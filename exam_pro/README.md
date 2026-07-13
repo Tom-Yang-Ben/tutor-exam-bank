@@ -43,6 +43,56 @@ exam_pro/
 
 ---
 
+## 🏗 系統架構
+
+```mermaid
+flowchart TD
+    Browser["🌐 瀏覽器<br/>public/index.html<br/>Tailwind + MathJax"]
+
+    subgraph Server["Express 伺服器 (Node.js)"]
+        App["app.js<br/>CORS 白名單 · 靜態資產 · 金鑰注入 · 全域錯誤中樞"]
+        subgraph MW["中介軟體"]
+            Auth["auth.js<br/>x-api-key（timing-safe）"]
+            RL["rateLimit.js<br/>AI 端點限流 10/min"]
+        end
+        Routes["routes/index.js<br/>/api 路由表"]
+        subgraph Ctrl["Controllers"]
+            QC["questionController<br/>題庫 CRUD / 批次入庫"]
+            EC["examController<br/>智慧組卷（交易）"]
+            AC["aiController<br/>PDF 上傳處理"]
+            WC["wordController<br/>Word 匯出"]
+        end
+        subgraph Svc["Services / Utils"]
+            AIS["aiService<br/>呼叫 Gemini 拆題"]
+            WS["wordService<br/>產生 .docx（防 SSRF）"]
+            TF["textFormatter<br/>LaTeX → OOXML 公式"]
+        end
+        Chapters["config/chapters.js<br/>章節白名單驗證"]
+        DB["config/db.js<br/>MySQL 連線池"]
+    end
+
+    Gemini["🤖 Google Gemini 2.5 Flash"]
+    MySQL[("🗄 MySQL<br/>questions · exam_papers")]
+
+    Browser -- "HTTP / x-api-key" --> App
+    App --> Auth --> RL --> Routes
+    Routes --> QC & EC & AC & WC
+    QC --> Chapters
+    AC --> AIS --> Gemini
+    WC --> WS --> TF
+    QC --> DB
+    EC --> DB
+    WC --> DB
+    DB --> MySQL
+```
+
+**兩條主要資料流**
+
+1. **AI 拆題入庫**：瀏覽器上傳 PDF → `aiController` → `aiService` 呼叫 Gemini 回傳 JSON → `questionController.batchSaveQuestions` 經**章節白名單**驗證後寫入 `questions`。
+2. **智慧組卷 + 匯出**：`examController` 依「學生 × 章節」濾掉寫過的題、抽題並以**交易**記錄作答歷史 → `wordController` / `wordService` 用 `textFormatter` 把 LaTeX 轉成 Word 數學公式，輸出 `.docx`。
+
+---
+
 ## 🚀 安裝與啟動
 
 ### 1. 前置需求

@@ -77,3 +77,12 @@ npm start                 # http://localhost:3000
 ├─ 期中專題報告/       # 簡報與 Demo（大型檔已排除）
 └─ 行事曆修改方案.md   # 另一構想草稿
 ```
+
+---
+
+## 📄 授權
+
+本專案採 **[Apache License 2.0](./LICENSE)** 釋出。
+你可自由使用、修改與散布（含商用），惟須保留版權與授權聲明。詳見 [`LICENSE`](./LICENSE)。
+
+© 2026 Ben Yang (楊本顥)
