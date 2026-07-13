@@ -1,0 +1,16 @@
+# 環境變數與金鑰（切勿進版控）
+.env
+.env.*
+!.env.example
+
+# 相依套件
+node_modules/
+
+# 上傳暫存檔
+uploads/
+!uploads/.gitkeep
+
+# 日誌與系統檔
+*.log
+npm-debug.log*
+.DS_Store
