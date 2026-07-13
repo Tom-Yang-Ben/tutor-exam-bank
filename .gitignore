@@ -21,6 +21,8 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
-# 大型報告素材（影片 / 簡報存檔，不適合進 git）
-期中專題報告/*.mp4
+# 大型報告素材（影片 / 簡報 / PDF / 網頁存檔，不適合進 git）
+*.mp4
+*.pptx
+*.pdf
 期中專題報告/Canva AI - Canva_files/
