@@ -12,9 +12,8 @@
 |------------|------|------|
 | **[`exam_pro/`](./exam_pro)** | 🌟 **主要成品**（企業級重構版） | MVC 分層架構的完整後端，詳見 [`exam_pro/README.md`](./exam_pro/README.md) |
 | [`exam/`](./exam) | 早期原型 | 功能相同但邏輯集中於單一 `server.js`，保留以呈現重構前後對照 |
-| [`depository/`](./depository) | 課堂練習 | Python / Jupyter 練習檔（`firework.py` ASCII 煙火、`donut.ipynb` 旋轉甜甜圈、matlab/experiment 等），與題庫系統無關 |
 | `期中專題報告/` | 簡報與 Demo | 報告簡報、螢幕錄影、擷圖等（大型 pptx/pdf/mp4 已排除，不進版控）|
-| `行事曆修改方案.md` | 另一構想草稿 | 「班表一鍵匯入 Apple 行事曆」的獨立發想，與題庫系統無關 |
+| `exam_pro 專案種子簡報.md` | 專案 baseline | 逆向回推的種子簡報（目標受眾 / 痛點 / 期望成果 / 約束 / 指標）|
 
 ---
 
@@ -73,9 +72,8 @@ npm start                 # http://localhost:3000
 │   ├─ public/index.html
 │   └─ schema.sql
 ├─ exam/              # 早期原型
-├─ depository/        # 課堂練習（Python / Jupyter）
 ├─ 期中專題報告/       # 簡報與 Demo（大型檔已排除）
-└─ 行事曆修改方案.md   # 另一構想草稿
+└─ exam_pro 專案種子簡報.md   # 專案 baseline（逆向回推）
 ```
 
 ---
