@@ -43,12 +43,14 @@ app.use(cors({
     }
 }));
 app.use(express.json({ limit: '2mb' }));
-// 不讓 static 直接吐出 index.html，改由下方路由注入 API 金鑰
-app.use(express.static(__dirname, { index: false }));
+// 只公開 public/ 目錄的前端資產，避免把後端原始碼、schema.sql、備份 JSON 一併靜態外洩。
+// index: false → 不讓 static 直接吐出 index.html，改由下方路由注入 API 金鑰
+const PUBLIC_DIR = path.join(__dirname, 'public');
+app.use(express.static(PUBLIC_DIR, { index: false }));
 
 // 2. 首頁路由：把 API_KEY 注入頁面，讓同源前端能自動帶上 x-api-key
 function serveIndex(req, res, next) {
-    fs.readFile(path.join(__dirname, 'index.html'), 'utf8', (err, html) => {
+    fs.readFile(path.join(PUBLIC_DIR, 'index.html'), 'utf8', (err, html) => {
         if (err) return next(err);
         const key = process.env.API_KEY || '';
         res.type('html').send(html.replace('__API_KEY__', key));

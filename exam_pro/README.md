@@ -27,15 +27,17 @@ exam_pro/
 │   ├─ db.js              # MySQL 連線池
 │   └─ chapters.js        # 數學/物理精細章節白名單 + 驗證函式
 ├─ middleware/
-│   └─ auth.js            # 可選的 x-api-key 認證（timingSafeEqual）
+│   ├─ auth.js            # 可選的 x-api-key 認證（timingSafeEqual）
+│   └─ rateLimit.js       # 記憶體型速率限制器（保護 AI 端點）
 ├─ routes/index.js        # API 路由表
+├─ public/
+│   └─ index.html         # 前端單頁介面（唯一對外靜態資產）
 ├─ controllers/           # 請求處理：question / exam / ai / word
 ├─ services/
 │   ├─ aiService.js       # 呼叫 Gemini 解析 PDF
 │   └─ wordService.js     # 產生 Word 考卷（含防 SSRF 圖片下載）
 ├─ utils/textFormatter.js # LaTeX → OOXML 數學公式解析器
 ├─ schema.sql             # 資料表定義（questions / exam_papers）
-├─ index.html             # 前端單頁介面
 └─ *.bat / fix_*.js       # 題庫維運工具（見下方）
 ```
 

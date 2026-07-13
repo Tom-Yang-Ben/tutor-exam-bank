@@ -5,6 +5,7 @@ const pool = mysql.createPool({
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'tutor_exam_bank',
+    charset: 'utf8mb4',            // 與資料表一致，確保 emoji / 4-byte 數學符號可正確寫入
     waitForConnections: true,
     connectionLimit: 10
 });
