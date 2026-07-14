@@ -62,7 +62,8 @@ exports.generatePaper = async (req, res, next) => {
         const d = new Date();
         const safeDateStr = `${d.getFullYear()}_${d.getMonth() + 1}_${d.getDate()}`;
         const paperTitle = `${trimmedName}-${chapter}特訓卷(${safeDateStr})`;
-        const todayStr = d.toISOString().split('T')[0];
+        // 用本地時區組日期（與試卷標題一致）；toISOString() 是 UTC，台灣早上 8 點前會差一天
+        const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
         // 交易：建立試卷與更新作答歷史必須一起成功，否則全部回滾
         await conn.beginTransaction();
