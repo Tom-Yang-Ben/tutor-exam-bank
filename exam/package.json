@@ -1,15 +1,14 @@
 {
-  "name": "exam",
+  "name": "tutor-exam-bank-prototype",
   "version": "1.0.0",
-  "description": "",
+  "description": "家教專用數學物理題庫系統 - 早期原型（ARCHIVED，請改用 exam_pro）",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Ben Yang (楊本顥)",
+  "license": "Apache-2.0",
   "type": "commonjs",
   "dependencies": {
     "@google/genai": "^2.4.0",

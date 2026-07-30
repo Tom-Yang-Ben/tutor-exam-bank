@@ -13,7 +13,8 @@
 | ✍️ **題庫管理** | 題目新增／編輯／刪除／搜尋／分頁，後端以「章節白名單」嚴格驗證 |
 | 🧠 **智慧組卷** | 依「學生 × 章節」抽題，自動記錄作答歷史，避免重複出題（交易確保一致性）|
 | 📥 **匯出 Word** | 依題型與難度排序，產生 `.docx` 考卷，內建 LaTeX → Word 數學公式轉換 |
-| 🔒 **安全設計** | 參數化 SQL、可選 API Key 認證（timing-safe）、CORS 白名單、圖片下載防 SSRF |
+| 🌱 **一鍵種子題庫** | `seed_questions.js` 內建 30 題自製示範題，空題庫也能立即跑完整流程 |
+| 🔒 **安全設計** | 參數化 SQL、CORS 白名單、圖片下載防 SSRF、可選 API Key 認證（timing-safe；能力邊界見[安全注意事項](#-安全注意事項)）|
 
 ---
 
@@ -38,7 +39,8 @@ exam_pro/
 │   └─ wordService.js     # 產生 Word 考卷（含防 SSRF 圖片下載）
 ├─ utils/textFormatter.js # LaTeX → OOXML 數學公式解析器
 ├─ schema.sql             # 資料表定義（questions / exam_papers）
-└─ *.bat / fix_*.js       # 題庫維運工具（見下方）
+├─ seed_questions.js      # 種子題庫：30 題自製示範題
+└─ *.bat / *_formulas.js  # 題庫維運工具（見下方）
 ```
 
 ---
@@ -116,7 +118,7 @@ cp .env.example .env
 | `PORT` | 服務埠 | `3000` |
 | `GEMINI_API_KEY` | Google Gemini 金鑰（**必填**）| — |
 | `DB_HOST` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` | MySQL 連線 | localhost / root / — / tutor_exam_bank |
-| `API_KEY` | 後端存取金鑰；留空則**停用**認證（純本機自用）| 空 |
+| `API_KEY` | 後端存取金鑰；留空則**停用**認證。⚠️ 此金鑰會被注入前端頁面，僅適用本機自用，**不可作為對外部署的存取控制**（見[安全注意事項](#-安全注意事項)）| 空 |
 | `ALLOWED_ORIGINS` | 允許的前端來源（逗號分隔）| `http://localhost:3000` |
 | `IMAGE_HOST_ALLOWLIST` | Word 匯圖時允許的圖片網域（逗號分隔，選填）| 空 |
 | `NODE_ENV` | `production` 時錯誤不外洩細節 | `development` |
@@ -156,22 +158,47 @@ npm run dev    # 開發（nodemon 熱重載）
 
 ## 🛠 題庫維運工具（Windows `.bat`）
 
-雙擊即可執行，`fix_*` 類含「先預覽、再套用」雙段流程並自動備份：
+雙擊即可執行，修正類工具含「先預覽、再套用」雙段流程並自動備份：
 
 | 批次檔 | 作用 |
 |--------|------|
 | `執行公式健檢.bat` | 掃描題庫公式問題 → 產生 `公式健檢報告.html` |
 | `預覽公式修正.bat` / `套用公式修正.bat` | 公式自動修正（套用前備份為 `formulas_backup_*.json`）|
-| `預覽逐字校正.bat` / `套用逐字校正.bat` | 逐字校正 |
-| `預覽人工修正.bat` / `套用人工修正.bat` | 人工修正清單 |
 | `建立索引與檢視表.bat` | 建立資料庫索引與檢視表 |
 
-> ⚠️ `*_backup_*.json` 內含題庫資料，已在 `.gitignore` 排除，請勿外流。
+灌入示範題（題庫為空時）：
+
+```bash
+node seed_questions.js          # 預覽：只列清單，不寫入
+node seed_questions.js --apply  # 實際寫入（交易保護；同題幹已存在則跳過）
+```
+
+> ⚠️ `*_backup_*.json` 與 `公式*.html` 產物內含題庫資料，已在 `.gitignore` 排除，請勿外流。
 
 ---
 
 ## 🔐 安全注意事項
 
 - **`.env` 內含真實金鑰，切勿進版控或分享**（已由 `.gitignore` 排除）。若金鑰曾外流，請至 Google AI Studio **重新產生**。
-- 對外部署時務必設定 `API_KEY`、`ALLOWED_ORIGINS`，並將 `NODE_ENV=production`。
+- 對外部署時務必設定 `ALLOWED_ORIGINS`，並將 `NODE_ENV=production`。
 - 資料庫帳號建議改用最小權限帳號，勿用 root。
+- 匯入的題目著作權屬原著作權人，請確認已取得合法權源，詳見專案根目錄 [`NOTICE`](../NOTICE)。
+
+### ⚠️ `API_KEY` 的能力邊界（請務必理解）
+
+為了讓同源前端能自動帶上 `x-api-key`，`app.js` 會在回應首頁時把金鑰**直接注入 HTML**：
+
+```js
+// app.js — serveIndex()
+const key = process.env.API_KEY || '';
+res.type('html').send(html.replace('__API_KEY__', key));
+```
+
+這代表**任何能開啟 `/` 的人，都會直接取得 `API_KEY`**。
+
+因此 `API_KEY` 只擋得住「未載入首頁就直接打 API」的存取，**不等同真正的存取控制**。
+在「單人、本機、`localhost` 自用」的前提下這是合理的取捨；但若要**對外公開部署**，必須改用下列任一方式，不可依賴 `API_KEY`：
+
+- 置於反向代理之後，由代理層負責驗證（Basic Auth / OAuth / IP 白名單）
+- 導入真正的使用者登入與 session／JWT 機制
+- 或至少改為「金鑰不注入前端、由使用者手動輸入並存於 `sessionStorage`」

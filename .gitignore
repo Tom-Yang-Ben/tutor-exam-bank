@@ -15,11 +15,21 @@ uploads/
 # 資料庫備份 JSON（含題庫資料，避免外流）
 *_backup_*.json
 
+# 維運腳本產出的報告（含題庫題目內容，且可隨時重新產生）
+公式健檢報告.html
+公式修正預覽.html
+公式轉換示範.docx
+
 # 日誌與系統檔
 *.log
 npm-debug.log*
 .DS_Store
 Thumbs.db
+
+# 編輯器 / 工具的個人設定（因人而異，不共用）
+.claude/
+.vscode/
+.idea/
 
 # 大型報告素材（影片 / 簡報 / PDF，不適合進 git）
 *.mp4
