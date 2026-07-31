@@ -1,5 +1,7 @@
 # 家教專用數學物理題庫系統（企業級重構版）
 
+[![CI](https://github.com/Tom-Yang-Ben/tutor-exam-bank/actions/workflows/ci.yml/badge.svg)](https://github.com/Tom-Yang-Ben/tutor-exam-bank/actions/workflows/ci.yml)
+
 以 **Node.js + Express + MySQL + Google Gemini** 打造的家教題庫與智慧組卷後端。
 支援上傳考卷 PDF 由 AI 自動拆題入庫、依學生作答歷史智慧組卷、並匯出含數學公式排版的 Word 考卷。
 
@@ -11,7 +13,7 @@
 |------|------|
 | 📄 **PDF 智慧解題** | 上傳考卷 PDF，Gemini 2.5 Flash 自動拆解題目、判斷學科／章節／難度，並將公式轉為 LaTeX |
 | ✍️ **題庫管理** | 題目新增／編輯／刪除／搜尋／分頁，後端以「章節白名單」嚴格驗證 |
-| 🧠 **智慧組卷** | 依「學生 × 章節」抽題，自動記錄作答歷史，避免重複出題（交易確保一致性）|
+| 🧠 **智慧組卷** | 依「學生 × 章節」抽題，**Fisher-Yates 均勻隨機**（有一萬次分佈測試把關），自動記錄作答歷史避免重複出題（交易確保一致性）|
 | 📥 **匯出 Word** | 依題型與難度排序，產生 `.docx` 考卷，內建 LaTeX → Word 數學公式轉換 |
 | 🌱 **一鍵種子題庫** | `seed_questions.js` 內建 30 題自製示範題，**集中在 4 章、每章 7~8 題**，灌完即可直接用預設值組卷 |
 | 🔒 **安全設計** | 參數化 SQL、CORS 白名單、圖片下載防 SSRF、可選 API Key 認證（timing-safe；能力邊界見[安全注意事項](#-安全注意事項)）|
@@ -59,12 +61,18 @@ exam_pro/
 ├─ services/
 │   ├─ aiService.js       # 呼叫 Gemini 解析 PDF
 │   └─ wordService.js     # 產生 Word 考卷（含防 SSRF 圖片下載）
-├─ utils/textFormatter.js # LaTeX → OOXML 數學公式解析器
+├─ utils/
+│   ├─ textFormatter.js   # LaTeX → OOXML 數學公式解析器
+│   └─ shuffle.js         # Fisher-Yates 洗牌（抽題的公平性核心）
 ├─ schema.sql             # 資料表定義（questions / exam_papers）
 ├─ seed_questions.js      # 種子題庫：30 題自製示範題（4 章 × 7~8 題）
 ├─ sample_exam.docx       # 成果範例：實際匯出的 Word 考卷
 ├─ test/                  # 單元測試（node:test，無額外相依）
+│   ├─ textFormatter.test.js  # 公式解析器
+│   └─ shuffle.test.js        # 抽題隨機性：一萬次分佈測試
 └─ *.bat / *_formulas.js  # 題庫維運工具（見下方）
+
+../.github/workflows/ci.yml  # CI：push / PR 時在 Node 20.x、22.x 上跑 npm ci + npm test
 ```
 
 ---
@@ -122,7 +130,7 @@ flowchart TD
 ## 🚀 安裝與啟動
 
 ### 1. 前置需求
-- Node.js 18+
+- **Node.js 20+**（`@google/genai` 於 `package.json` 宣告 `engines: node >= 20`；CI 亦以 20.x / 22.x 驗證）
 - MySQL 8.0.16+（`CHECK` 約束與 JSON 函式需要）
 - 一組 [Google Gemini API 金鑰](https://aistudio.google.com/apikey)
 
@@ -164,10 +172,17 @@ npm run dev    # 開發（nodemon 熱重載）
 ## 🧪 測試
 
 ```bash
-npm test        # 29 個測試，使用 Node 18+ 內建的 node:test，無額外相依套件
+npm test        # 40 個測試，使用 Node 內建的 node:test，無額外相依套件
 ```
 
-測試集中在 **`utils/textFormatter.js`**（LaTeX → Word OOXML 解析器）——它是本專案唯一手寫的解析器，且有兩個特性讓它最需要防線：
+每次 push 與 PR 都會由 [GitHub Actions](../.github/workflows/ci.yml) 在 Node 20.x / 22.x 上自動執行（badge 見本頁最上方）。
+測試**不連資料庫、不呼叫 Gemini**，因此 CI 不需要任何 secrets——任何人都能在不 clone、不設定 `.env` 的情況下看到驗證結果。
+
+測試集中在兩支模組，共同點是**壞掉不會噴錯**：
+
+### 1. `utils/textFormatter.js` — LaTeX → Word OOXML 解析器
+
+本專案唯一手寫的解析器，有兩個特性讓它最需要防線：
 
 1. **輸入不可控**：題目文字來自 Gemini 的自由輸出，未知指令、不成對的 `$`、中英數混排都可能出現。
 2. **會靜默失敗**：解析失敗時走 `try/catch` 降級成純文字而**不丟例外**，症狀只會在 Word 開起來時顯現為公式跑位。沒有測試就完全看不見退化。
@@ -180,6 +195,26 @@ npm test        # 29 個測試，使用 Node 18+ 內建的 node:test，無額外
 | 符號轉換 | 希臘字母、運算關係符號、函數名不被拆成單一變數、`\vec` 重音 |
 | 中英混排 | 中文留在 `w:r`、公式進 `m:oMath`，**中文不得被吞進公式**（否則 Word 會用數學斜體排中文）|
 | 健壯性 | 未知指令降級、不成對 `$`、未閉合 `{`、空參數、emoji 與控制字元清除、真實題目格式 |
+
+### 2. `utils/shuffle.js` — 抽題的隨機性（一萬次分佈測試）
+
+智慧組卷的隨機抽題決定了題目對學生的曝光是否公平，但**隨機性錯了不會噴錯、不會當機**——
+它只會讓某些題目長期抽不到。功能測試（回 200 嗎？有 5 題嗎？）完全測不出這件事，只有統計檢定能釘住。
+
+| 分類 | 驗證內容 |
+|---|---|
+| 基本契約 | 不修改原陣列、回傳新陣列、空／單元素邊界、1000 次輸出皆為合法排列（不重複不遺漏）、物件參考保留 |
+| 位置分佈 | 5 元素抽 **10,000 次**，每個位置的元素次數做卡方檢定（自由度 4，臨界值 18.467）；另有「每格偏差 < ±10%」的人眼可讀版本 |
+| 完整排列分佈 | 4 元素抽 **10,000 次**，24 種排列必須全部出現且卡方值 < 49.728（只看位置邊際分佈可能漏掉偏差）|
+| 真實亂數 | 改用 `Math.random` 仍須通過寬鬆門檻，防止有人把亂數來源寫死 |
+| **檢定的鑑別力** | 刻意保留舊寫法 `sort(() => 0.5 - Math.random())`，證明同一套檢定確實會把它判為不均勻 |
+
+分佈測試預設注入**固定種子的 PRNG**（mulberry32）。若直接用 `Math.random`，均勻分佈本身也有極小機率超過臨界值，
+會讓 CI 隨機轉紅；固定種子後結果完全可重現——**CI 紅燈就一定是程式改壞了，不是運氣不好**。
+
+> 最後那一列才是重點。一個永遠會過的測試等於沒有測試，所以測試自己的鑑別力也要被驗證。
+> 實測把 `shuffle` 改回舊寫法，40 個測試中會有 **5 個轉紅**（位置卡方值從 0.5~4.0 暴增到 1414，
+> 最常見與最罕見排列的次數從相差 1.25 倍變成相差 13.7 倍）——這條防線是驗證過的，不是宣稱的。
 
 ---
 
@@ -205,7 +240,7 @@ npm test        # 29 個測試，使用 Node 18+ 內建的 node:test，無額外
 
 | # | 步驟 | 通過標準 |
 |---|------|----------|
-| 6 | `npm test` | **29 passed / 0 failed** |
+| 6 | `npm test` | **40 passed / 0 failed**（CI 亦會在 push 後自動跑一次，見 README 上方 badge）|
 | 7 | 靜態檔完整性：確認 `public/index.html` 結尾為 `</script></body></html>`，且 `<div>`、`<script>` 開闔數相等 | 檔案未被截斷（詳見下方「截斷檔自檢」）|
 | 8 | `npm start` | 終端印出 `🚀 家教題庫後端系統已成功安全啟動：http://localhost:3000` |
 
@@ -240,12 +275,13 @@ fs.writeFileSync('.tmp_inline.js',b)" && node --check .tmp_inline.js && echo "JS
 |---|---|
 | 日期 | 2026-08-01 |
 | 方式 | 只複製版控追蹤的檔案至全新目錄 → 全新 `npm install` → 由 `.env.example` 產生 `.env` → `schema.sql` 建立獨立驗收資料庫 → 種子 30 題 |
-| `npm test` | 29 passed / 0 failed |
+| `npm test` | 40 passed / 0 failed（`npm ci` 亦驗證過 lock file 可獨立還原，且測試不需 `.env`）|
+| 突變測試 | 把 `shuffle` 改回 `sort(() => 0.5 - Math.random())` → 5 個測試轉紅、退出碼 1；還原後回到 40/40 |
 | 首頁載入 | Console **0 error、0 warning**；章節下拉 35 項、題庫清單 10 張卡＋「共 30 題」＋分頁正常 |
 | 智慧組卷（預設 5 題）| **4 章全部 200**；題型排序（單選→計算）與難度排序（1,2,2,3,3）皆正確 |
 | 避免重複出題 | 同一學生同章再抽 5 題 → 400（剩 3 題，符合預期）；改抽 3 題 → 200；換一位學生抽 5 題 → 200 |
 | 匯出 Word | `/api/download-word` 200，`Content-Type: …wordprocessingml.document`；`.docx` 解壓 22 項無損毀、含 33 個 `<m:oMath>`（見 [`sample_exam.docx`](sample_exam.docx)）|
-| 已修復 | ① `public/index.html` 曾截斷於 `downloadWordFile()` 的 `const url = …` 之後，已補回函式尾段與 `</script></body></html>`　② 種子題庫原為「30 章各 1 題」，預設抽 5 題必回 400，已改為 4 章各 7~8 題並加上單章密度自我檢查 |
+| 已修復 | ① `public/index.html` 曾截斷於 `downloadWordFile()` 的 `const url = …` 之後，已補回函式尾段與 `</script></body></html>`　② 種子題庫原為「30 章各 1 題」，預設抽 5 題必回 400，已改為 4 章各 7~8 題並加上單章密度自我檢查　③ 抽題洗牌原用 `sort(() => 0.5 - Math.random())`（分佈不均勻），已改為 Fisher-Yates 並以一萬次分佈測試釘住 |
 
 ---
 

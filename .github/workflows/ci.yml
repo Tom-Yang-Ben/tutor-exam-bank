@@ -1,0 +1,30 @@
+name: CI
+
+# 這個 repo 有 exam / exam_pro 兩個子專案，測試在 exam_pro 底下，
+# 因此所有 run 步驟都設定 working-directory: exam_pro。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: exam_pro
+    strategy:
+      fail-fast: false
+      matrix:
+        # @google/genai 要求 Node >= 20，故最低測到 20
+        node-version: ['20.x', '22.x']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: exam_pro/package-lock.json
+      - run: npm ci
+      # 測試不連資料庫、不呼叫 Gemini，因此不需要任何 secrets
+      - run: npm test

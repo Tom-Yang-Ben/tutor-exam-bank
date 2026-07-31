@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { shuffle } = require('../utils/shuffle');
 
 const MAX_QUESTIONS = 50; // 單次抽題上限，避免一次撈整章
 
@@ -41,7 +42,8 @@ exports.generatePaper = async (req, res, next) => {
             return res.status(400).json({ message: `新題目庫存不足！該章節 [${safeStudentName}] 沒寫過的題目僅剩 ${availableQuestions.length} 題。` });
         }
 
-        const shuffled = [...availableQuestions].sort(() => 0.5 - Math.random());
+        // Fisher-Yates；不可改用 sort(() => 0.5 - Math.random())，該寫法分佈不均勻
+        const shuffled = shuffle(availableQuestions);
         const rawSelectedIds = shuffled.slice(0, limitCount).map(q => q.id);
 
         const placeholders = rawSelectedIds.map(() => '?').join(',');
