@@ -40,6 +40,7 @@ exam_pro/
 ├─ utils/textFormatter.js # LaTeX → OOXML 數學公式解析器
 ├─ schema.sql             # 資料表定義（questions / exam_papers）
 ├─ seed_questions.js      # 種子題庫：30 題自製示範題
+├─ test/                  # 單元測試（node:test，無額外相依）
 └─ *.bat / *_formulas.js  # 題庫維運工具（見下方）
 ```
 
@@ -134,6 +135,28 @@ npm start      # 正式
 npm run dev    # 開發（nodemon 熱重載）
 ```
 啟動後開啟 <http://localhost:3000>。
+
+---
+
+## 🧪 測試
+
+```bash
+npm test        # 29 個測試，使用 Node 18+ 內建的 node:test，無額外相依套件
+```
+
+測試集中在 **`utils/textFormatter.js`**（LaTeX → Word OOXML 解析器）——它是本專案唯一手寫的解析器，且有兩個特性讓它最需要防線：
+
+1. **輸入不可控**：題目文字來自 Gemini 的自由輸出，未知指令、不成對的 `$`、中英數混排都可能出現。
+2. **會靜默失敗**：解析失敗時走 `try/catch` 降級成純文字而**不丟例外**，症狀只會在 Word 開起來時顯現為公式跑位。沒有測試就完全看不見退化。
+
+涵蓋的契約：
+
+| 分類 | 驗證內容 |
+|---|---|
+| 結構對應 | `\frac`→`m:f`、`x^2`→`m:sSup`、`\sqrt`→`m:rad`、`\sum`/`\int`→`m:nary`、`\lim`→`m:limLow`、巢狀分數 |
+| 符號轉換 | 希臘字母、運算關係符號、函數名不被拆成單一變數、`\vec` 重音 |
+| 中英混排 | 中文留在 `w:r`、公式進 `m:oMath`，**中文不得被吞進公式**（否則 Word 會用數學斜體排中文）|
+| 健壯性 | 未知指令降級、不成對 `$`、未閉合 `{`、空參數、emoji 與控制字元清除、真實題目格式 |
 
 ---
 
