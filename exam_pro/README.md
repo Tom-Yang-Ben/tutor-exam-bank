@@ -13,8 +13,30 @@
 | ✍️ **題庫管理** | 題目新增／編輯／刪除／搜尋／分頁，後端以「章節白名單」嚴格驗證 |
 | 🧠 **智慧組卷** | 依「學生 × 章節」抽題，自動記錄作答歷史，避免重複出題（交易確保一致性）|
 | 📥 **匯出 Word** | 依題型與難度排序，產生 `.docx` 考卷，內建 LaTeX → Word 數學公式轉換 |
-| 🌱 **一鍵種子題庫** | `seed_questions.js` 內建 30 題自製示範題，空題庫也能立即跑完整流程 |
+| 🌱 **一鍵種子題庫** | `seed_questions.js` 內建 30 題自製示範題，**集中在 4 章、每章 7~8 題**，灌完即可直接用預設值組卷 |
 | 🔒 **安全設計** | 參數化 SQL、CORS 白名單、圖片下載防 SSRF、可選 API Key 認證（timing-safe；能力邊界見[安全注意事項](#-安全注意事項)）|
+
+---
+
+## 🖼 成果展示
+
+### 匯出的 Word 考卷
+
+[`sample_exam.docx`](sample_exam.docx) 是系統**實際產出、未經手動編輯**的考卷，可直接下載開啟：
+
+- 來源：種子題庫的「物理 · 牛頓運動定律」，以預設值抽 5 題組卷後匯出
+- 題目依**題型**（單選→多選→填空→計算→證明）再依**難度**排序，並自動附上作答資訊列與參考答案區
+- 內含 **33 個 Word 原生數學公式**（`<m:oMath>`，其中 9 個分數、13 個上標）——是**可用 Word 公式編輯器點開修改的真公式**，不是截圖貼上
+
+### 介面截圖
+
+> 🚧 UI 美化完成後補上，屆時放在 `docs/` 並改為圖片連結。
+
+| 檔名 | 應呈現的畫面 |
+|------|--------------|
+| `docs/screenshot-manager.png` | 題庫管理：清單、篩選、分頁與「共 N 題」計數 |
+| `docs/screenshot-generate.png` | 智慧組卷：填入學生／章節／抽題數後的題目預覽與下載按鈕 |
+| `docs/screenshot-word.png` | 匯出的 `.docx` 在 Word 中開啟的實際排版（數學公式） |
 
 ---
 
@@ -39,7 +61,8 @@ exam_pro/
 │   └─ wordService.js     # 產生 Word 考卷（含防 SSRF 圖片下載）
 ├─ utils/textFormatter.js # LaTeX → OOXML 數學公式解析器
 ├─ schema.sql             # 資料表定義（questions / exam_papers）
-├─ seed_questions.js      # 種子題庫：30 題自製示範題
+├─ seed_questions.js      # 種子題庫：30 題自製示範題（4 章 × 7~8 題）
+├─ sample_exam.docx       # 成果範例：實際匯出的 Word 考卷
 ├─ test/                  # 單元測試（node:test，無額外相依）
 └─ *.bat / *_formulas.js  # 題庫維運工具（見下方）
 ```
@@ -176,7 +199,7 @@ npm test        # 29 個測試，使用 Node 18+ 內建的 node:test，無額外
 | 2 | `npm install` | 安裝成功，無 `ERR!`（`multer@1.x` 的 deprecated 警告為已知，不影響啟動）|
 | 3 | `cp .env.example .env` 並填入 `GEMINI_API_KEY`、`DB_PASSWORD` | `.env.example` 的每個欄位都有對應值 |
 | 4 | `mysql -u root -p < schema.sql` | `SHOW TABLES;` 可見 `questions`、`exam_papers` |
-| 5 | `node seed_questions.js --apply` | 顯示「新增 30 題」，空題庫也能立即走完整流程 |
+| 5 | `node seed_questions.js --apply` | 顯示「新增 30 題」且分佈為 4 章各 7~8 題（任一章 < 5 題會自動中止）|
 
 ### B. 自動化把關（先讓機器擋掉低級錯誤）
 
@@ -191,7 +214,7 @@ npm test        # 29 個測試，使用 Node 18+ 內建的 node:test，無額外
 | # | 步驟 | 通過標準 |
 |---|------|----------|
 | 9 | 開 <http://localhost:3000>，**F12 → Console** | **零 error、零 warning**；Network 無 4xx／5xx |
-| 10 | 走完主流程：① 題庫清單顯示筆數與分頁 → ② 手動新增一題 → ③ 智慧組卷 → ④ **點「下載標準 Word 考卷檔」** | `.docx` 成功下載、可用 Word 開啟、數學公式為**可編輯公式**而非亂碼 |
+| 10 | 走完主流程：① 題庫清單顯示筆數與分頁 → ② 手動新增一題 → ③ 智慧組卷（**抽題數維持預設 5 不要改**）→ ④ **點「下載標準 Word 考卷檔」** | 組卷回 200 而非 400；`.docx` 成功下載、可用 Word 開啟、數學公式為**可編輯公式**而非亂碼 |
 
 > 第 10 步的 ④ 是最容易被跳過、卻最容易壞的一步——`downloadWordFile()` 位於 `index.html` **最尾端**，
 > 檔案一旦被截斷，它就是第一個消失的函式，而前面九步**全部都會是綠燈**。
@@ -215,12 +238,14 @@ fs.writeFileSync('.tmp_inline.js',b)" && node --check .tmp_inline.js && echo "JS
 
 | 項目 | 結果 |
 |---|---|
-| 日期 | 2026-07-31 |
+| 日期 | 2026-08-01 |
 | 方式 | 只複製版控追蹤的檔案至全新目錄 → 全新 `npm install` → 由 `.env.example` 產生 `.env` → `schema.sql` 建立獨立驗收資料庫 → 種子 30 題 |
 | `npm test` | 29 passed / 0 failed |
 | 首頁載入 | Console **0 error、0 warning**；章節下拉 35 項、題庫清單 10 張卡＋「共 30 題」＋分頁正常 |
-| 組卷 → 匯出 | `/api/generate-paper` 200；`/api/download-word` 200，回傳 `Content-Type: …wordprocessingml.document`，`.docx` 解壓 22 個項目、`word/document.xml` 含 `<m:oMath>`（公式為真公式）|
-| 已修復 | `public/index.html` 曾截斷於 `downloadWordFile()` 的 `const url = …` 之後，已補回函式尾段與 `</script></body></html>` |
+| 智慧組卷（預設 5 題）| **4 章全部 200**；題型排序（單選→計算）與難度排序（1,2,2,3,3）皆正確 |
+| 避免重複出題 | 同一學生同章再抽 5 題 → 400（剩 3 題，符合預期）；改抽 3 題 → 200；換一位學生抽 5 題 → 200 |
+| 匯出 Word | `/api/download-word` 200，`Content-Type: …wordprocessingml.document`；`.docx` 解壓 22 項無損毀、含 33 個 `<m:oMath>`（見 [`sample_exam.docx`](sample_exam.docx)）|
+| 已修復 | ① `public/index.html` 曾截斷於 `downloadWordFile()` 的 `const url = …` 之後，已補回函式尾段與 `</script></body></html>`　② 種子題庫原為「30 章各 1 題」，預設抽 5 題必回 400，已改為 4 章各 7~8 題並加上單章密度自我檢查 |
 
 ---
 
@@ -256,9 +281,26 @@ fs.writeFileSync('.tmp_inline.js',b)" && node --check .tmp_inline.js && echo "JS
 灌入示範題（題庫為空時）：
 
 ```bash
-node seed_questions.js          # 預覽：只列清單，不寫入
+node seed_questions.js          # 預覽：只列清單與各章題數，不寫入
 node seed_questions.js --apply  # 實際寫入（交易保護；同題幹已存在則跳過）
 ```
+
+種子題的分佈是**刻意設計**的——30 題集中在 4 章，每章 7~8 題：
+
+| 學科 | 章節 | 題數 |
+|------|------|------|
+| 數學 | 指數與對數 | 8 |
+| 數學 | 三角函數的定義 | 7 |
+| 物理 | 牛頓運動定律 | 8 |
+| 物理 | 動量守恆與碰撞 | 7 |
+
+> **為什麼不是「每章 1 題、涵蓋 30 章」**：智慧組卷會先濾掉該學生寫過的題，
+> 若剩餘題數 < 抽題數就回 `400`（`controllers/examController.js`）。前端預設抽題數是 **5**
+> （`public/index.html` 的 `#count`），所以「每章 1 題」的題庫**看起來涵蓋很廣，但招牌功能一按就失敗**。
+> 題庫的可用性不取決於總題數，而取決於**單章密度**。
+> 每章 7~8 題還留有餘裕：同一位學生抽完 5 題後仍可再抽 3 題，能實際演示「避免重複出題」。
+>
+> `seed_questions.js` 內建這條防線——**任一章題數低於 5 就直接中止並列出該章**，不會讓失衡的題庫灌進資料庫。
 
 > ⚠️ `*_backup_*.json` 與 `公式*.html` 產物內含題庫資料，已在 `.gitignore` 排除，請勿外流。
 
