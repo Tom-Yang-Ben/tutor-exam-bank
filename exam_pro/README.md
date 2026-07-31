@@ -160,6 +160,70 @@ npm test        # 29 個測試，使用 Node 18+ 內建的 node:test，無額外
 
 ---
 
+## ✅ 交付前驗收清單（「陌生人驗收」）
+
+> **為什麼需要這份清單**：本專案的前端是**單一靜態 `public/index.html`**，沒有打包器、沒有編譯期。
+> 檔案就算被截斷在函式中段，伺服器仍會照常回 200，症狀只會在瀏覽器 F12 顯示 `SyntaxError`，
+> 而且**整支內嵌 script 會全部不執行**（下拉選單空白、按鈕沒反應）。
+> 「在我電腦上是好的」擋不住這種問題——只有**從乾淨目錄、只用版控裡的檔案、照 README 走一遍**才擋得住。
+> 因此每次交付前一律跑完以下 10 步，任何一步紅燈就不算完成。
+
+### A. 從零重建（驗證「版控裡的檔案足以跑起來」）
+
+| # | 步驟 | 通過標準 |
+|---|------|----------|
+| 1 | 取得乾淨副本：`git clone <repo> fresh && cd fresh/exam_pro` | **不可**沿用既有 `node_modules` / `.env`；`.env` 本來就不在版控中 |
+| 2 | `npm install` | 安裝成功，無 `ERR!`（`multer@1.x` 的 deprecated 警告為已知，不影響啟動）|
+| 3 | `cp .env.example .env` 並填入 `GEMINI_API_KEY`、`DB_PASSWORD` | `.env.example` 的每個欄位都有對應值 |
+| 4 | `mysql -u root -p < schema.sql` | `SHOW TABLES;` 可見 `questions`、`exam_papers` |
+| 5 | `node seed_questions.js --apply` | 顯示「新增 30 題」，空題庫也能立即走完整流程 |
+
+### B. 自動化把關（先讓機器擋掉低級錯誤）
+
+| # | 步驟 | 通過標準 |
+|---|------|----------|
+| 6 | `npm test` | **29 passed / 0 failed** |
+| 7 | 靜態檔完整性：確認 `public/index.html` 結尾為 `</script></body></html>`，且 `<div>`、`<script>` 開闔數相等 | 檔案未被截斷（詳見下方「截斷檔自檢」）|
+| 8 | `npm start` | 終端印出 `🚀 家教題庫後端系統已成功安全啟動：http://localhost:3000` |
+
+### C. 人工驗收（F12 全程開著）
+
+| # | 步驟 | 通過標準 |
+|---|------|----------|
+| 9 | 開 <http://localhost:3000>，**F12 → Console** | **零 error、零 warning**；Network 無 4xx／5xx |
+| 10 | 走完主流程：① 題庫清單顯示筆數與分頁 → ② 手動新增一題 → ③ 智慧組卷 → ④ **點「下載標準 Word 考卷檔」** | `.docx` 成功下載、可用 Word 開啟、數學公式為**可編輯公式**而非亂碼 |
+
+> 第 10 步的 ④ 是最容易被跳過、卻最容易壞的一步——`downloadWordFile()` 位於 `index.html` **最尾端**，
+> 檔案一旦被截斷，它就是第一個消失的函式，而前面九步**全部都會是綠燈**。
+
+### 截斷檔自檢（30 秒）
+
+```bash
+# 1) 尾端必須是完整的收尾標籤
+tail -5 public/index.html          # 應看到 </script>、</body>、</html>
+
+# 2) 內嵌 JS 必須能被解析（把 <script> 內容抽出來丟給 node 檢查）
+node -e "const fs=require('fs');const h=fs.readFileSync('public/index.html','utf8');\
+const b=[...h.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).join('\n;\n');\
+fs.writeFileSync('.tmp_inline.js',b)" && node --check .tmp_inline.js && echo "JS OK" && rm .tmp_inline.js
+```
+
+`node --check` 通過 ≠ 功能正確，但**截斷、少括號、少收尾標籤這類會讓整頁死掉的問題，它 100% 攔得下來**，
+而且不需要開瀏覽器。建議在每次修改 `index.html` 後、commit 前跑一次。
+
+### 最近一次驗收紀錄
+
+| 項目 | 結果 |
+|---|---|
+| 日期 | 2026-07-31 |
+| 方式 | 只複製版控追蹤的檔案至全新目錄 → 全新 `npm install` → 由 `.env.example` 產生 `.env` → `schema.sql` 建立獨立驗收資料庫 → 種子 30 題 |
+| `npm test` | 29 passed / 0 failed |
+| 首頁載入 | Console **0 error、0 warning**；章節下拉 35 項、題庫清單 10 張卡＋「共 30 題」＋分頁正常 |
+| 組卷 → 匯出 | `/api/generate-paper` 200；`/api/download-word` 200，回傳 `Content-Type: …wordprocessingml.document`，`.docx` 解壓 22 個項目、`word/document.xml` 含 `<m:oMath>`（公式為真公式）|
+| 已修復 | `public/index.html` 曾截斷於 `downloadWordFile()` 的 `const url = …` 之後，已補回函式尾段與 `</script></body></html>` |
+
+---
+
 ## 🔌 API 一覽
 
 所有路由掛在 `/api` 之下；若設定了 `API_KEY`，需帶 `x-api-key` 標頭。
