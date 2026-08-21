@@ -1,0 +1,68 @@
+# 階段 1 本機資料庫（S0 建立，凍結後只增服務不改埠與帳密）
+#
+#   postgres       埠 5442  開發用正式庫  named volume 保存資料
+#                  （刻意避開 5432：本機已有一個原生的 PostgreSQL 17 服務占用該埠，
+#                    兩邊都 LISTEN 時先啟動的那個會吃掉連線，症狀是莫名其妙的密碼錯誤）
+#   postgres_test  埠 5433  整合測試用    tmpfs，容器停掉資料即消失
+#
+# 兩個服務共用同一顆 pgvector/pgvector:pg16 映像（官方 pgvector，內含 PG contrib 的 pg_trgm），
+# 本機、CI、正式環境因此是同一個映像。
+#
+# 用法：
+#   docker compose up -d --wait      （或雙擊 啟動資料庫.bat）
+#   docker compose down              停止；加 -v 才會刪掉 pgdata
+#
+# 中文路徑 bind mount 已於 S0 實測可用（Docker Desktop 29.6.2 / WSL2），
+# 因此 ./migrations 以唯讀掛進容器，作為 migrate.js 不可用時的退路：
+#   docker compose exec -T postgres psql -U exam -d tutor_exam_bank -f /migrations/0001_init.sql
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: exam_pg
+    command: postgres -c maintenance_work_mem=256MB
+    environment:
+      POSTGRES_USER: exam
+      POSTGRES_PASSWORD: exam
+      POSTGRES_DB: tutor_exam_bank
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+      TZ: Asia/Taipei
+    ports:
+      - "5442:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./migrations:/migrations:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U exam -d tutor_exam_bank"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  postgres_test:
+    image: pgvector/pgvector:pg16
+    container_name: exam_pg_test
+    # 測試庫不需要耐久性，關掉 fsync 讓 migrate + truncate 快一點
+    command: postgres -c fsync=off -c full_page_writes=off -c synchronous_commit=off
+    environment:
+      POSTGRES_USER: exam
+      POSTGRES_PASSWORD: exam
+      POSTGRES_DB: tutor_exam_bank_test
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+      # PGDATA 放在 tmpfs 的子目錄，initdb 才有辦法設定 0700 權限
+      PGDATA: /var/lib/postgresql/data/pgdata
+      TZ: Asia/Taipei
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ./migrations:/migrations:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U exam -d tutor_exam_bank_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  pgdata:
