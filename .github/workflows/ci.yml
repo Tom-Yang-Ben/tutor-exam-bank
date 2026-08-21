@@ -6,8 +6,10 @@ name: CI
 # 兩個 job（規劃 §5.3.4）：
 #   unit         矩陣 22/24，**不連資料庫、不呼叫 Gemini、不需要任何 secrets**。
 #                任何人 fork 都能在不設定 .env 的情況下跑出同一個結果。
+#                這個 job **刻意不設定 TEST_DATABASE_URL**：設了的話，
+#                某支測試不小心開始連 DB 也不會被發現，單元層「無 I/O」的保證就沒了。
 #   integration  Node 24 + pgvector/pgvector:pg16 的 service container。
-#                跑 migrations、整合測試與檢索 eval；同樣不需要 secrets——
+#                跑 migrations、整合測試與三個 eval suite；同樣不需要 secrets——
 #                embedding 走 fixture（EMBED_MODE=fixture）、LLM 走 replay。
 on:
   push:
@@ -33,8 +35,14 @@ jobs:
           cache: npm
           cache-dependency-path: exam_pro/package-lock.json
       - run: npm ci
-      # 測試不連資料庫、不呼叫 Gemini，因此不需要任何 secrets
+      # 測試不連資料庫、不呼叫 Gemini，因此不需要任何 secrets。
+      # 本 job 沒有 env: 區塊——TEST_DATABASE_URL 一旦出現在這裡，
+      # test/unit/ 就有機會在無人察覺的情況下開始連 DB（規劃 §5.3.4 的測試金字塔）。
       - run: npm test
+
+      # 前端資產的語法與接點檢查（A-T13）。test/unit/publicAssets.test.js 已經涵蓋同樣的檢查，
+      # 這一步保留是為了讓紅燈直接指名「是 check:html 沒過」，而不必去 test 輸出裡翻。
+      - run: npm run check:html
 
   integration:
     runs-on: ubuntu-latest
@@ -89,6 +97,21 @@ jobs:
       # 兩者合入後同一行指令就會自動改走 pg engine 並開始守門檻。
       - name: 檢索 eval（三欄對照）
         run: npm run eval -- --suite retrieval
+
+      # ── 階段 2 的兩個 suite（A-T14）──
+      # 兩支都在 LLM_MODE=replay 底下跑：classify 讀 eval/cassettes/，pipeline 對自製樣卷
+      # eval/fixtures/sample_exam.pdf 走整條管線。**都不需要金鑰、都不連外**。
+      #
+      # 目前 agents/*（WS-B／WS-C）與 pipeline/stateMachine.js（WS-A）尚未合入，
+      # 兩支會把分數印成 n/a 並在報表列出原因；thresholds.json 的 classify 與 pipeline
+      # 兩節都是 null，所以「只報告不擋」，CI 不會因此轉紅。
+      # agent 合入且 cassette 錄好之後，同一行指令就會開始守門檻——
+      # 那時 replay miss 會直接讓這一步失敗（interfaces-stage2.md 第 5.2 條，訊息是凍結的）。
+      - name: 章節分類 eval（cassette 回放）
+        run: npm run eval:classify
+
+      - name: 管線 eval（對自製樣卷跑整條管線）
+        run: npm run eval:pipeline
 
       - name: 上傳 eval 報表
         if: always()

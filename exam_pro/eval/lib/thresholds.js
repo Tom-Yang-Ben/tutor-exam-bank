@@ -149,7 +149,11 @@ function compareSuite(thresholds, suite, measured) {
     for (const column of spec.columns) {
         const want = table[column];
         const got = measured[column];
-        if (!want) { skipped.push(`${column}（門檻尚未建立）`); continue; }
+        // 「這一欄的門檻全是 null」＝ 還沒有基準線，與「整個欄位不存在」同義。
+        // 少了這一條，thresholds.json 裡預先擺好的 {accuracy:null, macro_f1:null} 會被
+        // 當成「門檻已存在」，然後對一輪 n/a 的量測報失敗——那是骨架階段的常態，不是退步。
+        const hasNumber = want && spec.metrics.some(m => typeof want[m] === 'number');
+        if (!hasNumber) { skipped.push(`${column}（門檻尚未建立）`); continue; }
         if (!got) { failures.push(`${column}：門檻已存在但這次沒有量到任何數字`); continue; }
         for (const metric of spec.metrics) {
             if (want[metric] === null || want[metric] === undefined) continue;

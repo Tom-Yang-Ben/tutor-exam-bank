@@ -373,3 +373,35 @@ describe('legacyAdapter 的 prompt_hash', () => {
         assert.equal(r.basis, 'whole-file');
     });
 });
+
+describe('thresholds 的 suite 通用比對（A-T14 的 ratchet）', () => {
+    const th = require('../../eval/lib/thresholds');
+
+    test('門檻全是 null = 尚未建立基準線 → 只報告不擋', () => {
+        // 這一條是實際踩過的坑：thresholds.json 先擺好 {accuracy:null, macro_f1:null} 佔位，
+        // 結果被當成「門檻已存在」，對一輪 n/a 的量測報失敗——而 n/a 在骨架階段是常態。
+        const r = th.compareSuite({ classify: { classify: { accuracy: null, macro_f1: null } } }, 'classify', { classify: null });
+        assert.deepEqual(r.failures, []);
+        assert.equal(r.skipped.length, 1);
+    });
+
+    test('門檻有數字卻量不到 = 失敗（否則 cassette 被誤刪會表現成全綠）', () => {
+        const r = th.compareSuite({ classify: { classify: { accuracy: 0.8 } } }, 'classify', { classify: null });
+        assert.equal(r.failures.length, 1);
+    });
+
+    test('達標與未達標', () => {
+        const table = { classify: { classify: { accuracy: 0.8, macro_f1: null } } };
+        assert.equal(th.compareSuite(table, 'classify', { classify: { accuracy: 0.9 } }).failures.length, 0);
+        assert.equal(th.compareSuite(table, 'classify', { classify: { accuracy: 0.7 } }).failures.length, 1);
+    });
+
+    test('pipeline 的門檻只放「越高越好」的三個指標', () => {
+        // needs_review 的比率越低越好，放進 ratchet 會變成「只准更多題進複核」。
+        assert.deepEqual(th.SUITE_METRICS.pipeline.metrics, ['saved_rate', 'gate_pass_rate', 'answer_agree_rate']);
+    });
+
+    test('未知的 suite 丟錯，不靜默略過', () => {
+        assert.throws(() => th.compareSuite({}, 'formula', {}), /未知的 suite/);
+    });
+});
