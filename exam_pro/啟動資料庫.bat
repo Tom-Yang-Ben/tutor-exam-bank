@@ -4,7 +4,7 @@ cd /d "%~dp0"
 
 REM 啟動本機 PostgreSQL + pgvector（docker-compose.yml 的 postgres 5442 / postgres_test 5433）
 
-docker info >/dev/null 2>&1
+docker info >nul 2>&1
 if errorlevel 1 (
     echo.
     echo [X] 偵測不到 Docker 引擎。請先啟動 Docker Desktop，等鯨魚圖示不再轉動後再執行這支。
