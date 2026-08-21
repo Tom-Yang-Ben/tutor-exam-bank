@@ -10,13 +10,18 @@
 //   第一層（零成本閘門）：拆題模型給的章節本來就在白名單內、而且它自己的信心 ≥ CLASSIFY_MIN_CONF
 //   → 直接 pass，**一次 LLM 都不呼叫**。這一層的通過率是階段 2 最重要的成本指標
 //   （report:jobs 會印；> 95% 就代表這個節點可以降為抽樣）。
+//   `chapter_confidence` **缺值或 0 一律視為閘門不過**，不得當成 1.0（裁決 S2-13）。
 //
 //   第二層（few-shot + LLM）：只有第一層沒過的題才走到。few-shot 候選依序：
-//     A. 向量最近鄰 5 題（FEATURE_SIMILAR 開、且有 DB 與可用的 embedding 時）
+//     A. 向量最近鄰 5 題（`ctx.config.features.similar` 為真、且有 `ctx.db` 時；裁決 S2-8）
 //     B. 題庫各章各取 2 題
-//     C. config/chapterExamples.js 的自製例句（補上 A/B 取不到的章）
+//     C. config/chapterExamples.js 的自製例句（補上 A/B 取不到的章；永遠執行）
+//   取材失敗一律降級，不算節點失敗。
 //   輸出**再過一次** isValidChapter：schema 的 enum 是兩科合併的 66 個，
 //   模型可能給出「物理題配到數學章節」這種跨科錯配，只有伺服器端擋得住。
+//
+// ⚠ 錄 cassette 與跑 eval 時 **ctx.db 一律為 null**（裁決 S2-8）：cassette 的鍵含 fewShotIds，
+//   接了資料庫錄出來的鍵帶著一串題目 id，CI 沒有那個庫、fewShotIds 會是 []，鍵對不上、全部 miss。
 
 const { CHAPTERS, isValidChapter, isValidSubject } = require('../config/chapters');
 const { getChapterExample } = require('../config/chapterExamples');
@@ -133,8 +138,10 @@ function thresholdOf(ctx) {
 
 /** A. 向量最近鄰（需要 FEATURE_SIMILAR、DB、以及可用的 embedding） */
 async function fewShotByVector(ctx, { subject, chapter, question_text }) {
+    // 旗標只能從 ctx.config.features 讀（裁決 S2-8：runner 從 config/features.js 組成
+    // { similar, pipeline }）——agent 不得自己讀 process.env。
     const features = (ctx.config && ctx.config.features) || {};
-    if (!features.FEATURE_SIMILAR || !ctx.db || typeof ctx.db.query !== 'function') return null;
+    if (features.similar !== true || !ctx.db || typeof ctx.db.query !== 'function') return null;
     if (!ctx.llm || typeof ctx.llm.embed !== 'function') return null;
 
     const { buildEmbedText } = require('../utils/embedText');
@@ -262,9 +269,13 @@ async function run(ctx, input = {}) {
         }
 
         // ── 第一層：零成本閘門 ──
+        // 裁決 S2-13：chapter_confidence **缺值或 0 一律視為閘門不過**，不得當成 1.0。
+        // 這條看起來多餘（0 >= 0.8 本來就是 false），但把它寫死才擋得住兩種情況：
+        // 有人把 CLASSIFY_MIN_CONF 設成 0，以及未來有人「順手」把缺值補成預設高分。
         const minConf = thresholdOf(ctx);
         const confidence = Number(input.chapter_confidence);
-        if (isValidChapter(subject, input.chapter) && Number.isFinite(confidence) && confidence >= minConf) {
+        const confidenceUsable = Number.isFinite(confidence) && confidence > 0;
+        if (isValidChapter(subject, input.chapter) && confidenceUsable && confidence >= minConf) {
             return {
                 kind: 'pass',
                 data: {

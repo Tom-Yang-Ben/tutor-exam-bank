@@ -1,0 +1,66 @@
+// services/legacy/analyzePdf.js — A-T8 之前的 aiService.js 原封快照（裁決 S2-19）
+//
+// 這支檔案是 `git show e1740ca:exam_pro/services/aiService.js` 的逐字複製，只多了這段檔頭註解。
+// **不要改它**：一改，eval/compare_pipeline.js --method legacy 量到的就不再是「舊流程」，
+// 而兩欄數字會神奇地靠攏，沒有任何東西會報錯（eval/lib/legacyAdapter.js 檔頭講的正是這件事）。
+//
+// 它刻意保留了舊版的三個特徵，那些正是 E-X12a 要呈現的對照：
+//   1. 模型 ID 寫死 `gemini-2.5-flash`（不讀 MODEL_EXTRACT）
+//   2. 章節白名單手抄一份在 prompt 裡（指紋「【數學科精細章節白名單】」，與 config/chapters.js 是兩份真相）
+//   3. 只設 responseMimeType、沒有 schema，結尾直接 JSON.parse——沒有任何伺服器端閘門
+//
+// 現行的 services/aiService.js 已經瘦成 agents/extract.js 的相容包裝（A-T8）；
+// legacyAdapter 會優先找本檔，找不到才退回 aiService 並大聲警告。
+//
+// 擁有者：WS-B（interfaces-stage2.md 第 10.1 條，裁決 S2-19）。
+
+const { GoogleGenAI } = require('@google/genai');
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+exports.analyzePdfContent = async (pdfBase64) => {
+    const aiResponse = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+            { inlineData: { mimeType: 'application/pdf', data: pdfBase64 } },
+            `你是一個專業的台灣高中數學與物理家教老師。請細心閱讀這份 PDF 檔案，找出裡面「所有的」題目。
+            請將每一題各自拆解，並「嚴格」以下列的 JSON 陣列格式回傳。
+
+            特別注意【chapter】欄位，必須「完全符合」以下規定的精細章節名稱，不得自己發明新名詞：
+
+            【數學科精細章節白名單】：
+            - 第一冊：實數、絕對值、指數與對數、直線方程式、圓方程式、多項式除法、三次函數
+            - 第二冊：數列與級數、排列、組合、古典機率、期望值、一維數據分析、二維數據分析
+            - 第三冊(A/B)：三角函數的定義、正弦與餘弦定理、三角測量、向量的加減與係數積、向量內積、面積與行列式
+            - 第四冊(A/B)：空間概念與座標系、空間向量內積、外積、平面方程式、空間直線方程式、矩陣的加減與乘法、克拉瑪公式
+            - 選修數學：數列的極限、函數的極限、微分導函數、函數圖形與極值、定積分與面積、隨機變數、常態分配
+
+            【物理科精細章節白名單】：
+            - 必修物理：科學的態度與方法、物質的組成（夸克與原子）、物體的運動（速度與加速度）、四大基本交互作用、能量的形式與守恆、量子現象（光電效應與波粒二象性）、宇宙學簡介
+            - 選修物理一：直線運動、平面運動、牛頓運動定律、摩擦力與向心力、動量與衝量、動量守恆與碰撞
+            - 選修物理二：功與動能、位能與能量守恆、重力場與重力位能、剛體轉動與平衡、簡諧運動(SHM)、流體的壓力與浮力
+            - 選修物理三：波動的性質、聲波與交互作用、幾何光學（反射折射）、物理光學（干涉繞射）
+            - 選修物理四：靜電學、電場與電位、電流與電路、電流磁效應、電磁感應、交流電
+            - 選修物理五：近代物理的序幕、原子結構與光譜、核物理與基本粒子
+
+            JSON 回傳格式：
+            [
+                {
+                    "subject": "數學" 或 "物理",
+                    "chapter": "必須是上方白名單中的精細章節名稱",
+                    "question_type": "單選、多選、填空 或 計算",
+                    "difficulty": 1到5的難度整數,
+                    "question_text": "題目的完整題目與選項文字。⚠️【數學公式格式規範，務必嚴格遵守】：(1) 所有數學/物理式子、變數、符號都必須用 LaTeX 撰寫，並用單一錢號 $...$ 包起來（行內公式），例如：圓方程式寫成 $x^2+y^2=r^2$、速度寫成 $v_0$、希臘字母寫成 $\\theta$、$\\alpha$。(2) 分數一律用 $\\frac{分子}{分母}$（例如 $\\frac{\\pi}{2}$、$\\frac{16}{3}$），絕對禁止用斜線如 π/2 或 16/3。(3) 次方用 ^、下標用 _（例如 $x^2$、$a_{n+1}$）；根號用 $\\sqrt{...}$；積分 $\\int_a^b$；級數 $\\sum_{n=1}^{\\infty}$；三角函數 $\\sin\\theta$。(4) 請使用 LaTeX 指令而非 Unicode 符號（用 $\\times$ 而非 ×、用 $\\leq$ 而非 ≤、用 $\\theta$ 而非 θ），中文敘述文字則維持中文、不要包進 $ $。",
+                    "answer_text": "請提供該題的正確答案，數學式同樣用 $...$ 與 LaTeX 格式（例如 $x=\\frac{1}{2}$）。若為單選或多選題，答案「必須」以選項代號開頭，再附說明或計算過程，例如：(C)。$f(3)=2\\times3+1=7$"
+                }
+            ]`,
+            `\n\n【系統額外強制指令：圖表與幾何圖形分析】\n請務必仔細觀測考卷中的所有附圖、幾何圖形或圖表資料。由於你無法直接匯出圖片檔案，請將該圖表所有的「解題關鍵視覺資訊」（包含：精確的座標點、邊長、角度、函數曲線趨勢、物體受力方向或電路圖連接方式等）進行詳細的文字解讀，並以「[附圖描述：...]」的文字形式，直接補充進該題的 \`question_text\` 欄位末端。確保學生在沒有原始圖片的情況下，也能完全依賴你的文字描述解出題目。`
+        ],
+        config: { responseMimeType: "application/json" }
+    });
+
+    let rawText = aiResponse.text.trim();
+    if (rawText.startsWith("```")) {
+        rawText = rawText.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
+    }
+    return JSON.parse(rawText);
+};

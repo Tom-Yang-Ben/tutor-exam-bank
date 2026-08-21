@@ -17,6 +17,15 @@ const throttle = require('../../services/llm/throttle');
 const models = require('../../config/models');
 const pricing = require('../../config/pricing');
 const llm = require('../../services/llm');
+const extractAgent = require('../../agents/extract');
+const classifyAgent = require('../../agents/classify');
+
+// agent 在模組載入時就 registerTemplate（裁決 S2-5）。這份快照在這裡取，
+// 之後任何測試呼叫 templates._resetForTest() 都不會影響它。
+const REGISTERED_AT_LOAD = {
+    extract: templates.getTemplate(extractAgent.TEMPLATE),
+    classify: templates.getTemplate(classifyAgent.TEMPLATE)
+};
 
 let tmpDir;
 const envBackup = {};
@@ -183,6 +192,24 @@ describe('cassette 鍵（interfaces-stage2.md 第 5.2 條）', () => {
         templates.registerTemplate('dup.v1', 'AAA');
         assert.throws(() => templates.registerTemplate('dup.v1', 'BBB'), /已被註冊成不同內容/);
         templates._resetForTest();
+    });
+});
+
+describe('services/llm/templates.js 的匯出（裁決 S2-5）', () => {
+    test('registerTemplate 與 getTemplate 都匯出，且取回的是原文', () => {
+        assert.equal(typeof templates.registerTemplate, 'function');
+        assert.equal(typeof templates.getTemplate, 'function');
+        templates.registerTemplate('demo.v1', '模板原文 {{X}}');
+        assert.equal(templates.getTemplate('demo.v1'), '模板原文 {{X}}');
+        assert.equal(templates.getTemplate('沒註冊過'), null);
+        templates._resetForTest();
+    });
+
+    test('四個 LLM 節點的模板都要註冊——WS-B 的 extract／classify 在模組載入時就註冊好了', () => {
+        // 快照在檔頭取（模組載入時），不受其他測試的 _resetForTest 影響
+        assert.equal(REGISTERED_AT_LOAD.extract, extractAgent.PROMPT_TEMPLATE);
+        assert.equal(REGISTERED_AT_LOAD.classify, classifyAgent.PROMPT_TEMPLATE);
+        assert.ok(REGISTERED_AT_LOAD.extract.length > 0);
     });
 });
 

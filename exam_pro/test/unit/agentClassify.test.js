@@ -107,6 +107,22 @@ describe('第一層：零成本閘門', () => {
         assert.ok(!('few_shot_ids' in outcome.data), 'gate 路徑不該有 few_shot_ids');
     });
 
+    test('chapter_confidence 缺值 → 閘門不過（不得當成 1.0；裁決 S2-13）', async () => {
+        const { ctx, calls } = fakeCtx({ data: { chapter: '向量內積', confidence: 0.9, rationale: 'r' } });
+        const outcome = await classify.run(ctx, { subject: '數學', chapter: '向量內積', question_text: QUESTION });
+        assert.equal(outcome.data.source, 'llm');
+        assert.equal(calls.length, 1);
+    });
+
+    test('chapter_confidence 為 0 → 閘門不過，連 CLASSIFY_MIN_CONF=0 也擋得住（裁決 S2-13）', async () => {
+        const { ctx, calls } = fakeCtx({ data: { chapter: '向量內積', confidence: 0.9, rationale: 'r' }, minConf: 0 });
+        const outcome = await classify.run(ctx, {
+            subject: '數學', chapter: '向量內積', chapter_confidence: 0, question_text: QUESTION
+        });
+        assert.equal(outcome.data.source, 'llm', '門檻設 0 時仍不得讓 confidence=0 的題矇混過關');
+        assert.equal(calls.length, 1);
+    });
+
     test('信心剛好等於門檻也算通過', async () => {
         const { ctx, calls } = fakeCtx({ data: {}, minConf: 0.8 });
         const outcome = await classify.run(ctx, {
@@ -168,6 +184,44 @@ describe('第二層：few-shot + LLM', () => {
         assert.ok(calls[0].parts[0].text.includes('題 A'));
         // 題庫沒有的章由自製例句補上，prompt 才不會只認得那兩章
         assert.ok(calls[0].parts[0].text.includes(getChapterExample('數學', '外積')));
+    });
+
+    test('A 層向量 few-shot 只在 ctx.config.features.similar 為真時才走（裁決 S2-8）', async () => {
+        const queries = [];
+        const db = { query: async (sql) => { queries.push(sql); return { rows: [] }; } };
+
+        // 旗標關閉：不得呼叫 embed（fakeCtx 的 embed 一被叫到就丟錯），只走 B 層那一句 SQL
+        const off = fakeCtx({ data: { chapter: '向量內積', confidence: 0.9, rationale: 'r' }, db, features: {} });
+        const outcome = await classify.run(off.ctx, {
+            subject: '數學', chapter: null, chapter_confidence: 0, question_text: QUESTION
+        });
+        assert.equal(outcome.kind, 'pass');
+        assert.equal(queries.length, 1);
+        assert.ok(!queries[0].includes('<=>'), '旗標關閉時不該下向量查詢');
+
+        // 舊的大寫鍵名（FEATURE_SIMILAR）不再算數——第 3.1 條凍結的是 features.similar
+        queries.length = 0;
+        const legacyKey = fakeCtx({ data: { chapter: '向量內積', confidence: 0.9, rationale: 'r' }, db, features: { FEATURE_SIMILAR: true } });
+        await classify.run(legacyKey.ctx, { subject: '數學', chapter: null, chapter_confidence: 0, question_text: QUESTION });
+        assert.ok(!queries[0].includes('<=>'));
+    });
+
+    test('features.similar 為真時走向量最近鄰，few_shot_ids 是鄰居的 id', async () => {
+        const queries = [];
+        const db = {
+            query: async (sql) => {
+                queries.push(sql);
+                return { rows: [{ id: 87, chapter: '向量內積', question_text: '鄰居題' }] };
+            }
+        };
+        const ctx = fakeCtx({ data: { chapter: '向量內積', confidence: 0.9, rationale: 'r' }, db, features: { similar: true } }).ctx;
+        ctx.llm.embed = async () => ({ vectors: [new Array(768).fill(0.01)], usage: { tokenIn: 1 } });
+
+        const outcome = await classify.run(ctx, {
+            subject: '數學', chapter: null, chapter_confidence: 0, question_text: QUESTION
+        });
+        assert.ok(queries[0].includes('<=>'), '旗標開啟時第一句就該是向量查詢');
+        assert.deepEqual(outcome.data.few_shot_ids, [87]);
     });
 
     test('DB 壞掉不算失敗：退回自製例句繼續跑', async () => {
