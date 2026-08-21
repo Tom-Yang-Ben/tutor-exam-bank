@@ -413,7 +413,7 @@ node seed_questions.js --apply  # 實際寫入（交易保護；同題幹已存�
 ## 🛣 下一階段
 
 Agent 管線（狀態機 + 五個 sub-agent）、RAG（相似題／檢索式分類／自然語言查題）、資料層（MySQL → PostgreSQL + pgvector、`attempts` 表、檢索 eval）的設計規格、建議順序與驗收指標，統一維護在專案根目錄 [`README.md` 的 Roadmap 章節](../README.md#-roadmap)，完整規劃（作法／理由／替代方案／排程）在 [`docs/roadmap-plan.md`](../docs/roadmap-plan.md)。
-**進度**：階段 1 資料層的程式碼（PostgreSQL + pgvector、`students`/`attempts`、embedding 回填、hybrid 檢索與 `/similar`、eval 體系）已合入 main 並通過 CI；檢索三欄對照見上方「測試 › 3」。尚待：真資料遷移彩排與切換之夜（`docs/human-lane-stage1.md`、`docs/cutover-runbook.md`）。階段 2、3 尚未開工。
+**進度**：階段 1 資料層**已完成並於 2026-08-21 切換上線**——PostgreSQL 16 + pgvector（Docker，埠 5442）、`students`/`attempts` 取代 `history_json`、embedding 與 `search_tsv` 已回填、hybrid 檢索與 `GET /api/questions/:id/similar`（`FEATURE_SIMILAR=true`）、eval 體系與 CI integration job。切換紀錄：MySQL 匯出 70 題／126 卷／143 作答／5 學生，`migrate/verify.js` 七項全過，冒煙測試（列表／兩次組卷不重疊／Word 公式／`/similar`）全過；tag `v1-mysql`，MySQL 服務停用保留 14 天（回滾界線見 `docs/cutover-runbook.md` §3）。檢索三欄對照見上方「測試 › 3」。階段 2、3 尚未開工。
 
 ---
 
