@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Tom-Yang-Ben/tutor-exam-bank/actions/workflows/ci.yml/badge.svg)](https://github.com/Tom-Yang-Ben/tutor-exam-bank/actions/workflows/ci.yml)
 
-以 **Node.js + Express + MySQL + Google Gemini** 打造的家教題庫與智慧組卷後端。
+以 **Node.js + Express + PostgreSQL 16（pgvector）+ Google Gemini** 打造的家教題庫與智慧組卷後端。
 支援上傳考卷 PDF 由 AI 自動拆題入庫、依學生作答歷史智慧組卷、並匯出含數學公式排版的 Word 考卷。
 
 ---
@@ -49,7 +49,8 @@ exam_pro/
 ├─ server.js              # 進入點：啟動 HTTP server
 ├─ app.js                 # Express 設定：CORS、靜態檔、金鑰注入、全域錯誤中樞
 ├─ config/
-│   ├─ db.js              # MySQL 連線池
+│   ├─ db.js              # PostgreSQL 連線池（匯出 {pool, query}，型別轉換集中於此）
+│   ├─ features.js        # FEATURE_* 功能旗標（預設全關）
 │   └─ chapters.js        # 數學/物理精細章節白名單 + 驗證函式
 ├─ middleware/
 │   ├─ auth.js            # 可選的 x-api-key 認證（timingSafeEqual）
@@ -106,11 +107,11 @@ flowchart TD
             TF["textFormatter<br/>LaTeX → OOXML 公式"]
         end
         Chapters["config/chapters.js<br/>章節白名單驗證"]
-        DB["config/db.js<br/>MySQL 連線池"]
+        DB["config/db.js<br/>PostgreSQL 連線池"]
     end
 
     Gemini["🤖 Google Gemini 2.5 Flash"]
-    MySQL[("🗄 MySQL<br/>questions · exam_papers")]
+    PG[("🗄 PostgreSQL 16 + pgvector<br/>questions · students<br/>exam_papers · attempts")]
 
     Browser -- "HTTP / x-api-key" --> App
     App --> Auth --> RL --> Routes
@@ -121,13 +122,13 @@ flowchart TD
     QC --> DB
     EC --> DB
     WC --> DB
-    DB --> MySQL
+    DB --> PG
 ```
 
 **兩條主要資料流**
 
 1. **AI 拆題入庫**：瀏覽器上傳 PDF → `aiController` → `aiService` 呼叫 Gemini 回傳 JSON → `questionController.batchSaveQuestions` 經**章節白名單**驗證後寫入 `questions`。
-2. **智慧組卷 + 匯出**：`examController` 依「學生 × 章節」濾掉寫過的題、抽題並以**交易**記錄作答歷史 → `wordController` / `wordService` 用 `textFormatter` 把 LaTeX 轉成 Word 數學公式，輸出 `.docx`。
+2. **智慧組卷 + 匯出**：`examController` 以 `NOT EXISTS (SELECT 1 FROM attempts …)` 濾掉該生寫過的題、抽題並在**同一交易**內建立 `exam_papers` 與 `attempts` → `wordController` / `wordService` 用 `textFormatter` 把 LaTeX 轉成 Word 數學公式，輸出 `.docx`。
 
 ---
 
@@ -198,13 +199,28 @@ npm run dev    # 開發（nodemon 熱重載）
 ## 🧪 測試
 
 ```bash
-npm test        # 40 個測試，使用 Node 內建的 node:test，無額外相依套件
+npm test        # 40 個單元測試，使用 Node 內建的 node:test，無額外相依套件
 ```
 
 每次 push 與 PR 都會由 [GitHub Actions](../.github/workflows/ci.yml) 在 Node 20.x / 22.x 上自動執行（badge 見本頁最上方）。
-測試**不連資料庫、不呼叫 Gemini**，因此 CI 不需要任何 secrets——任何人都能在不 clone、不設定 `.env` 的情況下看到驗證結果。
+`npm test` **不連資料庫、不呼叫 Gemini、不需要任何 secrets**——任何人都能在不設定 `.env` 的情況下看到驗證結果。
 
-測試集中在兩支模組，共同點是**壞掉不會噴錯**：
+### 需要資料庫的整合測試（`test/integration/`）
+
+```bash
+docker compose up -d --wait                                    # 起 postgres_test（埠 5433，tmpfs）
+node -r dotenv/config --test "test/integration/**/*.test.js"   # 由 .env 帶入 TEST_DATABASE_URL
+```
+
+- 這一層**只讀 `TEST_DATABASE_URL`，且資料庫名必須以 `_test` 結尾**（與 `migrate.js` 同一條防呆），
+  因此永遠打不到真題庫；`npm test` 沒有預載 `.env`，整層會自動 skip。
+- 涵蓋：migrations 從零套用、組卷連抽兩次不重疊、400/409 訊息逐字不變、
+  attempts 寫入短少與拋錯時整筆交易回滾、`listQuestions` 的 `total` 型別、
+  出過的題刪除時改為封存（`archived:true`）。
+- ⚠️ Node 24 在 Windows 上 `node --test <目錄>` 會把目錄當成模組去 require 而失敗，
+  一定要用上面的 glob 形式。
+
+單元測試集中在兩支模組，共同點是**壞掉不會噴錯**：
 
 ### 1. `utils/textFormatter.js` — LaTeX → Word OOXML 解析器
 
@@ -259,14 +275,14 @@ npm test        # 40 個測試，使用 Node 內建的 node:test，無額外相�
 | 1 | 取得乾淨副本：`git clone <repo> fresh && cd fresh/exam_pro` | **不可**沿用既有 `node_modules` / `.env`；`.env` 本來就不在版控中 |
 | 2 | `npm install` | 安裝成功，無 `ERR!`（`multer@1.x` 的 deprecated 警告為已知，不影響啟動）|
 | 3 | `cp .env.example .env` 並填入 `GEMINI_API_KEY`、`DB_PASSWORD` | `.env.example` 的每個欄位都有對應值 |
-| 4 | `mysql -u root -p < schema.sql` | `SHOW TABLES;` 可見 `questions`、`exam_papers` |
+| 4 | `docker compose up -d --wait` 後 `npm run migrate` | `node migrate.js status` 顯示 `0001_init.sql`、`0002_vector.sql` 皆已套用 |
 | 5 | `node seed_questions.js --apply` | 顯示「新增 30 題」且分佈為 4 章各 7~8 題（任一章 < 5 題會自動中止）|
 
 ### B. 自動化把關（先讓機器擋掉低級錯誤）
 
 | # | 步驟 | 通過標準 |
 |---|------|----------|
-| 6 | `npm test` | **40 passed / 0 failed**（CI 亦會在 push 後自動跑一次，見 README 上方 badge）|
+| 6 | `npm test` | **40 passed / 0 failed / 1 skipped**（skip 的是需要 PG 的整合測試；CI 亦會在 push 後自動跑一次，見 README 上方 badge）|
 | 7 | 靜態檔完整性：確認 `public/index.html` 結尾為 `</script></body></html>`，且 `<div>`、`<script>` 開闔數相等 | 檔案未被截斷（詳見下方「截斷檔自檢」）|
 | 8 | `npm start` | 終端印出 `🚀 家教題庫後端系統已成功安全啟動：http://localhost:3000` |
 
@@ -300,7 +316,7 @@ fs.writeFileSync('.tmp_inline.js',b)" && node --check .tmp_inline.js && echo "JS
 | 項目 | 結果 |
 |---|---|
 | 日期 | 2026-08-01 |
-| 方式 | 只複製版控追蹤的檔案至全新目錄 → 全新 `npm install` → 由 `.env.example` 產生 `.env` → `schema.sql` 建立獨立驗收資料庫 → 種子 30 題 |
+| 方式 | 只複製版控追蹤的檔案至全新目錄 → 全新 `npm install` → 由 `.env.example` 產生 `.env` → `schema.sql` 建立獨立驗收資料庫（**當時仍是 MySQL**，階段 1 換底後改為 `docker compose up` + `npm run migrate`）→ 種子 30 題 |
 | `npm test` | 40 passed / 0 failed（`npm ci` 亦驗證過 lock file 可獨立還原，且測試不需 `.env`）|
 | 突變測試 | 把 `shuffle` 改回 `sort(() => 0.5 - Math.random())` → 5 個測試轉紅、退出碼 1；還原後回到 40/40 |
 | 首頁載入 | Console **0 error、0 warning**；章節下拉 35 項、題庫清單 10 張卡＋「共 30 題」＋分頁正常 |
@@ -320,11 +336,11 @@ fs.writeFileSync('.tmp_inline.js',b)" && node --check .tmp_inline.js && echo "JS
 | GET | `/api/questions` | 題庫列表（支援 `subject/chapter/question_type/q/page/limit` 篩選分頁）|
 | POST | `/api/questions` | 新增單題 |
 | PUT | `/api/questions/:id` | 更新題目 |
-| DELETE | `/api/questions/:id` | 刪除題目 |
+| DELETE | `/api/questions/:id` | 刪除題目。**已有學生作答紀錄者改為封存**（`archived_at`），回 `{message, id, archived:true}`；封存的題不再出現在題庫列表與組卷候選中 |
 | POST | `/api/batch-save-questions` | 批次入庫（AI 解析結果）。**部分入庫**：通過驗證的題照樣寫入，回 `{message, saved_count, rejected:[{idx, reason}]}`；`?strict=1` 則維持舊的「一題不合格就整批 400」行為 |
 | GET | `/api/chapters` | 題庫中實際存在的章節 |
 | GET | `/api/chapter-whitelist` | 完整章節白名單（前端下拉選單）|
-| POST | `/api/generate-paper` | 智慧組卷（`student_name/subject/chapter/count`）|
+| POST | `/api/generate-paper` | 智慧組卷（`student_name/subject/chapter/count`）。回應含 `paper_id`（`exam_papers.id`）|
 | POST | `/api/analyze-pdf` | 上傳 PDF（`multipart/form-data`, 欄位 `pdf`）解析題目 |
 | POST | `/api/download-word` | 依 `question_ids` 產生 Word 考卷 |
 
@@ -338,7 +354,6 @@ fs.writeFileSync('.tmp_inline.js',b)" && node --check .tmp_inline.js && echo "JS
 |--------|------|
 | `執行公式健檢.bat` | 掃描題庫公式問題 → 產生 `公式健檢報告.html` |
 | `預覽公式修正.bat` / `套用公式修正.bat` | 公式自動修正（套用前備份為 `formulas_backup_*.json`）|
-| `建立索引與檢視表.bat` | 建立資料庫索引與檢視表 |
 
 灌入示範題（題庫為空時）：
 
