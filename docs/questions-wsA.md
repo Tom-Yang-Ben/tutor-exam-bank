@@ -2,11 +2,16 @@
 
 > 依 `docs/stage1-parallel-prompts.md` 的硬規則第 2 條：實作 D-D3／D-D4／E-X9b 期間發現的
 > 介面問題寫在這裡，**沒有自行改 `docs/interfaces.md` 繞過**。
-> 下列每一條都標了「是否已阻擋實作」——目前**沒有任何一條阻擋**，全部照凍結介面實作完成。
+> 下列每一條都標了「是否已阻擋實作」——**沒有任何一條阻擋**，全部照凍結介面實作完成。
+>
+> **本檔已結案（2026-08-21）**：七條全數由開發者本人裁決，結論寫在 `docs/interfaces.md` §1.6（裁決 13–25）
+> 與新增的第 12 條。每條下方的「裁決」列即為最終結論，實作已對齊，後續不再更新本檔。
 
 ---
 
 ## Q1（介面內部不一致，不阻擋）`config/db.js` 的 `DB_*` 退路與第 9 條的 `DB_*` 定義互相衝突
+
+> **裁決：接受現行做法——D-X1 前保留退路但預設值為 PG（`5442`／`exam`／`exam`）；D-X1 後刪除退路，只認 `DATABASE_URL`（見 interfaces.md 第 8 條、§1.6 裁決 22）。** 已在 `config/db.js` 的註解裡標明 D-X1 要改成什麼；本輪不動。
 
 - 第 8 條：「連線來源：`DATABASE_URL`（存在時優先），否則以 `DB_HOST`／`DB_PORT`／`DB_USER`／`DB_PASSWORD`／`DB_NAME` 組出。」
 - 第 9 條：`DB_HOST` 等五個變數的說明是「**舊 MySQL**，遷移期間保留」，`.env.example` 裡 `DB_PORT=3306`、`DB_USER=root`。
@@ -23,6 +28,8 @@
 ---
 
 ## Q2（介面未涵蓋，已自行決定，請確認）`deleteQuestion` 的完整回應形狀
+
+> **裁決：全部接受，原樣凍結（見 interfaces.md 第 12.1 條、§1.6 裁決 23）。** 下表已逐字寫進 interfaces.md，實作未改。
 
 第 6 條凍結的是 `/similar`，第 7 條凍結的是 `/generate-paper`；`DELETE /api/questions/:id` 的回應形狀
 只在 §1.5 裁決 1 與規劃 §4.3.1 出現一句「回 `{archived:true}`」，沒有凍結其餘鍵。
@@ -42,6 +49,8 @@
 
 ## Q3（介面未涵蓋，已自行決定，請 WS-C 對齊）`config/features.js` 的匯出形狀
 
+> **裁決：全部接受，含「用 getter 不用 require 時取值」（見 interfaces.md 第 12.2 條、§1.6 裁決 23）。** WS-C 的 `retrievalService.isSimilarEnabled()` 已對齊，實作未改。
+
 第 9 條只說「所有 `FEATURE_*` 集中在 `config/features.js`，預設全關」與布林解讀規則，沒有凍結匯出形狀。
 WS-C 的 `/similar` 要讀 `FEATURE_SIMILAR`，所以這裡先定一版：
 
@@ -60,6 +69,8 @@ features.parseBool(value)        // 凍結的解讀規則：'1' 或 'true'（不
 
 ## Q4（實作解讀，請確認）「所有候選池加 `archived_at IS NULL`」的邊界
 
+> **裁決：全部接受，含 `downloadWord` 這個唯一例外（見 interfaces.md 第 12.3 條、§1.6 裁決 23）。** 下表已寫進 interfaces.md，實作未改。
+
 裁決文字是「所有候選池（`generatePaper`、`similar`、hybrid、few-shot）一律加 `archived_at IS NULL`」。
 WS-A 這一側把它套用到下列位置，其中前三項不在原文的列舉裡：
 
@@ -77,6 +88,8 @@ WS-A 這一側把它套用到下列位置，其中前三項不在原文的列舉
 ---
 
 ## Q5（不是介面問題，但會影響 WS-D 的 D-C1）Node 24 在 Windows 上 `node --test <目錄>` 會失敗
+
+> **裁決：採用 glob（見 interfaces.md §1.6 裁決 24）。** `npm test` 已改為 `node --test "test/unit/**/*.test.js"`，規劃裡「`node --test test/unit/`」的寫法作廢。WS-C 的 questions-wsC.md 第 8 條、WS-D 的 Q3 是同一件事。
 
 `docs/stage1-parallel-prompts.md` 給 WS-D 的第 1 項是「`npm test` 改為 `node --test test/unit/`」。
 在本機（Node v24.15.0 / Windows 11）實測，**傳目錄會失敗**——node 會把目錄本身當成模組去 `require`：
@@ -99,6 +112,8 @@ WS-A 的整合測試因此在 README 與檔頭註解都寫 glob 形式。**請 W
 
 ## Q6（防呆的邊界，提醒）`npm test` 不連 DB 的保證條件
 
+> **裁決：維持單一開關 `TEST_DATABASE_URL`，不加第二道 `RUN_INTEGRATION`（隨裁決 23 一併接受現行做法）。** CI 的 unit job 不設該變數、integration job 才設；`npm test` 的 glob 已限定在 `test/unit/`，整合測試連被掃到的機會都沒有了。
+
 整合測試的唯一開關是 `process.env.TEST_DATABASE_URL`（本檔**刻意不 `require('dotenv')`**），
 所以 `npm test` 預設一定 skip。但如果有人把 `TEST_DATABASE_URL` **export 到 shell 環境變數**裡，
 `npm test` 就會連上那個資料庫（庫名仍受 `_test` 後綴防呆保護，打不到真題庫）。
@@ -110,6 +125,8 @@ WS-A 的整合測試因此在 README 與檔頭註解都寫 glob 形式。**請 W
 ---
 
 ## Q7（版控衛生，提醒開發者本人）`NOTICE` 的第三方套件清單尚未跟上
+
+> **裁決：已由開發者本人在 `e431b8e` 補齊 `NOTICE`（`pg`、`pgvector`、`@node-rs/jieba`、`supertest`）。** 本條結案，`mysql2` 仍留到 D-X1。
 
 `NOTICE` 底部的「第三方相依套件」列了 `mysql2 (MIT)`，但沒有列 S0 加入的 `pg (MIT)`，
 也沒有 WS-A 這次加入的 `supertest (MIT, devDependency)`。`NOTICE` 不在 `docs/interfaces.md` 第 10.1 的

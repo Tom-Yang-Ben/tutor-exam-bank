@@ -209,14 +209,16 @@ npm test        # 40 個單元測試，使用 Node 內建的 node:test，無額�
 
 ```bash
 docker compose up -d --wait                                    # 起 postgres_test（埠 5433，tmpfs）
-node -r dotenv/config --test "test/integration/**/*.test.js"   # 由 .env 帶入 TEST_DATABASE_URL
+node -r dotenv/config --env-file=eval/.env.replay --test "test/integration/**/*.test.js"
 ```
 
 - 這一層**只讀 `TEST_DATABASE_URL`，且資料庫名必須以 `_test` 結尾**（與 `migrate.js` 同一條防呆），
   因此永遠打不到真題庫；`npm test` 沒有預載 `.env`，整層會自動 skip。
 - 涵蓋：migrations 從零套用、組卷連抽兩次不重疊、400/409 訊息逐字不變、
   attempts 寫入短少與拋錯時整筆交易回滾、`listQuestions` 的 `total` 型別、
-  出過的題刪除時改為封存（`archived:true`）。
+  出過的題刪除時改為封存（`archived:true`）、新增／修改題目後的 `search_tsv` 同步。
+- `npm run test:integration` 只帶 `eval/.env.replay`（沒有 `TEST_DATABASE_URL`），
+  在本機會整層 skip——那支是給 CI 用的（CI 由 workflow 的 env 提供）。本機請用上面那行。
 - ⚠️ Node 24 在 Windows 上 `node --test <目錄>` 會把目錄當成模組去 require 而失敗，
   一定要用上面的 glob 形式。
 

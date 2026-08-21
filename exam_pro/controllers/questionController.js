@@ -1,6 +1,54 @@
 const { query, pool } = require('../config/db');
 const { CHAPTERS, isValidSubject, isValidChapter, isValidQuestionType, normalizeDifficulty, QUESTION_TYPES } = require('../config/chapters');
 
+// ─────────────────────────────────────────────────────────────
+// 檢索欄位的同步（docs/interfaces.md 第 12.4 條）
+//
+// 新增／修改題目後必須讓 search_tsv 與 embedding 跟上，否則新題永遠檢索不到。
+// 兩者的可靠度不同，所以拆成兩條路徑：
+//
+//   search_tsv  只需要 jieba，純 CPU、不需金鑰 → **同步寫**，與題目本體同一筆交易，
+//               任何 EMBED_MODE 下都保證寫得進去。
+//   embedding   需要 Gemini 或 fixture，可能失敗 → **fire-and-forget**，失敗只記 log；
+//               同時在 UPDATE 時把 embed_hash 設成 NULL，讓 backfill_embeddings.js
+//               的 --missing-only 一定撿得到（新增的題 embedding 本來就是 NULL）。
+//
+// embedService 走延遲 require：它會載入 jieba 詞典（約 2 秒），不該進 app 的開機路徑，
+// 也不該讓不碰資料庫的單元測試被迫裝 @node-rs/jieba。
+// ─────────────────────────────────────────────────────────────
+
+// interfaces.md 第 2 條：不提供 toTsvSql()，寫入端自己組這段 SQL；
+// 三段 token 一律由 embedService 匯出的純函式產生（裁決 21），不得自行 tokenize。
+const SEARCH_TSV_ASSIGN = `search_tsv = setweight(to_tsvector('simple', array_to_string($2::text[], ' ')), 'A')
+                                     || setweight(to_tsvector('simple', array_to_string($3::text[], ' ')), 'A')
+                                     || setweight(to_tsvector('simple', array_to_string($4::text[], ' ')), 'B')`;
+
+/** 依 row 的內容重算 search_tsv 並寫回；row 需含 id 與 buildEmbedText 用得到的欄位。 */
+async function writeSearchTsv(executor, row) {
+    const { buildTsvTokens } = require('../services/embedService');
+    const { chapterTokens, keywordTokens, stemTokens } = buildTsvTokens(row);
+    await executor.query(`UPDATE questions SET ${SEARCH_TSV_ASSIGN} WHERE id = $1`,
+        [row.id, chapterTokens, keywordTokens, stemTokens]);
+}
+
+/**
+ * 非同步補上 embedding（不 await：向量是輔助欄位，失敗不該影響主要回應）。
+ * EMBED_MODE=fixture 查不到向量、或沒有金鑰時都會走到這裡的 log，
+ * 該題的 embed_hash 仍是 NULL，之後 npm run backfill 會補。
+ */
+function scheduleEmbed(id) {
+    Promise.resolve()
+        .then(() => require('../services/embedService').embedByIds([id]))
+        .then((r) => {
+            if (r.failed.length > 0) {
+                console.warn(`[embed] 題目 ${id} 的向量待 backfill 補：${String(r.failed[0].error).split('\n')[0]}`);
+            }
+        })
+        .catch((err) => {
+            console.warn(`[embed] 題目 ${id} 的向量寫入失敗（不影響主要回應）：${String(err.message).split('\n')[0]}`);
+        });
+}
+
 // 提供前端手動錄入時的章節下拉選單來源
 exports.getChapterWhitelist = (req, res) => {
     res.json(CHAPTERS);
@@ -44,13 +92,32 @@ exports.createQuestion = async (req, res, next) => {
         return res.status(400).json({ message: '難度必須為 1 到 5 的整數！' });
     }
     try {
+        // 新題的 keywords / concept_summary 一定是 NULL，所以 search_tsv 的三段 token
+        // 直接由這裡驗證過的欄位算得出來，可以與 INSERT 併成同一句（天然原子）。
+        const { buildTsvTokens } = require('../services/embedService');
+        const row = {
+            subject, chapter: chapter.trim(), question_type: qType, difficulty: diff,
+            question_text: question_text.trim(), keywords: null, concept_summary: null
+        };
+        const { chapterTokens, keywordTokens, stemTokens } = buildTsvTokens(row);
+
         // 手動錄入 → origin='manual'、chapter_src='human'（規劃 §4.3.1 的來源標記規則）
         const sql = `INSERT INTO questions
-                        (subject, chapter, question_type, difficulty, question_text, question_img, answer_text, solution_img, origin, chapter_src)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'manual', 'human')
+                        (subject, chapter, question_type, difficulty, question_text, question_img, answer_text, solution_img,
+                         origin, chapter_src, search_tsv)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'manual', 'human',
+                             setweight(to_tsvector('simple', array_to_string($9::text[],  ' ')), 'A')
+                          || setweight(to_tsvector('simple', array_to_string($10::text[], ' ')), 'A')
+                          || setweight(to_tsvector('simple', array_to_string($11::text[], ' ')), 'B'))
                      RETURNING id`;
-        const { rows } = await query(sql, [subject, chapter.trim(), qType, diff, question_text.trim(), question_img || null, answer_text.trim(), solution_img || null]);
+        const { rows } = await query(sql, [
+            row.subject, row.chapter, row.question_type, row.difficulty, row.question_text,
+            question_img || null, answer_text.trim(), solution_img || null,
+            chapterTokens, keywordTokens, stemTokens
+        ]);
         res.status(201).json({ message: '題目錄入成功！', questionId: rows[0].id });
+        // 回應送出後才補向量（interfaces.md 12.4）：embedding IS NULL 本來就會被 backfill 撿到
+        scheduleEmbed(rows[0].id);
     } catch (err) { next(err); }
 };
 
@@ -166,20 +233,46 @@ exports.updateQuestion = async (req, res, next) => {
     if (!Number.isInteger(id)) return res.status(400).json({ message: '無效的題目 ID' });
     const v = validateQuestionFields(req.body);
     if (!v.ok) return res.status(400).json({ message: v.error });
+    const client = await pool.connect();
     try {
         const { subject, chapter, question_type, difficulty, question_text, answer_text } = v.value;
-        // UPDATE 的 SET 運算式一律看**舊值**，所以 CASE 裡的 chapter 是改動前的章節：
-        // 老師手動改過章節 ⇒ 章節來源不再是 AI，標記 chapter_src='human'（規劃 §4.3.1）
-        const { rowCount } = await query(
+        await client.query('BEGIN');
+
+        // UPDATE 的 SET 運算式一律看**舊值**，所以兩個 CASE 裡的 chapter 與五個比較欄
+        // 都是改動前的內容：
+        //   chapter_src  老師手動改過章節 ⇒ 章節來源不再是 AI，標記 'human'（規劃 §4.3.1）
+        //   embed_hash   embed_text 的來源欄位有變 ⇒ 設 NULL，讓 backfill 的 --missing-only
+        //                一定撿得到（interfaces.md 12.4）。embedding 刻意留著不清空，
+        //                否則向量補上之前這題會直接從 /similar 消失。
+        const { rows } = await client.query(
             `UPDATE questions
                 SET subject=$1, chapter=$2, question_type=$3, difficulty=$4, question_text=$5, answer_text=$6,
-                    chapter_src = CASE WHEN chapter IS DISTINCT FROM $2 THEN 'human' ELSE chapter_src END
-              WHERE id=$7 AND archived_at IS NULL`,
+                    chapter_src = CASE WHEN chapter IS DISTINCT FROM $2 THEN 'human' ELSE chapter_src END,
+                    embed_hash  = CASE WHEN (subject, chapter, question_type, difficulty, question_text)
+                                       IS DISTINCT FROM ($1, $2, $3, $4::smallint, $5)
+                                  THEN NULL ELSE embed_hash END
+              WHERE id=$7 AND archived_at IS NULL
+          RETURNING id, subject, chapter, question_type, difficulty, question_text, keywords, concept_summary`,
             [subject, chapter, question_type, difficulty, question_text, answer_text || '略', id]
         );
-        if (rowCount === 0) return res.status(404).json({ message: '找不到該題目' });
+        if (rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: '找不到該題目' });
+        }
+
+        // 用 RETURNING 回來的權威值重算 search_tsv（keywords／concept_summary 只有 DB 知道），
+        // 與題目本體同一筆交易：不會出現「內容已改、tsv 還是舊的」的中間狀態。
+        await writeSearchTsv(client, rows[0]);
+        await client.query('COMMIT');
+
         res.json({ message: '題目已更新！', id });
-    } catch (err) { next(err); }
+        scheduleEmbed(id);
+    } catch (err) {
+        try { await client.query('ROLLBACK'); } catch (e) { /* 回滾失敗不覆蓋原始錯誤 */ }
+        next(err);
+    } finally {
+        client.release();
+    }
 };
 
 // 刪除單一題目

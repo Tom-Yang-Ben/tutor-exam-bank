@@ -101,9 +101,13 @@ function runSuite() {
             await pool.end();
         });
 
-        test('migrations 兩支都已套用', async () => {
+        test('migrations 全部套用（以 migrations/ 目錄為準，之後新增的支數也會被涵蓋）', async () => {
+            const files = require('node:fs')
+                .readdirSync(path.join(APP_DIR, 'migrations'))
+                .filter(f => f.endsWith('.sql')).sort();
+            assert.ok(files.includes('0001_init.sql') && files.includes('0002_vector.sql'));
             const { rows } = await query('SELECT version FROM schema_migrations ORDER BY version');
-            assert.deepEqual(rows.map(r => r.version), ['0001_init.sql', '0002_vector.sql']);
+            assert.deepEqual(rows.map(r => r.version), files);
         });
 
         // ── generate-paper ────────────────────────────────────────
@@ -316,6 +320,77 @@ function runSuite() {
             assert.equal(res.status, 200);
             ({ rows } = await query('SELECT chapter, chapter_src FROM questions WHERE id = $1', [ids[0]]));
             assert.deepEqual(rows[0], { chapter: '外積', chapter_src: 'human' });
+        });
+
+        // ── §12.4 檢索欄位同步 ────────────────────────────────────
+        test('新增的題目立刻就有 search_tsv（不依賴金鑰或 EMBED_MODE）', async () => {
+            const res = await request(app).post('/api/questions').send({
+                subject: '物理', chapter: '摩擦力與向心力', question_type: '計算', difficulty: 3,
+                question_text: '自製測試題：質量 $m$ 的物體沿半徑 $r$ 的圓周運動，求向心力大小。',
+                answer_text: '$F = \\frac{mv^2}{r}$'
+            });
+            assert.equal(res.status, 201);
+            const id = res.body.questionId;
+
+            const { rows } = await query(
+                `SELECT search_tsv IS NOT NULL AS has_tsv, embedding IS NULL AS no_vec,
+                        search_tsv::text AS tsv FROM questions WHERE id = $1`, [id]);
+            assert.equal(rows[0].has_tsv, true, '新題必須立刻有 search_tsv（interfaces.md 12.4）');
+            // 章節段權重 A、題幹段權重 B；兩段都要進得去
+            assert.match(rows[0].tsv, /'向心力':\d+A/, '章節 token 必須是權重 A');
+            assert.match(rows[0].tsv, /'圓周運動':\d+B/, '題幹 token 必須是權重 B');
+            // embedding 尚未產生也沒關係：它是 NULL，backfill 的 --missing-only 撿得到
+            assert.equal(rows[0].no_vec, true);
+
+            // 分詞後的詞真的查得到（to_tsquery 走同一個 'simple' 字典）
+            const { rows: hit } = await query(
+                `SELECT id FROM questions WHERE search_tsv @@ to_tsquery('simple', $1)`, ['向心力']);
+            assert.deepEqual(hit.map(r => r.id), [id]);
+        });
+
+        test('改過題目後 search_tsv 跟著更新，embed_hash 被設為 NULL 等 backfill', async () => {
+            const [id] = await seedQuestions(1);
+            // 先假裝這題已經被回填過：有向量、有 hash
+            await query(
+                `UPDATE questions SET embed_hash = repeat('a', 64), embedding_model = 'x',
+                        embedding = $2::vector, embedded_at = now(),
+                        search_tsv = to_tsvector('simple', '舊的內容')
+                  WHERE id = $1`,
+                [id, `[${Array.from({ length: 768 }, () => 0.001).join(',')}]`]);
+
+            const res = await request(app).put(`/api/questions/${id}`).send({
+                subject: '物理', chapter: '摩擦力與向心力', question_type: '計算', difficulty: 3,
+                question_text: '自製測試題：改寫後的題幹，求向心加速度。', answer_text: '略'
+            });
+            assert.equal(res.status, 200);
+
+            const { rows } = await query(
+                `SELECT embed_hash, embedding IS NULL AS no_vec, search_tsv::text AS tsv
+                   FROM questions WHERE id = $1`, [id]);
+            assert.equal(rows[0].embed_hash, null, 'embed_text 的來源欄位變了就要清掉 hash');
+            assert.equal(rows[0].no_vec, false, 'embedding 刻意保留，補上新向量前 /similar 仍找得到這題');
+            assert.match(rows[0].tsv, /'向心加速度'|'向心力'/, 'search_tsv 必須換成新內容');
+            assert.equal(/舊的內容/.test(rows[0].tsv), false);
+
+            // backfill 的 --missing-only 條件（embed_hash IS NULL）撿得到它
+            const { rows: pending } = await query(
+                `SELECT id FROM questions
+                  WHERE archived_at IS NULL AND (embedding IS NULL OR embed_hash IS NULL)`);
+            assert.equal(pending.some(r => r.id === id), true);
+        });
+
+        test('內容沒變的更新不會白白清掉 embed_hash', async () => {
+            const [id] = await seedQuestions(1);
+            const { rows: before } = await query(
+                `SELECT subject, chapter, question_type, difficulty, question_text FROM questions WHERE id = $1`, [id]);
+            await query(`UPDATE questions SET embed_hash = repeat('b', 64) WHERE id = $1`, [id]);
+
+            // 只改 answer_text（不屬於 embed_text 的來源欄位）
+            const res = await request(app).put(`/api/questions/${id}`).send({ ...before[0], answer_text: '換一個答案' });
+            assert.equal(res.status, 200);
+
+            const { rows } = await query('SELECT embed_hash FROM questions WHERE id = $1', [id]);
+            assert.equal(rows[0].embed_hash, 'b'.repeat(64), 'embed_text 沒變就不該觸發重算');
         });
 
         test('批次入庫走 unnest，部分入庫的回應形狀不變', async () => {

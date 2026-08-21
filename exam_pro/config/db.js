@@ -22,6 +22,11 @@ types.setTypeParser(1082, v => v);
 // 連線來源：DATABASE_URL 優先，否則以 DB_* 組出（docs/interfaces.md 第 8 條）。
 // 注意：.env 裡的 DB_* 目前指向**舊 MySQL**（DB_PORT=3306），遷移期間兩者同時存在。
 // 因此請一律設定 DATABASE_URL；DB_* 這條退路的預設值已改為 PostgreSQL 的值。
+//
+// ⚠️ 裁決 22（interfaces.md §1.6）：這條退路只活到 D-X1。切換之夜完成、DB_* 從 .env
+//    移除之後，整個三元運算式要換成單純的
+//        new Pool({ connectionString: process.env.DATABASE_URL, max: 10 })
+//    並在缺少 DATABASE_URL 時直接丟錯，不要再猜。
 const pool = process.env.DATABASE_URL
     ? new Pool({ connectionString: process.env.DATABASE_URL, max: 10 })
     : new Pool({
