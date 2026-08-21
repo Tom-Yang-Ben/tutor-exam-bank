@@ -153,7 +153,8 @@ function runSuite() {
      * 讓 id 在整輪測試裡單調遞增，殘留寫入就只會打在已經不存在的列上，影響 0 列。
      * 本檔所有斷言用的都是「插入時回傳的 id」，沒有任何一處假設 id 從 1 開始。
      */
-    async function truncateAll(attempts = 6) {
+    async function truncateAll(attempts = 10) {
+        await waitForIdleBackends();
         for (let i = 1; ; i++) {
             try {
                 await query('TRUNCATE job_events, job_questions, jobs CASCADE');
@@ -163,8 +164,44 @@ function runSuite() {
                 // 40P01 死結、55P03 拿不到鎖；其餘錯誤是真問題，直接往上丟
                 if ((err.code !== '40P01' && err.code !== '55P03') || i >= attempts) throw err;
                 await new Promise(r => setTimeout(r, 50 * i));
+                await waitForIdleBackends();
             }
         }
+    }
+
+    /**
+     * 等到這個資料庫上沒有其他連線正在跑查詢為止（最多等 timeoutMs）。
+     *
+     * 比「死結了再重試」更早一步：殘留的 embed 交易通常只有幾毫秒，先讓它跑完，
+     * TRUNCATE 就根本不會去跟它搶鎖。等不到也不丟錯——後面的重試還會兜底。
+     */
+    async function waitForIdleBackends(timeoutMs = 3000) {
+        const deadline = Date.now() + timeoutMs;
+        for (; ;) {
+            const { rows } = await query(
+                `SELECT count(*)::int AS n FROM pg_stat_activity
+                  WHERE datname = current_database() AND pid <> pg_backend_pid() AND state <> 'idle'`);
+            if (rows[0].n === 0 || Date.now() >= deadline) return;
+            await new Promise(r => setTimeout(r, 20));
+        }
+    }
+
+    /**
+     * 這個 job 真的入庫的題目（依 job_questions.question_id 反查）。
+     *
+     * 刻意不用 `SELECT … FROM questions` 全表查：`questions` 是所有案例、
+     * 甚至其他整合測試檔共用的表，全表斷言等於把「別人留下什麼」也算進來。
+     * 每個案例只該對自己造出來的資料下斷言。
+     *
+     * @param {number} jobId
+     * @param {string} [columns] 要取的欄位
+     */
+    async function savedQuestions(jobId, columns = '*') {
+        const { rows } = await query(
+            `SELECT ${columns} FROM questions q
+               JOIN job_questions jq ON jq.question_id = q.id
+              WHERE jq.job_id = $1 ORDER BY q.id`, [jobId]);
+        return rows;
     }
 
     /** 一直 tick 到沒有可推進的列為止（每次 tick 之後等 in-flight 清空）。 */
@@ -229,8 +266,8 @@ function runSuite() {
                 ].sort());
 
                 // 入庫的欄位：origin/chapter_src/text_hash 照第 3.3 條
-                const { rows: q } = await query(
-                    'SELECT origin, chapter_src, text_hash, search_tsv IS NOT NULL AS has_tsv FROM questions ORDER BY id');
+                const q = await savedQuestions(jobId,
+                     'origin, chapter_src, text_hash, search_tsv IS NOT NULL AS has_tsv');
                 assert.equal(q.length, 3);
                 for (const row of q) {
                     assert.equal(row.origin, 'pdf');
@@ -257,8 +294,7 @@ function runSuite() {
                 assert.equal(rows[1].review_reason, 'answer_mismatch');
                 assert.equal(rows[1].question_id, null, '沒過閘門的題目不得入庫');
 
-                const { rows: q } = await query('SELECT COUNT(*)::int AS n FROM questions');
-                assert.equal(q[0].n, 2, '整批退回是舊行為，管線要部分入庫');
+                assert.equal((await savedQuestions(jobId)).length, 2, '整批退回是舊行為，管線要部分入庫');
 
                 // verify 被試了 1 + 1 次（maxRetries.verify = 1）
                 const { rows: ev } = await query(
@@ -344,9 +380,9 @@ function runSuite() {
             });
 
             test('figure_desc 以 [附圖描述：…] 併回題幹末端後才入庫', async () => {
-                await seedJob([extractPayload(1, { figure_desc: '一個單位圓' })]);
+                const { jobId } = await seedJob([extractPayload(1, { figure_desc: '一個單位圓' })]);
                 await drain(makeRunner());
-                const { rows } = await query('SELECT question_text FROM questions');
+                const rows = await savedQuestions(jobId, 'question_text');
                 assert.match(rows[0].question_text, /\n\[附圖描述：一個單位圓\]$/);
             });
 
@@ -357,8 +393,7 @@ function runSuite() {
                 const { rows } = await query('SELECT state, review_reason FROM job_questions WHERE job_id = $1', [jobId]);
                 assert.equal(rows[0].state, 'needs_review');
                 assert.equal(rows[0].review_reason, 'schema_invalid');
-                const { rows: q } = await query('SELECT COUNT(*)::int AS n FROM questions');
-                assert.equal(q[0].n, 0);
+                assert.equal((await savedQuestions(jobId)).length, 0);
             });
         });
 
@@ -868,7 +903,7 @@ function runSuite() {
             });
 
             test('人也要過閘門：章節不在白名單 → 400「欄位驗證失敗」+ errors 陣列', async () => {
-                const { jqId } = await seedNeedsReview();
+                const { jobId, jqId } = await seedNeedsReview();
                 const res = await request(app).post(`/api/review/${jqId}/approve`)
                     .send({ ...GOOD_BODY, chapter: '這章不存在' });
                 assert.equal(res.status, 400);
@@ -876,23 +911,24 @@ function runSuite() {
                 assert.ok(Array.isArray(res.body.errors));
                 assert.match(res.body.errors[0], /不在 數學 的精細章節白名單中/);
 
-                const { rows } = await query('SELECT COUNT(*)::int AS n FROM questions');
-                assert.equal(rows[0].n, 0, '驗證失敗不得留下半筆資料');
+                assert.equal((await savedQuestions(jobId)).length, 0, '驗證失敗不得留下半筆資料');
             });
 
             test('merge_into：不入新題，只把這一列指到既有題目並記 variant', async () => {
                 const { rows: existing } = await query(
                     `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text)
                      VALUES ($1, $2, '計算', 3, '既有的題目', '答') RETURNING id`, [SUBJECT, CHAPTER]);
-                const { jqId } = await seedNeedsReview('duplicate');
+                const { jobId, jqId } = await seedNeedsReview('duplicate');
 
                 const res = await request(app).post(`/api/review/${jqId}/approve`)
                     .send({ ...GOOD_BODY, merge_into: existing[0].id });
                 assert.equal(res.status, 200);
                 assert.deepEqual(res.body, { question_id: existing[0].id, merged: true });
 
-                const { rows: q } = await query('SELECT COUNT(*)::int AS n FROM questions');
+                const { rows: q } = await query(
+                    'SELECT COUNT(*)::int AS n FROM questions WHERE id = $1', [existing[0].id]);
                 assert.equal(q[0].n, 1, 'merge 不該多出一題');
+                assert.equal((await savedQuestions(jobId)).length, 1, '只指到既有題目，沒有新增');
 
                 const { rows: jq } = await query('SELECT state, question_id, payload FROM job_questions WHERE id = $1', [jqId]);
                 assert.equal(jq[0].state, 'saved');
@@ -901,14 +937,14 @@ function runSuite() {
             });
 
             test('merge_into 指向不存在的題目 → 400', async () => {
-                const { jqId } = await seedNeedsReview('duplicate');
+                const { jobId, jqId } = await seedNeedsReview('duplicate');
                 const res = await request(app).post(`/api/review/${jqId}/approve`).send({ ...GOOD_BODY, merge_into: 999999 });
                 assert.equal(res.status, 400);
                 assert.equal(res.body.message, 'merge_into 指向的題目不存在。');
             });
 
             test('重複複核 → 409「該題目已處理完畢，不能重複複核。」', async () => {
-                const { jqId } = await seedNeedsReview();
+                const { jobId, jqId } = await seedNeedsReview();
                 await request(app).post(`/api/review/${jqId}/approve`).send(GOOD_BODY);
 
                 const again = await request(app).post(`/api/review/${jqId}/approve`).send(GOOD_BODY);
@@ -927,7 +963,7 @@ function runSuite() {
             });
 
             test('reject：state 變 rejected、review_reason 保留、不入庫', async () => {
-                const { jqId } = await seedNeedsReview('duplicate');
+                const { jobId, jqId } = await seedNeedsReview('duplicate');
                 const res = await request(app).post(`/api/review/${jqId}/reject`);
                 assert.equal(res.status, 200);
                 assert.deepEqual(res.body, { message: '已標記為不採用。', jq_id: jqId });
@@ -935,8 +971,7 @@ function runSuite() {
                 const { rows } = await query('SELECT state, review_reason, question_id FROM job_questions WHERE id = $1', [jqId]);
                 assert.deepEqual(rows[0], { state: 'rejected', review_reason: 'duplicate', question_id: null });
 
-                const { rows: q } = await query('SELECT COUNT(*)::int AS n FROM questions');
-                assert.equal(q[0].n, 0);
+                assert.equal((await savedQuestions(jobId)).length, 0);
 
                 const { rows: ev } = await query(`SELECT COUNT(*)::int AS n FROM job_events WHERE jq_id = $1 AND node = 'reject'`, [jqId]);
                 assert.equal(ev[0].n, 1);
@@ -1127,8 +1162,9 @@ function runSuite() {
                 assert.equal(done.body.state, 'done');
                 assert.deepEqual(done.body.counts, { saved: 2, needs_review: 0, pending: 0, rejected: 0 });
 
-                const { rows } = await query('SELECT chapter_src FROM questions ORDER BY id');
-                assert.deepEqual(rows.map(r => r.chapter_src), ['ai', 'human']);
+                const saved = await savedQuestions(jobId, 'chapter_src');
+                assert.deepEqual(saved.map(r => r.chapter_src), ['ai', 'human'],
+                    '第一題由管線入庫（ai），第二題經人複核（human）');
             });
         });
     });
