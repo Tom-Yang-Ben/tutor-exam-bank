@@ -68,6 +68,23 @@ if (retrievalService.isSimilarEnabled()) {
 // ─────────────────────────────────────────────────────────────
 
 // ===== [WS2-A: jobs] =====
+// 六支 jobs／review API（docs/interfaces-stage2.md 第 6 條，A-T12）。
+// 沿用上方既有的 upload（15 MB 上限）與 aiRateLimit（每分鐘 10 次），不另建一份。
+const jobController = require('../controllers/jobController');
+const reviewController = require('../controllers/reviewController');
+
+// upload.single 後面那支四參數中介軟體是「這條路由專屬」的錯誤處理：
+// multer 的 LIMIT_FILE_SIZE 預設會落到 app.js 的全域中樞變成 500，
+// 這裡把它轉成第 6.1 條凍結的 413。/analyze-pdf 的既有行為完全不動。
+router.post('/jobs', aiRateLimit, upload.single('pdf'), jobController.handleUploadError, jobController.createJob);
+router.get('/jobs/:id', jobController.getJob);
+router.get('/jobs/:id/questions', jobController.listJobQuestions);
+router.post('/jobs/:id/retry', jobController.retryJob);
+
+router.get('/review', reviewController.listReview);
+router.get('/review/:jqId', reviewController.getReviewItem);
+router.post('/review/:jqId/approve', reviewController.approve);
+router.post('/review/:jqId/reject', reviewController.reject);
 // ===== [/WS2-A: jobs] =====
 
 // ===== [WS2-B: llm] =====

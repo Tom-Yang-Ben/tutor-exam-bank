@@ -23,6 +23,14 @@ const path = require('path');
 
 const { transition, NODE_FOR_STATE, DEFAULT_LIMITS, TERMINAL_STATES } = require('../pipeline/stateMachine');
 
+/** exam_pro/ 的絕對路徑：jobs.pdf_path 存的是相對路徑，一律對這裡 resolve，不看 process.cwd()。 */
+const APP_DIR = path.resolve(__dirname, '..');
+
+/** @param {string} p jobs.pdf_path（相對於 exam_pro/，或絕對路徑） */
+function resolveJobPath(p) {
+    return path.isAbsolute(p) ? p : path.resolve(APP_DIR, p);
+}
+
 /** 六個可推進狀態（= 認領 SQL 的 WHERE state IN (...)）。 */
 const ADVANCEABLE_STATES = Object.keys(NODE_FOR_STATE);
 
@@ -602,7 +610,7 @@ function createRunner(opts = {}) {
             if (rows.length === 0) return;
             const job = rows[0];
 
-            if (!job.pdf_path || !fs.existsSync(path.resolve(job.pdf_path))) {
+            if (!job.pdf_path || !fs.existsSync(resolveJobPath(job.pdf_path))) {
                 await failJob(jobId, 'PDF 原檔不存在，無法拆題。');
                 return;
             }
@@ -617,7 +625,7 @@ function createRunner(opts = {}) {
             }
 
             // 全部 chunk 都拆完才刪檔並清空 pdf_path（第 1.3 條的生命週期）
-            try { fs.unlinkSync(path.resolve(job.pdf_path)); } catch (err) {
+            try { fs.unlinkSync(resolveJobPath(job.pdf_path)); } catch (err) {
                 logger.warn({ msg: '刪除 PDF 失敗', job_id: jobId, error: err.message });
             }
             await db.query(
@@ -652,7 +660,7 @@ function createRunner(opts = {}) {
                 jq: null, logger, models: loadModels(), limits: { ...DEFAULT_LIMITS, budgetLeft }
             };
             const { outcome, meter, cost, latencyMs } =
-                await invokeNode('extract', ctxBase, { jobId: job.id, pdfPath: path.resolve(job.pdf_path), chunk });
+                await invokeNode('extract', ctxBase, { jobId: job.id, pdfPath: resolveJobPath(job.pdf_path), chunk });
             await chargeJob(job.id, meter, cost);
 
             const attempt = failRetries + errorRetries + 1;
@@ -824,7 +832,7 @@ function startInlineRunner(opts) {
 module.exports = {
     createRunner, startInlineRunner,
     // 純函式，供單元測試與 report_jobs 共用
-    loadConfig, planChunks, backoffMs, attemptNo, buildSaveFields, normalizeErrorClass, makeLogger,
+    loadConfig, planChunks, backoffMs, attemptNo, buildSaveFields, normalizeErrorClass, makeLogger, resolveJobPath,
     ADVANCEABLE_STATES, FREE_NODES, AGENT_MODULE_FOR_NODE, ERROR_CLASSES,
     RENEW_INTERVAL_MS, BACKOFF_BASE_MS, BACKOFF_MAX_MS, EXTRACT_MAX_RETRIES
 };
