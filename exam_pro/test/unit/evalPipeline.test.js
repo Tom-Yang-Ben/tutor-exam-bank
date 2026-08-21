@@ -306,11 +306,31 @@ describe('答案卷（pdf_golden）的硬閘門', () => {
     });
 });
 
-describe('pipelineDriver 端到端（stub 狀態）', () => {
-    test('10 題全部走到終態，事件的形狀與 job_events 一致', async () => {
+describe('pipelineDriver 端到端', () => {
+    // 兩段式，與 answerGolden.test.js 同一個道理。
+    // agents/extract.js 合入之後，這一支會真的呼叫 LLM（replay 模式）；
+    // WS-B 的 cassette 目前是對**他們自己那份 6 題樣卷**錄的，裁決 S2-15 要求改對
+    // eval/fixtures/sample_exam.pdf 重錄。在重錄之前這裡一定 replay miss——
+    // 那不是 driver 壞掉，硬斷言只會得到一片與本次改動無關的紅燈。
+    //
+    // 因此：跑得起來就硬斷言；replay miss 就印出實際的 agent／key 並 skip，
+    // cassette 重錄之後自動轉回硬斷言。**其他任何失敗一律照舊紅燈。**
+    /** @returns {Promise<{res:object, skip:string|null}>} */
+    async function runOnce(opts) {
         const sheet = loadSheet({ pdfPath: SAMPLE_PDF });
-        const res = await driver.runPipeline({ pdfPath: SAMPLE_PDF, sheet });
-        assert.equal(res.ok, true);
+        const res = await driver.runPipeline({ pdfPath: SAMPLE_PDF, sheet, ...opts });
+        if (!res.ok && (res.replayMisses || []).length) {
+            const m = res.replayMisses[0];
+            return { res, skip: `replay 找不到 cassette（agent=${m.agent} key=${(m.key || '').slice(0, 12)}…）：` +
+                `WS-B 的 cassette 尚未對 eval/fixtures/sample_exam.pdf 重錄（裁決 S2-15）。` };
+        }
+        return { res, skip: null };
+    }
+
+    test('10 題全部走到終態，事件的形狀與 job_events 一致', async (t) => {
+        const { res, skip } = await runOnce();
+        if (skip) { t.skip(skip); return; }
+        assert.equal(res.ok, true, res.reason);
         assert.equal(res.jq.length, 10);
 
         const TERMINAL = sm.tables().TERMINAL_STATES;
@@ -325,8 +345,7 @@ describe('pipelineDriver 端到端（stub 狀態）', () => {
     });
 
     test('stub 狀態一定被標示出來（避免 oracle 的假數字被當真）', async () => {
-        const sheet = loadSheet({ pdfPath: SAMPLE_PDF });
-        const res = await driver.runPipeline({ pdfPath: SAMPLE_PDF, sheet });
+        const { res } = await runOnce();
         const caveats = driver.stubCaveats(res);
         // agents/ 目錄尚未存在時，extract 必為 oracle stub；WS-B 合入後這個斷言會自動變成
         // 「有真 agent 就不是 oracle」——兩種情況本測試都成立。
@@ -337,17 +356,33 @@ describe('pipelineDriver 端到端（stub 狀態）', () => {
     });
 
     test('summarizePipeline 的四個計數相加 = 題數（對齊第 6.2 條的 counts）', async () => {
-        const sheet = loadSheet({ pdfPath: SAMPLE_PDF });
-        const res = await driver.runPipeline({ pdfPath: SAMPLE_PDF, sheet });
+        const { res } = await runOnce();
         const s = driver.summarizePipeline(res);
         assert.equal(s.saved + s.needsReview + s.rejected + s.pending, res.jq.length);
     });
 
-    test('同一份 PDF 跑第二次時，dbHashes 會讓每一題都被 dedup0 攔下', async () => {
-        const sheet = loadSheet({ pdfPath: SAMPLE_PDF });
+    test('replay miss 會被辨識出來，不會混在一般的 provider_error 裡', async () => {
+        // 這一條在兩種狀態下都成立，所以不 skip：
+        // 有 miss 時 replayMisses 非空且 reason 講得出是哪一支 cassette；
+        // cassette 重錄之後 miss 為空、ok 為 true。
+        const { res } = await runOnce();
+        if (res.ok) {
+            assert.deepEqual(res.replayMisses, []);
+            return;
+        }
+        assert.ok(res.replayMisses.length > 0, `沒跑完但不是 replay miss：${res.reason}`);
+        assert.ok(res.reason.includes('cassette'), res.reason);
+        for (const m of res.replayMisses) {
+            assert.equal(typeof m.agent, 'string');
+            assert.equal(typeof m.key, 'string');
+        }
+    });
+
+    test('同一份 PDF 跑第二次時，dbHashes 會讓每一題都被 dedup0 攔下', async (t) => {
         const dbHashes = new Map();
-        await driver.runPipeline({ pdfPath: SAMPLE_PDF, sheet, dbHashes });
-        const second = await driver.runPipeline({ pdfPath: SAMPLE_PDF, sheet, dbHashes });
+        const first = await runOnce({ dbHashes });
+        if (first.skip) { t.skip(first.skip); return; }
+        const { res: second } = await runOnce({ dbHashes });
         const s = driver.summarizePipeline(second);
         assert.equal(s.saved, 0, '重傳同一份 PDF 不該再入庫任何題');
         assert.equal(s.needsReview, 10);

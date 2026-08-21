@@ -29,6 +29,7 @@ const { loadClassifyGolden } = require('./golden2');
 const metrics = require('./metrics');
 const shims = require('./stage2Shims');
 const sm = require('./stateMachineShim');
+const replayMiss = require('./replayMiss');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const AGENT_PATH = path.resolve(ROOT, 'agents', 'classify.js');
@@ -55,7 +56,9 @@ async function runClassifySuite(args) {
     const agentExists = fs.existsSync(AGENT_PATH);
     let rows = null;
     let sourceCounts = { gate: 0, llm: 0 };
-    let failures = [];
+    const failures = [];
+    const misses = [];
+    const missIds = [];
 
     if (!agentExists) {
         warnings.push(
@@ -71,18 +74,23 @@ async function runClassifySuite(args) {
         for (const e of golden.entries) {
             const ctx = {
                 llm,
-                // classify 的 few-shot 需要撈題庫；沒有 DB 時讓它明確失敗而不是回空集合
-                db: {
-                    pool: { query: async () => { throw new Error('--suite classify 沒有 DB：few-shot 查詢需要 TEST_DATABASE_URL'); } },
-                    query: async () => { throw new Error('--suite classify 沒有 DB：few-shot 查詢需要 TEST_DATABASE_URL'); }
-                },
+                // 裁決 S2-8／S2-13：**錄製與 eval 一律 ctx.db = null**。
+                // classify 的 few-shot 有三層取材（A 向量最近鄰 → B 各章取例 → C 自製例句），
+                // 前兩層都要 ctx.db；給 null 會讓它直接降級到第三層的 config/chapterExamples.js。
+                // 這不是「少了 DB 所以將就」，而是 cassette 鍵的可重現性要求：
+                // cacheKeyParts 含 fewShotIds，只要 few-shot 來自資料庫，題庫多一題、
+                // 近似索引微動、同分排序變動都會讓鍵變，replay 就會 miss（規劃 §5.3.3）。
+                db: null,
                 job: { id: 0, budget_usd: Infinity, cost_usd: 0 },
                 jq: { id: 0, idx: 0, payload: {}, retries: {} },
                 logger: { info() {}, warn() {}, error() {} },
                 config: {
                     models: { extract: process.env.MODEL_EXTRACT || 'gemini:gemini-3.5-flash', verify: process.env.MODEL_VERIFY || 'gemini:gemini-3.7-flash' },
                     limits: sm.tables().DEFAULT_LIMITS,
-                    thresholds: { classifyMinConf: minConf }
+                    thresholds: { classifyMinConf: minConf },
+                    // 第 3.1 條（裁決 S2-8）：features 由 runner 組。similar 關掉，
+                    // 與 ctx.db=null 一致——否則 agent 會先試向量最近鄰再失敗降級，白跑一次。
+                    features: { similar: false, pipeline: true }
                 },
                 signal: undefined
             };
@@ -97,9 +105,21 @@ async function runClassifySuite(args) {
                     question_text: e.question_text
                 });
             } catch (err) {
-                // replay miss 的訊息是凍結的（第 5.2 條），原樣往上拋給使用者看
-                failures.push(`${e.id}：${err.message}`);
-                outcome = { kind: 'error', errorClass: 'provider_error' };
+                outcome = { kind: 'error', errorClass: 'provider_error', message: err.message };
+            }
+
+            // agent 依第 3.1 條「不得 throw」，replay miss 會以 {kind:'error'} 回來。
+            // 這一段把它從「模型答錯了」裡分出去——不分開的話，90 筆全是 miss 會顯示成
+            // 「accuracy 0.07」，看起來像模型爛掉，其實是一支 cassette 都沒錄到。
+            // 訊息比對只到 `--suite ` 為止（裁決 S2-14）。
+            if (outcome && outcome.kind === 'error' && replayMiss.isReplayMiss(outcome.message)) {
+                // **原樣**推進 failures，不加 `${e.id}：` 前綴——run.js 的 partitionFailures
+                // 是用 startsWith 比對凍結前綴的（裁決 S2-14），加了前綴就辨識不出來，
+                // 82 筆 replay miss 會被當成 82 筆一般失敗，fork PR 的降級也不會發生。
+                // golden 的 id 另外收在 missIds 裡給報表用。
+                misses.push(outcome.message);
+                missIds.push(e.id);
+                continue;
             }
 
             const pred = outcome && outcome.kind === 'pass' && outcome.data ? outcome.data.chapter : null;
@@ -116,6 +136,16 @@ async function runClassifySuite(args) {
             });
         }
 
+        if (misses.length) {
+            // 有 miss 就不報分數。部分回放出來的 accuracy 只反映「哪幾題剛好錄過」，
+            // 拿它跟完整的一輪比較是沒有意義的（規劃 §5.3.3「不在缺數字時假裝通過」）。
+            warnings.push(
+                `${misses.length}/${golden.entries.length} 筆是 replay miss（${missIds.slice(0, 5).join('、')}${missIds.length > 5 ? ' …' : ''}）：` +
+                'cassette 尚未涵蓋這份 golden。accuracy／macro-F1／混淆對這一輪一律 n/a——' +
+                '部分回放的分數只反映「哪幾題剛好錄過」。'
+            );
+            rows = null;
+        }
         if (sourceCounts.gate > 0) {
             warnings.push(
                 `有 ${sourceCounts.gate} 筆是 source='gate' 走的零成本閘門——本 suite 的輸入刻意把 ` +
@@ -159,7 +189,7 @@ async function runClassifySuite(args) {
         decoyHits: rows ? rows.filter(r => r.hit_decoy).length : null,
         decoyInWhitelist, decoyTotal,
         sourceCounts,
-        failures,
+        failures: [...misses, ...failures],
         warnings,
         perEntry: golden.isPrivate ? [] : (rows || []),
         meta: {

@@ -28,6 +28,7 @@ const report = require('./lib/report');
 const thresholds = require('./lib/thresholds');
 const pgEngine = require('./lib/pgEngine');
 const report2 = require('./lib/report2');
+const replayMiss = require('./lib/replayMiss');
 const { runClassifySuite } = require('./lib/suiteClassify');
 const { runPipelineSuite } = require('./lib/suitePipeline');
 
@@ -265,9 +266,30 @@ async function runStage2Suite(args, runner) {
     report2.emit({ res, dir: args.reportsDir, private: res.isPrivate });
 
     if (res.failures && res.failures.length) {
-        console.error(`\n❌ ${res.suite} suite 有 ${res.failures.length} 筆呼叫失敗：\n  - ${res.failures.slice(0, 10).join('\n  - ')}`);
-        process.exitCode = 1;
-        return res;
+        // 第 5.2 條把「這是不是 replay miss」與「fork PR 要不要降級」留給 WS-D 判斷
+        // （「這個判斷不在 services/llm 裡」是介面的原話）；比對只到 `--suite ` 為止（裁決 S2-14）。
+        const { misses, others } = replayMiss.partitionFailures(res.failures);
+        const show = list => list.slice(0, 10).join('\n  - ');
+
+        if (misses.length && replayMiss.shouldDowngradeMiss()) {
+            console.warn(
+                `\n⚠️ ${res.suite} suite 有 ${misses.length} 筆 replay miss，因為這是 fork PR 而降為 warning：\n  - ${show(misses)}\n` +
+                '   外部貢獻者拿不到金鑰、無法自己重錄 cassette（規劃 §5.3.3）；' +
+                'main 與同 repo 分支上這會是紅燈。'
+            );
+        } else if (misses.length) {
+            console.error(
+                `\n❌ ${res.suite} suite 有 ${misses.length} 筆 replay miss：\n  - ${show(misses)}\n` +
+                '   請在本機執行 npm run eval:record（需要金鑰），或確認 cassette 是否因為 prompt 模板／' +
+                '模型 ID／schema／few-shot id 改動而失效（第 5.2 條）。'
+            );
+            process.exitCode = 1;
+        }
+        if (others.length) {
+            console.error(`\n❌ ${res.suite} suite 有 ${others.length} 筆呼叫失敗：\n  - ${show(others)}`);
+            process.exitCode = 1;
+        }
+        if (process.exitCode) return res;
     }
 
     if (args.writeBaseline) {

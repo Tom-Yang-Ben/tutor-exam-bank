@@ -26,6 +26,7 @@ const path = require('path');
 const { isValidChapter } = require('../../config/chapters');
 const shims = require('./stage2Shims');
 const sm = require('./stateMachineShim');
+const replayMiss = require('./replayMiss');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 
@@ -241,6 +242,7 @@ async function runPipeline(opts) {
     async function runInner() {
     const llm = opts.llm || require('../../services/llm');
     const events = [];
+    const replayMisses = [];
     let costUsd = 0;
     let tokenIn = 0, tokenOut = 0, tokenThinking = 0;
 
@@ -271,6 +273,12 @@ async function runPipeline(opts) {
                 tokenThinking: usage.tokenThinking, tokenCached: usage.tokenCached || 0
             });
             costUsd += cost.cost_usd;
+        }
+        if (outcome.kind === 'error' && replayMiss.isReplayMiss(outcome.message)) {
+            // 分辨「模型真的掛了」與「這一輪根本沒有對應的 cassette」。
+            // 兩者都是 provider_error，但前者重跑會好、後者重跑一萬次都一樣。
+            const { agent: missAgent, key } = replayMiss.parseReplayMiss(outcome.message);
+            replayMisses.push({ node, agent: missAgent, key, message: outcome.message });
         }
         events.push({
             jq_id: jqId,
@@ -325,9 +333,14 @@ async function runPipeline(opts) {
     });
 
     if (extractOutcome.kind !== 'pass') {
+        const missNote = replayMisses.length
+            ? `extract 未通過：replay 找不到 cassette（agent=${replayMisses[0].agent} key=${(replayMisses[0].key || '').slice(0, 12)}…）。` +
+              '本輪的樣卷是 eval/fixtures/sample_exam.pdf；cassette 必須對「這一份」樣卷錄製（裁決 S2-15）。'
+            : `extract 未通過：${extractOutcome.reason || extractOutcome.errorClass}`;
         return {
             ok: false,
-            reason: `extract 未通過：${extractOutcome.reason || extractOutcome.errorClass}`,
+            reason: missNote,
+            replayMisses,
             jq: [], events, agentSources,
             stateMachine: sm.source(),
             totals: { tokenIn, tokenOut, tokenThinking, costUsd, latencyMs: Date.now() - t0 },
@@ -443,7 +456,7 @@ async function runPipeline(opts) {
 
     return {
         ok: true,
-        jq, events, agentSources,
+        jq, events, agentSources, replayMisses,
         stateMachine: sm.source(),
         totals: { tokenIn, tokenOut, tokenThinking, costUsd, latencyMs: Date.now() - t0 },
         db: db.source,
