@@ -16,8 +16,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # @google/genai 要求 Node >= 20，故最低測到 20
-        node-version: ['20.x', '22.x']
+        # 矩陣 22/24（docs/roadmap-plan.md §1.5 裁決 5：橫切為準，20.x 作廢）
+        node-version: ['22.x', '24.x']
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
