@@ -47,6 +47,14 @@ router.post('/download-word', wordController.downloadWord);
 // ===== [/WS-B: ops] =====
 
 // ===== [WS-C: retrieval] =====
+// GET /api/questions/:id/similar — 相似題（docs/interfaces.md 第 6 條）
+// FEATURE_SIMILAR 未開啟時「不掛載」這條路由，因此請求會落到 Express 的預設 404。
+// 查詢向量直接取來源題的 embedding，不呼叫 Gemini，所以本端點可離線、可進 CI。
+const retrievalService = require('../services/retrievalService');
+if (retrievalService.isSimilarEnabled()) {
+    const similarRateLimit = createRateLimiter({ windowMs: 60 * 1000, max: 60 });
+    router.get('/questions/:id/similar', similarRateLimit, retrievalService.similarQuestionsHandler);
+}
 // ===== [/WS-C: retrieval] =====
 
 // ===== [WS-D: eval] =====

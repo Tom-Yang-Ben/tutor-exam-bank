@@ -1,9 +1,10 @@
-// 題庫公式健檢腳本（在你本機執行，連 localhost MySQL）
+// 題庫公式健檢腳本（在你本機執行，連 .env 的 DATABASE_URL 指向的 PostgreSQL）
 // 用法：在 exam_pro 資料夾內執行  node audit_formulas.js
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const mysql = require('mysql2/promise');
+// 連線一律走 config/db.js，不自建連線（docs/interfaces.md 第 8 條）
+const { query, pool } = require('./config/db');
 
 let buildParagraphComponents = null;
 try { ({ buildParagraphComponents } = require('./utils/textFormatter')); } catch (e) { /* 容錯 */ }
@@ -50,15 +51,9 @@ function analyze(text) {
 function esc(t) { return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
 async function main() {
-    const pool = await mysql.createConnection({
-        host: process.env.DB_HOST || 'localhost',
-        user: process.env.DB_USER || 'root',
-        password: process.env.DB_PASSWORD || '',
-        database: process.env.DB_NAME || 'tutor_exam_bank'
-    });
-
-    const [rows] = await pool.execute(
-        'SELECT id, subject, chapter, question_type, question_text, answer_text FROM questions ORDER BY id'
+    // 已封存（軟刪除）的題目不列入健檢：它們不會再出現在題庫與組卷候選中
+    const { rows } = await query(
+        'SELECT id, subject, chapter, question_type, question_text, answer_text FROM questions WHERE archived_at IS NULL ORDER BY id'
     );
 
     const flagged = [];

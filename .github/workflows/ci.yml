@@ -2,13 +2,20 @@ name: CI
 
 # 這個 repo 有 exam / exam_pro 兩個子專案，測試在 exam_pro 底下，
 # 因此所有 run 步驟都設定 working-directory: exam_pro。
+#
+# 兩個 job（規劃 §5.3.4）：
+#   unit         矩陣 22/24，**不連資料庫、不呼叫 Gemini、不需要任何 secrets**。
+#                任何人 fork 都能在不設定 .env 的情況下跑出同一個結果。
+#   integration  Node 24 + pgvector/pgvector:pg16 的 service container。
+#                跑 migrations、整合測試與檢索 eval；同樣不需要 secrets——
+#                embedding 走 fixture（EMBED_MODE=fixture）、LLM 走 replay。
 on:
   push:
     branches: [main]
   pull_request:
 
 jobs:
-  test:
+  unit:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -16,8 +23,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # @google/genai 要求 Node >= 20，故最低測到 20
-        node-version: ['20.x', '22.x']
+        # 矩陣 22/24（docs/roadmap-plan.md §1.5 裁決 5：橫切為準，20.x 作廢）
+        node-version: ['22.x', '24.x']
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -28,3 +35,66 @@ jobs:
       - run: npm ci
       # 測試不連資料庫、不呼叫 Gemini，因此不需要任何 secrets
       - run: npm test
+
+  integration:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: exam_pro
+    services:
+      postgres:
+        # 與本機 docker-compose.yml、正式環境同一顆映像：
+        # 「在我電腦上會過」整類問題因此消失（規劃 §5.4）。
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: exam
+          POSTGRES_PASSWORD: exam
+          # 庫名必須以 _test 結尾，否則 migrate.js 與整合測試會拒絕執行（規劃 §5.3.4 的 DB 防呆）
+          POSTGRES_DB: tutor_exam_bank_test
+          POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+        ports:
+          - 5432:5432
+        # 健康檢查一定要寫對，否則測試會在 PG 還沒起來時開跑，變成偶發 flaky
+        options: >-
+          --health-cmd "pg_isready -U exam -d tutor_exam_bank_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://exam:exam@localhost:5432/tutor_exam_bank_test
+      # eval/.env.replay 也會設這兩個；在這裡再設一次是為了讓「CI 恆為 fixture/replay」
+      # 這件事在 workflow 檔上就看得見，不必翻到別的檔案（interfaces 第 4 條）。
+      EMBED_MODE: fixture
+      LLM_MODE: replay
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.x'
+          cache: npm
+          cache-dependency-path: exam_pro/package-lock.json
+      - run: npm ci
+
+      # 用 migrate:test 而不是 migrate：後者讀 DATABASE_URL，
+      # 且不做「庫名以 _test 結尾」的檢查（docs/interfaces.md 第 1.1 條）。
+      - name: 套用 migrations
+        run: npm run migrate:test
+
+      - name: 整合測試
+        run: npm run test:integration
+
+      # 檢索 eval：向量走 fixture、不呼叫任何外部服務。
+      # 目前 queries/hybrid.js（WS-C 的 D-R1）與向量 fixture（D-V0）尚未合入，
+      # run.js 會把向量／hybrid 欄印成 n/a 並在報表列出原因，門檻為 null 時只報告不擋；
+      # 兩者合入後同一行指令就會自動改走 pg engine 並開始守門檻。
+      - name: 檢索 eval（三欄對照）
+        run: npm run eval -- --suite retrieval
+
+      - name: 上傳 eval 報表
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-reports
+          path: exam_pro/eval/reports/
+          retention-days: 30
+          if-no-files-found: warn

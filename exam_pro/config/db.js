@@ -1,13 +1,49 @@
-const mysql = require('mysql2/promise');
+// ─────────────────────────────────────────────────────────────
+// db.js — PostgreSQL 連線池（階段 1 D-D3 由 mysql2 換底）
+//
+// 介面凍結於 docs/interfaces.md 第 8 條：
+//   module.exports = { pool, query }
+//   query(text, values) → Promise<{ rows, rowCount }>
+//   需要交易時用 pool.connect() 取 client，自行 BEGIN / COMMIT / ROLLBACK / release()
+//
+// ⚠️ 型別轉換一律集中在這一支，其他檔案不得再各自 setTypeParser——
+//    pg 的 type parser 是「行程全域」的，散在各處會變成看誰先被 require 的競態。
+// ─────────────────────────────────────────────────────────────
+const { Pool, types } = require('pg');
 
-const pool = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'tutor_exam_bank',
-    charset: 'utf8mb4',            // 與資料表一致，確保 emoji / 4-byte 數學符號可正確寫入
-    waitForConnections: true,
-    connectionLimit: 10
-});
+// INT8（OID 20）：pg 預設回字串，因為 BIGINT 可能超出 Number.MAX_SAFE_INTEGER。
+// 但本專案的 BIGINT 只有 attempts.id 與各種 COUNT(*)，都遠在安全範圍內；
+// 不轉的話 listQuestions 的 total 會變成 "30" 這種字串，前端算分頁就會出錯。
+types.setTypeParser(20, v => (v === null ? null : parseInt(v, 10)));
+// DATE（OID 1082）：預設會轉成「本地午夜」的 Date 物件，序列化成 JSON 時變 UTC，
+// 台灣早上 8 點前會整個差一天。直接回 'YYYY-MM-DD' 字串最不會出事。
+types.setTypeParser(1082, v => v);
 
-module.exports = pool;
+// 連線來源：DATABASE_URL 優先，否則以 DB_* 組出（docs/interfaces.md 第 8 條）。
+// 注意：.env 裡的 DB_* 目前指向**舊 MySQL**（DB_PORT=3306），遷移期間兩者同時存在。
+// 因此請一律設定 DATABASE_URL；DB_* 這條退路的預設值已改為 PostgreSQL 的值。
+const pool = process.env.DATABASE_URL
+    ? new Pool({ connectionString: process.env.DATABASE_URL, max: 10 })
+    : new Pool({
+        host: process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.DB_PORT, 10) || 5442,
+        user: process.env.DB_USER || 'exam',
+        password: process.env.DB_PASSWORD || 'exam',
+        database: process.env.DB_NAME || 'tutor_exam_bank',
+        max: 10
+    });
+
+// 閒置連線被資料庫端切斷時，pg 會在 pool 上丟 error；沒有監聽器會直接讓整個行程崩潰。
+pool.on('error', err => console.error('【PostgreSQL 連線池】閒置連線錯誤:', err.message));
+
+/**
+ * 單句查詢（自動借還連線）。需要交易請改用 pool.connect()。
+ * @param {string} text   SQL，占位符為 $1、$2…
+ * @param {any[]} [values]
+ * @returns {Promise<{ rows: object[], rowCount: number }>}
+ */
+function query(text, values) {
+    return pool.query(text, values);
+}
+
+module.exports = { pool, query };
