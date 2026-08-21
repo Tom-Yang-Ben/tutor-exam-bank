@@ -126,4 +126,127 @@ function round4(v) {
     return Math.round(v * 10000) / 10000;
 }
 
-module.exports = { recallAtK, reciprocalRank, jaccard, scoreOne, mean, summarize, round4 };
+// ─────────────────────────────────────────────────────────────
+// 階段 2 新增：分類指標（A-T14 的 --suite classify）
+//
+// 三個指標刻意分工，缺一個就會看漏一整類問題：
+//   accuracy       整體對幾題——最直覺，但 90 題裡有 60 題來自同 8 個章節，
+//                  只看它會被「猜最大類」的策略騙過去。
+//   macro-F1       每個章節先各自算 F1 再取平均，稀有章節與大宗章節等重——
+//                  「只有『向量內積』准、別章全爛」在 accuracy 上看不出來，在這裡會塌下去。
+//   Top-N 混淆對   (正解, 預測) 出現最多次的組合。它不是分數，是**修 prompt 的清單**：
+//                  「向量內積 → 空間向量內積 出現 7 次」直接告訴你該補哪一句。
+// 三者都是純函式，吃的是 [{gold, pred}] 這種最小形狀，不認識章節也不認識模型。
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * 整體正確率。
+ * @param {Array<{gold:string, pred:string|null}>} rows
+ * @returns {{accuracy:number|null, n:number, correct:number}}
+ *          rows 為空時 accuracy 回 null（不是 0）——與 recallAtK 的理由相同：
+ *          「沒有題目」與「一題都沒對」是兩件事。
+ */
+function accuracy(rows) {
+    const list = rows || [];
+    if (list.length === 0) return { accuracy: null, n: 0, correct: 0 };
+    const correct = list.filter(r => r.pred !== null && r.pred !== undefined && r.pred === r.gold).length;
+    return { accuracy: correct / list.length, n: list.length, correct };
+}
+
+/**
+ * macro-F1：每個「出現在 gold 裡」的類別各算一次 P/R/F1 再取算術平均。
+ *
+ * 只在 pred 出現、gold 從未出現的類別（模型幻想出來的章節）**不列入平均的分母**，
+ * 但它造成的 false positive 會壓低對應 gold 類別的 recall——這正是我們要的行為：
+ * 幻想出一個白名單外的章節，該扣的是「本來該答對的那一章」的分。
+ *
+ * @param {Array<{gold:string, pred:string|null}>} rows
+ * @returns {{macroF1:number|null, perClass:Object<string,{precision:number, recall:number, f1:number, support:number}>}}
+ */
+function macroF1(rows) {
+    const list = rows || [];
+    if (list.length === 0) return { macroF1: null, perClass: {} };
+
+    const labels = [...new Set(list.map(r => r.gold))].sort();
+    const perClass = {};
+    let sum = 0;
+    for (const label of labels) {
+        let tp = 0, fp = 0, fn = 0;
+        for (const r of list) {
+            const pred = (r.pred === null || r.pred === undefined) ? null : r.pred;
+            if (r.gold === label && pred === label) tp++;
+            else if (r.gold !== label && pred === label) fp++;
+            else if (r.gold === label && pred !== label) fn++;
+        }
+        const precision = (tp + fp) === 0 ? 0 : tp / (tp + fp);
+        const recall = (tp + fn) === 0 ? 0 : tp / (tp + fn);
+        const f1 = (precision + recall) === 0 ? 0 : (2 * precision * recall) / (precision + recall);
+        perClass[label] = { precision, recall, f1, support: tp + fn };
+        sum += f1;
+    }
+    return { macroF1: sum / labels.length, perClass };
+}
+
+/**
+ * 混淆對：(gold, pred) 不相等的組合，依次數由多到少。
+ * @param {Array<{gold:string, pred:string|null}>} rows
+ * @param {number} [topN=5]
+ * @returns {Array<{gold:string, pred:string, count:number}>}
+ *          同次數時以 gold、再以 pred 的字典序排——報表不能每次跑出不同順序。
+ */
+function confusionPairs(rows, topN = 5) {
+    const counts = new Map();
+    for (const r of rows || []) {
+        const pred = (r.pred === null || r.pred === undefined) ? '（無回應）' : r.pred;
+        if (pred === r.gold) continue;
+        const key = `${r.gold} ${pred}`;
+        counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    return [...counts.entries()]
+        .map(([key, count]) => {
+            const [gold, pred] = key.split(' ');
+            return { gold, pred, count };
+        })
+        .sort((a, b) => b.count - a.count || a.gold.localeCompare(b.gold) || a.pred.localeCompare(b.pred))
+        .slice(0, topN);
+}
+
+/**
+ * 百分位數（線性內插，與 PostgreSQL 的 percentile_cont 同義）。
+ * 用途：pipeline suite 與 report:jobs 的 p50／p95 延遲。
+ * @param {number[]} values 不必先排序（本函式會複製後排序，不改動入參）
+ * @param {number} p 0~1
+ * @returns {number|null} values 為空時回 null
+ */
+function percentile(values, p) {
+    const list = (values || []).filter(v => typeof v === 'number' && Number.isFinite(v)).slice().sort((a, b) => a - b);
+    if (list.length === 0) return null;
+    if (!(p >= 0 && p <= 1)) throw new Error('p 必須介於 0 與 1 之間');
+    const pos = (list.length - 1) * p;
+    const lo = Math.floor(pos);
+    const hi = Math.ceil(pos);
+    if (lo === hi) return list[lo];
+    return list[lo] + (list[hi] - list[lo]) * (pos - lo);
+}
+
+/**
+ * 依鍵分組計數，並回「鍵 → 次數」由多到少的陣列。
+ * 用途：needs_review 原因分佈、error_class 分佈。
+ * @param {Array<string|null>} keys
+ * @returns {Array<{key:string, count:number}>}
+ */
+function distribution(keys) {
+    const counts = new Map();
+    for (const k of keys || []) {
+        const key = (k === null || k === undefined) ? '（無）' : String(k);
+        counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    return [...counts.entries()]
+        .map(([key, count]) => ({ key, count }))
+        .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+}
+
+module.exports = {
+    recallAtK, reciprocalRank, jaccard, scoreOne, mean, summarize, round4,
+    accuracy, macroF1, confusionPairs, percentile, distribution
+};

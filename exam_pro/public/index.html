@@ -5,6 +5,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="api-key" content="__API_KEY__">
+    <!-- FEATURE_PIPELINE 的注入點：語意與上面的 api-key 完全一致（interfaces-stage2.md 第 8 條
+         「不得把 FEATURE_PIPELINE 寫死在 JS」）。app.js 的 serveIndex 目前只替換 __API_KEY__，
+         需要再加一行替換 __FEATURE_PIPELINE__；在那之前這裡會保持佔位字串，
+         public/js/review.js 的 parseBool 會判成 false（＝旗標關閉，走舊流程），是安全的預設。 -->
+    <meta name="feature-pipeline" content="__FEATURE_PIPELINE__">
     <title>家教專用數學物理題庫系統</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link
@@ -503,6 +508,10 @@
         </div>
 
         <!-- 題庫管理 -->
+        <!-- 階段 2 的複核分頁錨點（interfaces-stage2.md 第 8 條：index.html 只插這一個 section
+             與底下一行 <script type="module">）。內容全部由 public/js/review.js 建立。 -->
+        <section id="review"></section>
+
         <section id="library" class="manager-shell mt-7 rounded-[1.65rem] p-5 sm:p-7 scroll-mt-24">
             <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6 border-b border-slate-100 pb-5">
                 <div class="flex items-start gap-3">
@@ -1083,7 +1092,20 @@
                 showToast("匯出 Word 時發生錯誤：" + error.message, 'error');
             }
         }
+
+        // ─────────────────────────────────────────────────────────────
+        // 階段 2 的橋接（interfaces-stage2.md 第 8 條）——**只加，不改任何既有程式**。
+        //
+        // public/js/review.js 是 ES module，抓不到這份 inline script 的區域函式，
+        // 所以把它需要的五個掛上 window.ExamApp。掛的是同一個函式參照，
+        // 不是複製品：createQuestionEditor 之後怎麼改，複核分頁就跟著怎麼變。
+        // ─────────────────────────────────────────────────────────────
+        window.ExamApp = Object.assign(window.ExamApp || {}, {
+            apiFetch, showToast, renderMath, escapeHtml, createQuestionEditor
+        });
     </script>
+    <!-- 階段 2 複核分頁（WS-D，A-T13）。module 預設 defer，所以一定在上面那段之後才執行。 -->
+    <script type="module" src="/js/review.js"></script>
 </body>
 
 </html>

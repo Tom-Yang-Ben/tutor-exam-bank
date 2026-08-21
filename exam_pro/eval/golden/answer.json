@@ -1,0 +1,1162 @@
+{
+  "_notice": "本檔的題目與答案全部由本專案作者自行編寫（多數改寫自 eval/fixtures/questions.public.json），不取自任何考卷、題本或出版品（見 repo 根目錄 NOTICE 第 2 條）。",
+  "_status": "needs_human_confirm — 50 筆全部尚未由開發者本人逐筆定案（A-T6 草稿）。",
+  "_schema": "entries[]：一筆 = 一題，展開後 = 3 個等價案例 + 2 個錯答案例，共 5 個 answerCompare 呼叫。\n  id                  string，唯一\n  from                number|null，來源 fixture 題 id（null = 本檔手寫）\n  question_type       '單選'|'多選'|'填空'|'計算'|'證明'（config/chapters.js 的 QUESTION_TYPES）\n  answer_form         'option'|'number'|'expression'|'text'（interfaces-stage2.md 第 3.2 條 payload.verify.answer_form）\n  claimed             string，拆題模型抄下來的原始 answer_text（可能含說明與計算過程）\n  equivalents         string[3]，驗證模型可能回的等價 final_answer\n  wrong               string[2]，典型錯答\n  expect.equivalent   'agree'|'uncertain'——equivalents 每一項的期望結果\n  expect.wrong        'disagree'|'uncertain'——wrong 每一項的期望結果\n  extraction_hazard   boolean；true = claimed 的「第一個 $…$」不是答案而是算式，\n                      依第 4.2 條的抽取規則會抽到算式（期望 uncertain）。這些筆是給開發者\n                      決定「要不要把規則改成取最後一個 $…$」的證據。\n  note                string|null\n  needs_human_confirm boolean\n\n呼叫方式：answerCompare({ question_type, claimed, model: { final_answer: <equivalents[i]|wrong[i]>, answer_form } })",
+  "_annotations": {
+    "為什麼不設 disagree 的預設值到 uncertain": "第 4.2 條：「任何比不出來的情況都回 uncertain，不回 disagree」。因此 wrong 那兩項只有在「兩邊都抽得出來、而且確實不等」時才該是 disagree；抽不出來就是 uncertain。本檔的 wrong 全部刻意寫成「抽得出來但不相等」，才能真的測到 disagree 這條路。",
+    "公式 golden 不在這裡": "eval/golden/formula.json 由 WS-C 產出（分工總表）。本檔只管答案比對。"
+  },
+  "version": 1,
+  "entries": [
+    {
+      "id": "ans-001",
+      "from": 1,
+      "question_type": "單選",
+      "answer_form": "option",
+      "claimed": "(A)。$\\log_{2} 8 = 3$、$\\log_{2} 4 = 2$，故兩者之和為 $5$。",
+      "equivalents": [
+        "(A)",
+        "A",
+        "A."
+      ],
+      "wrong": [
+        "(B)",
+        "(C)"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-002",
+      "from": 2,
+      "question_type": "單選",
+      "answer_form": "option",
+      "claimed": "(C)。$\\log_{3} 27 = 3$、$\\log_{3} 9 = 2$，故兩者之和為 $5$。",
+      "equivalents": [
+        "(C)",
+        "C",
+        "（Ｃ）"
+      ],
+      "wrong": [
+        "(A)",
+        "(D)"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "「（Ｃ）」是全形括號 + 全形字母，要靠 NFKC 才會收斂。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-003",
+      "from": 8,
+      "question_type": "單選",
+      "answer_form": "option",
+      "claimed": "(A)。$\\log_{10} 5 = 1 - \\log_{10} 2 = 0.6990$。",
+      "equivalents": [
+        "(A)",
+        "A",
+        "A)"
+      ],
+      "wrong": [
+        "(B)",
+        "(D)"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-004",
+      "from": 24,
+      "question_type": "單選",
+      "answer_form": "option",
+      "claimed": "(A)。內積為 $0$ 且兩向量非零，故 $\\cos \\theta = 0$，兩者互相垂直。",
+      "equivalents": [
+        "(A)",
+        "A",
+        "(a)"
+      ],
+      "wrong": [
+        "(B)",
+        "(C)"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "小寫 (a) 是否等同 (A)：第 4.2 條沒明講，先當 agree，等開發者定案。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-005",
+      "from": 25,
+      "question_type": "單選",
+      "answer_form": "option",
+      "claimed": "(A)。由畢氏恆等式 $\\sin^2 \\theta + \\cos^2 \\theta = 1$，與角度無關。",
+      "equivalents": [
+        "(A)",
+        "A",
+        "A."
+      ],
+      "wrong": [
+        "(C)",
+        "(D)"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-006",
+      "from": 29,
+      "question_type": "單選",
+      "answer_form": "option",
+      "claimed": "(B)。$400^\\circ - 360^\\circ = 40^\\circ$，故最小正同界角為 $40^\\circ$。",
+      "equivalents": [
+        "(B)",
+        "B",
+        "B."
+      ],
+      "wrong": [
+        "(A)",
+        "(D)"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-007",
+      "from": 31,
+      "question_type": "單選",
+      "answer_form": "option",
+      "claimed": "(B)。第二象限中 $x < 0$、$y > 0$，故 $\\tan \\theta < 0$。",
+      "equivalents": [
+        "(B)",
+        "B",
+        "（B）"
+      ],
+      "wrong": [
+        "(A)",
+        "(C)"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-008",
+      "from": 38,
+      "question_type": "單選",
+      "answer_form": "option",
+      "claimed": "(B)。作用力與反作用力大小相等、方向相反，且作用在不同物體上。",
+      "equivalents": [
+        "(B)",
+        "B",
+        "B)"
+      ],
+      "wrong": [
+        "(A)",
+        "(C)"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-009",
+      "from": 39,
+      "question_type": "單選",
+      "answer_form": "option",
+      "claimed": "(A)。由牛頓第一運動定律，乘客傾向維持原有的運動狀態。",
+      "equivalents": [
+        "(A)",
+        "A",
+        "A."
+      ],
+      "wrong": [
+        "(B)",
+        "(C)"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-010",
+      "from": 51,
+      "question_type": "單選",
+      "answer_form": "option",
+      "claimed": "(B)。$v$-$t$ 圖的面積等於位移；斜率才是加速度。",
+      "equivalents": [
+        "(B)",
+        "B",
+        "（B）"
+      ],
+      "wrong": [
+        "(A)",
+        "(C)"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-011",
+      "from": 53,
+      "question_type": "單選",
+      "answer_form": "option",
+      "claimed": "(C)。速度計顯示的是該瞬間的速率大小。",
+      "equivalents": [
+        "(C)",
+        "C",
+        "C."
+      ],
+      "wrong": [
+        "(A)",
+        "(B)"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-012",
+      "from": 59,
+      "question_type": "單選",
+      "answer_form": "option",
+      "claimed": "(B)。沿等位面移動電荷不作功，故電場線必與等位面垂直。",
+      "equivalents": [
+        "(B)",
+        "B",
+        "B)"
+      ],
+      "wrong": [
+        "(A)",
+        "(C)"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-013",
+      "from": 46,
+      "question_type": "多選",
+      "answer_form": "option",
+      "claimed": "(A)(C)。速率固定但速度方向持續改變；合力即向心力，恆指向圓心。",
+      "equivalents": [
+        "(A)(C)",
+        "(C)(A)",
+        "AC"
+      ],
+      "wrong": [
+        "(A)",
+        "(A)(B)(C)"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "「AC」這種無括號連寫是否抽得出兩個代號，是本組要釘的行為。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-014",
+      "from": null,
+      "question_type": "多選",
+      "answer_form": "option",
+      "claimed": "(B)(D)。等加速度直線運動的 $v$-$t$ 圖為斜直線，$x$-$t$ 圖為拋物線。",
+      "equivalents": [
+        "(B)(D)",
+        "(D)(B)",
+        "B、D"
+      ],
+      "wrong": [
+        "(B)",
+        "(B)(C)(D)"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-015",
+      "from": null,
+      "question_type": "多選",
+      "answer_form": "option",
+      "claimed": "(A)(B)(D)。三者皆為向量：位移、速度、加速度；速率為純量。",
+      "equivalents": [
+        "(A)(B)(D)",
+        "(D)(A)(B)",
+        "A B D"
+      ],
+      "wrong": [
+        "(A)(B)",
+        "(A)(B)(C)(D)"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-016",
+      "from": null,
+      "question_type": "多選",
+      "answer_form": "option",
+      "claimed": "本題無單一選項，正確者為 (A) 與 (E)。",
+      "equivalents": [
+        "(A)(E)",
+        "(E)(A)",
+        "AE"
+      ],
+      "wrong": [
+        "(A)",
+        "(A)(B)"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "代號到 (E)：第 4.2 條的正規化只到 [A-Ha-h]，(E) 在範圍內。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-017",
+      "from": 9,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$\\vec{a} \\cdot \\vec{b} = 3 \\times 1 + 4 \\times 2 = 11$。",
+      "equivalents": [
+        "$11$",
+        "11",
+        "11.0"
+      ],
+      "wrong": [
+        "$7$",
+        "$-11$"
+      ],
+      "expect": {
+        "equivalent": "uncertain",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": true,
+      "note": "第一個 $…$ 是整串算式「3×1+4×2=11」而不是答案。依第 4.2 條「第一個 $…$」的規則抽出來的是算式，比不出有理數 → uncertain。若開發者希望改成「取最後一個 $…$」，這 6 筆 hazard 的 expect 要一起改成 agree。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-018",
+      "from": 10,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$17$。$\\vec{a} \\cdot \\vec{b} = 5 \\times 3 + 2 \\times 1 = 17$。",
+      "equivalents": [
+        "$17$",
+        "17",
+        "17.00"
+      ],
+      "wrong": [
+        "$16$",
+        "$-17$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-019",
+      "from": 17,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$5$。$1 \\times 2 + 2 \\times 0 + 3 \\times 1 = 5$。",
+      "equivalents": [
+        "$5$",
+        "5",
+        "5.0"
+      ],
+      "wrong": [
+        "$6$",
+        "$0$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-020",
+      "from": 18,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$8$。$2 \\times 3 + 1 \\times 2 + 4 \\times 0 = 8$。",
+      "equivalents": [
+        "$8$",
+        "8",
+        "+8"
+      ],
+      "wrong": [
+        "$10$",
+        "$-8$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-021",
+      "from": 3,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$x = 4$。因 $32 = 2^5$，故 $x + 1 = 5$。",
+      "equivalents": [
+        "$4$",
+        "4",
+        "$x = 4$"
+      ],
+      "wrong": [
+        "$5$",
+        "$3$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "等號兩側：claimed 的第一個 $…$ 是「x = 4」，model 可能只回「4」，兩者必須算 agree。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-022",
+      "from": 4,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$x = 5$。因 $81 = 3^4$，故 $x - 1 = 4$。",
+      "equivalents": [
+        "$5$",
+        "5",
+        "$x=5$"
+      ],
+      "wrong": [
+        "$4$",
+        "$-5$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-023",
+      "from": 5,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$16$ 位數。$\\log_{10} 2^{50} = 15.05$，故介於 $10^{15}$ 與 $10^{16}$ 之間。",
+      "equivalents": [
+        "$16$",
+        "16",
+        "16 位數"
+      ],
+      "wrong": [
+        "$15$",
+        "$17$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "單位後綴「位數」要被去掉再比（第 4.2 條「單位後綴一律去掉再比」）。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-024",
+      "from": 6,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$31$ 位數。$\\log_{10} 2^{100} = 30.10$。",
+      "equivalents": [
+        "$31$",
+        "31",
+        "31 位數"
+      ],
+      "wrong": [
+        "$30$",
+        "$32$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-025",
+      "from": 7,
+      "question_type": "填空",
+      "answer_form": "number",
+      "claimed": "$3$。換底後 $\\frac{\\log 8}{\\log 2} = \\log_{2} 8 = 3$。",
+      "equivalents": [
+        "$3$",
+        "3",
+        "3.0"
+      ],
+      "wrong": [
+        "$2$",
+        "$\\frac{1}{3}$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-026",
+      "from": 32,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$5$ m/s$^2$。由 $F = ma$，$a = \\frac{10}{2} = 5$。",
+      "equivalents": [
+        "$5$",
+        "5 m/s^2",
+        "$5\\ \\mathrm{m/s^2}$"
+      ],
+      "wrong": [
+        "$0.2$",
+        "$20$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "單位寫法三種都要收斂到 5。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-027",
+      "from": 34,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$600$ N。$N = m(g + a) = 50 \\times 12 = 600$。",
+      "equivalents": [
+        "$600$",
+        "600 N",
+        "6.0 \\times 10^{2}"
+      ],
+      "wrong": [
+        "$500$",
+        "$400$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "科學記號 $6.0\\times10^2$ 是否算 number 的等價形，請開發者定案。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-028",
+      "from": 35,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$780$ N。$N = 60 \\times (10 + 3) = 780$。",
+      "equivalents": [
+        "$780$",
+        "780",
+        "780 N"
+      ],
+      "wrong": [
+        "$600$",
+        "$180$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-029",
+      "from": 42,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$18$ N。$T = \\frac{mv^2}{r} = \\frac{2 \\times 9}{1} = 18$。",
+      "equivalents": [
+        "$18$",
+        "18",
+        "18 N"
+      ],
+      "wrong": [
+        "$6$",
+        "$36$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-030",
+      "from": 43,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$24$ N。$T = \\frac{3 \\times 16}{2} = 24$。",
+      "equivalents": [
+        "$24$",
+        "24",
+        "24 N"
+      ],
+      "wrong": [
+        "$48$",
+        "$12$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-031",
+      "from": 44,
+      "question_type": "填空",
+      "answer_form": "number",
+      "claimed": "$20$ N。$f_{max} = \\mu_s mg = 0.5 \\times 4 \\times 10 = 20$。",
+      "equivalents": [
+        "$20$",
+        "20",
+        "20 N"
+      ],
+      "wrong": [
+        "$2$",
+        "$40$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-032",
+      "from": 47,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$25$ m。$s = \\frac{1}{2} a t^2 = \\frac{1}{2} \\times 2 \\times 25 = 25$。",
+      "equivalents": [
+        "$25$",
+        "25",
+        "25 m"
+      ],
+      "wrong": [
+        "$10$",
+        "$50$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-033",
+      "from": 49,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$2$ 秒。$t = \\sqrt{\\frac{2h}{g}} = \\sqrt{4} = 2$。",
+      "equivalents": [
+        "$2$",
+        "2",
+        "2 s"
+      ],
+      "wrong": [
+        "$4$",
+        "$20$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-034",
+      "from": 50,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$3$ 秒。$t = \\sqrt{\\frac{90}{10}} = 3$。",
+      "equivalents": [
+        "$3$",
+        "3",
+        "3 s"
+      ],
+      "wrong": [
+        "$4.5$",
+        "$9$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-035",
+      "from": 27,
+      "question_type": "填空",
+      "answer_form": "number",
+      "claimed": "$\\frac{1}{2}$。$150^\\circ$ 的參考角為 $30^\\circ$，第二象限的正弦為正。",
+      "equivalents": [
+        "$\\frac{1}{2}$",
+        "0.5",
+        "1/2"
+      ],
+      "wrong": [
+        "$-\\frac{1}{2}$",
+        "$\\frac{\\sqrt{3}}{2}$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-036",
+      "from": 28,
+      "question_type": "填空",
+      "answer_form": "number",
+      "claimed": "$-\\frac{1}{2}$。$120^\\circ$ 的參考角為 $60^\\circ$，第二象限的餘弦為負。",
+      "equivalents": [
+        "$-\\frac{1}{2}$",
+        "-0.5",
+        "-1/2"
+      ],
+      "wrong": [
+        "$\\frac{1}{2}$",
+        "$-\\frac{\\sqrt{3}}{2}$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "負號是本組的重點：漏掉負號是最典型的錯答。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-037",
+      "from": 13,
+      "question_type": "填空",
+      "answer_form": "number",
+      "claimed": "$k = -1$。垂直即內積為 $0$：$6 + 6k = 0$。",
+      "equivalents": [
+        "$-1$",
+        "-1",
+        "$k = -1$"
+      ],
+      "wrong": [
+        "$1$",
+        "$0$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-038",
+      "from": 14,
+      "question_type": "填空",
+      "answer_form": "number",
+      "claimed": "$k = -2$。$20 + 10k = 0$。",
+      "equivalents": [
+        "$-2$",
+        "-2",
+        "$k=-2$"
+      ],
+      "wrong": [
+        "$2$",
+        "$-\\frac{1}{2}$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-039",
+      "from": 21,
+      "question_type": "填空",
+      "answer_form": "number",
+      "claimed": "$k = 0$。$1 \\times 2 + 2 \\times (-1) + 3k = 0$。",
+      "equivalents": [
+        "$0$",
+        "0",
+        "$k = 0$"
+      ],
+      "wrong": [
+        "$1$",
+        "$-1$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-040",
+      "from": 23,
+      "question_type": "填空",
+      "answer_form": "number",
+      "claimed": "$\\frac{1}{3}$。$|\\vec{a}| = 3$，與 $x$ 軸正向的內積為 $1$。",
+      "equivalents": [
+        "$\\frac{1}{3}$",
+        "1/3",
+        "0.3333333333"
+      ],
+      "wrong": [
+        "$3$",
+        "$\\frac{2}{3}$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "0.3333333333 與 1/3 的差 > 1e-9：依容差規則應判 disagree。這一筆刻意用來釘容差的邊界，請開發者確認要不要放寬。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-041",
+      "from": 33,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$4.5$ m/s$^2$。$a = \\frac{18}{4} = 4.5$。",
+      "equivalents": [
+        "$4.5$",
+        "4.5",
+        "$\\frac{9}{2}$"
+      ],
+      "wrong": [
+        "$4$",
+        "$0.22$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-042",
+      "from": 36,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$2.5$ m/s$^2$。$a = \\frac{(5 - 3) \\times 10}{8} = 2.5$。",
+      "equivalents": [
+        "$2.5$",
+        "2.5",
+        "$\\frac{5}{2}$"
+      ],
+      "wrong": [
+        "$2$",
+        "$5$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-043",
+      "from": 58,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$2.4 \\times 10^{-4}$ J。$W = qEd = 3 \\times 10^{-6} \\times 200 \\times 0.4$。",
+      "equivalents": [
+        "$2.4 \\times 10^{-4}$",
+        "0.00024",
+        "2.4e-4"
+      ],
+      "wrong": [
+        "$2.4 \\times 10^{-3}$",
+        "$-2.4 \\times 10^{-4}$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "科學記號的三種寫法要收斂；e 記法是否支援請開發者定案。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-044",
+      "from": 54,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$0.6$ N。$F = 9 \\times 10^9 \\times \\frac{6 \\times 10^{-12}}{0.09} = 0.6$。",
+      "equivalents": [
+        "$0.6$",
+        "0.6",
+        "$\\frac{3}{5}$"
+      ],
+      "wrong": [
+        "$0.3$",
+        "$6$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-045",
+      "from": 11,
+      "question_type": "計算",
+      "answer_form": "expression",
+      "claimed": "$\\theta = 45^\\circ$。$\\cos \\theta = \\frac{1}{\\sqrt{2}}$。",
+      "equivalents": [
+        "$\\theta = 45^\\circ$",
+        "$\\theta=45^\\circ$",
+        "\\theta = 45^\\circ"
+      ],
+      "wrong": [
+        "$\\theta = 60^\\circ$",
+        "$\\theta = 30^\\circ$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-046",
+      "from": 19,
+      "question_type": "計算",
+      "answer_form": "expression",
+      "claimed": "$\\theta = 60^\\circ$。$\\cos \\theta = \\frac{1}{2}$。",
+      "equivalents": [
+        "$\\theta = 60^\\circ$",
+        "$\\theta=60^{\\circ}$",
+        "\\theta = 60^\\circ"
+      ],
+      "wrong": [
+        "$\\theta = 45^\\circ$",
+        "$\\theta = 120^\\circ$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "^\\circ 與 ^{\\circ} 的等價要靠去空白之外的正規化，請開發者確認。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-047",
+      "from": 15,
+      "question_type": "計算",
+      "answer_form": "expression",
+      "claimed": "$\\frac{3}{1} = 3$，故正射影長度為 $3$。",
+      "equivalents": [
+        "$\\left(\\frac{3}{1}\\right)$",
+        "$\\frac{3}{1}$",
+        "$\\frac{3}{1} $"
+      ],
+      "wrong": [
+        "$\\frac{1}{3}$",
+        "$\\frac{4}{1}$"
+      ],
+      "expect": {
+        "equivalent": "uncertain",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": true,
+      "note": "本題刻意讓 claimed 的第一個 $…$ 就是算式，用來釘「\\left\\right 去掉之後才比」這條。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-048",
+      "from": 24,
+      "question_type": "填空",
+      "answer_form": "text",
+      "claimed": "互相垂直。內積為零且兩向量非零，故夾角為 $90^\\circ$。",
+      "equivalents": [
+        "互相垂直",
+        "互相垂直。",
+        "互 相 垂 直"
+      ],
+      "wrong": [
+        "互相平行",
+        "長度相等"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-049",
+      "from": 22,
+      "question_type": "填空",
+      "answer_form": "text",
+      "claimed": "$A$ 點的 $x$ 座標。內積為 $\\vec{OA}$ 在 $x$ 軸正向上的分量長度。",
+      "equivalents": [
+        "$A$ 點的 $x$ 座標",
+        "A 點的 x 座標",
+        "A點的x座標"
+      ],
+      "wrong": [
+        "$A$ 點的 $y$ 座標",
+        "$\\vec{OA}$ 的長度"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "normalizeStem 會去掉所有 $ 與空白，三種寫法應收斂成同一個字串。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "ans-050",
+      "from": 16,
+      "question_type": "證明",
+      "answer_form": "text",
+      "claimed": "設兩向量夾角為 $\\theta$，則 $\\vec{a} \\cdot \\vec{b} = |\\vec{a}||\\vec{b}| \\cos \\theta$，因 $|\\cos \\theta| \\leq 1$ 故得證。",
+      "equivalents": [
+        "得證",
+        "故原式成立",
+        "Q.E.D."
+      ],
+      "wrong": [
+        "$1$",
+        "(A)"
+      ],
+      "expect": {
+        "equivalent": "uncertain",
+        "wrong": "uncertain"
+      },
+      "extraction_hazard": false,
+      "note": "第 4.2 條：「證明」一律回 uncertain，不論兩邊寫什麼。",
+      "needs_human_confirm": true
+    }
+  ]
+}

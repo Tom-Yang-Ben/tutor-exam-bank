@@ -111,4 +111,114 @@ function writeBaseline(opts) {
     return { written: true, changes, kept };
 }
 
-module.exports = { loadThresholds, compare, writeBaseline, DEFAULT_PATH, BASELINE_MARGIN };
+// ─────────────────────────────────────────────────────────────
+// 階段 2 新增：suite 通用的門檻比對與 ratchet（A-T14）
+//
+// 階段 1 的 compare() / writeBaseline() 把 suite 名（retrieval）與三個欄（like/vector/hybrid）
+// 寫死在函式裡。階段 2 多了 classify 與 pipeline 兩個 suite，欄與指標都不一樣，
+// 所以抽出通用版；**retrieval 的兩支照原樣保留**（既有行為與 eval:baseline 的輸出是契約）。
+//
+// 一條新規矩：**只放「越高越好」的指標**。needs_review 的比率越低越好，
+// 放進 ratchet 會變成「只准更多題進複核」——那不是門檻，是反向的門檻。
+// 這類指標只報告、不設門檻。
+// ─────────────────────────────────────────────────────────────
+
+const SUITE_METRICS = {
+    retrieval: { columns: ['like', 'vector', 'hybrid'], metrics: ['recall5', 'recall10', 'mrr'] },
+    // classify：cassette 回放 vs golden（規劃 §5.3.2、§3.8）
+    classify: { columns: ['classify'], metrics: ['accuracy', 'macro_f1'] },
+    // pipeline：對 sample_exam.pdf 跑整條管線（A-T14）
+    pipeline: { columns: ['pipeline'], metrics: ['saved_rate', 'gate_pass_rate', 'answer_agree_rate'] }
+};
+
+/**
+ * 通用的門檻比對。
+ * @param {object} thresholds  整份 thresholds.json
+ * @param {string} suite       'retrieval'|'classify'|'pipeline'
+ * @param {object} measured    { <column>: { <metric>: number|null } | null }
+ * @returns {{failures:string[], checked:number, skipped:string[]}}
+ */
+function compareSuite(thresholds, suite, measured) {
+    const spec = SUITE_METRICS[suite];
+    if (!spec) throw new Error(`未知的 suite「${suite}」`);
+    const failures = [];
+    const skipped = [];
+    let checked = 0;
+    const table = (thresholds && thresholds[suite]) || {};
+
+    for (const column of spec.columns) {
+        const want = table[column];
+        const got = measured[column];
+        // 「這一欄的門檻全是 null」＝ 還沒有基準線，與「整個欄位不存在」同義。
+        // 少了這一條，thresholds.json 裡預先擺好的 {accuracy:null, macro_f1:null} 會被
+        // 當成「門檻已存在」，然後對一輪 n/a 的量測報失敗——那是骨架階段的常態，不是退步。
+        const hasNumber = want && spec.metrics.some(m => typeof want[m] === 'number');
+        if (!hasNumber) { skipped.push(`${column}（門檻尚未建立）`); continue; }
+        if (!got) { failures.push(`${column}：門檻已存在但這次沒有量到任何數字`); continue; }
+        for (const metric of spec.metrics) {
+            if (want[metric] === null || want[metric] === undefined) continue;
+            checked++;
+            const v = got[metric];
+            if (v === null || v === undefined) {
+                // 門檻有數字卻量不到 = 失敗。否則「cassette 被誤刪」會表現成 CI 全綠。
+                failures.push(`${column}.${metric}：門檻 ${want[metric]} 但這次是 n/a`);
+            } else if (v + 1e-9 < want[metric]) {
+                failures.push(`${column}.${metric}：${v.toFixed(4)} < 門檻 ${want[metric]}`);
+            }
+        }
+    }
+    return { failures, checked, skipped };
+}
+
+/**
+ * 通用的 ratchet 寫入。
+ * @param {object} opts
+ * @param {string} opts.suite
+ * @param {object} opts.measured
+ * @param {string} [opts.file]
+ * @param {object} [opts.meta]     寫進 <suite>._measured_with
+ * @returns {{written:boolean, changes:string[], kept:string[]}}
+ */
+function writeBaselineSuite(opts) {
+    const spec = SUITE_METRICS[opts.suite];
+    if (!spec) throw new Error(`未知的 suite「${opts.suite}」`);
+    const target = path.resolve(opts.file || DEFAULT_PATH);
+    const current = loadThresholds(target);
+    current[opts.suite] = current[opts.suite] || {};
+
+    const changes = [];
+    const kept = [];
+    for (const column of spec.columns) {
+        const got = opts.measured[column];
+        if (!got) { kept.push(`${column}：這次沒有量到，維持原狀`); continue; }
+        const existing = current[opts.suite][column] || null;
+        const next = {};
+        for (const metric of spec.metrics) {
+            const v = got[metric];
+            if (v === null || v === undefined) { next[metric] = existing ? existing[metric] : null; continue; }
+            const candidate = Math.max(0, Math.round((v - BASELINE_MARGIN) * 10000) / 10000);
+            const old = existing ? existing[metric] : null;
+            if (old === null || old === undefined) {
+                next[metric] = candidate;
+                changes.push(`${opts.suite}.${column}.${metric}：（無）→ ${candidate}`);
+            } else if (candidate > old) {
+                next[metric] = candidate;
+                changes.push(`${opts.suite}.${column}.${metric}：${old} → ${candidate}（ratchet 調高）`);
+            } else {
+                next[metric] = old;
+                kept.push(`${opts.suite}.${column}.${metric}：維持 ${old}（新量測 −${BASELINE_MARGIN} 後為 ${candidate}）`);
+            }
+        }
+        current[opts.suite][column] = next;
+    }
+
+    if (opts.meta) current[`_${opts.suite}_measured_with`] = opts.meta;
+    if (changes.length === 0) return { written: false, changes, kept };
+    fs.writeFileSync(target, JSON.stringify(current, null, 2) + '\n', 'utf8');
+    return { written: true, changes, kept };
+}
+
+module.exports = {
+    loadThresholds, compare, writeBaseline, DEFAULT_PATH, BASELINE_MARGIN,
+    compareSuite, writeBaselineSuite, SUITE_METRICS
+};
