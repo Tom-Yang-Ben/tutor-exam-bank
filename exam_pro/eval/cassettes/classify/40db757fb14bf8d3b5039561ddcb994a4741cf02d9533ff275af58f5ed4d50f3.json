@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-21T17:45:55.901Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2510,
+        "sha256": "288efe716b18fd5ad0b4915be48d9b9443120e06c5b44d105388cf58c9d2941b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "設平面向量 $\\vec{a} = (3, 4)$、$\\vec{b} = (1, 2)$，求 $\\vec{a} \\cdot \\vec{b}$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "confidence": 1,
+      "rationale": "題目給定平面向量的坐標表示，並要求計算兩向量的內積，屬於「向量內積」章節的核心基本題型。"
+    },
+    "usage": {
+      "tokenIn": 1913,
+      "tokenOut": 54,
+      "tokenThinking": 262,
+      "tokenCached": 0
+    },
+    "latencyMs": 2252
+  }
+}

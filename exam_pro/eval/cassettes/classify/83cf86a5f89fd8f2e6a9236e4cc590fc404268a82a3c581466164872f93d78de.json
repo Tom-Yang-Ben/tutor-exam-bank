@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-21T17:46:32.748Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2407,
+        "sha256": "95b9e50c989359dfe9eb3e7490347939c8740af2fe838c022499d930afc225b9"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "兩點電荷 $q_1 = 2 \\times 10^{-6}$ C 與 $q_2 = 3 \\times 10^{-6}$ C 相距 $0.3$ m，求兩者間的靜電力（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "靜電學",
+      "confidence": 1,
+      "rationale": "題目要求根據庫侖定律計算兩點電荷之間的靜電力，屬於「靜電學」中庫侖定律的直接計算。"
+    },
+    "usage": {
+      "tokenIn": 1906,
+      "tokenOut": 43,
+      "tokenThinking": 475,
+      "tokenCached": 0
+    },
+    "latencyMs": 2644
+  }
+}

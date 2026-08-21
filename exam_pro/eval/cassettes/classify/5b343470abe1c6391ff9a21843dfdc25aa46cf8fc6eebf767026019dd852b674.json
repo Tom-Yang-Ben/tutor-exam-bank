@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-21T17:46:01.343Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2527,
+        "sha256": "2b652cc7ad4c7a826f29b64dd8f2c6b3d7a431e3bbb479e3a5119926749cf1b2"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "$\\sin^2 40^\\circ + \\cos^2 40^\\circ$ 之值為何？\n(A) $1$　(B) $0$　(C) $\\frac{1}{2}$　(D) 需查表才能得知",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "三角函數的定義",
+      "confidence": 0.95,
+      "rationale": "題目要求 $\\sin^2 40^\\circ + \\cos^2 40^\\circ$ 的值，此題直接應用三角函數的基本恆等式中的平方關係 $\\sin^2\\theta + \\cos^2\\theta = 1$，屬於三角函數的定義與基本關係之範疇。"
+    },
+    "usage": {
+      "tokenIn": 1935,
+      "tokenOut": 95,
+      "tokenThinking": 500,
+      "tokenCached": 0
+    },
+    "latencyMs": 2996
+  }
+}

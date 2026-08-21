@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-21T17:45:53.639Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2504,
+        "sha256": "9188258900d2003961ef4fbe1df3de663362ff6d23c6e9639232c5f26da1f516"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "$\\log_{2} 8 + \\log_{2} 4$ 之值為何？\n(A) $5$　(B) $6$　(C) $7$　(D) $12$",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "confidence": 1,
+      "rationale": "題目要求計算 $\\log_{2} 8 + \\log_{2} 4$ 的值，此為對數的運算求值，屬於「指數與對數」章節。"
+    },
+    "usage": {
+      "tokenIn": 1925,
+      "tokenOut": 66,
+      "tokenThinking": 352,
+      "tokenCached": 0
+    },
+    "latencyMs": 2789
+  }
+}
