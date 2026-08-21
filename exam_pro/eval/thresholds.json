@@ -1,0 +1,10 @@
+{
+  "_rule": "初值 = 第一次量測 − 0.03，之後只升不降（ratchet）。調整必須改本檔並在 PR 說明。",
+  "_status": "尚未建立基準線。三欄都是 null＝只報告不擋。等 WS-C 的 utils/tokenize.js、utils/embedText.js、queries/hybrid.js 合入並錄好 eval/fixtures/embeddings.*.json 之後，由開發者本人跑 npm run eval:baseline 寫入。",
+  "_why_not_now": "目前 eval 用的是 eval/lib 內的暫用 stub 分詞器與 stub buildEmbedText，量到的 LIKE 欄數字在 WS-C 合入後必然改變；拿它當基準線只會讓 CI 紅得莫名其妙。eval/lib/thresholds.js 對這件事有硬性 guard。",
+  "retrieval": {
+    "like": null,
+    "vector": null,
+    "hybrid": null
+  }
+}

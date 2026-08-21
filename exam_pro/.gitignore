@@ -14,3 +14,13 @@ uploads/
 *.log
 npm-debug.log*
 .DS_Store
+
+# ───────── WS-D eval：公開層進版控，報表與私有層不進 ─────────
+# 報表可隨時重跑產生，且含逐題排名，留在版控只會製造雜訊（規劃 §5.6.7）。
+eval/reports/
+eval/local/
+# 私有層＝對真實題庫的標註與 LLM 回應快照，含逐字試題，絕不可進版控（NOTICE 第 4 條）。
+eval/private/
+# eval/.env.replay 只含 LLM_MODE=replay / EMBED_MODE=fixture，沒有任何金鑰，
+# 但會被本檔開頭的 .env.* 規則掃到，所以在這裡放行（規劃 §5.3.1 要求它進 repo）。
+!eval/.env.replay
