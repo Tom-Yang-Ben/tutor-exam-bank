@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "verify.v1 — 解題驗證（不得看到拆題模型抄下來的答案）",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "final_answer",
+    "answer_form",
+    "steps_summary"
+  ],
+  "properties": {
+    "final_answer": {
+      "type": "string",
+      "minLength": 1,
+      "description": "最終答案本身；選擇題只寫代號如 (A)，數值題只寫數值"
+    },
+    "answer_form": {
+      "type": "string",
+      "x-enum": "answer_form",
+      "description": "final_answer 的形式，決定比對器用哪一種比法"
+    },
+    "steps_summary": {
+      "type": "string",
+      "maxLength": 400,
+      "description": "解題過程摘要（≤400 字）"
+    }
+  }
+}
