@@ -34,11 +34,10 @@ services/retrievalService + GET /api/questions/:id/similar
   → ["利用","克拉瑪公式","解","二元","一次","聯立方程式"]
 ```
 
-**沒有用 `dict.txt.big`。** `docs/interfaces.md` 第 2 條寫的是 jieba + `dict.txt.big`（繁體詞典），但
-`@node-rs/jieba` 並不隨附這個檔（只有簡體的 `dict.txt`），要嘛把 8.5 MB 的詞典 commit 進 repo、
-要嘛安裝時下載——兩條路都有代價，因此第一版改以「章節名 + 手寫學科詞」補足，
-並留 `JIEBA_DICT_BIG` 環境變數當實驗開關（**預設不啟用**：本機有、CI 沒有的話，
-同一題在兩邊會切出不同 token，寫入與查詢就不再一致）。裁決請見 `docs/questions-wsC.md` 第 1 題。
+**`dict.txt.big` 是選用的（裁決 17）。** `@node-rs/jieba` 並不隨附這個檔（只有簡體的 `dict.txt`），
+而把 8.5 MB 詞典 commit 進 repo 或安裝時下載都有代價，因此改以「章節名 + 手寫學科詞」補足；
+`JIEBA_DICT_BIG` 指到本機的 `dict.txt.big` 時才額外載入，**預設不啟用**——本機有、CI 沒有的話，
+同一題在兩邊會切出不同 token，寫入與查詢就不再一致，比切錯詞更糟。
 
 ## 2. `embed_text`：`utils/embedText.js`
 
@@ -76,6 +75,20 @@ L2 正規化統一在 `services/llm/index.js` 做，三種模式回來的向量�
 
 **該不該重算**只看三件事（其一成立就重算）：`embedding IS NULL`、`embed_hash <> sha256(buildEmbedText(q))`、
 `embedding_model <> EMBED_MODEL`。`--force` 可以蓋過。
+
+**三段 token 的唯一產生器**（裁決 21）：
+
+```js
+const { buildTsvTokens } = require('../services/embedService');
+
+buildTsvTokens(q) → { chapterTokens: string[], keywordTokens: string[], stemTokens: string[] }
+```
+
+`q` 可以是 `questions` 撈回來的列，也可以是 fixture 的題目物件——只讀 `chapter`、`keywords`
+與 `buildEmbedText(q)` 需要的欄位，是**純函式**（無 I/O、無隨機、無時間）。
+**寫入（`embedService`）、回填（`scripts/backfill_embeddings.js`）、eval 的 `eval/lib/pgEngine.js`
+三處都只能呼叫它**，不得自行 `tokenize(buildEmbedText(q))`——那樣會少掉章節名拆出來的子詞，
+PG 裡的 lexeme 集合就與記憶體排序器對不起來（D-R2 的 Jaccard 斷言會量到假差異）。
 
 **`search_tsv` 的組成**（規劃 §2.3.7 的權重規則，寫入端各自組，`interfaces.md` 第 2 條明講不提供 `toTsvSql()`）：
 
@@ -143,7 +156,7 @@ node scripts/backfill_embeddings.js --test         # 改打 TEST_DATABASE_URL（
 | `k`（別名 `limit`） | 10 | 1~20；超出範圍會夾進區間，不回 400 |
 | `student_id` | 無 | 排除該生已作答的題；查無此人 = 空排除集，仍回 200 |
 | `mode` | `hybrid` | `hybrid` / `vector` / `keyword`；給別的值回 **400**（默默換成 hybrid 會讓 eval 量錯東西）|
-| `scope` | `chapter` | `chapter` / `subject` / `all`；給別的值回 400 |
+| `scope` | `chapter` | `chapter` / `subject`（裁決 19 已移除 `all`）；給別的值（含 `all`）回 **400** |
 | `difficulty_delta` | 無 | 給了就**鎖定**「來源難度 + delta」（夾在 1~5）；未給則 ±1 |
 
 - 查詢向量**直接取來源題的 `embedding`，不呼叫 Gemini** → 可離線、可進 CI。
@@ -151,8 +164,8 @@ node scripts/backfill_embeddings.js --test         # 改打 TEST_DATABASE_URL（
   沒有就退回 `tokenize(章節 + keywords)`，再沒有就退回 `tokenize(題幹)`。
 - `404` = `:id` 不存在**或已封存**；`409` = 來源題還沒有向量（`mode=keyword` 例外，那條路不需要向量）。
 - `results` 每筆多帶 `vec_rank` / `kw_rank` 兩個除錯欄位，消費端請忽略未知鍵。
-- `scope=all` 會逐學科各跑一次同一段 SQL 再依 `score` 合併（`buildHybridQuery` 的 `subject` 是必填），
-  見 `docs/questions-wsC.md` 第 3 題。
+- **沒有跨學科這條路**：候選一律限定在來源題的學科內，因此永遠是同一段 SQL 跑一次，SQL 回來的順序就是最終順序。
+  `scope=all` 回 `400 {message:'scope 只接受 chapter / subject。'}`，不悄悄降級成 `subject`（裁決 19）。
 
 ## 7. 量到的數字
 
@@ -166,7 +179,6 @@ node scripts/backfill_embeddings.js --test         # 改打 TEST_DATABASE_URL（
 | `scope=chapter`、`mode=vector` | 10 ms | 17 ms |
 | `scope=subject`、`mode=hybrid` | 189 ms | 292 ms |
 | `scope=subject`、`mode=vector` | 46 ms | 70 ms |
-| `scope=all`、`mode=hybrid` | 183 ms | 276 ms |
 
 - 規劃 §2.8 的「萬題 p95 < 100 ms」對**預設路徑（同章）達成**。
 - `scope=subject` 慢的是**關鍵字側**而不是向量側（兩側 292 ms vs 只向量側 70 ms）。這份合成資料只有
@@ -183,11 +195,15 @@ node scripts/backfill_embeddings.js --test         # 改打 TEST_DATABASE_URL（
 ## 8. 測試
 
 ```bash
-npm test                                              # 138 項，不連 DB、不呼叫 Gemini、不需 secrets
-node --env-file=.env --test "test/integration/*.test.js"   # 38 項，需要 postgres_test（5433）
+npm test          # = node --test "test/unit/**/*.test.js"（裁決 24）
+                  # 不連 DB、不呼叫 Gemini、不需 secrets
+node --env-file=.env --test --test-concurrency=1 "test/integration/**/*.test.js"
 ```
 
-- 單元：`test/unit/tokenize.test.js`(21)、`embedText.test.js`(23)、`llmEmbed.test.js`(11)、
-  `embedService.test.js`(18)、`hybridQuery.test.js`(25)
-- 整合：`test/integration/hybrid.pg.test.js`(38)——**沒設 `TEST_DATABASE_URL` 就整組 skip**，
+- 單元（WS-C 的部分共 113 項）：`test/unit/tokenize.test.js`(21)、`embedText.test.js`(23)、
+  `llmEmbed.test.js`(11)、`embedService.test.js`(18)、`hybridQuery.test.js`(25)、`similarParams.test.js`(15)
+- 整合：`test/integration/hybrid.pg.test.js`(41)——**沒設 `TEST_DATABASE_URL` 就整組 skip**，
   所以 `npm test` 永遠不會連到資料庫。跑之前要先 `npm run migrate:test`。
+- **整合測試必須序列化跑**（`--test-concurrency=1`）：四支整合測試檔共用同一個 `postgres_test`，
+  每一支開頭都會 `TRUNCATE`，平行跑會互相清掉對方的資料。本檔跑完會把測試庫清乾淨，
+  測試學生的姓名也加了 `WS-C` 前綴，避免與別支的固定測試學生撞上 `students.name` 的 UNIQUE。

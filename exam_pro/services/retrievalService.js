@@ -11,7 +11,6 @@
 
 const { buildHybridQuery } = require('../queries/hybrid');
 const { tokenize } = require('../utils/tokenize');
-const { SUBJECTS } = require('../config/chapters');
 
 const DEFAULT_K = 10;
 const MAX_K = 20;
@@ -67,9 +66,11 @@ function parseSimilarQuery(query = {}) {
         return { ok: false, message: 'mode 只接受 hybrid / vector / keyword。' };
     }
 
+    // 裁決 19：拿掉 scope=all（跨學科相似題教學上無意義，也無法用同一段 SQL 表達）。
+    // 給 all 一律 400，不悄悄降級成 subject——降級會讓呼叫端以為自己拿到的是跨科結果。
     const scope = String(query.scope ?? 'chapter');
-    if (!['chapter', 'subject', 'all'].includes(scope)) {
-        return { ok: false, message: 'scope 只接受 chapter / subject / all。' };
+    if (!['chapter', 'subject'].includes(scope)) {
+        return { ok: false, message: 'scope 只接受 chapter / subject。' };
     }
 
     let difficultyDelta = null;
@@ -135,6 +136,10 @@ async function findSimilar(sourceId, opts = {}) {
     if (!Number.isInteger(sourceId)) {
         return { status: 400, body: { message: '無效的題目 ID' } };
     }
+    // 直接呼叫 findSimilar（不經 HTTP）的呼叫端也要擋：裁決 19 之後沒有 scope=all
+    if (!['chapter', 'subject'].includes(scope)) {
+        return { status: 400, body: { message: 'scope 只接受 chapter / subject。' } };
+    }
 
     // 已封存題視同不存在（與候選池「一律排除已封存」同一條線）
     const { rows: srcRows } = await db.query(
@@ -156,35 +161,31 @@ async function findSimilar(sourceId, opts = {}) {
     const difficultyMin = difficultyDelta === null ? clamp(source.difficulty - 1, 1, 5) : clamp(source.difficulty + difficultyDelta, 1, 5);
     const difficultyMax = difficultyDelta === null ? clamp(source.difficulty + 1, 1, 5) : clamp(source.difficulty + difficultyDelta, 1, 5);
 
-    // scope=all 沒辦法用同一段 SQL 表達（buildHybridQuery 的 subject 是必填），
-    // 因此逐學科各跑一次再依 score 合併。詳見 docs/questions-wsC.md 第 3 題。
-    const subjects = scope === 'all' ? SUBJECTS : [source.subject];
+    // scope 只有 chapter 與 subject（裁決 19 拿掉了 all）：候選一律限定在來源題的學科內，
+    // 因此永遠是同一段 SQL 跑一次，排序直接就是最終順序。
     const chapter = scope === 'chapter' ? source.chapter : null;
 
+    const { text, values } = buildHybridQuery({
+        subject: source.subject,
+        chapter,
+        difficultyMin,
+        difficultyMax,
+        excludeStudentId: studentId,
+        excludeIds: [source.id],          // /similar 必須排除來源題本身
+        queryVector,
+        queryTokens,
+        mode: 'rrf',
+        limit: k,
+        sides: sidesForMode(mode),
+    });
+
     const client = await db.pool.connect();
-    let ranked = [];
+    let ranked;
     try {
         await client.query('BEGIN');
         // 召回深度：交易內設定，eval 為求等效精確會調得更高（interfaces.md 第 5 條）
         await client.query('SET LOCAL hnsw.ef_search = 100');
-
-        for (const subject of subjects) {
-            const { text, values } = buildHybridQuery({
-                subject,
-                chapter,
-                difficultyMin,
-                difficultyMax,
-                excludeStudentId: studentId,
-                excludeIds: [source.id],          // /similar 必須排除來源題本身
-                queryVector,
-                queryTokens,
-                mode: 'rrf',
-                limit: k,
-                sides: sidesForMode(mode),
-            });
-            const res = await client.query(text, values);
-            ranked.push(...res.rows);
-        }
+        ranked = (await client.query(text, values)).rows;
         await client.query('COMMIT');
     } catch (err) {
         await client.query('ROLLBACK').catch(() => {});
@@ -193,8 +194,6 @@ async function findSimilar(sourceId, opts = {}) {
         client.release();
     }
 
-    ranked.sort((a, b) => (b.score - a.score) || (a.id - b.id));
-    ranked = ranked.slice(0, k);
     if (ranked.length === 0) return { status: 200, body: { source_id: source.id, mode, results: [] } };
 
     // 顯示欄位另外撈：hybrid SQL 的結果集只回 id/score/vec_rank/kw_rank（凍結）

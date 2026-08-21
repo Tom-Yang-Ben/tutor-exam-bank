@@ -138,7 +138,9 @@ before(async (t) => {
     assert.equal(res.embedded, QUESTIONS.length);
 
     // 一位測試學生：寫過 dot2，用來驗證 excludeStudentId
-    studentId = (await pool.query(`INSERT INTO students (name) VALUES ('整合測試學生') RETURNING id`)).rows[0].id;
+    // 姓名刻意加上 WS-C 前綴：students.name 是 UNIQUE，用通用名字會跟別支整合測試的
+    // 固定測試學生撞在一起（那支若沒有先 TRUNCATE，就會在插入時就先炸掉）。
+    studentId = (await pool.query(`INSERT INTO students (name) VALUES ('WS-C 檢索整合測試學生') RETURNING id`)).rows[0].id;
     await pool.query(`INSERT INTO attempts (student_id, question_id) VALUES ($1, $2)`, [studentId, idOf.dot2]);
 });
 
@@ -147,7 +149,12 @@ after(async () => {
         if (v === undefined) delete process.env[k]; else process.env[k] = v;
     }
     if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
-    if (pool) await pool.end();
+    if (pool) {
+        // 跑完把測試庫清乾淨：留著資料會讓後面跑的整合測試檔（它們共用同一個
+        // postgres_test）撞到 students.name / questions 的既有列。
+        await pool.query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE').catch(() => {});
+        await pool.end();
+    }
 });
 
 // ───────────────────────── 輔助 ─────────────────────────
@@ -439,7 +446,7 @@ describe('GET /api/questions/:id/similar', { skip }, () => {
         assert.ok(!body.results.some(r => r.id === idOf.dot2));
     });
 
-    test('scope=chapter（預設）只在同章找；scope=subject 跨章；scope=all 跨學科', async () => {
+    test('scope=chapter（預設）只在同章找；scope=subject 跨章但不跨學科', async () => {
         const inChapter = await retrievalService.findSimilar(idOf.dot1, { db, k: 20 });
         assert.ok(inChapter.body.results.every(r => r.chapter === '向量內積'));
 
@@ -447,8 +454,15 @@ describe('GET /api/questions/:id/similar', { skip }, () => {
         assert.ok(inSubject.body.results.every(r => r.subject === '數學'));
         assert.ok(inSubject.body.results.some(r => r.chapter !== '圓方程式'), '跨章時應該看得到其他章的題');
 
-        const all = await retrievalService.findSimilar(idOf.centripetal, { db, scope: 'all', k: 20 });
-        assert.ok(all.body.results.some(r => r.subject === '數學'), '跨學科時應該看得到另一科的題');
+        // 物理題不論怎麼查都不會撈到數學題（裁決 19 之後沒有跨學科這條路）
+        const physics = await retrievalService.findSimilar(idOf.centripetal, { db, scope: 'subject', k: 20 });
+        assert.ok(physics.body.results.every(r => r.subject === '物理'));
+    });
+
+    test('scope=all 已於裁決 19 移除 → 400（不悄悄降級成 subject）', async () => {
+        const { status, body } = await retrievalService.findSimilar(idOf.dot1, { db, scope: 'all' });
+        assert.equal(status, 400);
+        assert.equal(body.message, 'scope 只接受 chapter / subject。');
     });
 
     test('difficulty_delta 給了就鎖定「來源難度 + delta」', async () => {
@@ -517,6 +531,17 @@ describe('GET /api/questions/:id/similar — 走真的 HTTP', { skip }, () => {
         const res = await fetch(`http://127.0.0.1:${ctx.port}/api/questions/${idOf.dot1}/similar?mode=magic`);
         assert.equal(res.status, 400);
         assert.match((await res.json()).message, /mode 只接受/);
+    });
+
+    test('scope=all → 400（裁決 19 已移除跨學科）', async () => {
+        const res = await fetch(`http://127.0.0.1:${ctx.port}/api/questions/${idOf.dot1}/similar?scope=all`);
+        assert.equal(res.status, 400);
+        assert.equal((await res.json()).message, 'scope 只接受 chapter / subject。');
+    });
+
+    test('scope=subject → 200（合法值不受影響）', async () => {
+        const res = await fetch(`http://127.0.0.1:${ctx.port}/api/questions/${idOf.dot1}/similar?scope=subject`);
+        assert.equal(res.status, 200);
     });
 
     test('404：不存在的 id', async () => {
