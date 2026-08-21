@@ -64,12 +64,16 @@ exam_pro/
 ├─ utils/
 │   ├─ textFormatter.js   # LaTeX → OOXML 數學公式解析器
 │   └─ shuffle.js         # Fisher-Yates 洗牌（抽題的公平性核心）
-├─ schema.sql             # 資料表定義（questions / exam_papers）
+├─ docker-compose.yml     # 本機 PostgreSQL 16 + pgvector（5432 開發 / 5433 測試）
+├─ migrations/            # 只增不改的 SQL：0001_init.sql、0002_vector.sql
+├─ migrate.js             # 極簡 migration 執行器（node migrate.js up [--test] | status）
+├─ schema.sql             # 舊的 MySQL 資料表定義（遷移期間保留給 export 對照）
 ├─ seed_questions.js      # 種子題庫：30 題自製示範題（4 章 × 7~8 題）
 ├─ sample_exam.docx       # 成果範例：實際匯出的 Word 考卷
 ├─ test/                  # 單元測試（node:test，無額外相依）
 │   ├─ textFormatter.test.js  # 公式解析器
 │   └─ shuffle.test.js        # 抽題隨機性：一萬次分佈測試
+├─ 啟動資料庫.bat         # 雙擊即起容器 + 套 migrations（先檢查 Docker 是否啟動）
 └─ *.bat / *_formulas.js  # 題庫維運工具（見下方）
 
 ../.github/workflows/ci.yml  # CI：push / PR 時在 Node 20.x、22.x 上跑 npm ci + npm test
@@ -131,7 +135,8 @@ flowchart TD
 
 ### 1. 前置需求
 - **Node.js 20+**（`@google/genai` 於 `package.json` 宣告 `engines: node >= 20`；CI 亦以 20.x / 22.x 驗證）
-- MySQL 8.0.16+（`CHECK` 約束與 JSON 函式需要）
+- **Docker Desktop**（WSL2 後端）——階段 1 起資料庫改用容器裡的 PostgreSQL 16 + pgvector
+- MySQL 8.0.16+（**舊資料庫**；遷移完成前仍需要，只給 `migrate/export_mysql.js` 用）
 - 一組 [Google Gemini API 金鑰](https://aistudio.google.com/apikey)
 
 ### 2. 安裝相依套件
@@ -149,16 +154,37 @@ cp .env.example .env
 |------|------|------|
 | `PORT` | 服務埠 | `3000` |
 | `GEMINI_API_KEY` | Google Gemini 金鑰（**必填**）| — |
-| `DB_HOST` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` | MySQL 連線 | localhost / root / — / tutor_exam_bank |
+| `DATABASE_URL` | PostgreSQL 連線（階段 1 起的正式資料庫）| `postgres://exam:exam@localhost:5442/tutor_exam_bank` |
+| `TEST_DATABASE_URL` | 整合測試專用的 PostgreSQL；**資料庫名必須以 `_test` 結尾**，否則 `migrate.js` 拒絕執行 | `postgres://exam:exam@localhost:5433/tutor_exam_bank_test` |
+| `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` | 舊 MySQL 連線（遷移期間保留）| localhost / 3306 / root / — / tutor_exam_bank |
+| `EMBED_MODEL` / `EMBED_DIM` / `EMBED_RPM` / `EMBED_BATCH` / `EMBED_MODE` | embedding 模型與限速；`EMBED_DIM` 在 I0 釘死為 **768** | gemini-embedding-001 / 768 / 60 / 32 / fixture |
+| `LLM_MODE` | `live` / `record` / `replay`；CI 恆為 `replay` | `replay` |
+| `FEATURE_SIMILAR` / `FEATURE_HYBRID_SEARCH` | 新功能旗標，預設全關 | `false` |
 | `API_KEY` | 後端存取金鑰；留空則**停用**認證。⚠️ 此金鑰會被注入前端頁面，僅適用本機自用，**不可作為對外部署的存取控制**（見[安全注意事項](#-安全注意事項)）| 空 |
 | `ALLOWED_ORIGINS` | 允許的前端來源（逗號分隔）| `http://localhost:3000` |
 | `IMAGE_HOST_ALLOWLIST` | Word 匯圖時允許的圖片網域（逗號分隔，選填）| 空 |
 | `NODE_ENV` | `production` 時錯誤不外洩細節 | `development` |
 
-### 4. 建立資料庫
+### 4. 啟動資料庫並套用 migrations
+
+**Windows 直接雙擊 `啟動資料庫.bat`**（會先檢查 Docker 是否啟動、拉起容器、再套 migrations）。等價的手動指令：
+
 ```bash
-mysql -u root -p < schema.sql
+docker compose up -d --wait   # postgres → 5442（named volume）、postgres_test → 5433（tmpfs）
+npm run migrate               # 對 DATABASE_URL 套用 migrations/*.sql
+npm run migrate:test          # 對 TEST_DATABASE_URL 套用（跑整合測試前）
+node migrate.js status        # 看每一支的套用狀態
+docker compose down           # 停止（加 -v 才會刪掉 pgdata）
 ```
+
+- 映像固定為 `pgvector/pgvector:pg16`（官方 pgvector，內含 PG contrib 的 `pg_trgm`），本機、CI、正式環境同一顆。
+- `migrate.js` 只前進、不做 down；每一支 SQL 與它的 `schema_migrations` 紀錄在同一交易內，重跑是 no-op。
+- **中文路徑的 bind mount 已實測可用**（Docker Desktop 29.6.2 / WSL2，專案路徑含「期中專案」），`docker-compose.yml` 因此把 `./migrations` 唯讀掛進容器。萬一在別台機器上掛載失敗，退路是不經 `migrate.js` 直接餵檔：
+  ```bash
+  docker compose exec -T postgres psql -U exam -d tutor_exam_bank < migrations/0001_init.sql
+  ```
+- **開發埠是 5442，不是 5432**：這台開發機已安裝並啟動了原生的 PostgreSQL 17 服務（`postgresql-x64-17`）占用 5432。兩個行程同時 LISTEN 同一埠時，連線會被先啟動的那個接走，症狀是「密碼驗證失敗」這種看起來與 Docker 無關的錯誤。若日後停用該服務，要改回 5432 只需同步改 `docker-compose.yml` 與 `.env`／`docs/interfaces.md` 第 9 條。
+- 舊的 `schema.sql`（MySQL 版）在切換之夜前仍保留給 `migrate/export_mysql.js` 對照，之後移除。
 
 ### 5. 啟動
 ```bash
@@ -295,7 +321,7 @@ fs.writeFileSync('.tmp_inline.js',b)" && node --check .tmp_inline.js && echo "JS
 | POST | `/api/questions` | 新增單題 |
 | PUT | `/api/questions/:id` | 更新題目 |
 | DELETE | `/api/questions/:id` | 刪除題目 |
-| POST | `/api/batch-save-questions` | 批次入庫（AI 解析結果）|
+| POST | `/api/batch-save-questions` | 批次入庫（AI 解析結果）。**部分入庫**：通過驗證的題照樣寫入，回 `{message, saved_count, rejected:[{idx, reason}]}`；`?strict=1` 則維持舊的「一題不合格就整批 400」行為 |
 | GET | `/api/chapters` | 題庫中實際存在的章節 |
 | GET | `/api/chapter-whitelist` | 完整章節白名單（前端下拉選單）|
 | POST | `/api/generate-paper` | 智慧組卷（`student_name/subject/chapter/count`）|
