@@ -10,6 +10,12 @@
 //
 // LLM：runner 的 llm 由測試注入一支假的（回固定 usage），
 //      agents 指到 test/fixtures/fakeAgents/——不連 Gemini、不需金鑰。
+//
+// ⚠ 跑這支之前，確認**沒有另一個 runner 行程正指著測試庫**
+//   （例如另一個視窗開著 `node workers/jobRunner.js` 且 DATABASE_URL 指到 5433）。
+//   認領是 SKIP LOCKED + 租約，兩個 runner 本來就會互相禮讓，但那個外部 runner 會用
+//   真正的 agents/ 目錄去跑本檔建出來的列，於是本檔的斷言就對不上了。
+//   本檔設 JOB_RUNNER=off 只能擋住「app 自己起 runner」，擋不住外部行程。
 // ─────────────────────────────────────────────────────────────
 const { test, describe, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
