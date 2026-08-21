@@ -24,6 +24,35 @@ const { rankLike, candidates } = require('../lib/ranker');
 const { loadEmbeddings } = require('../lib/embeddings');
 const { tokenizerSource } = require('../lib/tokenize');
 
+/**
+ * 序列化：物件照常展開，但「元素全是純量」的陣列壓成一行。
+ *
+ * 為什麼要自己寫：這份檔案是要**人**逐筆看過 40 次的。用 JSON.stringify(…, 2)
+ * 會把 relevant:[2] 與候選池攤成一題二十幾行、整份三千多行，
+ * 光捲動就足以讓人放棄逐筆判定——而「逐筆人工判定」正是這份 golden 唯一的價值來源。
+ *
+ * @param {*} value
+ * @param {number} [level=0]
+ * @returns {string}
+ */
+function stringifyCompact(value, level = 0) {
+    const pad = '  '.repeat(level);
+    const padIn = '  '.repeat(level + 1);
+    if (Array.isArray(value)) {
+        if (value.length === 0) return '[]';
+        if (value.every(v => v === null || typeof v !== 'object')) {
+            return `[${value.map(v => JSON.stringify(v)).join(', ')}]`;
+        }
+        return `[\n${value.map(v => padIn + stringifyCompact(v, level + 1)).join(',\n')}\n${pad}]`;
+    }
+    if (value && typeof value === 'object') {
+        const keys = Object.keys(value);
+        if (keys.length === 0) return '{}';
+        return `{\n${keys.map(k => `${padIn}${JSON.stringify(k)}: ${stringifyCompact(value[k], level + 1)}`).join(',\n')}\n${pad}}`;
+    }
+    return JSON.stringify(value);
+}
+
 function parseArgs(argv) {
     const out = { out: path.resolve(__dirname, '..', 'golden', 'retrieval.json') };
     for (let i = 0; i < argv.length; i++) {
@@ -97,7 +126,9 @@ function main() {
             _suggestion: {
                 basis: `relevant = variant_group「${q.variant_group}」的其他成員；hard_negatives = ${q.lookalike_of ? `跨章對照組「${q.lookalike_of}」+ ` : ''}同章干擾題`,
                 like_keywords: likeKeywords(q),
-                pool: pool.map(p => ({ id: p.id, from: p.sources }))
+                // 候選池壓成「id ← 來源」的字串：人工判定時要看的是「有哪些候選、
+                // 從哪一路進來的」，不需要每一筆都攤成一個物件
+                pool: pool.map(p => `${p.id} ← ${p.sources.join('+')}`)
             }
         });
     }
@@ -112,7 +143,7 @@ function main() {
     };
 
     fs.mkdirSync(path.dirname(args.out), { recursive: true });
-    fs.writeFileSync(args.out, JSON.stringify(doc, null, 2) + '\n', 'utf8');
+    fs.writeFileSync(args.out, stringifyCompact(doc) + '\n', 'utf8');
     console.log(`已寫出 ${entries.length} 筆建議 → ${args.out}`);
     console.log(`   全部標記 needs_human_confirm，請逐筆核對後再定稿。`);
 }

@@ -11,97 +11,13 @@
         "kind": "question_id",
         "value": 1
       },
-      "relevant": [
-        2
-      ],
-      "hard_negatives": [
-        7,
-        8
-      ],
+      "relevant": [2],
+      "hard_negatives": [7, 8],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「log-add」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "之值",
-          "值為",
-          "為何"
-        ],
-        "pool": [
-          {
-            "id": 2,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 3,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 4,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 6,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 7,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 24,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 25,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 26,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 27,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 28,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 29,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 31,
-            "from": [
-              "keyword"
-            ]
-          }
-        ]
+        "like_keywords": ["之值", "值為", "為何"],
+        "pool": ["2 ← keyword+same_chapter_random", "3 ← same_chapter_random", "4 ← same_chapter_random", "6 ← same_chapter_random", "7 ← keyword+same_chapter_random", "24 ← keyword", "25 ← keyword", "26 ← keyword", "27 ← keyword", "28 ← keyword", "29 ← keyword", "31 ← keyword"]
       }
     },
     {
@@ -110,79 +26,13 @@
         "kind": "question_id",
         "value": 2
       },
-      "relevant": [
-        1
-      ],
-      "hard_negatives": [
-        7,
-        8
-      ],
+      "relevant": [1],
+      "hard_negatives": [7, 8],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「log-add」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "27",
-          "之值",
-          "值為"
-        ],
-        "pool": [
-          {
-            "id": 1,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 5,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 6,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 7,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 8,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 25,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 26,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 27,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 28,
-            "from": [
-              "keyword"
-            ]
-          }
-        ]
+        "like_keywords": ["27", "之值", "值為"],
+        "pool": ["1 ← keyword+same_chapter_random", "5 ← same_chapter_random", "6 ← same_chapter_random", "7 ← keyword+same_chapter_random", "8 ← same_chapter_random", "25 ← keyword", "26 ← keyword", "27 ← keyword", "28 ← keyword"]
       }
     },
     {
@@ -191,59 +41,13 @@
         "kind": "question_id",
         "value": 3
       },
-      "relevant": [
-        4
-      ],
-      "hard_negatives": [
-        7,
-        8
-      ],
+      "relevant": [4],
+      "hard_negatives": [7, 8],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「exp-eq」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "解方",
-          "方程",
-          "程式"
-        ],
-        "pool": [
-          {
-            "id": 1,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 2,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 4,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 5,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 6,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 7,
-            "from": [
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["解方", "方程", "程式"],
+        "pool": ["1 ← same_chapter_random", "2 ← same_chapter_random", "4 ← keyword", "5 ← same_chapter_random", "6 ← same_chapter_random", "7 ← same_chapter_random"]
       }
     },
     {
@@ -252,59 +56,13 @@
         "kind": "question_id",
         "value": 4
       },
-      "relevant": [
-        3
-      ],
-      "hard_negatives": [
-        7,
-        8
-      ],
+      "relevant": [3],
+      "hard_negatives": [7, 8],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「exp-eq」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "解方",
-          "方程",
-          "程式"
-        ],
-        "pool": [
-          {
-            "id": 1,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 2,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 3,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 5,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 6,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 7,
-            "from": [
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["解方", "方程", "程式"],
+        "pool": ["1 ← same_chapter_random", "2 ← same_chapter_random", "3 ← keyword", "5 ← same_chapter_random", "6 ← same_chapter_random", "7 ← same_chapter_random"]
       }
     },
     {
@@ -313,72 +71,13 @@
         "kind": "question_id",
         "value": 5
       },
-      "relevant": [
-        6
-      ],
-      "hard_negatives": [
-        7,
-        8
-      ],
+      "relevant": [6],
+      "hard_negatives": [7, 8],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「log-digits」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "已知",
-          "10",
-          "3010"
-        ],
-        "pool": [
-          {
-            "id": 1,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 2,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 3,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 4,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 6,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 8,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 14,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 30,
-            "from": [
-              "keyword"
-            ]
-          }
-        ]
+        "like_keywords": ["已知", "10", "3010"],
+        "pool": ["1 ← same_chapter_random", "2 ← same_chapter_random", "3 ← same_chapter_random", "4 ← same_chapter_random", "6 ← keyword", "8 ← keyword+same_chapter_random", "14 ← keyword", "30 ← keyword"]
       }
     },
     {
@@ -387,72 +86,13 @@
         "kind": "question_id",
         "value": 6
       },
-      "relevant": [
-        5
-      ],
-      "hard_negatives": [
-        7,
-        8
-      ],
+      "relevant": [5],
+      "hard_negatives": [7, 8],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「log-digits」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "已知",
-          "10",
-          "3010"
-        ],
-        "pool": [
-          {
-            "id": 1,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 3,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 4,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 5,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 7,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 8,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 14,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 30,
-            "from": [
-              "keyword"
-            ]
-          }
-        ]
+        "like_keywords": ["已知", "10", "3010"],
+        "pool": ["1 ← same_chapter_random", "3 ← same_chapter_random", "4 ← same_chapter_random", "5 ← keyword+same_chapter_random", "7 ← same_chapter_random", "8 ← keyword", "14 ← keyword", "30 ← keyword"]
       }
     },
     {
@@ -461,71 +101,13 @@
         "kind": "question_id",
         "value": 9
       },
-      "relevant": [
-        10
-      ],
-      "hard_negatives": [
-        15,
-        16,
-        17,
-        18
-      ],
+      "relevant": [10],
+      "hard_negatives": [15, 16, 17, 18],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「dot-basic」的其他成員；hard_negatives = 跨章對照組「sdot-basic」+ 同章干擾題",
-        "like_keywords": [
-          "設平",
-          "平面",
-          "面向"
-        ],
-        "pool": [
-          {
-            "id": 10,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 11,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 12,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 13,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 14,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 15,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 16,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["設平", "平面", "面向"],
+        "pool": ["10 ← keyword+same_chapter_random", "11 ← keyword", "12 ← keyword+same_chapter_random", "13 ← keyword+same_chapter_random", "14 ← keyword", "15 ← same_chapter_random", "16 ← keyword+same_chapter_random"]
       }
     },
     {
@@ -534,66 +116,13 @@
         "kind": "question_id",
         "value": 10
       },
-      "relevant": [
-        9
-      ],
-      "hard_negatives": [
-        15,
-        16,
-        17,
-        18
-      ],
+      "relevant": [9],
+      "hard_negatives": [15, 16, 17, 18],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「dot-basic」的其他成員；hard_negatives = 跨章對照組「sdot-basic」+ 同章干擾題",
-        "like_keywords": [
-          "設平",
-          "平面",
-          "面向"
-        ],
-        "pool": [
-          {
-            "id": 9,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 11,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 12,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 13,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 14,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 16,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["設平", "平面", "面向"],
+        "pool": ["9 ← keyword", "11 ← keyword+same_chapter_random", "12 ← keyword+same_chapter_random", "13 ← keyword+same_chapter_random", "14 ← keyword+same_chapter_random", "16 ← keyword+same_chapter_random"]
       }
     },
     {
@@ -602,71 +131,13 @@
         "kind": "question_id",
         "value": 11
       },
-      "relevant": [
-        12
-      ],
-      "hard_negatives": [
-        15,
-        16,
-        19,
-        20
-      ],
+      "relevant": [12],
+      "hard_negatives": [15, 16, 19, 20],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「dot-angle」的其他成員；hard_negatives = 跨章對照組「sdot-angle」+ 同章干擾題",
-        "like_keywords": [
-          "設平",
-          "平面",
-          "面向"
-        ],
-        "pool": [
-          {
-            "id": 9,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 10,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 12,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 13,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 14,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 15,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 16,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["設平", "平面", "面向"],
+        "pool": ["9 ← keyword+same_chapter_random", "10 ← keyword+same_chapter_random", "12 ← keyword+same_chapter_random", "13 ← keyword", "14 ← keyword", "15 ← same_chapter_random", "16 ← keyword+same_chapter_random"]
       }
     },
     {
@@ -675,71 +146,13 @@
         "kind": "question_id",
         "value": 12
       },
-      "relevant": [
-        11
-      ],
-      "hard_negatives": [
-        15,
-        16,
-        19,
-        20
-      ],
+      "relevant": [11],
+      "hard_negatives": [15, 16, 19, 20],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「dot-angle」的其他成員；hard_negatives = 跨章對照組「sdot-angle」+ 同章干擾題",
-        "like_keywords": [
-          "設平",
-          "平面",
-          "面向"
-        ],
-        "pool": [
-          {
-            "id": 9,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 10,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 11,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 13,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 14,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 15,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 16,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["設平", "平面", "面向"],
+        "pool": ["9 ← keyword", "10 ← keyword+same_chapter_random", "11 ← keyword+same_chapter_random", "13 ← keyword+same_chapter_random", "14 ← keyword", "15 ← same_chapter_random", "16 ← keyword+same_chapter_random"]
       }
     },
     {
@@ -748,69 +161,13 @@
         "kind": "question_id",
         "value": 13
       },
-      "relevant": [
-        14
-      ],
-      "hard_negatives": [
-        15,
-        16
-      ],
+      "relevant": [14],
+      "hard_negatives": [15, 16],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「dot-perp」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "設平",
-          "平面",
-          "面向"
-        ],
-        "pool": [
-          {
-            "id": 9,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 10,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 11,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 12,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 14,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 15,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 16,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["設平", "平面", "面向"],
+        "pool": ["9 ← keyword+same_chapter_random", "10 ← keyword+same_chapter_random", "11 ← keyword", "12 ← keyword", "14 ← keyword+same_chapter_random", "15 ← same_chapter_random", "16 ← keyword+same_chapter_random"]
       }
     },
     {
@@ -819,69 +176,13 @@
         "kind": "question_id",
         "value": 14
       },
-      "relevant": [
-        13
-      ],
-      "hard_negatives": [
-        15,
-        16
-      ],
+      "relevant": [13],
+      "hard_negatives": [15, 16],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「dot-perp」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "設平",
-          "平面",
-          "面向"
-        ],
-        "pool": [
-          {
-            "id": 9,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 10,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 11,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 12,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 13,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 15,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 16,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["設平", "平面", "面向"],
+        "pool": ["9 ← keyword", "10 ← keyword", "11 ← keyword+same_chapter_random", "12 ← keyword+same_chapter_random", "13 ← keyword+same_chapter_random", "15 ← same_chapter_random", "16 ← keyword+same_chapter_random"]
       }
     },
     {
@@ -890,71 +191,13 @@
         "kind": "question_id",
         "value": 17
       },
-      "relevant": [
-        18
-      ],
-      "hard_negatives": [
-        9,
-        10,
-        22,
-        23
-      ],
+      "relevant": [18],
+      "hard_negatives": [9, 10, 22, 23],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「sdot-basic」的其他成員；hard_negatives = 跨章對照組「dot-basic」+ 同章干擾題",
-        "like_keywords": [
-          "設空",
-          "空間",
-          "間向"
-        ],
-        "pool": [
-          {
-            "id": 18,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 19,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 20,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 21,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 22,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 23,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 24,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["設空", "空間", "間向"],
+        "pool": ["18 ← keyword", "19 ← keyword+same_chapter_random", "20 ← keyword+same_chapter_random", "21 ← keyword", "22 ← same_chapter_random", "23 ← keyword+same_chapter_random", "24 ← keyword+same_chapter_random"]
       }
     },
     {
@@ -963,66 +206,13 @@
         "kind": "question_id",
         "value": 18
       },
-      "relevant": [
-        17
-      ],
-      "hard_negatives": [
-        9,
-        10,
-        22,
-        23
-      ],
+      "relevant": [17],
+      "hard_negatives": [9, 10, 22, 23],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「sdot-basic」的其他成員；hard_negatives = 跨章對照組「dot-basic」+ 同章干擾題",
-        "like_keywords": [
-          "設空",
-          "空間",
-          "間向"
-        ],
-        "pool": [
-          {
-            "id": 17,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 19,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 20,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 21,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 23,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 24,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["設空", "空間", "間向"],
+        "pool": ["17 ← keyword+same_chapter_random", "19 ← keyword+same_chapter_random", "20 ← keyword+same_chapter_random", "21 ← keyword", "23 ← keyword+same_chapter_random", "24 ← keyword+same_chapter_random"]
       }
     },
     {
@@ -1031,71 +221,13 @@
         "kind": "question_id",
         "value": 19
       },
-      "relevant": [
-        20
-      ],
-      "hard_negatives": [
-        11,
-        12,
-        22,
-        23
-      ],
+      "relevant": [20],
+      "hard_negatives": [11, 12, 22, 23],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「sdot-angle」的其他成員；hard_negatives = 跨章對照組「dot-angle」+ 同章干擾題",
-        "like_keywords": [
-          "設空",
-          "空間",
-          "間向"
-        ],
-        "pool": [
-          {
-            "id": 17,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 18,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 20,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 21,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 22,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 23,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 24,
-            "from": [
-              "keyword"
-            ]
-          }
-        ]
+        "like_keywords": ["設空", "空間", "間向"],
+        "pool": ["17 ← keyword+same_chapter_random", "18 ← keyword+same_chapter_random", "20 ← keyword", "21 ← keyword+same_chapter_random", "22 ← same_chapter_random", "23 ← keyword+same_chapter_random", "24 ← keyword"]
       }
     },
     {
@@ -1104,71 +236,13 @@
         "kind": "question_id",
         "value": 20
       },
-      "relevant": [
-        19
-      ],
-      "hard_negatives": [
-        11,
-        12,
-        22,
-        23
-      ],
+      "relevant": [19],
+      "hard_negatives": [11, 12, 22, 23],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「sdot-angle」的其他成員；hard_negatives = 跨章對照組「dot-angle」+ 同章干擾題",
-        "like_keywords": [
-          "設空",
-          "空間",
-          "間向"
-        ],
-        "pool": [
-          {
-            "id": 17,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 18,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 19,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 21,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 22,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 23,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 24,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["設空", "空間", "間向"],
+        "pool": ["17 ← keyword+same_chapter_random", "18 ← keyword", "19 ← keyword+same_chapter_random", "21 ← keyword", "22 ← same_chapter_random", "23 ← keyword+same_chapter_random", "24 ← keyword+same_chapter_random"]
       }
     },
     {
@@ -1177,80 +251,13 @@
         "kind": "question_id",
         "value": 25
       },
-      "relevant": [
-        26
-      ],
-      "hard_negatives": [
-        29,
-        30
-      ],
+      "relevant": [26],
+      "hard_negatives": [29, 30],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「trig-pyth」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "40",
-          "之值",
-          "值為"
-        ],
-        "pool": [
-          {
-            "id": 1,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 2,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 7,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 26,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 27,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 28,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 29,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 30,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 31,
-            "from": [
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["40", "之值", "值為"],
+        "pool": ["1 ← keyword", "2 ← keyword", "7 ← keyword", "26 ← keyword+same_chapter_random", "27 ← keyword+same_chapter_random", "28 ← keyword", "29 ← keyword+same_chapter_random", "30 ← same_chapter_random", "31 ← same_chapter_random"]
       }
     },
     {
@@ -1259,74 +266,13 @@
         "kind": "question_id",
         "value": 26
       },
-      "relevant": [
-        25
-      ],
-      "hard_negatives": [
-        29,
-        30
-      ],
+      "relevant": [25],
+      "hard_negatives": [29, 30],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「trig-pyth」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "25",
-          "之值",
-          "值為"
-        ],
-        "pool": [
-          {
-            "id": 1,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 2,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 7,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 25,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 27,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 28,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 30,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 31,
-            "from": [
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["25", "之值", "值為"],
+        "pool": ["1 ← keyword", "2 ← keyword", "7 ← keyword", "25 ← keyword+same_chapter_random", "27 ← keyword+same_chapter_random", "28 ← keyword+same_chapter_random", "30 ← same_chapter_random", "31 ← same_chapter_random"]
       }
     },
     {
@@ -1335,85 +281,13 @@
         "kind": "question_id",
         "value": 27
       },
-      "relevant": [
-        28
-      ],
-      "hard_negatives": [
-        29,
-        30
-      ],
+      "relevant": [28],
+      "hard_negatives": [29, 30],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「trig-special」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "150",
-          "之值",
-          "值為"
-        ],
-        "pool": [
-          {
-            "id": 1,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 2,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 7,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 8,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 25,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 26,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 28,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 29,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 30,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 31,
-            "from": [
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["150", "之值", "值為"],
+        "pool": ["1 ← keyword", "2 ← keyword", "7 ← keyword", "8 ← keyword", "25 ← keyword+same_chapter_random", "26 ← keyword", "28 ← keyword+same_chapter_random", "29 ← same_chapter_random", "30 ← same_chapter_random", "31 ← same_chapter_random"]
       }
     },
     {
@@ -1422,79 +296,13 @@
         "kind": "question_id",
         "value": 28
       },
-      "relevant": [
-        27
-      ],
-      "hard_negatives": [
-        29,
-        30
-      ],
+      "relevant": [27],
+      "hard_negatives": [29, 30],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「trig-special」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "120",
-          "之值",
-          "值為"
-        ],
-        "pool": [
-          {
-            "id": 1,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 2,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 7,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 25,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 26,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 27,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 29,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 30,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 31,
-            "from": [
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["120", "之值", "值為"],
+        "pool": ["1 ← keyword", "2 ← keyword", "7 ← keyword", "25 ← keyword+same_chapter_random", "26 ← keyword+same_chapter_random", "27 ← keyword", "29 ← same_chapter_random", "30 ← same_chapter_random", "31 ← same_chapter_random"]
       }
     },
     {
@@ -1503,92 +311,13 @@
         "kind": "question_id",
         "value": 32
       },
-      "relevant": [
-        33
-      ],
-      "hard_negatives": [
-        38,
-        39
-      ],
+      "relevant": [33],
+      "hard_negatives": [38, 39],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「newton-fma」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "質量",
-          "kg",
-          "的物"
-        ],
-        "pool": [
-          {
-            "id": 33,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 34,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 35,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 36,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 37,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 38,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 39,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 40,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 41,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 42,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 44,
-            "from": [
-              "keyword"
-            ]
-          }
-        ]
+        "like_keywords": ["質量", "kg", "的物"],
+        "pool": ["33 ← keyword+same_chapter_random", "34 ← keyword+same_chapter_random", "35 ← keyword", "36 ← keyword", "37 ← keyword+same_chapter_random", "38 ← same_chapter_random", "39 ← same_chapter_random", "40 ← keyword", "41 ← keyword", "42 ← keyword", "44 ← keyword"]
       }
     },
     {
@@ -1597,87 +326,13 @@
         "kind": "question_id",
         "value": 33
       },
-      "relevant": [
-        32
-      ],
-      "hard_negatives": [
-        38,
-        39
-      ],
+      "relevant": [32],
+      "hard_negatives": [38, 39],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「newton-fma」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "質量",
-          "kg",
-          "的物"
-        ],
-        "pool": [
-          {
-            "id": 32,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 34,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 35,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 36,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 37,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 39,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 40,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 41,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 42,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 44,
-            "from": [
-              "keyword"
-            ]
-          }
-        ]
+        "like_keywords": ["質量", "kg", "的物"],
+        "pool": ["32 ← keyword+same_chapter_random", "34 ← keyword+same_chapter_random", "35 ← keyword+same_chapter_random", "36 ← keyword+same_chapter_random", "37 ← keyword", "39 ← same_chapter_random", "40 ← keyword", "41 ← keyword", "42 ← keyword", "44 ← keyword"]
       }
     },
     {
@@ -1686,87 +341,13 @@
         "kind": "question_id",
         "value": 34
       },
-      "relevant": [
-        35
-      ],
-      "hard_negatives": [
-        38,
-        39
-      ],
+      "relevant": [35],
+      "hard_negatives": [38, 39],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「newton-elevator」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "質量",
-          "50",
-          "kg"
-        ],
-        "pool": [
-          {
-            "id": 32,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 33,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 35,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 36,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 37,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 38,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 40,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 41,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 42,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 43,
-            "from": [
-              "keyword"
-            ]
-          }
-        ]
+        "like_keywords": ["質量", "50", "kg"],
+        "pool": ["32 ← keyword+same_chapter_random", "33 ← keyword+same_chapter_random", "35 ← keyword+same_chapter_random", "36 ← keyword+same_chapter_random", "37 ← keyword", "38 ← same_chapter_random", "40 ← keyword", "41 ← keyword", "42 ← keyword", "43 ← keyword"]
       }
     },
     {
@@ -1775,87 +356,13 @@
         "kind": "question_id",
         "value": 35
       },
-      "relevant": [
-        34
-      ],
-      "hard_negatives": [
-        38,
-        39
-      ],
+      "relevant": [34],
+      "hard_negatives": [38, 39],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「newton-elevator」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "質量",
-          "60",
-          "kg"
-        ],
-        "pool": [
-          {
-            "id": 32,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 33,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 34,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 36,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 37,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 39,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 40,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 41,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 42,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 43,
-            "from": [
-              "keyword"
-            ]
-          }
-        ]
+        "like_keywords": ["質量", "60", "kg"],
+        "pool": ["32 ← keyword", "33 ← keyword+same_chapter_random", "34 ← keyword+same_chapter_random", "36 ← keyword+same_chapter_random", "37 ← keyword+same_chapter_random", "39 ← same_chapter_random", "40 ← keyword", "41 ← keyword", "42 ← keyword", "43 ← keyword"]
       }
     },
     {
@@ -1864,66 +371,13 @@
         "kind": "question_id",
         "value": 36
       },
-      "relevant": [
-        37
-      ],
-      "hard_negatives": [
-        38,
-        39
-      ],
+      "relevant": [37],
+      "hard_negatives": [38, 39],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「newton-atwood」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "光滑",
-          "滑定",
-          "定滑"
-        ],
-        "pool": [
-          {
-            "id": 32,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 34,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 35,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 37,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 38,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 42,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 43,
-            "from": [
-              "keyword"
-            ]
-          }
-        ]
+        "like_keywords": ["光滑", "滑定", "定滑"],
+        "pool": ["32 ← same_chapter_random", "34 ← same_chapter_random", "35 ← same_chapter_random", "37 ← keyword+same_chapter_random", "38 ← same_chapter_random", "42 ← keyword", "43 ← keyword"]
       }
     },
     {
@@ -1932,66 +386,13 @@
         "kind": "question_id",
         "value": 37
       },
-      "relevant": [
-        36
-      ],
-      "hard_negatives": [
-        38,
-        39
-      ],
+      "relevant": [36],
+      "hard_negatives": [38, 39],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「newton-atwood」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "光滑",
-          "滑定",
-          "定滑"
-        ],
-        "pool": [
-          {
-            "id": 32,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 33,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 36,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 38,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 39,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 42,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 43,
-            "from": [
-              "keyword"
-            ]
-          }
-        ]
+        "like_keywords": ["光滑", "滑定", "定滑"],
+        "pool": ["32 ← same_chapter_random", "33 ← same_chapter_random", "36 ← keyword+same_chapter_random", "38 ← same_chapter_random", "39 ← same_chapter_random", "42 ← keyword", "43 ← keyword"]
       }
     },
     {
@@ -2000,97 +401,13 @@
         "kind": "question_id",
         "value": 40
       },
-      "relevant": [
-        41
-      ],
-      "hard_negatives": [
-        44,
-        45
-      ],
+      "relevant": [41],
+      "hard_negatives": [44, 45],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「friction-incline」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "質量",
-          "10",
-          "kg"
-        ],
-        "pool": [
-          {
-            "id": 32,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 33,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 34,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 35,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 36,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 37,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 41,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 42,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 43,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 44,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 45,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 46,
-            "from": [
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["質量", "10", "kg"],
+        "pool": ["32 ← keyword", "33 ← keyword", "34 ← keyword", "35 ← keyword", "36 ← keyword", "37 ← keyword", "41 ← keyword", "42 ← keyword+same_chapter_random", "43 ← same_chapter_random", "44 ← keyword+same_chapter_random", "45 ← same_chapter_random", "46 ← same_chapter_random"]
       }
     },
     {
@@ -2099,92 +416,13 @@
         "kind": "question_id",
         "value": 41
       },
-      "relevant": [
-        40
-      ],
-      "hard_negatives": [
-        44,
-        45
-      ],
+      "relevant": [40],
+      "hard_negatives": [44, 45],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「friction-incline」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "質量",
-          "kg",
-          "的物"
-        ],
-        "pool": [
-          {
-            "id": 32,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 33,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 34,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 35,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 36,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 37,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 40,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 42,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 44,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 45,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 46,
-            "from": [
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["質量", "kg", "的物"],
+        "pool": ["32 ← keyword", "33 ← keyword", "34 ← keyword", "35 ← keyword", "36 ← keyword", "37 ← keyword", "40 ← keyword+same_chapter_random", "42 ← keyword+same_chapter_random", "44 ← keyword+same_chapter_random", "45 ← same_chapter_random", "46 ← same_chapter_random"]
       }
     },
     {
@@ -2193,66 +431,13 @@
         "kind": "question_id",
         "value": 42
       },
-      "relevant": [
-        43
-      ],
-      "hard_negatives": [
-        44,
-        45
-      ],
+      "relevant": [43],
+      "hard_negatives": [44, 45],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「circular-tension」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "的輕",
-          "輕繩",
-          "繩繫"
-        ],
-        "pool": [
-          {
-            "id": 36,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 37,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 40,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 41,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 43,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 44,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 45,
-            "from": [
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["的輕", "輕繩", "繩繫"],
+        "pool": ["36 ← keyword", "37 ← keyword", "40 ← same_chapter_random", "41 ← same_chapter_random", "43 ← keyword+same_chapter_random", "44 ← same_chapter_random", "45 ← same_chapter_random"]
       }
     },
     {
@@ -2261,66 +446,13 @@
         "kind": "question_id",
         "value": 43
       },
-      "relevant": [
-        42
-      ],
-      "hard_negatives": [
-        44,
-        45
-      ],
+      "relevant": [42],
+      "hard_negatives": [44, 45],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「circular-tension」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "的輕",
-          "輕繩",
-          "繩繫"
-        ],
-        "pool": [
-          {
-            "id": 36,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 37,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 40,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 41,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 42,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 44,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 45,
-            "from": [
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["的輕", "輕繩", "繩繫"],
+        "pool": ["36 ← keyword", "37 ← keyword", "40 ← same_chapter_random", "41 ← same_chapter_random", "42 ← keyword+same_chapter_random", "44 ← same_chapter_random", "45 ← same_chapter_random"]
       }
     },
     {
@@ -2329,97 +461,13 @@
         "kind": "question_id",
         "value": 47
       },
-      "relevant": [
-        48
-      ],
-      "hard_negatives": [
-        51,
-        52
-      ],
+      "relevant": [48],
+      "hard_negatives": [51, 52],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「kinematics-disp」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "物體",
-          "體由",
-          "由靜"
-        ],
-        "pool": [
-          {
-            "id": 32,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 33,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 36,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 37,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 40,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 41,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 44,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 48,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 49,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 50,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 51,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 52,
-            "from": [
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["物體", "體由", "由靜"],
+        "pool": ["32 ← keyword", "33 ← keyword", "36 ← keyword", "37 ← keyword", "40 ← keyword", "41 ← keyword", "44 ← keyword", "48 ← keyword+same_chapter_random", "49 ← keyword+same_chapter_random", "50 ← same_chapter_random", "51 ← same_chapter_random", "52 ← same_chapter_random"]
       }
     },
     {
@@ -2428,97 +476,13 @@
         "kind": "question_id",
         "value": 48
       },
-      "relevant": [
-        47
-      ],
-      "hard_negatives": [
-        51,
-        52
-      ],
+      "relevant": [47],
+      "hard_negatives": [51, 52],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「kinematics-disp」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "物體",
-          "體由",
-          "由靜"
-        ],
-        "pool": [
-          {
-            "id": 32,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 33,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 36,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 37,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 40,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 41,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 44,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 47,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 49,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 50,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 51,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 52,
-            "from": [
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["物體", "體由", "由靜"],
+        "pool": ["32 ← keyword", "33 ← keyword", "36 ← keyword", "37 ← keyword", "40 ← keyword", "41 ← keyword", "44 ← keyword", "47 ← keyword+same_chapter_random", "49 ← keyword+same_chapter_random", "50 ← same_chapter_random", "51 ← same_chapter_random", "52 ← same_chapter_random"]
       }
     },
     {
@@ -2527,97 +491,13 @@
         "kind": "question_id",
         "value": 49
       },
-      "relevant": [
-        50
-      ],
-      "hard_negatives": [
-        51,
-        52
-      ],
+      "relevant": [50],
+      "hard_negatives": [51, 52],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「free-fall」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "物體",
-          "體自",
-          "20"
-        ],
-        "pool": [
-          {
-            "id": 32,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 33,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 36,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 37,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 40,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 41,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 44,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 47,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 48,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 50,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 51,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 53,
-            "from": [
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["物體", "體自", "20"],
+        "pool": ["32 ← keyword", "33 ← keyword", "36 ← keyword", "37 ← keyword", "40 ← keyword", "41 ← keyword", "44 ← keyword", "47 ← keyword+same_chapter_random", "48 ← same_chapter_random", "50 ← keyword+same_chapter_random", "51 ← same_chapter_random", "53 ← same_chapter_random"]
       }
     },
     {
@@ -2626,97 +506,13 @@
         "kind": "question_id",
         "value": 50
       },
-      "relevant": [
-        49
-      ],
-      "hard_negatives": [
-        51,
-        52
-      ],
+      "relevant": [49],
+      "hard_negatives": [51, 52],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「free-fall」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "物體",
-          "體自",
-          "45"
-        ],
-        "pool": [
-          {
-            "id": 32,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 33,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 36,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 37,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 40,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 41,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 44,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 47,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 48,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 49,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 51,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 52,
-            "from": [
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["物體", "體自", "45"],
+        "pool": ["32 ← keyword", "33 ← keyword", "36 ← keyword", "37 ← keyword", "40 ← keyword", "41 ← keyword", "44 ← keyword", "47 ← keyword+same_chapter_random", "48 ← same_chapter_random", "49 ← keyword+same_chapter_random", "51 ← same_chapter_random", "52 ← same_chapter_random"]
       }
     },
     {
@@ -2725,57 +521,13 @@
         "kind": "question_id",
         "value": 54
       },
-      "relevant": [
-        55
-      ],
-      "hard_negatives": [
-        59
-      ],
+      "relevant": [55],
+      "hard_negatives": [59],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「coulomb」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "兩點",
-          "點電",
-          "電荷"
-        ],
-        "pool": [
-          {
-            "id": 55,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 56,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 57,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 58,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 60,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["兩點", "點電", "電荷"],
+        "pool": ["55 ← keyword+same_chapter_random", "56 ← keyword+same_chapter_random", "57 ← keyword+same_chapter_random", "58 ← keyword+same_chapter_random", "60 ← keyword+same_chapter_random"]
       }
     },
     {
@@ -2784,57 +536,13 @@
         "kind": "question_id",
         "value": 55
       },
-      "relevant": [
-        54
-      ],
-      "hard_negatives": [
-        59
-      ],
+      "relevant": [54],
+      "hard_negatives": [59],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「coulomb」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "兩點",
-          "點電",
-          "電荷"
-        ],
-        "pool": [
-          {
-            "id": 54,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 56,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 57,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 58,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 60,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["兩點", "點電", "電荷"],
+        "pool": ["54 ← keyword+same_chapter_random", "56 ← keyword+same_chapter_random", "57 ← keyword+same_chapter_random", "58 ← keyword+same_chapter_random", "60 ← keyword+same_chapter_random"]
       }
     },
     {
@@ -2843,86 +551,13 @@
         "kind": "question_id",
         "value": 56
       },
-      "relevant": [
-        57
-      ],
-      "hard_negatives": [
-        59
-      ],
+      "relevant": [57],
+      "hard_negatives": [59],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「efield-point」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "點電",
-          "電荷",
-          "10"
-        ],
-        "pool": [
-          {
-            "id": 32,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 34,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 35,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 36,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 54,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 55,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 57,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 58,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 59,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 60,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["點電", "電荷", "10"],
+        "pool": ["32 ← keyword", "34 ← keyword", "35 ← keyword", "36 ← keyword", "54 ← keyword+same_chapter_random", "55 ← keyword+same_chapter_random", "57 ← keyword+same_chapter_random", "58 ← keyword", "59 ← same_chapter_random", "60 ← keyword+same_chapter_random"]
       }
     },
     {
@@ -2931,86 +566,13 @@
         "kind": "question_id",
         "value": 57
       },
-      "relevant": [
-        56
-      ],
-      "hard_negatives": [
-        59
-      ],
+      "relevant": [56],
+      "hard_negatives": [59],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「efield-point」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "點電",
-          "電荷",
-          "10"
-        ],
-        "pool": [
-          {
-            "id": 32,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 34,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 35,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 36,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 54,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 55,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 56,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 58,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 59,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 60,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["點電", "電荷", "10"],
+        "pool": ["32 ← keyword", "34 ← keyword", "35 ← keyword", "36 ← keyword", "54 ← keyword+same_chapter_random", "55 ← keyword", "56 ← keyword+same_chapter_random", "58 ← keyword+same_chapter_random", "59 ← same_chapter_random", "60 ← keyword+same_chapter_random"]
       }
     },
     {
@@ -3019,55 +581,13 @@
         "kind": "question_id",
         "value": 58
       },
-      "relevant": [
-        60
-      ],
-      "hard_negatives": [
-        59
-      ],
+      "relevant": [60],
+      "hard_negatives": [59],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「efield-work」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "在量",
-          "量值",
-          "200"
-        ],
-        "pool": [
-          {
-            "id": 54,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 55,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 56,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 57,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 60,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["在量", "量值", "200"],
+        "pool": ["54 ← same_chapter_random", "55 ← same_chapter_random", "56 ← keyword+same_chapter_random", "57 ← keyword+same_chapter_random", "60 ← keyword+same_chapter_random"]
       }
     },
     {
@@ -3076,60 +596,13 @@
         "kind": "question_id",
         "value": 60
       },
-      "relevant": [
-        58
-      ],
-      "hard_negatives": [
-        59
-      ],
+      "relevant": [58],
+      "hard_negatives": [59],
       "needs_human_confirm": true,
       "_suggestion": {
         "basis": "relevant = variant_group「efield-work」的其他成員；hard_negatives = 同章干擾題",
-        "like_keywords": [
-          "在量",
-          "量值",
-          "500"
-        ],
-        "pool": [
-          {
-            "id": 54,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 55,
-            "from": [
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 56,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 57,
-            "from": [
-              "keyword",
-              "same_chapter_random"
-            ]
-          },
-          {
-            "id": 58,
-            "from": [
-              "keyword"
-            ]
-          },
-          {
-            "id": 59,
-            "from": [
-              "same_chapter_random"
-            ]
-          }
-        ]
+        "like_keywords": ["在量", "量值", "500"],
+        "pool": ["54 ← same_chapter_random", "55 ← same_chapter_random", "56 ← keyword+same_chapter_random", "57 ← keyword+same_chapter_random", "58 ← keyword", "59 ← same_chapter_random"]
       }
     }
   ]
