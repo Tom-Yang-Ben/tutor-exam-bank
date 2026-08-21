@@ -7,7 +7,9 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { candidates, rankLike, rankVector, rankKeyword, fuse, cosine, RRF_K } = require('../../eval/lib/ranker');
+const { candidates, rankLike, rankVector, rankKeyword, queryTokensFor, fuse, cosine, RRF_K } = require('../../eval/lib/ranker');
+const { likeKeywords } = require('../../eval/lib/pooling');
+const { buildTsvTokens } = require('../../services/embedService');
 
 const Q = (id, chapter, text, subject = '數學') => ({
     id, subject, chapter, question_type: '計算', difficulty: 3, question_text: text, answer_text: 'a'
@@ -52,17 +54,20 @@ describe('candidates（候選集，對齊 queries/hybrid.js 的候選 CTE）', (
 
 describe('rankLike', () => {
     test('命中越多關鍵字排越前，同分時 id 小的在前', () => {
-        const source = Q(1, '向量內積', '甲乙丙丁');
+        // 這個測試刻意**不寫死任何分詞結果**：關鍵字直接向 likeKeywords() 要，
+        // 再拿真正被選中的詞去組候選題。分詞器換掉（bigram stub → jieba → 未來換詞典）
+        // 都不影響它，而它要守的「命中多的排前面、同分看 id」完全沒有被放寬。
+        const source = Q(1, '向量內積', '設平面向量的內積與夾角，並求其正射影長度');
+        const kws = likeKeywords(source);
+        assert.ok(kws.length >= 2, `題幹要能切出至少 2 個關鍵字才測得出排序，實際：${JSON.stringify(kws)}`);
+
         const docs = [
-            Q(10, '向量內積', '甲乙'),          // 中 1 個
-            Q(11, '向量內積', '甲乙丙丁'),      // 中 2 個（甲乙、丙丁）
-            Q(12, '向量內積', '甲乙丙丁')       // 同上，id 較大
+            Q(10, '向量內積', `只出現一個：${kws[0]}`),
+            Q(11, '向量內積', `兩個都出現：${kws[0]}／${kws[1]}`),
+            Q(12, '向量內積', `兩個都出現：${kws[0]}／${kws[1]}`)   // 與 11 同分，id 較大
         ];
-        // stub 分詞器對「甲乙丙丁」會切出「甲乙」「丙丁」兩個 bigram
         const out = rankLike(source, docs);
-        assert.equal(out[0].id, 11);
-        assert.equal(out[1].id, 12);
-        assert.equal(out[out.length - 1].id, 10);
+        assert.deepEqual(out.map(r => r.id), [11, 12, 10]);
     });
 
     test('一個關鍵字都沒中的題不進結果（不是排在最後）', () => {
@@ -107,17 +112,54 @@ describe('rankKeyword', () => {
     });
 
     test('完全沒命中的題不進關鍵字側', () => {
-        const out = rankKeyword(['橢圓'], [Q(30, '向量內積', '自由落體')]);
+        const out = rankKeyword(['橢圓錐線'], [Q(30, '向量內積', '自由落體')]);
         assert.deepEqual(out, []);
     });
 
-    test('關鍵字側比對的是整段 embed_text（含章節那一行），不是只有題幹', () => {
-        // 這是刻意的：search_tsv 由 embed_text 分詞後寫入（interfaces 第 2、5 條），
+    test('比對的是 embedService.buildTsvTokens() 的三段，章節段也算命中', () => {
+        // 這是刻意的：search_tsv = 章節 A ‖ keywords A ‖ 題幹 B（interfaces 第 2 條、裁決 21），
         // 章節名本來就在索引裡，所以同章的題會因章節詞而互相命中。
         // 記憶體排序器必須跟著這個定義走，否則它就不是 SQL 的對照組。
-        const out = rankKeyword(['內積'], [Q(30, '向量內積', '自由落體')]);
-        assert.equal(out.length, 1);
-        assert.equal(out[0].id, 30);
+        //
+        // token 從 buildTsvTokens 現場取，不寫死「內積」之類的字串——
+        // jieba 把「向量內積」當一個自訂詞，寫死子字串的斷言換分詞器就會假性失敗。
+        const doc = Q(30, '向量內積', '自由落體');
+        const { chapterTokens, stemTokens } = buildTsvTokens(doc);
+        assert.ok(chapterTokens.length > 0);
+
+        const byChapter = rankKeyword([chapterTokens[0]], [doc]);
+        assert.deepEqual(byChapter.map(r => r.id), [30], '章節段的詞應該命中');
+
+        const byStem = rankKeyword([stemTokens[0]], [doc]);
+        assert.deepEqual(byStem.map(r => r.id), [30], '題幹段的詞也應該命中');
+    });
+
+    test('章節段（權重 A）的命中比題幹段（權重 B）分數高', () => {
+        // ts_rank 的預設權重 A=1.0 > B=0.4。記憶體端若一視同仁，
+        // 排序就會與 SQL 分歧，而分歧只會表現成 D-R2 的 Jaccard 掉下來。
+        const doc = Q(30, '向量內積', '自由落體運動的加速度');
+        const { chapterTokens, stemTokens } = buildTsvTokens(doc);
+        const a = rankKeyword([chapterTokens[0]], [doc])[0].score;
+        const b = rankKeyword([stemTokens[0]], [doc])[0].score;
+        assert.ok(a > b, `章節段 ${a} 應該大於題幹段 ${b}`);
+    });
+});
+
+describe('queryTokensFor（對齊 retrievalService 的查詢詞規則）', () => {
+    test('優先取權重 A 的那兩段（章節 + keywords），不是整段題幹', () => {
+        const q = { ...Q(1, '向量內積', '設平面向量的內積'), keywords: ['夾角', '正射影'] };
+        const { chapterTokens, keywordTokens, stemTokens } = buildTsvTokens(q);
+        const tokens = queryTokensFor(q);
+        assert.deepEqual(tokens, [...new Set([...chapterTokens, ...keywordTokens])]);
+        // 題幹裡有、但權重 A 兩段沒有的詞，不該出現在查詢詞裡
+        const onlyStem = stemTokens.filter(t => !tokens.includes(t));
+        for (const t of onlyStem) assert.ok(!tokens.includes(t));
+    });
+
+    test('章節與 keywords 都切不出東西時才退回題幹', () => {
+        const q = { subject: '數學', chapter: '', question_type: '計算', difficulty: 3, question_text: '自由落體' };
+        const { stemTokens } = buildTsvTokens(q);
+        assert.deepEqual(queryTokensFor(q), stemTokens);
     });
 });
 

@@ -20,9 +20,9 @@ const path = require('path');
 const { loadFixture } = require('./lib/fixtures');
 const { loadGolden } = require('./lib/golden');
 const { loadEmbeddings, assertComplete } = require('./lib/embeddings');
-const { tokenize, tokenizerSource, isStub: tokenizerIsStub } = require('./lib/tokenize');
+const { tokenizerSource, isStub: tokenizerIsStub } = require('./lib/tokenize');
 const { buildEmbedText, embedTextSource, embedHash, isStub: embedTextIsStub } = require('./lib/embedText');
-const { rankAll, candidates } = require('./lib/ranker');
+const { rankAll, queryTokensFor } = require('./lib/ranker');
 const metrics = require('./lib/metrics');
 const report = require('./lib/report');
 const thresholds = require('./lib/thresholds');
@@ -103,7 +103,6 @@ async function runPg(ctx) {
         vectorOf: ctx.emb.available ? ctx.emb.vectorOf : null,
         embedTextOf: buildEmbedText,
         hashOf: embedHash,
-        tokenizeFn: tokenize,
         model: ctx.emb.model
     });
     const fxToDb = seeded.idMap;
@@ -132,9 +131,11 @@ async function runPg(ctx) {
                 source, queryVector, scope: ctx.args.scope, excludeIds,
                 fuseMode: ctx.args.fuse, limit: ctx.args.limit, efSearch
             };
-            // queryTokens 為空 → 關鍵字側空集合 → rrf 退化成純向量順序
-            vecIds = (await pgEngine.search({ ...common, queryTokens: [] })).map(r => dbToFx.get(r.id));
-            hybIds = (await pgEngine.search({ ...common, queryTokens: tokenize(buildEmbedText(source)) })).map(r => dbToFx.get(r.id));
+            // 純向量欄走 sides:['vec']（interfaces 第 5 條、裁決 18），與 /similar 的 mode=vector 同一條路；
+            // 查詢詞則對齊 retrievalService 的規則（權重 A 的章節與 keywords 段）。
+            const queryTokens = queryTokensFor(source);
+            vecIds = (await pgEngine.search({ ...common, sides: ['vec'], queryTokens: [] })).map(r => dbToFx.get(r.id));
+            hybIds = (await pgEngine.search({ ...common, sides: ['vec', 'kw'], queryTokens })).map(r => dbToFx.get(r.id));
             rows.vector.push({ ranked: vecIds, relevant: entry.relevant });
             rows.hybrid.push({ ranked: hybIds, relevant: entry.relevant });
         }

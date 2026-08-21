@@ -37,8 +37,18 @@ npm run eval -- --suite retrieval --golden eval/private/golden/retrieval.json
 | 欄 | 怎麼算 | 為什麼要有它 |
 |---|---|---|
 | **LIKE（基準）** | 該題 `embed_text` 去掉第 1 行（學科｜章節｜題型｜難度）後 `tokenize()`，取前 3 個長度 ≥ 2 的詞，各自 `LIKE '%詞%'` 取 OR | 對應 `questionController.js` 現行的搜尋寫法。它是「什麼都不做」的對照組——hybrid 打不贏它，這整套檢索就沒有存在的理由 |
-| **純向量** | `queries/hybrid.js` 但 `queryTokens` 傳空陣列（關鍵字側回空集合，RRF 分數退化成 `1/(60+vec_rank)`，排序即純向量順序） | 讓「向量」與「hybrid」共用同一段 SQL 與同一組候選條件，兩欄的差異只剩融合本身 |
-| **hybrid** | `queries/hybrid.js`，RRF：`1/(60+vec_rank) + 1/(60+kw_rank)` | 實際上線的那條路徑 |
+| **純向量** | `queries/hybrid.js` 傳 `sides:['vec']`（interfaces 第 5 條、裁決 18），與 `/similar` 的 `mode=vector` 同一條路 | 讓「向量」與「hybrid」共用同一段 SQL 與同一組候選條件，兩欄的差異只剩融合本身 |
+| **hybrid** | `queries/hybrid.js` 傳 `sides:['vec','kw']`，RRF：`1/(60+vec_rank) + 1/(60+kw_rank)` | 實際上線的那條路徑 |
+
+**關鍵字側的兩端都不自己分詞**（interfaces 第 2 條、裁決 21）：
+
+- 文件端（`search_tsv`）＝ `services/embedService.js` 的 `buildTsvTokens()`，
+  寫成 `章節 A ‖ keywords A ‖ 題幹 B`。`eval/lib/pgEngine.js` 灌 fixture 時呼叫同一支，
+  `eval/lib/ranker.js` 的記憶體對照組也呼叫同一支（並套 `ts_rank` 的預設權重 `A=1.0`、`B=0.4`）。
+- 查詢端＝ `eval/lib/ranker.js` 的 `queryTokensFor()`，對齊 `services/retrievalService.js`
+  的 `queryTokensForSource()`：取權重 `A` 的章節與 `keywords` 兩段，沒有才退回題幹。
+
+只改其中一端，D-R2 的 Jaccard 就會轉紅，而**紅燈的原因會看起來像排序器寫錯**。
 
 **LIKE 欄的關鍵字規則寫死在 `eval/lib/pooling.js`，不可以在 PR 裡順手調。**
 理由很直接：只要有人把關鍵字從 3 個調成 5 個、或不去掉章節那一行，
@@ -85,6 +95,10 @@ npm run migrate:test
 npm run test:integration
 ```
 
+`test:integration` 帶 `--test-concurrency=1`：三支整合測試檔（`schema` / `hybrid` / `controllers`）
+都對同一顆測試庫 `TRUNCATE`，並行跑的話彼此的交易與 `TRUNCATE` 會互相踩，
+症狀是隨機一支轉紅、重跑又過——最難查的那種 flaky。
+
 `npm test` 只跑 `test/unit/`，**永遠不連 DB、不呼叫 Gemini、不需要 secrets**。
 
 ---
@@ -97,30 +111,35 @@ npm run test:integration
 - 門檻有數字卻量不到那一欄 = **失敗**。否則「向量檔被誤刪」會表現成 CI 全綠。
 - `hybrid` 的 Recall@5 必須 **≥ LIKE**。差值只報，不設數字門檻——
   「要贏多少才算贏」很容易被 baseline 的定義操弄，只有「不得更差」這條不可爭辯。
-- `--write-baseline` 在 stub 狀態下**拒絕執行**（見下一節）。
+- `--write-baseline` 在「暫用實作」狀態下**拒絕執行**（見下一節）。
 
 ---
 
-## 5. 目前的暫用狀態（stub）
+## 5. 相依狀態
 
-WS-C 的三個檔還沒合入時，eval 用 `eval/lib/` 內的轉接層退回暫用實作：
+第一輪合併後，WS-A 與 WS-C 的零件都在了，只剩向量 fixture 要由開發者本人錄：
 
-| 缺的東西 | 誰的 | 沒有它的後果 |
-|---|---|---|
-| `utils/tokenize.js` | WS-C（D-T1） | LIKE 欄與 hybrid 關鍵字側改用 CJK bigram 的 stub 分詞器，數字不是最終規則 |
-| `utils/embedText.js` | WS-C（D-E3） | `embed_hash` 與最終規則不同 → 錄出來的向量檔會全部查不到 |
-| `queries/hybrid.js` | WS-C（D-R1） | 只能跑 `--engine memory`；D-R2 的 Jaccard 斷言會 skip |
-| `config/db.js` 的 `{ pool, query }` | WS-A（D-D3） | 同上 |
-| `eval/fixtures/embeddings.*.json` | D-V0（需開發者本人的金鑰） | 向量／hybrid 欄印 `n/a` |
+| 相依 | 誰的 | 狀態 | 沒有它的後果 |
+|---|---|---|---|
+| `utils/tokenize.js` | WS-C | ✅ 已合入 | — |
+| `utils/embedText.js` | WS-C | ✅ 已合入 | — |
+| `services/embedService.js` 的 `buildTsvTokens()` | WS-C | ✅ 已合入 | — |
+| `queries/hybrid.js` | WS-C | ✅ 已合入 | — |
+| `config/db.js` 的 `{ pool, query }` | WS-A | ✅ 已合入 | — |
+| `eval/fixtures/embeddings.<model>.768.json` | D-V0（需開發者本人的金鑰） | ⬜ 未錄製 | 向量／hybrid 欄印 `n/a`；D-R2 的整合測試 skip |
+
+`eval/lib/tokenize.js` 與 `eval/lib/embedText.js` 是**轉接殼**，規則是「有真的就用真的」：
+`utils/` 底下有就直接用，沒有才退回殼內標示清楚的暫用實作。合入後不必改 eval——
+但殼保留著，是為了讓「哪一支不見了」變成一句明確的警告，而不是一個 `MODULE_NOT_FOUND` 堆疊。
 
 三個硬性 guard，都是為了不留下「看起來有數字、其實是假的」的痕跡：
 
 1. **不拿假向量湊數字**。查不到向量就印 `n/a` 並說明原因（`docs/interfaces.md` 第 4 條）。
-2. **stub 狀態下不得寫 `thresholds.json` 初值**。否則 WS-C 合入真 jieba 之後數字必然變動，
-   CI 會紅得莫名其妙，而紅燈的原因跟這次改動無關。
-3. **stub 狀態下不得錄向量**。鍵是 `sha256(buildEmbedText(q))`，規則差一個字元，整份表作廢。
+2. **暫用實作狀態下不得寫 `thresholds.json` 初值**。基準線一定會被之後的真實作推翻，
+   CI 會紅得莫名其妙，而紅燈的原因跟那次改動無關。
+3. **暫用實作狀態下不得錄向量**。鍵是 `sha256(buildEmbedText(q))`，規則差一個字元，整份表作廢。
 
-轉接層會在 stderr 警告，並把 `tokenizer` / `embedText` 的實際來源寫進每一份報表的 `meta`。
+報表的 `meta` 會記下 `tokenizer` / `embedText` 的實際來源。
 **比較兩份 `meta` 不同的報表是沒有意義的**，`eval/trend.js` 會先把環境差異列出來再印數字。
 
 ---

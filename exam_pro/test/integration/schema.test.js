@@ -109,7 +109,17 @@ describe('migrations 套用結果', { skip: SKIP }, () => {
     test('attempts 的 UNIQUE(student_id, question_id) 擋得住重複指派', async () => {
         await client.query('BEGIN');
         try {
-            const s = await client.query(`INSERT INTO students (name) VALUES ('整合測試學生') RETURNING id`);
+            // students.name 有 UNIQUE 約束，而同一顆測試庫上還有別的整合測試檔
+            // （hybrid.pg.test.js 也建一個叫「整合測試學生」的學生，且不在交易裡）。
+            // 用同一個名字直接 INSERT 會**先死在 students_name_key 上**，
+            // 於是這一題真正要驗的 attempts 唯一約束根本沒測到，
+            // 而失敗訊息指向另一個約束，看起來像 DDL 寫錯。
+            // 兩層保險：名字帶檔名前綴不與別人共用，再加 ON CONFLICT 讓重跑也不受影響。
+            const s = await client.query(
+                `INSERT INTO students (name) VALUES ('schema.test-約束檢查學生')
+                 ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+                 RETURNING id`
+            );
             const q = await client.query(
                 `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text)
                  VALUES ('物理', '直線運動', '計算', 2, '約束檢查', '通過') RETURNING id`
