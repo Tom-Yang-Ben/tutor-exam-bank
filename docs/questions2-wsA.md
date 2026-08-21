@@ -187,3 +187,13 @@ WS-B 只有 `extract`／`classify`，WS-C 只有 `lint`／`verify`／`dedup`—�
 
 > 給 WS-D：`public/index.html` 裡 `<meta name="feature-pipeline">` 上方那段註解仍寫著
 > 「app.js 的 serveIndex 目前只替換 `__API_KEY__`，需要再加一行」——已經加了，那段註解可以清掉（那是你的檔案）。
+
+> **給 WS-B（S2-8 的鍵名對不上，一行可修，但不是我的檔案所以沒動）**：
+> `agents/classify.js:137` 讀的是 `features.FEATURE_SIMILAR`，而 S2-8 與第 3.1 條凍結的鍵名是
+> **小寫短名 `similar`**（`agents/dedup.js:44` 讀對了）。runner 現在確實送
+> `{similar:true, pipeline:false}` 進去，但 classify 拿到的是 `undefined`，
+> 於是**第一層 few-shot（A：向量最近鄰）永遠不會啟動**，靜靜降級到 B／C。
+> 因為降級本來就是合法路徑，沒有任何測試會紅，只有分類品質默默變差。
+> 重現：`FEATURE_SIMILAR=true node -e "const{readFeatures}=require('./workers/jobRunner');
+> console.log(readFeatures().FEATURE_SIMILAR)"` → `undefined`。
+> 修法：`features.FEATURE_SIMILAR` → `features.similar`。
