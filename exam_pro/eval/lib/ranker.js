@@ -16,11 +16,18 @@
 // ─────────────────────────────────────────────────────────────
 
 const { likeKeywords } = require('./pooling');
-const { tokenize } = require('./tokenize');
-const { buildEmbedText } = require('./embedText');
+// 分詞與 embed_text 不在本檔直接呼叫：關鍵字側的 token 一律經 embedService.buildTsvTokens()
+// （裁決 21），LIKE 欄的關鍵字一律經 pooling.likeKeywords()（凍結規則）。
+const { buildTsvTokens } = require('../../services/embedService');
 
 const RRF_K = 60;        // interfaces 第 5 條寫死的 RRF 常數
 const SIDE_LIMIT = 50;   // 兩側各自 ORDER BY r LIMIT 50 之後才 FULL OUTER JOIN
+
+// ts_rank 的預設權重 {D,C,B,A} = {0.1, 0.2, 0.4, 1.0}。
+// embedService 的 search_tsv 是 章節 A ‖ keywords A ‖ 題幹 B（interfaces 第 2 條、裁決 21），
+// 記憶體端要對得上 SQL 的排序，就得用同一組權重，不能一視同仁。
+const TS_WEIGHT_A = 1.0;
+const TS_WEIGHT_B = 0.4;
 
 /**
  * 候選集：與 queries/hybrid.js 的候選 CTE 對齊（同學科、依 scope 限章、排除指定 id）。
@@ -106,12 +113,58 @@ function rankVector(queryVec, cands, vectorOf) {
 }
 
 /**
+ * 一題的 search_tsv token → 權重表。
+ *
+ * token 的來源**必須**是 services/embedService.js 的 buildTsvTokens()（interfaces 裁決 21：
+ * 寫入、回填、eval 三處只能呼叫同一支純函式）。自己在這裡 tokenize(buildEmbedText(q))
+ * 會漏掉章節段的兩種切法與 keywords 段，記憶體排序器就不再是 SQL 的對照組。
+ *
+ * @param {object} q
+ * @returns {Map<string, number>} token → 權重（同一個 token 出現在多段時取最大者，同 ts_rank）
+ */
+function tsvWeights(q) {
+    const { chapterTokens, keywordTokens, stemTokens } = buildTsvTokens(q);
+    const w = new Map();
+    const put = (tokens, weight) => {
+        for (const t of tokens) {
+            if (!t) continue;
+            if (!w.has(t) || w.get(t) < weight) w.set(t, weight);
+        }
+    };
+    put(stemTokens, TS_WEIGHT_B);
+    put(chapterTokens, TS_WEIGHT_A);
+    put(keywordTokens, TS_WEIGHT_A);
+    return w;
+}
+
+/**
+ * 來源題的關鍵字側查詢詞。
+ *
+ * 對齊 services/retrievalService.js 的 queryTokensForSource()：prod 取的是來源題
+ * search_tsv 裡**權重 A** 的詞（＝寫入時的章節段與 keywords 段），沒有才退回題幹。
+ * 這裡不查 DB，直接從 buildTsvTokens() 拿同樣那兩段——seedFixture 寫進去的權重 A
+ * 就是它們，所以兩邊等價，而且記憶體 engine 不需要 DB 也能算。
+ *
+ * 為什麼不沿用「對整段 embed_text 分詞」：那不是 prod 會送出的查詢詞。
+ * eval 若用一組 prod 不會用的查詢詞，量到的 hybrid 分數就不是 /similar 的分數。
+ *
+ * @param {object} source
+ * @returns {string[]}
+ */
+function queryTokensFor(source) {
+    const { chapterTokens, keywordTokens, stemTokens } = buildTsvTokens(source);
+    const weightA = [...new Set([...chapterTokens, ...keywordTokens])];
+    return weightA.length ? weightA : stemTokens;
+}
+
+/**
  * hybrid 的關鍵字側：對應 SQL 的 to_tsquery('simple', 'tok1 | tok2 | …') + ts_rank。
  *
- * 這裡是**近似**：ts_rank 的權重細節（詞頻、文件長度正規化）不在 Node 端重現，
- * 改用「命中的相異查詢詞數 ÷ √文件詞數」——命中越多越前、文件越長越吃虧，
- * 與 ts_rank 的方向一致。它唯一的職責是讓前 10 名的**集合**跟 SQL 對得起來（Jaccard ≥ 0.9），
- * 不是重寫一份 PostgreSQL。D-R2 的 Jaccard 若掉下來，第一個該懷疑的就是這個近似。
+ * 這裡是**近似**：ts_rank 的詞頻與文件長度正規化細節不在 Node 端重現，
+ * 改用「命中的相異查詢詞的權重和 ÷ √文件詞數」——命中越多越前、命中權重 A 的段更前、
+ * 文件越長越吃虧，三個方向都與 ts_rank 一致。它唯一的職責是讓前 10 名的**集合**
+ * 跟 SQL 對得起來（Jaccard ≥ 0.9），不是重寫一份 PostgreSQL。
+ * D-R2 的 Jaccard 若掉下來，第一個該懷疑的就是這個近似。
  *
  * @param {string[]} queryTokens
  * @param {Array<object>} cands
@@ -122,13 +175,12 @@ function rankKeyword(queryTokens, cands) {
     if (qset.size === 0) return [];            // queryTokens 為空時安全回空集合（interfaces 第 5 條）
     const rows = [];
     for (const q of cands) {
-        const docTokens = tokenize(buildEmbedText(q));
-        if (docTokens.length === 0) continue;
-        const docSet = new Set(docTokens);
-        let matched = 0;
-        for (const t of qset) if (docSet.has(t)) matched++;
-        if (matched === 0) continue;
-        rows.push({ id: q.id, score: matched / Math.sqrt(docTokens.length) });
+        const weights = tsvWeights(q);
+        if (weights.size === 0) continue;
+        let score = 0;
+        for (const t of qset) if (weights.has(t)) score += weights.get(t);
+        if (score === 0) continue;
+        rows.push({ id: q.id, score: score / Math.sqrt(weights.size) });
     }
     rows.sort((a, b) => b.score - a.score || a.id - b.id);
     return rows;
@@ -215,7 +267,7 @@ function rankAll(opts) {
     }
 
     const vectorRows = rankVector(queryVec, cands, vectorOf);
-    const keywordRows = rankKeyword(tokenize(buildEmbedText(opts.source)), cands);
+    const keywordRows = rankKeyword(queryTokensFor(opts.source), cands);
     const hybridRows = fuse({ vectorRows, keywordRows, mode: opts.fuseMode, limit });
 
     return {
@@ -228,4 +280,7 @@ function rankAll(opts) {
     };
 }
 
-module.exports = { candidates, rankLike, rankVector, rankKeyword, fuse, rankAll, cosine, RRF_K, SIDE_LIMIT };
+module.exports = {
+    candidates, rankLike, rankVector, rankKeyword, queryTokensFor, tsvWeights,
+    fuse, rankAll, cosine, RRF_K, SIDE_LIMIT, TS_WEIGHT_A, TS_WEIGHT_B
+};

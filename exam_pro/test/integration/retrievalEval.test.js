@@ -24,9 +24,8 @@ const assert = require('node:assert/strict');
 const { loadFixture } = require('../../eval/lib/fixtures');
 const { loadGolden } = require('../../eval/lib/golden');
 const { loadEmbeddings } = require('../../eval/lib/embeddings');
-const { tokenize } = require('../../eval/lib/tokenize');
 const { buildEmbedText, embedHash } = require('../../eval/lib/embedText');
-const { rankAll } = require('../../eval/lib/ranker');
+const { rankAll, queryTokensFor } = require('../../eval/lib/ranker');
 const { jaccard, summarize, round4 } = require('../../eval/lib/metrics');
 const pgEngine = require('../../eval/lib/pgEngine');
 
@@ -59,7 +58,6 @@ describe('D-R2 三欄對照（對真 PG 下 queries/hybrid.js）', { skip: SKIP 
             vectorOf: emb.vectorOf,
             embedTextOf: buildEmbedText,
             hashOf: embedHash,
-            tokenizeFn: tokenize,
             model: emb.model
         });
         fxToDb = seeded.idMap;
@@ -76,8 +74,9 @@ describe('D-R2 三欄對照（對真 PG 下 queries/hybrid.js）', { skip: SKIP 
                 source, queryVector: emb.vectorOf(source), scope: SCOPE,
                 excludeIds: [fxToDb.get(source.id)], fuseMode: 'rrf', limit: LIMIT, efSearch
             };
-            const sqlVector = (await pgEngine.search({ ...common, queryTokens: [] })).map(r => dbToFx.get(r.id));
-            const sqlHybrid = (await pgEngine.search({ ...common, queryTokens: tokenize(buildEmbedText(source)) })).map(r => dbToFx.get(r.id));
+            // 純向量欄走 sides:['vec']（interfaces 第 5 條、裁決 18），與 /similar 的 mode=vector 同一條路
+            const sqlVector = (await pgEngine.search({ ...common, sides: ['vec'], queryTokens: [] })).map(r => dbToFx.get(r.id));
+            const sqlHybrid = (await pgEngine.search({ ...common, sides: ['vec', 'kw'], queryTokens: queryTokensFor(source) })).map(r => dbToFx.get(r.id));
 
             results.like.push({ ranked: memory.like, relevant: entry.relevant });
             results.vector.push({ ranked: sqlVector, relevant: entry.relevant });

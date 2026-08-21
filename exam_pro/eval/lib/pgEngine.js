@@ -5,12 +5,13 @@
 // 理由（規劃 §5.3.4 末段）：eval 與 prod 走同一段 SQL，只調 ef_search，
 // 量到的就是 prod 的查詢路徑；繞 HTTP 只會多量到 Express 與 JSON 序列化。
 //
-// **向量欄也用 buildHybridQuery**，做法是把 queryTokens 傳空陣列：
-// interfaces 第 5 條規定「queryTokens 為空陣列時，關鍵字側必須安全地回空集合」，
-// 此時 rrf 的 score 退化成 1/(60+vec_rank)，排序即純向量順序。
-// 這樣「向量欄」與「hybrid 欄」共用同一段 SQL 與同一組候選條件，
-// 兩欄的差異就只剩融合本身——否則另寫一句 ORDER BY embedding <=> $1，
-// 量到的差異裡會混進候選集不同造成的假差異。
+// **向量欄也用 buildHybridQuery**，傳 sides: ['vec']（interfaces 第 5 條、裁決 18）。
+// 這樣「向量欄」與「hybrid 欄」共用同一段 SQL 與同一組候選條件，兩欄的差異只剩融合本身；
+// 另寫一句 ORDER BY embedding <=> $1 的話，量到的差異裡會混進候選集不同造成的假差異。
+//
+// 舊做法是傳 queryTokens: []「讓關鍵字側自然回空集合」。裁決 18 給了 sides 之後就不該再這樣：
+// 空 queryTokens 只保證關鍵字側是空的，並沒有保證整段 SQL 會走成純向量路徑，
+// 而 /similar 的 mode=vector 走的是 sides:['vec']——eval 要量的是 prod 走的那一條。
 //
 // LIKE 欄不在這裡：對 fixture 這種短字串，JS 的 includes 與 SQL 的 LIKE '%詞%'
 // 是同一件事（見 eval/lib/ranker.js 的說明），沒有理由讓它多一個「今天有沒有 DB」的變數。
@@ -19,6 +20,9 @@
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..', '..');
+
+// 裁決 21：eval 灌 fixture 時的 search_tsv 必須用 embedService 匯出的同一支純函式
+const { buildTsvTokens } = require('../../services/embedService');
 
 /**
  * 取得 config/db.js 的 { pool, query }。
@@ -96,12 +100,17 @@ function toVectorLiteral(v) {
  * 把 fixture 灌進測試庫（TRUNCATE 後重灌，可重複執行）。
  * 只寫 eval 需要的欄位：檢索三欄要的是 question_text / embedding / search_tsv。
  *
+ * search_tsv 的三段 token 一律呼叫 services/embedService.js 的 buildTsvTokens()
+ * （interfaces 第 2 條、裁決 21：寫入、回填、eval 三處只能用同一支純函式），
+ * 並照 embedService 的 UPDATE 用 setweight 組成 章節 A ‖ keywords A ‖ 題幹 B。
+ * 自己在這裡 tokenize(buildEmbedText(q)) 會少掉權重與章節段的兩種切法，
+ * eval 就會在一份與 prod 不同的索引上量數字。
+ *
  * @param {object} opts
  * @param {Array<object>} opts.questions
  * @param {(q:object)=>number[]|null} opts.vectorOf
  * @param {(q:object)=>string} opts.embedTextOf
  * @param {(s:string)=>string} opts.hashOf
- * @param {(text:string)=>string[]} opts.tokenizeFn
  * @returns {Promise<{inserted:number, idMap:Map<number,number>}>} idMap: fixture id → questions.id
  */
 async function seedFixture(opts) {
@@ -116,7 +125,7 @@ async function seedFixture(opts) {
         for (const q of opts.questions) {
             const embedText = opts.embedTextOf(q);
             const vec = opts.vectorOf ? opts.vectorOf(q) : null;
-            const tokens = opts.tokenizeFn(embedText);
+            const { chapterTokens, keywordTokens, stemTokens } = buildTsvTokens(q);
 
             // 參數位置隨「這題有沒有向量」而變，所以逐一 push 而不是寫死 $9/$10/$11——
             // 手動編號在有無向量兩條路徑之間最容易錯位，而錯位只會表現成「tsv 是空的」。
@@ -132,8 +141,13 @@ async function seedFixture(opts) {
                 modelSql = `$${values.length}`;
                 embeddedAtSql = 'now()';
             }
-            values.push(tokens);
-            const tsvSql = `to_tsvector('simple', array_to_string($${values.length}::text[], ' '))`;
+            values.push(chapterTokens); const pChapter = values.length;
+            values.push(keywordTokens); const pKeyword = values.length;
+            values.push(stemTokens); const pStem = values.length;
+            const tsvSql =
+                `setweight(to_tsvector('simple', array_to_string($${pChapter}::text[], ' ')), 'A')` +
+                ` || setweight(to_tsvector('simple', array_to_string($${pKeyword}::text[], ' ')), 'A')` +
+                ` || setweight(to_tsvector('simple', array_to_string($${pStem}::text[], ' ')), 'B')`;
 
             const res = await client.query(
                 `INSERT INTO questions
@@ -162,7 +176,8 @@ async function seedFixture(opts) {
  * @param {object} opts
  * @param {object} opts.source        來源題（fixture 物件）
  * @param {number[]} opts.queryVector
- * @param {string[]} opts.queryTokens 空陣列 = 純向量欄
+ * @param {string[]} opts.queryTokens 關鍵字側的查詢詞；sides 不含 'kw' 時可為 []
+ * @param {('vec'|'kw')[]} [opts.sides] interfaces 第 5 條的選用參數（裁決 18）：純向量欄傳 ['vec']
  * @param {'chapter'|'subject'|'all'} opts.scope
  * @param {number[]} opts.excludeIds  已是 questions.id
  * @param {'rrf'|'weighted'} opts.fuseMode
@@ -184,6 +199,7 @@ async function search(opts) {
         queryVector: opts.queryVector,
         queryTokens: opts.queryTokens || [],
         mode: opts.fuseMode || 'rrf',
+        sides: opts.sides || ['vec', 'kw'],
         limit: opts.limit || 10
     });
 
