@@ -71,7 +71,9 @@ function buildDb(warnings) {
     const { Pool } = require('pg');
     const pool = new Pool({ connectionString: url, max: 2 });
     warnings.push('pipeline eval 對 TEST_DATABASE_URL 開了連線池：只有真 agent 需要 few-shot／text_hash 查詢時才會用到。');
-    return { pool, query: (sql, params) => pool.query(sql, params), source: 'TEST_DATABASE_URL' };
+    // close() 由 runPipeline 在 finally 裡叫。run.js 最後會 process.exit()，不關也不會卡住，
+    // 但 compare_pipeline.js 一輪要跑十份 PDF，每份都留一條閒置連線就會撞到 PG 的連線上限。
+    return { pool, query: (sql, params) => pool.query(sql, params), source: 'TEST_DATABASE_URL', close: () => pool.end() };
 }
 
 // ───────────────────── 各節點的暫用實作 ─────────────────────
@@ -228,6 +230,15 @@ async function runPipeline(opts) {
     if (!agents.dedup) agentSources.dedup = 'stub';
 
     const db = buildDb(warnings);
+    // 本函式從這裡開始的每一條 return 路徑都要關掉連線池，所以主體包在 runInner 裡，
+    // 由外層的 try/finally 統一收尾——比在四個 return 前面各補一次 close() 可靠。
+    try {
+        return await runInner();
+    } finally {
+        if (typeof db.close === 'function') await db.close().catch(() => {});
+    }
+
+    async function runInner() {
     const llm = opts.llm || require('../../services/llm');
     const events = [];
     let costUsd = 0;
@@ -438,6 +449,7 @@ async function runPipeline(opts) {
         db: db.source,
         warnings, thresholds
     };
+    }   // ← runInner
 }
 
 /**
