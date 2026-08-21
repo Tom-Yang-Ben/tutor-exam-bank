@@ -891,6 +891,7 @@
 
                     result.forEach((q, idx) => {
                         const card = el('div', 'question-card rounded-2xl p-4 bg-white');
+                        card.dataset.idx = idx;   // 對應後端 rejected[].idx
                         card.appendChild(el('div', 'eyebrow text-violet-500 mb-3', { textContent: `Question ${String(idx + 1).padStart(2, '0')}` }));
                         card.appendChild(createQuestionEditor(q)); // 就地編輯：修改會同步回 globalAnalyzedQuestions
                         listEl.appendChild(card);
@@ -909,7 +910,28 @@
             } finally { btn.disabled = false; }
         });
 
-        // 2. 一鍵批量入庫
+        // 把後端回報的未通過題目標紅留在預覽區；已寫入的題目從清單移除，避免再送一次造成重複入庫
+        function applyRejected(rejected) {
+            const listEl = document.getElementById('previewList');
+            const rejectedIdx = new Set(rejected.map(r => r.idx));
+            const reasonOf = new Map(rejected.map(r => [r.idx, r.reason]));
+
+            Array.from(listEl.children).forEach(card => {
+                const idx = Number(card.dataset.idx);
+                if (!rejectedIdx.has(idx)) { card.remove(); return; }
+                card.classList.add('ring-2', 'ring-rose-400', 'bg-rose-50/40');
+                const text = '⚠ 未寫入：' + (reasonOf.get(idx) || '未通過驗證');
+                const existing = card.querySelector('.reject-reason');
+                if (existing) { existing.textContent = text; return; }
+                card.insertBefore(el('div', 'reject-reason mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700', { textContent: text }), card.firstChild);
+            });
+
+            globalAnalyzedQuestions = globalAnalyzedQuestions.filter((_, i) => rejectedIdx.has(i));
+            Array.from(listEl.children).forEach((card, i) => { card.dataset.idx = i; });
+            document.getElementById('qCount').innerText = globalAnalyzedQuestions.length;
+        }
+
+        // 2. 一鍵批量入庫（後端只寫入通過驗證的題，未通過的以 rejected 回報）
         document.getElementById('batchSaveBtn').addEventListener('click', async () => {
             if (globalAnalyzedQuestions.length === 0) return;
             const btn = document.getElementById('batchSaveBtn');
@@ -923,9 +945,14 @@
                 });
                 const resData = await response.json();
                 showToast(resData.message || (response.ok ? '題目已成功寫入資料庫' : '寫入失敗'), response.ok ? 'success' : 'error');
-                if (response.ok) {
+
+                const rejected = Array.isArray(resData.rejected) ? resData.rejected : [];
+                if (rejected.length > 0) {
+                    applyRejected(rejected);
+                    if (resData.saved_count > 0) await fetchChapters();
+                } else if (response.ok) {
                     document.getElementById('previewArea').classList.add('hidden');
-                    document.getElementById('pdfStatus').innerText = "🎉 所有題目已成功寫入 MySQL 資料庫！";
+                    document.getElementById('pdfStatus').innerText = "🎉 所有題目已成功寫入資料庫！";
                     document.getElementById('pdfFile').value = "";
                     await fetchChapters();
                 }

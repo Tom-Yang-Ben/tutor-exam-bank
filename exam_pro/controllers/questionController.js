@@ -56,8 +56,12 @@ exports.batchSaveQuestions = async (req, res, next) => {
         return res.status(400).json({ message: "資料格式不正確或陣列為空" });
     }
 
+    // ?strict=1 保留舊行為：只要有一題不合格就整批退回，不寫入任何一筆
+    const strict = req.query.strict === '1';
+
     // 後端逐題驗證，攔截 AI 產生的非法 subject / chapter / 題型 / 難度
-    const errors = [];
+    // 通過的題目照樣入庫，未通過的以 rejected 回報（idx 為請求陣列中 0 起始的索引）
+    const rejected = [];
     const values = [];
     questions.forEach((q, idx) => {
         const subject = q.subject;
@@ -65,23 +69,36 @@ exports.batchSaveQuestions = async (req, res, next) => {
         const qType = q.question_type || '填空';
         const diff = normalizeDifficulty(q.difficulty ?? 3);
 
-        if (!isValidSubject(subject)) { errors.push(`第 ${idx + 1} 題：學科「${subject}」無效`); return; }
-        if (!isValidChapter(subject, chapter)) { errors.push(`第 ${idx + 1} 題：章節「${chapter}」不在白名單`); return; }
-        if (!isValidQuestionType(qType)) { errors.push(`第 ${idx + 1} 題：題型「${qType}」無效`); return; }
-        if (diff === null) { errors.push(`第 ${idx + 1} 題：難度無效`); return; }
-        if (!q.question_text || !String(q.question_text).trim()) { errors.push(`第 ${idx + 1} 題：缺少題目內容`); return; }
+        if (!isValidSubject(subject)) { rejected.push({ idx, reason: `學科「${subject}」無效` }); return; }
+        if (!isValidChapter(subject, chapter)) { rejected.push({ idx, reason: `章節「${chapter}」不在白名單` }); return; }
+        if (!isValidQuestionType(qType)) { rejected.push({ idx, reason: `題型「${qType}」無效` }); return; }
+        if (diff === null) { rejected.push({ idx, reason: '難度無效' }); return; }
+        if (!q.question_text || !String(q.question_text).trim()) { rejected.push({ idx, reason: '缺少題目內容' }); return; }
 
         values.push([subject, chapter, qType, diff, String(q.question_text).trim(), (q.answer_text || '略'), '{}']);
     });
 
-    if (errors.length > 0) {
+    if (strict && rejected.length > 0) {
+        const errors = rejected.map(r => `第 ${r.idx + 1} 題：${r.reason}`);
         return res.status(400).json({ message: `有 ${errors.length} 題未通過驗證，請重新分析：\n` + errors.join('\n') });
+    }
+
+    // 全軍覆沒時沒有任何一筆寫入，回 400 但維持同一個回應形狀
+    if (values.length === 0) {
+        return res.status(400).json({
+            message: `${rejected.length} 題全部未通過驗證，沒有任何題目寫入題庫。`,
+            saved_count: 0,
+            rejected
+        });
     }
 
     try {
         const sql = `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text, history_json) VALUES ?`;
         await pool.query(sql, [values]);
-        res.json({ message: `🎉 成功！已將共 ${values.length} 題自動錄入資料庫！` });
+        const message = rejected.length === 0
+            ? `🎉 成功！已將共 ${values.length} 題自動錄入資料庫！`
+            : `已寫入 ${values.length} 題；另有 ${rejected.length} 題未通過驗證（已在下方標紅），修正後可再次送出。`;
+        res.json({ message, saved_count: values.length, rejected });
     } catch (err) { next(err); }
 };
 
