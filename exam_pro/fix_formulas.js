@@ -3,7 +3,8 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const mysql = require('mysql2/promise');
+// 連線一律走 config/db.js，不自建連線（docs/interfaces.md 第 8 條）
+const { pool } = require('./config/db');
 
 const APPLY = process.argv.includes('--apply');
 
@@ -73,11 +74,9 @@ function isClean(text) {
 function esc(t) { return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
 async function main() {
-    const conn = await mysql.createConnection({
-        host: process.env.DB_HOST || 'localhost', user: process.env.DB_USER || 'root',
-        password: process.env.DB_PASSWORD || '', database: process.env.DB_NAME || 'tutor_exam_bank'
-    });
-    const [rows] = await conn.execute('SELECT id, subject, chapter, question_text, answer_text FROM questions ORDER BY id');
+    const conn = await pool.connect();
+    // 已封存（軟刪除）的題目不修：它們不會再出現在題庫與組卷候選中
+    const { rows } = await conn.query('SELECT id, subject, chapter, question_text, answer_text FROM questions WHERE archived_at IS NULL ORDER BY id');
 
     const autoFix = [];   // 可安全自動修復
     const manual = [];    // 需人工處理
@@ -132,14 +131,19 @@ h1{font-size:22px}h2{font-size:18px;margin-top:26px}.sum{background:#f1f5f9;bord
         const bk = path.join(__dirname, 'formulas_backup_' + Date.now() + '.json');
         fs.writeFileSync(bk, JSON.stringify(backup, null, 2), 'utf8');
         console.log('已備份：' + path.basename(bk));
-        await conn.beginTransaction();
         try {
-            for (const c of autoFix) await conn.execute('UPDATE questions SET question_text=?, answer_text=? WHERE id=?', [c.newQ, c.newA, c.id]);
-            await conn.commit();
+            await conn.query('BEGIN');
+            for (const c of autoFix) await conn.query('UPDATE questions SET question_text=$1, answer_text=$2 WHERE id=$3', [c.newQ, c.newA, c.id]);
+            await conn.query('COMMIT');
             console.log('✅ 已更新 ' + autoFix.length + ' 題；另有 ' + manual.length + ' 題需人工處理（未更動）。');
-        } catch (e) { await conn.rollback(); console.error('失敗已回滾：' + e.message); }
+        } catch (e) {
+            try { await conn.query('ROLLBACK'); } catch (_) { /* 回滾失敗不覆蓋原始錯誤 */ }
+            console.error('失敗已回滾：' + e.message);
+            process.exitCode = 1;
+        }
     }
-    await conn.end();
+    conn.release();
+    await pool.end();
 }
 
 if (require.main === module) main().catch(e => { console.error('執行失敗：', e.message); process.exit(1); });

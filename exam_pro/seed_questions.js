@@ -19,7 +19,7 @@
 // 公式使用 utils/textFormatter.js 支援的 LaTeX 子集（\frac、\sqrt、\int、^\circ…）。
 // ─────────────────────────────────────────────────────────────
 require('dotenv').config();
-const pool = require('./config/db');
+const { pool } = require('./config/db');
 const { isValidChapter, isValidQuestionType, normalizeDifficulty } = require('./config/chapters');
 
 // 前端預設抽題數（public/index.html #count 的 value）。每章題數低於此值，
@@ -231,36 +231,40 @@ const QUESTIONS = [
     }
 
     // 3. 交易寫入；同題幹已存在則跳過（可重複執行，不會灌重複題）
-    const conn = await pool.getConnection();
+    const conn = await pool.connect();
     try {
-        await conn.beginTransaction();
+        await conn.query('BEGIN');
         let inserted = 0, skipped = 0;
         const insertedIds = [];
         for (const q of QUESTIONS) {
-            const [dup] = await conn.execute(
-                'SELECT id FROM questions WHERE question_text = ? LIMIT 1', [q.question_text]
+            // 已封存的同題幹也算存在：重跑種子不該把封存過的題再灌一份回來
+            const { rows: dup } = await conn.query(
+                'SELECT id FROM questions WHERE question_text = $1 LIMIT 1', [q.question_text]
             );
             if (dup.length > 0) { skipped++; continue; }
-            const [result] = await conn.execute(
-                `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text, history_json)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                [q.subject, q.chapter, q.question_type, q.difficulty, q.question_text, q.answer_text, '{}']
+            // 這 30 題是作者自行編寫、章節已對齊白名單 ⇒ origin='seed'、chapter_src='human'
+            // （規劃 §4.3.1 的來源標記規則；WS-B 的 import_pg.js 也用同一組值回填舊資料）
+            const { rows } = await conn.query(
+                `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text, origin, chapter_src)
+                 VALUES ($1, $2, $3, $4, $5, $6, 'seed', 'human')
+                 RETURNING id`,
+                [q.subject, q.chapter, q.question_type, q.difficulty, q.question_text, q.answer_text]
             );
-            insertedIds.push(result.insertId);
+            insertedIds.push(rows[0].id);
             inserted++;
         }
-        await conn.commit();
+        await conn.query('COMMIT');
         console.log(`\n✅ 寫入完成：新增 ${inserted} 題、跳過已存在 ${skipped} 題`);
         if (insertedIds.length > 0) {
             console.log(`   新增題目 ID：${insertedIds[0]} ~ ${insertedIds[insertedIds.length - 1]}`);
             console.log(`   （若要整批移除：DELETE FROM questions WHERE id BETWEEN ${insertedIds[0]} AND ${insertedIds[insertedIds.length - 1]};）`);
         }
     } catch (err) {
-        await conn.rollback();
+        try { await conn.query('ROLLBACK'); } catch (e) { /* 回滾失敗不覆蓋原始錯誤 */ }
         console.error('❌ 寫入失敗，已回滾：', err.message);
         process.exitCode = 1;
     } finally {
         conn.release();
-        process.exit();
+        await pool.end();
     }
 })();

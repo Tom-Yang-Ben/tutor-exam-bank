@@ -1,4 +1,4 @@
-const pool = require('../config/db');
+const { query, pool } = require('../config/db');
 const { CHAPTERS, isValidSubject, isValidChapter, isValidQuestionType, normalizeDifficulty, QUESTION_TYPES } = require('../config/chapters');
 
 // 提供前端手動錄入時的章節下拉選單來源
@@ -44,9 +44,13 @@ exports.createQuestion = async (req, res, next) => {
         return res.status(400).json({ message: '難度必須為 1 到 5 的整數！' });
     }
     try {
-        const sql = `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, question_img, answer_text, solution_img, history_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '{}')`;
-        const [result] = await pool.execute(sql, [subject, chapter.trim(), qType, diff, question_text.trim(), question_img || null, answer_text.trim(), solution_img || null]);
-        res.status(201).json({ message: '題目錄入成功！', questionId: result.insertId });
+        // 手動錄入 → origin='manual'、chapter_src='human'（規劃 §4.3.1 的來源標記規則）
+        const sql = `INSERT INTO questions
+                        (subject, chapter, question_type, difficulty, question_text, question_img, answer_text, solution_img, origin, chapter_src)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'manual', 'human')
+                     RETURNING id`;
+        const { rows } = await query(sql, [subject, chapter.trim(), qType, diff, question_text.trim(), question_img || null, answer_text.trim(), solution_img || null]);
+        res.status(201).json({ message: '題目錄入成功！', questionId: rows[0].id });
     } catch (err) { next(err); }
 };
 
@@ -62,7 +66,9 @@ exports.batchSaveQuestions = async (req, res, next) => {
     // 後端逐題驗證，攔截 AI 產生的非法 subject / chapter / 題型 / 難度
     // 通過的題目照樣入庫，未通過的以 rejected 回報（idx 為請求陣列中 0 起始的索引）
     const rejected = [];
-    const values = [];
+    // PG 沒有 mysql2 的 `VALUES ?`（二維陣列）批次語法，改成「每欄一個陣列參數」餵給 unnest，
+    // 因此這裡以「欄」為單位收集，而不是以「列」為單位。
+    const cols = { subject: [], chapter: [], question_type: [], difficulty: [], question_text: [], answer_text: [] };
     questions.forEach((q, idx) => {
         const subject = q.subject;
         const chapter = (q.chapter || '').trim();
@@ -75,8 +81,15 @@ exports.batchSaveQuestions = async (req, res, next) => {
         if (diff === null) { rejected.push({ idx, reason: '難度無效' }); return; }
         if (!q.question_text || !String(q.question_text).trim()) { rejected.push({ idx, reason: '缺少題目內容' }); return; }
 
-        values.push([subject, chapter, qType, diff, String(q.question_text).trim(), (q.answer_text || '略'), '{}']);
+        cols.subject.push(subject);
+        cols.chapter.push(chapter);
+        cols.question_type.push(qType);
+        cols.difficulty.push(diff);
+        cols.question_text.push(String(q.question_text).trim());
+        cols.answer_text.push(q.answer_text || '略');
     });
+
+    const savedCount = cols.subject.length;
 
     if (strict && rejected.length > 0) {
         const errors = rejected.map(r => `第 ${r.idx + 1} 題：${r.reason}`);
@@ -84,7 +97,7 @@ exports.batchSaveQuestions = async (req, res, next) => {
     }
 
     // 全軍覆沒時沒有任何一筆寫入，回 400 但維持同一個回應形狀
-    if (values.length === 0) {
+    if (savedCount === 0) {
         return res.status(400).json({
             message: `${rejected.length} 題全部未通過驗證，沒有任何題目寫入題庫。`,
             saved_count: 0,
@@ -93,23 +106,29 @@ exports.batchSaveQuestions = async (req, res, next) => {
     }
 
     try {
-        const sql = `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text, history_json) VALUES ?`;
-        await pool.query(sql, [values]);
+        // AI 拆題入庫：origin / chapter_src 走 DDL 預設（'pdf' / 'ai'）
+        const sql = `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text)
+                     SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::int[], $5::text[], $6::text[])`;
+        await query(sql, [cols.subject, cols.chapter, cols.question_type, cols.difficulty, cols.question_text, cols.answer_text]);
         const message = rejected.length === 0
-            ? `🎉 成功！已將共 ${values.length} 題自動錄入資料庫！`
-            : `已寫入 ${values.length} 題；另有 ${rejected.length} 題未通過驗證（已在下方標紅），修正後可再次送出。`;
-        res.json({ message, saved_count: values.length, rejected });
+            ? `🎉 成功！已將共 ${savedCount} 題自動錄入資料庫！`
+            : `已寫入 ${savedCount} 題；另有 ${rejected.length} 題未通過驗證（已在下方標紅），修正後可再次送出。`;
+        res.json({ message, saved_count: savedCount, rejected });
     } catch (err) { next(err); }
 };
 
 exports.getChapters = async (req, res, next) => {
     try {
-        const [rows] = await pool.execute('SELECT DISTINCT subject, chapter FROM questions WHERE chapter IS NOT NULL AND chapter != ""');
+        // PG 的雙引號是識別字引號，舊寫法 `chapter != ""` 會報 zero-length delimited identifier，必須改 <> ''
+        const { rows } = await query(
+            `SELECT DISTINCT subject, chapter FROM questions
+              WHERE chapter IS NOT NULL AND chapter <> '' AND archived_at IS NULL`
+        );
         res.json(rows);
     } catch (err) { next(err); }
 };
 
-// 題庫列表（支援篩選與分頁）
+// 題庫列表（支援篩選與分頁）。已封存（軟刪除）的題目不出現在列表中，與兩個 VIEW 的定義一致。
 exports.listQuestions = async (req, res, next) => {
     try {
         const { subject, chapter, question_type, q } = req.query;
@@ -117,20 +136,24 @@ exports.listQuestions = async (req, res, next) => {
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
         const offset = (page - 1) * limit;
 
-        const where = [];
+        const where = ['archived_at IS NULL'];
         const params = [];
-        if (subject) { where.push('subject = ?'); params.push(subject); }
-        if (chapter) { where.push('chapter = ?'); params.push(chapter); }
-        if (question_type) { where.push('question_type = ?'); params.push(question_type); }
-        if (q) { where.push('(question_text LIKE ? OR answer_text LIKE ?)'); params.push('%' + q + '%', '%' + q + '%'); }
-        const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+        // PG 的占位符有序（$1、$2…），因此推進參數後才取得它的編號
+        const ph = () => `$${params.length}`;
+        if (subject) { params.push(subject); where.push(`subject = ${ph()}`); }
+        if (chapter) { params.push(chapter); where.push(`chapter = ${ph()}`); }
+        if (question_type) { params.push(question_type); where.push(`question_type = ${ph()}`); }
+        // PG 的 LIKE 區分大小寫，改用 ILIKE 才與舊 MySQL（預設 ci collation）的行為一致
+        if (q) { params.push('%' + q + '%'); where.push(`(question_text ILIKE ${ph()} OR answer_text ILIKE ${ph()})`); }
+        const whereSql = 'WHERE ' + where.join(' AND ');
 
-        const [countRows] = await pool.query(`SELECT COUNT(*) AS total FROM questions ${whereSql}`, params);
+        // COUNT(*) 的型別是 INT8：沒有 config/db.js 的 setTypeParser(20)，total 會變成字串 "30"
+        const { rows: countRows } = await query(`SELECT COUNT(*) AS total FROM questions ${whereSql}`, params);
         const total = countRows[0].total;
 
-        const [rows] = await pool.query(
+        const { rows } = await query(
             `SELECT id, subject, chapter, question_type, difficulty, question_text, answer_text, created_at
-             FROM questions ${whereSql} ORDER BY id DESC LIMIT ? OFFSET ?`,
+             FROM questions ${whereSql} ORDER BY id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
             [...params, limit, offset]
         );
         res.json({ total, page, limit, totalPages: Math.ceil(total / limit) || 1, questions: rows });
@@ -145,22 +168,57 @@ exports.updateQuestion = async (req, res, next) => {
     if (!v.ok) return res.status(400).json({ message: v.error });
     try {
         const { subject, chapter, question_type, difficulty, question_text, answer_text } = v.value;
-        const [result] = await pool.execute(
-            `UPDATE questions SET subject=?, chapter=?, question_type=?, difficulty=?, question_text=?, answer_text=? WHERE id=?`,
+        // UPDATE 的 SET 運算式一律看**舊值**，所以 CASE 裡的 chapter 是改動前的章節：
+        // 老師手動改過章節 ⇒ 章節來源不再是 AI，標記 chapter_src='human'（規劃 §4.3.1）
+        const { rowCount } = await query(
+            `UPDATE questions
+                SET subject=$1, chapter=$2, question_type=$3, difficulty=$4, question_text=$5, answer_text=$6,
+                    chapter_src = CASE WHEN chapter IS DISTINCT FROM $2 THEN 'human' ELSE chapter_src END
+              WHERE id=$7 AND archived_at IS NULL`,
             [subject, chapter, question_type, difficulty, question_text, answer_text || '略', id]
         );
-        if (result.affectedRows === 0) return res.status(404).json({ message: '找不到該題目' });
+        if (rowCount === 0) return res.status(404).json({ message: '找不到該題目' });
         res.json({ message: '題目已更新！', id });
     } catch (err) { next(err); }
 };
 
 // 刪除單一題目
+//
+// attempts.question_id 是 ON DELETE RESTRICT（interfaces.md §1.5 裁決 1）：作答紀錄是階段 3
+// 弱點面板的基底，不能隨題目消失。因此刪題語意改為
+//   有 attempts 紀錄 → 軟刪除（archived_at = now()），回 { archived: true }
+//   沒有紀錄        → 照舊硬刪
+// 兩步之間先 SELECT … FOR UPDATE 鎖住該列：attempts 的外鍵插入會取 FOR KEY SHARE，與
+// FOR UPDATE 互斥，因此不會出現「檢查時沒紀錄、硬刪前剛好被組卷寫進一筆」的競態。
 exports.deleteQuestion = async (req, res, next) => {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ message: '無效的題目 ID' });
+
+    const client = await pool.connect();
     try {
-        const [result] = await pool.execute('DELETE FROM questions WHERE id = ?', [id]);
-        if (result.affectedRows === 0) return res.status(404).json({ message: '找不到該題目' });
+        await client.query('BEGIN');
+        const { rows } = await client.query(
+            'SELECT id FROM questions WHERE id = $1 AND archived_at IS NULL FOR UPDATE', [id]
+        );
+        if (rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: '找不到該題目' });
+        }
+
+        const { rows: used } = await client.query('SELECT 1 FROM attempts WHERE question_id = $1 LIMIT 1', [id]);
+        if (used.length > 0) {
+            await client.query('UPDATE questions SET archived_at = now() WHERE id = $1', [id]);
+            await client.query('COMMIT');
+            return res.json({ message: '該題已有學生作答紀錄，改為封存（不再出現在題庫與組卷候選中）。', id, archived: true });
+        }
+
+        await client.query('DELETE FROM questions WHERE id = $1', [id]);
+        await client.query('COMMIT');
         res.json({ message: '題目已刪除！', id });
-    } catch (err) { next(err); }
+    } catch (err) {
+        try { await client.query('ROLLBACK'); } catch (e) { /* 回滾失敗不覆蓋原始錯誤 */ }
+        next(err);
+    } finally {
+        client.release();
+    }
 };
