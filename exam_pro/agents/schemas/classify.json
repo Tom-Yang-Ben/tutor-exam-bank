@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "classify",
+  "description": "把一道題目歸到精細章節白名單裡的某一章。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["chapter", "confidence", "rationale"],
+  "propertyOrdering": ["chapter", "confidence", "rationale"],
+  "properties": {
+    "chapter": {
+      "type": "string",
+      "x-enum": "chapter",
+      "description": "最合適的精細章節，必須完全等於白名單中的字串。就算覺得都不像，也只能挑最接近的那一個。"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "你對這個章節的把握程度，0 到 1。低於 0.8 的題目會被送去人工複核，所以不確定就誠實給低分。"
+    },
+    "rationale": {
+      "type": "string",
+      "description": "為什麼是這一章，200 字以內。指出題目裡真正決定章節的關鍵詞或解法（例如「出現 $\\vec{a}\\cdot\\vec{b}$ 且問夾角，屬向量內積」），不要複述題目。"
+    }
+  }
+}

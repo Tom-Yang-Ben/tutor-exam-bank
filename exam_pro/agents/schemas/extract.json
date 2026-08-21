@@ -1,0 +1,84 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "extract",
+  "description": "一塊 PDF（最多 JOB_PDF_CHUNK_PAGES 頁）拆出來的所有題目。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["questions"],
+  "properties": {
+    "questions": {
+      "type": "array",
+      "description": "這一塊 PDF 裡的每一道題，依照它在紙上出現的順序。沒有題目時回空陣列。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subject",
+          "chapter",
+          "chapter_confidence",
+          "question_type",
+          "difficulty",
+          "question_text",
+          "answer_text"
+        ],
+        "propertyOrdering": [
+          "idx",
+          "subject",
+          "chapter",
+          "chapter_confidence",
+          "question_type",
+          "difficulty",
+          "question_text",
+          "answer_text",
+          "figure_desc"
+        ],
+        "properties": {
+          "idx": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "這一題在本塊 PDF 裡的順序，從 1 開始。系統實際採用的是元素在陣列中的位置，這個欄位只是方便你自己數題號。"
+          },
+          "subject": {
+            "type": "string",
+            "x-enum": "subject",
+            "description": "學科。"
+          },
+          "chapter": {
+            "type": "string",
+            "x-enum": "chapter",
+            "description": "精細章節，必須完全等於白名單中的字串，不得自創新詞。"
+          },
+          "chapter_confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "你對上面那個章節的把握程度，0 到 1。誠實給分：不確定就給低分，系統會另外請人或另一個模型再判一次；亂給高分反而會讓錯的章節直接入庫。"
+          },
+          "question_type": {
+            "type": "string",
+            "x-enum": "question_type",
+            "description": "題型。要求證明某個結論的題目一律是「證明」。"
+          },
+          "difficulty": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "description": "難度，1（最簡單）到 5（最難），以台灣高中生的程度為基準。"
+          },
+          "question_text": {
+            "type": "string",
+            "description": "題目完整文字（含選項）。數學式一律用 $...$ 包住的 LaTeX。**不要**把附圖描述寫進這裡，附圖描述放 figure_desc。"
+          },
+          "answer_text": {
+            "type": "string",
+            "description": "正確答案；數學式同樣用 $...$ 的 LaTeX。單選／多選必須以選項代號開頭，例如「(C)。$f(3)=7$」。"
+          },
+          "figure_desc": {
+            "type": "string",
+            "description": "這一題附圖／圖表的文字解讀（座標點、邊長、角度、曲線趨勢、受力方向、電路接法…）。沒有附圖時整個欄位不要輸出。"
+          }
+        }
+      }
+    }
+  }
+}
