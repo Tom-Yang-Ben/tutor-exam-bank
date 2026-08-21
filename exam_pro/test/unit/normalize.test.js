@@ -1,6 +1,8 @@
-// migrate/lib/normalize.test.js — D-D5a 的純函式測試
+// test/unit/normalize.test.js — migrate/lib/normalize.js（D-D5a）的純函式測試
 //
-// 不連 DB、不呼叫 Gemini、不需要任何 secrets；`npm test`（node --test）會自動收進來。
+// 不連 DB、不呼叫 Gemini、不需要任何 secrets。
+// 放在 test/unit/ 是因為 npm test 已改為 node --test "test/unit/**/*.test.js"（裁決 24），
+// 擺在 migrate/lib/ 旁邊的話不會被收進去。
 // 測試資料全部是自己編的假姓名，不含任何真實學生資料。
 
 'use strict';
@@ -16,7 +18,7 @@ const {
     flattenHistory,
     buildMergeReport,
     renderMergeReport
-} = require('./normalize');
+} = require('../../migrate/lib/normalize');
 
 // ── normalizeName ────────────────────────────────────────────
 test('normalizeName：只有 trim 的一般情況', () => {

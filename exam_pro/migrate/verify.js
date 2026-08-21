@@ -12,10 +12,12 @@
 //   1. questions / exam_papers 筆數
 //   2. 各章（subject｜chapter）筆數
 //   3. 逐列 sha256(question_text + answer_text) 全等
-//   4. COUNT(attempts) = Σ history_json 鍵數
-//      —— 只要姓名正規化合併過、或同一題有兩個鍵指向同一人，這個等式就不會成立。
-//         那不是 bug，是 UNIQUE(student_id, question_id) 的必然結果，但**必須被看到**：
-//         預設仍然算失敗，確認過 name_merge_report.md 之後才用 --allow-merged 放行。
+//   4. attempts 守恆（interfaces.md 裁決 14 的條文）：
+//        COUNT(attempts) = Σ history_json 鍵數 − 姓名合併與空姓名造成的差額
+//      差額**逐筆列在 name_merge_report.md**，經人工確認後以 --allow-merged 放行。
+//      為什麼等式本身不會成立：UNIQUE(student_id, question_id) 只容得下一列，
+//      同一題有兩個鍵指向同一人時必然少一列；姓名正規化後為空的鍵則建不出 students。
+//      這不是 bug，但**必須被看到**——所以預設仍然算失敗，不加旗標不會過。
 //   5. 隨機 N 題的 buildParagraphComponents 產物逐位元比對（MySQL 端文字 vs PG 端文字）
 //   6. students 筆數、attempts 沒有孤兒、序列（setval）有對齊
 //
@@ -127,25 +129,27 @@ async function main() {
         if (hashBad === 0) ok(`${ids.length} 列的雜湊全等`);
         console.log('');
 
-        // ── 4. attempts 筆數 ────────────────────────────────
-        console.log('4. COUNT(attempts) = Σ history_json 鍵數');
+        // ── 4. attempts 守恆（裁決 14）──────────────────────
+        console.log('4. attempts 守恆：COUNT(attempts) = Σ history_json 鍵數 − 合併與空姓名的差額');
         const keyTotal = report.totals.historyKeys;
         const actual = Number(cnt.attempts);
-        if (actual === keyTotal) {
-            ok(`attempts ${actual} = history_json 鍵總數 ${keyTotal}`);
+        const shrink = keyTotal - report.totals.attemptsExpected;
+        if (actual === keyTotal && shrink === 0) {
+            ok(`attempts ${actual} = history_json 鍵總數 ${keyTotal}，差額 0`);
         } else {
-            const shrink = keyTotal - report.totals.attemptsExpected;
             const detail =
-                `attempts ${actual} ≠ history_json 鍵總數 ${keyTotal}` +
-                `（正規化後為空 ${report.totals.historyKeysDropped} 筆、同題撞鍵 ${report.collisions.length} 組、` +
-                `合計少 ${shrink} 筆 → 去重後應為 ${report.totals.attemptsExpected}）`;
+                `attempts ${actual} = history_json 鍵總數 ${keyTotal} − 差額 ${shrink}` +
+                `（姓名正規化後為空 ${report.totals.historyKeysDropped} 筆、同題撞鍵 ${report.collisions.length} 組）`;
             if (actual === report.totals.attemptsExpected && allowMerged) {
                 notes.push(detail);
-                ok(`${detail}；已用 --allow-merged 放行`);
+                ok(`${detail}；差額逐筆列在 name_merge_report.md，已用 --allow-merged 放行`);
             } else if (actual === report.totals.attemptsExpected) {
-                bad(`${detail}。確認 name_merge_report.md 的合併沒有誤判後，加 --allow-merged 放行`);
+                bad(
+                    `${detail}。差額逐筆列在 name_merge_report.md（「正規化後合併的姓名」與` +
+                    '「同一題出現多個鍵指向同一位學生」兩節）。逐條確認沒有誤判後，加 --allow-merged 放行'
+                );
             } else {
-                bad(`${detail}，而且與去重後的期望值也不符`);
+                bad(`${detail}，但實際筆數 ${actual} 與差額推得的 ${report.totals.attemptsExpected} 也不符——這才是真的有問題`);
             }
         }
         console.log('');
