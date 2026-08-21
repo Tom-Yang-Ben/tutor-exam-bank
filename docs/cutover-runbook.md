@@ -13,7 +13,7 @@
 | 條件 | 怎麼確認 |
 |---|---|
 | Docker Desktop 已啟動、兩個容器健康 | 雙擊 `啟動資料庫.bat`，最後印出「[OK] 資料庫已就緒」 |
-| migrations 已套用 | `node migrate.js status` → `0001_init.sql`、`0002_vector.sql` 都是「✅ 已套用」 |
+| migrations 已套用 | `node migrate.js status` → `0001_init.sql`、`0002_vector.sql`、`0004_origin_legacy.sql` 都是「✅ 已套用」。**`0004` 是必要的**：`import_pg.js` 對舊題寫 `origin='legacy'`（裁決 13），沒套用會撞 `questions_origin_check`；`import_pg.js` 開場就會擋下來 |
 | PG 是**空的** | `docker compose exec -T postgres psql -U exam -d tutor_exam_bank -c "SELECT count(*) FROM questions"` → `0` |
 | `npm test` 全綠 | `npm test`（不連 DB、不呼叫 Gemini） |
 | WS-A 的 controller 已改 `pg` 並合入 | `git log --oneline` 看得到 D-D3／D-D4 |
@@ -106,13 +106,14 @@ node migrate/export_mysql.js
 notepad migrate\out\name_merge_report.md
 ```
 
-三個段落一定要看：
+四個段落一定要看。前兩節同時也是 2-7 那個 attempts 差額的來源，逐條看過才有資格加 `--allow-merged`：
 
 | 段落 | 意思 | 要做的判斷 |
 |---|---|---|
 | 正規化後合併的姓名 | `王"小明`（試卷）與 `王小明`（history 鍵）會併成同一位學生 | 這確實是同一個人嗎？ |
+| 同一題出現多個鍵指向同一位學生 | `UNIQUE (student_id, question_id)` 只容得下一列，取最早的日期 | 少掉的那幾列就是 attempts 差額的一部分 |
 | 疑似同一人（**不會**自動合併） | 只差全形／半形空白，程式**不敢**替你決定 | 若是同一人，**回舊 MySQL 把姓名改一致，重跑 2-3** |
-| 正規化後為空的姓名 | 姓名只有空白或只有 `"` `\` | history 的鍵會被丟掉；試卷則會**擋下整支匯入** |
+| 正規化後為空的姓名 | 姓名只有空白或只有 `"` `\` | history 的鍵會被丟掉（也算進差額）；**試卷則會擋下整支匯入**，依裁決 15 回 MySQL 補姓名後重跑 2-3 |
 
 ### 2-5 匯入 PG（先 dry-run）
 
@@ -134,10 +135,14 @@ node migrate/import_pg.js --apply
 - `questions`／`exam_papers` **保留原 id**（`OVERRIDING SYSTEM VALUE`）
 - `history_json` 在 **PG 端**以 `jsonb_each_text` 展開成 `students` + `attempts(assigned_at)`
 - `question_ids` 由 JSON 陣列轉成 `INT[]`
-- 題幹與 `seed_questions.js` 完全相同的題設成 `origin='seed'`、`chapter_src='human'`
+- 舊題一律 `origin='legacy'`（裁決 13 = 來源未知；舊 schema 分不出是 AI 拆 PDF 還是手動新增，
+  不拿 `'pdf'` 假裝知道）。唯一的例外是題幹與 `seed_questions.js` 完全相同的那 30 題，
+  改標 `origin='seed'`、`chapter_src='human'`
 - `attempts.paper_id` 以「同學生 + 同一天 + 該卷含這題」回填，對不上留 `NULL`
 - 對 `questions`／`exam_papers`／`students` 各跑一次 `setval`
 - 寫出 `migrate\out\cutover.json`（**14 天內回滾要用，不要刪**）
+- **不寫** `search_tsv` 與 `embedding` —— 裁決 16 把這兩欄統一交給 `services/embedService.js`，
+  在 2-8 由「回填向量.bat」補
 
 ### 2-7 校驗
 
@@ -146,27 +151,41 @@ node migrate/verify.js
 ```
 
 六項檢查任一不等就以非零碼退出：筆數、各章筆數、逐列 `sha256(question_text+answer_text)`、
-`COUNT(attempts)` = Σ `history_json` 鍵數、隨機 20 題 `buildParagraphComponents` 產物逐位元比對、參照完整性與序列。
+**attempts 守恆**、隨機 20 題 `buildParagraphComponents` 產物逐位元比對、參照完整性與序列。
 
-> **關於第 4 項**：只要姓名合併過，或同一題有兩個鍵指向同一位學生，這個等式就**不可能**成立——
-> `UNIQUE (student_id, question_id)` 只容得下一列。verify 會把差額拆給你看
-> （「正規化後為空 N 筆、同題撞鍵 M 組、合計少 K 筆」）。
-> 確認過 `name_merge_report.md` 之後，用 `node migrate/verify.js --allow-merged` 放行，
-> 並把那行差額說明抄進 `import_report.md`。**不要**因為看到紅字就直接加旗標。
+> **第 4 項 attempts 守恆的條文**（`docs/interfaces.md` 裁決 14）：
+>
+> > `COUNT(attempts)` = Σ `history_json` 鍵數 − 姓名合併與空姓名造成的差額；
+> > 差額**逐筆列在 `name_merge_report.md`**，經人工確認後以 `--allow-merged` 放行。
+>
+> 差額不是 bug：`UNIQUE (student_id, question_id)` 只容得下一列，同一題有兩個鍵指向同一人時
+> 必然少一列；正規化後為空的鍵則建不出 `students`。verify 會印成
+> 「attempts N = 鍵總數 M − 差額 K（正規化後為空 x 筆、同題撞鍵 y 組）」。
+>
+> 做法：回頭把 `name_merge_report.md` 的「正規化後合併的姓名」與「同一題出現多個鍵指向同一位學生」
+> 兩節逐條看過，數字對得起來、也確定不是誤判，才執行
+> `node migrate/verify.js --allow-merged`，並把那行差額說明抄進 `import_report.md`。
+> **verify 預設仍然把差額當失敗**，不要因為看到紅字就直接加旗標。
 
-### 2-8 回填向量與全文檢索欄位
+### 2-8 回填向量與全文檢索欄位（**這一步不能省**）
 
 ```bat
 回填向量.bat
 ```
 
-`import_pg.js` **不寫** `search_tsv` 與 `embedding`（規劃 §2.3.6 的寫入路徑表），要靠 WS-C 的
-`scripts/backfill_embeddings.js` 補。可以中斷再重跑（每批一個交易）。
-跑完 `node migrate/verify.js` 的第 7 項應該顯示 `embedding IS NULL：0 筆`。
+**裁決 16**：遷移後的 `search_tsv` 與 `embedding` 由 `services/embedService.js` 統一回填。
+`import_pg.js` 刻意不碰這兩欄——若遷移腳本自己實作一套 tsvector 權重，就會與寫入路徑
+（`createQuestion`／`batchSaveQuestions`／`backfill_embeddings.js`）產生兩套規則，
+hybrid 查詢會**靜默地**少召回一批題，比「暫時是 NULL」危險得多。
 
-> 這一步要呼叫 Gemini，題數多時可能要跑很久。**它不影響切換本身**：組卷與題庫瀏覽不需要向量，
-> 只有 `/api/questions/:id/similar` 與 hybrid 檢索需要，而那兩個功能的旗標預設是關的。
-> 太晚就先睡，隔天再跑完。
+`回填向量.bat` 是 `scripts/backfill_embeddings.js` 的殼，可以中斷再重跑（每批一個交易，天然斷點續跑）。
+跑完再執行一次 `node migrate/verify.js`，第 7 項應該顯示 `embedding IS NULL：0 筆、search_tsv IS NULL：0 筆`。
+
+> **時間安排**：這一步要呼叫 Gemini，題數多時可能要跑很久，可以隔天再跑完——但**別忘了跑**。
+> 在它跑完之前：組卷、題庫瀏覽、Word 下載都正常（那些不需要向量），
+> 但 `GET /api/questions/:id/similar` 會回 409、hybrid 檢索找不到遷移進來的題。
+> 那兩個功能的旗標（`FEATURE_SIMILAR`／`FEATURE_HYBRID_SEARCH`）預設是關的，
+> **回填沒跑完就不要開**。
 
 ### 2-9 切 `.env`
 
@@ -308,7 +327,8 @@ REM 1. MySQL 整庫最後一次備份，收進長期保存的資料夾（不要�
 REM 2. DROP DATABASE tutor_exam_bank;（或直接移除 MySQL）
 REM 3. .env 與 .env.example 移除 DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME 五行
 REM 4. package.json 移除 mysql2 相依（migrate/export_mysql.js 一併退役）
-REM 5. 刪除 exam_pro/schema.sql（MySQL 版）與 建立索引與檢視表.bat、setup_index_views.js
+REM 5. 刪除 exam_pro/schema.sql（MySQL 版）與 setup_index_views.js
+REM    （建立索引與檢視表.bat 已於第一輪合併時隨 WS-A 一起退役）
 REM 6. 更新 exam_pro/README.md 與根 README 的資料庫段落
 ```
 
@@ -324,8 +344,8 @@ REM 6. 更新 exam_pro/README.md 與根 README 的資料庫段落
 | 看報告 | `notepad migrate\out\name_merge_report.md` | 合併與疑似同一人都確認過 |
 | 演練匯入 | `node migrate/import_pg.js` | 「✅ dry-run 全部通過」 |
 | 正式匯入 | `node migrate/import_pg.js --apply` | 「✅ 已 COMMIT」＋ `cutover.json` 產生 |
-| 校驗 | `node migrate/verify.js` | 「✅ 校驗全部通過」（差額已確認才加 `--allow-merged`） |
-| 回填 | `回填向量.bat` | `embedding IS NULL` = 0 |
+| 校驗 | `node migrate/verify.js` | 「✅ 校驗全部通過」（attempts 差額逐條對過 `name_merge_report.md` 才加 `--allow-merged`） |
+| 回填 | `回填向量.bat`（**不能省**） | 再跑一次 verify，`embedding IS NULL` 與 `search_tsv IS NULL` 都是 0 |
 | 切換 | 改 `.env` 的 `DATABASE_URL` | `npm start` 起得來 |
 | 冒煙 | 列表／組卷兩次／Word | 兩次組卷不重疊 |
 | 收尾 | `git tag v1-mysql`、停 MySQL、設排程 | tag 推上去、排程建好 |
@@ -337,7 +357,7 @@ REM 6. 更新 exam_pro/README.md 與根 README 的資料庫段落
 | 訊息／症狀 | 意思 | 怎麼辦 |
 |---|---|---|
 | `目標資料庫不是空的（questions=…）` | PG 已經有資料了 | 若是演練殘留就照訊息裡的 `TRUNCATE` 清掉；確定要疊加才用 `--force` |
-| `有 N 張試卷的 student_name 正規化後是空字串` | 試卷姓名只有空白／`"`／`\` | 首選回 MySQL 補好姓名重跑 export；真的查不出來才用 `--unknown-student="未知學生"`，並在報告裡寫明是誰決定的 |
+| `有 N 張試卷的 student_name 正規化後是空字串` | 試卷姓名只有空白／`"`／`\` | **依裁決 15：回舊 MySQL 把那幾張卷的姓名補好，重跑 2-3**。`--unknown-student="未知學生"` **不建議使用**，只留給「真的查不出是誰」的例外；用了要在 `import_report.md` 註明是誰決定的 |
 | `history_json 有 N 筆日期不是 YYYY-MM-DD` | 舊資料裡有髒日期 | 先修來源；確定要放棄那些紀錄才加 `--skip-bad-dates`（會列進報告） |
 | `姓名正規化的 JS 與 SQL 兩份實作結果不一致` | `normalizeName` 與 `pgNormalizeSql` 走鐘了 | **不要繞過**。修 `migrate/lib/normalize.js`，跑 `npm test` 確認 22 項全綠再重來 |
 | `questions.id=N 的逐列雜湊不符` | 匯出之後 MySQL 又被改過，或匯入途中資料被動到 | 確認凍結是否真的生效，`TRUNCATE` PG 後從 2-3 重跑 |
@@ -351,6 +371,7 @@ REM 6. 更新 exam_pro/README.md 與根 README 的資料庫段落
 
 ## 6. 這份手冊涵蓋範圍以外的事
 
-- **`search_tsv` 的權重規則**屬 WS-C（`utils/tokenize.js` + `scripts/backfill_embeddings.js`），`import_pg.js` 刻意不碰，避免兩套寫法。
-- **`deleteQuestion` 改成軟刪除**（有 `attempts` 就寫 `archived_at`）屬 WS-A 的 D-D3；`attempts.question_id` 是 `ON DELETE RESTRICT`，沒改完之前刪題會失敗，這是預期行為。
-- **`audit_formulas.js` / `fix_formulas.js` 仍連舊 MySQL**：切換之後要由 WS-A 改走 `config/db.js`；在那之前三支公式 `.bat`（已改包 `node scripts/formulas.js`）讀到的是舊題庫。
+- **`search_tsv`／`embedding` 的來源文字與權重規則**屬 `services/embedService.js`（裁決 16、21），`import_pg.js` 刻意不碰，避免兩套寫法；本手冊只負責在 2-8 提醒你去跑回填。
+- **`deleteQuestion` 改成軟刪除**（有 `attempts` 就回 `{archived:true}`）見 `docs/interfaces.md` §12.1；`attempts.question_id` 是 `ON DELETE RESTRICT`，硬刪一定失敗，這是刻意的。
+- **`audit_formulas.js` / `fix_formulas.js` 連的是哪個資料庫**：切換之後由 WS-A 改走 `config/db.js`；在那之前三支公式 `.bat`（已改包 `node scripts/formulas.js`）讀到的是舊題庫。改完之後 `scripts/formulas.js` 的內容要換掉，但入口與 `.bat` 不必再動。
+- **`origin='legacy'` 對階段 3 的意義**：它代表「來源未知」，不是「AI 拆出來的」。任何按 `origin` 做統計或分流的地方都要認得這個值（裁決 13）。

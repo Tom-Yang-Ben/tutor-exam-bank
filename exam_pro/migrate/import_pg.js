@@ -9,7 +9,9 @@
 //
 // 其他旗標：
 //   --force                  目標表已有資料時仍繼續（預設拒絕，避免把匯入疊在既有資料上）
-//   --unknown-student=<姓名>  student_name 正規化後為空的試卷改掛到這個學生（預設直接中止）
+//   --unknown-student=<姓名>  student_name 正規化後為空的試卷改掛到這個學生。
+//                            **裁決 15 明定不走這條**：正解是回舊 MySQL 把姓名補好再重跑 export。
+//                            旗標留著只為了「真的查不出是誰」的例外，用了要在報告裡說明是誰決定的。
 //   --skip-bad-dates         history_json 的日期不是 YYYY-MM-DD 時略過該筆（預設直接中止）
 //   --tz=Asia/Taipei         MySQL 的 DATETIME 沒有時區，用這個時區解讀成 TIMESTAMPTZ
 //
@@ -24,6 +26,8 @@
 //   4. **question_ids 是 INT[]**（不是 JSON），**exam_papers.student_id 是 NOT NULL**，
 //      **attempts.question_id 是 ON DELETE RESTRICT**（interfaces.md §1.5 第 1~3 條）。
 //   5. **姓名正規化只有一條規則**，JS 與 SQL 兩份實作在匯入前先逐筆對過（自我檢查）。
+//   6. **舊題一律 `origin='legacy'`**（裁決 13，需先套用 `0004_origin_legacy.sql`）；
+//      只有題幹與 `seed_questions.js` 完全相同的 30 題寫 `'seed'` + `chapter_src='human'`。
 //
 // 不寫 search_tsv / embedding：那是 WS-C 的 backfill_embeddings.js 的責任
 // （規劃 §2.3.6 的寫入路徑表：migrate 這一列的 embedding 欄是「不做，交給回填」）。
@@ -87,8 +91,11 @@ async function main() {
         const ids = report.dropped.paperNames.map(d => d.paperId).join(', ');
         throw new Error(
             `有 ${report.totals.papersDropped} 張試卷的 student_name 正規化後是空字串（exam_papers.id = ${ids}）。\n` +
-            '   exam_papers.student_id 是 NOT NULL（interfaces.md §1.5 第 2 條），不能自己編一個學生塞進去。\n' +
-            '   請二選一：(a) 回舊 MySQL 把姓名補好再重跑 export；(b) 明確指定歸屬：--unknown-student="未知學生"'
+            '   exam_papers.student_id 是 NOT NULL（interfaces.md §1.5 第 2 條），不能自己編一個學生塞進去，\n' +
+            '   也不會靜默丟掉這幾張卷。\n' +
+            '   → 依裁決 15：回舊 MySQL 把這幾張卷的 student_name 補好，再重跑 export_mysql.js。\n' +
+            '     （--unknown-student="未知學生" 只保留給「真的查不出是誰」的例外，不建議使用；\n' +
+            '      用了請在 import_report.md 註明是誰決定的。）'
         );
     }
 
@@ -174,6 +181,9 @@ async function main() {
         await assertNormalizeAgrees(client, historyKeys, paperNames);
 
         // ── 7. questions（保留原 id）────────────────────────
+        // origin 一律寫 'legacy'（interfaces.md 裁決 13 / migrations/0004_origin_legacy.sql）：
+        // 舊 schema 分不出這題是 AI 拆 PDF 進來的還是老師手動新增的，'legacy' 就是
+        // 「來源未知」的誠實說法，不要拿 'pdf' 假裝知道。chapter_src 用 DDL 預設的 'ai'。
         const qIns = await client.query(`
             INSERT INTO questions (id, subject, chapter, question_type, difficulty,
                                    question_text, question_img, answer_text, solution_img, created_at,
@@ -181,20 +191,21 @@ async function main() {
             OVERRIDING SYSTEM VALUE
             SELECT id, subject, chapter, question_type, difficulty,
                    question_text, question_img, answer_text, solution_img, created_at,
-                   'pdf', 'ai'
+                   'legacy', 'ai'
               FROM mq ORDER BY id`);
         stats.questions = qIns.rowCount;
 
-        // 種子題（自己編的 30 題示範題）：題幹完全相同就標成 origin='seed'、chapter_src='human'
+        // 種子題（自己編的 30 題示範題）是唯一的例外：題幹完全相同就標成
+        // origin='seed'、chapter_src='human'（章節是人工標的，不是 AI 猜的）。
         const seedTexts = loadSeedTexts();
         const seedUpd = await client.query(
             `UPDATE questions SET origin = 'seed', chapter_src = 'human' WHERE question_text = ANY($1::text[])`,
             [seedTexts]
         );
         stats.seedMarked = seedUpd.rowCount;
-        console.log(`   questions ${stats.questions} 筆；其中 ${stats.seedMarked}/${seedTexts.length} 題比對到種子題（origin='seed'、chapter_src='human'）`);
+        console.log(`   questions ${stats.questions} 筆（origin='legacy'）；其中 ${stats.seedMarked}/${seedTexts.length} 題比對到種子題，改標 origin='seed'、chapter_src='human'`);
         if (seedTexts.length > 0 && stats.seedMarked < seedTexts.length) {
-            console.log(`   ↳ 有 ${seedTexts.length - stats.seedMarked} 題種子題沒比對到（題庫裡沒灌，或題幹被公式修正改過），維持 origin='pdf'`);
+            console.log(`   ↳ 有 ${seedTexts.length - stats.seedMarked} 題種子題沒比對到（題庫裡沒灌，或題幹被公式修正改過），維持 origin='legacy'`);
         }
 
         // ── 8. students：兩個來源聯集，同一條正規化規則 ──────
@@ -400,7 +411,8 @@ function assertFileStamp(dir, name, checksums) {
 async function assertMigrated(client) {
     const { rows } = await client.query('SELECT version FROM schema_migrations');
     const applied = new Set(rows.map(r => r.version));
-    for (const need of ['0001_init.sql', '0002_vector.sql']) {
+    // 0004 是 origin='legacy' 的前提（裁決 13）：沒套用的話下面的 INSERT 會撞 CHECK 約束
+    for (const need of ['0001_init.sql', '0002_vector.sql', '0004_origin_legacy.sql']) {
         if (!applied.has(need)) throw new Error(`目標資料庫還沒套用 ${need}，請先執行 npm run migrate（或雙擊「啟動資料庫.bat」）`);
     }
 }
@@ -563,7 +575,7 @@ function renderImportReport(ctx) {
     L.push('');
     L.push(`逐列雜湊已比對 ${stats.hashChecked} 列；attempts.paper_id 回填 ${stats.paperIdFilled} 筆（其餘留 NULL，屬預期）。`);
     L.push('');
-    L.push(`種子題標記：${stats.seedMarked} 題設為 \`origin='seed'\`、\`chapter_src='human'\`。`);
+    L.push(`來源標記：舊題一律 \`origin='legacy'\`（裁決 13 = 來源未知）；其中 ${stats.seedMarked} 題比對到 \`seed_questions.js\` 的題幹，改標 \`origin='seed'\` + \`chapter_src='human'\`。`);
     L.push('');
     L.push('## history_json → attempts 的筆數怎麼算出來的');
     L.push('');
