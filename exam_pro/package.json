@@ -9,12 +9,18 @@
     "seed": "node seed_questions.js",
     "test": "node --test \"test/unit/**/*.test.js\"",
     "test:integration": "node --env-file=eval/.env.replay --test --test-concurrency=1 \"test/integration/**/*.test.js\"",
+    "check:html": "node eval/tools/check_html.js",
     "eval": "node --env-file=eval/.env.replay eval/run.js",
     "eval:retrieval": "npm run eval -- --suite retrieval",
     "eval:baseline": "npm run eval -- --suite retrieval --write-baseline",
     "eval:trend": "node eval/trend.js",
+    "eval:classify": "npm run eval -- --suite classify",
+    "eval:pipeline": "npm run eval -- --suite pipeline",
     "eval:golden": "node eval/tools/suggest_golden.js",
     "eval:record": "node eval/record_embeddings.js",
+    "eval:sample-pdf": "node eval/fixtures/make_sample_pdf.js",
+    "compare:legacy": "node eval/compare_pipeline.js --method legacy",
+    "compare:pipeline": "node --env-file=eval/.env.replay eval/compare_pipeline.js --method pipeline",
     "embed:backfill": "node scripts/backfill_embeddings.js",
     "embed:backfill:test": "node scripts/backfill_embeddings.js --test",
     "migrate": "node migrate.js up",
@@ -23,7 +29,8 @@
     "migrate:verify": "node migrate/verify.js",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
-    "db:backup": "node scripts/backup.js"
+    "db:backup": "node scripts/backup.js",
+    "report:jobs": "node scripts/report_jobs.js"
   },
   "keywords": [
     "exam-bank",
