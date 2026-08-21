@@ -8,12 +8,233 @@
     <title>家教專用數學物理題庫系統</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;600;700;800&display=swap"
         rel="stylesheet">
 
     <style>
+        :root {
+            --ink: #17233c;
+            --muted: #65728a;
+            --line: #dce4f0;
+            --paper: #ffffff;
+            --canvas: #f5f7fb;
+            --brand: #3758e8;
+            --brand-dark: #2945c7;
+            --brand-soft: #eef1ff;
+            --mint: #0a9d7b;
+            --amber: #e8a229;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
         body {
-            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(circle at 8% 4%, rgba(55, 88, 232, 0.10), transparent 23rem),
+                radial-gradient(circle at 94% 18%, rgba(10, 157, 123, 0.08), transparent 28rem),
+                var(--canvas);
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            pointer-events: none;
+            opacity: .28;
+            background-image: radial-gradient(#aab5c8 0.7px, transparent 0.7px);
+            background-size: 22px 22px;
+            mask-image: linear-gradient(to bottom, black, transparent 58%);
+        }
+
+        .topbar {
+            background: rgba(255, 255, 255, 0.82);
+            border-bottom: 1px solid rgba(220, 228, 240, 0.9);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+        }
+
+        .brand-mark {
+            background: linear-gradient(145deg, #4567f3, #2844c2);
+            box-shadow: 0 10px 24px rgba(55, 88, 232, 0.28);
+        }
+
+        .hero-panel {
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(120deg, #14223e 0%, #1e3261 55%, #2949b7 100%);
+            box-shadow: 0 28px 70px rgba(26, 45, 89, 0.18);
+        }
+
+        .hero-panel::before,
+        .hero-panel::after {
+            content: '';
+            position: absolute;
+            border-radius: 999px;
+            pointer-events: none;
+        }
+
+        .hero-panel::before {
+            width: 27rem;
+            height: 27rem;
+            right: -8rem;
+            top: -15rem;
+            background: rgba(100, 126, 255, 0.28);
+            filter: blur(2px);
+        }
+
+        .hero-panel::after {
+            width: 18rem;
+            height: 18rem;
+            left: 44%;
+            bottom: -15rem;
+            background: rgba(42, 208, 164, 0.22);
+            filter: blur(8px);
+        }
+
+        .hero-grid {
+            background-image:
+                linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,.06) 1px, transparent 1px),
+                linear-gradient(120deg, #14223e 0%, #1e3261 55%, #2949b7 100%);
+            background-size: 34px 34px, 34px 34px, cover;
+        }
+
+        .workflow-card {
+            background: rgba(255, 255, 255, 0.10);
+            border: 1px solid rgba(255, 255, 255, 0.17);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+            backdrop-filter: blur(10px);
+        }
+
+        .surface-card {
+            background: rgba(255, 255, 255, 0.94);
+            border: 1px solid rgba(211, 220, 234, 0.92);
+            box-shadow: 0 16px 38px rgba(31, 49, 88, 0.07), 0 2px 7px rgba(31, 49, 88, 0.04);
+        }
+
+        .surface-card:hover {
+            border-color: rgba(178, 191, 215, 0.95);
+            box-shadow: 0 20px 45px rgba(31, 49, 88, 0.10), 0 3px 9px rgba(31, 49, 88, 0.05);
+        }
+
+        .section-icon {
+            display: grid;
+            width: 2.75rem;
+            height: 2.75rem;
+            flex: 0 0 auto;
+            place-items: center;
+            border-radius: .9rem;
+            font-size: 1.15rem;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,.45);
+        }
+
+        .eyebrow {
+            font-size: .68rem;
+            font-weight: 800;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+        }
+
+        .field-control {
+            min-height: 3rem;
+            border-radius: .85rem;
+            border: 1px solid #d7e0ed;
+            background: #f8faff;
+            color: #25334d;
+            box-shadow: inset 0 1px 2px rgba(31,49,88,.025);
+        }
+
+        .field-control:hover {
+            border-color: #bcc9dc;
+        }
+
+        .field-control:focus {
+            border-color: #5976ee;
+            background: white;
+            box-shadow: 0 0 0 4px rgba(55,88,232,.12);
+            outline: none;
+        }
+
+        .primary-button {
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 12px 22px rgba(55, 88, 232, .20);
+        }
+
+        .primary-button::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(110deg, transparent 15%, rgba(255,255,255,.18) 48%, transparent 75%);
+            transform: translateX(-120%);
+            transition: transform .5s ease;
+        }
+
+        .primary-button:hover::after {
+            transform: translateX(120%);
+        }
+
+        .upload-zone {
+            background:
+                linear-gradient(135deg, rgba(238,241,255,.86), rgba(246,249,255,.95)),
+                white;
+            border: 1.5px dashed #9caef8;
+        }
+
+        .upload-zone:hover {
+            border-color: #5673ee;
+            background: #f1f4ff;
+        }
+
+        .paper-card {
+            background: linear-gradient(145deg, #ffffff 0%, #fbfffd 100%);
+            border-top: 4px solid var(--mint);
+        }
+
+        .manager-shell {
+            background: rgba(255, 255, 255, .94);
+            border: 1px solid rgba(211, 220, 234, .92);
+            box-shadow: 0 16px 38px rgba(31, 49, 88, .07);
+        }
+
+        .question-card {
+            background: #fff;
+            border: 1px solid #dde5f0;
+            box-shadow: 0 3px 10px rgba(31,49,88,.035);
+        }
+
+        .question-card:hover {
+            transform: translateY(-1px);
+            border-color: #c6d2e4;
+            box-shadow: 0 10px 24px rgba(31,49,88,.08);
+        }
+
+        .modal-backdrop {
+            background: rgba(17, 27, 49, .58);
+            backdrop-filter: blur(5px);
+        }
+
+        ::selection {
+            color: #fff;
+            background: #4664e8;
+        }
+
+        @media (max-width: 640px) {
+            .hero-panel { border-radius: 1.25rem; }
+            .surface-card, .manager-shell { border-radius: 1.25rem; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                scroll-behavior: auto !important;
+                transition-duration: .01ms !important;
+                animation-duration: .01ms !important;
+                animation-iteration-count: 1 !important;
+            }
         }
     </style>
 
@@ -28,27 +249,81 @@
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
 
-<body class="bg-slate-50 min-h-screen text-slate-800 antialiased">
-    <div class="h-2 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600"></div>
-
-    <div class="max-w-7xl mx-auto px-4 py-12">
-        <div class="text-center mb-12">
-            <h1
-                class="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-3">
-                🎯 家教專用數學物理題庫系統
-            </h1>
-            <p class="text-slate-500 font-medium">智慧抽題組卷 · AI 考卷批量分析 · 頂級出題排版工具</p>
+<body class="min-h-screen antialiased">
+    <header class="topbar sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+            <a href="#top" class="flex items-center gap-3 min-w-0">
+                <span class="brand-mark grid place-items-center w-9 h-9 rounded-xl text-white font-extrabold text-sm">Q</span>
+                <span class="min-w-0">
+                    <span class="block text-sm font-extrabold tracking-tight text-slate-900 truncate">Tutor Question Lab</span>
+                    <span class="block text-[10px] font-semibold tracking-[.14em] text-slate-400 uppercase">Math · Physics</span>
+                </span>
+            </a>
+            <nav class="hidden md:flex items-center gap-1 text-sm font-semibold text-slate-600" aria-label="主要導覽">
+                <a href="#create" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">建立題目</a>
+                <a href="#paper" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">智慧組卷</a>
+                <a href="#library" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">題庫管理</a>
+            </nav>
+            <span class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
+                <span class="relative flex h-2 w-2"><span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-50"></span><span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span></span>
+                系統就緒
+            </span>
         </div>
+    </header>
 
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+    <main id="top" class="max-w-7xl mx-auto px-4 sm:px-6 pt-6 sm:pt-9 pb-14">
+        <section class="hero-panel hero-grid rounded-[2rem] px-6 py-8 sm:px-10 sm:py-11 mb-7 sm:mb-10 text-white">
+            <div class="relative z-10 grid lg:grid-cols-[1.35fr_.85fr] gap-8 lg:gap-12 items-center">
+                <div>
+                    <div class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold text-indigo-100 mb-5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-amber-300"></span>
+                        為家教工作流打造的出題中樞
+                    </div>
+                    <h1 class="text-[2.15rem] sm:text-5xl lg:text-[3.35rem] leading-[1.12] font-extrabold tracking-[-.04em] max-w-3xl">
+                        把整理題目的時間，<br class="hidden sm:block"><span class="text-indigo-200">留給真正的教學。</span>
+                    </h1>
+                    <p class="mt-5 max-w-2xl text-sm sm:text-base leading-7 text-slate-200">
+                        從手動建題、AI 解析考卷到避免重複的智慧組卷，在同一個清楚、可靠的工作區完成。
+                    </p>
+                    <div class="mt-7 flex flex-col sm:flex-row gap-3">
+                        <a href="#create" class="inline-flex justify-center items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-extrabold text-slate-900 shadow-lg shadow-slate-950/10 hover:bg-indigo-50 transition-colors">
+                            開始建立題目 <span aria-hidden="true">→</span>
+                        </a>
+                        <a href="#library" class="inline-flex justify-center items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-5 py-3 text-sm font-bold text-white hover:bg-white/15 transition-colors">
+                            瀏覽現有題庫
+                        </a>
+                    </div>
+                </div>
+                <div class="workflow-card rounded-2xl p-5 sm:p-6">
+                    <div class="flex items-center justify-between mb-5">
+                        <div>
+                            <p class="eyebrow text-indigo-200">Smart workflow</p>
+                            <h2 class="mt-1 text-lg font-extrabold">三步完成一份專屬考卷</h2>
+                        </div>
+                        <span class="grid place-items-center w-10 h-10 rounded-xl bg-white/10 text-xl">✦</span>
+                    </div>
+                    <ol class="space-y-4">
+                        <li class="flex gap-3 items-start"><span class="grid place-items-center w-7 h-7 rounded-lg bg-indigo-400/20 text-indigo-100 text-xs font-extrabold shrink-0">01</span><div><p class="text-sm font-bold">建立你的題庫</p><p class="text-xs leading-5 text-slate-300">手動輸入，或交給 AI 從 PDF 拆題。</p></div></li>
+                        <li class="flex gap-3 items-start"><span class="grid place-items-center w-7 h-7 rounded-lg bg-emerald-400/20 text-emerald-100 text-xs font-extrabold shrink-0">02</span><div><p class="text-sm font-bold">設定學生與章節</p><p class="text-xs leading-5 text-slate-300">依教學進度挑選合適範圍。</p></div></li>
+                        <li class="flex gap-3 items-start"><span class="grid place-items-center w-7 h-7 rounded-lg bg-amber-300/20 text-amber-100 text-xs font-extrabold shrink-0">03</span><div><p class="text-sm font-bold">生成並匯出 Word</p><p class="text-xs leading-5 text-slate-300">自動避開學生已做過的題目。</p></div></li>
+                    </ol>
+                </div>
+            </div>
+        </section>
 
-            <div class="lg:col-span-7 space-y-8">
+        <div id="create" class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-7 items-start scroll-mt-24">
+
+            <div class="lg:col-span-7 space-y-6">
 
                 <div
-                    class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 transition-all hover:shadow-md">
-                    <div class="flex items-center space-x-2 mb-6 border-b border-slate-100 pb-3">
-                        <span class="text-2xl">➕</span>
-                        <h2 class="text-xl font-bold text-slate-800">快速手動錄入新題目</h2>
+                    class="surface-card rounded-[1.65rem] p-5 sm:p-7 transition-all">
+                    <div class="flex items-start gap-3 mb-6 border-b border-slate-100 pb-5">
+                        <span class="section-icon bg-indigo-50 text-indigo-700">✎</span>
+                        <div>
+                            <p class="eyebrow text-indigo-600">Manual entry</p>
+                            <h2 class="mt-1 text-xl font-extrabold tracking-tight text-slate-900">快速建立新題目</h2>
+                            <p class="mt-1 text-xs sm:text-sm text-slate-500">填寫題型與答案，立即收進你的專屬題庫。</p>
+                        </div>
                     </div>
 
                     <form id="questionForm" class="space-y-5">
@@ -56,7 +331,7 @@
                             <div>
                                 <label class="block text-sm font-semibold text-slate-600 mb-1.5">學科</label>
                                 <select id="subject"
-                                    class="block w-full rounded-xl border-slate-200 bg-slate-50/50 p-3 border text-slate-700 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none">
+                                    class="field-control block w-full p-3 transition-all">
                                     <option value="數學">📐 數學</option>
                                     <option value="物理">🧲 物理</option>
                                 </select>
@@ -64,7 +339,7 @@
                             <div>
                                 <label class="block text-sm font-semibold text-slate-600 mb-1.5">精細章節</label>
                                 <select id="chapter"
-                                    class="block w-full rounded-xl border-slate-200 bg-slate-50/50 p-3 border text-slate-700 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none"
+                                    class="field-control block w-full p-3 transition-all"
                                     required>
                                     <option value="">-- 載入中 --</option>
                                 </select>
@@ -75,7 +350,7 @@
                             <div>
                                 <label class="block text-sm font-semibold text-slate-600 mb-1.5">題型</label>
                                 <select id="question_type"
-                                    class="block w-full rounded-xl border-slate-200 bg-slate-50/50 p-3 border text-slate-700 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none">
+                                    class="field-control block w-full p-3 transition-all">
                                     <option value="單選">單選題</option>
                                     <option value="多選">多選題</option>
                                     <option value="填空">填空題</option>
@@ -85,7 +360,7 @@
                             <div>
                                 <label class="block text-sm font-semibold text-slate-600 mb-1.5">難度評等</label>
                                 <select id="difficulty"
-                                    class="block w-full rounded-xl border-slate-200 bg-slate-50/50 p-3 border text-slate-700 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none">
+                                    class="field-control block w-full p-3 transition-all">
                                     <option value="1">★ (易)</option>
                                     <option value="2">★★</option>
                                     <option value="3" selected>★★★ (中)</option>
@@ -98,41 +373,47 @@
                         <div>
                             <label class="block text-sm font-semibold text-slate-600 mb-1.5">題目內容 <span
                                     class="text-xs font-normal text-slate-400">(支援 LaTeX 公式)</span></label>
-                            <textarea id="question_text" rows="3" placeholder="請輸入題目敘述敘述... 支援 $ $ 線內公式與 $$ $$ 獨立公式"
-                                class="block w-full rounded-xl border-slate-200 bg-slate-50/50 p-3 border text-slate-700 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none resize-none"
+                            <textarea id="question_text" rows="4" placeholder="請輸入題目敘述…支援 $ $ 線內公式與 $$ $$ 獨立公式"
+                                class="field-control block w-full p-3 transition-all resize-none"
                                 required></textarea>
                         </div>
 
                         <div>
                             <label class="block text-sm font-semibold text-slate-600 mb-1.5">標準答案 <span class="text-xs font-normal text-slate-400">(公式請用 $...$ LaTeX，如 $x=\frac{1}{2}$)</span></label>
                             <input type="text" id="answer_text" placeholder="請輸入正確答案，公式用 $ $ 包覆"
-                                class="block w-full rounded-xl border-slate-200 bg-slate-50/50 p-3 border text-slate-700 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none"
+                                class="field-control block w-full p-3 transition-all"
                                 required>
                         </div>
 
                         <button type="submit"
-                            class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-sm hover:shadow transition-all duration-150 cursor-pointer text-center">
-                            💾 儲存此題至雲端資料庫
+                            class="primary-button w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-extrabold py-3.5 px-4 rounded-xl transition-all duration-150 cursor-pointer text-center">
+                            儲存題目至資料庫 <span class="ml-1" aria-hidden="true">→</span>
                         </button>
                     </form>
                 </div>
 
                 <div
-                    class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 transition-all hover:shadow-md">
-                    <div class="flex items-center space-x-2 mb-6 border-b border-slate-100 pb-3">
-                        <span class="text-2xl">📄</span>
-                        <h2 class="text-xl font-bold text-slate-800">AI 智能批量錄入 (PDF 講義/考卷)</h2>
+                    class="surface-card rounded-[1.65rem] p-5 sm:p-7 transition-all">
+                    <div class="flex items-start gap-3 mb-6 border-b border-slate-100 pb-5">
+                        <span class="section-icon bg-violet-50 text-violet-700">AI</span>
+                        <div>
+                            <p class="eyebrow text-violet-600">PDF importer</p>
+                            <h2 class="mt-1 text-xl font-extrabold tracking-tight text-slate-900">AI 批量解析考卷</h2>
+                            <p class="mt-1 text-xs sm:text-sm text-slate-500">上傳 PDF，自動辨識題目、答案、章節與難度。</p>
+                        </div>
                     </div>
 
                     <div
-                        class="border-2 border-dashed border-indigo-200 hover:border-indigo-400 p-6 rounded-2xl bg-indigo-50/30 text-center transition-all">
-                        <label class="block text-sm font-bold text-indigo-700 mb-3">📎 選擇要拆解的 PDF 檔案</label>
+                        class="upload-zone p-5 sm:p-7 rounded-2xl text-center transition-all">
+                        <span class="mx-auto mb-3 grid place-items-center w-11 h-11 rounded-2xl bg-white text-indigo-600 shadow-sm text-xl">↑</span>
+                        <label class="block text-sm font-extrabold text-slate-800 mb-1">選擇要拆解的 PDF 檔案</label>
+                        <p class="text-xs text-slate-500 mb-4">AI 會先產生可編輯預覽，確認後才會寫入題庫。</p>
                         <input type="file" id="pdfFile" accept=".pdf"
-                            class="block w-full text-sm text-slate-500 mx-auto file:mr-4 file:py-2.5 file:px-5 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-indigo-100 file:text-indigo-700 hover:file:bg-indigo-200 file:cursor-pointer" />
+                            class="block w-full text-sm text-slate-500 mx-auto file:mr-3 file:py-2.5 file:px-4 file:rounded-xl file:border file:border-indigo-100 file:text-sm file:font-bold file:bg-white file:text-indigo-700 hover:file:bg-indigo-50 file:cursor-pointer" />
 
                         <button type="button" id="uploadPdfBtn"
-                            class="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl shadow-sm hover:shadow transition-all cursor-pointer animate-pulse hover:animate-none">
-                            ⚡ 啟動 AI 讀取整份 PDF 並全自動拆題
+                            class="primary-button mt-5 w-full bg-slate-900 hover:bg-slate-800 text-white font-extrabold py-3 px-4 rounded-xl transition-all cursor-pointer">
+                            啟動 AI 解析整份 PDF <span class="ml-1 text-indigo-300" aria-hidden="true">✦</span>
                         </button>
                         <p id="pdfStatus" class="text-sm font-medium text-slate-500 mt-3 hidden"></p>
                     </div>
@@ -149,26 +430,30 @@
                         <div id="previewList" class="space-y-3 max-h-[30rem] overflow-y-auto pr-1"></div>
 
                         <button type="button" id="batchSaveBtn"
-                            class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-3.5 rounded-xl shadow-sm hover:shadow transition-all cursor-pointer">
-                            💾 確認無誤，一鍵寫入 MySQL 資料庫庫存
+                            class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold p-3.5 rounded-xl shadow-lg shadow-emerald-600/15 transition-all cursor-pointer">
+                            確認無誤，將題目寫入資料庫
                         </button>
                     </div>
                 </div>
             </div>
 
-            <div class="lg:col-span-5">
+            <div id="paper" class="lg:col-span-5 scroll-mt-24">
                 <div
-                    class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 sticky top-6 transition-all hover:shadow-md">
-                    <div class="flex items-center space-x-2 mb-6 border-b border-slate-100 pb-3">
-                        <span class="text-2xl">🧠</span>
-                        <h2 class="text-xl font-bold text-slate-800">智慧自動抽題組卷</h2>
+                    class="surface-card paper-card p-5 sm:p-7 rounded-[1.65rem] lg:sticky lg:top-24 transition-all">
+                    <div class="flex items-start gap-3 mb-6 border-b border-slate-100 pb-5">
+                        <span class="section-icon bg-emerald-50 text-emerald-700">✦</span>
+                        <div>
+                            <p class="eyebrow text-emerald-600">Smart paper</p>
+                            <h2 class="mt-1 text-xl font-extrabold tracking-tight text-slate-900">智慧自動組卷</h2>
+                            <p class="mt-1 text-xs sm:text-sm text-slate-500">依學生與章節抽題，自動避開已練習題目。</p>
+                        </div>
                     </div>
 
                     <form id="paperForm" class="space-y-5">
                         <div>
                             <label class="block text-sm font-semibold text-slate-600 mb-1.5">學生姓名</label>
                             <input type="text" id="student_name" placeholder="例如：林小明 (系統會自動避開他寫過的題)"
-                                class="block w-full rounded-xl border-slate-200 bg-slate-50/50 p-3 border text-slate-700 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none"
+                                class="field-control block w-full p-3 transition-all"
                                 required>
                         </div>
 
@@ -176,7 +461,7 @@
                             <div>
                                 <label class="block text-sm font-semibold text-slate-600 mb-1.5">學科</label>
                                 <select id="paper_subject"
-                                    class="block w-full rounded-xl border-slate-200 bg-slate-50/50 p-3 border text-slate-700 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none">
+                                    class="field-control block w-full p-3 transition-all">
                                     <option value="數學">數學</option>
                                     <option value="物理">物理</option>
                                 </select>
@@ -184,7 +469,7 @@
                             <div>
                                 <label class="block text-sm font-semibold text-slate-600 mb-1.5">指定精細章節</label>
                                 <select id="paper_chapter"
-                                    class="block w-full rounded-xl border-slate-200 bg-slate-50/50 p-3 border text-slate-700 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none"
+                                    class="field-control block w-full p-3 transition-all"
                                     required>
                                     <option value="">-- 請先載入章節 --</option>
                                 </select>
@@ -194,13 +479,13 @@
                         <div>
                             <label class="block text-sm font-semibold text-slate-600 mb-1.5">期望抽題數量 (題)</label>
                             <input type="number" id="count" value="5" min="1"
-                                class="block w-full rounded-xl border-slate-200 bg-slate-50/50 p-3 border text-slate-700 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none"
+                                class="field-control block w-full p-3 transition-all"
                                 required>
                         </div>
 
                         <button type="button" onclick="generatePaper()"
-                            class="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-sm hover:shadow transition-all cursor-pointer">
-                            🔮 開始智慧篩選與生成特訓試卷
+                            class="primary-button w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold py-3.5 px-4 rounded-xl shadow-lg shadow-emerald-600/20 transition-all cursor-pointer">
+                            生成專屬特訓試卷 <span class="ml-1" aria-hidden="true">→</span>
                         </button>
                     </form>
 
@@ -218,25 +503,32 @@
         </div>
 
         <!-- 題庫管理 -->
-        <div class="mt-8 bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6">
-            <div class="flex items-center space-x-2 mb-6 border-b border-slate-100 pb-3">
-                <span class="text-2xl">🗂️</span>
-                <h2 class="text-xl font-bold text-slate-800">題庫管理 · 檢視 / 編輯 / 刪除</h2>
+        <section id="library" class="manager-shell mt-7 rounded-[1.65rem] p-5 sm:p-7 scroll-mt-24">
+            <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6 border-b border-slate-100 pb-5">
+                <div class="flex items-start gap-3">
+                    <span class="section-icon bg-amber-50 text-amber-700">⌘</span>
+                    <div>
+                        <p class="eyebrow text-amber-600">Question library</p>
+                        <h2 class="mt-1 text-xl font-extrabold tracking-tight text-slate-900">題庫管理</h2>
+                        <p class="mt-1 text-xs sm:text-sm text-slate-500">快速篩選、檢視與維護所有題目。</p>
+                    </div>
+                </div>
+                <span id="mgr_count" class="self-start sm:self-auto inline-flex rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600"></span>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[.8fr_1.2fr_.8fr_1.4fr_auto] gap-3 mb-5 p-4 rounded-2xl bg-slate-50 border border-slate-100">
                 <select id="mgr_subject"
-                    class="block w-full rounded-xl border-slate-200 bg-slate-50/50 p-2.5 border text-slate-700 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none text-sm">
+                    aria-label="篩選學科" class="field-control block w-full p-2.5 transition-all text-sm">
                     <option value="">全部學科</option>
                     <option value="數學">數學</option>
                     <option value="物理">物理</option>
                 </select>
                 <select id="mgr_chapter"
-                    class="block w-full rounded-xl border-slate-200 bg-slate-50/50 p-2.5 border text-slate-700 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none text-sm">
+                    aria-label="篩選章節" class="field-control block w-full p-2.5 transition-all text-sm">
                     <option value="">全部章節</option>
                 </select>
                 <select id="mgr_type"
-                    class="block w-full rounded-xl border-slate-200 bg-slate-50/50 p-2.5 border text-slate-700 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none text-sm">
+                    aria-label="篩選題型" class="field-control block w-full p-2.5 transition-all text-sm">
                     <option value="">全部題型</option>
                     <option value="單選">單選</option>
                     <option value="多選">多選</option>
@@ -245,36 +537,39 @@
                     <option value="證明">證明</option>
                 </select>
                 <input id="mgr_search" type="text" placeholder="搜尋題目/答案關鍵字"
-                    class="block w-full rounded-xl border-slate-200 bg-slate-50/50 p-2.5 border text-slate-700 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none text-sm">
-            </div>
-
-            <div class="flex justify-between items-center mb-4">
+                    class="field-control block w-full p-2.5 transition-all text-sm">
                 <button type="button" id="mgr_search_btn"
-                    class="bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold py-2 px-5 rounded-xl transition-all cursor-pointer">🔍 查詢</button>
-                <span id="mgr_count" class="text-sm text-slate-500"></span>
+                    class="bg-slate-900 hover:bg-indigo-700 text-white text-sm font-extrabold py-2 px-5 rounded-xl transition-all cursor-pointer">查詢題庫</button>
             </div>
 
             <div id="mgr_list" class="space-y-3"></div>
             <div id="mgr_pager" class="flex justify-center items-center gap-4 mt-5"></div>
-        </div>
-    </div>
+        </section>
+
+        <footer class="mt-8 flex flex-col sm:flex-row items-center justify-between gap-2 px-2 text-xs text-slate-400">
+            <p>家教專用數學物理題庫系統</p>
+            <p>AI 輔助整理 · 智慧組卷 · Word 匯出</p>
+        </footer>
+    </main>
 
     <!-- 編輯題目 Modal -->
-    <div id="editModal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
+    <div id="editModal" class="modal-backdrop hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-[1.5rem] shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-5 sm:p-7">
             <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
-                <h3 class="text-lg font-bold text-slate-800">✏️ 編輯題目 <span id="edit_id" class="text-slate-400 text-sm font-normal"></span></h3>
-                <button type="button" id="edit_close" class="text-slate-400 hover:text-slate-700 text-3xl leading-none cursor-pointer">&times;</button>
+                <h3 class="text-lg font-extrabold text-slate-900">編輯題目 <span id="edit_id" class="text-slate-400 text-sm font-normal"></span></h3>
+                <button type="button" id="edit_close" aria-label="關閉編輯視窗" class="grid place-items-center w-9 h-9 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 text-2xl leading-none cursor-pointer">&times;</button>
             </div>
             <div id="edit_body"></div>
             <div class="flex justify-end gap-3 mt-5">
                 <button type="button" id="edit_cancel"
                     class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 cursor-pointer">取消</button>
                 <button type="button" id="edit_save"
-                    class="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer">💾 儲存變更</button>
+                    class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold cursor-pointer">儲存變更</button>
             </div>
         </div>
     </div>
+
+    <div id="toastRegion" class="fixed right-4 bottom-4 z-[60] flex w-[calc(100%-2rem)] max-w-sm flex-col gap-2" aria-live="polite"></div>
 
     <script>
         let allChapters = [];
@@ -325,10 +620,10 @@
         document.getElementById('subject').addEventListener('change', updateManualChapterDropdown);
 
         // ============ 共用工具 ============
-        const SELCLS = 'rounded-lg border-slate-200 bg-slate-50/50 p-2 border text-slate-700 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none text-sm';
-        const TACLS = 'block w-full rounded-lg border-slate-200 bg-slate-50/50 p-2.5 border text-slate-700 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none text-sm resize-y';
-        const INCLS = 'block w-full rounded-lg border-slate-200 bg-slate-50/50 p-2.5 border text-slate-700 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none text-sm';
-        const PAGEBTN = 'text-sm px-4 py-2 rounded-lg border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer';
+        const SELCLS = 'field-control min-h-0 p-2.5 transition-all text-sm';
+        const TACLS = 'field-control block w-full min-h-0 p-3 transition-all text-sm resize-y';
+        const INCLS = 'field-control block w-full min-h-0 p-3 transition-all text-sm';
+        const PAGEBTN = 'text-sm px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 font-bold hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors';
         const Q_TYPES = ['單選', '多選', '填空', '計算', '證明'];
 
         function el(tag, cls, props) {
@@ -344,6 +639,21 @@
             if (window.MathJax && typeof window.MathJax.typesetPromise === 'function') {
                 window.MathJax.typesetPromise([node]).catch(() => { });
             }
+        }
+
+        function showToast(message, type = 'info') {
+            const region = document.getElementById('toastRegion');
+            const tone = type === 'success'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                : type === 'error'
+                    ? 'border-rose-200 bg-rose-50 text-rose-900'
+                    : 'border-indigo-200 bg-white text-slate-800';
+            const icon = type === 'success' ? '✓' : type === 'error' ? '!' : 'i';
+            const toast = el('div', `flex items-start gap-3 rounded-2xl border p-4 shadow-xl shadow-slate-900/10 ${tone}`);
+            toast.innerHTML = `<span class="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-white/80 text-xs font-extrabold">${icon}</span><p class="pt-0.5 text-sm font-bold leading-5"></p>`;
+            toast.querySelector('p').textContent = message;
+            region.appendChild(toast);
+            setTimeout(() => toast.remove(), 4200);
         }
 
         // 可重複使用的「題目編輯器」：直接就地修改傳入的 q 物件，並提供即時 MathJax 預覽
@@ -374,10 +684,10 @@
             qTa.placeholder = '題目內容（公式用 $...$）';
             const aIn = el('input', INCLS, { value: q.answer_text || '', placeholder: '標準答案（公式用 $...$）' });
 
-            const prev = el('div', 'p-3 bg-slate-50 rounded-lg border border-slate-100 text-sm');
+            const prev = el('div', 'p-3.5 bg-indigo-50/50 rounded-xl border border-indigo-100 text-sm');
             const prevQ = el('div', 'mb-1 text-slate-700');
             const prevA = el('div', 'text-emerald-700 font-semibold');
-            prev.append(el('div', 'text-xs text-slate-400 mb-1', { textContent: '即時預覽：' }), prevQ, prevA);
+            prev.append(el('div', 'eyebrow text-indigo-400 mb-2', { textContent: 'Live preview' }), prevQ, prevA);
 
             let timer;
             function sync() {
@@ -443,15 +753,15 @@
             list.innerHTML = '';
             document.getElementById('mgr_count').textContent = `共 ${data.total} 題`;
             if (!data.questions.length) {
-                list.innerHTML = '<p class="text-slate-400 text-sm py-8 text-center">沒有符合條件的題目</p>';
+                list.innerHTML = '<div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 py-12 text-center"><span class="mx-auto mb-3 grid h-10 w-10 place-items-center rounded-xl bg-white text-slate-400 shadow-sm">⌕</span><p class="font-bold text-slate-600">沒有符合條件的題目</p><p class="mt-1 text-xs text-slate-400">調整上方篩選條件後再試一次</p></div>';
                 document.getElementById('mgr_pager').innerHTML = '';
                 return;
             }
             data.questions.forEach(q => {
-                const card = el('div', 'border border-slate-200 rounded-xl p-4 hover:shadow-sm transition-all');
-                const head = el('div', 'flex justify-between items-start gap-3 mb-2');
-                const meta = el('div', 'text-xs leading-relaxed');
-                meta.innerHTML = `<span class="font-mono text-slate-400">#${q.id}</span> <span class="font-semibold text-indigo-600">${escapeHtml(q.subject)}·${escapeHtml(q.chapter)}</span> <span class="text-slate-500">[${escapeHtml(q.question_type)}]</span> <span class="text-amber-500">${'★'.repeat(q.difficulty)}</span>`;
+                const card = el('article', 'question-card rounded-2xl p-4 sm:p-5 transition-all');
+                const head = el('div', 'flex flex-col-reverse sm:flex-row sm:justify-between sm:items-start gap-3 mb-3');
+                const meta = el('div', 'flex flex-wrap items-center gap-1.5 text-xs leading-relaxed');
+                meta.innerHTML = `<span class="rounded-md bg-slate-100 px-2 py-1 font-mono font-bold text-slate-500">#${q.id}</span><span class="rounded-md bg-indigo-50 px-2 py-1 font-bold text-indigo-700">${escapeHtml(q.subject)} · ${escapeHtml(q.chapter)}</span><span class="rounded-md bg-slate-50 px-2 py-1 font-semibold text-slate-500">${escapeHtml(q.question_type)}</span><span class="px-1 text-amber-500">${'★'.repeat(q.difficulty)}</span>`;
                 const btns = el('div', 'flex gap-2 shrink-0');
                 const editBtn = el('button', 'text-xs px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100 cursor-pointer', { type: 'button', textContent: '✏️ 編輯' });
                 editBtn.addEventListener('click', () => openEditModal(q));
@@ -460,8 +770,8 @@
                 btns.append(editBtn, delBtn);
                 head.append(meta, btns);
 
-                const qDiv = el('div', 'text-sm text-slate-700'); qDiv.textContent = q.question_text;
-                const aDiv = el('div', 'text-sm text-emerald-700 font-semibold mt-1'); aDiv.textContent = '答：' + (q.answer_text || '');
+                const qDiv = el('div', 'text-sm leading-7 text-slate-700'); qDiv.textContent = q.question_text;
+                const aDiv = el('div', 'mt-3 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-sm text-emerald-800 font-bold'); aDiv.textContent = '答：' + (q.answer_text || '');
                 card.append(head, qDiv, aDiv);
                 list.appendChild(card);
             });
@@ -484,9 +794,9 @@
             try {
                 const res = await apiFetch('/api/questions/' + q.id, { method: 'DELETE' });
                 const data = await res.json();
-                if (res.ok) { await fetchQuestions(mgrPage); await fetchChapters(); }
-                else alert('刪除失敗：' + (data.message || ''));
-            } catch (e) { alert('連線失敗'); }
+                if (res.ok) { showToast('題目已刪除', 'success'); await fetchQuestions(mgrPage); await fetchChapters(); }
+                else showToast('刪除失敗：' + (data.message || '請稍後再試'), 'error');
+            } catch (e) { showToast('連線失敗，請確認伺服器狀態', 'error'); }
         }
 
         // ============ 編輯 Modal ============
@@ -514,9 +824,9 @@
                     body: JSON.stringify(editingObj)
                 });
                 const data = await res.json();
-                if (res.ok) { closeEditModal(); await fetchQuestions(mgrPage); await fetchChapters(); }
-                else alert('儲存失敗：' + (data.message || ''));
-            } catch (e) { alert('連線失敗'); } finally { btn.disabled = false; }
+                if (res.ok) { closeEditModal(); showToast('題目變更已儲存', 'success'); await fetchQuestions(mgrPage); await fetchChapters(); }
+                else showToast('儲存失敗：' + (data.message || '請稍後再試'), 'error');
+            } catch (e) { showToast('連線失敗，請確認伺服器狀態', 'error'); } finally { btn.disabled = false; }
         }
 
         async function fetchChapters() {
@@ -559,7 +869,7 @@
             const listEl = document.getElementById('previewList');
             const btn = document.getElementById('uploadPdfBtn');
 
-            if (!fileInput.files || fileInput.files.length === 0) return alert("請先選取 PDF！");
+            if (!fileInput.files || fileInput.files.length === 0) return showToast("請先選取 PDF 檔案", 'error');
 
             statusText.classList.remove('hidden', 'text-rose-600', 'text-emerald-600');
             statusText.className = "text-sm font-medium text-indigo-600 mt-3";
@@ -580,8 +890,8 @@
                     document.getElementById('qCount').innerText = result.length;
 
                     result.forEach((q, idx) => {
-                        const card = el('div', 'border border-slate-200 rounded-xl p-3 bg-white');
-                        card.appendChild(el('div', 'text-xs font-bold text-slate-400 mb-2', { textContent: `第 ${idx + 1} 題` }));
+                        const card = el('div', 'question-card rounded-2xl p-4 bg-white');
+                        card.appendChild(el('div', 'eyebrow text-violet-500 mb-3', { textContent: `Question ${String(idx + 1).padStart(2, '0')}` }));
                         card.appendChild(createQuestionEditor(q)); // 就地編輯：修改會同步回 globalAnalyzedQuestions
                         listEl.appendChild(card);
                     });
@@ -612,14 +922,14 @@
                     body: JSON.stringify({ questions: globalAnalyzedQuestions })
                 });
                 const resData = await response.json();
-                alert(resData.message);
+                showToast(resData.message || (response.ok ? '題目已成功寫入資料庫' : '寫入失敗'), response.ok ? 'success' : 'error');
                 if (response.ok) {
                     document.getElementById('previewArea').classList.add('hidden');
                     document.getElementById('pdfStatus').innerText = "🎉 所有題目已成功寫入 MySQL 資料庫！";
                     document.getElementById('pdfFile').value = "";
                     await fetchChapters();
                 }
-            } catch (e) { alert("寫入失敗"); } finally { btn.disabled = false; }
+            } catch (e) { showToast("寫入失敗，請稍後再試", 'error'); } finally { btn.disabled = false; }
         });
 
         // 3. 手動錄入
@@ -641,12 +951,12 @@
                     body: JSON.stringify(data)
                 });
                 const result = await response.json();
-                alert(result.message);
+                showToast(result.message || (response.ok ? '題目已成功儲存' : '儲存失敗'), response.ok ? 'success' : 'error');
                 if (response.ok) {
                     document.getElementById('questionForm').reset();
                     await fetchChapters();
                 }
-            } catch (error) { alert("無法連線伺服器"); }
+            } catch (error) { showToast("無法連線伺服器", 'error'); }
         });
 
         // 4. 智慧組卷
@@ -656,8 +966,8 @@
             const chapterSelect = document.getElementById('paper_chapter');
             const countInput = document.getElementById('count');
 
-            if (!studentNameInput.value.trim()) return alert("請輸入學生姓名！");
-            if (!chapterSelect.value) return alert("請選擇出題章節！");
+            if (!studentNameInput.value.trim()) return showToast("請輸入學生姓名", 'error');
+            if (!chapterSelect.value) return showToast("請選擇出題章節", 'error');
 
             const data = {
                 student_name: studentNameInput.value.trim(),
@@ -685,12 +995,15 @@
                         question_ids: result.question_ids
                     };
 
-                    document.getElementById('resultTitle').innerHTML = `
-                        <span class="text-emerald-900">✨ ${result.paper_title}</span>
-                        <button type="button" onclick="downloadWordFile()" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow-sm hover:shadow transition-all cursor-pointer">
-                            📥 下載標準 Word 考卷檔 (.docx)
+                    const resultTitle = document.getElementById('resultTitle');
+                    resultTitle.innerHTML = `
+                        <span class="text-emerald-900"></span>
+                        <button type="button" onclick="downloadWordFile()" class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold py-2.5 px-4 rounded-xl shadow-lg shadow-indigo-600/15 transition-all cursor-pointer">
+                            下載 Word 考卷 (.docx)
                         </button>
                     `;
+                    // paper_title 由使用者輸入的學生姓名組成，必須走 textContent 才不會被當成 HTML 執行
+                    resultTitle.querySelector('span').textContent = `✨ ${result.paper_title}`;
 
                     let infoText = `本次抽出的題目 ID 清單：${JSON.stringify(result.question_ids)}\n(自動避開歷史重複題目)\n\n📝 【 線上考卷題目預覽 】：\n`;
                     result.questions.forEach((q, index) => {
@@ -707,12 +1020,12 @@
                     resultIds.className = "text-sm text-rose-500 mt-1 font-semibold";
                     resultIds.textContent = result.message || "未知錯誤";
                 }
-            } catch (error) { alert("與後端連線中斷"); }
+            } catch (error) { showToast("與後端連線中斷", 'error'); }
         }
 
         // 5. 下載 Word 檔案
         async function downloadWordFile() {
-            if (!currentPaperCache) return alert("請先生成考卷！");
+            if (!currentPaperCache) return showToast("請先生成考卷", 'error');
 
             try {
                 const response = await apiFetch('/api/download-word?v=' + Date.now(), {
@@ -740,7 +1053,7 @@
                 a.remove();
                 window.URL.revokeObjectURL(url);
             } catch (error) {
-                alert("導出 Word 檔案時發生系統錯誤: " + error.message);
+                showToast("匯出 Word 時發生錯誤：" + error.message, 'error');
             }
         }
     </script>

@@ -4,6 +4,17 @@ const { buildParagraphComponents } = require('../utils/textFormatter');
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 圖片大小上限 5MB
 
+// docx v9 的 ImageRun 必須指定 type，否則圖片會以 word/media/<hash>.undefined 落地，
+// 而 [Content_Types].xml 沒有對應的副檔名宣告，Word 會判定整份 .docx 損毀。
+// 建構子不會拋錯，所以缺這個欄位是安靜地壞掉。svg 另需 fallback，故不列入支援。
+const IMAGE_TYPE_BY_MIME = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/gif': 'gif',
+    'image/bmp': 'bmp'
+};
+
 // 防 SSRF：只允許 http/https，且封鎖 localhost 與內網位址
 function isSafeImageUrl(rawUrl) {
     let url;
@@ -51,11 +62,12 @@ exports.generateExamPaperDocx = async (paperTitle, studentName, sortedQuestions)
         if (q.question_img && isSafeImageUrl(q.question_img)) {
             try {
                 const imgResponse = await fetch(q.question_img, { timeout: 8000, size: MAX_IMAGE_BYTES });
-                const contentType = imgResponse.headers.get('content-type') || '';
-                if (imgResponse.ok && contentType.startsWith('image/')) {
+                const contentType = (imgResponse.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+                const imageType = IMAGE_TYPE_BY_MIME[contentType];
+                if (imgResponse.ok && imageType) {
                     const arrayBuffer = await imgResponse.arrayBuffer();
                     const imageBuffer = Buffer.from(arrayBuffer);
-                    childrenElements.push(new Paragraph({ children: [new ImageRun({ data: imageBuffer, transformation: { width: 300, height: 200 } })], alignment: AlignmentType.CENTER }));
+                    childrenElements.push(new Paragraph({ children: [new ImageRun({ data: imageBuffer, type: imageType, transformation: { width: 300, height: 200 } })], alignment: AlignmentType.CENTER }));
                     childrenElements.push(new Paragraph({ text: "" }));
                 }
             } catch (imgError) { console.error(`圖片下載失敗`, imgError.message); }
