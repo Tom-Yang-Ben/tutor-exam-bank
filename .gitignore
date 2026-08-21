@@ -41,3 +41,9 @@ Thumbs.db
 exam_pro/migrate/out/
 # scripts/backup.js 的 pg_dump 檔與失敗旗標
 exam_pro/backups/
+
+# ───────── 階段 2 Agent 管線：上傳的 PDF 原檔（含真實考卷，絕不可進版控）─────────
+# POST /api/jobs 把 PDF 存到 exam_pro/data/jobs/<job_id>.pdf（不放 uploads/，避開
+# app.js 的一小時清理）；拆題完成後 worker 會刪檔並把 jobs.pdf_path 清成 NULL。
+data/
+exam_pro/data/

@@ -24,3 +24,6 @@ eval/private/
 # eval/.env.replay 只含 LLM_MODE=replay / EMBED_MODE=fixture，沒有任何金鑰，
 # 但會被本檔開頭的 .env.* 規則掃到，所以在這裡放行（規劃 §5.3.1 要求它進 repo）。
 !eval/.env.replay
+
+# ───────── 階段 2：jobs 的 PDF 原檔（data/jobs/<job_id>.pdf）─────────
+data/

@@ -60,4 +60,23 @@ if (retrievalService.isSimilarEnabled()) {
 // ===== [WS-D: eval] =====
 // ===== [/WS-D: eval] =====
 
+// ─────────────────────────────────────────────────────────────
+// 階段 2（Agent 管線）的 append-only 區塊
+// 名稱凍結於 docs/interfaces-stage2.md 第 10 條；規則與階段 1 相同：
+// 各 workstream 只在自己的區塊內加行，不重排既有路由，rebase 衝突兩邊都保留。
+// 六支 jobs／review API 一律掛在 apiKeyAuth 之後（app.js 已對 /api 全域套用）。
+// ─────────────────────────────────────────────────────────────
+
+// ===== [WS2-A: jobs] =====
+// ===== [/WS2-A: jobs] =====
+
+// ===== [WS2-B: llm] =====
+// ===== [/WS2-B: llm] =====
+
+// ===== [WS2-C: gates] =====
+// ===== [/WS2-C: gates] =====
+
+// ===== [WS2-D: eval] =====
+// ===== [/WS2-D: eval] =====
+
 module.exports = router;
