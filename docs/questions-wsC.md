@@ -101,3 +101,25 @@
   `test/integration/hybrid.pg.test.js`），沒有動任何既有檔。若你希望 WS-C 的測試改放別處，我照做。
 - `NOTICE` 的第三方套件清單建議補上 `@node-rs/jieba (MIT)` 與 `pgvector (MIT)`——那個檔不在
   所有權表裡，我沒有動它。
+
+---
+
+## 8.（給 WS-D 的提醒，不是介面問題）Node 24 上 `node --test test/unit/` 不能用
+
+規劃 §5.3.1 把 `npm test` 定為 `node --test test/unit/`。這台開發機的 Node 是 v24.15.0，
+實測把「目錄」傳給 `--test` 會被當成模組去解析：
+
+```
+node --test test/unit                → Error: Cannot find module …\test\unit
+node --test ./test/unit              → 同上
+node --test "test/unit/*.test.js"    → 正常
+node --test                          → 正常（自動遞迴搜尋，目前 138 項）
+```
+
+（在 ASCII 路徑下也重現得到，與專案路徑含中文無關。）`scripts` 由 WS-D 統一，所以我沒有動
+`package.json` 的 `scripts`；請把 `test` 改成 glob 形式，或維持現在無參數的 `node --test`。
+CI 矩陣若含 Node 22，請一併確認該版本的行為。
+
+順帶一提：無參數的 `node --test` 會連 `test/integration/` 一起搜到，我的整合測試因此設計成
+「沒有 `TEST_DATABASE_URL` 就整組 skip」，且**不呼叫 `dotenv.config()`**——這樣 `npm test` 才會
+維持不連 DB。WS-D 若把整合測試改成會自己讀 `.env`，這條保證就會破掉。
