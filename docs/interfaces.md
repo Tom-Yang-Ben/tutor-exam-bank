@@ -129,6 +129,7 @@ questions_physics --   FROM questions WHERE subject='數學'|'物理' AND archiv
 23. **`deleteQuestion` 回應、`config/features.js` 匯出形狀、`archived_at` 排除邊界**（A-Q2／Q3／Q4）：全部接受，見新增的第 12 條。
 24. **`npm test` 用 glob**（A-Q5／C-8／D-Q3）：`node --test "test/unit/**/*.test.js"`；規劃裡「`node --test test/unit/`」的寫法作廢。
 25. **`EVAL_CASSETTE_DIR`**（D-Q4）：階段 2 再裁，目前只由 `eval/run.js` 在行程內設定。
+26. **eval 的 pg engine 只連 `TEST_DATABASE_URL`**（第一次 push 後 CI 紅燈的根因）：`eval/lib/pgEngine.js` 原本經 `config/db.js` 連 `DATABASE_URL`，而 `seedFixture()` 會 `TRUNCATE` 四張表——本機等於對開發庫清空重灌，CI 則因沒有 5442 而以空訊息的 `AggregateError` 失敗。已改為自建 Pool、只讀 `TEST_DATABASE_URL` 且強制 `_test` 後綴（與 `test/integration/` 同規則）。**任何會寫入／清空資料表的 eval、測試、腳本，一律不得經 `config/db.js` 取連線**；`config/db.js` 只給應用程式本體用。
 
 ---
 

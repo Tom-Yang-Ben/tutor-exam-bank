@@ -125,7 +125,7 @@ npm run test:integration
 | `utils/embedText.js` | WS-C | ✅ 已合入 | — |
 | `services/embedService.js` 的 `buildTsvTokens()` | WS-C | ✅ 已合入 | — |
 | `queries/hybrid.js` | WS-C | ✅ 已合入 | — |
-| `config/db.js` 的 `{ pool, query }` | WS-A | ✅ 已合入 | — |
+| `TEST_DATABASE_URL`（pg engine 自建 Pool，不經 `config/db.js`；裁決 26） | — | ✅ | 庫名必須以 `_test` 結尾 |
 | `eval/fixtures/embeddings.<model>.768.json` | D-V0（需開發者本人的金鑰） | ⬜ 未錄製 | 向量／hybrid 欄印 `n/a`；D-R2 的整合測試 skip |
 
 `eval/lib/tokenize.js` 與 `eval/lib/embedText.js` 是**轉接殼**，規則是「有真的就用真的」：

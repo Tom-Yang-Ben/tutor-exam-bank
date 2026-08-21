@@ -25,25 +25,33 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const { buildTsvTokens } = require('../../services/embedService');
 
 /**
- * 取得 config/db.js 的 { pool, query }。
- * docs/interfaces.md 第 8 條把匯出形狀從 `module.exports = pool` 改成 `{ pool, query }`，
- * 由 WS-A 在 D-D3 一次改完。還沒合入時給一句能直接照做的錯誤訊息，不要讓人去猜。
+ * 取得 eval 專用的 { pool, query }——**只連 TEST_DATABASE_URL，絕不連 DATABASE_URL**。
+ *
+ * 裁決 26（2026-08-21）：seedFixture() 會 TRUNCATE 四張表，所以這裡不能走 config/db.js
+ * （它連的是 DATABASE_URL＝開發／正式庫；CI 沒有 5442 時則是 ECONNREFUSED 的空訊息 AggregateError）。
+ * 與 test/integration/ 同一條規則：只讀 TEST_DATABASE_URL，且庫名必須以 _test 結尾。
+ * 型別轉換與 config/db.js 第 8 條一致（INT8→number、DATE→'YYYY-MM-DD' 字串）。
  * @returns {{pool:object, query:Function}}
  */
+let _db = null;
 function requireDb() {
-    let mod;
-    try {
-        mod = require(path.join(ROOT, 'config', 'db.js'));
-    } catch (err) {
-        throw new Error(`載入 config/db.js 失敗：${err.message}`);
-    }
-    if (!mod || typeof mod.query !== 'function' || !mod.pool) {
+    if (_db) return _db;
+    const url = process.env.TEST_DATABASE_URL;
+    if (!url) {
         throw new Error(
-            'config/db.js 尚未改成 docs/interfaces.md 第 8 條的 { pool, query } 形狀（WS-A 的 D-D3）。\n' +
-            '   eval 的 pg engine 需要它才能跑；在那之前請用 --engine memory。'
+            'TEST_DATABASE_URL 未設。eval 的 pg engine 只對測試庫跑（docs/interfaces.md 第 9 條），不會碰 DATABASE_URL；\n' +
+            '   本機請 node --env-file=.env --env-file=eval/.env.replay eval/run.js …，或改用 --engine memory。'
         );
     }
-    return mod;
+    if (!/_test(\?|$)/.test(url)) {
+        throw new Error('TEST_DATABASE_URL 的資料庫名必須以 _test 結尾（eval 會 TRUNCATE，防止打到正式庫）。');
+    }
+    const { Pool, types } = require('pg');
+    types.setTypeParser(20, v => parseInt(v, 10));
+    types.setTypeParser(1082, v => v);
+    const pool = new Pool({ connectionString: url, max: 4 });
+    _db = { pool, query: (text, values) => pool.query(text, values) };
+    return _db;
 }
 
 /**
