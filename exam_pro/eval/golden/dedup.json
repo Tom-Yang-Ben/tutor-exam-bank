@@ -1,0 +1,492 @@
+{
+  "_notice": "本檔題幹全部取自 eval/fixtures/questions.public.json（由本專案作者自行編寫）或其手寫改寫，不取自任何考卷、題本或出版品（見 repo 根目錄 NOTICE 第 2 條）。",
+  "_status": "needs_human_confirm — 30 組全部尚未由開發者本人逐組定案（A-T6 草稿）。",
+  "_schema": "entries[]：一筆 = 一組兩題的比較。\n  id                  string，唯一；dd-vb-* 逐字重複、dd-rs-* 重傳、dd-nc-* 換數字、dd-df-* 不同題\n  kind                'verbatim'|'resend'|'numeric_change'|'different'\n  a / b               { from: number|null（fixture 題 id）, text: string（送進 dedup0 的 question_text）}\n  expect_l0           'hit'|'miss'——textHash(a.text) === textHash(b.text) 是否成立（utils/normalizeStem.js）\n  expect_l1           'duplicate'|'variant'|'unique'——dedup1 的向量判定（interfaces-stage2.md 第 3.2 條 payload.dedup1.verdict）\n  note                string|null；這一組要釘的是哪一條規則\n  needs_human_confirm boolean\n\n驗收（規劃 §3.8）：L0 對 verbatim + resend 的 recall 必須是 100%（16/16），\n                   對 numeric_change + different 的誤報必須是 0（14/14 miss）。",
+  "_annotations": {
+    "L0 與 L1 的分工": "L0 是雜湊，只回「一樣／不一樣」，跑在任何 LLM 呼叫之前，成本為零；L1 是向量餘弦，要等階段 1 的 embedding。expect_l0 是 CI 守得住的硬數字，expect_l1 在 D-V0 的向量 fixture 錄好之前只是待驗證的預期。",
+    "為什麼 resend 是 8 筆而不是隨便幾筆": "normalizeStem 的七個步驟裡有六步會影響結果（第 1 步只處理空字串），每一步至少要有一筆專屬案例，紅燈才指得出是哪一步壞了。"
+  },
+  "version": 1,
+  "entries": [
+    {
+      "id": "dd-vb-01",
+      "kind": "verbatim",
+      "a": {
+        "from": 1,
+        "text": "$\\log_{2} 8 + \\log_{2} 4$ 之值為何？\n(A) $5$　(B) $6$　(C) $7$　(D) $12$"
+      },
+      "b": {
+        "from": 1,
+        "text": "$\\log_{2} 8 + \\log_{2} 4$ 之值為何？\n(A) $5$　(B) $6$　(C) $7$　(D) $12$"
+      },
+      "expect_l0": "hit",
+      "expect_l1": "duplicate",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-vb-02",
+      "kind": "verbatim",
+      "a": {
+        "from": 9,
+        "text": "設平面向量 $\\vec{a} = (3, 4)$、$\\vec{b} = (1, 2)$，求 $\\vec{a} \\cdot \\vec{b}$。"
+      },
+      "b": {
+        "from": 9,
+        "text": "設平面向量 $\\vec{a} = (3, 4)$、$\\vec{b} = (1, 2)$，求 $\\vec{a} \\cdot \\vec{b}$。"
+      },
+      "expect_l0": "hit",
+      "expect_l1": "duplicate",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-vb-03",
+      "kind": "verbatim",
+      "a": {
+        "from": 17,
+        "text": "設空間向量 $\\vec{a} = (1, 2, 3)$、$\\vec{b} = (2, 0, 1)$，求 $\\vec{a} \\cdot \\vec{b}$。"
+      },
+      "b": {
+        "from": 17,
+        "text": "設空間向量 $\\vec{a} = (1, 2, 3)$、$\\vec{b} = (2, 0, 1)$，求 $\\vec{a} \\cdot \\vec{b}$。"
+      },
+      "expect_l0": "hit",
+      "expect_l1": "duplicate",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-vb-04",
+      "kind": "verbatim",
+      "a": {
+        "from": 25,
+        "text": "$\\sin^2 40^\\circ + \\cos^2 40^\\circ$ 之值為何？\n(A) $1$　(B) $0$　(C) $\\frac{1}{2}$　(D) 需查表才能得知"
+      },
+      "b": {
+        "from": 25,
+        "text": "$\\sin^2 40^\\circ + \\cos^2 40^\\circ$ 之值為何？\n(A) $1$　(B) $0$　(C) $\\frac{1}{2}$　(D) 需查表才能得知"
+      },
+      "expect_l0": "hit",
+      "expect_l1": "duplicate",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-vb-05",
+      "kind": "verbatim",
+      "a": {
+        "from": 32,
+        "text": "質量 $2$ kg 的物體受到合力 $10$ N，求其加速度。"
+      },
+      "b": {
+        "from": 32,
+        "text": "質量 $2$ kg 的物體受到合力 $10$ N，求其加速度。"
+      },
+      "expect_l0": "hit",
+      "expect_l1": "duplicate",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-vb-06",
+      "kind": "verbatim",
+      "a": {
+        "from": 42,
+        "text": "長 $1$ m 的輕繩繫住質量 $2$ kg 的小球，在光滑水平面上以 $3$ m/s 的速率作等速圓周運動，求繩的張力。"
+      },
+      "b": {
+        "from": 42,
+        "text": "長 $1$ m 的輕繩繫住質量 $2$ kg 的小球，在光滑水平面上以 $3$ m/s 的速率作等速圓周運動，求繩的張力。"
+      },
+      "expect_l0": "hit",
+      "expect_l1": "duplicate",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-vb-07",
+      "kind": "verbatim",
+      "a": {
+        "from": 47,
+        "text": "物體由靜止出發，以 $2$ m/s$^2$ 的等加速度直線前進，求 $5$ 秒後的位移。"
+      },
+      "b": {
+        "from": 47,
+        "text": "物體由靜止出發，以 $2$ m/s$^2$ 的等加速度直線前進，求 $5$ 秒後的位移。"
+      },
+      "expect_l0": "hit",
+      "expect_l1": "duplicate",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-vb-08",
+      "kind": "verbatim",
+      "a": {
+        "from": 54,
+        "text": "兩點電荷 $q_1 = 2 \\times 10^{-6}$ C 與 $q_2 = 3 \\times 10^{-6}$ C 相距 $0.3$ m，求兩者間的靜電力（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）。"
+      },
+      "b": {
+        "from": 54,
+        "text": "兩點電荷 $q_1 = 2 \\times 10^{-6}$ C 與 $q_2 = 3 \\times 10^{-6}$ C 相距 $0.3$ m，求兩者間的靜電力（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）。"
+      },
+      "expect_l0": "hit",
+      "expect_l1": "duplicate",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-rs-01",
+      "kind": "resend",
+      "a": {
+        "from": 9,
+        "text": "設平面向量 $\\vec{a} = (3, 4)$、$\\vec{b} = (1, 2)$，求 $\\vec{a} \\cdot \\vec{b}$。"
+      },
+      "b": {
+        "from": 9,
+        "text": "設平面向量 $\\vec{a} = (3, 4)$、$\\vec{b} = (1, 2)$，求 $\\vec{a} \\cdot \\vec{b}$。\n[附圖描述：坐標平面上以原點為始點畫出兩箭頭，分別指向 $(3,4)$ 與 $(1,2)$。]"
+      },
+      "expect_l0": "hit",
+      "expect_l1": "duplicate",
+      "note": "只動第 2 步：剝掉 [附圖描述：…]。拆題模型每次對同一張圖的描述都會不同，若不剝掉，同一份 PDF 重傳就永遠去不了重。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-rs-02",
+      "kind": "resend",
+      "a": {
+        "from": 1,
+        "text": "$\\log_{2} 8 + \\log_{2} 4$ 之值為何？\n(A) $5$　(B) $6$　(C) $7$　(D) $12$"
+      },
+      "b": {
+        "from": 1,
+        "text": "$\\log_{2} 8 + \\log_{2} 4$ 之值為何？\n（Ａ） $5$　（Ｂ） $6$　（Ｃ） $7$　（Ｄ） $12$"
+      },
+      "expect_l0": "hit",
+      "expect_l1": "duplicate",
+      "note": "第 3 步（NFKC 全形→半形）+ 第 4a 步（全形括號的選項代號統一成 (A)）。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-rs-03",
+      "kind": "resend",
+      "a": {
+        "from": 25,
+        "text": "$\\sin^2 40^\\circ + \\cos^2 40^\\circ$ 之值為何？\n(A) $1$　(B) $0$　(C) $\\frac{1}{2}$　(D) 需查表才能得知"
+      },
+      "b": {
+        "from": 25,
+        "text": "$\\sin^2 40^\\circ + \\cos^2 40^\\circ$ 之值為何？\nA. $1$\nB. $0$\nC. $\\frac{1}{2}$\nD. 需查表才能得知"
+      },
+      "expect_l0": "hit",
+      "expect_l1": "duplicate",
+      "note": "第 4b 步：行首的「A.」要能被認成 (A)。這一步必須在第 6 步（去空白）之前，否則認不出行首。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-rs-04",
+      "kind": "resend",
+      "a": {
+        "from": 47,
+        "text": "物體由靜止出發，以 $2$ m/s$^2$ 的等加速度直線前進，求 $5$ 秒後的位移。"
+      },
+      "b": {
+        "from": 47,
+        "text": "物體由靜止出發，以 2 m/s^2 的等加速度直線前進，求 5 秒後的位移。"
+      },
+      "expect_l0": "hit",
+      "expect_l1": "duplicate",
+      "note": "第 5 步：去掉所有 $。老師手打時常常不加 $…$，模型抄時會加——這是最常見的「同一題兩種抄法」。注意「上標符號本身」不會被去掉：b 仍寫成 m/s^2，若把它抄成 m/s2 就會變成不同的雜湊（已實測）。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-rs-05",
+      "kind": "resend",
+      "a": {
+        "from": 29,
+        "text": "與 $400^\\circ$ 同界的最小正角為何？\n(A) $20^\\circ$　(B) $40^\\circ$　(C) $60^\\circ$　(D) $340^\\circ$"
+      },
+      "b": {
+        "from": 29,
+        "text": "與 $400^\\circ$ 同界的最小正角為何？\n\n  (A) $20^\\circ$\n  (B) $40^\\circ$\n  (C) $60^\\circ$\n  (D) $340^\\circ$"
+      },
+      "expect_l0": "hit",
+      "expect_l1": "duplicate",
+      "note": "第 6 步：選項從同一行改成分行、加縮排，去掉所有空白後必須一致。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-rs-06",
+      "kind": "resend",
+      "a": {
+        "from": 44,
+        "text": "質量 $4$ kg 的物體靜置於水平地面，與地面間的靜摩擦係數為 $0.5$，求最大靜摩擦力（取 $g = 10$ m/s$^2$）。"
+      },
+      "b": {
+        "from": 44,
+        "text": "質量 $4$ kg 的物體靜置於水平地面，與地面間的靜摩擦係數為 $0.5$，求最大靜摩擦力（取 $g = 10$ m/s$^2$）﻿。"
+      },
+      "expect_l0": "hit",
+      "expect_l1": "duplicate",
+      "note": "b 在句尾多了一個零寬不斷行空格（U+FEFF）——PDF 抽文字時很常見。NFKC 不會刪掉它，靠的是第 6 步的 /\\s+/：JS 的 \\s 涵蓋 U+FEFF，因此兩邊收斂（已對 scripts/backfill_text_hash.js 的參考實作實測）。WS-C 的 utils/normalizeStem.js 若改用別的空白字元類別，這一筆會第一個轉紅。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-rs-07",
+      "kind": "resend",
+      "a": {
+        "from": 53,
+        "text": "汽車儀表板上的速度計所顯示的數值，是下列何者？\n(A) 平均速度　(B) 平均速率　(C) 瞬時速率　(D) 位移"
+      },
+      "b": {
+        "from": 53,
+        "text": "汽車儀表板上的速度計所顯示的數值，是下列何者?\n(a) 平均速度　(b) 平均速率　(c) 瞬時速率　(d) 位移"
+      },
+      "expect_l0": "hit",
+      "expect_l1": "duplicate",
+      "note": "第 3 步（全形 ？→ ?）+ 第 4a 步的小寫代號要轉大寫 + 第 7 步 toLowerCase。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-rs-08",
+      "kind": "resend",
+      "a": {
+        "from": 34,
+        "text": "質量 $50$ kg 的人站在體重計上，電梯以 $2$ m/s$^2$ 的加速度向上加速，求體重計的讀數（取 $g = 10$ m/s$^2$）。"
+      },
+      "b": {
+        "from": 34,
+        "text": "質量 50 kg 的人站在體重計上，電梯以 2 m/s^2 的加速度向上加速，求體重計的讀數（取 g = 10 m/s^2）。\n[附圖描述：電梯內一人立於體重計上，向上箭頭標示 $a$。]"
+      },
+      "expect_l0": "hit",
+      "expect_l1": "duplicate",
+      "note": "混合案例：附圖描述 + 去 $ + 上標寫法不同。這是「同一份 PDF 用兩個不同模型拆題」的真實長相。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-nc-01",
+      "kind": "numeric_change",
+      "a": {
+        "from": 1,
+        "text": "$\\log_{2} 8 + \\log_{2} 4$ 之值為何？\n(A) $5$　(B) $6$　(C) $7$　(D) $12$"
+      },
+      "b": {
+        "from": 2,
+        "text": "$\\log_{3} 27 + \\log_{3} 9$ 之值為何？\n(A) $3$　(B) $4$　(C) $5$　(D) $6$"
+      },
+      "expect_l0": "miss",
+      "expect_l1": "variant",
+      "note": "同 variant_group：log-add。expect_l1='variant' 代表餘弦落在 [DEDUP_VARIANT_THRESHOLD, DEDUP_DUP_THRESHOLD) 且照常入庫；實際餘弦要等 D-V0 的向量 fixture 才量得到，門檻是否合適請開發者看過數字再定案。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-nc-02",
+      "kind": "numeric_change",
+      "a": {
+        "from": 3,
+        "text": "解方程式 $2^{x+1} = 32$。"
+      },
+      "b": {
+        "from": 4,
+        "text": "解方程式 $3^{x-1} = 81$。"
+      },
+      "expect_l0": "miss",
+      "expect_l1": "variant",
+      "note": "同 variant_group：exp-eq。expect_l1='variant' 代表餘弦落在 [DEDUP_VARIANT_THRESHOLD, DEDUP_DUP_THRESHOLD) 且照常入庫；實際餘弦要等 D-V0 的向量 fixture 才量得到，門檻是否合適請開發者看過數字再定案。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-nc-03",
+      "kind": "numeric_change",
+      "a": {
+        "from": 9,
+        "text": "設平面向量 $\\vec{a} = (3, 4)$、$\\vec{b} = (1, 2)$，求 $\\vec{a} \\cdot \\vec{b}$。"
+      },
+      "b": {
+        "from": 10,
+        "text": "設平面向量 $\\vec{a} = (5, 2)$、$\\vec{b} = (3, 1)$，求 $\\vec{a} \\cdot \\vec{b}$。"
+      },
+      "expect_l0": "miss",
+      "expect_l1": "variant",
+      "note": "同 variant_group：dot-basic。expect_l1='variant' 代表餘弦落在 [DEDUP_VARIANT_THRESHOLD, DEDUP_DUP_THRESHOLD) 且照常入庫；實際餘弦要等 D-V0 的向量 fixture 才量得到，門檻是否合適請開發者看過數字再定案。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-nc-04",
+      "kind": "numeric_change",
+      "a": {
+        "from": 32,
+        "text": "質量 $2$ kg 的物體受到合力 $10$ N，求其加速度。"
+      },
+      "b": {
+        "from": 33,
+        "text": "質量 $4$ kg 的物體受到合力 $18$ N，求其加速度。"
+      },
+      "expect_l0": "miss",
+      "expect_l1": "variant",
+      "note": "同 variant_group：newton-fma。expect_l1='variant' 代表餘弦落在 [DEDUP_VARIANT_THRESHOLD, DEDUP_DUP_THRESHOLD) 且照常入庫；實際餘弦要等 D-V0 的向量 fixture 才量得到，門檻是否合適請開發者看過數字再定案。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-nc-05",
+      "kind": "numeric_change",
+      "a": {
+        "from": 42,
+        "text": "長 $1$ m 的輕繩繫住質量 $2$ kg 的小球，在光滑水平面上以 $3$ m/s 的速率作等速圓周運動，求繩的張力。"
+      },
+      "b": {
+        "from": 43,
+        "text": "長 $2$ m 的輕繩繫住質量 $3$ kg 的小球，在光滑水平面上以 $4$ m/s 的速率作等速圓周運動，求繩的張力。"
+      },
+      "expect_l0": "miss",
+      "expect_l1": "variant",
+      "note": "同 variant_group：circular-tension。expect_l1='variant' 代表餘弦落在 [DEDUP_VARIANT_THRESHOLD, DEDUP_DUP_THRESHOLD) 且照常入庫；實際餘弦要等 D-V0 的向量 fixture 才量得到，門檻是否合適請開發者看過數字再定案。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-nc-06",
+      "kind": "numeric_change",
+      "a": {
+        "from": 49,
+        "text": "物體自 $20$ m 高處自由落下，求落地所需的時間（取 $g = 10$ m/s$^2$，不計空氣阻力）。"
+      },
+      "b": {
+        "from": 50,
+        "text": "物體自 $45$ m 高處自由落下，求落地所需的時間（取 $g = 10$ m/s$^2$，不計空氣阻力）。"
+      },
+      "expect_l0": "miss",
+      "expect_l1": "variant",
+      "note": "同 variant_group：free-fall。expect_l1='variant' 代表餘弦落在 [DEDUP_VARIANT_THRESHOLD, DEDUP_DUP_THRESHOLD) 且照常入庫；實際餘弦要等 D-V0 的向量 fixture 才量得到，門檻是否合適請開發者看過數字再定案。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-nc-07",
+      "kind": "numeric_change",
+      "a": {
+        "from": 56,
+        "text": "點電荷 $Q = 5 \\times 10^{-6}$ C 在距離 $0.5$ m 處產生的電場量值為何（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）？"
+      },
+      "b": {
+        "from": 57,
+        "text": "點電荷 $Q = 2 \\times 10^{-6}$ C 在距離 $0.3$ m 處產生的電場量值為何（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）？"
+      },
+      "expect_l0": "miss",
+      "expect_l1": "variant",
+      "note": "同 variant_group：efield-point。expect_l1='variant' 代表餘弦落在 [DEDUP_VARIANT_THRESHOLD, DEDUP_DUP_THRESHOLD) 且照常入庫；實際餘弦要等 D-V0 的向量 fixture 才量得到，門檻是否合適請開發者看過數字再定案。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-df-01",
+      "kind": "different",
+      "a": {
+        "from": 9,
+        "text": "設平面向量 $\\vec{a} = (3, 4)$、$\\vec{b} = (1, 2)$，求 $\\vec{a} \\cdot \\vec{b}$。"
+      },
+      "b": {
+        "from": 17,
+        "text": "設空間向量 $\\vec{a} = (1, 2, 3)$、$\\vec{b} = (2, 0, 1)$，求 $\\vec{a} \\cdot \\vec{b}$。"
+      },
+      "expect_l0": "miss",
+      "expect_l1": "unique",
+      "note": "跨章字面相近：平面向量內積 vs 空間向量內積，題幹幾乎同構，只差一個維度。這一組若被判 duplicate，就是閾值太鬆。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-df-02",
+      "kind": "different",
+      "a": {
+        "from": 11,
+        "text": "設平面向量 $\\vec{a} = (1, 0)$、$\\vec{b} = (1, 1)$，求兩向量的夾角 $\\theta$。"
+      },
+      "b": {
+        "from": 19,
+        "text": "設空間向量 $\\vec{a} = (1, 1, 0)$、$\\vec{b} = (0, 1, 1)$，求兩向量的夾角 $\\theta$。"
+      },
+      "expect_l0": "miss",
+      "expect_l1": "unique",
+      "note": "跨章字面相近：夾角題的平面版與空間版。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-df-03",
+      "kind": "different",
+      "a": {
+        "from": 13,
+        "text": "設平面向量 $\\vec{a} = (2, k)$ 與 $\\vec{b} = (3, 6)$ 互相垂直，求 $k$。"
+      },
+      "b": {
+        "from": 21,
+        "text": "設空間向量 $\\vec{a} = (1, 2, k)$ 與 $\\vec{b} = (2, -1, 3)$ 互相垂直，求 $k$。"
+      },
+      "expect_l0": "miss",
+      "expect_l1": "unique",
+      "note": "跨章字面相近：垂直求 k 的平面版與空間版。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-df-04",
+      "kind": "different",
+      "a": {
+        "from": 1,
+        "text": "$\\log_{2} 8 + \\log_{2} 4$ 之值為何？\n(A) $5$　(B) $6$　(C) $7$　(D) $12$"
+      },
+      "b": {
+        "from": 7,
+        "text": "$\\log_{2} 3 \\times \\log_{3} 8$ 之值為何？"
+      },
+      "expect_l0": "miss",
+      "expect_l1": "unique",
+      "note": "同章不同概念：對數相加 vs 換底公式。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-df-05",
+      "kind": "different",
+      "a": {
+        "from": 42,
+        "text": "長 $1$ m 的輕繩繫住質量 $2$ kg 的小球，在光滑水平面上以 $3$ m/s 的速率作等速圓周運動，求繩的張力。"
+      },
+      "b": {
+        "from": 45,
+        "text": "汽車在半徑 $50$ m 的水平彎道上轉彎，輪胎與路面的靜摩擦係數為 $0.4$，依 $v_{max} = \\sqrt{\\mu g r$ 求不打滑的最大速率（取 $g = 10$ m/s$^2$）。"
+      },
+      "expect_l0": "miss",
+      "expect_l1": "unique",
+      "note": "同章不同概念：繩張力提供向心力 vs 摩擦力提供向心力。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-df-06",
+      "kind": "different",
+      "a": {
+        "from": 47,
+        "text": "物體由靜止出發，以 $2$ m/s$^2$ 的等加速度直線前進，求 $5$ 秒後的位移。"
+      },
+      "b": {
+        "from": 51,
+        "text": "速度—時間圖中，圖形與時間軸所圍成的面積代表下列何者？\n(A) 加速度　(B) 位移　(C) 速率　(D) 力"
+      },
+      "expect_l0": "miss",
+      "expect_l1": "unique",
+      "note": "同章不同題型：等加速度位移計算 vs v-t 圖觀念單選。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "dd-df-07",
+      "kind": "different",
+      "a": {
+        "from": 54,
+        "text": "兩點電荷 $q_1 = 2 \\times 10^{-6}$ C 與 $q_2 = 3 \\times 10^{-6}$ C 相距 $0.3$ m，求兩者間的靜電力（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）。"
+      },
+      "b": {
+        "from": 58,
+        "text": "在量值 $E = 200$ N/C 的均勻電場中，將電量 $q = 3 \\times 10^{-6}$ C 的電荷沿電場方向移動 $0.4$ m，求電場力所作的功。"
+      },
+      "expect_l0": "miss",
+      "expect_l1": "unique",
+      "note": "同章不同概念：庫侖力 vs 電場力作功。",
+      "needs_human_confirm": true
+    }
+  ]
+}
