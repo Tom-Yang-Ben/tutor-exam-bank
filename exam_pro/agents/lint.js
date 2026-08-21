@@ -16,7 +16,8 @@
 
 const { formulaFix } = require('../utils/formulaFix');
 const { formulaLint } = require('../utils/formulaLint');
-const { buildSchema } = require('./_schema');
+const { buildSchema } = require('./schemas');
+const { registerTemplate } = require('../services/llm/templates');
 
 const TEMPLATE = 'lint.v1';
 const MAX_OUTPUT_TOKENS = 4096;
@@ -30,8 +31,10 @@ const SYSTEM = [
 
 /**
  * prompt 模板（把可變欄位挖空後的原文）。
- * services/llm 的 cassette 鍵要用 sha256(模板原文)——介面第 5.2 條——
- * 但 generateJson 的參數裡只帶得到模板「識別名」，因此這裡把原文一併匯出給 WS-B／eval 用。
+ * cassette 的鍵要用 sha256(模板原文)（介面第 5.2 條），但 generateJson 只帶得到識別名，
+ * 因此模組載入時就把原文註冊進 services/llm/templates.js（裁決 S2-5），
+ * generateJson 只傳識別名，由 services/llm 依識別名回查原文算雜湊。
+ * 模板文字改一個字，cassette 就會失效——這是刻意的。
  */
 const PROMPT_TEMPLATE = [
     '以下題目的公式寫法有問題，請修好後照 JSON schema 回覆。',
@@ -52,6 +55,9 @@ const PROMPT_TEMPLATE = [
     '3. 不要使用 \\begin{…}、\\mathbb、\\overrightarrow 這類指令，本系統的轉換器不支援。',
     '4. 中文敘述、數字、單位、選項內容保持原樣。',
 ].join('\n');
+
+// 模組載入時註冊（裁決 S2-5）：四個 LLM 節點都必須註冊，否則 cassette 鍵會退回 sha256(識別名)
+registerTemplate(TEMPLATE, PROMPT_TEMPLATE);
 
 /** 把 issues 排成 prompt 用的條列 */
 function issuesToText(issues) {
