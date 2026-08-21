@@ -179,6 +179,8 @@ function makeLogger(sink = console) {
  * @param {object}  [opts.config]          loadConfig() 的輸出，可逐欄覆寫
  * @param {object}  [opts.logger]
  * @param {(ms:number)=>Promise<void>} [opts.sleep] 測試可換成不真的睡
+ * @param {(meter)=>{cost_usd:number, cost_estimated:boolean}} [opts.estimateCost]
+ *        預設查 config/pricing.js（WS-B）；整合測試塞一個假的才測得到預算累加
  * @returns {{tick, start, stop, runJobQuestion, runExtractJob, isBusy, inFlight}}
  */
 function createRunner(opts = {}) {
@@ -188,6 +190,7 @@ function createRunner(opts = {}) {
     const config = { ...loadConfig(), ...(opts.config || {}) };
     const logger = opts.logger || makeLogger();
     const sleep = opts.sleep || ((ms) => new Promise(r => setTimeout(r, ms)));
+    const estimateCost = opts.estimateCost || estimateCostFromPricing;
 
     const agentCache = new Map();
     const inFlight = new Set();      // 'jq:12' / 'job:3'
@@ -241,7 +244,7 @@ function createRunner(opts = {}) {
     }
 
     /** 用 config/pricing.js 估價；WS-B 還沒合入時記 0 且 cost_estimated=false（第 5.5 條）。 */
-    function estimateCost(meter) {
+    function estimateCostFromPricing(meter) {
         if (!meter.model || meter.calls === 0) return { cost_usd: 0, cost_estimated: false };
         try {
             const pricing = require('../config/pricing');
