@@ -342,6 +342,12 @@ node seed_questions.js --apply  # 實際寫入（交易保護；同題幹已存�
 
 ---
 
+## 🛣 下一階段
+
+Agent 管線（狀態機 + 五個 sub-agent）、RAG（相似題／檢索式分類／自然語言查題）、資料層（MySQL → PostgreSQL + pgvector、`attempts` 表、檢索 eval）的設計規格、建議順序與驗收指標，統一維護在專案根目錄 [`README.md` 的 Roadmap 章節](../README.md#-roadmap)。**目前為規劃，尚未實作。**
+
+---
+
 ## 🔐 安全注意事項
 
 - **`.env` 內含真實金鑰，切勿進版控或分享**（已由 `.gitignore` 排除）。若金鑰曾外流，請至 Google AI Studio **重新產生**。

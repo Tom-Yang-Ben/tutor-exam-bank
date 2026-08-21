@@ -5,6 +5,8 @@
 本 repo 收錄專題的**完整開發歷程**:從早期原型、企業級重構版，到開發紀實簡報。
 
 > ⚖️ 本 repo 不含任何題庫或考卷內容；程式碼採 Apache-2.0，示範題為自行編寫。詳見 [`NOTICE`](./NOTICE)。
+>
+> 🛣 下一階段（Agent 管線 × RAG × 資料層）的設計規格、建議順序與驗收指標見 [Roadmap](#-roadmap)。
 
 ---
 
@@ -135,6 +137,210 @@ npm start                 # http://localhost:3000
 - **AI**：Google Gemini 2.5 Flash（`@google/genai`）— PDF 考卷解析
 - **文件**：`docx`（自製 LaTeX → OOXML 數學公式轉換）
 - **前端**：單頁 HTML + Tailwind（CDN）+ MathJax
+
+---
+
+## 🛣 Roadmap
+
+> **下一階段：Agent 管線 × RAG × 資料層**（規劃中，尚未實作；本節是設計規格與驗收標準，不是功能清單）
+
+### 現況診斷
+
+目前系統的 AI 部分是「**一次 Gemini 呼叫 → JSON → 白名單驗證**」，檢索則是 `WHERE subject = ? AND chapter = ?` 的精確比對加 `LIKE` 關鍵字搜尋。工程紀律（分層、硬驗證、交易、防 SSRF、解析器測試、CI）已經到位，但有三個缺口：
+
+| 缺口 | 具體症狀（現有程式碼） |
+|---|---|
+| **沒有 agent 迴圈** | `aiService.analyzePdfContent` 一個巨型 prompt 一次到位；`batchSaveQuestions` 一題不合格**整批退回**；LaTeX 不合解析器時靜默降級；答案由模型自算、無人驗證 |
+| **沒有語意檢索** | 「不重複出題」只靠題目 ID，不同 PDF 裡「換個數字的同一題」會被當成新題；無法做「找同概念、難度 +1 的題」 |
+| **沒有對 AI 輸出品質的量測** | 章節分類正確率、公式解析成功率、重複題檢出率都沒有數字，改 prompt 或換模型無從比較 |
+
+設計原則沿用本 repo 既有哲學——**prompt 不是保證，伺服器端驗證才是**——把它接上「迴圈」與「檢索」：每個 sub-agent 後面都有一道不可繞過的硬閘門，每一項交付都附量測指標。
+
+### 建議順序
+
+| 階段 | 交付物 | 量測 / 驗收 |
+|---|---|---|
+| **1. 資料層** | MySQL → PostgreSQL 遷移；`students` / `attempts` 表取代 `history_json`；pgvector 欄位與 HNSW 索引；embedding 回填腳本；`GET /api/questions/:id/similar`；`npm run eval:retrieval` | golden set 上的 **Recall@5、MRR**；`LIKE` vs 純向量 vs hybrid 三欄對照；eval 以固定小題庫 + 預先算好的 embedding fixture 跑，**不連外部服務**即可進 CI |
+| **2. Agent 管線** | `jobs` / `job_questions` 表與狀態機；五個 sub-agent（拆題、分類、公式檢查、解題驗證、去重）；部分入庫取代整批退回；人工複核佇列 | **章節分類正確率、公式解析成功率、答案驗證不一致率、重複題檢出數、每份 PDF 的 token 成本與延遲**，全部前後對照 |
+| **3. 產品面** | 相似題／變式題生成（走同一組閘門）；學生弱點面板（`attempts` 的 SQL 聚合）；自然語言查題；README 改寫成「問題 → 決策 → 數字」 | 變式題通過閘門的比例；弱點面板查詢延遲；自然語言查題在 golden set 上的命中率 |
+
+---
+
+### 規格 1：資料層 — 為什麼改用 PostgreSQL
+
+| 考量 | MySQL 8 / 9（現況） | PostgreSQL 16 + pgvector（規劃） |
+|---|---|---|
+| 向量搜尋 | MySQL 9 有 `VECTOR` 型別，但 **`DISTANCE()` 只在 HeatWave（Oracle 雲端版）提供，社群版沒有**，實際做不了近鄰搜尋 | `pgvector` 提供 `<=>` 餘弦距離與 HNSW / IVFFlat 索引，生產環境成熟 |
+| 全文檢索（中文） | `FULLTEXT` 對中文需 ngram parser，功能有限 | `tsvector` + `zhparser` / `pg_jieba` 分詞，或 `pg_trgm` 作退路 |
+| 一條 SQL 做 hybrid | 需在應用層自行算距離再合併 | 關聯篩選 + 全文 + 向量 **同一個查詢、同一個交易** |
+| 遷移成本 | — | 只有兩張表，`schema.sql` 與 `mysql2` 查詢改寫為 `pg` 即可 |
+
+**規模判斷**：題庫量級是數千到數萬題，`pgvector` 綽綽有餘；**不引入專用向量資料庫**（Pinecone / Milvus / Qdrant），理由是多一套系統要同步、metadata 篩選 + 語意檢索要兩次往返，而且量級遠未到需要獨立擴展。
+
+**Schema 變更草案**
+
+```sql
+-- 學生與作答歷史：取代以「姓名」當 key 的 history_json（重名無法區分、做不了逐生分析）
+CREATE TABLE students (id SERIAL PRIMARY KEY, name TEXT NOT NULL UNIQUE);
+CREATE TABLE attempts (
+    id          BIGSERIAL PRIMARY KEY,
+    student_id  INT  NOT NULL REFERENCES students(id),
+    question_id INT  NOT NULL REFERENCES questions(id),
+    paper_id    INT  REFERENCES exam_papers(id),
+    assigned_at DATE NOT NULL DEFAULT CURRENT_DATE,
+    result      SMALLINT,                       -- NULL=未批改, 1=對, 0=錯
+    UNIQUE (student_id, question_id)
+);
+
+-- 題目：加上檢索用欄位
+ALTER TABLE questions
+    ADD COLUMN concept_summary TEXT,            -- LLM 產生的一句概念摘要（embedding 用）
+    ADD COLUMN embed_text      TEXT,            -- 實際送去 embedding 的文本（可重現）
+    ADD COLUMN embedding       vector(768),     -- 維度依所選模型，MRL 模型可降維
+    ADD COLUMN search_tsv      tsvector;
+CREATE INDEX idx_questions_embedding ON questions USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX idx_questions_tsv       ON questions USING gin  (search_tsv);
+```
+
+**Embedding 文本規則**：不要直接 embed 原始 LaTeX——embedding 模型對 `\frac{16}{3}` 這類 token 不敏感。`embed_text` = 學科 + 章節 + 題型 + 中文題幹（去掉 `$...$` 內容或換成口語）+ `concept_summary`；原始 LaTeX 留在 `question_text` 供排版。
+
+**Hybrid 查詢草案**（metadata 篩選 → 向量 + 全文融合）
+
+```sql
+WITH cand AS (
+    SELECT id FROM questions
+    WHERE subject = $1 AND chapter = $2
+      AND difficulty BETWEEN $3 AND $4
+      AND id NOT IN (SELECT question_id FROM attempts WHERE student_id = $5)
+)
+SELECT q.id,
+       1 - (q.embedding <=> $6::vector)                        AS vec_score,
+       ts_rank(q.search_tsv, plainto_tsquery('chinese', $7))   AS kw_score
+FROM questions q JOIN cand USING (id)
+ORDER BY 0.7 * (1 - (q.embedding <=> $6::vector)) + 0.3 * ts_rank(q.search_tsv, plainto_tsquery('chinese', $7)) DESC
+LIMIT 20;   -- 權重為起點；亦可改用 Reciprocal Rank Fusion（RRF）避免分數尺度不一
+```
+
+候選池內的最終抽題仍沿用 `utils/shuffle.js` 的 Fisher-Yates，維持「同條件下每題被抽中機率相同」的既有保證。
+
+**檢索評估**：`eval/retrieval_golden.json` 手工標註 50–100 筆「查詢（題目 ID 或自然語言）→ 相關題目 ID 清單」；`npm run eval:retrieval` 對 `LIKE`、純向量、hybrid 三種方法輸出 Recall@5 / Recall@10 / MRR。這份對照表是整個階段的驗收物。
+
+---
+
+### 規格 2：Agent 管線 — 協調層是程式碼，LLM 只在判斷節點
+
+```mermaid
+stateDiagram-v2
+    [*] --> extracted : 拆題 agent（PDF → 候選題 JSON）
+    extracted --> classified : 分類 agent（檢索相似已標註題當 few-shot）
+    classified --> linted : 公式檢查 agent（工具 = textFormatter 解析器）
+    linted --> verified : 解題驗證 agent（不同家模型獨立解題）
+    verified --> deduped : 去重 agent（向量近鄰）
+    deduped --> saved : 全部閘門通過 → 入庫
+    classified --> needs_review : 章節不在白名單且重試用盡
+    linted --> needs_review : 公式重寫 N 次仍不可解析
+    verified --> needs_review : 答案不一致
+    deduped --> needs_review : 疑似重複，待人工合併
+    needs_review --> saved : 人工修正後入庫
+    saved --> [*]
+```
+
+**四條設計原則**
+
+1. **協調層是確定性狀態機，不是 LLM。** 每份 PDF 是一個 `jobs` 列，每一題是一個 `job_questions` 列，狀態逐步推進並落地；LLM 只出現在需要「判斷」的節點。好處是可測試、可重跑、可觀測、費用可控。對應 Anthropic《Building effective agents》中的 *orchestrator-workers* 與 *evaluator-optimizer* 模式——能用 workflow 就不用 agent。
+2. **sub-agent 之間以型別化合約溝通**（JSON schema / structured output），每一步的輸入輸出都存進 `job_questions.payload`，任一步失敗只重跑那一步，不重跑整份 PDF。
+3. **重試有預算。** 每題每節點最多 N 次、每份 PDF 有 token 上限；超過就進 `needs_review`，不會無限迴圈、不會費用失控。
+4. **部分成功取代整批退回。** 通過的題先入庫，有問題的題進人工佇列並附原因；修掉 README「設計決策 2」自承的缺點。
+
+**Sub-agent 規格**
+
+| Sub-agent | 對應的現有失敗模式 | 工具 | 硬閘門（不是 prompt） | 模型等級 |
+|---|---|---|---|---|
+| **拆題** | — | PDF 原生輸入 | JSON schema 驗證 | 便宜、多模態（Gemini Flash 系列） |
+| **分類** | 章節名漂移（「圓方程式」vs「圓的方程式」），組卷撈不到 | 向量檢索「已標好章節的相似題」作 few-shot | `isValidChapter`；輸出限定白名單 enum | 便宜 |
+| **公式檢查** | LaTeX 不合解析器 → 靜默降級成純文字 | 直接呼叫 `utils/textFormatter` 解析；失敗的公式連同錯誤訊息退回重寫 | 解析成功且無降級 token | 便宜 |
+| **解題驗證** | 答案由 Gemini 自算，無人驗 | 以**不同家**模型獨立解題、比對答案（錯誤才不相關） | 不一致 → `needs_review`，不自動入庫 | 推理強 |
+| **去重** | 「不重複出題」只看 ID；跨 PDF 近似題被當新題 | 向量近鄰（與 RAG 共用 `embedding`） | 相似度超過閾值 → 合併為 variants 或標記 | 不需 LLM（純檢索 + 閾值） |
+
+**`jobs` 表草案**
+
+```sql
+CREATE TABLE jobs (
+    id          BIGSERIAL PRIMARY KEY,
+    pdf_sha256  CHAR(64) NOT NULL,
+    state       TEXT NOT NULL,                  -- extracted / classified / ... / saved / failed
+    token_in    INT NOT NULL DEFAULT 0,
+    token_out   INT NOT NULL DEFAULT 0,
+    cost_usd    NUMERIC(10,6) NOT NULL DEFAULT 0,
+    error       TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE job_questions (
+    id            BIGSERIAL PRIMARY KEY,
+    job_id        BIGINT NOT NULL REFERENCES jobs(id),
+    idx           INT    NOT NULL,
+    state         TEXT   NOT NULL,
+    payload       JSONB  NOT NULL,              -- 各節點的輸入輸出（可重放）
+    retries       JSONB  NOT NULL DEFAULT '{}', -- 每節點已重試次數
+    review_reason TEXT,
+    question_id   INT REFERENCES questions(id)  -- 入庫後回填
+);
+```
+
+**設計取捨 FAQ**
+
+- *為什麼不一個大 prompt 全做？* 成本不可切分、失敗不可局部重試、沒有可觀測性；拆開後每個節點都有自己的指標與閘門。
+- *為什麼協調層不用 LLM？* 流程是固定的，用 LLM 協調只會引入不確定性；狀態機可以寫單元測試。
+- *怎麼避免無限迴圈與費用失控？* 每節點重試上限 + 每份 PDF token 預算 + `jobs.cost_usd` 即時累計，超線即停。
+- *怎麼證明有效？* 用同一批 PDF 跑「舊單次呼叫」與「新管線」，對照上表的量測指標。
+
+---
+
+### 規格 3：RAG 在題庫裡的三個落點
+
+RAG 在這裡**不是聊天機器人**，而是三個有業務意義的檢索應用（依價值排序）：
+
+| 落點 | 檢索什麼 | 生成什麼 | 為什麼重要 |
+|---|---|---|---|
+| **1. 相似題／變式題** | 學生錯的那題 → 同概念、不同數字、難度 +1 的題 | 以檢索到的題為藍本產生變式題，**再走同一組硬閘門** | 家教的真正痛點：針對弱點練習；檢索本身就是產品 |
+| **2. 檢索式 few-shot 分類** | 與待分類題最相似的已標註題 | 限定白名單的章節標籤 | 用 RAG 提升結構化輸出的正確率，而不是寫文章 |
+| **3. 自然語言查題** | 「牛頓第二定律＋摩擦力、計算題、難度 4 以上、小明沒寫過」 | 先轉成 metadata 篩選條件，再語意檢索 | 老師不必記章節白名單 |
+
+本專案做 RAG 的先天優勢：**chunk 天然就是一題**，沒有一般 RAG 最痛的切塊問題；要做的是把 embedding 文本整理好（規格 1）與把評估做出來。
+
+---
+
+### 規格 4：模型路由 — 依工作負載選模型，用 eval 證明
+
+| 工作負載 | 主選 | 次選 | 取捨 |
+|---|---|---|---|
+| **PDF 拆題**（多模態、量大、要便宜） | Gemini Flash 系列（現用 `gemini-2.5-flash`；原生吃 PDF、長上下文、最便宜） | Claude Sonnet / GPT 系列 | 都能讀 PDF，但大批量成本明顯高於 Gemini Flash；多接一家供應商 |
+| **解題驗證、變式題生成**（推理要強） | 高階模型，且**刻意選與拆題不同家**（Claude Sonnet / Opus、GPT、Gemini Pro 皆可） | 用同一個 Flash 自驗 | 便宜，但自己驗自己，錯誤高度相關，驗證價值低 |
+| **Embedding** | Gemini Embedding（同一個 SDK、多語、MRL 可降維） | Qwen3-Embedding / BGE-M3（開源、中文強、生產常用） | 開源零 API 費、資料不出門，但要自架推理服務、維運與版本管理；Anthropic 沒有 embedding 產品 |
+
+- 模型 ID 全部改為環境變數（`MODEL_EXTRACT`、`MODEL_VERIFY`、`MODEL_EMBED`、`EMBED_DIM`），換模型不改程式碼，由 eval 決定。
+- 具體版本號與價格變動很快（2026-08 查證時 Gemini 已有 3.x Flash / Pro 系列），**採購前以各家官方定價頁為準**。
+- 現有的 `/analyze-pdf` 每分鐘 10 次限流保留；新增每份 PDF 的 token 與成本記帳（`jobs.cost_usd`）。
+
+---
+
+### 明確不做（Non-goals）
+
+- 不用 LLM 當 orchestrator。
+- 不引入專用向量資料庫。
+- 不把「聊天介面」當主功能；RAG 的落點是相似題、分類與查題。
+- 第一版不自架 embedding 模型。
+
+### 技術棧變動預告
+
+| 現在 | 規劃 |
+|---|---|
+| MySQL 8（`mysql2`） | PostgreSQL 16 + `pgvector`（+ `zhparser` / `pg_trgm`），`pg` |
+| 單次 Gemini 呼叫 | `jobs` 狀態機 + 五個 sub-agent，多模型路由 |
+| `LIKE` 關鍵字搜尋 | hybrid：metadata 篩選 + 全文 + 向量 |
+| `history_json`（以姓名為 key） | `students` / `attempts` 正規化表，可做逐生弱點分析 |
+| 無 AI 品質量測 | golden set + `eval/` 腳本，進 CI |
 
 ---
 
