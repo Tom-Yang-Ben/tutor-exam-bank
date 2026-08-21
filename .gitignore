@@ -35,6 +35,8 @@ Thumbs.db
 *.mp4
 *.pptx
 *.pdf
+# 公開的自製考卷 fixture（extract／pipeline 的 cassette 要靠它；真實考卷仍被上面的 *.pdf 擋住）——裁決 S2-15
+!exam_pro/eval/fixtures/*.pdf
 
 # ───────── WS-B 遷移與維運的產出（含真實題目，絕對不可進版控）─────────
 # export_mysql.js / import_pg.js / export_pg_delta.js 的工作目錄

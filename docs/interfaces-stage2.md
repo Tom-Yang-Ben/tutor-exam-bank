@@ -44,7 +44,7 @@
 
 **裁決 S0-3**：`JOB_PDF_CHUNK_PAGES=20` **合理，維持**。但理由要改寫：20 頁 ≈ 10.6k 輸入 token，離 1 048 576 的上下文上限與 65 536 的輸出上限都很遠，**切塊的真正理由是「失敗重試的粒度」與「輸出不被截斷」**，不是輸入塞不下。80 頁的考卷一次送也塞得下，但一次 schema_invalid 就要重付 80 頁的錢。
 
-**裁決 S0-4**：`GEMINI_INLINE_MAX_BYTES=15728640`（15 MB，**base64 前的原始位元組**），對齊 `routes/index.js` 既有的 multer 上限。因此 Files API 這條路在階段 2 **不會被觸發**：`agents/extract.js` 仍要留 `{fileUri}` 的分支（`generateJson` 的 parts 已支援），但可以只寫「超過門檻就丟 `Error('PDF 超過 inlineData 門檻，Files API 路徑尚未啟用')`」，並在 `docs/llm.md` 註明。真的要支援 >15 MB 的 PDF 時，同時放寬 multer 與實作 `ai.files.upload`。
+**裁決 S0-4**：`GEMINI_INLINE_MAX_BYTES=15728640`（15 MB，**base64 前的原始位元組**），對齊 `routes/index.js` 既有的 multer 上限。因此 Files API 這條路在階段 2 **不會被觸發**：`agents/extract.js` 仍要留 `{fileUri}` 的分支（`generateJson` 的 parts 已支援），但超過門檻時**回 `{kind:'fail', reason:'provider_error', feedback:'PDF 超過 inlineData 門檻，Files API 路徑尚未啟用'}`，不得 throw**（裁決 S2-9：確定性失敗不該退避重試；`extract` 的 `maxRetries` 為 0，會直接進 `needs_review('provider_error')`），並在 `docs/llm.md` 註明。真的要支援 >15 MB 的 PDF 時，同時放寬 multer 與實作 `ai.files.upload`。
 
 ### 0.3 當日可用的模型 ID
 
@@ -316,6 +316,10 @@ type Ctx = {
 
 - **agent 不得自己 `require('../config/db')`、不得自己讀 `process.env`**：全部經 `ctx`。這是單元測試能離線跑的唯一原因。
 - agent 不寫 `job_events`、不改 `job_questions.state`——那是 runner 的事。
+- **`ctx.config.features = { similar: boolean, pipeline: boolean }`**（裁決 S2-8）：由 runner 從 `config/features.js` 組出來；agent 要知道旗標只能從這裡讀（dedup1 的 `skipped` 條件、classify 的 A 層 few-shot 都靠它）。
+- **節點名與檔名的對應**（裁決 S2-6）：`dedup0`／`dedup1` 兩個節點由 `agents/dedup.js` 一支服務（匯出 `{ run, runDedup0, runDedup1 }`），另有三行的轉接檔 `agents/dedup0.js`／`agents/dedup1.js`；runner 的解析順序是 ①`agents/<node>.js` → ②`AGENT_MODULE_FOR_NODE[node]`（`dedup0|dedup1 → dedup`）。層級**只能靠凍結的 input 鍵**判斷（`dedup0` 拿 `{question_text}`、`dedup1` 拿 `{question_id, embed_text, subject, chapter}`），不得看 `ctx.jq.state` 或 payload。
+- **`save` 節點不在 `agents/` 裡**（裁決 S2-7）：由 `workers/jobRunner.js` 的 `saveNode` 實作（要開交易、寫 `job_events`、回填 `question_id`，本來就不符合 agent 合約）；`job_events.node` 仍寫 `'save'`。
+- **`idx` 由 agent 算**（裁決 S2-10）：`payload.extract.idx = chunk_no * 1000 + 元素在陣列中的位置 + 1`，不用模型給的題號（會跳號、重號而撞 `UNIQUE (job_id, idx)`）；`outcome.data.rejected[].idx` 同一套算法。
 
 ### 3.2 `payload` 的六個鍵（逐欄凍結）
 
@@ -380,7 +384,7 @@ type Ctx = {
 |---|---|---|---|---|
 | `extract` | `{ jobId, pdfPath, chunk:{ no, fromPage, toPage } }`；agent 自己讀檔切塊 | `ajv` **逐元素**驗證：合格元素進 `outcome.data.questions`，不合格元素記進 `outcome.data.rejected:[{idx, errors}]`；**整包都不合格**才 `fail` | `schema_invalid` | `MODEL_EXTRACT` |
 | `dedup0` | `{ question_text }` | `normalizeStem` → `sha256`；命中 `questions.text_hash` 或同 job 內較小 `idx` 的列 → `fail('duplicate')`。**在任何 LLM 呼叫之前** | `duplicate` | 無 |
-| `classify` | `{ subject, chapter, chapter_confidence, question_text }` | 第一層：`isValidChapter(subject, chapter)` 且 `chapter_confidence >= CLASSIFY_MIN_CONF` → `pass`（`source:'gate'`，**不呼叫 LLM**）。第二層：few-shot → LLM → 輸出必須再過 `isValidChapter` | `chapter_invalid`，`feedback` 格式凍結為 `「${回傳值}」不在白名單內，最接近的是「${候選1}」「${候選2}」` | `MODEL_EXTRACT` |
+| `classify` | `{ subject, chapter, chapter_confidence, question_text }` | 第一層：`isValidChapter(subject, chapter)` 且 `chapter_confidence >= CLASSIFY_MIN_CONF` → `pass`（`source:'gate'`，**不呼叫 LLM**）；**`chapter_confidence` 缺值或 `0` 一律視為閘門不過，不得當成 1.0**（裁決 S2-13）。第二層 few-shot 三層取材（裁決 S2-8）：A 向量最近鄰（`ctx.config.features.similar` 且有 `ctx.db`：以 `ctx.llm.embed` 把題幹轉向量查 `questions`）→ B 各章取例（有 `ctx.db`）→ C `config/chapterExamples.js` 自製例句（永遠執行）；取材失敗一律降級不算失敗。LLM 輸出必須再過 `isValidChapter`。**eval 的 `--suite classify` 固定餵 `{subject, chapter: decoy 或 '', chapter_confidence: 0, question_text}` 且 `ctx.db = null`**，保證量到的是第二層；錄製 cassette 時同樣 `ctx.db = null`（`fewShotIds` 才可重現） | `chapter_invalid`，`feedback` 格式凍結為 `「${回傳值}」不在白名單內，最接近的是「${候選1}」「${候選2}」` | `MODEL_EXTRACT` |
 | `lint` | `{ question_text, answer_text, feedback? }` | ① `formulaFix` ② `formulaLint` ③ 仍有 `sev:'error'` 才 LLM 重寫。閘門＝**沒有 `sev:'error'` 的 issue**（`warn` 放行） | `formula_unparsable` | ③ 才用 `MODEL_EXTRACT` |
 | `verify` | `{ question_text, question_type }`（`figure_desc` 已併入題幹）**＋ `claimed_answer` 只放在 input，不得進 prompt** | `question_type === '證明'` → `skipped`。其餘：`answerCompare` 回 `agree` → `pass`；`uncertain` → 再採樣一次，仍 `uncertain` → `fail`；`disagree` → `fail` | `answer_mismatch` | `MODEL_VERIFY` |
 | `dedup1` | `{ question_id:null, embed_text, subject, chapter }` | 餘弦 ≥ `DEDUP_DUP_THRESHOLD` → `fail('duplicate')`；≥ `DEDUP_VARIANT_THRESHOLD` → `pass`（`verdict:'variant'`，照常入庫）；來源題無向量或 `FEATURE_SIMILAR=false` → `skipped` | `duplicate` | 無 |
@@ -482,10 +486,10 @@ function answerCompare(opts) {}
 module.exports = { answerCompare };
 ```
 
-規則（凍結）：
+規則（凍結；裁決 S2-11／S2-12 改寫）：
 - `單選`／`多選`：兩邊各抽出**選項代號集合**（`(A)`、`A`、`A.`、`甲` 不算），集合相等 → `agree`；任一邊抽不到代號 → `uncertain`。
-- `填空`／`計算`：先從 `claimed` 抽 `final_answer`——**第一個 `$…$`**，沒有就取**最後一個 `=` 之後**的片段；抽不到 → `uncertain`。
-- 抽出後依 `answer_form` 比：`number` 比正規化後的有理數（`\frac{a}{b}`、小數、`a/b`、負號、`±`、單位後綴一律去掉再比，容差 `1e-9`）；`option` 同上；`expression` 比去空白、去 `$`、去 `\left\right` 後的字串；`text` 比 `normalizeStem` 後的字串。
+- `填空`／`計算`：先從 `claimed` 抽 `final_answer`——**取最後一個 `$…$`**；該段含 `=` 或 `\approx` 就再取**最後一個 `=`／`\approx` 之後**的片段；只含上下標的片段（例如單位的 `$^2$`）視為單位的一部分**跳過**，往前找上一段 `$…$`；沒有任何 `$…$` 就取整段文字最後一個 `=`／`\approx` 之後；抽不到 → `uncertain`。（WS-D 對 fixture 45 題實測：舊規則「第一個 `$…$`」只抽對 4 題，本規則抽對 39 題。）
+- 抽出後依 `answer_form` 比：`number`——`\frac{a}{b}`、小數、`a/b`、百分比三種寫法先化成同一個有理數，單位後綴去掉，**負號視為數值的一部分**（`-1` 與 `1` → `disagree`），`±` 只與 `±` 比量值、`±2` 對上單值 `2` → `uncertain`，容差 `1e-9`；`option` 同單選；`expression` 比去空白、去 `$`、去 `\left\right` 後的字串；`text` 比 `normalizeStem` 後的字串。
 - `證明` 一律 `uncertain`（實務上 verify 節點會先 `skipped`，不會呼叫到）。
 - **任何比不出來的情況都回 `uncertain`，不回 `disagree`**：誤報一次 `answer_mismatch` 的成本（老師白看一題）遠低於漏報。
 
@@ -503,7 +507,7 @@ module.exports = { answerCompare };
 function parseLatexStrict(str) {}
 ```
 
-`kind` 的六個值（凍結）：`unknown_command`／`missing_rbrace`／`empty_fallback`／`parser_error`／`tokenize_error`／`bare_script`。
+`kind` 的六個值（凍結）：`unknown_command`／`missing_rbrace`／`empty_fallback`／`parser_error`／`tokenize_error`／`bare_script`。**凍結的是六個 kind，埋點位置由 WS-C 決定**（裁決 S2-17）：`bare_script` 除了 `renderMixedInto` 的純文字 `^`／`_`，也要在 `parseScripted` 對 `$…$` 內「`^`／`_` 後面什麼都沒有」發事件，fixture 的 10 題壞公式才抓得全。
 
 ### 4.4 `utils/formulaLint.js` / `utils/formulaFix.js`
 
@@ -523,8 +527,8 @@ function formulaLint(text) {}
 function formulaFix(text) {}
 ```
 
-- `rule` 的字串值由 WS-C 定，但**必須穩定**（會進 `job_events.detail` 與報表）；新增規則不得改既有規則名。
-- `formulaLint` 的 `sev` 分級原則：**會讓 Word 匯出降級成純文字的 → `error`**（`parseLatexStrict` 有事件）；只是寫法不漂亮的 → `warn`。
+- `rule` 的字串值由 WS-C 定，但**必須穩定**（會進 `job_events.detail` 與報表）；新增規則不得改既有規則名。已凍結的兩條：`$…$` 內的裸上下標 = `bare_script`（`error`）、純文字裡的 `^`／`_` = `bare_script_text`（`warn`，填空題的 `答案：___` 就長這樣）。
+- `formulaLint` 的 `sev` 分級原則：**會讓 Word 匯出降級成純文字的 → `error`**（`parseLatexStrict` 有事件）；只是寫法不漂亮的 → `warn`；`audit_formulas.js` 原本的 `info`（如 `latex_without_dollar`）一律併進 `warn`（裁決 S2-18，不加第三級）。
 
 ### 4.5 `utils/questionValidation.js`（擁有者：WS-A）
 
@@ -533,14 +537,16 @@ function formulaFix(text) {}
  * 從 controllers/questionController.js:10-25 原封不動抽出來，**行為一字不改**
  * （既有整合測試與 batch-save-questions 的回應形狀是契約）。
  * @param {object} q   HTTP body 或 payload 彙整後的欄位
- * @returns {{ ok: boolean, errors: string[], value?: object }}
+ * @returns {{ ok: boolean, error?: string, errors: string[], value?: object }}
+ *          不通過：{ ok:false, error:'<原訊息>', errors:['<原訊息>'] }（errors 恆為 error 的長度 1 陣列；
+ *                  本函式一次只回一則訊息）；通過：{ ok:true, errors:[], value:{…} }
  *          ok=true 時 value 是正規化後的欄位（difficulty 轉 int、chapter trim 過）
  */
 function validateQuestionFields(q) {}
 module.exports = { validateQuestionFields };
 ```
 
-`questionController.js` 改成 `require` 它，自己不再留一份。
+`questionController.js` 改成 `require` 它，自己不再留一份（既有呼叫點讀 `error`、approve 讀 `errors`——裁決 S2-1 的「兩鍵並存」是最終形狀）。
 
 ---
 
@@ -559,13 +565,15 @@ generateJson({
     // ── 階段 2 新增（三個都是選用，舊呼叫端不受影響）──
     agent,             // string，cassette 的第一段鍵；record/replay 模式下**必填**
     cacheKeyParts,     // object，見 5.2
-    template           // string，prompt 模板的識別名（記進 cassette 的 meta）
+    template           // string，prompt 模板的識別名（記進 cassette 的 meta）；原文經 templates.js 註冊表回查
 })
-  → Promise<{ data, usage:{tokenIn, tokenOut, tokenThinking, tokenCached}, latencyMs, raw }>
+  → Promise<{ data, usage:{tokenIn, tokenOut, tokenThinking, tokenCached}, latencyMs, raw, schemaFallback }>
 ```
 
 - `usage.tokenOut` = `candidatesTokenCount`；`usage.tokenThinking` = `thoughtsTokenCount`；**計費用 `tokenOut + tokenThinking`**（第 0.4 條）。
 - `tokenCached` 在沒有快取命中時回 `0`（來源鍵不存在）。
+- **模板註冊表**（裁決 S2-5）：`services/llm/templates.js` 匯出 `registerTemplate(name, text)`／`getTemplate(name)`；每個 agent 在模組載入時 `registerTemplate('<agent>.v1', PROMPT_TEMPLATE)`，`services/llm` 依 `template` 識別名回查原文算 `promptTemplateHash`。沒註冊的識別名退回 `sha256(識別名)` 並印一次警告（弱，識別名要帶版號）。**四個 LLM 節點（extract／classify／lint／verify）都必須註冊**。
+- **`schemaFallback`**（裁決 S2-4）：布林，`true` = 這次走了「schema 不含 enum + prompt 列舉」的退路（第 0.1 條）；runner 把它寫進 `job_events.detail.schema_fallback`。
 
 ### 5.2 cassette 的鍵與檔案格式（`LLM_MODE=record|replay`）
 
@@ -607,7 +615,7 @@ key = sha256( agent + '\n' + modelId + '\n' + promptTemplateHash + '\n' + schema
 
 - **replay miss 一律丟錯**，訊息逐字凍結為：
   `LLM_MODE=replay 找不到 cassette（agent=<agent> key=<key>）。請在本機執行 npm run eval:record -- --suite <suite>`
-  不得靜默退回假資料。fork PR 由 CI（WS-D）判斷後降為 warning，**這個判斷不在 `services/llm` 裡**。
+  不得靜默退回假資料。fork PR 由 CI（WS-D）判斷後降為 warning，**這個判斷不在 `services/llm` 裡**。`<suite>` 由 `services/llm` 保持字面不代換（它不知道 suite 名），後面可另接一行預期路徑；CI 比對訊息只比到 `--suite ` 為止（裁決 S2-14）。
 - `meta.fixtureHash` 與現況不符時：印 warning「few-shot 內容已變，cassette 可能過期」，**仍然回放**（規劃 §5.3.3）。
 - `record` 模式：真的呼叫 → 寫檔 → 回傳。已存在同鍵檔案時**覆寫**並印一行 log。
 
@@ -840,6 +848,7 @@ Windows 提醒：PowerShell 5.1 的 `>` 會寫成 UTF-16LE，要用 `npm start |
 | `MODEL_EXTRACT` | `gemini:gemini-3.5-flash` | 拆題／分類／公式重寫用（第 0.3 條） | WS-B |
 | `MODEL_VERIFY` | `gemini:gemini-3.7-flash` | 解題驗證用；開通付費後改 `gemini:gemini-3.1-pro-preview` | WS-B |
 | `ANTHROPIC_API_KEY` | （空） | 預留給 A-T17 異家驗證，**第一版不讀** | — |
+| `GEMINI_RPM` | `5` | `generateContent` 的每分鐘上限（令牌桶，與 `EMBED_RPM` 獨立）；免費層實測為 5，開通付費後放寬（裁決 S2-16） | WS-B |
 | `LLM_MODE` | `replay` | 既有；`live`／`record`／`replay`，CI 恆為 `replay` | WS-B、WS-D |
 | `EVAL_CASSETTE_DIR` | `eval/cassettes` | **裁決 25 在此定案**：`--golden` 落在 `eval/private/` 時，由 `eval/run.js` 在行程內改成 `eval/private/cassettes` | WS-B、WS-D |
 | `JOB_RUNNER` | `inline` | `inline`／`off` | WS-A |
@@ -869,10 +878,11 @@ Windows 提醒：PowerShell 5.1 的 `>` 會寫成 UTF-16LE，要用 `npm start |
 | Workstream | 擁有的檔案（階段 2） |
 |---|---|
 | **S0**（已完成） | `migrations/0003_jobs.sql`、`scripts/backfill_text_hash.js`、`scripts/spike_genai.js`、`config/chapterExamples.js`（空殼）、`.env.example`、`.gitignore`、`docs/interfaces-stage2.md`、`routes/index.js` 的四個新區塊（空殼） |
-| **WS-A** 管線核心 | `pipeline/`、`workers/`、`controllers/jobController.js`、`controllers/reviewController.js`、`utils/questionValidation.js`、`scripts/report_jobs.js`、`server.js`、`routes/index.js` 的 `[WS2-A: jobs]` 區塊 |
-| **WS-B** LLM 層與前段 agents | `services/llm/*`、`config/models.js`、`config/pricing.js`、`agents/extract.js`、`agents/classify.js`、`agents/schemas/`（含 `index.js` 的 `buildSchema`）、`config/chapterExamples.js`（**填內容**）、`eval/cassettes/**`、`docs/llm.md` |
-| **WS-C** 閘門零件與後段 agents | `utils/textFormatter.js`（**只加**）、`utils/formulaFix.js`、`utils/formulaLint.js`、`utils/answerCompare.js`、`utils/normalizeStem.js`、`agents/lint.js`、`agents/verify.js`、`agents/dedup.js`、`agents/schemas/verify.json`、`lint.json`、`eval/golden/formula.json` |
-| **WS-D** 評估與前端 | `eval/**`（`cassettes/` 除外）、`test/unit/`、`test/integration/`（controller 以外）、`public/index.html`、`public/js/review.js`、`.github/workflows/ci.yml`、`package.json` 的 `scripts` |
+| **WS-A** 管線核心 | `pipeline/`、`workers/`（含 `save` 節點）、`controllers/jobController.js`、`controllers/reviewController.js`、`utils/questionValidation.js`、`scripts/report_jobs.js`、`server.js`、**`app.js`**（裁決 S2-20：`serveIndex()` 的 `__FEATURE_PIPELINE__` 注入）、`routes/index.js` 的 `[WS2-A: jobs]` 區塊 |
+| **WS-B** LLM 層與前段 agents | `services/llm/*`（含 `cassette.js`、`templates.js`、`throttle.js`、`fake.js`）、`config/models.js`、`config/pricing.js`、`agents/extract.js`、`agents/classify.js`、`agents/promptParts.js`、`agents/schemas/`（含 `index.js` 的 `buildSchema`）、`config/chapterExamples.js`（**填內容**）、`eval/cassettes/**`、`scripts/record_cassettes.js`、**`services/legacy/analyzePdf.js`**（裁決 S2-19：A-T8 前的 `aiService.js` 快照，給 `compare_pipeline --method legacy` 用）、`docs/llm.md` |
+| **WS-C** 閘門零件與後段 agents | `utils/textFormatter.js`（**只加**）、`utils/formulaFix.js`、`utils/formulaLint.js`、`utils/answerCompare.js`、`utils/normalizeStem.js`、`agents/lint.js`、`agents/verify.js`、`agents/dedup.js`、`agents/dedup0.js`、`agents/dedup1.js`、`agents/schemas/verify.json`、`lint.json`、`eval/golden/formula.json`、`scripts/backfill_text_hash.js`（合入後改 `require` `utils/normalizeStem`） |
+| **WS-D** 評估與前端 | `eval/**`（`cassettes/` 除外）、`public/index.html`、`public/js/review.js`、`.github/workflows/ci.yml`、`package.json` 的 `scripts`、`.gitattributes` |
+| **測試檔（裁決 S2-2）** | `test/unit/` 與 `test/integration/` 下，**各 WS 可新增自己擁有模組的測試檔**（例如 `stateMachine.test.js` 歸 A、`agentsGates.test.js` 歸 C），**不得修改別人的檔**；既有 `test/unit/shuffle|textFormatter.test.js` 是契約 |
 
 共用檔規則（與階段 1 相同）：
 
@@ -909,5 +919,40 @@ Windows 提醒：PowerShell 5.1 的 `>` 會寫成 UTF-16LE，要用 `npm start |
 - `migrate.js` 沒有 `down`：寫錯的 migration 用「再寫一支把它改回來」修正。
 - `text_hash` 改成 UNIQUE 是**另一支 migration**，前提是 `scripts/backfill_text_hash.js` 的碰撞清單經人工逐組確認（目前開發庫有 2 組待確認：#2/#3、#5/#38）。
 - WS 發現缺欄位時，**不是**改 `0003`，而是寫進 `docs/questions2-ws<X>.md` 由開發者本人裁決後新開一支。
+
+---
+
+## 12. 第一輪裁決（階段 2，2026-08-22，回應 `questions2-ws*.md` 共 32 條）
+
+全部已寫進對應條文；編號 S2-*。
+
+| # | 裁決 | 來源 |
+|---|---|---|
+| S2-1 | `validateQuestionFields` 回 `{ok, error, errors, value?}` 兩鍵並存（第 4.5 條） | A-1 |
+| S2-2 | 各 WS 可在 `test/unit|integration` 新增自己的測試檔，不得改別人的（第 10.1 條） | A-2／C-4 |
+| S2-3 | 終止上界以第 2.4 條的 `Σ maxRetries + Σ maxErrorRetries + 6 = 29` 為準；規劃 §3.8 的 11 作廢 | A-3 |
+| S2-4 | `generateJson` 回傳多 `schemaFallback`，runner 寫進 `job_events.detail.schema_fallback`（第 5.1 條） | B-Q5 |
+| S2-5 | 模板原文走 `services/llm/templates.js` 註冊表，四個 LLM 節點都要 `registerTemplate`（第 5.1 條） | B-Q1／C-7 |
+| S2-6 | `dedup0`／`dedup1` 由 `agents/dedup.js` + 兩支轉接檔服務，runner 另有對應表；層級只看 input 鍵（第 3.1 條） | A-6／C-6 |
+| S2-7 | `save` 節點歸 runner（第 3.1、10.1 條） | A-7 |
+| S2-8 | `ctx.config.features = {similar, pipeline}` 由 runner 組；classify 三層 few-shot；錄製與 eval 一律 `ctx.db=null`（第 3.1、3.3 條） | B-Q2／C-3 |
+| S2-9 | PDF 超門檻回 `fail('provider_error')` 不 throw（S0-4 改寫） | B-Q3 |
+| S2-10 | `idx` 由 agent 算（第 3.1 條） | B-Q4 |
+| S2-11 | `answerCompare` 的 `number`：負號是數值一部分、`±` 只與 `±` 比（第 4.2 條） | C-1 |
+| S2-12 | `final_answer` 抽取改為「最後一個 `$…$`，含 `=`／`\approx` 取其後，純上下標片段跳過」（第 4.2 條）；D 的 answer golden 改回真實寫法 | D-Q3 |
+| S2-13 | classify 的 `chapter_confidence` 缺值／0 視為閘門不過；eval 的 classify suite 輸入約定寫進第 3.3 條 | D-Q4 |
+| S2-14 | replay miss 訊息的 `<suite>` 保持字面，CI 只比對前綴（第 5.2 條） | B-Q6 |
+| S2-15 | 根 `.gitignore` 加 `!exam_pro/eval/fixtures/*.pdf`；樣卷以 WS-D 的 `eval/fixtures/make_sample_pdf.js` 產出為準，WS-B 的 `scripts/make_sample_exam_pdf.js` 退場，cassette 要對 D 的樣卷重錄 | B-Q7／B-Q8／D-Q5 |
+| S2-16 | `GEMINI_RPM=5` 進 `.env.example` 與第 9 條 | B-Q9 |
+| S2-17 | `bare_script` 埋點補 `parseScripted`；rule 分 `bare_script`／`bare_script_text`（第 4.3、4.4 條） | C-2 |
+| S2-18 | `formulaLint` 的 info 併 warn（第 4.4 條） | C-8 |
+| S2-19 | `services/legacy/analyzePdf.js` 由 WS-B 從 A-T8 之前的 `aiService.js` 快照建立（取 `git show e1740ca:exam_pro/services/aiService.js`），歸 WS-B（第 10.1 條） | D-Q1 |
+| S2-20 | `app.js` 歸 WS-A；`serveIndex()` 補 `__FEATURE_PIPELINE__` 注入（第 10.1 條） | D-Q2 |
+| S2-21 | `/api/jobs` 自己把 multer `LIMIT_FILE_SIZE` 轉成 413 凍結字串；`/analyze-pdf` 維持舊行為 | A-4 |
+| S2-22 | extracting 期間 `counts` 全 0、靠 `state` 顯示「拆題中」；前端據此顯示 | A-5 |
+| S2-23 | approve 入庫時 `text_hash` **對修正後的 `question_text` 重算**（`utils/normalizeStem.textHash`），不沿用 payload 的值——人改過文字，雜湊就該變；A 的整合測試據此修正 | 合併測試 |
+| S2-24 | C 的 `agents/_schema.js` 橋接在 B 合入後改用 `agents/schemas/index.js` 的 `buildSchema` 並刪除 | C-5 |
+| S2-25 | B 改了 `test/unit/llmEmbed.test.js` 一項斷言（接受）；新檔 `cassette.js`／`templates.js`／`promptParts.js`／`record_cassettes.js` 歸 B | B-Q10／B-Q7 |
+| 人工 | fixture #47（直線運動 vs 物體的運動）、#54（電場與電位 vs 靜電學）的章節由開發者決定；開發庫 `text_hash` 碰撞 #2/#3、#5/#38 由開發者確認 | B 附帶／S0 |
 
 ---
