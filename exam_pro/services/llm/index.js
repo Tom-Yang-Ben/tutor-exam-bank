@@ -81,20 +81,66 @@ async function embed({ model, texts, dim, taskType } = {}) {
 }
 
 /**
- * 受限 JSON 生成（階段 2 才會真正用到；這裡先固定簽名與模式檢查）。
+ * 受限 JSON 生成（docs/interfaces-stage2.md 第 5.1 條）。
+ *
+ * 三個模式：
+ *   live   —— 真的呼叫供應商，不留 cassette
+ *   record —— 真的呼叫，把回應寫成 cassette（同鍵覆寫並印一行 log）
+ *   replay —— 只讀 cassette；miss 一律丟錯（訊息逐字凍結於第 5.2 條），CI 恆為這個模式
+ *
  * @param {{model?:string, system?:string, parts:Array<object>, schema?:object,
- *          maxOutputTokens?:number, signal?:AbortSignal}} opts
+ *          maxOutputTokens?:number, signal?:AbortSignal,
+ *          agent?:string, cacheKeyParts?:object, template?:string}} opts
+ *        agent／cacheKeyParts／template 是階段 2 新增的三個選用欄位；
+ *        record／replay 模式下 **agent 必填**（它是 cassette 的第一段鍵與子目錄名）。
+ * @returns {Promise<{data:object, usage:{tokenIn,tokenOut,tokenThinking,tokenCached},
+ *                    latencyMs:number, raw:any}>}
  */
 async function generateJson(opts = {}) {
     const mode = llmMode();
+    const { parseModel } = require('../../config/models');
+    const models = require('../../config/models');
+    const { vendor, id } = parseModel(opts.model || models.MODEL_EXTRACT);
+
     if (mode === 'replay') {
-        throw new Error('LLM_MODE=replay：generateJson 的 cassette 回放屬階段 2（jobs 管線）範圍，階段 1 尚未實作。');
+        const fake = require('./fake');
+        return fake.generateJson({ ...opts, model: id });
     }
-    if (mode === 'record') {
-        throw new Error('LLM_MODE=record：cassette 錄製屬階段 2 範圍，階段 1 尚未實作。');
+
+    if (vendor !== 'gemini') {
+        throw new Error(`services/llm：第一版只有 gemini adapter，收到 vendor=「${vendor}」（anthropic／openai 留給 A-T17）。`);
     }
+
     const gemini = require('./gemini');
-    return gemini.generateJson({ model: opts.model || process.env.MODEL_EXTRACT || 'gemini-2.5-flash', ...opts });
+    const res = await gemini.generateJson({ ...opts, model: id });
+
+    if (mode === 'record') {
+        const cassette = require('./cassette');
+        const key = cassette.cassetteKey({
+            agent: opts.agent, modelId: id, template: opts.template,
+            schema: opts.schema, cacheKeyParts: opts.cacheKeyParts
+        });
+        const { file, overwritten } = cassette.writeCassette({
+            agent: opts.agent,
+            key,
+            meta: {
+                agent: opts.agent,
+                model: id,
+                template: opts.template ?? null,
+                recorded_at: new Date().toISOString(),
+                fixtureHash: cassette.fixtureHash()
+            },
+            // 只存摘要：PDF base64 與逐字試題絕不進版控（NOTICE 第 4 條）
+            request: {
+                parts: cassette.summarizeParts(opts.parts),
+                cacheKeyParts: opts.cacheKeyParts ?? {}
+            },
+            response: { data: res.data, usage: res.usage, latencyMs: res.latencyMs }
+        });
+        console.log(`[llm:record] ${overwritten ? '覆寫' : '寫入'} cassette → ${file}`);
+    }
+
+    return res;
 }
 
 module.exports = { embed, generateJson, l2Normalize, embedMode, llmMode };
