@@ -13,6 +13,7 @@ const assert = require('node:assert/strict');
 
 const {
     loadConfig, planChunks, backoffMs, attemptNo, buildSaveFields, normalizeErrorClass, makeLogger,
+    readFeatures, schemaFallbackOf,
     ADVANCEABLE_STATES, FREE_NODES, AGENT_MODULE_FOR_NODE, ERROR_CLASSES,
     RENEW_INTERVAL_MS, BACKOFF_BASE_MS, BACKOFF_MAX_MS, EXTRACT_MAX_RETRIES
 } = require('../../workers/jobRunner');
@@ -248,6 +249,90 @@ describe('jobRunner — buildSaveFields', () => {
         assert.equal(buildSaveFields(null).question_text, '');
         assert.equal(buildSaveFields(undefined).answer_text, '');
     });
+});
+
+describe('jobRunner — readFeatures（裁決 S2-8）', () => {
+    /** 這幾格會動 process.env，跑完一定要還原，否則會汙染同一行程的其他測試。 */
+    function withEnv(vars, fn) {
+        const saved = {};
+        for (const [k, v] of Object.entries(vars)) {
+            saved[k] = process.env[k];
+            if (v === undefined) delete process.env[k]; else process.env[k] = v;
+        }
+        try { fn(); } finally {
+            for (const [k, v] of Object.entries(saved)) {
+                if (v === undefined) delete process.env[k]; else process.env[k] = v;
+            }
+        }
+    }
+
+    test('鍵名是小寫短名 similar／pipeline，不是環境變數全名', () => {
+        withEnv({ FEATURE_SIMILAR: 'true', FEATURE_PIPELINE: 'true' }, () => {
+            assert.deepEqual(readFeatures(), { similar: true, pipeline: true });
+        });
+    });
+
+    test('未設定時兩個都是 false（旗標預設全關）', () => {
+        withEnv({ FEATURE_SIMILAR: undefined, FEATURE_PIPELINE: undefined }, () => {
+            assert.deepEqual(readFeatures(), { similar: false, pipeline: false });
+        });
+    });
+
+    test('沿用 interfaces.md 第 9 條的布林規則：只有 1／true 為真', () => {
+        for (const [raw, expected] of [['1', true], ['true', true], ['TRUE', true],
+        ['false', false], ['0', false], ['off', false], ['no', false], ['', false], ['yes', false]]) {
+            withEnv({ FEATURE_SIMILAR: raw }, () => {
+                assert.equal(readFeatures().similar, expected, `FEATURE_SIMILAR=「${raw}」`);
+            });
+        }
+    });
+
+    test('兩個旗標各自獨立', () => {
+        withEnv({ FEATURE_SIMILAR: 'true', FEATURE_PIPELINE: 'false' }, () => {
+            assert.deepEqual(readFeatures(), { similar: true, pipeline: false });
+        });
+    });
+
+    test('即時讀取：改了 env 不用重啟 worker', () => {
+        withEnv({ FEATURE_PIPELINE: 'false' }, () => {
+            assert.equal(readFeatures().pipeline, false);
+            process.env.FEATURE_PIPELINE = 'true';
+            assert.equal(readFeatures().pipeline, true);
+        });
+    });
+});
+
+describe('jobRunner — schemaFallbackOf（裁決 S2-4）', () => {
+    test('generateJson 回 schemaFallback:true → 記', () => {
+        assert.equal(schemaFallbackOf({ schemaFallback: true }, { kind: 'pass', data: {} }), true);
+    });
+
+    test('agent 自己放進 outcome.data.schema_fallback → 也記', () => {
+        assert.equal(schemaFallbackOf({ schemaFallback: false }, { kind: 'pass', data: { schema_fallback: true } }), true);
+    });
+
+    test('兩個來源取 OR', () => {
+        assert.equal(schemaFallbackOf({ schemaFallback: true }, { data: { schema_fallback: true } }), true);
+    });
+
+    test('都沒走退路 → false（呼叫端因此不寫這個鍵）', () => {
+        assert.equal(schemaFallbackOf({ schemaFallback: false }, { kind: 'pass', data: {} }), false);
+        assert.equal(schemaFallbackOf(newMeterLike(), { kind: 'fail', reason: 'duplicate' }), false);
+    });
+
+    test('缺 meter／缺 outcome／缺 data 都不丟例外', () => {
+        assert.equal(schemaFallbackOf(undefined, undefined), false);
+        assert.equal(schemaFallbackOf(null, null), false);
+        assert.equal(schemaFallbackOf({}, {}), false);
+    });
+
+    test('只認嚴格 true，不做寬鬆真值判斷', () => {
+        assert.equal(schemaFallbackOf({ schemaFallback: 'true' }, { data: { schema_fallback: 1 } }), false);
+    });
+
+    function newMeterLike() {
+        return { model: null, tokenIn: 0, tokenOut: 0, calls: 0, schemaFallback: false };
+    }
 });
 
 describe('jobRunner — makeLogger', () => {

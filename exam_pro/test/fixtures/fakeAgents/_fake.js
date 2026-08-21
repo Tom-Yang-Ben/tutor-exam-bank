@@ -50,6 +50,11 @@ function makeAgent(node, defaultPass) {
                     });
                     return { kind: 'error', errorClass: 'timeout', message: '假 agent：被 abort' };
                 }
+                if (spec.kind === 'echoCtx') {
+                    // 裁決 S2-8：把 runner 組給 agent 的旗標原樣回報，
+                    // 讓整合測試看得到「agent 真的拿得到 ctx.config.features」。
+                    return { kind: 'pass', data: { ...defaultPass(ctx, input), __features: ctx.config.features } };
+                }
                 if (spec.kind === 'spendThenPass') {
                     await ctx.llm.generateJson({
                         model: ctx.config.models.extract, agent: node,

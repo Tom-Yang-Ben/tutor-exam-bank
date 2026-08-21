@@ -64,6 +64,7 @@ function runSuite() {
     }
     const { query, pool } = require(path.join(APP_DIR, 'config', 'db'));
     const { createRunner } = require(path.join(APP_DIR, 'workers', 'jobRunner'));
+    const { textHash } = require(path.join(APP_DIR, 'utils', 'normalizeStem'));
     const fakeExtract = require(path.join(APP_DIR, 'test', 'fixtures', 'fakeAgents', 'extract.js'));
     const fakeCommon = require(path.join(APP_DIR, 'test', 'fixtures', 'fakeAgents', '_fake.js'));
 
@@ -76,12 +77,14 @@ function runSuite() {
     /** 假 LLM：回固定 usage，讓成本累加與 job_events 的 token 欄位有東西可斷言。 */
     const fakeLlm = {
         calls: 0,
+        schemaFallback: false,      // 裁決 S2-4：模擬「走了 schema 不含 enum 的退路」
         async generateJson({ model }) {
             fakeLlm.calls += 1;
             return {
                 data: {}, latencyMs: 5,
                 usage: { tokenIn: 1000, tokenOut: 100, tokenThinking: 400, tokenCached: 0 },
-                raw: { usageMetadata: { promptTokenCount: 1000, candidatesTokenCount: 100, thoughtsTokenCount: 400 } }
+                raw: { usageMetadata: { promptTokenCount: 1000, candidatesTokenCount: 100, thoughtsTokenCount: 400 } },
+                schemaFallback: fakeLlm.schemaFallback
             };
         },
         async embed() { return { vectors: [], usage: { tokenIn: 10 } }; }
@@ -131,6 +134,39 @@ function runSuite() {
         return { jobId, jqIds };
     }
 
+    /**
+     * 清空管線與題庫的所有表，**遇到死結就重試**。
+     *
+     * 為什麼需要重試：入庫成功後 runner 與 approve 都會 fire-and-forget 呼叫
+     * `embedService.embedByIds()`（第 3.3 條、interfaces.md 12.4 都明訂如此），
+     * 它是刻意不被 await 的，因此可能跨到下一個案例才跑完。那個交易在
+     * `questions` 上持有列鎖並要做 FK 檢查（RowShareLock），而 TRUNCATE 要的是
+     * AccessExclusiveLock——兩邊互等就是 40P01。
+     *
+     * 這不是產品缺陷（線上不會每隔幾秒 TRUNCATE 一次題庫），而是「測試想要一個
+     * 乾淨起點」與「背景補向量」之間的競爭。死結一定有一邊被 PG 中止，殘留的
+     * 那筆 embed 交易很短，退避幾十毫秒再試就會過。
+     *
+     * **刻意不加 `RESTART IDENTITY`**：同一個理由的另一半。identity 歸零會讓下一個
+     * 案例的 job 又拿到 id=1，於是上一個案例殘留的 `UPDATE jobs SET token_in = token_in + …
+     * WHERE id = 1` 會結結實實記到新案例頭上（實測就是這樣讓 token_in 變成兩倍的）。
+     * 讓 id 在整輪測試裡單調遞增，殘留寫入就只會打在已經不存在的列上，影響 0 列。
+     * 本檔所有斷言用的都是「插入時回傳的 id」，沒有任何一處假設 id 從 1 開始。
+     */
+    async function truncateAll(attempts = 6) {
+        for (let i = 1; ; i++) {
+            try {
+                await query('TRUNCATE job_events, job_questions, jobs CASCADE');
+                await query('TRUNCATE attempts, exam_papers, students, questions CASCADE');
+                return;
+            } catch (err) {
+                // 40P01 死結、55P03 拿不到鎖；其餘錯誤是真問題，直接往上丟
+                if ((err.code !== '40P01' && err.code !== '55P03') || i >= attempts) throw err;
+                await new Promise(r => setTimeout(r, 50 * i));
+            }
+        }
+    }
+
     /** 一直 tick 到沒有可推進的列為止（每次 tick 之後等 in-flight 清空）。 */
     async function drain(runner, maxRounds = 60) {
         for (let i = 0; i < maxRounds; i++) {
@@ -151,11 +187,11 @@ function runSuite() {
         });
 
         beforeEach(async () => {
-            await query('TRUNCATE job_events, job_questions, jobs RESTART IDENTITY CASCADE');
-            await query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE');
+            await truncateAll();
             fakeExtract.resetCounts();
             fakeCommon.resetCounts();
             fakeLlm.calls = 0;
+            fakeLlm.schemaFallback = false;
             for (const f of fs.readdirSync(JOBS_DIR)) fs.unlinkSync(path.join(JOBS_DIR, f));
         });
 
@@ -323,6 +359,54 @@ function runSuite() {
                 assert.equal(rows[0].review_reason, 'schema_invalid');
                 const { rows: q } = await query('SELECT COUNT(*)::int AS n FROM questions');
                 assert.equal(q[0].n, 0);
+            });
+        });
+
+        // ─────────────────── §12 第一輪裁決 ───────────────────
+
+        describe('runner — §12 裁決 S2-4／S2-8', () => {
+            test('S2-8：agent 從 ctx.config.features 拿得到 {similar, pipeline}（小寫短名）', async () => {
+                const saved = { s: process.env.FEATURE_SIMILAR, p: process.env.FEATURE_PIPELINE };
+                process.env.FEATURE_SIMILAR = 'true';
+                process.env.FEATURE_PIPELINE = 'false';
+                try {
+                    const { jobId } = await seedJob([
+                        extractPayload(1, { __fake: { classify: { kind: 'echoCtx' } } })
+                    ]);
+                    await drain(makeRunner());
+
+                    const { rows } = await query('SELECT payload FROM job_questions WHERE job_id = $1', [jobId]);
+                    assert.deepEqual(rows[0].payload.classify.__features, { similar: true, pipeline: false },
+                        '鍵名必須是小寫短名，值來自 config/features.js');
+                } finally {
+                    if (saved.s === undefined) delete process.env.FEATURE_SIMILAR; else process.env.FEATURE_SIMILAR = saved.s;
+                    if (saved.p === undefined) delete process.env.FEATURE_PIPELINE; else process.env.FEATURE_PIPELINE = saved.p;
+                }
+            });
+
+            test('S2-4：generateJson 回 schemaFallback → job_events.detail.schema_fallback = true', async () => {
+                fakeLlm.schemaFallback = true;
+                const { jobId } = await seedJob([
+                    extractPayload(1, { __fake: { classify: { kind: 'spendThenPass' } } })
+                ]);
+                await drain(makeRunner());
+
+                const { rows } = await query(
+                    `SELECT detail->>'schema_fallback' AS sf FROM job_events
+                      WHERE job_id = $1 AND node = 'classify'`, [jobId]);
+                assert.equal(rows[0].sf, 'true');
+            });
+
+            test('S2-4：沒走退路時不寫這個鍵（detail 不必逐列存一個 false）', async () => {
+                const { jobId } = await seedJob([
+                    extractPayload(1, { __fake: { classify: { kind: 'spendThenPass' } } })
+                ]);
+                await drain(makeRunner());
+
+                const { rows } = await query(
+                    `SELECT detail ? 'schema_fallback' AS has_key FROM job_events
+                      WHERE job_id = $1 AND node = 'classify'`, [jobId]);
+                assert.equal(rows[0].has_key, false);
             });
         });
 
@@ -750,7 +834,7 @@ function runSuite() {
                 return { jobId, jqId: jqIds[0] };
             }
 
-            test('approve 入庫：origin=pdf、chapter_src=human、text_hash 與 search_tsv 都有', async () => {
+            test('approve 入庫：origin=pdf、chapter_src=human、text_hash 對修正後題幹重算（S2-23）', async () => {
                 const { jobId, jqId } = await seedNeedsReview();
                 const res = await request(app).post(`/api/review/${jqId}/approve`).send(GOOD_BODY);
                 assert.equal(res.status, 200);
@@ -761,7 +845,11 @@ function runSuite() {
                        FROM questions WHERE id = $1`, [res.body.question_id]);
                 assert.equal(rows[0].origin, 'pdf');
                 assert.equal(rows[0].chapter_src, 'human', '人改過的章節要標 human');
-                assert.equal(rows[0].text_hash, 'c'.repeat(64));
+                // 裁決 S2-23：人改過題幹，雜湊就該跟著變，不得沿用 payload.dedup0 那一個。
+                // seedNeedsReview 把 payload 的 text_hash 塞成 'cccc…'，正好當對照組。
+                assert.equal(rows[0].text_hash, textHash(GOOD_BODY.question_text));
+                assert.notEqual(rows[0].text_hash, 'c'.repeat(64), '不可沿用 dedup0 當初算的舊雜湊');
+                assert.match(rows[0].text_hash, /^[0-9a-f]{64}$/);
                 assert.equal(rows[0].question_text, GOOD_BODY.question_text);
                 assert.equal(rows[0].has_tsv, true);
 
@@ -955,6 +1043,44 @@ function runSuite() {
                 const res = await request(app).post('/api/jobs/999999/retry').send({});
                 assert.equal(res.status, 404);
                 assert.equal(res.body.message, '找不到該任務');
+            });
+        });
+
+        describe('app.js — serveIndex 的旗標注入（裁決 S2-20）', () => {
+            test('FEATURE_PIPELINE=true 時注入 true，__FEATURE_PIPELINE__ 不得殘留', async () => {
+                const saved = process.env.FEATURE_PIPELINE;
+                process.env.FEATURE_PIPELINE = 'true';
+                try {
+                    const res = await request(freshApp()).get('/');
+                    assert.equal(res.status, 200);
+                    assert.match(res.text, /<meta name="feature-pipeline" content="true">/);
+                    assert.equal(res.text.includes('__FEATURE_PIPELINE__'), false);
+                    assert.equal(res.text.includes('__API_KEY__'), false, '兩個佔位字串要在同一次替換裡處理掉');
+                } finally {
+                    if (saved === undefined) delete process.env.FEATURE_PIPELINE; else process.env.FEATURE_PIPELINE = saved;
+                }
+            });
+
+            test('未設定時注入字面 false（旗標預設關）', async () => {
+                const saved = process.env.FEATURE_PIPELINE;
+                delete process.env.FEATURE_PIPELINE;
+                try {
+                    const res = await request(freshApp()).get('/');
+                    assert.match(res.text, /<meta name="feature-pipeline" content="false">/);
+                } finally {
+                    if (saved !== undefined) process.env.FEATURE_PIPELINE = saved;
+                }
+            });
+
+            test('/index.html 走同一支 serveIndex，注入結果一致', async () => {
+                const saved = process.env.FEATURE_PIPELINE;
+                process.env.FEATURE_PIPELINE = '1';
+                try {
+                    const res = await request(freshApp()).get('/index.html');
+                    assert.match(res.text, /<meta name="feature-pipeline" content="1">/);
+                } finally {
+                    if (saved === undefined) delete process.env.FEATURE_PIPELINE; else process.env.FEATURE_PIPELINE = saved;
+                }
             });
         });
 

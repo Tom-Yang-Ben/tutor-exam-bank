@@ -35,5 +35,9 @@ module.exports = {
     // GET /api/questions/:id/similar 是否掛載（WS-C）
     get FEATURE_SIMILAR() { return isEnabled('FEATURE_SIMILAR'); },
     // listQuestions 是否改走 hybrid 檢索（WS-A + WS-C）
-    get FEATURE_HYBRID_SEARCH() { return isEnabled('FEATURE_HYBRID_SEARCH'); }
+    get FEATURE_HYBRID_SEARCH() { return isEnabled('FEATURE_HYBRID_SEARCH'); },
+    // 上傳區是否改走 POST /api/jobs（階段 2，interfaces-stage2.md 第 9 條）。
+    // 讀取點有兩個，都經這裡：app.js 的 serveIndex 注入給前端（裁決 S2-20）、
+    // workers/jobRunner.js 組 ctx.config.features.pipeline（裁決 S2-8）。
+    get FEATURE_PIPELINE() { return isEnabled('FEATURE_PIPELINE'); }
 };

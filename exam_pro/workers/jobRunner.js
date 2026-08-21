@@ -31,7 +31,7 @@ function resolveJobPath(p) {
     return path.isAbsolute(p) ? p : path.resolve(APP_DIR, p);
 }
 
-/** 六個可推進狀態（= 認領 SQL 的 WHERE state IN (...)）。 */
+/** 六個可推進狀態（= 認領 SQL 的 WHERE state IN (...)）。終止上界見裁決 S2-3。 */
 const ADVANCEABLE_STATES = Object.keys(NODE_FOR_STATE);
 
 /**
@@ -40,7 +40,14 @@ const ADVANCEABLE_STATES = Object.keys(NODE_FOR_STATE);
  */
 const FREE_NODES = new Set(['dedup0', 'dedup1', 'save']);
 
-/** node → agent 檔名。dedup0／dedup1 共用 agents/dedup.js（第 10.1 條 WS-C 只列了單數的 dedup.js）。 */
+/**
+ * node → agent 檔名（裁決 S2-6，第 3.1 條）。
+ *
+ * `dedup0`／`dedup1` 兩個節點由 `agents/dedup.js` 一支服務，另有兩支三行的轉接檔
+ * `agents/dedup0.js`／`dedup1.js`。因此 loadAgent 的解析順序是
+ * ①`agents/<node>.js` → ②這張表，兩種寫法都接得上。
+ * 層級只能靠凍結的 input 鍵判斷（見 buildInput），不看 state 或 payload。
+ */
 const AGENT_MODULE_FOR_NODE = {
     extract: 'extract', dedup0: 'dedup', classify: 'classify',
     lint: 'lint', verify: 'verify', dedup1: 'dedup'
@@ -120,6 +127,24 @@ function attemptNo(retries, node) {
     return (r[node] ?? 0) + (r[`${node}:error`] ?? 0) + 1;
 }
 
+/**
+ * 這次節點呼叫有沒有走 schema 退路（裁決 S2-4，第 5.1 條）。
+ *
+ * 兩個來源取 OR，任一為真就記：
+ *   1. `generateJson` 的回傳（runner 的計量器直接看到，最權威——agent 忘了轉手也不會漏）
+ *   2. `outcome.data.schema_fallback`（agent 自己記的，例如 `agents/extract.js`）
+ *
+ * 回 false 時呼叫端**不寫這個鍵**：絕大多數呼叫都沒走退路，
+ * 逐列存一個 `false` 只是讓 job_events.detail 白白變大。
+ *
+ * @param {{schemaFallback?:boolean}} meter
+ * @param {{data?:object}} outcome
+ * @returns {boolean}
+ */
+function schemaFallbackOf(meter, outcome) {
+    return meter?.schemaFallback === true || outcome?.data?.schema_fallback === true;
+}
+
 /** 不在 DDL 九個值內的 error_class 一律不寫（欄位可為 NULL），避免 CHECK 炸掉。 */
 function normalizeErrorClass(value) {
     return ERROR_CLASSES.has(value) ? value : null;
@@ -154,6 +179,23 @@ function buildSaveFields(payload) {
         difficulty: ex.difficulty,
         question_text,
         answer_text: lint.answer_text ?? ex.answer_text ?? ''
+    };
+}
+
+/**
+ * 組 `ctx.config.features`（裁決 S2-8，第 3.1 條）。
+ *
+ * 鍵名凍結為**小寫短名** `{ similar, pipeline }`，不是環境變數全名；
+ * 值一律經 `config/features.js`（布林解讀規則凍結於 interfaces.md 第 9 條：
+ * 只有字串 `1`／`true` 為真）。每次組 ctx 都重讀一次，`.env` 改了不必重啟 worker。
+ *
+ * @returns {{similar:boolean, pipeline:boolean}}
+ */
+function readFeatures() {
+    const features = require('../config/features');
+    return {
+        similar: features.isEnabled('FEATURE_SIMILAR'),
+        pipeline: features.isEnabled('FEATURE_PIPELINE')
     };
 }
 
@@ -227,6 +269,9 @@ function createRunner(opts = {}) {
                 meter.tokenThinking += u.tokenThinking ?? 0;
                 meter.tokenCached += u.tokenCached ?? 0;
                 meter.calls += 1;
+                // 裁決 S2-4：走過「schema 不含 enum + prompt 列舉」退路的呼叫要留痕。
+                // 由 runner 直接從 generateJson 的回傳讀，不倚賴 agent 有沒有轉手記下來。
+                if (res?.schemaFallback === true) meter.schemaFallback = true;
                 if (res?.raw?.usageMetadata) meter.usageMetadata.push(res.raw.usageMetadata);
                 return res;
             },
@@ -240,7 +285,10 @@ function createRunner(opts = {}) {
     }
 
     function newMeter() {
-        return { model: null, tokenIn: 0, tokenOut: 0, tokenThinking: 0, tokenCached: 0, calls: 0, usageMetadata: [] };
+        return {
+            model: null, tokenIn: 0, tokenOut: 0, tokenThinking: 0, tokenCached: 0,
+            calls: 0, usageMetadata: [], schemaFallback: false
+        };
     }
 
     /** 用 config/pricing.js 估價；WS-B 還沒合入時記 0 且 cost_estimated=false（第 5.5 條）。 */
@@ -355,7 +403,10 @@ function createRunner(opts = {}) {
                     pdfChunkPages: config.pdfChunkPages,
                     inlineMaxBytes: config.inlineMaxBytes,
                     nodeTimeoutMs: config.nodeTimeoutMs
-                }
+                },
+                // 裁決 S2-8（第 3.1 條）：agent 不得自己讀 process.env，旗標只能從這裡拿。
+                // 鍵名是小寫短名 similar／pipeline，值即時由 config/features.js 讀取。
+                features: readFeatures()
             }
         };
         delete ctx.models; delete ctx.limits;
@@ -393,7 +444,9 @@ function createRunner(opts = {}) {
         return 'provider_error';
     }
 
-    // ── save 節點（第 3.3 條最後一列；由 runner 自己實作，不在 agents/）──
+    // ── save 節點（第 3.3 條最後一列；裁決 S2-7：歸 runner，不在 agents/）──
+    //    理由（§12）：它要開交易、寫 job_events、回填 question_id，
+    //    這三件事第 3.1 條都明文排除在 agent 合約之外。job_events.node 仍寫 'save'。
     /**
      * 最後一道閘門 + 入庫。validateQuestionFields 與 INSERT 在同一個交易裡，
      * 因此不會出現「questions 有了、job_questions.question_id 還是 NULL」的中間狀態。
@@ -567,6 +620,7 @@ function createRunner(opts = {}) {
                     ...(outcome.kind === 'fail' ? { reason: outcome.reason, feedback: outcome.feedback } : {}),
                     ...(outcome.kind === 'error' ? { message: outcome.message } : {}),
                     ...(meter.usageMetadata.length > 0 ? { usage_metadata: meter.usageMetadata } : {}),
+                    ...(schemaFallbackOf(meter, outcome) ? { schema_fallback: true } : {}),
                     review_reason: next.review_reason
                 }
             });
@@ -687,7 +741,8 @@ function createRunner(opts = {}) {
                     rejected: (outcome.data?.rejected || []).length,
                     ...(outcome.kind === 'fail' ? { reason: outcome.reason } : {}),
                     ...(outcome.kind === 'error' ? { message: outcome.message } : {}),
-                    ...(meter.usageMetadata.length > 0 ? { usage_metadata: meter.usageMetadata } : {})
+                    ...(meter.usageMetadata.length > 0 ? { usage_metadata: meter.usageMetadata } : {}),
+                    ...(schemaFallbackOf(meter, outcome) ? { schema_fallback: true } : {})
                 }
             });
             logger.info({
@@ -836,6 +891,7 @@ module.exports = {
     createRunner, startInlineRunner,
     // 純函式，供單元測試與 report_jobs 共用
     loadConfig, planChunks, backoffMs, attemptNo, buildSaveFields, normalizeErrorClass, makeLogger, resolveJobPath,
+    readFeatures, schemaFallbackOf,
     ADVANCEABLE_STATES, FREE_NODES, AGENT_MODULE_FOR_NODE, ERROR_CLASSES,
     RENEW_INTERVAL_MS, BACKOFF_BASE_MS, BACKOFF_MAX_MS, EXTRACT_MAX_RETRIES
 };

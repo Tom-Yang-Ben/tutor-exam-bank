@@ -23,33 +23,23 @@ const REVIEW_REASONS = ['chapter_invalid', 'formula_unparsable', 'answer_mismatc
 const NOT_FOUND = '找不到該待複核題目';
 const ALREADY_DONE = '該題目已處理完畢，不能重複複核。';
 
-/**
- * 公式閘門（WS-C 的 utils/formulaLint.js）。合入前回 null，
- * 呼叫端看到 null 就只跑 validateQuestionFields 並留 TODO——
- * 不自己寫一份替代品，那會變成第二份真相。
- *
- * TODO(WS-C 合入後)：改成直接 require，並把 approve 的公式那一段測試從 skip 打開。
- */
-function tryFormulaLint() {
-    try {
-        const mod = require('../utils/formulaLint');
-        return typeof mod.formulaLint === 'function' ? mod.formulaLint : null;
-    } catch (err) {
-        if (err.code !== 'MODULE_NOT_FOUND') throw err;
-        return null;
-    }
-}
+// WS-C 的兩支閘門零件已合入（S2-17／S2-18、第 4.1／4.4 條），改成直接 require：
+// 早先那兩個 MODULE_NOT_FOUND 退路是「等 WS-C」的鷹架，現在留著只會變成
+// 「模組不見時默默跳過必經閘門」的暗門，而第 6.6 條要的是「人也要過閘門」。
+const { formulaLint } = require('../utils/formulaLint');
+const { textHash } = require('../utils/normalizeStem');
 
-/** text_hash：WS-C 的 normalizeStem 合入後用它重算（人改過題幹，舊雜湊就過期了）。 */
-function computeTextHash(questionText, payload) {
-    try {
-        const { textHash } = require('../utils/normalizeStem');
-        if (typeof textHash === 'function') return textHash(questionText);
-    } catch (err) {
-        if (err.code !== 'MODULE_NOT_FOUND') throw err;
-    }
-    // 退路：沿用 dedup0 當初算的那一個（題幹沒被改動時仍然正確）
-    return payload?.dedup0?.text_hash ?? null;
+/**
+ * approve 入庫時的 text_hash（裁決 S2-23）。
+ *
+ * **對修正後的 question_text 重算**，不沿用 `payload.dedup0.text_hash`——
+ * 人既然改過題幹，L0 去重的雜湊就該跟著變，否則下一份 PDF 會拿舊雜湊誤判重複。
+ *
+ * @param {string} questionText 已經過 validateQuestionFields 正規化的題幹
+ * @returns {string|null} sha256(normalizeStem(text)) 的小寫 hex；正規化後為空回 null
+ */
+function computeTextHash(questionText) {
+    return textHash(questionText);
 }
 
 // ─────────────────────── 6.4 GET /api/review ───────────────────────
@@ -130,8 +120,7 @@ exports.approve = async (req, res, next) => {
         }
 
         // ── 閘門二：公式（accept_plain_text 才放行降級）──
-        const formulaLint = tryFormulaLint();
-        if (formulaLint && !acceptPlainText) {
+        if (!acceptPlainText) {
             const lint = formulaLint(`${v.value.question_text}\n${v.value.answer_text}`);
             if (!lint.ok) {
                 await client.query('ROLLBACK');
@@ -168,7 +157,7 @@ exports.approve = async (req, res, next) => {
         }
 
         // ── 入庫：origin='pdf'、chapter_src='human'（人改過章節）、text_hash，同一交易 ──
-        const textHash = computeTextHash(v.value.question_text, jq.payload);
+        const hash = computeTextHash(v.value.question_text);
         const { buildTsvTokens } = require('../services/embedService');
         const { chapterTokens, keywordTokens, stemTokens } =
             buildTsvTokens({ ...v.value, keywords: null, concept_summary: null });
@@ -184,7 +173,7 @@ exports.approve = async (req, res, next) => {
              RETURNING id`,
             [v.value.subject, v.value.chapter, v.value.question_type, v.value.difficulty,
             v.value.question_text, body.question_img || null, v.value.answer_text || '略',
-            body.solution_img || null, textHash, chapterTokens, keywordTokens, stemTokens]);
+            body.solution_img || null, hash, chapterTokens, keywordTokens, stemTokens]);
         const questionId = inserted[0].id;
 
         await client.query(

@@ -3,6 +3,9 @@
 > 規則（`docs/interfaces-stage2.md` 開頭）：發現介面有問題就停下來寫在這裡，
 > **不自行改介面繞過**。以下每一條都附「我暫時怎麼做」，讓開發者裁決時知道要改哪裡。
 > 分支：`ws2-a/pipeline`。
+>
+> **狀態：七條全部結案**（2026-08-22，`interfaces-stage2.md` §12 第一輪裁決 S2-1～25）。
+> 每條末尾的「裁決」就是最終結論，實作已對齊；本檔往後只作紀錄，不再更新。
 
 ---
 
@@ -38,11 +41,9 @@ return { ok: false, error: '學科僅能為「數學」或「物理」！' };   
 - `error` 讓 `questionController` 的既有呼叫點與整合測試完全不受影響。
 - `errors` 讓 approve 直接 `errors: v.errors`，符合第 6.6 條的陣列形狀。
 
-**要裁決的**：是否接受「兩個鍵並存」當成第 4.5 條的最終形狀？
-若要單一真相，建議改第 4.5 條為 `{ok, error, errors, value?}` 並在文件註明
-「`errors` 恆為 `error` 的長度 1 陣列（本函式一次只回一則訊息）」；
-若堅持只留 `errors`，則 `questionController.updateQuestion` 要一併改成讀 `v.errors[0]`，
-那就不再是「行為一字不改」，需要開發者明示放行。
+**裁決：兩鍵並存就是最終形狀（S2-1）。** 第 4.5 條已改寫成
+`{ok, error, errors, value?}`，並註明「既有呼叫點讀 `error`、approve 讀 `errors`」。
+實作不需改動，暫行處置直接轉正。
 
 ---
 
@@ -59,8 +60,9 @@ return { ok: false, error: '學科僅能為「數學」或「物理」！' };   
 「`test/integration/`（controller 以外）歸 WS-D」的**例外**那一側，衝突較小；
 `test/unit/stateMachine.test.js` 則確實是踩進 WS-D 的目錄。
 
-**要裁決的**：合併時若 WS-D 也建了同名檔，以 WS-A 的版本為準（狀態機是 WS-A 的驗收條件），
-或請在所有權表補一句「各 WS 可在 `test/unit/` 新增**自己擁有的模組**的測試檔」。
+**裁決：各 WS 可在 `test/unit`／`test/integration` 新增自己的測試檔，但不得改別人的（S2-2）。**
+第 10.1 條已補上這句。`test/unit/stateMachine.test.js`、`test/unit/jobRunner.test.js`、
+`test/unit/reportJobs.test.js`、`test/integration/jobs.pg.test.js` 四支確定歸 WS-A。
 
 ---
 
@@ -77,7 +79,8 @@ return { ok: false, error: '學科僅能為「數學」或「物理」！' };   
 實際最壞路徑是 29 步（測試已具體構造出來並斷言「剛好等於 29」）。
 
 **我暫時怎麼做**：以**凍結介面第 2.4 條的 29** 為準，測試斷言 `worst === 29`。
-規劃文件是舊的、且第 2.4 條較嚴謹，無須改動——只在這裡備查。
+
+**裁決：以 29 為準，規劃 §3.8 的 11 作廢（S2-3）。** 實作與測試無需改動。
 
 ---
 
@@ -97,8 +100,8 @@ return { ok: false, error: '學科僅能為「數學」或「物理」！' };   
 自己的 multer 錯誤處理中介軟體，把 `LIMIT_FILE_SIZE` 轉成第 6.1 條的 413 字串，
 `app.js` 與 `/analyze-pdf` 完全不動（不是我擁有的檔案，且舊行為是既有測試的契約）。
 
-**要裁決的**：`/analyze-pdf` 是否也該一併改成 413？（那是共用檔 `app.js` 或
-`aiController` 的改動，不在 WS-A 的所有權內，所以我沒有動。）
+**裁決：`/api/jobs` 自己轉 413，`/analyze-pdf` 維持舊行為（S2-21）。**
+暫行處置即最終做法，路由層那支專屬錯誤中介軟體保留。
 
 ---
 
@@ -110,7 +113,9 @@ return { ok: false, error: '學科僅能為「數學」或「物理」！' };   
 
 **我暫時怎麼做**：照字面實作（全 0），不自己補一個假的 pending；
 `state` 欄位（`queued`／`extracting`）已經足夠讓前端顯示「拆題中」。
-在此備查，免得 WS-D 接前端時以為是 bug。
+
+**裁決：extracting 期間 counts 全 0，靠 `state` 顯示「拆題中」，前端據此顯示（S2-22）。**
+實作不改；`test/integration/jobs.pg.test.js` 有一格專門釘住這個行為。
 
 ---
 
@@ -132,8 +137,10 @@ return { ok: false, error: '學科僅能為「數學」或「物理」！' };   
 **給 WS-C 的注意事項**：如果選第一種，請**不要**用 `ctx.jq.state` 或 `payload` 的內容判斷層級——
 runner 保證傳進去的 input 就是第 3.3 條表格裡那一組鍵，這是唯一穩定的依據。
 
-**要裁決的**：是否在第 3.1 條補一句「檔名與節點名不同時，以第 7.4 條的節點名對應到
-`AGENT_MODULE_FOR_NODE` 的檔名」？或直接要求 WS-C 拆成兩支檔。
+**裁決：兩者都做（S2-6）。** WS-C 的 `agents/dedup.js` 匯出 `{run, runDedup0, runDedup1}`，
+另加兩支三行轉接檔 `agents/dedup0.js`／`dedup1.js`；runner 保留
+①`agents/<node>.js` → ②`AGENT_MODULE_FOR_NODE` 的解析順序，兩種寫法都接得上。
+第 3.1 條已寫明「層級只能靠凍結的 input 鍵判斷」。實作不需改動，只把註解改成引用 §12。
 
 ---
 
@@ -153,5 +160,30 @@ WS-B 只有 `extract`／`classify`，WS-C 只有 `lint`／`verify`／`dedup`—�
 
 `job_events.node` 仍然照第 7.4 條寫 `'save'`，報表看得到它的延遲與 outcome。
 
-**要裁決的**：確認 `save` 歸 WS-A 的 runner，並在第 10.1 條的 WS-A 欄補一句
-「`save` 節點（在 `workers/jobRunner.js` 內）」，免得日後有人去 `agents/` 找它。
+**裁決：`save` 歸 runner（S2-7）。** 第 10.1 條的 WS-A 欄已寫成
+「`workers/`（含 `save` 節點）」，第 3.1 條也加了一條說明。實作不需改動，只補註解引用。
+
+
+---
+
+## 附錄：本輪裁決帶進來的四項實作變更（2026-08-22）
+
+| 裁決 | 改到哪 |
+|---|---|
+| S2-8 | `workers/jobRunner.js` 的 `readFeatures()` → `ctx.config.features = {similar, pipeline}`；`config/features.js` 補 `FEATURE_PIPELINE` getter |
+| S2-4 | `meteredLlm` 記下 `generateJson` 回傳的 `schemaFallback`，`schemaFallbackOf()` 與 `outcome.data.schema_fallback` 取 OR，寫進 `job_events.detail.schema_fallback`（為 false 時不寫這個鍵） |
+| S2-20 | `app.js` 的 `serveIndex()` 補 `__FEATURE_PIPELINE__` 注入 |
+| S2-23 | `controllers/reviewController.js` 對修正後的 `question_text` 以 `normalizeStem.textHash` 重算；整合測試改斷言等於重算值 |
+
+順帶修掉兩個在做上面四項時翻出來的既有缺陷（都在 WS-A 擁有的檔案內）：
+
+1. **`/index.html` 從來沒有被注入過**：`express.static` 掛在 `serveIndex` 之前，
+   `index: false` 只擋「目錄請求」，明確請求 `/index.html` 時 static 仍會把檔案原樣送出，
+   於是 `__API_KEY__` 一直是佔位字串（設了 `API_KEY` 時該頁打不了 API）。
+   已把兩支 `serveIndex` 路由移到 `express.static` 之前。
+2. **佔位字串用 `replace` 只換第一個**：`__FEATURE_PIPELINE__` 在 `index.html` 裡
+   除了 `<meta>` 還出現在上方的說明註解，`replace` 會換到註解、讓 `<meta>` 留著佔位字串。
+   已改用 `replaceAll`。
+
+> 給 WS-D：`public/index.html` 裡 `<meta name="feature-pipeline">` 上方那段註解仍寫著
+> 「app.js 的 serveIndex 目前只替換 `__API_KEY__`，需要再加一行」——已經加了，那段註解可以清掉（那是你的檔案）。
