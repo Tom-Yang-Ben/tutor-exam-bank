@@ -25,7 +25,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const { loadSheet, listPdfs, PRIVATE_DIR: PDF_PRIVATE_DIR } = require('./lib/pdfGolden');
+const { loadSheet, listPdfs } = require('./lib/pdfGolden');
 const { matchQuestions, scoreExtraction } = require('./lib/pdfMatch');
 const { resolveLegacy } = require('./lib/legacyAdapter');
 const pipelineDriver = require('./lib/pipelineDriver');
@@ -225,7 +225,7 @@ async function main() {
             const score = scoreExtraction(expected, once.extracted, match);
             const strict = shims.formulaStrictRate(once.extracted.map(q => q.question_text));
 
-            runs.push({ once, score, strict, extractedCount: once.extracted.length });
+            runs.push({ once, match, score, strict, extractedCount: once.extracted.length });
         }
 
         const last = runs[runs.length - 1];
@@ -257,7 +257,12 @@ async function main() {
             needs_review: args.method === 'pipeline' ? median(runs.map(r => r.once.needsReview)) : null,
             note: args.method === 'legacy' ? 'legacy 整批回前端，saved 恆為 0' : null,
             _detail: isPrivate ? null : {
-                unmatched_expected: last.score.matched === expected.length ? [] : matchQuestions(expected, last.once.extracted).unmatchedExpected,
+                // 用最後一輪已經算好的配對結果，不重算——重算一次會讓 --repeat 3 的
+                // 報表多跑一次分詞，而且兩次結果若不同（不該發生）也沒人會發現。
+                unmatched_expected: last.match.unmatchedExpected,
+                unmatched_extracted: last.match.unmatchedExtracted,
+                matched_by: { hash: last.match.pairs.filter(p => p.method === 'hash').length,
+                              jaccard: last.match.pairs.filter(p => p.method === 'jaccard').length },
                 chapter_wrong: last.score.chapter_wrong,
                 strict_events: last.strict.events,
                 review_reasons: args.method === 'pipeline' ? last.once.reviewReasons : null,
