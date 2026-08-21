@@ -13,7 +13,7 @@ const {
     buildParagraphComponents,
     parseLatexToMath,
     xmlSafeClean,
-} = require('../utils/textFormatter');
+} = require('../../utils/textFormatter');
 
 // ───────────────────────── 測試輔助 ─────────────────────────
 

@@ -15,7 +15,7 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { shuffle } = require('../utils/shuffle');
+const { shuffle } = require('../../utils/shuffle');
 
 // ───────────────────────── 測試輔助 ─────────────────────────
 

@@ -1,0 +1,6 @@
+# ───────── .gitattributes（擁有者：WS-D，docs/interfaces.md 第 10.1 條）─────────
+#
+# eval/** 一律 LF：cassette 與報表的鍵來自 JSON.parse 後的字串，與檔案換行符無關，
+# 這條純粹是為了 diff 整潔——Windows 上 checkout 成 CRLF 會讓每次重錄的 fixture
+# 看起來整份都變了。fixture 與 cassette 一律只由 Node 寫（PowerShell 的 > 會寫 BOM）。
+exam_pro/eval/** text eol=lf

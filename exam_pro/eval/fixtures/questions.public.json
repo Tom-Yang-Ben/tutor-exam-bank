@@ -1,0 +1,376 @@
+{
+  "_notice": "本檔 60 題全部由本專案作者自行編寫的常見教科書型例題，用於展示與評估系統流程，不取自任何特定考卷、題本或出版品（見 repo 根目錄 NOTICE 第 2 條）。",
+  "_status": "needs_human_confirm — 由 WS-D 起草，須由開發者本人逐題核對答案後才算定稿；未核對前不得引用其數字作為對外成果。",
+  "_schema": "questions[]：subject / chapter / question_type / difficulty / question_text / answer_text 為必填，欄位語意同 docs/interfaces.md 第 1.2 條的 questions 表。載入時逐題過 config/chapters.js 的 isValidChapter / isValidQuestionType / normalizeDifficulty。",
+  "_annotations": {
+    "id": "fixture 內部編號（1..60），golden set 以此為 question_id；與正式資料庫的 questions.id 無關",
+    "variant_group": "「換數字的同一題」家族代號；同 group 的題互為檢索 golden 的正樣本",
+    "role": "base | numeric_variant | distractor | lookalike，說明該題在 fixture 結構中的角色",
+    "lookalike_of": "跨章字面相近的對照組（例如「向量內積」vs「空間向量內積」）",
+    "latex_broken": "true = 題幹的 LaTeX 是刻意寫壞的，用來驗證公式解析的降級路徑；共 10 題",
+    "broken_kind": "刻意植入的壞法：missing_rbrace | unknown_command | bare_script | empty_fallback | unclosed_math"
+  },
+  "version": 1,
+  "questions": [
+    {
+      "id": 1, "subject": "數學", "chapter": "指數與對數", "question_type": "單選", "difficulty": 1,
+      "question_text": "$\\log_{2} 8 + \\log_{2} 4$ 之值為何？\n(A) $5$　(B) $6$　(C) $7$　(D) $12$",
+      "answer_text": "(A)。$\\log_{2} 8 = 3$、$\\log_{2} 4 = 2$，故兩者之和為 $5$。",
+      "variant_group": "log-add", "role": "base"
+    },
+    {
+      "id": 2, "subject": "數學", "chapter": "指數與對數", "question_type": "單選", "difficulty": 1,
+      "question_text": "$\\log_{3} 27 + \\log_{3} 9$ 之值為何？\n(A) $3$　(B) $4$　(C) $5$　(D) $6$",
+      "answer_text": "(C)。$\\log_{3} 27 = 3$、$\\log_{3} 9 = 2$，故兩者之和為 $5$。",
+      "variant_group": "log-add", "role": "numeric_variant"
+    },
+    {
+      "id": 3, "subject": "數學", "chapter": "指數與對數", "question_type": "計算", "difficulty": 2,
+      "question_text": "解方程式 $2^{x+1} = 32$。",
+      "answer_text": "$32 = 2^5$，故 $x + 1 = 5$，得 $x = 4$。",
+      "variant_group": "exp-eq", "role": "base"
+    },
+    {
+      "id": 4, "subject": "數學", "chapter": "指數與對數", "question_type": "計算", "difficulty": 2,
+      "question_text": "解方程式 $3^{x-1} = 81$。",
+      "answer_text": "$81 = 3^4$，故 $x - 1 = 4$，得 $x = 5$。",
+      "variant_group": "exp-eq", "role": "numeric_variant"
+    },
+    {
+      "id": 5, "subject": "數學", "chapter": "指數與對數", "question_type": "計算", "difficulty": 4,
+      "question_text": "已知 $\\log_{10} 2 = 0.3010$，求 $2^{50}$ 是幾位數的整數。",
+      "answer_text": "$\\log_{10} 2^{50} = 50 \\times 0.3010 = 15.05$，即 $10^{15} < 2^{50} < 10^{16}$，故 $2^{50}$ 為 $16$ 位數。",
+      "variant_group": "log-digits", "role": "base"
+    },
+    {
+      "id": 6, "subject": "數學", "chapter": "指數與對數", "question_type": "計算", "difficulty": 4,
+      "question_text": "已知 $\\log_{10} 2 = 0.3010$，求 $2^{100}$ 是幾位數的整數。",
+      "answer_text": "$\\log_{10} 2^{100} = 100 \\times 0.3010 = 30.10$，即 $10^{30} < 2^{100} < 10^{31}$，故 $2^{100}$ 為 $31$ 位數。",
+      "variant_group": "log-digits", "role": "numeric_variant"
+    },
+    {
+      "id": 7, "subject": "數學", "chapter": "指數與對數", "question_type": "填空", "difficulty": 3,
+      "question_text": "$\\log_{2} 3 \\times \\log_{3} 8$ 之值為何？",
+      "answer_text": "$3$。換底後 $\\frac{\\log 3}{\\log 2} \\times \\frac{\\log 8}{\\log 3} = \\frac{\\log 8}{\\log 2} = \\log_{2} 8 = 3$。",
+      "role": "distractor"
+    },
+    {
+      "id": 8, "subject": "數學", "chapter": "指數與對數", "question_type": "單選", "difficulty": 2,
+      "question_text": "已知 $\\log_{10} 2 = 0.3010$，利用 $\\log_{10} 5 = \\log_{10} \\frac{10}{2$ 求 $\\log_{10} 5$ 之近似值。\n(A) $0.6990$　(B) $0.3010$　(C) $0.1505$　(D) $1.6990$",
+      "answer_text": "(A)。$\\log_{10} 5 = \\log_{10} \\frac{10}{2} = 1 - \\log_{10} 2 = 1 - 0.3010 = 0.6990$。",
+      "role": "distractor", "latex_broken": true, "broken_kind": "missing_rbrace"
+    },
+    {
+      "id": 9, "subject": "數學", "chapter": "向量內積", "question_type": "計算", "difficulty": 2,
+      "question_text": "設平面向量 $\\vec{a} = (3, 4)$、$\\vec{b} = (1, 2)$，求 $\\vec{a} \\cdot \\vec{b}$。",
+      "answer_text": "$\\vec{a} \\cdot \\vec{b} = 3 \\times 1 + 4 \\times 2 = 3 + 8 = 11$。",
+      "variant_group": "dot-basic", "role": "base", "lookalike_of": "sdot-basic"
+    },
+    {
+      "id": 10, "subject": "數學", "chapter": "向量內積", "question_type": "計算", "difficulty": 2,
+      "question_text": "設平面向量 $\\vec{a} = (5, 2)$、$\\vec{b} = (3, 1)$，求 $\\vec{a} \\cdot \\vec{b}$。",
+      "answer_text": "$\\vec{a} \\cdot \\vec{b} = 5 \\times 3 + 2 \\times 1 = 15 + 2 = 17$。",
+      "variant_group": "dot-basic", "role": "numeric_variant", "lookalike_of": "sdot-basic"
+    },
+    {
+      "id": 11, "subject": "數學", "chapter": "向量內積", "question_type": "計算", "difficulty": 3,
+      "question_text": "設平面向量 $\\vec{a} = (1, 0)$、$\\vec{b} = (1, 1)$，求兩向量的夾角 $\\theta$。",
+      "answer_text": "$\\cos \\theta = \\frac{\\vec{a} \\cdot \\vec{b}}{|\\vec{a}||\\vec{b}|} = \\frac{1}{1 \\times \\sqrt{2}} = \\frac{1}{\\sqrt{2}}$，故 $\\theta = 45^\\circ$。",
+      "variant_group": "dot-angle", "role": "base", "lookalike_of": "sdot-angle"
+    },
+    {
+      "id": 12, "subject": "數學", "chapter": "向量內積", "question_type": "計算", "difficulty": 3,
+      "question_text": "設平面向量 $\\vec{a} = (2, 0)$、$\\vec{b} = (1, \\sqrt{3})$，求兩向量的夾角 $\\theta$。",
+      "answer_text": "$\\vec{a} \\cdot \\vec{b} = 2$、$|\\vec{a}| = 2$、$|\\vec{b}| = 2$，故 $\\cos \\theta = \\frac{2}{4} = \\frac{1}{2}$，$\\theta = 60^\\circ$。",
+      "variant_group": "dot-angle", "role": "numeric_variant", "lookalike_of": "sdot-angle"
+    },
+    {
+      "id": 13, "subject": "數學", "chapter": "向量內積", "question_type": "填空", "difficulty": 3,
+      "question_text": "設平面向量 $\\vec{a} = (2, k)$ 與 $\\vec{b} = (3, 6)$ 互相垂直，求 $k$。",
+      "answer_text": "垂直即內積為 $0$：$2 \\times 3 + k \\times 6 = 0$，得 $6k = -6$，$k = -1$。",
+      "variant_group": "dot-perp", "role": "base"
+    },
+    {
+      "id": 14, "subject": "數學", "chapter": "向量內積", "question_type": "填空", "difficulty": 3,
+      "question_text": "設平面向量 $\\vec{a} = (4, k)$ 與 $\\vec{b} = (5, 10)$ 互相垂直，求 $k$。",
+      "answer_text": "垂直即內積為 $0$：$4 \\times 5 + k \\times 10 = 0$，得 $10k = -20$，$k = -2$。",
+      "variant_group": "dot-perp", "role": "numeric_variant"
+    },
+    {
+      "id": 15, "subject": "數學", "chapter": "向量內積", "question_type": "計算", "difficulty": 4,
+      "question_text": "求 $\\vec{a} = (3, 4)$ 在 $\\vec{b} = (1, 0)$ 上的正射影長度 $\\frac{\\vec{a} \\cdot \\vec{b}}{|\\vec{b}|$。",
+      "answer_text": "$\\vec{a} \\cdot \\vec{b} = 3$、$|\\vec{b}| = 1$，故正射影長度為 $\\frac{3}{1} = 3$。",
+      "role": "distractor", "latex_broken": true, "broken_kind": "missing_rbrace"
+    },
+    {
+      "id": 16, "subject": "數學", "chapter": "向量內積", "question_type": "證明", "difficulty": 5,
+      "question_text": "試證：對任意平面向量 $\\vec{a}$、$\\vec{b}$，恆有 $|\\vec{a} \\cdot \\vec{b}| \\leq |\\vec{a}||\\vec{b}|$。",
+      "answer_text": "設兩向量夾角為 $\\theta$，則 $\\vec{a} \\cdot \\vec{b} = |\\vec{a}||\\vec{b}| \\cos \\theta$。因 $|\\cos \\theta| \\leq 1$，兩邊取絕對值得 $|\\vec{a} \\cdot \\vec{b}| = |\\vec{a}||\\vec{b}||\\cos \\theta| \\leq |\\vec{a}||\\vec{b}|$；等號成立於兩向量平行（$\\theta = 0^\\circ$ 或 $180^\\circ$）時。",
+      "role": "distractor"
+    },
+    {
+      "id": 17, "subject": "數學", "chapter": "空間向量內積", "question_type": "計算", "difficulty": 2,
+      "question_text": "設空間向量 $\\vec{a} = (1, 2, 3)$、$\\vec{b} = (2, 0, 1)$，求 $\\vec{a} \\cdot \\vec{b}$。",
+      "answer_text": "$\\vec{a} \\cdot \\vec{b} = 1 \\times 2 + 2 \\times 0 + 3 \\times 1 = 2 + 0 + 3 = 5$。",
+      "variant_group": "sdot-basic", "role": "base", "lookalike_of": "dot-basic"
+    },
+    {
+      "id": 18, "subject": "數學", "chapter": "空間向量內積", "question_type": "計算", "difficulty": 2,
+      "question_text": "設空間向量 $\\vec{a} = (2, 1, 4)$、$\\vec{b} = (3, 2, 0)$，求 $\\vec{a} \\cdot \\vec{b}$。",
+      "answer_text": "$\\vec{a} \\cdot \\vec{b} = 2 \\times 3 + 1 \\times 2 + 4 \\times 0 = 6 + 2 + 0 = 8$。",
+      "variant_group": "sdot-basic", "role": "numeric_variant", "lookalike_of": "dot-basic"
+    },
+    {
+      "id": 19, "subject": "數學", "chapter": "空間向量內積", "question_type": "計算", "difficulty": 3,
+      "question_text": "設空間向量 $\\vec{a} = (1, 1, 0)$、$\\vec{b} = (0, 1, 1)$，求兩向量的夾角 $\\theta$。",
+      "answer_text": "$\\vec{a} \\cdot \\vec{b} = 1$、$|\\vec{a}| = |\\vec{b}| = \\sqrt{2}$，故 $\\cos \\theta = \\frac{1}{2}$，$\\theta = 60^\\circ$。",
+      "variant_group": "sdot-angle", "role": "base", "lookalike_of": "dot-angle"
+    },
+    {
+      "id": 20, "subject": "數學", "chapter": "空間向量內積", "question_type": "計算", "difficulty": 3,
+      "question_text": "設空間向量 $\\vec{a} = (1, 0, 0)$、$\\vec{b} = (1, 1, 0)$，求兩向量的夾角 $\\theta$。",
+      "answer_text": "$\\vec{a} \\cdot \\vec{b} = 1$、$|\\vec{a}| = 1$、$|\\vec{b}| = \\sqrt{2}$，故 $\\cos \\theta = \\frac{1}{\\sqrt{2}}$，$\\theta = 45^\\circ$。",
+      "variant_group": "sdot-angle", "role": "numeric_variant", "lookalike_of": "dot-angle"
+    },
+    {
+      "id": 21, "subject": "數學", "chapter": "空間向量內積", "question_type": "填空", "difficulty": 3,
+      "question_text": "設空間向量 $\\vec{a} = (1, 2, k)$ 與 $\\vec{b} = (2, -1, 3)$ 互相垂直，求 $k$。",
+      "answer_text": "垂直即內積為 $0$：$1 \\times 2 + 2 \\times (-1) + k \\times 3 = 0$，得 $3k = 0$，$k = 0$。",
+      "role": "lookalike", "lookalike_of": "dot-perp"
+    },
+    {
+      "id": 22, "subject": "數學", "chapter": "空間向量內積", "question_type": "計算", "difficulty": 4,
+      "question_text": "設 $A(1, 2, 2)$，求位置向量 $\\vec{OA}$ 與 $\\vec{n} = (1, 0, 0)$ 的內積，並說明其幾何意義。",
+      "answer_text": "$\\vec{OA} \\cdot \\vec{n} = 1 \\times 1 + 2 \\times 0 + 2 \\times 0 = 1$。因 $|\\vec{n}| = 1$，此內積即 $\\vec{OA}$ 在 $x$ 軸正向上的分量長度，也就是 $A$ 點的 $x$ 座標。",
+      "role": "distractor"
+    },
+    {
+      "id": 23, "subject": "數學", "chapter": "空間向量內積", "question_type": "填空", "difficulty": 3,
+      "question_text": "設空間向量 $\\vec{a} = (1, 2, 2)$，依 $\\frac{1}{\\sqrt{1^2 + 2^2 + 2^2}$ 求它與 $x$ 軸正向夾角的餘弦值。",
+      "answer_text": "$|\\vec{a}| = \\sqrt{1 + 4 + 4} = 3$，與 $x$ 軸正向 $(1, 0, 0)$ 的內積為 $1$，故餘弦值為 $\\frac{1}{3}$。",
+      "role": "distractor", "latex_broken": true, "broken_kind": "missing_rbrace"
+    },
+    {
+      "id": 24, "subject": "數學", "chapter": "空間向量內積", "question_type": "單選", "difficulty": 2,
+      "question_text": "兩個非零空間向量 $\\vecc{a}$ 與 $\\vecc{b}$ 的內積為 $0$，代表兩者的關係為何？\n(A) 互相垂直　(B) 互相平行　(C) 長度相等　(D) 方向相同",
+      "answer_text": "(A)。$\\vec{a} \\cdot \\vec{b} = |\\vec{a}||\\vec{b}| \\cos \\theta = 0$，因兩向量非零，故 $\\cos \\theta = 0$，即 $\\theta = 90^\\circ$，兩者互相垂直。",
+      "role": "distractor", "latex_broken": true, "broken_kind": "unknown_command"
+    },
+    {
+      "id": 25, "subject": "數學", "chapter": "三角函數的定義", "question_type": "單選", "difficulty": 1,
+      "question_text": "$\\sin^2 40^\\circ + \\cos^2 40^\\circ$ 之值為何？\n(A) $1$　(B) $0$　(C) $\\frac{1}{2}$　(D) 需查表才能得知",
+      "answer_text": "(A)。由畢氏恆等式 $\\sin^2 \\theta + \\cos^2 \\theta = 1$，與角度無關。",
+      "variant_group": "trig-pyth", "role": "base"
+    },
+    {
+      "id": 26, "subject": "數學", "chapter": "三角函數的定義", "question_type": "單選", "difficulty": 1,
+      "question_text": "$\\sin^2 25^\\circ + \\cos^2 25^\\circ$ 之值為何？\n(A) $0$　(B) $\\frac{1}{2}$　(C) $1$　(D) 需查表才能得知",
+      "answer_text": "(C)。由畢氏恆等式 $\\sin^2 \\theta + \\cos^2 \\theta = 1$，與角度無關。",
+      "variant_group": "trig-pyth", "role": "numeric_variant"
+    },
+    {
+      "id": 27, "subject": "數學", "chapter": "三角函數的定義", "question_type": "填空", "difficulty": 2,
+      "question_text": "$\\sin 150^\\circ$ 之值為何？",
+      "answer_text": "$\\frac{1}{2}$。$150^\\circ$ 在第二象限、參考角為 $30^\\circ$，第二象限的正弦為正，故 $\\sin 150^\\circ = \\sin 30^\\circ = \\frac{1}{2}$。",
+      "variant_group": "trig-special", "role": "base"
+    },
+    {
+      "id": 28, "subject": "數學", "chapter": "三角函數的定義", "question_type": "填空", "difficulty": 2,
+      "question_text": "$\\cos 120^\\circ$ 之值為何？",
+      "answer_text": "$-\\frac{1}{2}$。$120^\\circ$ 在第二象限、參考角為 $60^\\circ$，第二象限的餘弦為負，故 $\\cos 120^\\circ = -\\cos 60^\\circ = -\\frac{1}{2}$。",
+      "variant_group": "trig-special", "role": "numeric_variant"
+    },
+    {
+      "id": 29, "subject": "數學", "chapter": "三角函數的定義", "question_type": "單選", "difficulty": 2,
+      "question_text": "與 $400^\\circ$ 同界的最小正角為何？\n(A) $20^\\circ$　(B) $40^\\circ$　(C) $60^\\circ$　(D) $340^\\circ$",
+      "answer_text": "(B)。$400^\\circ - 360^\\circ = 40^\\circ$，故最小正同界角為 $40^\\circ$。",
+      "role": "distractor"
+    },
+    {
+      "id": 30, "subject": "數學", "chapter": "三角函數的定義", "question_type": "計算", "difficulty": 3,
+      "question_text": "已知角 $\\theta$ 的終邊通過點 $P(-3, 4)$，試依定義 $\\sin \\theta = \\frac{y}{r$ 求 $\\sin \\theta$。",
+      "answer_text": "$r = \\sqrt{(-3)^2 + 4^2} = \\sqrt{25} = 5$，依定義 $\\sin \\theta = \\frac{y}{r} = \\frac{4}{5}$。",
+      "role": "distractor", "latex_broken": true, "broken_kind": "missing_rbrace"
+    },
+    {
+      "id": 31, "subject": "數學", "chapter": "三角函數的定義", "question_type": "單選", "difficulty": 2,
+      "question_text": "若 $\\theta$ 落在第二象限，則 $\\tan \\theta$ 的正負為何？\n(A) 恆為正　(B) 恆為負　(C) 恆為零　(D) 無法判斷",
+      "answer_text": "(B)。第二象限中 $x < 0$、$y > 0$，故 $\\tan \\theta = \\frac{y}{x} < 0$，恆為負。",
+      "role": "distractor"
+    },
+    {
+      "id": 32, "subject": "物理", "chapter": "牛頓運動定律", "question_type": "計算", "difficulty": 2,
+      "question_text": "質量 $2$ kg 的物體受到合力 $10$ N，求其加速度。",
+      "answer_text": "由 $F = ma$，$a = \\frac{F}{m} = \\frac{10}{2} = 5$ m/s$^2$，方向與合力同向。",
+      "variant_group": "newton-fma", "role": "base"
+    },
+    {
+      "id": 33, "subject": "物理", "chapter": "牛頓運動定律", "question_type": "計算", "difficulty": 2,
+      "question_text": "質量 $4$ kg 的物體受到合力 $18$ N，求其加速度。",
+      "answer_text": "由 $F = ma$，$a = \\frac{F}{m} = \\frac{18}{4} = 4.5$ m/s$^2$，方向與合力同向。",
+      "variant_group": "newton-fma", "role": "numeric_variant"
+    },
+    {
+      "id": 34, "subject": "物理", "chapter": "牛頓運動定律", "question_type": "計算", "difficulty": 3,
+      "question_text": "質量 $50$ kg 的人站在體重計上，電梯以 $2$ m/s$^2$ 的加速度向上加速，求體重計的讀數（取 $g = 10$ m/s$^2$）。",
+      "answer_text": "以人為系統：$N - mg = ma$，故 $N = m(g + a) = 50 \\times (10 + 2) = 600$ N。",
+      "variant_group": "newton-elevator", "role": "base"
+    },
+    {
+      "id": 35, "subject": "物理", "chapter": "牛頓運動定律", "question_type": "計算", "difficulty": 3,
+      "question_text": "質量 $60$ kg 的人站在體重計上，電梯以 $3$ m/s$^2$ 的加速度向上加速，求體重計的讀數（取 $g = 10$ m/s$^2$）。",
+      "answer_text": "以人為系統：$N - mg = ma$，故 $N = m(g + a) = 60 \\times (10 + 3) = 780$ N。",
+      "variant_group": "newton-elevator", "role": "numeric_variant"
+    },
+    {
+      "id": 36, "subject": "物理", "chapter": "牛頓運動定律", "question_type": "計算", "difficulty": 4,
+      "question_text": "光滑定滑輪兩端以輕繩懸掛 $3$ kg 與 $5$ kg 的物體，由靜止釋放後求系統的加速度與繩張力（取 $g = 10$ m/s$^2$，繩與滑輪質量不計）。",
+      "answer_text": "$a = \\frac{(m_2 - m_1)g}{m_1 + m_2} = \\frac{(5 - 3) \\times 10}{8} = 2.5$ m/s$^2$；張力 $T = m_1(g + a) = 3 \\times 12.5 = 37.5$ N。",
+      "variant_group": "newton-atwood", "role": "base"
+    },
+    {
+      "id": 37, "subject": "物理", "chapter": "牛頓運動定律", "question_type": "計算", "difficulty": 4,
+      "question_text": "光滑定滑輪兩端以輕繩懸掛 $2$ kg 與 $6$ kg 的物體，由靜止釋放後求系統的加速度與繩張力（取 $g = 10$ m/s$^2$，繩與滑輪質量不計）。",
+      "answer_text": "$a = \\frac{(m_2 - m_1)g}{m_1 + m_2} = \\frac{(6 - 2) \\times 10}{8} = 5$ m/s$^2$；張力 $T = m_1(g + a) = 2 \\times 15 = 30$ N。",
+      "variant_group": "newton-atwood", "role": "numeric_variant"
+    },
+    {
+      "id": 38, "subject": "物理", "chapter": "牛頓運動定律", "question_type": "單選", "difficulty": 1,
+      "question_text": "馬拉車前進時，馬對車的作用力 $F^$ 與車對馬的反作用力，兩者的關係為何？\n(A) 馬對車的力較大　(B) 大小相等、方向相反　(C) 車對馬的力較大　(D) 視速度而定",
+      "answer_text": "(B)。由牛頓第三運動定律，作用力與反作用力大小相等、方向相反，且作用在不同物體上，故不會互相抵消。",
+      "role": "distractor", "latex_broken": true, "broken_kind": "bare_script"
+    },
+    {
+      "id": 39, "subject": "物理", "chapter": "牛頓運動定律", "question_type": "單選", "difficulty": 1,
+      "question_text": "公車緊急煞車時乘客身體向前傾，主要原因為何？\n(A) 慣性　(B) 向心力　(C) 摩擦力變大　(D) 重力變大",
+      "answer_text": "(A)。由牛頓第一運動定律，乘客原有的運動狀態傾向維持不變，車體減速而乘客上半身仍保持原速度，故向前傾。",
+      "role": "distractor"
+    },
+    {
+      "id": 40, "subject": "物理", "chapter": "摩擦力與向心力", "question_type": "計算", "difficulty": 3,
+      "question_text": "質量 $10$ kg 的物體置於傾角 $30^\\circ$ 的斜面上，與斜面間的動摩擦係數 $\\mu = 0.2$，求物體沿斜面下滑的加速度（取 $g = 10$ m/s$^2$）。",
+      "answer_text": "$a = g(\\sin 30^\\circ - \\mu \\cos 30^\\circ) = 10 \\times (0.5 - 0.2 \\times 0.866) \\approx 10 \\times 0.327 = 3.27$ m/s$^2$，方向沿斜面向下。",
+      "variant_group": "friction-incline", "role": "base"
+    },
+    {
+      "id": 41, "subject": "物理", "chapter": "摩擦力與向心力", "question_type": "計算", "difficulty": 3,
+      "question_text": "質量 $5$ kg 的物體置於傾角 $45^\\circ$ 的斜面上（$\\sin 45^\\circ = \\cos 45^\\circ = \\frac{\\sqrt{2}}{2$），與斜面間的動摩擦係數 $\\mu = 0.1$，求物體沿斜面下滑的加速度（取 $g = 10$ m/s$^2$）。",
+      "answer_text": "$a = g(\\sin 45^\\circ - \\mu \\cos 45^\\circ) = 10 \\times 0.707 \\times (1 - 0.1) \\approx 6.36$ m/s$^2$，方向沿斜面向下。",
+      "variant_group": "friction-incline", "role": "numeric_variant", "latex_broken": true, "broken_kind": "missing_rbrace"
+    },
+    {
+      "id": 42, "subject": "物理", "chapter": "摩擦力與向心力", "question_type": "計算", "difficulty": 3,
+      "question_text": "長 $1$ m 的輕繩繫住質量 $2$ kg 的小球，在光滑水平面上以 $3$ m/s 的速率作等速圓周運動，求繩的張力。",
+      "answer_text": "繩張力提供向心力：$T = \\frac{mv^2}{r} = \\frac{2 \\times 3^2}{1} = 18$ N。",
+      "variant_group": "circular-tension", "role": "base"
+    },
+    {
+      "id": 43, "subject": "物理", "chapter": "摩擦力與向心力", "question_type": "計算", "difficulty": 3,
+      "question_text": "長 $2$ m 的輕繩繫住質量 $3$ kg 的小球，在光滑水平面上以 $4$ m/s 的速率作等速圓周運動，求繩的張力。",
+      "answer_text": "繩張力提供向心力：$T = \\frac{mv^2}{r} = \\frac{3 \\times 4^2}{2} = 24$ N。",
+      "variant_group": "circular-tension", "role": "numeric_variant"
+    },
+    {
+      "id": 44, "subject": "物理", "chapter": "摩擦力與向心力", "question_type": "填空", "difficulty": 2,
+      "question_text": "質量 $4$ kg 的物體靜置於水平地面，與地面間的靜摩擦係數為 $0.5$，求最大靜摩擦力（取 $g = 10$ m/s$^2$）。",
+      "answer_text": "$f_{max} = \\mu_s N = \\mu_s mg = 0.5 \\times 4 \\times 10 = 20$ N。",
+      "role": "distractor"
+    },
+    {
+      "id": 45, "subject": "物理", "chapter": "摩擦力與向心力", "question_type": "計算", "difficulty": 4,
+      "question_text": "汽車在半徑 $50$ m 的水平彎道上轉彎，輪胎與路面的靜摩擦係數為 $0.4$，依 $v_{max} = \\sqrt{\\mu g r$ 求不打滑的最大速率（取 $g = 10$ m/s$^2$）。",
+      "answer_text": "摩擦力提供向心力：$\\mu mg = \\frac{mv^2}{r}$，故 $v_{max} = \\sqrt{\\mu g r} = \\sqrt{0.4 \\times 10 \\times 50} = \\sqrt{200} \\approx 14.1$ m/s。",
+      "role": "distractor", "latex_broken": true, "broken_kind": "missing_rbrace"
+    },
+    {
+      "id": 46, "subject": "物理", "chapter": "摩擦力與向心力", "question_type": "多選", "difficulty": 2,
+      "question_text": "關於等速圓周運動，下列敘述何者正確？（複選）\n(A) 速率不變　(B) 速度不變　(C) 加速度指向圓心　(D) 合力為零",
+      "answer_text": "(A)(C)。等速圓周運動的速率固定但速度方向持續改變，故速度並非不變；合力即向心力，恆指向圓心且不為零。",
+      "role": "distractor"
+    },
+    {
+      "id": 47, "subject": "物理", "chapter": "直線運動", "question_type": "計算", "difficulty": 2,
+      "question_text": "物體由靜止出發，以 $2$ m/s$^2$ 的等加速度直線前進，求 $5$ 秒後的位移。",
+      "answer_text": "$s = v_0 t + \\frac{1}{2} a t^2 = 0 + \\frac{1}{2} \\times 2 \\times 5^2 = 25$ m。",
+      "variant_group": "kinematics-disp", "role": "base"
+    },
+    {
+      "id": 48, "subject": "物理", "chapter": "直線運動", "question_type": "計算", "difficulty": 2,
+      "question_text": "物體由靜止出發，以 $3$ m/s$^2$ 的等加速度直線前進，求 $4$ 秒後的位移。",
+      "answer_text": "$s = v_0 t + \\frac{1}{2} a t^2 = 0 + \\frac{1}{2} \\times 3 \\times 4^2 = 24$ m。",
+      "variant_group": "kinematics-disp", "role": "numeric_variant"
+    },
+    {
+      "id": 49, "subject": "物理", "chapter": "直線運動", "question_type": "計算", "difficulty": 2,
+      "question_text": "物體自 $20$ m 高處自由落下，求落地所需的時間（取 $g = 10$ m/s$^2$，不計空氣阻力）。",
+      "answer_text": "$h = \\frac{1}{2} g t^2$，故 $t = \\sqrt{\\frac{2h}{g}} = \\sqrt{\\frac{40}{10}} = 2$ 秒。",
+      "variant_group": "free-fall", "role": "base"
+    },
+    {
+      "id": 50, "subject": "物理", "chapter": "直線運動", "question_type": "計算", "difficulty": 2,
+      "question_text": "物體自 $45$ m 高處自由落下，求落地所需的時間（取 $g = 10$ m/s$^2$，不計空氣阻力）。",
+      "answer_text": "$h = \\frac{1}{2} g t^2$，故 $t = \\sqrt{\\frac{2h}{g}} = \\sqrt{\\frac{90}{10}} = 3$ 秒。",
+      "variant_group": "free-fall", "role": "numeric_variant"
+    },
+    {
+      "id": 51, "subject": "物理", "chapter": "直線運動", "question_type": "單選", "difficulty": 2,
+      "question_text": "速度—時間圖中，圖形與時間軸所圍成的面積代表下列何者？\n(A) 加速度　(B) 位移　(C) 速率　(D) 力",
+      "answer_text": "(B)。$v$-$t$ 圖的面積等於 $\\int v \\, dt$，即位移；圖形的斜率才是加速度。",
+      "role": "distractor"
+    },
+    {
+      "id": 52, "subject": "物理", "chapter": "直線運動", "question_type": "填空", "difficulty": 3,
+      "question_text": "甲車以 $20$ m/s 向東行駛、乙車以 $15$ m/s 向西行駛，依 $\\relvel{v}$ 求甲車相對於乙車的速度。",
+      "answer_text": "取向東為正：$v_{甲} = +20$、$v_{乙} = -15$，故 $v_{甲對乙} = 20 - (-15) = 35$ m/s，方向向東。",
+      "role": "distractor", "latex_broken": true, "broken_kind": "unknown_command"
+    },
+    {
+      "id": 53, "subject": "物理", "chapter": "直線運動", "question_type": "單選", "difficulty": 1,
+      "question_text": "汽車儀表板上的速度計所顯示的數值，是下列何者？\n(A) 平均速度　(B) 平均速率　(C) 瞬時速率　(D) 位移",
+      "answer_text": "(C)。速度計顯示的是該瞬間的速率大小，不含方向資訊，也不是整段行程的平均值。",
+      "role": "distractor"
+    },
+    {
+      "id": 54, "subject": "物理", "chapter": "電場與電位", "question_type": "計算", "difficulty": 3,
+      "question_text": "兩點電荷 $q_1 = 2 \\times 10^{-6}$ C 與 $q_2 = 3 \\times 10^{-6}$ C 相距 $0.3$ m，求兩者間的靜電力（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）。",
+      "answer_text": "$F = k \\frac{q_1 q_2}{r^2} = 9 \\times 10^9 \\times \\frac{6 \\times 10^{-12}}{0.09} = 0.6$ N，同號電荷故為斥力。",
+      "variant_group": "coulomb", "role": "base"
+    },
+    {
+      "id": 55, "subject": "物理", "chapter": "電場與電位", "question_type": "計算", "difficulty": 3,
+      "question_text": "兩點電荷 $q_1 = 4 \\times 10^{-6}$ C 與 $q_2 = 3 \\times 10^{-6}$ C 相距 $0.6$ m，求兩者間的靜電力（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）。",
+      "answer_text": "$F = k \\frac{q_1 q_2}{r^2} = 9 \\times 10^9 \\times \\frac{12 \\times 10^{-12}}{0.36} = 0.3$ N，同號電荷故為斥力。",
+      "variant_group": "coulomb", "role": "numeric_variant"
+    },
+    {
+      "id": 56, "subject": "物理", "chapter": "電場與電位", "question_type": "計算", "difficulty": 2,
+      "question_text": "點電荷 $Q = 5 \\times 10^{-6}$ C 在距離 $0.5$ m 處產生的電場量值為何（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）？",
+      "answer_text": "$E = k \\frac{Q}{r^2} = 9 \\times 10^9 \\times \\frac{5 \\times 10^{-6}}{0.25} = 1.8 \\times 10^5$ N/C，方向沿徑向向外。",
+      "variant_group": "efield-point", "role": "base"
+    },
+    {
+      "id": 57, "subject": "物理", "chapter": "電場與電位", "question_type": "計算", "difficulty": 2,
+      "question_text": "點電荷 $Q = 2 \\times 10^{-6}$ C 在距離 $0.3$ m 處產生的電場量值為何（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）？",
+      "answer_text": "$E = k \\frac{Q}{r^2} = 9 \\times 10^9 \\times \\frac{2 \\times 10^{-6}}{0.09} = 2 \\times 10^5$ N/C，方向沿徑向向外。",
+      "variant_group": "efield-point", "role": "numeric_variant"
+    },
+    {
+      "id": 58, "subject": "物理", "chapter": "電場與電位", "question_type": "計算", "difficulty": 3,
+      "question_text": "在量值 $E = 200$ N/C 的均勻電場中，將電量 $q = 3 \\times 10^{-6}$ C 的電荷沿電場方向移動 $0.4$ m，求電場力所作的功。",
+      "answer_text": "$W = qEd = 3 \\times 10^{-6} \\times 200 \\times 0.4 = 2.4 \\times 10^{-4}$ J。",
+      "variant_group": "efield-work", "role": "base"
+    },
+    {
+      "id": 59, "subject": "物理", "chapter": "電場與電位", "question_type": "單選", "difficulty": 2,
+      "question_text": "在靜電平衡下，等位面與電場線的關係為何（提示：$E^$ 沿等位面方向的分量）？\n(A) 互相平行　(B) 互相垂直　(C) 夾 $45^\\circ$　(D) 無固定關係",
+      "answer_text": "(B)。沿等位面移動電荷不作功，故電場沿等位面方向的分量為零，電場線必與等位面互相垂直。",
+      "role": "distractor", "latex_broken": true, "broken_kind": "bare_script"
+    },
+    {
+      "id": 60, "subject": "物理", "chapter": "電場與電位", "question_type": "計算", "difficulty": 3,
+      "question_text": "在量值 $E = 500$ N/C 的均勻電場中，將電量 $q = 2 \\times 10^{-6}$ C 的電荷沿電場方向移動 $0.2$ m，求電場力所作的功。",
+      "answer_text": "$W = qEd = 2 \\times 10^{-6} \\times 500 \\times 0.2 = 2 \\times 10^{-4}$ J。",
+      "variant_group": "efield-work", "role": "numeric_variant"
+    }
+  ]
+}
