@@ -19,24 +19,16 @@ types.setTypeParser(20, v => (v === null ? null : parseInt(v, 10)));
 // 台灣早上 8 點前會整個差一天。直接回 'YYYY-MM-DD' 字串最不會出事。
 types.setTypeParser(1082, v => v);
 
-// 連線來源：DATABASE_URL 優先，否則以 DB_* 組出（docs/interfaces.md 第 8 條）。
-// 注意：.env 裡的 DB_* 目前指向**舊 MySQL**（DB_PORT=3306），遷移期間兩者同時存在。
-// 因此請一律設定 DATABASE_URL；DB_* 這條退路的預設值已改為 PostgreSQL 的值。
-//
-// ⚠️ 裁決 22（interfaces.md §1.6）：這條退路只活到 D-X1。切換之夜完成、DB_* 從 .env
-//    移除之後，整個三元運算式要換成單純的
-//        new Pool({ connectionString: process.env.DATABASE_URL, max: 10 })
-//    並在缺少 DATABASE_URL 時直接丟錯，不要再猜。
-const pool = process.env.DATABASE_URL
-    ? new Pool({ connectionString: process.env.DATABASE_URL, max: 10 })
-    : new Pool({
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT, 10) || 5442,
-        user: process.env.DB_USER || 'exam',
-        password: process.env.DB_PASSWORD || 'exam',
-        database: process.env.DB_NAME || 'tutor_exam_bank',
-        max: 10
-    });
+// 連線來源：只認 DATABASE_URL（docs/interfaces.md 第 8 條、裁決 22／27）。
+// D-X1 收尾（2026-08-21）已移除 DB_* 退路：舊 MySQL 的 DB_* 變數已從 .env 刪除，
+// 缺 DATABASE_URL 直接丟錯，不再猜連線參數。
+if (!process.env.DATABASE_URL) {
+    throw new Error(
+        '缺少 DATABASE_URL。請在 exam_pro/.env 設定，例如 ' +
+        'DATABASE_URL=postgres://exam:exam@localhost:5442/tutor_exam_bank（埠是 5442，見 docs/interfaces.md 第 9 條）。'
+    );
+}
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
 
 // 閒置連線被資料庫端切斷時，pg 會在 pool 上丟 error；沒有監聽器會直接讓整個行程崩潰。
 pool.on('error', err => console.error('【PostgreSQL 連線池】閒置連線錯誤:', err.message));

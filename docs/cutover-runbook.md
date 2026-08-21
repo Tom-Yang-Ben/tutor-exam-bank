@@ -317,6 +317,10 @@ REM B-5 接著照 3-A 的 A-2、A-3、A-5 做完
 另外，**切換後在 PG 上「修改」既有題目的內容不會被倒回去**（delta 只看新增的 id）——
 14 天窗口內如果大量編輯過舊題，退回 MySQL 就等於放棄那些編輯。這一點在決定要不要回滾時要先講明。
 
+> **執行紀錄**：切換之夜於 2026-08-21 完成（70 題／126 卷／143 attempts／5 學生，verify 七項全過，冒煙全過，tag `v1-mysql`）。
+> 開發者決定**跳過 14 天窗口**，同日執行 3-C 收尾（切換後無任何新寫入，零遺失）：`mysql2`／`DB_*`／`schema.sql`／`export_mysql.js` 已移除，`config/db.js` 只認 `DATABASE_URL`。
+> 之後若仍要退回 MySQL：用 `Desktop\期中專案_資料庫備份\tutor_exam_bank_cutover_2026-08-21.sql` 還原 + `git checkout v1-mysql`。
+
 ### 3-C 第 15 天起 ＝ 不回滾
 
 14 天窗口過了就不再保證能退回 MySQL。此時做 D-X1 收尾：

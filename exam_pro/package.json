@@ -19,7 +19,6 @@
     "embed:backfill:test": "node scripts/backfill_embeddings.js --test",
     "migrate": "node migrate.js up",
     "migrate:test": "node migrate.js up --test",
-    "migrate:export": "node migrate/export_mysql.js",
     "migrate:import": "node migrate/import_pg.js",
     "migrate:verify": "node migrate/verify.js",
     "db:up": "docker compose up -d --wait",
@@ -29,10 +28,11 @@
   "keywords": [
     "exam-bank",
     "express",
-    "mysql",
+    "postgresql",
     "gemini",
     "latex",
-    "docx"
+    "docx",
+    "pgvector"
   ],
   "author": "Ben Yang (楊本顥)",
   "license": "Apache-2.0",
@@ -45,7 +45,6 @@
     "dotenv": "^16.4.5",
     "express": "^5.2.1",
     "multer": "^1.4.5-lts.1",
-    "mysql2": "^3.22.3",
     "node-fetch": "^2.7.0",
     "pg": "^8.23.0",
     "pgvector": "^0.3.0"

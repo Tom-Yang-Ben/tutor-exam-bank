@@ -3,6 +3,8 @@
 > 前提（已確認）：`origin/main` = `76919da`，CI 綠；Docker `exam_pg`(5442) / `exam_pg_test`(5433) 在跑；MySQL80 服務在跑、3306 開著；`.env` 有 `GEMINI_API_KEY`、`DATABASE_URL`、`TEST_DATABASE_URL`、`DB_*`（舊 MySQL）。
 > 所有指令都在 `exam_pro/` 資料夾內執行。**順序有講究**：先改題目文字、再錄向量（題幹一改 `embed_text` 的 hash 就變，向量表會對不上）。
 
+> **狀態（2026-08-21）**：步驟 1–5 全部完成（切換上線），並已同日執行 D-X1 收尾（見 `docs/cutover-runbook.md` §3-C 的執行紀錄）。本檔保留作為流程紀錄。
+
 ## 總覽
 
 | 步驟 | 做什麼 | 預估 | 產出 |

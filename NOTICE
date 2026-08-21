@@ -36,7 +36,7 @@ Copyright 2026 Ben Yang (楊本顥)
 
 本專案使用下列開放原始碼套件，各自依其原授權條款釋出：
 
-- Express (MIT)                    - mysql2 (MIT，遷移期間保留，切換後移除)
+- Express (MIT)
 - @google/genai (Apache-2.0)       - docx (MIT)
 - multer (MIT)                     - dotenv (BSD-2-Clause)
 - cors (MIT)                       - node-fetch (MIT)

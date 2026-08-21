@@ -16,10 +16,8 @@
 //   新增匯出上。先把入口與 .bat 換掉，等那兩邊就緒後只要改這一支的內容，
 //   使用者雙擊的檔案與流程都不必再動一次。
 //
-// 遷移期間的注意事項：
-//   audit_formulas.js 與 fix_formulas.js 目前仍連**舊的 MySQL**（各自 mysql.createConnection）。
-//   切換之夜之後它們要由 WS-A 改成走 config/db.js（PostgreSQL）；在那之前，
-//   這兩支讀到的是舊題庫，不是切換後的新資料。
+// 2026-08-21 D-X1 收尾後：audit_formulas.js 與 fix_formulas.js 已由 WS-A 改走 config/db.js
+//   （PostgreSQL，只認 DATABASE_URL），本殼呼叫到的就是正式題庫。
 // ─────────────────────────────────────────────────────────────
 
 'use strict';

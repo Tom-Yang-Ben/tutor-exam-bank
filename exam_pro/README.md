@@ -65,10 +65,10 @@ exam_pro/
 ├─ utils/
 │   ├─ textFormatter.js   # LaTeX → OOXML 數學公式解析器
 │   └─ shuffle.js         # Fisher-Yates 洗牌（抽題的公平性核心）
-├─ docker-compose.yml     # 本機 PostgreSQL 16 + pgvector（5432 開發 / 5433 測試）
-├─ migrations/            # 只增不改的 SQL：0001_init.sql、0002_vector.sql
+├─ docker-compose.yml     # 本機 PostgreSQL 16 + pgvector（5442 開發 / 5433 測試）
+├─ migrations/            # 只增不改的 SQL：0001_init、0002_vector、0004_origin_legacy（0003 保留給階段 2）
 ├─ migrate.js             # 極簡 migration 執行器（node migrate.js up [--test] | status）
-├─ schema.sql             # 舊的 MySQL 資料表定義（遷移期間保留給 export 對照）
+├─ migrate/               # 一次性遷移工具（import_pg / verify / export_pg_delta；MySQL 匯出腳本已隨 D-X1 收尾退役）
 ├─ seed_questions.js      # 種子題庫：30 題自製示範題（4 章 × 7~8 題）
 ├─ sample_exam.docx       # 成果範例：實際匯出的 Word 考卷
 ├─ test/                  # 單元測試（node:test，無額外相依）
@@ -136,8 +136,7 @@ flowchart TD
 
 ### 1. 前置需求
 - **Node.js 20+**（`@google/genai` 於 `package.json` 宣告 `engines: node >= 20`；CI 亦以 20.x / 22.x 驗證）
-- **Docker Desktop**（WSL2 後端）——階段 1 起資料庫改用容器裡的 PostgreSQL 16 + pgvector
-- MySQL 8.0.16+（**舊資料庫**；遷移完成前仍需要，只給 `migrate/export_mysql.js` 用）
+- **Docker Desktop**（WSL2 後端）——資料庫是容器裡的 PostgreSQL 16 + pgvector（2026-08-21 起正式使用；MySQL 已退役）
 - 一組 [Google Gemini API 金鑰](https://aistudio.google.com/apikey)
 
 ### 2. 安裝相依套件
@@ -157,7 +156,6 @@ cp .env.example .env
 | `GEMINI_API_KEY` | Google Gemini 金鑰（**必填**）| — |
 | `DATABASE_URL` | PostgreSQL 連線（階段 1 起的正式資料庫）| `postgres://exam:exam@localhost:5442/tutor_exam_bank` |
 | `TEST_DATABASE_URL` | 整合測試專用的 PostgreSQL；**資料庫名必須以 `_test` 結尾**，否則 `migrate.js` 拒絕執行 | `postgres://exam:exam@localhost:5433/tutor_exam_bank_test` |
-| `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` | 舊 MySQL 連線（遷移期間保留）| localhost / 3306 / root / — / tutor_exam_bank |
 | `EMBED_MODEL` / `EMBED_DIM` / `EMBED_RPM` / `EMBED_BATCH` / `EMBED_MODE` | embedding 模型與限速；`EMBED_DIM` 在 I0 釘死為 **768** | gemini-embedding-001 / 768 / 60 / 32 / fixture |
 | `LLM_MODE` | `live` / `record` / `replay`；CI 恆為 `replay` | `replay` |
 | `FEATURE_SIMILAR` / `FEATURE_HYBRID_SEARCH` | 新功能旗標，預設全關 | `false` |
@@ -185,7 +183,7 @@ docker compose down           # 停止（加 -v 才會刪掉 pgdata）
   docker compose exec -T postgres psql -U exam -d tutor_exam_bank < migrations/0001_init.sql
   ```
 - **開發埠是 5442，不是 5432**：這台開發機已安裝並啟動了原生的 PostgreSQL 17 服務（`postgresql-x64-17`）占用 5432。兩個行程同時 LISTEN 同一埠時，連線會被先啟動的那個接走，症狀是「密碼驗證失敗」這種看起來與 Docker 無關的錯誤。若日後停用該服務，要改回 5432 只需同步改 `docker-compose.yml` 與 `.env`／`docs/interfaces.md` 第 9 條。
-- 舊的 `schema.sql`（MySQL 版）在切換之夜前仍保留給 `migrate/export_mysql.js` 對照，之後移除。
+- 舊的 MySQL 版 `schema.sql` 與 `migrate/export_mysql.js` 已於 D-X1 收尾（2026-08-21）移除；歷史版本見 git tag `v1-mysql`。
 
 ### 5. 啟動
 ```bash
@@ -209,8 +207,10 @@ npm test        # 268 個單元測試（test/unit/），使用 Node 內建的 no
 
 ```bash
 docker compose up -d --wait                                    # 起 postgres_test（埠 5433，tmpfs）
-node -r dotenv/config --env-file=eval/.env.replay --test "test/integration/**/*.test.js"
+node --env-file=.env --env-file=eval/.env.replay --test --test-concurrency=1 "test/integration/**/*.test.js"
 ```
+
+- **一定要帶 `--test-concurrency=1`**：各檔案共用同一個測試庫並會 `TRUNCATE`，`node --test` 預設多檔並行會互相清掉對方的資料，出現「一起跑就紅、單跑就綠」的假失敗（`npm run test:integration` 已內建此旗標）。
 
 - 這一層**只讀 `TEST_DATABASE_URL`，且資料庫名必須以 `_test` 結尾**（與 `migrate.js` 同一條防呆），
   因此永遠打不到真題庫；`npm test` 沒有預載 `.env`，整層會自動 skip。

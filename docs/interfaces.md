@@ -129,6 +129,7 @@ questions_physics --   FROM questions WHERE subject='數學'|'物理' AND archiv
 23. **`deleteQuestion` 回應、`config/features.js` 匯出形狀、`archived_at` 排除邊界**（A-Q2／Q3／Q4）：全部接受，見新增的第 12 條。
 24. **`npm test` 用 glob**（A-Q5／C-8／D-Q3）：`node --test "test/unit/**/*.test.js"`；規劃裡「`node --test test/unit/`」的寫法作廢。
 25. **`EVAL_CASSETTE_DIR`**（D-Q4）：階段 2 再裁，目前只由 `eval/run.js` 在行程內設定。
+27. **D-X1 收尾已於 2026-08-21 執行**（跳過 14 天窗口，因切換後無任何新寫入）：`config/db.js` 只認 `DATABASE_URL`；`.env`／`.env.example` 移除 `DB_*`；`package.json` 移除 `mysql2`、`migrate:export` script；刪除 `migrate/export_mysql.js` 與 MySQL 版 `schema.sql`；`NOTICE` 移除 mysql2。回滾路徑僅剩「以 `Desktop/期中專案_資料庫備份/` 的 mysqldump 還原 MySQL + `git checkout v1-mysql`」。
 26. **eval 的 pg engine 只連 `TEST_DATABASE_URL`**（第一次 push 後 CI 紅燈的根因）：`eval/lib/pgEngine.js` 原本經 `config/db.js` 連 `DATABASE_URL`，而 `seedFixture()` 會 `TRUNCATE` 四張表——本機等於對開發庫清空重灌，CI 則因沒有 5442 而以空訊息的 `AggregateError` 失敗。已改為自建 Pool、只讀 `TEST_DATABASE_URL` 且強制 `_test` 後綴（與 `test/integration/` 同規則）。**任何會寫入／清空資料表的 eval、測試、腳本，一律不得經 `config/db.js` 取連線**；`config/db.js` 只給應用程式本體用。
 
 ---
@@ -331,7 +332,7 @@ types.setTypeParser(20, v => parseInt(v, 10));  // INT8 / COUNT(*)：預設回�
 types.setTypeParser(1082, v => v);              // DATE：回 'YYYY-MM-DD' 字串，不轉成本地午夜的 Date（時區差一天）
 ```
 
-- 連線來源：`DATABASE_URL`（存在時優先）。D-X1 前保留 `DB_HOST`／`DB_PORT`／`DB_USER`／`DB_PASSWORD`／`DB_NAME` 的退路，但退路**預設值是 PG 的 `localhost`／`5442`／`exam`／`exam`／`tutor_exam_bank`**（裁決 22，避免誤拿 MySQL 的 3306/root 去連 PG）；**D-X1 後退路整段刪除，只認 `DATABASE_URL`**。`max: 10`。
+- 連線來源：**只認 `DATABASE_URL`**，缺少時啟動即丟錯（裁決 22 的「D-X1 後刪退路」已於 2026-08-21 執行，裁決 27）。`max: 10`。
 - `vector` 欄位讀回來是字串；寫入一律用 `pgvector` npm 的 `toSql()`。
 - `audit_formulas.js`、`fix_formulas.js`、`seed_questions.js` **不得再自建連線**，一律走這一支。
 - `listQuestions` 的 `total` 必須是 `number`（由 `setTypeParser(20)` 保證），WS-D 的整合測試會斷言型別。
@@ -346,7 +347,7 @@ types.setTypeParser(1082, v => v);              // DATE：回 'YYYY-MM-DD' 字�
 |---|---|---|---|
 | `DATABASE_URL` | `postgres://exam:exam@localhost:5442/tutor_exam_bank` | 正式／開發 PG 連線。**埠是 5442 不是規劃裡寫的 5432**——開發機上已有一個原生的 `postgresql-x64-17` 服務占用 5432，兩者同時 LISTEN 時連線會被它接走（症狀是「密碼驗證失敗」）。日後停用該服務要改回 5432 的話，同步改 `docker-compose.yml` 與本表 | `config/db.js`、`migrate.js` |
 | `TEST_DATABASE_URL` | `postgres://exam:exam@localhost:5433/tutor_exam_bank_test` | 整合測試 PG 連線，**庫名必須以 `_test` 結尾** | `migrate.js --test`、`test/integration/` |
-| `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` | `localhost` / `3306` / `root` / — / `tutor_exam_bank` | **舊 MySQL**，遷移期間保留；只有 `migrate/export_mysql.js` 與切換前的 `config/db.js` 會用到，D-X1 後移除 | WS-B |
+| ~~`DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME`~~ | — | **已移除**（裁決 27，D-X1 收尾 2026-08-21）：舊 MySQL 變數連同 `migrate/export_mysql.js`、`mysql2` 相依一起退役 | — |
 | `EMBED_MODEL` | `gemini-embedding-001` | embedding 模型 ID | WS-C |
 | `EMBED_DIM` | `768` | **釘死**；改值必須連同新 migration 與全量重算 | WS-C、WS-D |
 | `EMBED_RPM` | `60` | embedding 每分鐘請求上限（令牌桶） | WS-C |

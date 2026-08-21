@@ -38,7 +38,7 @@
 
 | 目錄 / 檔案 | 內容 | 說明 |
 |------------|------|------|
-| **[`exam_pro/`](./exam_pro)** | 🌟 **主要成品**（企業級重構版） | `app.js` / `server.js` + `config` `controllers` `services` `middleware` `routes` `utils` 分層，前端為 `public/index.html`，資料表定義於 `schema.sql`。詳見 [`exam_pro/README.md`](./exam_pro/README.md) |
+| **[`exam_pro/`](./exam_pro)** | 🌟 **主要成品**（企業級重構版） | `app.js` / `server.js` + `config` `controllers` `services` `middleware` `routes` `utils` 分層，前端為 `public/index.html`，資料表定義於 `migrations/`（PostgreSQL）。詳見 [`exam_pro/README.md`](./exam_pro/README.md) |
 | [`exam/`](./exam) | 早期原型（ARCHIVED） | 功能相同但邏輯集中於單一 `server.js`，保留以呈現重構前後對照 |
 | [`期中專題報告/`](./期中專題報告) | 開發紀實簡報 | [`tutor_presentation.html`](./期中專題報告/tutor_presentation.html)：GitHub 只會顯示原始碼，請下載後用瀏覽器開啟（大型 pptx/pdf/mp4 素材未進版控）|
 | [`LICENSE`](./LICENSE) | Apache License 2.0 | 程式碼授權 |
@@ -122,8 +122,9 @@ Gemini 已回傳 JSON，為何不直接入庫？
 ```bash
 cd exam_pro
 npm install
-cp .env.example .env      # 填入 GEMINI_API_KEY 與資料庫設定
-mysql -u root -p < schema.sql
+cp .env.example .env      # 填入 GEMINI_API_KEY（DATABASE_URL 預設值即可用）
+npm run db:up             # Docker 起 PostgreSQL 16 + pgvector（開發 5442 / 測試 5433）
+npm run migrate           # 套用 migrations/
 npm start                 # http://localhost:3000
 ```
 
@@ -133,7 +134,7 @@ npm start                 # http://localhost:3000
 
 ## 🧰 技術棧
 
-- **後端**：Node.js · Express · MySQL（mysql2）
+- **後端**：Node.js · Express · PostgreSQL 16 + pgvector（`pg`；2026-08-21 由 MySQL 切換，見 `docs/cutover-runbook.md`）
 - **AI**：Google Gemini 2.5 Flash（`@google/genai`）— PDF 考卷解析
 - **文件**：`docx`（自製 LaTeX → OOXML 數學公式轉換）
 - **前端**：單頁 HTML + Tailwind（CDN）+ MathJax
