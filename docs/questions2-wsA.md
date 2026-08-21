@@ -111,3 +111,47 @@ return { ok: false, error: '學科僅能為「數學」或「物理」！' };   
 **我暫時怎麼做**：照字面實作（全 0），不自己補一個假的 pending；
 `state` 欄位（`queued`／`extracting`）已經足夠讓前端顯示「拆題中」。
 在此備查，免得 WS-D 接前端時以為是 bug。
+
+---
+
+## 6. 節點名 `dedup0`／`dedup1` 對不上檔名 `agents/dedup.js`
+
+**問題**：第 7.4 條的 `job_events.node` 合法值是 **`dedup0`／`dedup1`**（兩個），
+第 3.1 條說「每個 agent 是 `agents/<name>.js`」，但第 10.1 條的所有權表只給了 WS-C
+**一支單數的 `agents/dedup.js`**。runner 要動態 require 時，`agents/dedup0.js` 並不存在。
+
+**我暫時怎麼做**：`workers/jobRunner.js` 的解析順序是
+①`agents/<node>.js` → ②`agents/<AGENT_MODULE_FOR_NODE[node]>.js`，
+其中 `dedup0`／`dedup1` 都對應到 `dedup`。因此 WS-C 兩種寫法都能接上：
+
+- 一支 `agents/dedup.js` 服務兩層 —— **靠凍結的 input 鍵區分**：
+  `dedup0` 拿 `{question_text}`，`dedup1` 拿 `{question_id, embed_text, subject, chapter}`。
+  `test/fixtures/fakeAgents/dedup.js` 就是這樣寫的（`'embed_text' in input`），可當範本。
+- 或之後拆成 `agents/dedup0.js`／`dedup1.js`，runner 不用改。
+
+**給 WS-C 的注意事項**：如果選第一種，請**不要**用 `ctx.jq.state` 或 `payload` 的內容判斷層級——
+runner 保證傳進去的 input 就是第 3.3 條表格裡那一組鍵，這是唯一穩定的依據。
+
+**要裁決的**：是否在第 3.1 條補一句「檔名與節點名不同時，以第 7.4 條的節點名對應到
+`AGENT_MODULE_FOR_NODE` 的檔名」？或直接要求 WS-C 拆成兩支檔。
+
+---
+
+## 7. `save` 節點沒有列在任何 workstream 的 `agents/` 清單裡
+
+**問題**：第 3.3 條的節點表最後一列是 `save`（閘門＝`validateQuestionFields`，
+同一交易 `INSERT questions` + 回填 `question_id`），但第 10.1 條的所有權表裡
+WS-B 只有 `extract`／`classify`，WS-C 只有 `lint`／`verify`／`dedup`——**沒有人擁有 `agents/save.js`**。
+
+**我暫時怎麼做**：由 **runner 自己實作** `save`（`workers/jobRunner.js` 的 `saveNode`），
+不放進 `agents/`。理由：
+
+1. 它不呼叫任何模型，而 agent 合約（第 3.1 條）整套設計都是為了「LLM 節點可離線測試」；
+2. 它要開交易寫 `questions` 並回填 `job_questions.question_id`，而第 3.1 條明寫
+   「agent 不寫 `job_events`、不改 `job_questions.state`」——`save` 兩件都要做；
+3. 第 3.3 條也把「`save` 成功後由 **runner** 呼叫 `embedService.embedByIds`」寫在 runner 身上。
+
+`job_events.node` 仍然照第 7.4 條寫 `'save'`，報表看得到它的延遲與 outcome。
+
+**要裁決的**：確認 `save` 歸 WS-A 的 runner，並在第 10.1 條的 WS-A 欄補一句
+「`save` 節點（在 `workers/jobRunner.js` 內）」，免得日後有人去 `agents/` 找它。
