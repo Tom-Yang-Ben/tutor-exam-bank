@@ -353,4 +353,7 @@ function xmlSafeClean(rawStr) {
     return stripUnsafe(rawStr || '');
 }
 
-module.exports = { buildParagraphComponents, xmlSafeClean, parseLatexToMath };
+// 對照表對外匯出（WS-C / D-E3）：utils/embedText.js 的 latexToPlain 重用同一份表，
+// 才不會出現「Word 匯出看到 θ、embedding 看到 theta」這種兩套規則。
+// ⚠️ 只加匯出，不改上面任何既有輸出——test/textFormatter.test.js 的 29 項是契約。
+module.exports = { buildParagraphComponents, xmlSafeClean, parseLatexToMath, GREEK, SYMBOLS, FUNCTIONS, ACCENTS };
