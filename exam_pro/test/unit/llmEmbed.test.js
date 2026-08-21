@@ -120,12 +120,15 @@ describe('模式旗標', () => {
         }
     });
 
-    test('LLM_MODE=replay 時 generateJson 明確說明屬階段 2，不會偷偷呼叫 Gemini', async () => {
+    // 階段 2（A-T3）把 generateJson 實作完之後，這一項的斷言由「屬階段 2、尚未實作」
+    // 改成「replay 模式下缺 agent 就丟錯」——測試的本意（不會偷偷呼叫 Gemini）不變。
+    // record／replay 下 agent 是必填（interfaces-stage2.md 第 5.1 條），沒有 agent 就算不出 cassette 鍵。
+    test('LLM_MODE=replay 時 generateJson 不會偷偷呼叫 Gemini（缺 agent 直接丟錯）', async () => {
         const { generateJson } = require('../../services/llm');
         const old = process.env.LLM_MODE;
         process.env.LLM_MODE = 'replay';
         try {
-            await assert.rejects(() => generateJson({ parts: [{ text: 'hi' }] }), /階段 2/);
+            await assert.rejects(() => generateJson({ parts: [{ text: 'hi' }] }), /agent 是必填/);
         } finally {
             if (old === undefined) delete process.env.LLM_MODE; else process.env.LLM_MODE = old;
         }

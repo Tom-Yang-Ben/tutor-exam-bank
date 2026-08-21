@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-21T17:46:04.143Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2320,
+        "sha256": "b90422e7f7055b74b67b6791514c452d5ec9c75124ff178fa9641d5a7850cd73"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "質量 $2$ kg 的物體受到合力 $10$ N，求其加速度。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "confidence": 1,
+      "rationale": "題目給定物體的質量與所受合力，要求計算其加速度。這直接應用了牛頓第二運動定律 $F=ma$，屬於「牛頓運動定律」章節。"
+    },
+    "usage": {
+      "tokenIn": 1849,
+      "tokenOut": 64,
+      "tokenThinking": 461,
+      "tokenCached": 0
+    },
+    "latencyMs": 2793
+  }
+}
