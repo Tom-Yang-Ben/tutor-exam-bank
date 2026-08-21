@@ -199,10 +199,10 @@ npm run dev    # 開發（nodemon 熱重載）
 ## 🧪 測試
 
 ```bash
-npm test        # 40 個單元測試，使用 Node 內建的 node:test，無額外相依套件
+npm test        # 268 個單元測試（test/unit/），使用 Node 內建的 node:test，無額外相依套件
 ```
 
-每次 push 與 PR 都會由 [GitHub Actions](../.github/workflows/ci.yml) 在 Node 20.x / 22.x 上自動執行（badge 見本頁最上方）。
+每次 push 與 PR 都會由 [GitHub Actions](../.github/workflows/ci.yml) 在 Node 22.x / 24.x 上自動執行單元層，另有一個 `integration` job 起 `pgvector/pgvector:pg16` service 跑整合測試與檢索 eval（badge 見本頁最上方）。
 `npm test` **不連資料庫、不呼叫 Gemini、不需要任何 secrets**——任何人都能在不設定 `.env` 的情況下看到驗證結果。
 
 ### 需要資料庫的整合測試（`test/integration/`）
@@ -259,6 +259,31 @@ node -r dotenv/config --env-file=eval/.env.replay --test "test/integration/**/*.
 > 最後那一列才是重點。一個永遠會過的測試等於沒有測試，所以測試自己的鑑別力也要被驗證。
 > 實測把 `shuffle` 改回舊寫法，40 個測試中會有 **5 個轉紅**（位置卡方值從 0.5~4.0 暴增到 1414，
 > 最常見與最罕見排列的次數從相差 1.25 倍變成相差 13.7 倍）——這條防線是驗證過的，不是宣稱的。
+
+### 3. 檢索 eval — `LIKE` vs 純向量 vs hybrid 三欄對照（`eval/`）
+
+**問題**：組卷與「找相似題」原本只有 `WHERE subject=? AND chapter=?` 加 `LIKE '%關鍵字%'`，
+「換個數字的同一題」在不同 PDF 裡會被當成新題，也做不出「同概念、難度 +1」的推薦。
+**決策**：PostgreSQL + pgvector 存 768 維向量（Gemini Embedding），檢索改為 metadata 篩選 → 向量 + 全文（應用層 jieba 分詞）RRF 融合，同一段 SQL（`queries/hybrid.js`）同時服務 API 與 eval。
+**數字**（公開層：自製 fixture 60 題、人工定案 golden 40 筆；2026-08-22，`gemini-embedding-001`／768 維，commit `a02f7e4`，CI 的 `integration` job 對真 PG 量測）：
+
+| 檢索方式 | Recall@5 | Recall@10 | MRR |
+|---|---:|---:|---:|
+| `LIKE`（舊基準） | 0.875 | 0.950 | 0.768 |
+| 純向量 | **1.000** | **1.000** | **0.988** |
+| hybrid（RRF） | **1.000** | **1.000** | 0.824 |
+
+```bash
+node --env-file=.env --env-file=eval/.env.replay eval/run.js --suite retrieval   # 本機重現（對 postgres_test）
+npm run eval:baseline                                                           # 重寫門檻初值（只升不降）
+```
+
+怎麼讀這張表：
+
+- **hybrid 的 Recall@5 比 `LIKE` 高 12.5 個百分點**，Roadmap 規格 1 要求的「hybrid ≥ LIKE」成立；`eval/thresholds.json` 以第一次量測 −0.03 為門檻、之後只升不降（ratchet），任何改動讓三欄掉到門檻下 CI 就轉紅。
+- **hybrid 的 MRR 反而低於純向量**（0.824 vs 0.988）：RRF 把關鍵字側名次混進來後，正確題偶爾從第 1 名掉到第 2–3 名。這是規劃 §2.6.5 預留的決策點（「加權優於 RRF > 3 點 Recall@5 才切換」）——在私有 golden（真題庫）上量過再決定，先不動。
+- 公開 fixture 小而乾淨，數字好看不代表真題庫表現；私有層（`eval/private/`，不進版控）的數字由開發者本機跑後另行記錄。CI 只守「不退步」。
+- 與 prod 同一段 SQL：eval 的 pg engine 只調 `hnsw.ef_search`，量到的就是 `/api/questions/:id/similar` 走的路徑；eval **只連 `TEST_DATABASE_URL`**（`_test` 後綴強制），不會碰正式庫。
 
 ---
 
@@ -387,7 +412,8 @@ node seed_questions.js --apply  # 實際寫入（交易保護；同題幹已存�
 
 ## 🛣 下一階段
 
-Agent 管線（狀態機 + 五個 sub-agent）、RAG（相似題／檢索式分類／自然語言查題）、資料層（MySQL → PostgreSQL + pgvector、`attempts` 表、檢索 eval）的設計規格、建議順序與驗收指標，統一維護在專案根目錄 [`README.md` 的 Roadmap 章節](../README.md#-roadmap)。**目前為規劃，尚未實作。**
+Agent 管線（狀態機 + 五個 sub-agent）、RAG（相似題／檢索式分類／自然語言查題）、資料層（MySQL → PostgreSQL + pgvector、`attempts` 表、檢索 eval）的設計規格、建議順序與驗收指標，統一維護在專案根目錄 [`README.md` 的 Roadmap 章節](../README.md#-roadmap)，完整規劃（作法／理由／替代方案／排程）在 [`docs/roadmap-plan.md`](../docs/roadmap-plan.md)。
+**進度**：階段 1 資料層的程式碼（PostgreSQL + pgvector、`students`/`attempts`、embedding 回填、hybrid 檢索與 `/similar`、eval 體系）已合入 main 並通過 CI；檢索三欄對照見上方「測試 › 3」。尚待：真資料遷移彩排與切換之夜（`docs/human-lane-stage1.md`、`docs/cutover-runbook.md`）。階段 2、3 尚未開工。
 
 ---
 
