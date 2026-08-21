@@ -35,5 +35,21 @@
     "golden": "eval/golden/retrieval.json",
     "goldenEntries": 40,
     "goldenPending": 40
+  },
+  "_rule_stage2": "classify／pipeline 的初值同樣是「第一次量測 − 0.03」，之後只升不降。但兩者都有額外的前置條件：classify 要等 agents/classify.js 合入且 cassette 錄好；pipeline 要等 agents/extract.js 合入（在那之前拆題走 oracle stub，數字沒有意義）。eval/run.js 的 --write-baseline 會在 stub 狀態下拒絕執行。",
+  "classify": {
+    "_note": "門檻為 null = 尚未建立基準線，只報告不擋（與階段 1 retrieval 的語意一致）。有數字之後，量不到那一欄就算失敗——否則「cassette 被誤刪」會表現成 CI 全綠。",
+    "classify": {
+      "accuracy": null,
+      "macro_f1": null
+    }
+  },
+  "pipeline": {
+    "_note": "只放「越高越好」的指標。needs_review 的比率越低越好，放進 ratchet 會變成「只准更多題進複核」，那不是門檻；它只在報表裡呈現分佈。",
+    "pipeline": {
+      "saved_rate": null,
+      "gate_pass_rate": null,
+      "answer_agree_rate": null
+    }
   }
 }

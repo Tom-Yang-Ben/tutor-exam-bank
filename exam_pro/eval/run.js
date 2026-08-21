@@ -27,11 +27,16 @@ const metrics = require('./lib/metrics');
 const report = require('./lib/report');
 const thresholds = require('./lib/thresholds');
 const pgEngine = require('./lib/pgEngine');
+const report2 = require('./lib/report2');
+const { runClassifySuite } = require('./lib/suiteClassify');
+const { runPipelineSuite } = require('./lib/suitePipeline');
 
-const USAGE = `用法：node eval/run.js --suite retrieval [選項]
+const USAGE = `用法：node eval/run.js --suite retrieval|classify|pipeline [選項]
 
-  --suite <name>        目前只支援 retrieval（classify／formula 屬階段 2）
-  --golden <path>       golden 檔（預設 eval/golden/retrieval.json）
+  --suite <name>        retrieval（階段 1）｜classify｜pipeline（階段 2，A-T14）
+  --golden <path>       golden 檔（retrieval 預設 eval/golden/retrieval.json；
+                        classify 預設 eval/golden/classify.json；pipeline 為答案卷目錄）
+  --pdfs <path>         只有 --suite pipeline 用：PDF 路徑（預設 eval/fixtures/sample_exam.pdf）
   --mode <m>            like | vector | hybrid | all（預設 all）
   --engine <e>          memory | pg | auto（預設 auto：pg 相依齊全就用 pg，否則 memory）
   --scope <s>           chapter | subject | all（預設 subject）
@@ -45,13 +50,15 @@ const USAGE = `用法：node eval/run.js --suite retrieval [選項]
 function parseArgs(argv) {
     const args = {
         suite: null, golden: null, mode: 'all', engine: 'auto', scope: 'subject',
-        fuse: 'rrf', limit: 10, excludeSelf: true, writeBaseline: false, reportsDir: null
+        fuse: 'rrf', limit: 10, excludeSelf: true, writeBaseline: false, reportsDir: null,
+        pdfs: null
     };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         switch (a) {
             case '--suite': args.suite = argv[++i]; break;
             case '--golden': args.golden = argv[++i]; break;
+            case '--pdfs': args.pdfs = argv[++i]; break;
             case '--mode': args.mode = argv[++i]; break;
             case '--engine': args.engine = argv[++i]; break;
             case '--scope': args.scope = argv[++i]; break;
@@ -239,11 +246,73 @@ async function runRetrieval(args) {
     return emitted;
 }
 
+/**
+ * 階段 2 兩個 suite 的共同外殼：跑 → 報表 → 門檻（ratchet）。
+ *
+ * 這裡有一條與階段 1 完全一致的 guard：**stub 狀態下不得寫 thresholds 初值**。
+ * 理由也一樣——基準線一定會被真實作推翻，之後的 CI 會紅得莫名其妙，
+ * 而紅燈的原因跟那次改動無關（eval/lib/thresholds.js 檔頭第 1 點）。
+ *
+ * @param {object} args
+ * @param {(args:object) => Promise<object>} runner
+ */
+async function runStage2Suite(args, runner) {
+    const res = await runner(args);
+
+    if (res.isPrivate && !args.reportsDir) {
+        args.reportsDir = path.resolve(__dirname, 'private', 'reports');
+    }
+    report2.emit({ res, dir: args.reportsDir, private: res.isPrivate });
+
+    if (res.failures && res.failures.length) {
+        console.error(`\n❌ ${res.suite} suite 有 ${res.failures.length} 筆呼叫失敗：\n  - ${res.failures.slice(0, 10).join('\n  - ')}`);
+        process.exitCode = 1;
+        return res;
+    }
+
+    if (args.writeBaseline) {
+        const blockers = [];
+        const st = res.meta.sources || {};
+        if (st.anyStub) blockers.push(`轉接層仍有暫用／未合入：${JSON.stringify(st)}`);
+        if (res.suite === 'pipeline' && res.caveats && res.caveats.anyStub) {
+            blockers.push(`agent 仍有 stub：${JSON.stringify(res.meta.agentSources)}`);
+        }
+        if (res.suite === 'classify' && res.meta.agent === '（未合入）') {
+            blockers.push('agents/classify.js 尚未合入，這一輪沒有任何分類數字');
+        }
+        if (blockers.length) {
+            throw new Error(
+                `拒絕在 stub 狀態下寫入 ${res.suite} 的 thresholds 初值：\n  - ${blockers.join('\n  - ')}\n` +
+                '   等 WS-B／WS-C 的零件合入、cassette 錄好之後再跑 --write-baseline。'
+            );
+        }
+        const w = thresholds.writeBaselineSuite({ suite: res.suite, measured: res.measured, meta: res.meta });
+        console.log(w.written ? `thresholds.json 已更新：\n  - ${w.changes.join('\n  - ')}` : 'thresholds.json 無需更新。');
+        if (w.kept.length) console.log(`  保持不變：\n  - ${w.kept.join('\n  - ')}`);
+    }
+
+    const cmp = thresholds.compareSuite(thresholds.loadThresholds(), res.suite, res.measured);
+    if (cmp.skipped.length) console.log(`未設門檻（只報告不擋）：${cmp.skipped.join('、')}`);
+    if (cmp.failures.length) {
+        console.error(`\n❌ ${res.suite} eval 未達門檻：\n  - ${cmp.failures.join('\n  - ')}`);
+        process.exitCode = 1;
+    } else {
+        console.log(`\n✅ ${res.suite} eval 通過（比對了 ${cmp.checked} 個門檻）。`);
+    }
+    return res;
+}
+
 async function main() {
     const args = parseArgs(process.argv.slice(2));
     if (args.help || !args.suite) { console.log(USAGE); return; }
+
+    // 階段 2 的兩個 suite：形狀與 retrieval 不同（沒有三欄對照），
+    // 所以走各自的入口與報表，只共用 thresholds 的 ratchet 規則。
+    if (args.suite === 'classify') return runStage2Suite(args, runClassifySuite);
+    if (args.suite === 'pipeline') return runStage2Suite(args, runPipelineSuite);
+
     if (args.suite !== 'retrieval') {
-        throw new Error(`--suite ${args.suite} 尚未實作（階段 1 只有 retrieval；classify／formula 屬階段 2）`);
+        throw new Error(`--suite ${args.suite} 不存在（可用：retrieval｜classify｜pipeline；formula 由 WS-C 以 node --test 表格測試跑，不走本入口）`);
     }
     if (!['like', 'vector', 'hybrid', 'all'].includes(args.mode)) throw new Error(`--mode 只能是 like|vector|hybrid|all`);
     if (!['memory', 'pg', 'auto'].includes(args.engine)) throw new Error(`--engine 只能是 memory|pg|auto`);
@@ -258,4 +327,4 @@ if (require.main === module) {
         .catch(err => { console.error(`\n❌ ${err.message}`); process.exit(1); });
 }
 
-module.exports = { runRetrieval, parseArgs };
+module.exports = { runRetrieval, runStage2Suite, parseArgs };
