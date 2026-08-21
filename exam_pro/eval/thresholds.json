@@ -1,10 +1,39 @@
 {
   "_rule": "初值 = 第一次量測 − 0.03，之後只升不降（ratchet）。調整必須改本檔並在 PR 說明。",
-  "_status": "尚未建立基準線。三欄都是 null＝只報告不擋。等 WS-C 的 utils/tokenize.js、utils/embedText.js、queries/hybrid.js 合入並錄好 eval/fixtures/embeddings.*.json 之後，由開發者本人跑 npm run eval:baseline 寫入。",
-  "_why_not_now": "目前 eval 用的是 eval/lib 內的暫用 stub 分詞器與 stub buildEmbedText，量到的 LIKE 欄數字在 WS-C 合入後必然改變；拿它當基準線只會讓 CI 紅得莫名其妙。eval/lib/thresholds.js 對這件事有硬性 guard。",
+  "_status": "基準線已於 2026-08-22 由開發者本人以 npm run eval:baseline 建立（fixture 60 題與 golden 40 筆均已人工定案）。之後只升不降。",
   "retrieval": {
-    "like": null,
-    "vector": null,
-    "hybrid": null
+    "like": {
+      "recall5": 0.845,
+      "recall10": 0.92,
+      "mrr": 0.7383
+    },
+    "vector": {
+      "recall5": 0.97,
+      "recall10": 0.97,
+      "mrr": 0.9575
+    },
+    "hybrid": {
+      "recall5": 0.97,
+      "recall10": 0.97,
+      "mrr": 0.695
+    }
+  },
+  "_measured_with": {
+    "engine": "memory",
+    "scope": "subject",
+    "fuseMode": "rrf",
+    "limit": 10,
+    "excludeSelf": true,
+    "model": "gemini-embedding-001",
+    "dim": 768,
+    "embeddings": "embeddings.gemini-embedding-001.768.json",
+    "tokenizer": "utils/tokenize.js",
+    "embedText": "utils/embedText.js",
+    "fixture": "eval/fixtures/questions.public.json",
+    "fixtureQuestions": 60,
+    "fixturePending": false,
+    "golden": "eval/golden/retrieval.json",
+    "goldenEntries": 40,
+    "goldenPending": 40
   }
 }
