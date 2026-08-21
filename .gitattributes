@@ -4,3 +4,9 @@
 # 這條純粹是為了 diff 整潔——Windows 上 checkout 成 CRLF 會讓每次重錄的 fixture
 # 看起來整份都變了。fixture 與 cassette 一律只由 Node 寫（PowerShell 的 > 會寫 BOM）。
 exam_pro/eval/** text eol=lf
+
+# 但「eval/** 一律 LF」不可以套到二進位檔上。實測：sample_exam.pdf 被上面那條當成文字，
+# commit 時把一個 CRLF 收成 LF，存進去的 blob 比原檔少一個位元組——PDF 的 xref 位移
+# 全部作廢，而且 `git status` 是乾淨的，只有在別台機器 checkout 打開檔案時才會發現。
+# binary 同時關掉 eol 轉換與 diff，正是這裡要的。
+exam_pro/eval/fixtures/*.pdf binary
