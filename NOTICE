@@ -36,10 +36,12 @@ Copyright 2026 Ben Yang (楊本顥)
 
 本專案使用下列開放原始碼套件，各自依其原授權條款釋出：
 
-- Express (MIT)                    - mysql2 (MIT)
+- Express (MIT)                    - mysql2 (MIT，遷移期間保留，切換後移除)
 - @google/genai (Apache-2.0)       - docx (MIT)
 - multer (MIT)                     - dotenv (BSD-2-Clause)
 - cors (MIT)                       - node-fetch (MIT)
-- nodemon (MIT, devDependency)
+- pg (MIT)                         - pgvector (MIT)
+- @node-rs/jieba (MIT；內含 jieba 詞典，MIT)
+- nodemon (MIT, devDependency)     - supertest (MIT, devDependency)
 
 前端以 CDN 方式載入 Tailwind CSS (MIT) 與 MathJax (Apache-2.0)。

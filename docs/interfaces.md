@@ -52,7 +52,7 @@ schema_migrations ( version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DE
 | `answer_text` | `TEXT` | `NOT NULL` | |
 | `solution_img` | `TEXT` | 可為 NULL | |
 | `created_at` | `TIMESTAMPTZ` | `NOT NULL DEFAULT now()` | |
-| `origin` | `TEXT` | `NOT NULL DEFAULT 'pdf' CHECK (IN ('pdf','manual','seed','variant'))` | §4.3.1 |
+| `origin` | `TEXT` | `NOT NULL DEFAULT 'pdf' CHECK (IN ('pdf','manual','seed','variant','legacy'))`（`'legacy'` 由 `0004` 加入，裁決 13） | §4.3.1 |
 | `variant_of` | `INT` | `REFERENCES questions(id) ON DELETE SET NULL`；永遠指向家族根節點 | §4.3.1 |
 | `chapter_src` | `TEXT` | `NOT NULL DEFAULT 'ai' CHECK (IN ('ai','human','knn'))` | §4.3.1 |
 | `archived_at` | `TIMESTAMPTZ` | 軟刪除標記，NULL = 未封存 | §4.3.1 |
@@ -112,6 +112,24 @@ questions_physics --   FROM questions WHERE subject='數學'|'物理' AND archiv
 11. **開發資料庫的對外埠改為 5442**（測試庫維持 5433）。原因見第 9 條的 `DATABASE_URL`。
 12. **`queries/hybrid.js` 的參數多一個 `excludeIds`**（規劃與分工文件的清單裡沒有）。`/similar` 必須排除來源題本身，eval 的 `--exclude-self` 也要同一個機制，與其讓兩邊各自在外層過濾（會讓 `limit` 的語意不一致），不如放進同一段 SQL。見第 5 條。
 
+### 1.6 第一輪裁決（2026-08-21，回應四條 WS 的 `questions-ws*.md`）
+
+以下由開發者本人裁決，**已寫進本檔對應條文**；各 WS 依第 12 條的「合併後小修」對齊。
+
+13. **`origin` 加 `'legacy'`**（B-Q1）：新開 `migrations/0004_origin_legacy.sql` 把 CHECK 改為 `('pdf','manual','seed','variant','legacy')`。從 MySQL 遷移的舊題一律 `origin='legacy'`（只有題幹與 `seed_questions.js` 完全相同的 30 題寫 `'seed'` + `chapter_src='human'`）。階段 3 讀 `origin` 時必須認得 `'legacy'` = 來源未知。
+14. **M1 驗收條文改寫**（B-Q2）：「`COUNT(attempts)` = Σ `history_json` 鍵數 − 姓名合併與空姓名造成的差額；差額逐筆列在 `name_merge_report.md`，經人工確認後以 `--allow-merged` 放行」。`verify.js` 預設仍把差額當失敗。
+15. **姓名正規化後為空的舊試卷**（B-Q3）：遇到時走 (a) 回 MySQL 補姓名再重跑 export；`import_pg.js` 預設中止不得靜默丟資料。
+16. **遷移後的 `search_tsv`／`embedding` 由 `services/embedService.js` 統一回填**（B-Q4）：`import_pg.js` 不寫這兩欄，runbook 在 import→verify 之後接「回填向量.bat」。
+17. **`dict.txt.big` 改為選用**（C-1）：見第 2 條。
+18. **`buildHybridQuery` 新增選用參數 `sides`**（C-2／D-Q1）：見第 5 條。
+19. **`/similar` 拿掉 `scope=all`**（C-3）：跨學科相似題教學上無意義，且無法用同一段 SQL 表達；見第 6 條。
+20. **`difficulty_delta` 維持字面語意**（C-4）：給了就鎖定單一難度；階段 3 依實際使用再調。
+21. **`search_tsv` 的來源文字與權重**（D-Q2）：見第 2 條；eval 的 `pgEngine` 必須呼叫 `embedService` 匯出的同一支純函式，不得自行 `tokenize(buildEmbedText(q))`。
+22. **`config/db.js` 的 `DB_*` 退路**（A-Q1）：D-X1 前保留但預設值為 PG（`5442`／`exam`／`exam`）；**D-X1 後刪除退路，只認 `DATABASE_URL`**。見第 8 條。
+23. **`deleteQuestion` 回應、`config/features.js` 匯出形狀、`archived_at` 排除邊界**（A-Q2／Q3／Q4）：全部接受，見新增的第 12 條。
+24. **`npm test` 用 glob**（A-Q5／C-8／D-Q3）：`node --test "test/unit/**/*.test.js"`；規劃裡「`node --test test/unit/`」的寫法作廢。
+25. **`EVAL_CASSETTE_DIR`**（D-Q4）：階段 2 再裁，目前只由 `eval/run.js` 在行程內設定。
+
 ---
 
 ## 2. `utils/tokenize.js`（擁有者：WS-C）
@@ -127,7 +145,8 @@ function tokenize(text) {}
 module.exports = { tokenize };
 ```
 
-- 實作：`@node-rs/jieba`（win32 有預編譯 napi，不需 node-gyp）+ **`dict.txt.big` 繁體詞典**，另把 `config/chapters.js` 的全部章節名加進自訂詞（「向心力」「克拉瑪公式」「正弦定理」…）。
+- 實作：`@node-rs/jieba`（win32 有預編譯 napi，不需 node-gyp）內建詞典 + `config/chapters.js` 的全部章節名（含拆出的子詞）+ `utils/tokenize.js` 內手寫的高中數理繁體名詞表作為自訂詞。**`dict.txt.big` 為選用**（裁決 17）：npm 套件不隨附、不進版控、不 postinstall 下載；環境變數 `JIEBA_DICT_BIG` 指到本機檔案時才額外載入，**預設不啟用**——本機有、CI 沒有會讓同一題兩邊切出不同 token，比切錯詞更糟。
+- **`search_tsv` 的來源文字與權重**（裁決 21）：由 `services/embedService.js` 統一組裝——章節名 token 權重 `A`、`keywords` token 權重 `A`、`embed_text` 第 2 行起（題幹口語化文字 + concept_summary）token 權重 `B`；三段 token 的產生是 `embedService` 匯出的純函式，**寫入、回填、eval 的 `pgEngine` 三處都只能呼叫它**。
 - `tokenize(null)`／`tokenize('')` 回 `[]`，**不得拋出例外**。
 - 輸出可能含 `f(x)`、`a:b`、`x2` 這類殘留符號——這是刻意的。呼叫端一律以 `text[]` 參數傳進 SQL，在 SQL 端用 `quote_literal` 組裝（見第 5 條），**不得**在 JS 端把 token 字串拼接成 `to_tsquery` 的輸入。
 - `search_tsv` 的組裝不另外提供 `toTsvSql()`：寫入端（WS-A 的 controller、WS-C 的 `embedService`）自己以 `to_tsvector('simple', array_to_string($n::text[], ' '))` 組，權重規則見規劃 §2.3.7。
@@ -198,6 +217,8 @@ generateJson({ model, system, parts /* [{text}|{pdfBase64}|{fileUri}] */, schema
  *   queryVector: number[],           // 長度必須 = EMBED_DIM(768)
  *   queryTokens: string[],           // tokenize() 的輸出
  *   mode: 'rrf'|'weighted',
+ *   sides?: ('vec'|'kw')[],          // 選用（裁決 18）；預設 ['vec','kw']；/similar 的 mode=vector 傳 ['vec']、mode=keyword 傳 ['kw']；
+ *                                    // 只含 'kw' 時 queryVector 可為 null
  *   limit: number                    // 1..50
  * }} opts
  * @returns {{ text: string, values: any[] }}   直接餵給 config/db.js 的 query(text, values)
@@ -235,7 +256,7 @@ module.exports = { buildHybridQuery };
 | `k` | int 1~20 | `10` | 回傳筆數；亦接受 `limit` 作為別名 |
 | `student_id` | int | 無 | 給了就排除該生已作答（`attempts`）的題；查無此人＝空排除集，正常回結果，**不回 404** |
 | `mode` | `hybrid` / `vector` / `keyword` | `hybrid` | 給 eval 與除錯用 |
-| `scope` | `chapter` / `subject` / `all` | `chapter` | 候選範圍 |
+| `scope` | `chapter` / `subject` | `chapter` | 候選範圍（裁決 19：**沒有 `all`**，給 `all` 回 400） |
 | `difficulty_delta` | int -4~4 | 無 | 給了則目標難度 = 來源難度 + delta（夾在 1~5）；未給則 ±1 |
 
 **200 回應形狀（凍結）**：
@@ -309,7 +330,7 @@ types.setTypeParser(20, v => parseInt(v, 10));  // INT8 / COUNT(*)：預設回�
 types.setTypeParser(1082, v => v);              // DATE：回 'YYYY-MM-DD' 字串，不轉成本地午夜的 Date（時區差一天）
 ```
 
-- 連線來源：`DATABASE_URL`（存在時優先），否則以 `DB_HOST`／`DB_PORT`／`DB_USER`／`DB_PASSWORD`／`DB_NAME` 組出。`max: 10`。
+- 連線來源：`DATABASE_URL`（存在時優先）。D-X1 前保留 `DB_HOST`／`DB_PORT`／`DB_USER`／`DB_PASSWORD`／`DB_NAME` 的退路，但退路**預設值是 PG 的 `localhost`／`5442`／`exam`／`exam`／`tutor_exam_bank`**（裁決 22，避免誤拿 MySQL 的 3306/root 去連 PG）；**D-X1 後退路整段刪除，只認 `DATABASE_URL`**。`max: 10`。
 - `vector` 欄位讀回來是字串；寫入一律用 `pgvector` npm 的 `toSql()`。
 - `audit_formulas.js`、`fix_formulas.js`、`seed_questions.js` **不得再自建連線**，一律走這一支。
 - `listQuestions` 的 `total` 必須是 `number`（由 `setTypeParser(20)` 保證），WS-D 的整合測試會斷言型別。
@@ -333,6 +354,12 @@ types.setTypeParser(1082, v => v);              // DATE：回 'YYYY-MM-DD' 字�
 | `LLM_MODE` | `replay` | `live` / `record` / `replay`；CI 恆為 `replay` | WS-C（階段 2 起 WS-B） |
 | `FEATURE_SIMILAR` | `false` | `/api/questions/:id/similar` 是否掛載 | WS-C |
 | `FEATURE_HYBRID_SEARCH` | `false` | `listQuestions` 是否改走 hybrid 檢索 | WS-A、WS-C |
+| `EMBED_FIXTURE_DIR` | `exam_pro/eval/fixtures` | fixture 向量檔目錄（單元測試把它指到暫存目錄） | WS-C、WS-D |
+| `JIEBA_DICT_BIG` | 未設定 | 指到本機 `dict.txt.big` 才額外載入；CI 與預設皆不啟用 | WS-C |
+| `BACKUP_DIR` | `exam_pro/backups` | `scripts/backup.js` 輸出資料夾 | WS-B |
+| `BACKUP_KEEP` | `14` | 保留份數 | WS-B |
+| `BACKUP_COPY_DIR` | （空） | 額外複製到雲端同步資料夾；留空不複製 | WS-B |
+| `BACKUP_PG_SERVICE` | `postgres` | `docker compose exec` 的服務名 | WS-B |
 
 - 所有 `FEATURE_*` 集中在 `config/features.js`（WS-A 建立），**預設全關**；DB 驅動層不放旗標。
 - 布林值的解讀規則凍結為：字串 `1` 或 `true`（不分大小寫）為真，其餘皆為假。
@@ -387,5 +414,50 @@ rebase 時若兩條 WS 都動了本檔，衝突只會落在相鄰行，**兩邊�
 - `0001_init.sql`、`0002_vector.sql` 一旦合進 `main` 就是歷史，**任何人都不得再編輯其內容**（包括加註解）。
 - 之後任何欄位／索引／約束變更一律新開檔案，四位數編號 + `_` + 英文小寫描述，例如 `0004_add_question_source.sql`。
 - **`0003_jobs.sql` 已保留給階段 2 的 `jobs`／`job_events`**，階段 1 不得占用這個編號。
+- **`0004_origin_legacy.sql`** 已由開發者本人依裁決 13 建立（`origin` CHECK 加 `'legacy'`）。
 - `migrate.js` 沒有 `down`：寫錯的 migration 用「再寫一支把它改回來」修正，不做回滾腳本。
 - 因此 WS-B 的匯入若發現缺欄位，**不是**改 `0001`，而是寫進 `docs/questions-wsB.md` 由開發者本人裁決後新開一支。
+
+---
+
+## 12. 第一輪合併後補凍結的介面（裁決 23）
+
+### 12.1 `DELETE /api/questions/:id`（擁有者：WS-A）
+
+| 情境 | 狀態 | 回應 |
+|---|---|---|
+| 有 `attempts` 紀錄 | 200 | `{ message: '該題已有學生作答紀錄，改為封存（不再出現在題庫與組卷候選中）。', id, archived: true }` |
+| 沒有紀錄 | 200 | `{ message: '題目已刪除！', id }`（不帶 `archived`） |
+| 找不到或已封存 | 404 | `{ message: '找不到該題目' }` |
+
+### 12.2 `config/features.js`（擁有者：WS-A）
+
+```js
+const features = require('../config/features');
+features.FEATURE_SIMILAR          // boolean getter，即時讀 process.env
+features.FEATURE_HYBRID_SEARCH    // boolean getter
+features.isEnabled('FEATURE_XXX') // 任意旗標
+features.parseBool(value)         // '1' 或 'true'（不分大小寫）為真
+```
+
+### 12.3 `archived_at IS NULL` 的套用邊界
+
+| 位置 | 排除已封存 |
+|---|---|
+| `generatePaper` 候選池、`listQuestions`、`getChapters`、`updateQuestion`（改不到回 404）、`/similar`、hybrid、few-shot、`audit_formulas`／`fix_formulas` | ✅ |
+| **`wordController.downloadWord`（重印已出過的試卷）** | ❌ 不排除——舊卷必須印得出全部題目 |
+
+### 12.4 新增／修改題目必須同步檢索欄位（A 的合併後小修）
+
+`POST /api/questions` 與 `PUT /api/questions/:id` 成功後，WS-A 的 controller 必須呼叫 `embedService.embedByIds([id])`（`EMBED_MODE=fixture` 或無金鑰時允許失敗並記 log，不影響主要回應），或至少把該題 `embed_hash` 設為 NULL 讓 `backfill_embeddings.js` 撿到；**不得讓新題永遠沒有 `search_tsv`**。
+
+### 12.5 各 WS 合併後的小修清單
+
+| WS | 必修 |
+|---|---|
+| A | 12.4；D-X1 時刪 `DB_*` 退路 |
+| B | `import_pg.js` 舊題寫 `origin='legacy'`（依 `0004`）；runbook 在 verify 後接「回填向量.bat」 |
+| C | 無 |
+| D | `evalRanker` 兩個測試改成對 jieba 的期望值或分詞器無關斷言；`schema.test.js` 的測試學生加清理／`ON CONFLICT`；純向量欄改傳 `sides:['vec']`；`pgEngine` 改呼叫 `embedService` 的 tsv 純函式；加 B 要的 `migrate:export`／`migrate:import`／`migrate:verify`／`db:backup` 四個 scripts |
+
+---
