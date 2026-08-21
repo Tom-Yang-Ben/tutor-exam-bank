@@ -55,22 +55,9 @@ exports.getChapterWhitelist = (req, res) => {
 };
 
 // 共用：驗證並正規化題目欄位（手動新增與編輯共用）
-function validateQuestionFields(body) {
-    const subject = body.subject;
-    const chapter = (body.chapter || '').trim();
-    const question_text = (body.question_text || '').trim();
-    const answer_text = (body.answer_text || '').trim();
-    const question_type = body.question_type || '填空';
-    const difficulty = normalizeDifficulty(body.difficulty ?? 3);
-
-    if (!subject || !chapter || !question_text) return { ok: false, error: '學科、章節、題目內容皆為必填！' };
-    if (!isValidSubject(subject)) return { ok: false, error: '學科僅能為「數學」或「物理」！' };
-    if (!isValidChapter(subject, chapter)) return { ok: false, error: `章節「${chapter}」不在 ${subject} 的精細章節白名單中！` };
-    if (!isValidQuestionType(question_type)) return { ok: false, error: `題型僅能為：${QUESTION_TYPES.join('、')}` };
-    if (difficulty === null) return { ok: false, error: '難度必須為 1 到 5 的整數！' };
-
-    return { ok: true, value: { subject, chapter, question_type, difficulty, question_text, answer_text } };
-}
+// A-T12 起管線的 save 節點與 POST /api/review/:jqId/approve 也要跑同一道閘門，
+// 因此本函式已搬到 utils/questionValidation.js，這裡只留 require（行為完全不變）。
+const { validateQuestionFields } = require('../utils/questionValidation');
 
 exports.createQuestion = async (req, res, next) => {
     const { subject, chapter, question_type, difficulty, question_text, question_img, answer_text, solution_img } = req.body;
