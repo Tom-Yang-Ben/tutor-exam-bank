@@ -7,7 +7,9 @@
 // 「印差值」就夠了。一個人開發時，真正需要回答的問題只有一句——
 // **這次改動讓哪一欄動了、動了多少**。
 //
-// 報表檔名是 <日期>-<sha>.json，字典序即時間序（日期在前），所以排序不需要讀檔內時間。
+// 排序用檔內的 generated_at，不用檔名。檔名是 <日期>-<sha>.json，
+// 同一天跑兩次的話後半段是 sha——字典序會變成「哪個 sha 的十六進位比較小」，
+// 與時間無關。而「同一天連跑兩次比較差值」正是這個工具最常見的用法。
 // ─────────────────────────────────────────────────────────────
 
 const fs = require('fs');
@@ -34,16 +36,18 @@ function listReports(dir) {
     if (!fs.existsSync(dir)) return [];
     return fs.readdirSync(dir)
         .filter(f => f.endsWith('.json'))
-        .sort()
         .map(f => {
             const full = path.join(dir, f);
             try {
-                return { file: f, doc: JSON.parse(fs.readFileSync(full, 'utf8')) };
+                const doc = JSON.parse(fs.readFileSync(full, 'utf8'));
+                return { file: f, doc, at: doc.generated_at || '' };
             } catch {
                 return null;   // 半寫入或手動塞進來的檔案略過，不讓趨勢工具因此爆掉
             }
         })
-        .filter(Boolean);
+        .filter(Boolean)
+        // generated_at 是 ISO 字串，字典序即時間序；缺這個鍵的舊報表退回用檔名排
+        .sort((a, b) => (a.at || a.file).localeCompare(b.at || b.file));
 }
 
 function fmtDelta(prev, curr) {
