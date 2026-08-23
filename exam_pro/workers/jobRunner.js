@@ -738,6 +738,9 @@ function createRunner(opts = {}) {
                     ...(outcome.kind === 'error' ? { message: outcome.message } : {}),
                     ...(meter.usageMetadata.length > 0 ? { usage_metadata: meter.usageMetadata } : {}),
                     ...(schemaFallbackOf(meter, outcome) ? { schema_fallback: true } : {}),
+                    // 階段 3 第 5.2 條：classify 是哪一層決定的（'gate'／'llm'／'knn'）要進事件，
+                    // 「短路率與短路正確率」才報得出來。只加一個鍵，其餘欄位不動。
+                    ...(node === 'classify' && outcome.data?.source ? { source: outcome.data.source } : {}),
                     review_reason: next.review_reason
                 }
             });
