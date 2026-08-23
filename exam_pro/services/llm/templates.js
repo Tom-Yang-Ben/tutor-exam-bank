@@ -1,6 +1,9 @@
 // services/llm/templates.js — prompt 模板註冊表（cassette 鍵的 promptTemplateHash 來源）
 //
-// 為什麼需要這一支（見 docs/questions2-wsB.md Q1）：
+// 裁決 S2-5（interfaces-stage2.md 第 5.1、12 條）：模板原文一律走這張註冊表，
+// **四個 LLM 節點（extract／classify／lint／verify）都必須 registerTemplate**。
+//
+// 為什麼需要這一支（原 docs/questions2-wsB.md Q1，已結案）：
 //   interfaces-stage2.md 第 5.2 條把 cassette 的鍵定義成
 //       sha256(agent + '\n' + modelId + '\n' + promptTemplateHash + '\n' + schemaHash + '\n' + …)
 //   其中「promptTemplateHash = sha256(模板原文)；模板＝把可變欄位挖空後的字串，由 agent 提供」，
@@ -42,13 +45,23 @@ function registerTemplate(name, text) {
 }
 
 /**
+ * 取回註冊過的模板原文（裁決 S2-5 明列的匯出）。
+ * @param {string} name 識別名
+ * @returns {string|null} 沒註冊過回 null（呼叫端據此判斷會不會退回弱雜湊）
+ */
+function getTemplate(name) {
+    const key = String(name || '');
+    return templates.has(key) ? templates.get(key) : null;
+}
+
+/**
  * 取得模板的雜湊。
  * @param {string} name 識別名；沒給就當空字串（舊呼叫端沒有 template 也不該炸）
  * @returns {string} sha256 hex
  */
 function templateHash(name) {
     const key = String(name || '');
-    if (templates.has(key)) return sha256Hex(templates.get(key));
+    if (templates.has(key)) return sha256Hex(getTemplate(key));
     if (key && !warned.has(key)) {
         warned.add(key);
         console.warn(`[llm] 模板「${key}」沒有註冊原文，改以識別名雜湊；模板改寫時請自行把識別名的版號 +1（services/llm/templates.js）。`);
@@ -66,4 +79,4 @@ function _resetForTest() {
     warned.clear();
 }
 
-module.exports = { registerTemplate, templateHash, sha256Hex, _resetForTest };
+module.exports = { registerTemplate, getTemplate, templateHash, sha256Hex, _resetForTest };

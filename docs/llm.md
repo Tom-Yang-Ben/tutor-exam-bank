@@ -90,18 +90,23 @@ key = sha256( agent + '\n' + modelId + '\n' + promptTemplateHash + '\n' + schema
 
 ### 模板原文怎麼傳進來
 
-介面第 5.2 條要求 `promptTemplateHash = sha256(模板原文)`，但 `generateJson` 的簽名裡只有一個「模板識別名」`template`，沒有欄位可以傳原文（見 `docs/questions2-wsB.md` Q1）。在不動凍結簽名的前提下，本專案的做法是一張註冊表：
+介面第 5.2 條要求 `promptTemplateHash = sha256(模板原文)`，但 `generateJson` 的簽名裡只有一個「模板識別名」`template`，沒有欄位可以傳原文。**裁決 S2-5**：走 `services/llm/templates.js` 這張註冊表，簽名不動。
 
 ```js
-const { registerTemplate } = require('../services/llm/templates');
+const { registerTemplate, getTemplate } = require('../services/llm/templates');
 
 const TEMPLATE = 'extract.v1';
 const PROMPT_TEMPLATE = `請細心閱讀這份 PDF …{{CHAPTER_WHITELIST}}…`;   // 可變欄位挖空後的字串
-registerTemplate(TEMPLATE, PROMPT_TEMPLATE);
+registerTemplate(TEMPLATE, PROMPT_TEMPLATE);      // 模組載入時就註冊
+getTemplate(TEMPLATE);                            // 取回原文；沒註冊過回 null
 ```
 
 - 有註冊 → 用原文雜湊：**模板改一個字，cassette 就失效**，正是第 5.2 條要的。
 - 沒註冊 → 退回 `sha256(識別名)` 並印一次警告。那條路較弱（改模板不會自動失效），所以識別名要帶版號，改寫模板時把 `v1` 進到 `v2`。
+
+> **四個 LLM 節點（`extract`／`classify`／`lint`／`verify`）都必須 `registerTemplate`**（S2-5）。
+> 2026-08-22 現況：`extract`／`classify`（WS-B）已註冊；`lint`／`verify`（WS-C）尚未——
+> 它們目前走的是弱雜湊那條路。WS-C 補上之後，四個節點的 cassette 都必須重錄一次（鍵會變）。
 
 ### 每個節點的 `cacheKeyParts`（凍結，第 5.2 條）
 
@@ -151,10 +156,21 @@ npm test                                                # 確認回放正常
 
 | agent | 素材 |
 |---|---|
-| `extract` | `eval/fixtures/sample_exam.pdf`（六題全部自撰，`node scripts/make_sample_exam_pdf.js` 產生） |
+| `extract` | `eval/fixtures/sample_exam.pdf` —— **WS-D 的樣卷**（10 題，`node eval/fixtures/make_sample_pdf.js` 從 `questions.public.json` 挑題排版）。裁決 S2-15 定它為唯一的樣卷，WS-B 原本的 `scripts/make_sample_exam_pdf.js` 已退場 |
 | `classify` | `eval/fixtures/questions.public.json`（60 題公開 fixture） |
 
 真實考卷、私有題庫的回應一律走 `eval/private/cassettes`（`.gitignore` 內），由 `eval/run.js` 在 `--golden` 落在 `eval/private/` 時自動切換（裁決 25）。
+
+另外兩個 suite 也會錄（WS-D 的 `eval/run.js`，同樣只吃公開素材）：
+
+```powershell
+node scripts/record_cassettes.js --agent all                       # extract 1 次 + classify 8 題
+LLM_MODE=record GEMINI_RPM=5 node eval/run.js --suite classify     # 90 筆 golden，約 18 分鐘
+LLM_MODE=record GEMINI_RPM=5 node eval/run.js --suite pipeline     # 樣卷 10 題走 extract/classify/lint/verify
+```
+
+（PowerShell 沒有行內 `VAR=x` 語法：請先在該視窗 `$env:LLM_MODE='record'; $env:GEMINI_RPM='5'`，或把兩個值寫進 `.env`。）
+錄完 `git add eval/cassettes`，再把 `LLM_MODE` 切回 `replay` 確認三個 suite 全綠。
 
 ### 錄製時的兩個坑
 
@@ -172,8 +188,12 @@ npm test                                                # 確認回放正常
 | `eval/fixtures/sample_exam.pdf` | `eval/cassettes/extract/**`（`pdfSha256` 變） |
 | `eval/fixtures/questions.public.json` 的題幹 | `eval/cassettes/classify/**`（`questionText` 變） |
 
-> ⚠ WS-D 的 `eval/fixtures/make_sample_pdf.js` 合入後會取代 `scripts/make_sample_exam_pdf.js`。
-> 只要產出的 PDF 位元組不同，`pdfSha256` 就不同，`eval/cassettes/extract/**` 必須整批重錄。
+> **2026-08-22 現況**：樣卷已依裁決 S2-15 換成 WS-D 的版本（`sha256 f1a15d77…`），
+> 原本對 WS-B 舊樣卷錄的那支 extract cassette 已成孤兒並刪除。
+> `test/unit/cassetteReplay.test.js` 的 extract 那一組會**自動 skip 並印出原因**——
+> 它會依現行樣卷算出預期的鍵再檢查檔案在不在，所以重錄完就自動恢復執行，不必改測試。
+> 重錄的時機：**等 WS-C 的 `registerTemplate`（S2-5）與 `buildSchema` 切換（S2-24）合入**——
+> 模板原文與 schema 任何一個變動都會換鍵，先錄會白錄一次。
 
 ---
 
@@ -247,6 +267,28 @@ const schema = buildSchema('extract');   // 深凍結、模組內快取
    - `registerTemplate('<name>.v1', PROMPT_TEMPLATE)`；
    - 呼叫 `ctx.llm.generateJson({ …, agent:'<name>', template:'<name>.v1', cacheKeyParts:{…} })`；
    - **不得 `require('../config/db')`、不得讀 `process.env`**——全部經 `ctx`（介面第 3.1 條）；
-   - **不得 throw**：例外一律包成 `{kind:'error', errorClass}`。
+   - **不得 throw**：例外一律包成 `{kind:'error', errorClass}`；
+   - 旗標只能從 `ctx.config.features`（`{similar, pipeline}`）讀，runner 會組好（裁決 S2-8）。
 3. 單元測試注入假的 `ctx.llm`，或走 `LLM_MODE=replay` + cassette。
 4. 需要真呼叫時，把素材加進 `scripts/record_cassettes.js`，確認它是公開的。
+
+---
+
+## 9. `services/legacy/analyzePdf.js` —— 舊流程的凍結快照
+
+`eval/compare_pipeline.js --method legacy` 要量的是「A-T8 之前的舊流程」。但 `services/aiService.js`
+在 A-T8 之後已經是新 extract agent 的相容包裝——直接呼叫它，`legacy` 那一欄量到的其實是新管線，
+而且**兩欄數字會神奇地靠攏，沒有任何東西會報錯**。
+
+因此裁決 S2-19：把舊版原封快照成 `services/legacy/analyzePdf.js`（`git show e1740ca:exam_pro/services/aiService.js`），
+歸 WS-B。`eval/lib/legacyAdapter.js` 會優先找它，找不到才退回 `aiService.js` 並大聲警告。
+
+**不要改它。** 它刻意保留了三個舊版特徵，那些正是對照實驗要呈現的差異：
+
+| 舊版特徵 | 現行 `aiService.js` |
+|---|---|
+| 模型 ID 寫死 `gemini-2.5-flash` | 讀 `MODEL_EXTRACT` |
+| prompt 裡手抄一份章節白名單（指紋「【數學科精細章節白名單】」） | 由 `config/chapters.js` 產生，只有一份真相 |
+| 只設 `responseMimeType`、沒有 schema，結尾直接 `JSON.parse` | `responseJsonSchema` + 伺服器端 `ajv` 逐元素驗證 |
+
+改 prompt 會連帶改掉 `legacyAdapter` 算出來的 `prompt_hash`，之前跑過的基準線就對不起來了。
