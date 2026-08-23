@@ -67,8 +67,8 @@ describe('classify golden（章節分類）', () => {
         }
     });
 
-    test('全部標 needs_human_confirm（尚未定案）', () => {
-        assert.equal(classify.pendingConfirm, 90);
+    test('已全部定案（裁決 S2-30：needs_human_confirm 為 0）', () => {
+        assert.equal(classify.pendingConfirm, 0);
     });
 
     test('閘門會擋下白名單外的章節', () => {
@@ -133,8 +133,8 @@ describe('answer golden（答案比對）', () => {
         assert.ok(types.size >= 4, `只涵蓋 ${[...types].join('、')}`);
     });
 
-    test('全部標 needs_human_confirm', () => {
-        assert.equal(answer.pendingConfirm, 50);
+    test('已全部定案（裁決 S2-30：needs_human_confirm 為 0）', () => {
+        assert.equal(answer.pendingConfirm, 0);
     });
 
     test('閘門會擋下「證明題期望 agree」這種違反第 4.2 條的標註', () => {
@@ -193,8 +193,8 @@ describe('dedup golden（重複判定）', () => {
         }
     });
 
-    test('全部標 needs_human_confirm', () => {
-        assert.equal(dedup.pendingConfirm, 30);
+    test('已全部定案（裁決 S2-30：needs_human_confirm 為 0）', () => {
+        assert.equal(dedup.pendingConfirm, 0);
     });
 });
 
