@@ -317,8 +317,9 @@ function request(app, url, options) {
 // ───────────────────────── DOM 小工具 ─────────────────────────
 
 /**
- * 建元素。含連字號的鍵（aria-label、data-*、role…）走 setAttribute——
- * Object.assign 對它們只會在物件上多掛一個屬性，畫面上什麼都不會發生。
+ * 建元素。含連字號的鍵（aria-label、data-*）與 role 一律走 setAttribute——
+ * Object.assign 對 aria-* 只會在物件上多掛一個屬性、畫面上什麼都不會發生；
+ * role 雖然在新版瀏覽器有屬性反射，但寫成 attribute 才是各家都吃得到的那一種。
  * @param {string} tag
  * @param {string} [cls]
  * @param {object} [props]
@@ -328,7 +329,7 @@ function el(tag, cls, props) {
     const node = document.createElement(tag);
     if (cls) node.className = cls;
     for (const [k, v] of Object.entries(props || {})) {
-        if (k.includes('-')) node.setAttribute(k, String(v));
+        if (k.includes('-') || k === 'role') node.setAttribute(k, String(v));
         else node[k] = v;
     }
     return node;

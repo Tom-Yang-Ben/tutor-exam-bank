@@ -260,7 +260,7 @@ function el(tag, cls, props) {
     const node = document.createElement(tag);
     if (cls) node.className = cls;
     for (const [k, v] of Object.entries(props || {})) {
-        if (k.includes('-')) node.setAttribute(k, String(v));
+        if (k.includes('-') || k === 'role') node.setAttribute(k, String(v));
         else node[k] = v;
     }
     return node;
