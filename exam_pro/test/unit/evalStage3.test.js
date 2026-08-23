@@ -3,10 +3,16 @@
 // WS-D 在第 8 條的職責只有「接線」：run.js 的兩個分支、thresholds 的兩節、
 // package.json 的兩個 script、ci.yml 的兩步。suite 的內容是 WS-B／WS-C 的事。
 //
-// 這一支要擋的是接線特有的兩種失敗，兩種都不會噴例外：
+// 這一支要擋的是接線特有的失敗，都不會噴例外：
 //   ① suite 檔還沒合入時整個 eval 入口爆掉（檔頭 require 一個不存在的模組）——
 //      那會讓「跑 retrieval」也一起紅，而且紅的原因跟那次改動無關。
-//   ② 用「尚未合入」的替身寫出 thresholds 初值——那條基準線一定會被真實作推翻。
+//   ② `--suite nlq|variant` 悄悄接到「尚未合入」的替身上——量出來全是 n/a、CI 照樣綠。
+//
+// **裁決 S3-R27**：WS-B／WS-C 的兩支 suite 已經合入 main，替身這條路不該再被走到。
+// 原本那兩則「替身回全部 n/a」「替身 anyStub=true 擋 --write-baseline」的斷言，
+// 因此改成反過來釘：**接到的是真的那一支、`anyStub` 是 `false`、量得出真數字**。
+// 替身的程式碼保留在 `eval/run.js`（suite 檔被誤刪時仍然只會讓那一個 suite 變 n/a，
+// 不會炸掉整個 eval 入口），但它從此是**不該被走到的那條路**。
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
@@ -17,6 +23,19 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const run = require('../../eval/run');
 const thresholds = require('../../eval/lib/thresholds');
 const report2 = require('../../eval/lib/report2');
+const { runNlqSuite } = require('../../eval/lib/suiteNlq');
+const { runVariantSuite } = require('../../eval/lib/suiteVariant');
+
+// 兩支 suite 各只跑一次（跑一輪 nlq 要好幾秒），結果給多則斷言共用。
+// 這裡**沒有連 DB、沒有呼叫 Gemini**：`LLM_MODE` 預設 replay、`EMBED_MODE` 預設 fixture
+// （`services/llm/index.js:27`），PG 相依不齊時 suite 自己退回記憶體引擎。
+const ran = new Map();
+function runSuiteOnce(suite) {
+    if (!ran.has(suite)) {
+        ran.set(suite, (suite === 'nlq' ? runNlqSuite : runVariantSuite)({}));
+    }
+    return ran.get(suite);
+}
 
 describe('SUITE_METRICS 的兩節（第 8.2、8.3 條）', () => {
     test('nlq：兩欄三指標，欄與指標名逐字凍結', () => {
@@ -92,30 +111,59 @@ describe('eval/run.js 的兩個新分支（第 8.5 條）', () => {
         assert.deepEqual(Object.keys(run.STAGE3_SUITES).sort(), ['nlq', 'variant']);
     });
 
-    test('替身回的是「全部 n/a」而不是假數字', async () => {
+    test('接到的是 WS-C／WS-B 真的那一支，不是替身（裁決 S3-R27）', () => {
+        // 用參照比對而不是「跑起來有沒有數字」：後者在 cassette 或 fixture 出問題時
+        // 也會變 n/a，兩種失敗會混成同一種紅燈。這一則只回答「接線接到誰」。
+        assert.equal(run.loadStage3Suite('nlq'), runNlqSuite, '--suite nlq 沒有接到 eval/lib/suiteNlq.js');
+        assert.equal(run.loadStage3Suite('variant'), runVariantSuite, '--suite variant 沒有接到 eval/lib/suiteVariant.js');
+    });
+
+    test('兩支 suite 的 anyStub 都是 false，--write-baseline 不再被擋（裁決 S3-R27）', async () => {
+        // runStage2Suite 的 guard 讀的就是這個布林值：true 代表「轉接層還有暫用或未合入」，
+        // 會拒絕寫 thresholds 初值。兩支真 suite 合入後它必須是 false，否則基準線永遠建不起來。
         for (const suite of ['nlq', 'variant']) {
-            const res = await run.loadStage3Suite(suite)({});
+            const res = await runSuiteOnce(suite);
             assert.equal(res.suite, suite);
-            for (const col of thresholds.SUITE_METRICS[suite].columns) {
-                assert.equal(res.measured[col], null, `${suite}.${col} 不該有數字`);
-            }
-            assert.deepEqual(res.failures, []);
-            assert.equal(res.warnings.length, 1);
-            assert.ok(res.warnings[0].includes('尚未合入'), res.warnings[0]);
+            assert.equal(res.meta.sources.anyStub, false, `${suite} 的轉接層還有 stub：${JSON.stringify(res.meta.sources)}`);
+            assert.ok(!res.warnings.some(w => w.includes('尚未合入')),
+                `${suite} 還在印「尚未合入」＝走到替身了：${res.warnings.join(' | ')}`);
         }
     });
 
-    test('替身標記 anyStub，--write-baseline 因此會被 runStage2Suite 擋下來', async () => {
-        // 用替身寫出來的基準線一定會被真實作推翻，之後的 CI 會紅得莫名其妙。
-        const res = await run.loadStage3Suite('nlq')({});
-        assert.equal(res.meta.sources.anyStub, true);
+    test('兩支 suite 真的量得出數字（不是整排 n/a）', async () => {
+        // 只釘「有沒有量到」與「值在合法區間」，**不釘數值本身**——
+        // 那是 WS-B／WS-C 調規則與門檻時會動的東西，釘死會讓他們每改一次就紅一次。
+        const nlq = await runSuiteOnce('nlq');
+        const coverage = nlq.measured.rules && nlq.measured.rules.rule_coverage;
+        assert.equal(typeof coverage, 'number', `nlq 的 rule_coverage 是 ${coverage}`);
+        assert.ok(coverage >= 0 && coverage <= 1, `rule_coverage 超出 0~1：${coverage}`);
+        // 第 8.2 條：rule_coverage 只在 rules 欄有值，llm 欄恆為 null。
+        assert.equal(nlq.measured.llm.rule_coverage, null, 'rule_coverage 不該出現在 llm 欄');
+
+        const variant = await runSuiteOnce('variant');
+        const retrieved = variant.measured.variant && variant.measured.variant.retrieved_coverage;
+        assert.equal(typeof retrieved, 'number', `variant 的 retrieved_coverage 是 ${retrieved}`);
+        assert.ok(retrieved >= 0 && retrieved <= 1, `retrieved_coverage 超出 0~1：${retrieved}`);
     });
 
-    test('替身的 meta 指得到正確的 golden 與 cassette 目錄（第 8.4、8.5 條）', async () => {
-        const nlq = await run.loadStage3Suite('nlq')({});
-        const variant = await run.loadStage3Suite('variant')({});
+    test('meta 指得到正確的 golden 與 cassette 目錄（第 8.4、8.5 條）', async () => {
+        const nlq = await runSuiteOnce('nlq');
+        const variant = await runSuiteOnce('variant');
         assert.equal(nlq.meta.golden, 'eval/golden/nlq.json');
         assert.equal(variant.meta.golden, 'eval/golden/variant.json');
+        // 沒有量測環境的數字不能拿來互相比較（report2 的檔頭）。
+        for (const res of [nlq, variant]) {
+            assert.equal(typeof res.meta.goldenEntries, 'number');
+            assert.ok(res.meta.cassetteDir, `${res.suite} 沒有記 cassette 目錄`);
+        }
+    });
+
+    test('替身仍然存在，但只在 suite 檔真的不見時才會被走到', () => {
+        // 保留這條路的理由：suite 檔被誤刪時只該讓那一個 suite 變 n/a，
+        // 不該讓 `--suite retrieval` 也一起炸（檔頭 require 的那種死法）。
+        const src = fs.readFileSync(path.join(ROOT, 'eval', 'run.js'), 'utf8');
+        assert.ok(src.includes("err.code !== 'MODULE_NOT_FOUND'"), 'run.js 不再是惰性 require');
+        assert.ok(src.includes('anyStub: true'), '替身沒有標記 anyStub');
     });
 
     test('--suite 的說明字串含五個 suite', () => {

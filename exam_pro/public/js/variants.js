@@ -29,6 +29,14 @@ const POLL_MS = 2000;        // 第 3.2 條：每 2 秒輪詢一次
 const POLL_MAX_MS = 60000;   // 第 3.2 條：最多 60 秒
 const SIMILAR_K = 5;         // 「找相似」一次看 5 題就夠了（interfaces.md 第 6 條的 k）
 
+// 「出變式」的兩個下拉（裁決 S3-R24）。上限 3 = VARIANT_MAX_PER_REQUEST 的預設；
+// 預設值與第 3 條的 body 預設**逐字一致**（count=1、difficulty_delta=0），
+// 前端不自作主張多生幾題——多生一題就是多付一次錢。
+export const COUNT_OPTIONS = [1, 2, 3];
+export const DEFAULT_COUNT = 1;
+export const DELTA_OPTIONS = [[-1, '難度 −1（簡單一點）'], [0, '難度不變'], [1, '難度 +1（難一點）']];
+export const DEFAULT_DELTA = 0;
+
 // students.js 發的事件（兩邊各自宣告同一個字串，避免互相 import——
 // 兩個 module 因此都能被 data: URL 載入做單元測試）。
 export const VARIANT_EVENT = 'examapp:variant-request';
@@ -271,6 +279,26 @@ async function messageOf(res) {
     return body.message || `HTTP ${res.status}`;
 }
 
+/**
+ * 讀「出變式」的兩個下拉（裁決 S3-R24）。
+ *
+ * 下拉不存在（旗標關閉時面板沒渲染，或被改版拿掉）時一律回介面預設值——
+ * 這裡**不擋非法值**：第 3 條的 400 是伺服器的職責，前端悄悄修正只會讓
+ * 「介面說 1~3 而前端送了 7」這種錯永遠查不出來。前端只負責不自己造出非法值。
+ *
+ * @returns {{count:number, difficulty_delta:number}}
+ */
+export function requestOptions() {
+    const countSel = document.getElementById('varCount');
+    const deltaSel = document.getElementById('varDelta');
+    const count = Number(countSel && countSel.value);
+    const delta = Number(deltaSel && deltaSel.value);
+    return {
+        count: COUNT_OPTIONS.includes(count) ? count : DEFAULT_COUNT,
+        difficulty_delta: DELTA_OPTIONS.some(([v]) => v === delta) ? delta : DEFAULT_DELTA
+    };
+}
+
 /** 目前這一頁上所有會送出請求的按鈕（輪詢期間一律停用） */
 function actionButtons() {
     return [...document.querySelectorAll('[data-variant-action]')];
@@ -340,11 +368,35 @@ function mountVariantsSection(section) {
     );
     head.append(el('span', 'section-icon bg-violet-50 text-violet-700', { textContent: '變' }), box);
 
+    // ── 「出變式」的兩個下拉（裁決 S3-R24）──
+    // 預設值與第 3 條的 body 預設**逐字一致**：count=1、difficulty_delta=0。
+    // 放在面板頂端而不是每張卡片裡：這兩個值是「這一次要怎麼生」的設定，
+    // 而按鈕在學生分頁——按下去之前先看得到會花多少錢（一次生幾題），比按完才問誠實。
+    const controls = el('div', 'mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5');
+    controls.appendChild(el('span', 'text-xs font-bold text-slate-600', { textContent: '出變式設定：' }));
+
+    const countSel = el('select', 'field-control min-h-0 p-2 text-xs', { id: 'varCount', 'aria-label': '一次生成幾題' });
+    for (const n of COUNT_OPTIONS) {
+        const o = el('option', '', { value: String(n), textContent: `生 ${n} 題` });
+        if (n === DEFAULT_COUNT) o.selected = true;
+        countSel.appendChild(o);
+    }
+    const deltaSel = el('select', 'field-control min-h-0 p-2 text-xs', { id: 'varDelta', 'aria-label': '難度調整' });
+    for (const [value, label] of DELTA_OPTIONS) {
+        const o = el('option', '', { value: String(value), textContent: label });
+        if (value === DEFAULT_DELTA) o.selected = true;
+        deltaSel.appendChild(o);
+    }
+    controls.append(countSel, deltaSel);
+    controls.appendChild(el('span', 'text-[11px] text-slate-500', {
+        textContent: '這兩個值在按「出變式」的當下讀取；先檢索得到就不會生成，也就不會花錢。'
+    }));
+
     const body = el('div', '', { id: 'varBody' });
     body.appendChild(el('p', 'rounded-xl border border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-500', {
         textContent: '還沒有任何請求。到上面的「學生」分頁，在最近錯題那一列按「找相似」或「出變式」。'
     }));
-    section.append(head, body);
+    section.append(head, controls, body);
 }
 
 /** @returns {HTMLElement|null} */
@@ -444,7 +496,9 @@ function stopPolling() {
  * @param {object} detail
  */
 async function requestVariants(app, detail) {
-    const panel = resetPanel(detail, '出變式（先檢索，池不足才生成）');
+    const opts = requestOptions();
+    const deltaLabel = (DELTA_OPTIONS.find(([v]) => v === opts.difficulty_delta) || [0, ''])[1];
+    const panel = resetPanel(detail, `出變式（先檢索，池不足才生成）　·　生 ${opts.count} 題　·　${deltaLabel}`);
     if (!panel) return;
     panel.slot.textContent = '請求中…';
     setActionsDisabled(true);
@@ -455,8 +509,8 @@ async function requestVariants(app, detail) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                count: 2,
-                difficulty_delta: 0,
+                count: opts.count,
+                difficulty_delta: opts.difficulty_delta,
                 student_id: detail.student_id || null,
                 force_generate: false
             })

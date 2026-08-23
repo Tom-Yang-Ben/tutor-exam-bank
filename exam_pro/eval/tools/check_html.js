@@ -148,6 +148,13 @@ const STAGE3_PAGES = [
     { id: 'variants', meta: 'feature-variants', placeholder: '__FEATURE_VARIANTS__' }
 ];
 
+// 第四個注入點（裁決 S3-R25）：FEATURE_SIMILAR 沒有自己的分頁，只有一個 <meta>。
+// 它控制學生分頁「最近錯題」那一列的「找相似」按鈕；漏了這個 meta，
+// 按鈕會**永遠不出現**而且沒有任何錯誤訊息（parseBool 對缺失的 meta 回 false）。
+const STAGE3_EXTRA_METAS = [
+    { meta: 'feature-similar', placeholder: '__FEATURE_SIMILAR__', reader: 'public/js/students.js' }
+];
+
 // 第 7.1 條凍結的 window.ExamApp 鍵：階段 2 的五個 + 階段 3 的五個。
 const BRIDGE_KEYS = [
     'apiFetch', 'showToast', 'renderMath', 'escapeHtml', 'createQuestionEditor',
@@ -219,6 +226,18 @@ function checkContracts() {
             problems.push(`public/js/${page.id}.js 沒有「旗標關閉＝整段不渲染」的處理（第 7.2 條）`);
         }
     }
+
+    // 只有 <meta> 的那幾個旗標（裁決 S3-R25）
+    for (const extra of STAGE3_EXTRA_METAS) {
+        if (!html.includes(`<meta name="${extra.meta}" content="${extra.placeholder}">`)) {
+            problems.push(`public/index.html 少了 <meta name="${extra.meta}" content="${extra.placeholder}">（裁決 S3-R25）`);
+        }
+        const abs = path.join(ROOT, extra.reader);
+        if (fs.existsSync(abs) && !fs.readFileSync(abs, 'utf8').includes(`meta[name="${extra.meta}"]`)) {
+            problems.push(`${extra.reader} 沒有讀 <meta name="${extra.meta}">（裁決 S3-R25）`);
+        }
+    }
+
     // 導覽列的「學生」（第 7.2 條第 2 列）
     if (!html.includes('<a href="#students"')) {
         problems.push('public/index.html 的導覽列少了 <a href="#students">學生</a>（第 7.2 條第 2 列）');
@@ -246,4 +265,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { checkAll, checkContracts, extractInlineScripts, stripHtmlComments, checkSyntax, PUBLIC_DIR, STAGE3_PAGES, BRIDGE_KEYS };
+module.exports = { checkAll, checkContracts, extractInlineScripts, stripHtmlComments, checkSyntax, PUBLIC_DIR, STAGE3_PAGES, STAGE3_EXTRA_METAS, BRIDGE_KEYS };

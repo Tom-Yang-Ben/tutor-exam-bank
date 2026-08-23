@@ -245,7 +245,12 @@ function fakeBridge(extra = {}) {
     return {
         calls,
         apiFetch(url, options) {
-            calls.fetches.push({ url, method: (options || {}).method || 'GET' });
+            // body 一起記下來：有些斷言問的是「送出去的到底是什麼」（例如
+            // 「出變式」的 count／difficulty_delta 有沒有真的用下拉選到的值）。
+            const raw = (options || {}).body;
+            let body = null;
+            if (typeof raw === 'string') { try { body = JSON.parse(raw); } catch { body = raw; } }
+            calls.fetches.push({ url, method: (options || {}).method || 'GET', body });
             return Promise.resolve(new Response(JSON.stringify({ message: '這個測試不該打真的 API' }), { status: 501 }));
         },
         showToast(message, type) { calls.toasts.push({ message, type }); },
