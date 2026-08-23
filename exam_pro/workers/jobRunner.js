@@ -812,7 +812,7 @@ function createRunner(opts = {}) {
             if (err.code !== 'MODULE_NOT_FOUND') throw err;
             modelsCache = {
                 extract: process.env.MODEL_EXTRACT || 'gemini:gemini-3.5-flash',
-                verify: process.env.MODEL_VERIFY || 'gemini:gemini-3.7-flash'
+                verify: process.env.MODEL_VERIFY || 'gemini:gemini-3.1-pro-preview'   // 與 config/models.js 的 DEFAULT_VERIFY 一致（裁決 S2-29）
             };
         }
         return modelsCache;

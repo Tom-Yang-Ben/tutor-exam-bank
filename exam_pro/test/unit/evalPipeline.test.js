@@ -383,10 +383,16 @@ describe('pipelineDriver 端到端', () => {
         const first = await runOnce({ dbHashes });
         if (first.skip) { t.skip(first.skip); return; }
         const { res: second } = await runOnce({ dbHashes });
+        const s1 = driver.summarizePipeline(first.res);
         const s = driver.summarizePipeline(second);
         assert.equal(s.saved, 0, '重傳同一份 PDF 不該再入庫任何題');
         assert.equal(s.needsReview, 10);
-        assert.ok(s.reviewReasons.every(r => r === 'duplicate'), s.reviewReasons.join('、'));
+        // 第一輪**已入庫**的題，第二輪全部被 dedup0 攔下（duplicate）；第一輪本來就進複核的題
+        //（例如 verify 的 answer_mismatch）不在 dbHashes 裡，第二輪會重走一次並得到同樣的原因——
+        // 那不是 dedup0 失效，所以只斷言 duplicate 的數量 = 第一輪入庫數。
+        const dup = s.reviewReasons.filter(r => r === 'duplicate').length;
+        assert.equal(dup, s1.saved, `duplicate ${dup} 筆 ≠ 第一輪入庫 ${s1.saved} 筆：${s.reviewReasons.join('、')}`);
+        assert.ok(s1.saved > 0, '第一輪至少要有入庫的題，這個測試才有鑑別力');
     });
 });
 

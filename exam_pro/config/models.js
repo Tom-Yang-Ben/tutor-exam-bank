@@ -12,7 +12,7 @@
 const VENDORS = ['gemini', 'anthropic', 'openai'];
 
 const DEFAULT_EXTRACT = 'gemini:gemini-3.5-flash';   // 裁決 S0-5
-const DEFAULT_VERIFY = 'gemini:gemini-3.7-flash';   // 裁決 S0-5
+const DEFAULT_VERIFY = 'gemini:gemini-3.1-pro-preview';   // 裁決 S2-29（付費後改 Pro；S0-5 的條件成立）。CI 沒有 .env，cassette 是對這個預設錄的
 
 /**
  * 解析 'vendor:model-id'；沒有冒號時 vendor 預設 'gemini'。

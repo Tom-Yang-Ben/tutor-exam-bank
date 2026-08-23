@@ -85,7 +85,7 @@ async function runClassifySuite(args) {
                 jq: { id: 0, idx: 0, payload: {}, retries: {} },
                 logger: { info() {}, warn() {}, error() {} },
                 config: {
-                    models: { extract: process.env.MODEL_EXTRACT || 'gemini:gemini-3.5-flash', verify: process.env.MODEL_VERIFY || 'gemini:gemini-3.7-flash' },
+                    models: { extract: require('../../config/models').MODEL_EXTRACT, verify: require('../../config/models').MODEL_VERIFY },   // 單一真相：config/models.js（裁決 S2-29）
                     limits: sm.tables().DEFAULT_LIMITS,
                     thresholds: { classifyMinConf: minConf },
                     // 第 3.1 條（裁決 S2-8）：features 由 runner 組。similar 關掉，

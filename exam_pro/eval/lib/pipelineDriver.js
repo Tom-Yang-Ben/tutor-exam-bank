@@ -310,7 +310,7 @@ async function runPipeline(opts) {
             config: {
                 models: {
                     extract: process.env.MODEL_EXTRACT || 'gemini:gemini-3.5-flash',
-                    verify: process.env.MODEL_VERIFY || 'gemini:gemini-3.7-flash'
+                    verify: require('../../config/models').MODEL_VERIFY   // 單一真相：config/models.js（裁決 S2-29）
                 },
                 limits: sm.tables().DEFAULT_LIMITS,
                 thresholds

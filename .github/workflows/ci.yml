@@ -74,6 +74,10 @@ jobs:
       # 這件事在 workflow 檔上就看得見，不必翻到別的檔案（interfaces 第 4 條）。
       EMBED_MODE: fixture
       LLM_MODE: replay
+      # cassette 的鍵含模型 ID：CI 沒有 .env，這裡明寫錄製時用的模型（interfaces-stage2 裁決 S0-5／S2-29），
+      # 與 config/models.js 的預設值一致；換模型＝重錄 cassette 並同步改這兩行。
+      MODEL_EXTRACT: gemini:gemini-3.5-flash
+      MODEL_VERIFY: gemini:gemini-3.1-pro-preview
       # fork PR 的 replay miss 降為 warning（規劃 §5.3.3、介面第 5.2 條）。
       # 判斷本身在 eval/lib/replayMiss.js（介面明說「這個判斷不在 services/llm 裡」）；
       # 這裡只負責把 GitHub 的事實傳進去。同 repo 分支與 main 上這個值是空的＝不降級。

@@ -80,6 +80,10 @@ function checkSyntax(code, isModule, label) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'checkhtml-'));
     const file = path.join(dir, `${crypto.randomBytes(6).toString('hex')}.${isModule ? 'mjs' : 'js'}`);
     try {
+        // Node ≥ 22.7 預設開啟「模組語法偵測」：沒有 package.json 的目錄裡，含 export 的 .js
+        // 會被當成 ESM 而通過 --check（Linux CI 上就是這樣）。放一個 type=commonjs 的 package.json
+        // 把腳本模式釘死，script／module 兩種判定才在所有平台一致。
+        fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"commonjs"}\n', 'utf8');
         fs.writeFileSync(file, code, 'utf8');
         execFileSync(process.execPath, ['--check', file], { stdio: 'pipe' });
         return { ok: true, message: '' };
