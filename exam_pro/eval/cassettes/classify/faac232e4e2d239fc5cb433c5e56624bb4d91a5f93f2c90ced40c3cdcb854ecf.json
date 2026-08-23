@@ -3,7 +3,7 @@
     "agent": "classify",
     "model": "gemini-3.5-flash",
     "template": "classify.v1",
-    "recorded_at": "2026-08-21T17:45:58.339Z",
+    "recorded_at": "2026-08-23T11:22:33.492Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -24,14 +24,14 @@
     "data": {
       "chapter": "空間向量內積",
       "confidence": 1,
-      "rationale": "題目給定兩個空間向量，並要求計算這兩個空間向量的內積（點積），屬於「空間向量內積」章節的基本運算。"
+      "rationale": "題目給定兩個三維空間向量並要求計算其內積，完全屬於「空間向量內積」的基本運算範疇。"
     },
     "usage": {
       "tokenIn": 1919,
-      "tokenOut": 65,
-      "tokenThinking": 275,
+      "tokenOut": 52,
+      "tokenThinking": 444,
       "tokenCached": 0
     },
-    "latencyMs": 2432
+    "latencyMs": 2835
   }
 }

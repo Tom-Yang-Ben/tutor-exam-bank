@@ -3,7 +3,7 @@
     "agent": "classify",
     "model": "gemini-3.5-flash",
     "template": "classify.v1",
-    "recorded_at": "2026-08-21T17:46:32.748Z",
+    "recorded_at": "2026-08-23T11:23:36.247Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -24,14 +24,14 @@
     "data": {
       "chapter": "靜電學",
       "confidence": 1,
-      "rationale": "題目要求根據庫侖定律計算兩點電荷之間的靜電力，屬於「靜電學」中庫侖定律的直接計算。"
+      "rationale": "題目要求計算兩點電荷之間的靜電力（庫侖力），此為庫侖定律的直接應用，屬於「靜電學」章節。"
     },
     "usage": {
       "tokenIn": 1906,
-      "tokenOut": 43,
-      "tokenThinking": 475,
+      "tokenOut": 49,
+      "tokenThinking": 180,
       "tokenCached": 0
     },
-    "latencyMs": 2644
+    "latencyMs": 1841
   }
 }

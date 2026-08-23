@@ -336,10 +336,14 @@ function compareExpression(claimedAnswer, modelAnswer) {
  * 抽出來的多半是敘述裡的某個符號（例如 `$90^\circ$`）。
  */
 function compareText(claimedWhole, modelAnswer) {
-    const a = normalizeStem(String(claimedWhole ?? ''));
-    const b = normalizeStem(String(modelAnswer ?? ''));
+    // 裁決 S2-27：claimed 是整段敘述（「…故夾角為 90°，兩者互相垂直。」），模型給的是結論短語
+    // （「互相垂直」）。normalizeStem 兩邊後，claimed **包含** 模型答案 → agree；否則一律 uncertain
+    // （包含關係判不出「錯」，只判得出「對」——不回 disagree）。句尾標點由 normalizeStem 之後再剝一次。
+    const strip = s => normalizeStem(String(s ?? '')).replace(/[。．.,，、;；!！?？:：]+$/g, '');
+    const a = strip(claimedWhole);
+    const b = strip(modelAnswer);
     if (a === '' || b === '') return 'uncertain';
-    return a === b ? 'agree' : 'uncertain';
+    return (a === b || a.includes(b)) ? 'agree' : 'uncertain';
 }
 
 function compareOption(claimedAnswer, modelAnswer) {

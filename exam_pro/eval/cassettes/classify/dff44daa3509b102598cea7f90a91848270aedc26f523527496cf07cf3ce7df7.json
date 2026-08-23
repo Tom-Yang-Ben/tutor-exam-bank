@@ -3,7 +3,7 @@
     "agent": "classify",
     "model": "gemini-3.5-flash",
     "template": "classify.v1",
-    "recorded_at": "2026-08-21T17:46:25.279Z",
+    "recorded_at": "2026-08-23T11:23:30.956Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -24,14 +24,14 @@
     "data": {
       "chapter": "摩擦力與向心力",
       "confidence": 0.9,
-      "rationale": "題目涉及斜面上動摩擦力（$f_k = \\mu_k N$）的計算，並結合牛頓第二運動定律求下滑加速度，屬於「摩擦力與向心力」章節中對摩擦力性質與應用的探討。"
+      "rationale": "題目涉及物體在斜面上受摩擦力影響的運動分析，需利用動摩擦力公式 $f_k = \\mu_k N$ 計算摩擦力，再結合牛頓第二運動定律求加速度，屬於「摩擦力與向心力」章節中摩擦力的典型計算題。"
     },
     "usage": {
       "tokenIn": 1893,
-      "tokenOut": 89,
-      "tokenThinking": 1172,
+      "tokenOut": 97,
+      "tokenThinking": 988,
       "tokenCached": 0
     },
-    "latencyMs": 21131
+    "latencyMs": 20363
   }
 }

@@ -1,0 +1,141 @@
+{
+  "meta": {
+    "agent": "extract",
+    "model": "gemini-3.5-flash",
+    "template": "extract.v1",
+    "recorded_at": "2026-08-23T11:22:25.990Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "pdf",
+        "bytes": 35814,
+        "sha256": "f1a15d77282523b60f88d12fa65b45f21ad46ae708bc0eb92963af9f00fc3622"
+      },
+      {
+        "kind": "text",
+        "chars": 1375,
+        "sha256": "60bf53eed30b26a54494d693ca5c625265fc17f8cb7191b4df06bc8d8d32c5c4"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "extract.v1",
+      "chunkNo": 1,
+      "pdfSha256": "f1a15d77282523b60f88d12fa65b45f21ad46ae708bc0eb92963af9f00fc3622"
+    }
+  },
+  "response": {
+    "data": {
+      "questions": [
+        {
+          "idx": 1,
+          "subject": "數學",
+          "chapter": "指數與對數",
+          "chapter_confidence": 1,
+          "question_type": "單選",
+          "difficulty": 1,
+          "question_text": "$\\log_2 8 + \\log_2 4$ 之值為何？\n(A) $5$ (B) $6$ (C) $7$ (D) $12$",
+          "answer_text": "(A)。$\\log_2 8 + \\log_2 4 = 3 + 2 = 5$"
+        },
+        {
+          "idx": 2,
+          "subject": "數學",
+          "chapter": "向量內積",
+          "chapter_confidence": 1,
+          "question_type": "計算",
+          "difficulty": 1,
+          "question_text": "設平面向量 $\\vec{a} = (3, 4)$、$\\vec{b} = (1, 2)$，求 $\\vec{a} \\cdot \\vec{b}$。",
+          "answer_text": "$11$。$\\vec{a} \\cdot \\vec{b} = 3 \\times 1 + 4 \\times 2 = 11$"
+        },
+        {
+          "idx": 3,
+          "subject": "數學",
+          "chapter": "向量內積",
+          "chapter_confidence": 1,
+          "question_type": "填空",
+          "difficulty": 1,
+          "question_text": "設平面向量 $\\vec{a} = (2, k)$ 與 $\\vec{b} = (3, 6)$ 互相垂直，求 $k$。",
+          "answer_text": "$-1$。互相垂直則內積為 $0$，即 $2 \\times 3 + 6k = 0 \\Rightarrow k = -1$"
+        },
+        {
+          "idx": 4,
+          "subject": "數學",
+          "chapter": "三角函數的定義",
+          "chapter_confidence": 1,
+          "question_type": "單選",
+          "difficulty": 1,
+          "question_text": "$\\sin^2 40^\\circ + \\cos^2 40^\\circ$ 之值為何？\n(A) $1$ (B) $0$ (C) $\\frac{1}{2}$ (D) 需查表才能得知",
+          "answer_text": "(A)。根據三角恆等式 $\\sin^2 \\theta + \\cos^2 \\theta = 1$ 恆成立，故其值為 $1$。"
+        },
+        {
+          "idx": 5,
+          "subject": "物理",
+          "chapter": "牛頓運動定律",
+          "chapter_confidence": 1,
+          "question_type": "計算",
+          "difficulty": 1,
+          "question_text": "質量 $2\\text{ kg}$ 的物體受到合力 $10\\text{ N}$，求其加速度。",
+          "answer_text": "$5\\text{ m/s}^2$。依牛頓第二運動定律 $F = ma \\Rightarrow 10 = 2 \\times a \\Rightarrow a = 5\\text{ m/s}^2$。"
+        },
+        {
+          "idx": 6,
+          "subject": "物理",
+          "chapter": "摩擦力與向心力",
+          "chapter_confidence": 0.95,
+          "question_type": "計算",
+          "difficulty": 2,
+          "question_text": "長 $1\\text{ m}$ 的輕繩繫住質量 $2\\text{ kg}$ 的小球，在光滑水平面上以 $3\\text{ m/s}$ 的速率作等速圓周運動，求繩的張力。",
+          "answer_text": "$18\\text{ N}$。繩的張力提供為向心力，$T = F_c = \\frac{mv^2}{r} = \\frac{2 \\times 3^2}{1} = 18\\text{ N}$。"
+        },
+        {
+          "idx": 7,
+          "subject": "物理",
+          "chapter": "直線運動",
+          "chapter_confidence": 1,
+          "question_type": "計算",
+          "difficulty": 1,
+          "question_text": "物體由靜止出發，以 $2\\text{ m/s}^2$ 的等加速度直線前進，求 $5$ 秒後的位移。",
+          "answer_text": "$25\\text{ m}$。由位移公式 $S = v_0 t + \\frac{1}{2} a t^2 = 0 + \\frac{1}{2} \\times 2 \\times 5^2 = 25\\text{ m}$。"
+        },
+        {
+          "idx": 8,
+          "subject": "數學",
+          "chapter": "指數與對數",
+          "chapter_confidence": 1,
+          "question_type": "單選",
+          "difficulty": 1,
+          "question_text": "已知 $\\log_{10} 2 = 0.3010$，利用 $\\log_{10} 5 = \\log_{10} \\frac{10}{2}$ 求 $\\log_{10} 5$ 之近似值。\n(A) $0.6990$ (B) $0.3010$ (C) $0.1505$ (D) $1.6990$",
+          "answer_text": "(A)。$\\log_{10} 5 = \\log_{10} \\frac{10}{2} = \\log_{10} 10 - \\log_{10} 2 = 1 - 0.3010 = 0.6990$"
+        },
+        {
+          "idx": 9,
+          "subject": "物理",
+          "chapter": "牛頓運動定律",
+          "chapter_confidence": 1,
+          "question_type": "單選",
+          "difficulty": 1,
+          "question_text": "馬拉車前進時，馬對車的作用力 $F$ 與車對馬的反作用力，兩者的關係為何？\n(A) 馬對車的力較大 (B) 大小相等、方向相反 (C) 車對馬的力較大 (D) 視速度而定",
+          "answer_text": "(B)。根據牛頓第三運動定律（作用力與反作用力定律），不論兩者運動狀態為何，作用力與反作用力恆大小相等、方向相反。"
+        },
+        {
+          "idx": 10,
+          "subject": "物理",
+          "chapter": "摩擦力與向心力",
+          "chapter_confidence": 0.95,
+          "question_type": "多選",
+          "difficulty": 2,
+          "question_text": "關於等速圓周運動，下列敘述何者正確？（複選）\n(A) 速率不變 (B) 速度不變 (C) 加速度指向圓心 (D) 合力為零",
+          "answer_text": "(A)(C)。等速圓周運動的速度方向持續改變，故速度不變為錯誤。具有指向圓心的向心加速度，故合力不為零且指向圓心。"
+        }
+      ]
+    },
+    "usage": {
+      "tokenIn": 1534,
+      "tokenOut": 1780,
+      "tokenThinking": 3624,
+      "tokenCached": 0
+    },
+    "latencyMs": 17637
+  }
+}

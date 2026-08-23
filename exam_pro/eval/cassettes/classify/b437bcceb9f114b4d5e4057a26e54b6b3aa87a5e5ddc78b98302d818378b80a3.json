@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T11:23:46.063Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2460,
+        "sha256": "01f5eac32b34918f507e9127ab00e3573bb5e844b2df80a85e9c562611902d05"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "解方程式 $2^{x+1} = 32$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "confidence": 1,
+      "rationale": "題目為求解指數方程式 $2^{x+1} = 32$（即 $2^{x+1} = 2^5$），此題型屬於指數與對數章節中的指數方程式求解。"
+    },
+    "usage": {
+      "tokenIn": 1885,
+      "tokenOut": 66,
+      "tokenThinking": 182,
+      "tokenCached": 0
+    },
+    "latencyMs": 2984
+  }
+}

@@ -454,6 +454,22 @@ async function runPipeline(opts) {
         }
     }
 
+    // 部分 cassette 也算 miss：只要有任一節點 replay 找不到，整輪就不是可信的量測
+    //（第 5.2 條／裁決 S2-14：main 上的 replay miss 是錯誤，不是警告）。
+    if (replayMisses.length) {
+        const m = replayMisses[0];
+        return {
+            ok: false,
+            reason: `有 ${replayMisses.length} 個節點 replay 找不到 cassette（第一個：agent=${m.agent} key=${(m.key || '').slice(0, 12)}…）。` +
+                `請在本機以 LLM_MODE=record 重跑 --suite pipeline 補錄。`,
+            jq, events, agentSources, replayMisses,
+            stateMachine: sm.source(),
+            totals: { tokenIn, tokenOut, tokenThinking, costUsd, latencyMs: Date.now() - t0 },
+            db: db.source,
+            warnings, thresholds
+        };
+    }
+
     return {
         ok: true,
         jq, events, agentSources, replayMisses,

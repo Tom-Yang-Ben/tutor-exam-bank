@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T11:26:42.365Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2498,
+        "sha256": "02311f6b233eeac4a78759fb9181ad00766c02c055ee0b912edcbe4376e1a861"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "設平面向量 $\\vec{a} = (4, k)$ 與 $\\vec{b} = (5, 10)$ 互相垂直，求 $k$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "confidence": 1,
+      "rationale": "題目給定兩個平面向量互相垂直並求未知數，解題關鍵在於兩向量垂直等價於其內積為 0，即 a·b = 0，此觀念屬於「向量內積」章節。"
+    },
+    "usage": {
+      "tokenIn": 1907,
+      "tokenOut": 81,
+      "tokenThinking": 579,
+      "tokenCached": 0
+    },
+    "latencyMs": 50146
+  }
+}

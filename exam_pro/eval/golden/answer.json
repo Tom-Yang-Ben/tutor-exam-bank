@@ -1108,10 +1108,10 @@
       ],
       "expect": {
         "equivalent": "agree",
-        "wrong": "disagree"
+        "wrong": "uncertain"
       },
       "extraction_hazard": false,
-      "note": "text 走 normalizeStem 比整段，不走 $…$ 抽取。",
+      "note": "text 走 normalizeStem 比整段，不走 $…$ 抽取。（裁決 S2-27：text 走「claimed 包含模型答案」→ agree，否則一律 uncertain，不回 disagree）",
       "needs_human_confirm": true
     },
     {
@@ -1130,11 +1130,11 @@
         "$\\vec{OA}$ 的長度"
       ],
       "expect": {
-        "equivalent": "uncertain",
+        "equivalent": "agree",
         "wrong": "uncertain"
       },
       "extraction_hazard": false,
-      "note": "text 比的是**整段 claimed** 的 normalizeStem，而 claimed 是一整句說明、model 只回結論短語，兩者永遠不相等。依「比不出來回 uncertain」的精神應為 uncertain，但字面上 normalizeStem 兩邊都非空、會走 disagree。**text 型答案該怎麼比，請開發者定案**（選項：verify 對 text 型一律 skipped／改成包含式比對／維持現狀）。",
+      "note": "裁決 S2-27：text 走「claimed 包含模型答案」→ agree，否則 uncertain（不回 disagree）。",
       "needs_human_confirm": true
     },
     {

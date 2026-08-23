@@ -3,7 +3,7 @@
     "agent": "classify",
     "model": "gemini-3.5-flash",
     "template": "classify.v1",
-    "recorded_at": "2026-08-21T17:46:01.343Z",
+    "recorded_at": "2026-08-23T11:22:35.506Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -23,15 +23,15 @@
   "response": {
     "data": {
       "chapter": "三角函數的定義",
-      "confidence": 0.95,
-      "rationale": "題目要求 $\\sin^2 40^\\circ + \\cos^2 40^\\circ$ 的值，此題直接應用三角函數的基本恆等式中的平方關係 $\\sin^2\\theta + \\cos^2\\theta = 1$，屬於三角函數的定義與基本關係之範疇。"
+      "confidence": 1,
+      "rationale": "題目要求計算平方關係 $\\sin^2\\theta + \\cos^2\\theta = 1$ 的具體數值，此基本恆等式屬於三角函數的定義範疇。"
     },
     "usage": {
       "tokenIn": 1935,
-      "tokenOut": 95,
-      "tokenThinking": 500,
+      "tokenOut": 73,
+      "tokenThinking": 253,
       "tokenCached": 0
     },
-    "latencyMs": 2996
+    "latencyMs": 2009
   }
 }

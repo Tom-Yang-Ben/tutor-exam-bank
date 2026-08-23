@@ -321,12 +321,13 @@ describe('answerCompare — 填空／計算：先抽 final_answer 再依 answer_
         assert.equal(cmp('計算', '$x + 1$', '2', 'expression'), 'uncertain');
     });
 
-    test('text：normalizeStem 後相等 → agree，不相等一律 uncertain（裁決 S2-26）', () => {
+    test('text：claimed 包含模型答案 → agree，否則一律 uncertain（裁決 S2-26／S2-27）', () => {
         assert.equal(cmp('填空', '$互相垂直$', '互相 垂直', 'text'), 'agree');
         assert.equal(cmp('填空', '互相垂直', '互相垂直', 'text'), 'agree');
         // 文字答案的「不同」分不出是答錯還是換句話說，永遠不回 disagree
         assert.equal(cmp('填空', '$互相垂直$', '互相平行', 'text'), 'uncertain');
-        assert.equal(cmp('填空', '兩向量的內積為零，故兩者互相垂直。', '互相垂直', 'text'), 'uncertain');
+        assert.equal(cmp('填空', '兩向量的內積為零，故兩者互相垂直。', '互相垂直', 'text'), 'agree');   // S2-27：包含即 agree
+        assert.equal(cmp('填空', '兩向量的內積為零，故兩者互相垂直。', '長度相等', 'text'), 'uncertain');
     });
 
     test('text 比的是整段 claimed，不走 $…$ 抽取（裁決 S2-26）', () => {

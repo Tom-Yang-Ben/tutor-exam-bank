@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T11:25:52.215Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2497,
+        "sha256": "462d2d6974b0e51659d9fe72bed4862fa67a3156c06bbfe4c7451abec7695ef7"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "設平面向量 $\\vec{a} = (2, k)$ 與 $\\vec{b} = (3, 6)$ 互相垂直，求 $k$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "confidence": 1,
+      "rationale": "題目給定兩個平面向量互相垂直，需利用「兩非零向量垂直則其內積為零」（即 $\\vec{a}\\cdot\\vec{b}=0$）的性質來解出未知數 $k$，此為向量內積的核心概念與應用。"
+    },
+    "usage": {
+      "tokenIn": 1906,
+      "tokenOut": 90,
+      "tokenThinking": 438,
+      "tokenCached": 0
+    },
+    "latencyMs": 2837
+  }
+}

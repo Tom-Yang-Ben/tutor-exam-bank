@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T11:24:41.478Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2460,
+        "sha256": "7d4c3c53fdbef61c5253fb8505eaf1dcf02e008f3b6606d533d957241ff2ff31"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "解方程式 $3^{x-1} = 81$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "confidence": 1,
+      "rationale": "題目為解指數方程式 3^(x-1) = 81，需要使用底數相同的指數性質來求解未知數，屬於指數與對數的範圍。"
+    },
+    "usage": {
+      "tokenIn": 1885,
+      "tokenOut": 55,
+      "tokenThinking": 446,
+      "tokenCached": 0
+    },
+    "latencyMs": 55410
+  }
+}

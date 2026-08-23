@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T11:24:43.327Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2485,
+        "sha256": "8575510dc8fb0515ffb91d0bc2890d4ca83f57310a0d8afaa0a9193aa808f5c1"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "已知 $\\log_{10} 2 = 0.3010$，求 $2^{50}$ 是幾位數的整數。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "confidence": 1,
+      "rationale": "此題利用常用對數的性質 $\\log_{10}(2^{50}) = 50 \\log_{10} 2$ 來計算其首數，進而決定 $2^{50}$ 的位數，屬於典型的「指數與對數」應用題。"
+    },
+    "usage": {
+      "tokenIn": 1903,
+      "tokenOut": 84,
+      "tokenThinking": 131,
+      "tokenCached": 0
+    },
+    "latencyMs": 1844
+  }
+}

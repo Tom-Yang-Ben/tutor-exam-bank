@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T11:24:49.495Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2476,
+        "sha256": "25faf32beaca54116cdafebae1d8a0f3b1c8f2245fee82d9df57cdc0d9b25a10"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "$\\log_{2} 3 \\times \\log_{3} 8$ 之值為何？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "confidence": 1,
+      "rationale": "題目涉及對數的乘法與換底公式計算，即 \\log_{2} 3 \\times \\log_{3} 8 = \\log_{2} 8 = 3，屬於「指數與對數」章節。"
+    },
+    "usage": {
+      "tokenIn": 1891,
+      "tokenOut": 68,
+      "tokenThinking": 685,
+      "tokenCached": 0
+    },
+    "latencyMs": 3420
+  }
+}

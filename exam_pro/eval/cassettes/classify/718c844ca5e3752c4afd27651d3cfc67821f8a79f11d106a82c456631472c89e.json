@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T11:24:52.318Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2580,
+        "sha256": "2cf9c6547c9aab8b81e13558bad12bd690e77e59c733a5de9425b7bd7dbdc93f"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "已知 $\\log_{10} 2 = 0.3010$，利用 $\\log_{10} 5 = \\log_{10} \\frac{10}{2$ 求 $\\log_{10} 5$ 之近似值。\n(A) $0.6990$　(B) $0.3010$　(C) $0.1505$　(D) $1.6990$",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "confidence": 1,
+      "rationale": "題目要求利用對數性質 $\\log_{10} 5 = \\log_{10}(10/2) = 1 - \\log_{10} 2$ 來計算對數的近似值，涉及常用對數的運算與性質，故屬於「指數與對數」。"
+    },
+    "usage": {
+      "tokenIn": 1980,
+      "tokenOut": 82,
+      "tokenThinking": 504,
+      "tokenCached": 0
+    },
+    "latencyMs": 2818
+  }
+}
