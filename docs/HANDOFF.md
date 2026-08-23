@@ -22,14 +22,14 @@
 | 階段 2 Agent 管線 | **完成**（三輪合併、cassette 錄齊、CI 綠；`FEATURE_PIPELINE=true` 已在本機 `.env`）；A-T16 前後對照**使用者選擇先跳過** | `docs/interfaces-stage2.md`（S0-1～6、S2-1～30）、`docs/stage2-parallel-prompts.md`、`docs/ws-notices-round2/3-stage2.md` |
 | 階段 3 產品面 | **第一輪合入 main（`b64f149`），裁決 S3-R1～R28 已發（`106a546`），nlq cassette 已錄（`fd5cf5b`），第二輪小修四條合入 main（`5facafe`，2026-08-24）**；WS 端已無待合併工作 | `docs/interfaces-stage3.md`（§15 = 裁決）、`docs/stage3-parallel-prompts.md`、`docs/ws-notices-round2-stage3.md` |
 
-main 最新：`18db34d`（第二輪合併 `5facafe` → NUL 修正 `5e26224` → variant cassette `18db34d`）。單元 1403/1403、整合 253/253、五個 suite replay 通過。CI **全綠**（unit 22/24 + integration）。四個 worktree 已 ff 到同一點。
+main 最新：`f4a15ca`（第二輪合併 `5facafe` → NUL 修正 `5e26224` → variant 第一次錄製 `18db34d` → S3-R29 `7cfacce` → golden 定案＋0.90 重錄＋nlq／variant 門檻 `f4a15ca`）。單元 1403/1403、整合 253/253、五個 suite 都有硬門檻且全過。CI **全綠**。四個 worktree 已 ff 到同一點。
 
 ## 3. 階段 3 現在卡在哪、下一步
 
 1. ~~第二輪小修~~ **已完成**（2026-08-24 合入 `5facafe`，A／B／C／D 的 questions3-ws*.md 全部結案）。目前沒有發給 WS 的新工作；若第三輪有需要，再開新分支貼新提示詞。
 2. ~~nlqHeuristics.js 的字面 NUL~~ **已修**（`5e26224`，改成 `'\u0000'` 逸出）。WS-B 留下的私有測試庫 `tutor_exam_bank_wsb_test` 不用了可 DROP。
-3. ~~variant cassette 尚未錄~~ **已錄（2026-08-24，`18db34d`）**：60 次生成、76 次 LLM、60 筆新向量；`gate_pass_rate` **0.15**（9/60）。**26/30 藍本停在 `off_topic`**（`VARIANT_OFFTOPIC_SIM_MIN=0.92`）、1 停 verify、3 全過；replay 掃描 0.85→5、0.88→14、0.90→19 個藍本停在 off_topic（數字在 `docs/variants.md` 第 4 節）。**待裁決：要不要把跑題閾值下修到 0.88～0.90**——改了要**重錄**（新放行的題會走到 classify／lint／verify；record 模式會重呼叫全部 ≈ 再一次費用）。順手修了 `suiteVariant.js` 的雞生蛋閘門（record 模式空目錄永遠不生成）。
-4. 人工 lane（使用者）：定案 `eval/golden/nlq.json` 50 句、`eval/golden/variant.json` 30 藍本 → 我跑 `--write-baseline`；之後 `.env` 開 `FEATURE_STUDENTS／FEATURE_NLQ／FEATURE_VARIANTS／FEATURE_SIMILAR=true` 試用三個新分頁；P-15b 把數字填進 `exam_pro/README.md` 的「問題→決策→數字」表。
+3. ~~variant cassette~~ **已錄並依 S3-R29 重錄**（`VARIANT_OFFTOPIC_SIM_MIN` 0.92 → 0.90；`.env`／`.env.example`／三處程式預設同步）：`gate_pass_rate` 0.15 → **0.25**（21/30 藍本仍停 off_topic、4 停 verify、5 全過），`retrieved_coverage` 0.8667。0.92 的由來與為何錯：S3-R9 用 fixture「同概念換數字」的現成題對校準（餘弦 ≥ 0.93），但那正是只改字閘門 S3-R8 要退回的東西；實錄合格變式餘弦多在 0.85～0.92（`docs/variants.md` 第 3／4 節）。若還想再降（0.88），同樣要重錄（record 模式會重呼叫全部 ≈ 90 次 LLM、~25 分鐘）。
+4. ~~golden 定案 → `--write-baseline`~~ **已完成（2026-08-24）**：nlq 門檻 rules 0.81／0.97／0.97、llm 0.72／0.845；variant 0.8367／0.22（皆量測 −0.03，只升不降）。接下來（使用者）： `.env` 開 `FEATURE_STUDENTS／FEATURE_NLQ／FEATURE_VARIANTS／FEATURE_SIMILAR=true` 試用三個新分頁；P-15b 把數字填進 `exam_pro/README.md` 的「問題→決策→數字」表。
 5. 階段 3 結案後沒有階段 4 規劃；可選的後續：A-T16 前後對照、`config/pricing.js` 填官方價格（目前全 0，`cost_usd` 恆 0）、私有 golden（真題庫）。
 
 ## 4. 本機環境（已確認）
