@@ -129,7 +129,10 @@ async function queryVector(ctx, input) {
 
 /**
  * @param {object} ctx
- * @param {{question_id:number|null, embed_text:string, subject:string, chapter:string}} input
+ * @param {{question_id:number|null, embed_text:string, subject:string, chapter:string,
+ *          exclude_family_root?:number|null}} input
+ *        `exclude_family_root` 是階段 3 新增的**選用**鍵（裁決 S3-14）：非 null 時
+ *        候選 SQL 多一條 `AND COALESCE(variant_of, id) <> $root`，排除藍本整個家族。
  * @returns {Promise<object>}  Outcome
  */
 async function runDedup1(ctx, input) {
@@ -154,18 +157,31 @@ async function runDedup1(ctx, input) {
 
     // 候選只限同一個學科，**不限章節**：分類漂移的重複題正是最該抓到的那一種。
     // 向量在 services/llm 已做 L2 正規化，餘弦 = 1 - (<=> 距離)。
+    //
+    // 階段 3（interfaces-stage3.md 第 4.6 條、裁決 S3-14）：**選用**的第五個 input 鍵
+    // `exclude_family_root`。給了就多一條 `AND COALESCE(q.variant_of, q.id) <> $4`——
+    // 新生成的變式一定與自己的藍本極為相似，不排掉家族的話每一題都會被判 duplicate。
+    // **沒給這個鍵時，SQL 與參數陣列與階段 2 逐位元相同**（PDF job 完全不受影響），
+    // 所以這裡是「多接一段字串」而不是「加一個恆真的條件」。
+    const familyRoot = Number.isInteger(inp.exclude_family_root) ? inp.exclude_family_root : null;
     let rows;
     try {
+        const values = [pgvector.toSql(vector), inp.subject, inp.question_id ?? null];
+        let familyClause = '';
+        if (familyRoot !== null) {
+            values.push(familyRoot);
+            familyClause = `\n                AND COALESCE(variant_of, id) <> $${values.length}`;
+        }
         const res = await ctx.db.query(
             `SELECT id, 1 - (embedding <=> $1::vector) AS cosine
                FROM questions
               WHERE embedding IS NOT NULL
                 AND archived_at IS NULL
                 AND subject = $2
-                AND ($3::int IS NULL OR id <> $3)
+                AND ($3::int IS NULL OR id <> $3)${familyClause}
               ORDER BY embedding <=> $1::vector
               LIMIT ${TOP_N}`,
-            [pgvector.toSql(vector), inp.subject, inp.question_id ?? null]
+            values
         );
         rows = res.rows;
     } catch (err) {

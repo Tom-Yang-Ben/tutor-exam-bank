@@ -52,6 +52,9 @@ const AGENT_MODULE_FOR_NODE = {
     extract: 'extract', dedup0: 'dedup', classify: 'classify',
     lint: 'lint', verify: 'verify', dedup1: 'dedup'
 };
+// 階段 3 的 `generate` 節點（interfaces-stage3.md 第 4.1 條）**刻意不進這張表**：
+// 它走 loadAgent 的第一順位 `agents/generate.js`（一支轉接到 generateVariant.js 的三行檔），
+// 與 dedup0／dedup1 同一個做法。這樣本表維持階段 2 的六個鍵，WS-A 的既有斷言不受影響。
 
 /** job_events.error_class 的九個合法值（DDL CHECK）；不在其中的一律不寫進該欄。 */
 const ERROR_CLASSES = new Set(['schema_invalid', 'chapter_invalid', 'formula_unparsable',
@@ -89,6 +92,46 @@ function loadConfig(env = process.env) {
         classifyMinConf: num('CLASSIFY_MIN_CONF', 0.8),
         dedupDup: num('DEDUP_DUP_THRESHOLD', 0.97),
         dedupVariant: num('DEDUP_VARIANT_THRESHOLD', 0.90)
+    };
+}
+
+/**
+ * 階段 3 新增的五個設定（interfaces-stage3.md 第 4.5、4.6、4.7、9 條）。
+ *
+ * 為什麼另開一支而不是往 `loadConfig()` 裡加鍵：`loadConfig()` 的回傳形狀被
+ * `test/unit/jobRunner.test.js`（WS-A 的檔，本 WS 不得修改）用 deepEqual 逐鍵釘住了。
+ * 「只加分支」的意思是既有路徑逐位元不變——那也包含既有純函式的回傳形狀。
+ * `createRunner()` 把兩份設定合起來用，行為與寫在同一支裡完全相同。
+ *
+ * @param {object} [env] 預設 process.env
+ * @returns {{variantSimMin:number, variantMinEdit:number, knnVoteSim:number,
+ *           variantLintRetries:number, variantAutoApprove:boolean}}
+ */
+function loadStage3Config(env = process.env) {
+    const int = (name, dflt) => {
+        const n = Number.parseInt(env[name], 10);
+        return Number.isFinite(n) ? n : dflt;
+    };
+    const num = (name, dflt) => {
+        const n = Number.parseFloat(env[name]);
+        return Number.isFinite(n) ? n : dflt;
+    };
+    // 布林一律經 config/features.js 的凍結規則（interfaces.md 第 9 條：只有 '1'／'true' 為真），
+    // 不自己寫一份「有值就是真」——.env 寫 VARIANT_AUTO_APPROVE=false 反而會把它打開。
+    const bool = (name, dflt) => {
+        const raw = env[name];
+        if (raw === undefined || String(raw).trim() === '') return dflt;
+        return require('../config/features').parseBool(raw);
+    };
+    return {
+        // 三個門檻會進 ctx.config.thresholds（agent 一律不得自己讀 process.env）
+        variantSimMin: num('VARIANT_SIM_MIN', 0.80),
+        variantMinEdit: num('VARIANT_MIN_EDIT', 0.08),
+        knnVoteSim: num('KNN_VOTE_SIM', 0.90),
+        // 只影響變式 job 的 lint 重試上限（第 4.6 條），預設與階段 2 同值
+        variantLintRetries: int('VARIANT_LINT_RETRIES', DEFAULT_LIMITS.maxRetries.lint),
+        // false（首輪預設）＝ 全部閘門過了仍停在 needs_review('awaiting_approval') 等人核准
+        variantAutoApprove: bool('VARIANT_AUTO_APPROVE', false)
     };
 }
 
@@ -183,6 +226,23 @@ function buildSaveFields(payload) {
 }
 
 /**
+ * 入庫時的 `chapter_src`，依 `payload.classify.source` 決定
+ * （interfaces-stage3.md 第 4.7、5.2 條的對照表）：
+ *
+ *   'gate' → 'ai'  ｜ 'llm' → 'ai'  ｜ **'knn' → 'knn'**
+ *
+ * `'human'` 不會出現在這裡：它只由「人動手改過章節」產生（`PUT /api/questions/:id`
+ * 與 `POST /api/review/:jqId/approve`），這是 kNN 投票只信人工標籤的前提（規劃 §4.4）。
+ * 沒跑過 classify（理論上不會發生）時保守回 `'ai'`。
+ *
+ * @param {object} payload job_questions.payload
+ * @returns {'ai'|'knn'}
+ */
+function chapterSrcFor(payload) {
+    return payload?.classify?.source === 'knn' ? 'knn' : 'ai';
+}
+
+/**
  * 組 `ctx.config.features`（裁決 S2-8，第 3.1 條）。
  *
  * 鍵名凍結為**小寫短名** `{ similar, pipeline }`，不是環境變數全名；
@@ -229,7 +289,7 @@ function createRunner(opts = {}) {
     const db = opts.db || require('../config/db');
     const llm = opts.llm || require('../services/llm');
     const agentsDir = opts.agentsDir || path.resolve(__dirname, '..', 'agents');
-    const config = { ...loadConfig(), ...(opts.config || {}) };
+    const config = { ...loadConfig(), ...loadStage3Config(), ...(opts.config || {}) };
     const logger = opts.logger || makeLogger();
     const sleep = opts.sleep || ((ms) => new Promise(r => setTimeout(r, ms)));
     const estimateCost = opts.estimateCost || estimateCostFromPricing;
@@ -402,7 +462,11 @@ function createRunner(opts = {}) {
                     dedupVariant: config.dedupVariant,
                     pdfChunkPages: config.pdfChunkPages,
                     inlineMaxBytes: config.inlineMaxBytes,
-                    nodeTimeoutMs: config.nodeTimeoutMs
+                    nodeTimeoutMs: config.nodeTimeoutMs,
+                    // 階段 3 的三個（第 4.5 條）：generateVariant 的兩道閘門與 classify 的 kNN 短路
+                    variantSimMin: config.variantSimMin,
+                    variantMinEdit: config.variantMinEdit,
+                    knnVoteSim: config.knnVoteSim
                 },
                 // 裁決 S2-8（第 3.1 條）：agent 不得自己讀 process.env，旗標只能從這裡拿。
                 // 鍵名是小寫短名 similar／pipeline，值即時由 config/features.js 讀取。
@@ -460,6 +524,11 @@ function createRunner(opts = {}) {
         }
 
         const textHash = input?.dedup0?.text_hash ?? null;
+        // 階段 3（第 4.7、5.2 條）：三個欄位改由 job.kind 與 payload.classify.source 決定。
+        // kind='pdf' 的路徑逐位元不變（origin='pdf'；classify 沒短路時 chapter_src 仍是 'ai'）。
+        const origin = ctx?.job?.kind === 'variant' ? 'variant' : 'pdf';
+        const variantOf = ctx?.job?.kind === 'variant' ? (input?.extract?.variant_of_root ?? null) : null;
+        const chapterSrc = chapterSrcFor(input);
         const client = await db.pool.connect();
         try {
             await client.query('BEGIN');
@@ -471,14 +540,14 @@ function createRunner(opts = {}) {
             const { rows } = await client.query(
                 `INSERT INTO questions
                     (subject, chapter, question_type, difficulty, question_text, answer_text,
-                     origin, chapter_src, text_hash, search_tsv)
-                 VALUES ($1,$2,$3,$4,$5,$6,'pdf','ai',$7,
-                         setweight(to_tsvector('simple', array_to_string($8::text[],  ' ')), 'A')
-                      || setweight(to_tsvector('simple', array_to_string($9::text[],  ' ')), 'A')
-                      || setweight(to_tsvector('simple', array_to_string($10::text[], ' ')), 'B'))
+                     origin, chapter_src, variant_of, text_hash, search_tsv)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+                         setweight(to_tsvector('simple', array_to_string($11::text[], ' ')), 'A')
+                      || setweight(to_tsvector('simple', array_to_string($12::text[], ' ')), 'A')
+                      || setweight(to_tsvector('simple', array_to_string($13::text[], ' ')), 'B'))
                  RETURNING id`,
                 [v.value.subject, v.value.chapter, v.value.question_type, v.value.difficulty,
-                v.value.question_text, v.value.answer_text || '略', textHash,
+                v.value.question_text, v.value.answer_text || '略', origin, chapterSrc, variantOf, textHash,
                     chapterTokens, keywordTokens, stemTokens]);
 
             const questionId = rows[0].id;
@@ -486,7 +555,10 @@ function createRunner(opts = {}) {
             await client.query('COMMIT');
 
             scheduleEmbed(questionId, ctx.logger);
-            return { kind: 'pass', data: { question_id: questionId, text_hash: textHash } };
+            return {
+                kind: 'pass',
+                data: { question_id: questionId, text_hash: textHash, origin, chapter_src: chapterSrc, ...(variantOf !== null ? { variant_of: variantOf } : {}) }
+            };
         } catch (err) {
             await client.query('ROLLBACK').catch(() => { });
             throw err;
@@ -508,6 +580,10 @@ function createRunner(opts = {}) {
     }
 
     // ── 節點 input（第 3.3 條逐節點）─────────────────────────
+    /**
+     * @param {string} node
+     * @param {object} jq   認領回來的列，階段 3 多帶了 job 的 kind
+     */
     function buildInput(node, jq) {
         const p = jq.payload || {};
         const ex = p.extract || {};
@@ -540,7 +616,12 @@ function createRunner(opts = {}) {
                     question_id: null,
                     embed_text: fields.question_text,
                     subject: fields.subject,
-                    chapter: fields.chapter
+                    chapter: fields.chapter,
+                    // 裁決 S3-14：**選用**的第五個鍵，只有變式 job 會給。
+                    // 沒給這個鍵時 agents/dedup.js 的行為與階段 2 逐位元相同（PDF job 不受影響）。
+                    // 給了就排除藍本整個家族——不然新生的變式一定會撞到自己的藍本而被判 duplicate。
+                    ...(jq.kind === 'variant' && Number.isInteger(ex.variant_of_root)
+                        ? { exclude_family_root: ex.variant_of_root } : {})
                 };
             }
             case 'save':
@@ -573,6 +654,7 @@ function createRunner(opts = {}) {
         try {
             const { rows } = await db.query(
                 `SELECT q.id, q.job_id, q.idx, q.state, q.payload, q.retries,
+                        j.kind, j.pdf_sha256,
                         j.budget_usd::float8 AS budget_usd, j.cost_usd::float8 AS cost_usd
                    FROM job_questions q JOIN jobs j ON j.id = q.job_id
                   WHERE q.id = $1`, [jqId]);
@@ -582,7 +664,37 @@ function createRunner(opts = {}) {
 
             const node = NODE_FOR_STATE[jq.state];
             const budgetLeft = Number(jq.budget_usd) - Number(jq.cost_usd);
-            const limits = { ...DEFAULT_LIMITS, budgetLeft };
+            // 第 4.6 條：變式 job 的 lint 重試上限由 VARIANT_LINT_RETRIES 覆寫，其餘節點不變。
+            const limits = jq.kind === 'variant'
+                ? {
+                    ...DEFAULT_LIMITS,
+                    maxRetries: { ...DEFAULT_LIMITS.maxRetries, lint: config.variantLintRetries },
+                    budgetLeft
+                }
+                : { ...DEFAULT_LIMITS, budgetLeft };
+
+            // ── 第 4.7 條：VARIANT_AUTO_APPROVE=false 的「政策停等」──
+            // 全部閘門都過了（state='deduped'），但首輪不自動入庫：直接寫 needs_review
+            // ('awaiting_approval')，**不經 transition()**。理由（裁決 S3-11）：transition 的四種
+            // outcome 沒有一種能從 deduped 走到 needs_review 而不謊報失敗——fail 會讓
+            // job_events.error_class 寫進一個不在九個合法值內的字串，撞 job_events_error_class_check。
+            // 這是整條管線唯一一處不經 transition 的狀態變更，pipeline/stateMachine.js 一個字都沒改。
+            if (node === 'save' && jq.kind === 'variant' && !config.variantAutoApprove) {
+                await writeEvent({
+                    job_id: jq.job_id, jq_id: jq.id, node: 'save', attempt: attemptNo(jq.retries, 'save'),
+                    cost_usd: 0, cost_estimated: false, latency_ms: 0, outcome: 'skipped', error_class: null,
+                    detail: { reason: 'awaiting_approval', auto_approve: false }
+                });
+                await db.query(
+                    `UPDATE job_questions SET state = 'needs_review', review_reason = 'awaiting_approval',
+                            locked_until = NULL, updated_at = now() WHERE id = $1`, [jq.id]);
+                logger.info({
+                    job_id: jq.job_id, jq_id: jq.id, node: 'save', attempt: attemptNo(jq.retries, 'save'),
+                    outcome: 'skipped', latency_ms: 0, state: 'needs_review', review_reason: 'awaiting_approval'
+                });
+                await maybeFinishJob(jq.job_id);
+                return;
+            }
 
             let outcome, meter = newMeter(), cost = { cost_usd: 0, cost_estimated: false }, latencyMs = 0;
 
@@ -593,7 +705,12 @@ function createRunner(opts = {}) {
                 logger.warn({ msg: '預算用盡，跳過呼叫', job_id: jq.job_id, jq_id: jq.id, node, budget_left: budgetLeft });
             } else {
                 const ctxBase = {
-                    db, job: { id: jq.job_id, budget_usd: Number(jq.budget_usd), cost_usd: Number(jq.cost_usd) },
+                    db,
+                    // 第 4.5 條：ctx.job 加 kind 與 pdf_sha256（classify 的同 PDF 排除要用），兩個都是附加
+                    job: {
+                        id: jq.job_id, kind: jq.kind, pdf_sha256: jq.pdf_sha256 ?? null,
+                        budget_usd: Number(jq.budget_usd), cost_usd: Number(jq.cost_usd)
+                    },
                     jq: { id: jq.id, idx: jq.idx, payload: jq.payload, retries: jq.retries },
                     logger, models: loadModels(), limits
                 };
@@ -621,6 +738,9 @@ function createRunner(opts = {}) {
                     ...(outcome.kind === 'error' ? { message: outcome.message } : {}),
                     ...(meter.usageMetadata.length > 0 ? { usage_metadata: meter.usageMetadata } : {}),
                     ...(schemaFallbackOf(meter, outcome) ? { schema_fallback: true } : {}),
+                    // 階段 3 第 5.2 條：classify 是哪一層決定的（'gate'／'llm'／'knn'）要進事件，
+                    // 「短路率與短路正確率」才報得出來。只加一個鍵，其餘欄位不動。
+                    ...(node === 'classify' && outcome.data?.source ? { source: outcome.data.source } : {}),
                     review_reason: next.review_reason
                 }
             });
@@ -662,7 +782,8 @@ function createRunner(opts = {}) {
         const stopRenew = startRenew('jobs', jobId);
         try {
             const { rows } = await db.query(
-                `SELECT id, pdf_path, page_count, budget_usd::float8 AS budget_usd, cost_usd::float8 AS cost_usd
+                `SELECT id, pdf_path, pdf_sha256, page_count,
+                        budget_usd::float8 AS budget_usd, cost_usd::float8 AS cost_usd
                    FROM jobs WHERE id = $1`, [jobId]);
             if (rows.length === 0) return;
             const job = rows[0];
@@ -713,7 +834,11 @@ function createRunner(opts = {}) {
             }
 
             const ctxBase = {
-                db, job: { id: job.id, budget_usd: Number(job.budget_usd), cost_usd: Number(rows[0]?.cost_usd ?? 0) },
+                db,
+                job: {
+                    id: job.id, kind: 'pdf', pdf_sha256: job.pdf_sha256 ?? null,
+                    budget_usd: Number(job.budget_usd), cost_usd: Number(rows[0]?.cost_usd ?? 0)
+                },
                 jq: null, logger, models: loadModels(), limits: { ...DEFAULT_LIMITS, budgetLeft }
             };
             const { outcome, meter, cost, latencyMs } =
@@ -793,11 +918,192 @@ function createRunner(opts = {}) {
         return created;
     }
 
-    async function failJob(jobId, message) {
+    // ── 工作單位 C：變式生成（interfaces-stage3.md 第 4.1 條）────────────────
+    //
+    // 與工作單位 A（拆題）是同一個形狀：job 層節點跑完 → 建 job_questions(state='extracted')
+    // → jobs.state='processing'，之後**逐題走完全相同的六個節點**。變式題不另開通道，
+    // 也就不會有「變式題的閘門比較鬆」這種事（規劃 §4 的核心設計）。
+    //
+    // 差別只有三個：
+    //   1. 節點名是 'generate' 不是 'extract'（agents/generateVariant.js）；
+    //   2. 沒有 PDF，所以 chunk_no = 0、idx = i（1-based，裁決 S3-10）；
+    //   3. 一列都沒建出來時 jobs.error 是第 4.1 條凍結的那句話。
+    /**
+     * @param {number} jobId kind='variant' 的 job
+     */
+    async function runGenerateJob(jobId) {
+        const stopRenew = startRenew('jobs', jobId);
+        try {
+            const variantService = require('../services/variantService');
+
+            const { rows } = await db.query(
+                `SELECT id, source_question_id, budget_usd::float8 AS budget_usd, cost_usd::float8 AS cost_usd
+                   FROM jobs WHERE id = $1`, [jobId]);
+            if (rows.length === 0) return;
+            const job = rows[0];
+
+            // 建 job 時寫進 job_events 的請求參數（裁決 S3-9）
+            const requested = await variantService.readRequested(db, jobId);
+
+            const source = await variantService.loadSource(db, job.source_question_id);
+            if (!source) {
+                await failJob(jobId, '藍本題不存在或已封存，無法生成變式。', 'generate');
+                return;
+            }
+            // 錨點鄰居由 runner 查好（agent 不得自己連 DB，第 3.1 條）
+            const neighbors = await variantService.findNeighbors(db, source);
+
+            let created = 0;
+            for (let i = 1; i <= requested.count; i++) {
+                created += await runGenerateOne(job, source, neighbors, requested, i);
+            }
+
+            if (created === 0) {
+                // 第 4.1 條的凍結訊息（其他 job 層例外沿用既有訊息）
+                await failJob(jobId, '變式生成全部未通過文字閘門或跑題檢查。', 'generate');
+                return;
+            }
+
+            await db.query(
+                `UPDATE jobs SET state = 'processing', locked_until = NULL, updated_at = now() WHERE id = $1`,
+                [jobId]);
+            logger.info({ job_id: jobId, node: 'generate', outcome: 'pass', questions: created, requested: requested.count });
+        } finally {
+            stopRenew();
+        }
+    }
+
+    /**
+     * 生成第 i 題（含 fail 重試 1 次與 error 退避，比照 extract）。
+     * @returns {Promise<number>} 這一題建出來的列數（0 或 1）
+     */
+    async function runGenerateOne(job, source, neighbors, requested, idx) {
+        let failRetries = 0;
+        let errorRetries = 0;
+        let feedback = '';
+
+        for (; ;) {
+            const { rows } = await db.query('SELECT cost_usd::float8 AS cost_usd FROM jobs WHERE id = $1', [job.id]);
+            const spent = Number(rows[0]?.cost_usd ?? 0);
+            const budgetLeft = Number(job.budget_usd) - spent;
+            const attempt = failRetries + errorRetries + 1;
+
+            if (budgetLeft <= 0) {
+                // 第 7.3.2 條：呼叫「前」就檢查，錢不夠連叫都不叫
+                await writeEvent({
+                    job_id: job.id, node: 'generate', attempt, latency_ms: 0,
+                    outcome: 'fail', error_class: 'budget_exceeded', detail: { idx }
+                });
+                logger.warn({ job_id: job.id, node: 'generate', idx, msg: '預算用盡，跳過這一題', budget_left: budgetLeft });
+                return 0;
+            }
+
+            const ctxBase = {
+                db,
+                job: {
+                    id: job.id, kind: 'variant', pdf_sha256: null,
+                    budget_usd: Number(job.budget_usd), cost_usd: spent
+                },
+                jq: null, logger, models: loadModels(), limits: { ...DEFAULT_LIMITS, budgetLeft }
+            };
+            const { outcome, meter, cost, latencyMs } = await invokeNode('generate', ctxBase, {
+                source,
+                neighbors,
+                difficulty_delta: requested.difficulty_delta,
+                idx,
+                ...(feedback ? { feedback } : {})
+            });
+            await chargeJob(job.id, meter, cost);
+
+            let jqId = null;
+            if (outcome.kind === 'pass') {
+                jqId = await insertVariantQuestion(job, source, requested, idx, outcome, attempt);
+            }
+
+            await writeEvent({
+                job_id: job.id, jq_id: null, node: 'generate', attempt,
+                model: meter.calls > 0 ? meter.model : null,
+                token_in: meter.calls > 0 ? meter.tokenIn : null,
+                token_out: meter.calls > 0 ? meter.tokenOut : null,
+                token_thinking: meter.calls > 0 ? meter.tokenThinking : null,
+                token_cached: meter.calls > 0 ? meter.tokenCached : null,
+                cost_usd: cost.cost_usd, cost_estimated: cost.cost_estimated, latency_ms: latencyMs,
+                outcome: outcome.kind === 'skipped' ? 'skipped' : outcome.kind,
+                error_class: outcome.kind === 'fail' ? outcome.reason
+                    : outcome.kind === 'error' ? outcome.errorClass : null,
+                detail: {
+                    idx,
+                    ...(jqId !== null ? { jq_id: jqId } : {}),
+                    ...(outcome.kind === 'pass' && outcome.gate ? { text_gate: outcome.gate.text_gate, sim: outcome.gate.sim } : {}),
+                    // 沒過閘門的那幾題只留在事件裡（第 4.1 條：失敗的記進 job_events.detail.rejected）
+                    ...(outcome.kind === 'fail'
+                        ? { rejected: [{ idx, reason: outcome.reason, feedback: outcome.feedback }] } : {}),
+                    ...(outcome.kind === 'error' ? { message: outcome.message } : {}),
+                    ...(meter.usageMetadata.length > 0 ? { usage_metadata: meter.usageMetadata } : {}),
+                    ...(schemaFallbackOf(meter, outcome) ? { schema_fallback: true } : {})
+                }
+            });
+            logger.info({
+                job_id: job.id, jq_id: jqId, node: 'generate', attempt, outcome: outcome.kind,
+                latency_ms: latencyMs, idx
+            });
+
+            if (outcome.kind === 'pass') return 1;
+            if (outcome.kind === 'skipped') return 0;
+
+            if (outcome.kind === 'fail') {
+                // 下一次重試把失敗理由餵回 prompt（第 4.2 條）
+                feedback = outcome.feedback || feedback;
+                if (failRetries < EXTRACT_MAX_RETRIES) { failRetries += 1; continue; }
+                return 0;
+            }
+            if (errorRetries < DEFAULT_LIMITS.maxErrorRetries) {
+                await sleep(backoffMs(errorRetries));
+                errorRetries += 1;
+                continue;
+            }
+            return 0;
+        }
+    }
+
+    /**
+     * 把一題變式建成 job_questions。
+     *
+     * payload 有**七個鍵**的其中兩個：`extract`（與 PDF job 同形，之後六個節點照原樣讀）
+     * 與階段 3 新增的 `variant`（第 4.5 條，只由 generate 節點寫，其餘節點不碰）。
+     *
+     * ON CONFLICT DO NOTHING：租約過期後整份 job 被重新認領時，同一個 idx 不會建出重複的列。
+     *
+     * @returns {Promise<number|null>} 新列的 id；撞 UNIQUE 沒建成時回 null
+     */
+    async function insertVariantQuestion(job, source, requested, idx, outcome, attempt) {
+        const data = outcome.data || {};
+        const gate = outcome.gate || {};
+        const payload = {
+            extract: { ...data, idx, chunk_no: 0, page_range: null },
+            variant: {
+                source_question_id: source.id,
+                difficulty_delta: requested.difficulty_delta,
+                anchor_ids: data.anchor_ids || [],
+                text_gate: gate.text_gate ?? null,
+                sim: gate.sim ?? null,
+                attempt
+            }
+        };
+        const { rows } = await db.query(
+            `INSERT INTO job_questions (job_id, idx, state, payload)
+             VALUES ($1, $2, 'extracted', $3::jsonb)
+             ON CONFLICT (job_id, idx) DO NOTHING
+             RETURNING id`,
+            [job.id, idx, JSON.stringify(payload)]);
+        return rows.length ? rows[0].id : null;
+    }
+
+    async function failJob(jobId, message, node = 'extract') {
         await db.query(
             `UPDATE jobs SET state = 'failed', error = $2, locked_until = NULL, updated_at = now() WHERE id = $1`,
             [jobId, message]);
-        logger.error({ job_id: jobId, node: 'extract', outcome: 'error', latency_ms: 0, error: message });
+        logger.error({ job_id: jobId, node, outcome: 'error', latency_ms: 0, error: message });
     }
 
     // ── 模型設定（config/models.js 由 WS-B 提供，還沒合入時退回 .env）──
@@ -807,12 +1113,17 @@ function createRunner(opts = {}) {
         try {
             const m = require('../config/models');
             if (typeof m.warnIfSameModel === 'function') m.warnIfSameModel();
-            modelsCache = { extract: m.MODEL_EXTRACT, verify: m.MODEL_VERIFY };
+            // 第三個鍵是階段 3 加的（interfaces-stage3.md 第 4.2、9 條）：
+            // 「MODEL_VARIANT 未設時退回 MODEL_VERIFY」的解析放在 config/models.js **之外**，
+            // 也就是這裡——agent 不得自己讀 process.env，所以退回這一步只能由 runner 做。
+            modelsCache = { extract: m.MODEL_EXTRACT, verify: m.MODEL_VERIFY, variant: m.MODEL_VARIANT || m.MODEL_VERIFY };
         } catch (err) {
             if (err.code !== 'MODULE_NOT_FOUND') throw err;
+            const verify = process.env.MODEL_VERIFY || 'gemini:gemini-3.1-pro-preview';   // 與 config/models.js 的 DEFAULT_VERIFY 一致（裁決 S2-29）
             modelsCache = {
                 extract: process.env.MODEL_EXTRACT || 'gemini:gemini-3.5-flash',
-                verify: process.env.MODEL_VERIFY || 'gemini:gemini-3.1-pro-preview'   // 與 config/models.js 的 DEFAULT_VERIFY 一致（裁決 S2-29）
+                verify,
+                variant: process.env.MODEL_VARIANT || verify
             };
         }
         return modelsCache;
@@ -842,8 +1153,13 @@ function createRunner(opts = {}) {
 
                 if (overDaily) break;
                 const jobId = await claim('jobs', `kind = 'pdf' AND state IN ('queued','extracting')`, [], `, state = 'extracting'`);
-                if (jobId === null) break;
-                spawn(`job:${jobId}`, () => runExtractJob(jobId));
+                if (jobId !== null) { spawn(`job:${jobId}`, () => runExtractJob(jobId)); continue; }
+
+                // 第 4.1 條：**第二條認領分支，只加不改**。變式 job 也用 'extracting' 當
+                // 「job 層節點正在跑」的狀態（jobs.state 的五個值沒有新增，DDL 不必動）。
+                const variantJobId = await claim('jobs', `kind = 'variant' AND state IN ('queued','extracting')`, [], `, state = 'extracting'`);
+                if (variantJobId === null) break;
+                spawn(`job:${variantJobId}`, () => runGenerateJob(variantJobId));
             }
         } catch (err) {
             logger.error({ msg: 'tick 失敗', node: 'claim', error: err.message });
@@ -873,7 +1189,7 @@ function createRunner(opts = {}) {
     }
 
     return {
-        tick, start, stop, runJobQuestion, runExtractJob, config,
+        tick, start, stop, runJobQuestion, runExtractJob, runGenerateJob, config,
         get inFlight() { return inFlight.size; }
     };
 }
@@ -890,7 +1206,7 @@ function startInlineRunner(opts) {
 module.exports = {
     createRunner, startInlineRunner,
     // 純函式，供單元測試與 report_jobs 共用
-    loadConfig, planChunks, backoffMs, attemptNo, buildSaveFields, normalizeErrorClass, makeLogger, resolveJobPath,
+    loadConfig, loadStage3Config, planChunks, backoffMs, attemptNo, buildSaveFields, chapterSrcFor, normalizeErrorClass, makeLogger, resolveJobPath,
     readFeatures, schemaFallbackOf,
     ADVANCEABLE_STATES, FREE_NODES, AGENT_MODULE_FOR_NODE, ERROR_CLASSES,
     RENEW_INTERVAL_MS, BACKOFF_BASE_MS, BACKOFF_MAX_MS, EXTRACT_MAX_RETRIES
