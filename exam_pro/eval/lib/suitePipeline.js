@@ -56,8 +56,37 @@ async function runPipelineSuite(args) {
 
     const res = await driver.runPipeline({ pdfPath, sheet });
     warnings.push(...(res.warnings || []));
+
+    // 沒跑完時**不丟例外**：replay miss 要交給 run.js 依裁決 S2-14 判斷
+    // （fork PR 降 warning、其餘紅燈），丟例外會讓那段邏輯完全繞過去，
+    // 而且 fork 的外部貢獻者會看到一個他無法自救的堆疊。
     if (!res.ok) {
-        throw new Error(`pipeline 沒跑完：${res.reason}`);
+        const misses = res.replayMisses || [];
+        return {
+            suite: 'pipeline',
+            measured: { pipeline: null },
+            nodes: {}, reviewReasons: [],
+            counts: { total: 0, saved: 0, needs_review: 0, rejected: 0, pending: 0 },
+            cost: { token_in: 0, token_out: 0, token_thinking: 0, token_out_billed: 0, cost_usd: 0, latency_ms: res.totals.latencyMs },
+            caveats: { fakeExtract: false, fakeVerify: false, anyStub: false, notes: [res.reason] },
+            // failures 走 run.js 的 partitionFailures：是 replay miss 就照 S2-14 處理
+            failures: misses.length ? misses.map(m => m.message) : [res.reason],
+            warnings: [...warnings, res.reason],
+            perQuestion: [],
+            meta: {
+                pdf: isPrivate ? '（私有 PDF，路徑不記錄）' : path.relative(ROOT, pdfPath).replace(/\\/g, '/'),
+                pdfSha256: sheet.sha256,
+                questionsExpected: sheet.doc.questions.length,
+                agentSources: res.agentSources,
+                stateMachine: res.stateMachine,
+                db: res.db,
+                llmMode: process.env.LLM_MODE || 'replay',
+                cassetteDir: process.env.EVAL_CASSETTE_DIR || 'eval/cassettes',
+                thresholds: res.thresholds,
+                sources: shims.sources()
+            },
+            isPrivate
+        };
     }
 
     const caveats = driver.stubCaveats(res);

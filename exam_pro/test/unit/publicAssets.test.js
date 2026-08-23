@@ -166,6 +166,27 @@ describe('public/js/review.js 的純函式', () => {
         const { reasonSentence } = await load();
         assert.ok(reasonSentence('something_new', {}).includes('something_new'));
     });
+
+    // ── 裁決 S2-22：extracting 期間 counts 全 0，靠 state 顯示「拆題中」 ──
+    test('queued／extracting 時 counts 沒有意義，其餘三個狀態有', async () => {
+        const { countsMeaningful } = await load();
+        assert.equal(countsMeaningful('queued'), false);
+        assert.equal(countsMeaningful('extracting'), false);
+        for (const s of ['processing', 'done', 'failed']) {
+            assert.equal(countsMeaningful(s), true, s);
+        }
+    });
+
+    test('jobs.state 的五個值都有中文標籤（第 2.1 條）', async () => {
+        const { JOB_STATE_LABEL } = await load();
+        assert.deepEqual(Object.keys(JOB_STATE_LABEL).sort(),
+            ['done', 'extracting', 'failed', 'processing', 'queued']);
+        assert.equal(JOB_STATE_LABEL.extracting, '拆題中');
+        for (const [k, v] of Object.entries(JOB_STATE_LABEL)) {
+            assert.equal(typeof v, 'string');
+            assert.ok(v.trim().length > 0, k);
+        }
+    });
 });
 
 describe('review.js 的檔案層級契約', () => {
@@ -189,6 +210,14 @@ describe('review.js 的檔案層級契約', () => {
         assert.ok(source.includes("formData.append('pdf'"), '欄位名必須是 pdf');
     });
 
+    test('拆題階段不把 counts 全 0 當成錯（裁決 S2-22）', () => {
+        // 這一條守的是「顯示邏輯有沒有真的分兩路」：光有 countsMeaningful() 而沒有在
+        // renderJobStatus 裡用到它，單元測試照樣會綠，但畫面上還是會印「已入庫 0」。
+        assert.match(source, /countsMeaningful\(job\.state\)/);
+        assert.ok(source.includes('正在拆題，尚未逐題處理'), '缺少 extracting 的說明文字');
+        assert.ok(source.includes('已排隊，等待 worker 認領'), '缺少 queued 的說明文字');
+    });
+
     test('mock 資料只在 ?mock=1 時被讀到', () => {
         // 靜默的假資料比壞掉更難查。唯一讀 MOCK 的地方是 request()，而它第一行就檢查旗標——
         // 所以「所有讀取 MOCK 的程式碼都在那個 return 之後」就等於「旗標關閉時讀不到假資料」。
@@ -201,6 +230,30 @@ describe('review.js 的檔案層級契約', () => {
             const trimmed = line.trim();
             if (!/\bMOCK\./.test(line) || trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
             assert.ok(at > guard, `MOCK 在旗標檢查之前就被讀到：${trimmed}`);
+        }
+    });
+});
+
+describe('eval/README.md 的結構完整性', () => {
+    // 為什麼需要這一條：上一輪用 String.replace(OLD, NEW) patch 這個檔，
+    // 而 NEW 裡出現了「$」緊接反引號的序列（`「取第一個 $…$」` 這種寫法）。
+    // replace() 把它當成替換樣式 $` = 「match 之前的全部內容」展開，
+    // 整份 README 因此被塞回自己中間、長度從 192 行變成 692 行——
+    // 而 `git diff --stat` 只顯示「+62 行」，commit 當下完全看不出來。
+    const readme = fs.readFileSync(
+        path.resolve(__dirname, '..', '..', 'eval', 'README.md'), 'utf8');
+    const headings = readme.split('\n').filter(l => /^#{1,2} /.test(l));
+
+    test('每個標題只出現一次（檔案沒有自我重複）', () => {
+        const seen = new Map();
+        for (const h of headings) seen.set(h, (seen.get(h) || 0) + 1);
+        const dupes = [...seen.entries()].filter(([, n]) => n > 1).map(([h, n]) => `${h}（${n} 次）`);
+        assert.deepEqual(dupes, [], `README 有重複的標題：\n  ${dupes.join('\n  ')}`);
+    });
+
+    test('三個 suite 與新舊對照都有專屬章節', () => {
+        for (const marker of ['--suite classify', '--suite pipeline', 'compare_pipeline.js', 'check:html']) {
+            assert.ok(readme.includes(marker), `README 沒有提到 ${marker}`);
         }
     });
 });

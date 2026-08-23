@@ -4,9 +4,11 @@
 > 實作時發現介面有問題就寫在這裡，由開發者本人裁決後統一改 `interfaces-stage2.md`
 > 並通知四條 WS「第 N 條已更新為 …，請 rebase 後對齊」。
 >
-> **狀態：五則全部待裁決（2026-08-22 提出，第一輪 WS-D 交付時）。**
-> 每一則都寫了「WS-D 目前的做法」——都是不改介面就能繼續往下做的暫行方案，
-> 沒有任何一則卡住交付。裁決之後若與暫行方案不同，改的是 WS-D 的檔案。
+> **狀態：Q1–Q5 全部已裁決並結案（2026-08-22 第一輪裁決，S2-* 見 `interfaces-stage2.md` §12）。**
+> Q6 為第二輪合併後新發現，待裁決。
+>
+> 每一則都保留提問全文，是為了讓「為什麼介面長這樣」有跡可循——只看結論會看不出當初的岔路在哪裡。
+> 每則末尾的「**裁決**」段落是開發者本人的決定與 WS-D 的落地情形。
 
 ---
 
@@ -41,6 +43,17 @@
 | B | 由開發者本人在合併 A-T8 之前手動 `git mv` 一份快照 | 一個人工步驟，忘了就沒有基準線 |
 | C | 不保留快照，接受 `--method legacy` 在 A-T8 之後失效，基準線只在 A-T8 合入**之前**跑一次 | 之後想重跑對照就沒得跑；換模型後也無法重驗 |
 
+
+> **裁決（S2-19，落地於第 10.1 條）：選項 A。**
+> `services/legacy/analyzePdf.js` 由 **WS-B** 從 A-T8 之前的 `aiService.js` 快照建立
+> （`git show e1740ca:exam_pro/services/aiService.js`），並歸 WS-B 所有。
+>
+> **WS-D 已照辦**：`eval/lib/legacyAdapter.js` 的解析順序不變（快照優先），
+> **指紋檢查照樣保留**——快照萬一取錯版本、或日後有人「順手」把它改成呼叫新 agent，
+> 那個警告是唯一會出聲的地方，成本只是一次 `String.includes`。
+> 檔頭註解已改寫成引用 S2-19。目前快照尚未建立，`--method legacy` 仍會退回 `aiService.js`
+> 並印出「尚未建立」的警告，這是預期行為。
+
 ---
 
 ## Q2（會影響 A-T13 是否真的能開啟）第 8 條：`FEATURE_PIPELINE` 的注入點需要 `app.js` 配合一行
@@ -70,6 +83,15 @@ res.type('html').send(
 
 由誰加？建議 **WS-A**（他在 A-T12 本來就要動 `routes/index.js` 與 `server.js`，
 `app.js` 與這兩支是同一層）。在那之前，本機驗收可用 `?pipeline=1` 手動開啟。
+
+
+> **裁決（S2-20，落地於第 10.1 條）：`app.js` 歸 WS-A，由 WS-A 在 `serveIndex()` 補
+> `__FEATURE_PIPELINE__` 的注入。**
+>
+> **WS-D 不動**：`index.html` 的 `<meta name="feature-pipeline">` 與 `review.js` 的
+> `parseBool` 讀法維持原樣。注入合入之前佔位字串會被判成 `false`（＝旗標關閉、走舊流程），
+> 這是安全的預設，已有單元測試守著；本機驗收仍可用 `?pipeline=1`。
+> 檔頭註解已從「需要有人補」改寫成引用 S2-20。
 
 ---
 
@@ -148,6 +170,27 @@ C 剩下的 6 題失敗全部可診斷，而且都指向同一件事——**單�
    那**不是 fixture 的真實分佈**（45 題裡只有 6 題長那樣）。改規則之後應該改寫成真實寫法，
    golden 才量得到真正的行為。
 
+
+> **裁決（S2-12，落地於第 4.2 條）：採 C，並加兩項補強。**
+> 抽取規則改為「**取最後一個 `$…$`**；該段含 `=` 或 `\approx` 就再取最後一個 `=`／`\approx`
+> 之後的片段；**只含上下標的片段（例如單位的 `$^2$`）視為單位的一部分跳過**，往前找上一段；
+> 沒有任何 `$…$` 就取整段文字最後一個 `=`／`\approx` 之後」。
+> 同時 S2-11 定案：**負號是數值的一部分**（`-1` 與 `1` 判 `disagree`），`±` 只與 `±` 比。
+>
+> **WS-D 已照辦**（`eval/golden/answer.json` v2）：
+> 1. 40 筆的 `claimed` 改回**真實寫法**（過程 = 結論），直接沿用 fixture 的 `answer_text` 原文——
+>    舊版為了不與舊規則牴觸而寫成「答案在最前面」，那不是 fixture 的真實分佈。
+> 2. `extraction_hazard` 從 2 筆減為 1 筆（`ans-047`），`expect.equivalent` 改回 `agree`
+>    的有 47/50 筆。
+> 3. 產生腳本內建一份 S2-12 的參考抽取器，**逐筆檢查 `claimed` 抽得到預期的答案，抽不到就拒絕產出**——
+>    產生過程中因此抓到兩筆標錯（`ans-045`／`ans-046` 的題目問的是夾角，不是餘弦值）。
+> 4. 新增 `test/unit/answerGolden.test.js`：250 個案例對 `utils/answerCompare.js` 全跑一遍。
+>    它用一個確定性探針判斷實作在哪一版——已是 S2-12 就硬斷言 250 筆，還是舊規則就印出
+>    目前的相符數並 skip，WS-C 更新 `extractFinalAnswer` 之後自動轉成硬斷言。
+>
+> **仍待 WS-C**：`utils/answerCompare.js` 目前是 S2-12 之前的實作（探針顯示
+> `claimed` 的最後一段 `$x = 4$` 抽不到 `4`），250 個案例目前 163 筆相符。
+
 ---
 
 ## Q4（會影響 `--suite classify` 量到的是不是第二層）第 3.3 條：classify 的 eval 輸入沒有定義
@@ -177,6 +220,18 @@ suite 另外會斷言「`source='gate'` 的筆數應為 0」，不為 0 就在�
 如果不寫進去，`agents/classify.js` 的作者完全有理由把「`chapter_confidence` 缺值時視為 1.0」
 當成合理的預設，那一改就會讓 classify suite 的數字整個失真，而報表上只會看到 accuracy 變好。
 
+
+> **裁決（S2-13，落地於第 3.3 條）：維持 WS-D 的做法，並把約定寫進介面。**
+> 第 3.3 條的 classify 那一列現在明文寫著：
+> 「`chapter_confidence` 缺值或 `0` 一律視為閘門不過，不得當成 1.0」，以及
+> 「**eval 的 `--suite classify` 固定餵 `{subject, chapter: decoy 或 '', chapter_confidence: 0, question_text}`
+> 且 `ctx.db = null`**，保證量到的是第二層；錄製 cassette 時同樣 `ctx.db = null`（`fewShotIds` 才可重現）」。
+>
+> **WS-D 已照辦**：輸入不變；`ctx.db` 從「會丟錯的假 db」改成 `null`（S2-8／S2-13），
+> 並補上 `ctx.config.features = { similar: false, pipeline: true }`——
+> 否則 agent 會先試向量最近鄰再失敗降級，白跑一次。
+> 「`source='gate'` 應為 0」的斷言**保留**：那是這條約定有沒有真的生效的唯一訊號。
+
 ---
 
 ## Q5（會影響公開樣卷能不能進版控）第 10.1 條與根 `.gitignore`：`*.pdf` 擋住 `sample_exam.pdf`
@@ -202,21 +257,117 @@ blob 的 sha256 現在與 `make_sample_pdf.js` 產出的完全相同。
 就會被 `*.pdf` 默默擋掉，而 `git status` 不會顯示它——症狀是 CI 上
 `--suite pipeline` 突然找不到檔案。
 
+
+> **裁決（S2-15）：根 `.gitignore` 加 `!exam_pro/eval/fixtures/*.pdf`（已由 S0 補上）。**
+> 樣卷以 **WS-D 的 `eval/fixtures/make_sample_pdf.js` 產出為準**，
+> WS-B 的 `scripts/make_sample_exam_pdf.js` 退場；cassette 要對 D 的樣卷重錄。
+>
+> **WS-D 不用再做什麼**：`git add -f` 的一次性做法從此不需要。
+> `.gitattributes` 的 `exam_pro/eval/fixtures/*.pdf binary` 保留——那條修的是
+> `text eol=lf` 把 PDF 當文字而少存一個位元組的問題，與 `.gitignore` 無關。
+
+---
+
+## Q6（第二輪新發現，待裁決）第 4.2 條：選項代號抽取對「B、D」「B.D.」只抽得到第一個
+
+**背景。** 改寫 answer golden 時對已合入的 `utils/answerCompare.js` 實測，發現多選題的
+代號抽取在兩種很自然的寫法上只抽得到第一個代號，結果從 `agree` 變成 `disagree`：
+
+| model.final_answer | claimed | 抽出 | 結果 |
+|---|---|---|---|
+| `(B)(D)` | `(B)(D)。…` | {B,D} | agree ✅ |
+| `BD` | `(B)(D)。…` | {B,D} | agree ✅ |
+| `B, D` | `(B)(D)。…` | {B,D} | agree ✅ |
+| **`B、D`** | `(B)(D)。…` | **{B}** | **disagree ❌** |
+| **`B.D.`** | `(B)(D)。…` | **{B}** | **disagree ❌** |
+
+**原因。** `extractOptionCodes()` 是三層由強到弱、**抽到就停**：
+括號型 → 標號型（`A.`／`A、`）→ 裸字母。
+`B、D` 會被第二層的 `LABELLED_OPTION_RE` 匹配到「`B、`」而回傳 `{B}` 並提早 return，
+第三層「整串只剩字母」的完整解讀因此永遠沒有機會執行。`B.D.` 同理。
+
+**為什麼要緊。** `disagree` 會直接變成 `answer_mismatch` 進複核佇列。
+這不是漏報而是**誤報**，而且集中在多選題——老師會反覆看到「答案對不上」，
+但兩邊其實一模一樣。第 4.2 條的原則是「比不出來回 `uncertain`，不回 `disagree`」，
+這裡卻是「比出一半就下結論」。
+
+**WS-D 目前的做法。** `eval/golden/answer.json` 的 `ans-014` 改用已驗證可用的 `B, D`
+（半形逗號），並在 `note` 指向本條。**沒有**把 `B、D` 寫成期望 `disagree`——
+那等於把一個缺陷寫進 golden 當成正確行為。
+
+**需要裁決的是。** 三個選項：
+
+| 選項 | 改法 | 代價 |
+|---|---|---|
+| A（建議） | 第二層改成「掃完整串再判斷」：若標號型只抽到 1 個、而整串去掉標點後**全是 A–H 字母**，就改用第三層的結果 | `utils/answerCompare.js` 十行內；WS-C 要加兩個案例 |
+| B | 在第二層的分隔字元集合裡把 `、` 與 `.` 也當成「代號之間的分隔」而非「代號的後綴」 | 會讓「`A.` 這種標號」與「`A、B` 這種列舉」的界線變模糊 |
+| C | 不改，並在第 4.2 條明文限定合法寫法只有 `(A)`／`A`／`A.`／連寫 | 最省事，但線上遇到 `B、D` 時仍會誤報，只是變成「已知且允許」 |
+
 ---
 
 ## 附：不是提問，但要通知其他 workstream 的事
 
-1. **`package.json` 的 `scripts` 已由 WS-D 加了七支**：`check:html`、`eval:classify`、
-   `eval:pipeline`、`eval:sample-pdf`、`compare:legacy`、`compare:pipeline`、`report:jobs`。
-   其中 `report:jobs` 指向 `scripts/report_jobs.js`（**WS-A 的 A-T15**，檔案尚未存在）。
-2. **新的 devDependency：`pdfkit`**，只給 `eval/fixtures/make_sample_pdf.js` 用，不在 CI 路徑上。
-3. **WS-A**：`pipeline/stateMachine.js` 合入後，`eval/lib/stateMachineShim.js` 會自動改用真實作，
-   `test/unit/evalPipeline.test.js` 的 15 項狀態機測試也會跟著改測真的。兩者行為若有出入，
-   那 15 項會第一個轉紅——請不要把它當成 eval 壞掉。
-4. **WS-C**：`utils/normalizeStem.js` 合入後，`test/unit/evalGolden2.test.js` 會比對
-   它與 `scripts/backfill_text_hash.js` 參考實作對 180 段文字的雜湊是否逐位元相同。
-   `eval/golden/dedup.json` 的 16 組 `expect_l0: 'hit'` 也全部靠這個實作，
-   規則一改那 16 組就會轉紅——那是刻意的（規則一改，全庫 `text_hash` 作廢）。
-5. **WS-B**：`eval/cassettes/` 是你的目錄。`--suite classify` 會用 `LLM_MODE=replay` 讀它；
-   在 cassette 錄好之前 suite 印 n/a、不擋 CI。錄好之後 replay miss 會直接讓 CI 那一步失敗
-   （第 5.2 條的訊息是凍結的，WS-D 不會攔截或改寫它）。
+> 更新於第二輪合併後（2026-08-22）。前五條是第一輪就有的，第 6–8 條是這一輪跑出來的。
+
+1. **`package.json` 的 `scripts` 由 WS-D 統一維護**，目前多了七支：`check:html`、
+   `eval:classify`、`eval:pipeline`、`eval:sample-pdf`、`compare:legacy`、
+   `compare:pipeline`、`report:jobs`。
+2. **devDependency `pdfkit`** 只給 `eval/fixtures/make_sample_pdf.js` 用，不在 CI 路徑上。
+3. **WS-A**：`pipeline/stateMachine.js` 已合入，`eval/lib/stateMachineShim.js` 已自動改用真實作，
+   `test/unit/evalPipeline.test.js` 的 15 項狀態機測試現在測的是真的，**全過**。
+4. **WS-C**：`utils/normalizeStem.js` 已合入，`test/unit/evalGolden2.test.js` 比對它與
+   `scripts/backfill_text_hash.js` 參考實作對 180 段文字的雜湊——**逐位元相同，全過**。
+   `eval/golden/dedup.json` 的 16 組 `expect_l0: 'hit'` 也全過。
+5. **WS-B**：`eval/cassettes/` 是你的目錄，WS-D 不碰。
+
+---
+
+### 6. ⚠️ WS-B：cassette 要對 **WS-D 的樣卷** 重錄（裁決 S2-15），目前是紅燈
+
+第二輪合併後，`eval/fixtures/sample_exam.pdf` 是 WS-D 產的 **10 題**版本
+（S2-15：WS-B 的 `scripts/make_sample_exam_pdf.js` 退場）。但 `eval/cassettes/extract/`
+裡的 cassette 還是對舊的 6 題樣卷錄的，鍵對不上。**同一個 key 在三個地方一起紅**：
+
+| 位置 | 症狀 |
+|---|---|
+| `test/unit/cassetteReplay.test.js`（**WS-B 的檔**） | 「extract：對自製的 sample_exam.pdf 回放出 6 題」→ replay miss，`npm test` 紅燈 |
+| `npm run eval:pipeline` | extract 節點 miss，整條管線跑不起來 → 紅燈 |
+| `npm run eval:classify` | 90 筆裡 82 筆 miss → 紅燈 |
+
+miss 的 key 都是 `83edf715c659…`（extract）。
+
+**WS-D 已做的事**：把 replay miss 從一般錯誤裡分出來，不再讓它偽裝成模型表現——
+`--suite classify` 原本會把 82 筆 miss 算成答錯而印出「accuracy 0.0667」，
+現在一律 n/a 並明說是 miss；`--suite pipeline` 的 `reason` 會指名是哪一支 cassette
+與「必須對這一份樣卷錄製（S2-15）」。
+
+**WS-B 要做的事**：`npm run eval:record`（需要金鑰）對現在這份 `sample_exam.pdf` 重錄，
+並把 `cassetteReplay.test.js` 裡「回放出 6 題」的期望改成 10 題。
+classify 的 cassette 也要補到涵蓋 `eval/golden/classify.json` 的 90 筆
+（目前只涵蓋 8 筆），否則 `--suite classify` 永遠沒有數字。
+
+### 7. ⚠️ WS-A：`test/integration/jobs.pg.test.js` 有一項還在斷言舊的 `text_hash`（裁決 S2-23）
+
+`approve 入庫：origin=pdf、chapter_src=human、text_hash 與 search_tsv 都有` 目前紅燈：
+
+```
+actual   'cad606ec7861adf0954db88bc1729d34a2c342e8d71c97f05a379a30eba1752e'   ← 對修正後的文字重算
+expected 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'   ← 沿用 payload 的假值
+```
+
+S2-23 已定案「approve 入庫時 `text_hash` **對修正後的 `question_text` 重算**，不沿用 payload 的值——
+人改過文字，雜湊就該變；**A 的整合測試據此修正**」。實作已經照做了，測試還沒跟上。
+這一項不在 WS-D 的所有權內（S2-2：不得改別人的測試檔），所以留給 WS-A。
+
+### 8. WS-A：`app.js` 的 `__FEATURE_PIPELINE__` 注入尚未合入（裁決 S2-20）
+
+目前 `serveIndex()` 只替換 `__API_KEY__`。在補上之前，前端讀到的是佔位字串、
+`parseBool` 判成 `false`＝旗標關閉、走舊流程——這是安全的預設，不是壞掉，
+且有單元測試守著。補上之後 WS-D 這邊不需要任何改動。
+
+### 9. 給所有人：`EVAL_FORK_PR` 這個新的 CI 環境變數
+
+`ci.yml` 的 integration job 多了 `EVAL_FORK_PR: ${{ github.event.pull_request.head.repo.fork }}`。
+它只影響一件事：fork PR 的 replay miss 降為 warning 而不是紅燈（規劃 §5.3.3、介面第 5.2 條，
+「這個判斷不在 `services/llm` 裡」）。判斷本身在 `eval/lib/replayMiss.js`，
+比對只到 `--suite ` 為止（裁決 S2-14）。本機與 main 上不設這個變數，miss 一律紅燈。

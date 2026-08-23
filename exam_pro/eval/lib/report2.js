@@ -72,7 +72,10 @@ function markdownClassify(res) {
 
 /** pipeline suite 的 Markdown */
 function markdownPipeline(res) {
-    const m = res.measured.pipeline;
+    // measured.pipeline 為 null = 這一輪根本沒跑起來（例如 replay miss）。
+    // 用一組全 null 的替身讓報表照常印出來——report 的價值在這種時候最高，
+    // 因為 meta 會告訴你是哪個 agent、哪支 cassette 出的問題。
+    const m = res.measured.pipeline || { saved_rate: null, gate_pass_rate: null, answer_agree_rate: null, n: 0 };
     const c = res.counts;
     const lines = [
         '',

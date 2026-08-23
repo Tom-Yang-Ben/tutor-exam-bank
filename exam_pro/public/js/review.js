@@ -15,9 +15,9 @@
 //      （<meta name="feature-pipeline">，語意與 <meta name="api-key"> 完全一致）。
 //      注入點沒被後端替換掉時內容仍是佔位字串，parseBool 會判為 false——
 //      也就是「後端沒開這個旗標」的安全預設。
-//      ⚠️ app.js 的 serveIndex 目前只替換 __API_KEY__，需要**再加一行**替換
-//         __FEATURE_PIPELINE__（app.js 不在 WS-D 的所有權表內，已寫進 docs/questions2-wsD.md）。
-//         在那之前可用 ?pipeline=1 手動開啟，方便本機驗收。
+//      注入由 **WS-A** 在 `app.js` 的 `serveIndex()` 補上（裁決 S2-20：`app.js` 歸 WS-A）。
+//      本檔的讀法不變；在注入合入之前佔位字串會被 parseBool 判成 false（＝旗標關閉、走舊流程），
+//      本機驗收可用 ?pipeline=1 手動開啟。
 //
 //   3. **舊流程完全不動**（第 8 條：「舊流程 /analyze-pdf + batch-save-questions 保留可用，
 //      既有測試是契約」）。旗標關閉時本檔只掛複核分頁的空狀態，不碰上傳按鈕；
@@ -356,16 +356,46 @@ function jobStatusLine() {
     return node;
 }
 
+// jobs.state 的五個值（第 2.1 條）→ 給人看的一句話。
+// 裁決 S2-22：**queued／extracting 期間 counts 一定全是 0**——job_questions 還沒被建出來。
+// 那不是「一題都沒過」，而是「還沒開始逐題推進」。把它顯示成「已入庫 0／待複核 0」
+// 會讓老師以為出事了，所以這兩個狀態改成只顯示進度文字，不顯示計數。
+export const JOB_STATE_LABEL = {
+    queued: '排隊中',
+    extracting: '拆題中',
+    processing: '逐題處理中',
+    done: '已完成',
+    failed: '失敗'
+};
+
+/** @param {string} state @returns {boolean} counts 在這個狀態下有沒有意義 */
+export function countsMeaningful(state) {
+    return state !== 'queued' && state !== 'extracting';
+}
+
 function renderJobStatus(job) {
     const node = jobStatusLine();
     node.classList.remove('hidden');
     const c = job.counts || {};
     const cost = typeof job.cost_usd === 'number' ? job.cost_usd.toFixed(4) : '—';
     const secs = Math.round((job.elapsed_ms || 0) / 1000);
-    node.textContent =
-        `任務 #${job.id}（${job.state}）：已入庫 ${c.saved ?? 0}／待複核 ${c.needs_review ?? 0}／` +
-        `處理中 ${c.pending ?? 0}${c.rejected ? `／不採用 ${c.rejected}` : ''}` +
-        `　·　${secs} 秒　·　$${cost} / $${job.budget_usd}`;
+    const label = JOB_STATE_LABEL[job.state] || job.state;
+
+    const head = `任務 #${job.id}（${label}）：`;
+    const body = countsMeaningful(job.state)
+        ? `已入庫 ${c.saved ?? 0}／待複核 ${c.needs_review ?? 0}／處理中 ${c.pending ?? 0}` +
+          `${c.rejected ? `／不採用 ${c.rejected}` : ''}`
+        // queued／extracting：counts 全 0 是正常的，不要印出來嚇人（裁決 S2-22）
+        : (job.state === 'queued' ? '已排隊，等待 worker 認領' : '正在拆題，尚未逐題處理');
+    const tail = `　·　${secs} 秒　·　$${cost} / $${job.budget_usd}`;
+
+    node.textContent = head + body + tail;
+    node.classList.toggle('border-amber-200', !countsMeaningful(job.state));
+    node.classList.toggle('bg-amber-50', !countsMeaningful(job.state));
+    node.classList.toggle('text-amber-800', !countsMeaningful(job.state));
+    node.classList.toggle('border-indigo-200', countsMeaningful(job.state));
+    node.classList.toggle('bg-indigo-50', countsMeaningful(job.state));
+    node.classList.toggle('text-indigo-800', countsMeaningful(job.state));
 }
 
 let pollTimer = null;

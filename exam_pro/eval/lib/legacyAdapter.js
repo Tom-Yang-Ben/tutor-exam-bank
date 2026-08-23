@@ -17,8 +17,10 @@
 //   3. 算 prompt_hash：只雜湊原始碼裡的長樣板字串（＝ prompt 本體），
 //      不雜湊整個檔案——這樣「改了 prompt」與「改了周邊程式」在報表上分得開。
 //
-// ⚠️ services/legacy/analyzePdf.js **不在任何 workstream 的所有權表內**（interfaces-stage2.md 第 10.1 條）。
-//    WS-D 不會自己建它（硬規則 1）。已寫進 docs/questions2-wsD.md 請開發者裁決由誰保留這份快照。
+// 裁決 S2-19：`services/legacy/analyzePdf.js` 由 **WS-B** 從 A-T8 之前的 `aiService.js` 快照建立
+//    （`git show e1740ca:exam_pro/services/aiService.js`），歸 WS-B（第 10.1 條）。
+//    **指紋檢查照樣保留**：快照萬一取錯版本、或日後有人「順手」把它改成呼叫新 agent，
+//    這裡的警告是唯一會出聲的地方。檢查成本是一次 `String.includes`。
 // ─────────────────────────────────────────────────────────────
 
 const fs = require('fs');

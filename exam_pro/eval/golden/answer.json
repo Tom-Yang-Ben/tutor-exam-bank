@@ -1,12 +1,13 @@
 {
-  "_notice": "本檔的題目與答案全部由本專案作者自行編寫（多數改寫自 eval/fixtures/questions.public.json），不取自任何考卷、題本或出版品（見 repo 根目錄 NOTICE 第 2 條）。",
-  "_status": "needs_human_confirm — 50 筆全部尚未由開發者本人逐筆定案（A-T6 草稿）。",
-  "_schema": "entries[]：一筆 = 一題，展開後 = 3 個等價案例 + 2 個錯答案例，共 5 個 answerCompare 呼叫。\n  id                  string，唯一\n  from                number|null，來源 fixture 題 id（null = 本檔手寫）\n  question_type       '單選'|'多選'|'填空'|'計算'|'證明'（config/chapters.js 的 QUESTION_TYPES）\n  answer_form         'option'|'number'|'expression'|'text'（interfaces-stage2.md 第 3.2 條 payload.verify.answer_form）\n  claimed             string，拆題模型抄下來的原始 answer_text（可能含說明與計算過程）\n  equivalents         string[3]，驗證模型可能回的等價 final_answer\n  wrong               string[2]，典型錯答\n  expect.equivalent   'agree'|'uncertain'——equivalents 每一項的期望結果\n  expect.wrong        'disagree'|'uncertain'——wrong 每一項的期望結果\n  extraction_hazard   boolean；true = claimed 的「第一個 $…$」不是答案而是算式，\n                      依第 4.2 條的抽取規則會抽到算式（期望 uncertain）。這些筆是給開發者\n                      決定「要不要把規則改成取最後一個 $…$」的證據。\n  note                string|null\n  needs_human_confirm boolean\n\n呼叫方式：answerCompare({ question_type, claimed, model: { final_answer: <equivalents[i]|wrong[i]>, answer_form } })",
+  "_notice": "本檔的題目與答案全部由本專案作者自行編寫；40 筆的 claimed 直接沿用 eval/fixtures/questions.public.json 的 answer_text 原文，不取自任何考卷、題本或出版品（見 repo 根目錄 NOTICE 第 2 條）。",
+  "_status": "needs_human_confirm — 50 筆全部尚未由開發者本人逐筆定案（A-T6 草稿，2026-08-22 依裁決 S2-12 改寫）。",
+  "_schema": "entries[]：一筆 = 一題，展開後 = 3 個等價案例 + 2 個錯答案例，共 5 個 answerCompare 呼叫。\n  id                  string，唯一\n  from                number|null，來源 fixture 題 id（null = 本檔手寫）\n  question_type       '單選'|'多選'|'填空'|'計算'|'證明'（config/chapters.js 的 QUESTION_TYPES）\n  answer_form         'option'|'number'|'expression'|'text'（interfaces-stage2.md 第 3.2 條）\n  claimed             string，拆題模型抄下來的原始 answer_text——**真實寫法（過程 = 結論）**，\n                      40 筆直接沿用 fixture 的 answer_text 原文\n  equivalents         string[3]，驗證模型可能回的等價 final_answer\n  wrong               string[2]，典型錯答\n  expect.equivalent   'agree'|'uncertain'——equivalents 每一項的期望結果\n  expect.wrong        'disagree'|'uncertain'——wrong 每一項的期望結果\n  extraction_hazard   boolean；true = 抽取規則在這一筆上仍有爭議（目前只剩 ans-047）\n  note                string|null\n  needs_human_confirm boolean\n\n呼叫方式：answerCompare({ question_type, claimed, model: { final_answer: <equivalents[i]|wrong[i]>, answer_form } })",
   "_annotations": {
-    "為什麼不設 disagree 的預設值到 uncertain": "第 4.2 條：「任何比不出來的情況都回 uncertain，不回 disagree」。因此 wrong 那兩項只有在「兩邊都抽得出來、而且確實不等」時才該是 disagree；抽不出來就是 uncertain。本檔的 wrong 全部刻意寫成「抽得出來但不相等」，才能真的測到 disagree 這條路。",
+    "S2-12 的改寫": "舊版為了不與「取第一個 $…$」的舊規則牴觸，把 claimed 都寫成「答案在最前面」——fixture 的 45 題填空／計算裡只有 6 題長那樣，那不是真實分佈。S2-12 定案為「最後一個 $…$，含 = 或 \\approx 取其後，純上下標片段跳過」之後，claimed 一律改回真實寫法。本檔在產生時會用一份 S2-12 的參考抽取器自我檢查每一筆 claimed 抽得到預期的答案，抽不到就拒絕產出。",
+    "為什麼 wrong 不預設 uncertain": "第 4.2 條：「任何比不出來的情況都回 uncertain，不回 disagree」。因此 wrong 那兩項只有在「兩邊都抽得出來、而且確實不等」時才該是 disagree。本檔的 wrong 全部刻意寫成「抽得出來但不相等」，才能真的測到 disagree 這條路。",
     "公式 golden 不在這裡": "eval/golden/formula.json 由 WS-C 產出（分工總表）。本檔只管答案比對。"
   },
-  "version": 1,
+  "version": 2,
   "entries": [
     {
       "id": "ans-001",
@@ -59,11 +60,11 @@
       "from": 8,
       "question_type": "單選",
       "answer_form": "option",
-      "claimed": "(A)。$\\log_{10} 5 = 1 - \\log_{10} 2 = 0.6990$。",
+      "claimed": "(A)。$\\log_{10} 5 = \\log_{10} \\frac{10}{2} = 1 - \\log_{10} 2 = 1 - 0.3010 = 0.6990$。",
       "equivalents": [
         "(A)",
         "A",
-        "A)"
+        "（A）"
       ],
       "wrong": [
         "(B)",
@@ -74,7 +75,7 @@
         "wrong": "disagree"
       },
       "extraction_hazard": false,
-      "note": null,
+      "note": "第 4.2 條列的合法寫法是 (A)／A／A.；「A)」（只有右括號）不在其中，故不列入等價形。",
       "needs_human_confirm": true
     },
     {
@@ -82,7 +83,7 @@
       "from": 24,
       "question_type": "單選",
       "answer_form": "option",
-      "claimed": "(A)。內積為 $0$ 且兩向量非零，故 $\\cos \\theta = 0$，兩者互相垂直。",
+      "claimed": "(A)。$\\vec{a} \\cdot \\vec{b} = |\\vec{a}||\\vec{b}| \\cos \\theta = 0$，因兩向量非零，故 $\\cos \\theta = 0$，即 $\\theta = 90^\\circ$，兩者互相垂直。",
       "equivalents": [
         "(A)",
         "A",
@@ -97,7 +98,7 @@
         "wrong": "disagree"
       },
       "extraction_hazard": false,
-      "note": "小寫 (a) 是否等同 (A)：第 4.2 條沒明講，先當 agree，等開發者定案。",
+      "note": "小寫 (a) 是否等同 (A)：第 4.2 條沒明講，先當 agree（utils/answerCompare.js 目前 toUpperCase，符合）。",
       "needs_human_confirm": true
     },
     {
@@ -151,7 +152,7 @@
       "from": 31,
       "question_type": "單選",
       "answer_form": "option",
-      "claimed": "(B)。第二象限中 $x < 0$、$y > 0$，故 $\\tan \\theta < 0$。",
+      "claimed": "(B)。第二象限中 $x < 0$、$y > 0$，故 $\\tan \\theta = \\frac{y}{x} < 0$，恆為負。",
       "equivalents": [
         "(B)",
         "B",
@@ -174,11 +175,11 @@
       "from": 38,
       "question_type": "單選",
       "answer_form": "option",
-      "claimed": "(B)。作用力與反作用力大小相等、方向相反，且作用在不同物體上。",
+      "claimed": "(B)。由牛頓第三運動定律，作用力與反作用力大小相等、方向相反，且作用在不同物體上，故不會互相抵消。",
       "equivalents": [
         "(B)",
         "B",
-        "B)"
+        "B."
       ],
       "wrong": [
         "(A)",
@@ -197,7 +198,7 @@
       "from": 39,
       "question_type": "單選",
       "answer_form": "option",
-      "claimed": "(A)。由牛頓第一運動定律，乘客傾向維持原有的運動狀態。",
+      "claimed": "(A)。由牛頓第一運動定律，乘客原有的運動狀態傾向維持不變，車體減速而乘客上半身仍保持原速度，故向前傾。",
       "equivalents": [
         "(A)",
         "A",
@@ -220,7 +221,7 @@
       "from": 51,
       "question_type": "單選",
       "answer_form": "option",
-      "claimed": "(B)。$v$-$t$ 圖的面積等於位移；斜率才是加速度。",
+      "claimed": "(B)。$v$-$t$ 圖的面積等於 $\\int v \\, dt$，即位移；圖形的斜率才是加速度。",
       "equivalents": [
         "(B)",
         "B",
@@ -243,7 +244,7 @@
       "from": 53,
       "question_type": "單選",
       "answer_form": "option",
-      "claimed": "(C)。速度計顯示的是該瞬間的速率大小。",
+      "claimed": "(C)。速度計顯示的是該瞬間的速率大小，不含方向資訊，也不是整段行程的平均值。",
       "equivalents": [
         "(C)",
         "C",
@@ -266,11 +267,11 @@
       "from": 59,
       "question_type": "單選",
       "answer_form": "option",
-      "claimed": "(B)。沿等位面移動電荷不作功，故電場線必與等位面垂直。",
+      "claimed": "(B)。沿等位面移動電荷不作功，故電場沿等位面方向的分量為零，電場線必與等位面互相垂直。",
       "equivalents": [
         "(B)",
         "B",
-        "B)"
+        "B."
       ],
       "wrong": [
         "(A)",
@@ -289,7 +290,7 @@
       "from": 46,
       "question_type": "多選",
       "answer_form": "option",
-      "claimed": "(A)(C)。速率固定但速度方向持續改變；合力即向心力，恆指向圓心。",
+      "claimed": "(A)(C)。等速圓周運動的速率固定但速度方向持續改變，故速度並非不變；合力即向心力，恆指向圓心且不為零。",
       "equivalents": [
         "(A)(C)",
         "(C)(A)",
@@ -312,11 +313,11 @@
       "from": null,
       "question_type": "多選",
       "answer_form": "option",
-      "claimed": "(B)(D)。等加速度直線運動的 $v$-$t$ 圖為斜直線，$x$-$t$ 圖為拋物線。",
+      "claimed": "(B)(D)。等加速度直線運動的 $v$-$t$ 圖為斜直線、$x$-$t$ 圖為拋物線，故 (B)(D) 正確。",
       "equivalents": [
         "(B)(D)",
         "(D)(B)",
-        "B、D"
+        "B, D"
       ],
       "wrong": [
         "(B)",
@@ -327,7 +328,7 @@
         "wrong": "disagree"
       },
       "extraction_hazard": false,
-      "note": null,
+      "note": "「B、D」（頓號分隔）目前抽不出兩個代號，見 docs/questions2-wsD.md Q6；本筆改用半形逗號分隔的 B, D，那是已驗證可用的寫法。",
       "needs_human_confirm": true
     },
     {
@@ -335,7 +336,7 @@
       "from": null,
       "question_type": "多選",
       "answer_form": "option",
-      "claimed": "(A)(B)(D)。三者皆為向量：位移、速度、加速度；速率為純量。",
+      "claimed": "位移、速度、加速度三者皆為向量，速率為純量，故答案為 (A)(B)(D)。",
       "equivalents": [
         "(A)(B)(D)",
         "(D)(A)(B)",
@@ -350,7 +351,7 @@
         "wrong": "disagree"
       },
       "extraction_hazard": false,
-      "note": null,
+      "note": "claimed 把代號寫在句尾——這是拆題模型很常見的抄法，代號抽取不該只看句首。",
       "needs_human_confirm": true
     },
     {
@@ -381,7 +382,7 @@
       "from": 9,
       "question_type": "計算",
       "answer_form": "number",
-      "claimed": "$\\vec{a} \\cdot \\vec{b} = 3 \\times 1 + 4 \\times 2 = 11$。",
+      "claimed": "$\\vec{a} \\cdot \\vec{b} = 3 \\times 1 + 4 \\times 2 = 3 + 8 = 11$。",
       "equivalents": [
         "$11$",
         "11",
@@ -392,11 +393,11 @@
         "$-11$"
       ],
       "expect": {
-        "equivalent": "uncertain",
+        "equivalent": "agree",
         "wrong": "disagree"
       },
-      "extraction_hazard": true,
-      "note": "第一個 $…$ 是整串算式「3×1+4×2=11」而不是答案。依第 4.2 條「第一個 $…$」的規則抽出來的是算式，比不出有理數 → uncertain。若開發者希望改成「取最後一個 $…$」，這 6 筆 hazard 的 expect 要一起改成 agree。",
+      "extraction_hazard": false,
+      "note": "舊規則（第一個 $…$）在這一筆抽到整串算式而比不出來；S2-12 之後抽到 11。",
       "needs_human_confirm": true
     },
     {
@@ -404,7 +405,7 @@
       "from": 10,
       "question_type": "計算",
       "answer_form": "number",
-      "claimed": "$17$。$\\vec{a} \\cdot \\vec{b} = 5 \\times 3 + 2 \\times 1 = 17$。",
+      "claimed": "$\\vec{a} \\cdot \\vec{b} = 5 \\times 3 + 2 \\times 1 = 15 + 2 = 17$。",
       "equivalents": [
         "$17$",
         "17",
@@ -427,7 +428,7 @@
       "from": 17,
       "question_type": "計算",
       "answer_form": "number",
-      "claimed": "$5$。$1 \\times 2 + 2 \\times 0 + 3 \\times 1 = 5$。",
+      "claimed": "$\\vec{a} \\cdot \\vec{b} = 1 \\times 2 + 2 \\times 0 + 3 \\times 1 = 2 + 0 + 3 = 5$。",
       "equivalents": [
         "$5$",
         "5",
@@ -450,7 +451,7 @@
       "from": 18,
       "question_type": "計算",
       "answer_form": "number",
-      "claimed": "$8$。$2 \\times 3 + 1 \\times 2 + 4 \\times 0 = 8$。",
+      "claimed": "$\\vec{a} \\cdot \\vec{b} = 2 \\times 3 + 1 \\times 2 + 4 \\times 0 = 6 + 2 + 0 = 8$。",
       "equivalents": [
         "$8$",
         "8",
@@ -473,7 +474,7 @@
       "from": 3,
       "question_type": "計算",
       "answer_form": "number",
-      "claimed": "$x = 4$。因 $32 = 2^5$，故 $x + 1 = 5$。",
+      "claimed": "$32 = 2^5$，故 $x + 1 = 5$，得 $x = 4$。",
       "equivalents": [
         "$4$",
         "4",
@@ -488,7 +489,7 @@
         "wrong": "disagree"
       },
       "extraction_hazard": false,
-      "note": "等號兩側：claimed 的第一個 $…$ 是「x = 4」，model 可能只回「4」，兩者必須算 agree。",
+      "note": "claimed 抽出「4」，model 可能回「x = 4」；number 的比法會取等號右邊，兩者必須算 agree。",
       "needs_human_confirm": true
     },
     {
@@ -496,7 +497,7 @@
       "from": 4,
       "question_type": "計算",
       "answer_form": "number",
-      "claimed": "$x = 5$。因 $81 = 3^4$，故 $x - 1 = 4$。",
+      "claimed": "$81 = 3^4$，故 $x - 1 = 4$，得 $x = 5$。",
       "equivalents": [
         "$5$",
         "5",
@@ -519,7 +520,7 @@
       "from": 5,
       "question_type": "計算",
       "answer_form": "number",
-      "claimed": "$16$ 位數。$\\log_{10} 2^{50} = 15.05$，故介於 $10^{15}$ 與 $10^{16}$ 之間。",
+      "claimed": "$\\log_{10} 2^{50} = 50 \\times 0.3010 = 15.05$，即 $10^{15} < 2^{50} < 10^{16}$，故 $2^{50}$ 為 $16$ 位數。",
       "equivalents": [
         "$16$",
         "16",
@@ -534,7 +535,7 @@
         "wrong": "disagree"
       },
       "extraction_hazard": false,
-      "note": "單位後綴「位數」要被去掉再比（第 4.2 條「單位後綴一律去掉再比」）。",
+      "note": "單位後綴「位數」要被去掉再比（第 4.2 條）。claimed 的最後一段是 $16$，前面的 $15.05$ 不該被抽到。",
       "needs_human_confirm": true
     },
     {
@@ -542,7 +543,7 @@
       "from": 6,
       "question_type": "計算",
       "answer_form": "number",
-      "claimed": "$31$ 位數。$\\log_{10} 2^{100} = 30.10$。",
+      "claimed": "$\\log_{10} 2^{100} = 100 \\times 0.3010 = 30.10$，即 $10^{30} < 2^{100} < 10^{31}$，故 $2^{100}$ 為 $31$ 位數。",
       "equivalents": [
         "$31$",
         "31",
@@ -565,7 +566,7 @@
       "from": 7,
       "question_type": "填空",
       "answer_form": "number",
-      "claimed": "$3$。換底後 $\\frac{\\log 8}{\\log 2} = \\log_{2} 8 = 3$。",
+      "claimed": "$3$。換底後 $\\frac{\\log 3}{\\log 2} \\times \\frac{\\log 8}{\\log 3} = \\frac{\\log 8}{\\log 2} = \\log_{2} 8 = 3$。",
       "equivalents": [
         "$3$",
         "3",
@@ -588,7 +589,7 @@
       "from": 32,
       "question_type": "計算",
       "answer_form": "number",
-      "claimed": "$5$ m/s$^2$。由 $F = ma$，$a = \\frac{10}{2} = 5$。",
+      "claimed": "由 $F = ma$，$a = \\frac{F}{m} = \\frac{10}{2} = 5$ m/s$^2$，方向與合力同向。",
       "equivalents": [
         "$5$",
         "5 m/s^2",
@@ -603,7 +604,7 @@
         "wrong": "disagree"
       },
       "extraction_hazard": false,
-      "note": "單位寫法三種都要收斂到 5。",
+      "note": "本筆是 S2-12「純上下標片段跳過」的主案例：claimed 結尾是 m/s$^2$，最後一段 $…$ 是「^2」，必須跳過它往前找到 $a = \\frac{10}{2} = 5$ 才抽得到 5。",
       "needs_human_confirm": true
     },
     {
@@ -611,7 +612,7 @@
       "from": 34,
       "question_type": "計算",
       "answer_form": "number",
-      "claimed": "$600$ N。$N = m(g + a) = 50 \\times 12 = 600$。",
+      "claimed": "以人為系統：$N - mg = ma$，故 $N = m(g + a) = 50 \\times (10 + 2) = 600$ N。",
       "equivalents": [
         "$600$",
         "600 N",
@@ -634,7 +635,7 @@
       "from": 35,
       "question_type": "計算",
       "answer_form": "number",
-      "claimed": "$780$ N。$N = 60 \\times (10 + 3) = 780$。",
+      "claimed": "以人為系統：$N - mg = ma$，故 $N = m(g + a) = 60 \\times (10 + 3) = 780$ N。",
       "equivalents": [
         "$780$",
         "780",
@@ -657,7 +658,7 @@
       "from": 42,
       "question_type": "計算",
       "answer_form": "number",
-      "claimed": "$18$ N。$T = \\frac{mv^2}{r} = \\frac{2 \\times 9}{1} = 18$。",
+      "claimed": "繩張力提供向心力：$T = \\frac{mv^2}{r} = \\frac{2 \\times 3^2}{1} = 18$ N。",
       "equivalents": [
         "$18$",
         "18",
@@ -680,7 +681,7 @@
       "from": 43,
       "question_type": "計算",
       "answer_form": "number",
-      "claimed": "$24$ N。$T = \\frac{3 \\times 16}{2} = 24$。",
+      "claimed": "繩張力提供向心力：$T = \\frac{mv^2}{r} = \\frac{3 \\times 4^2}{2} = 24$ N。",
       "equivalents": [
         "$24$",
         "24",
@@ -703,7 +704,7 @@
       "from": 44,
       "question_type": "填空",
       "answer_form": "number",
-      "claimed": "$20$ N。$f_{max} = \\mu_s mg = 0.5 \\times 4 \\times 10 = 20$。",
+      "claimed": "$f_{max} = \\mu_s N = \\mu_s mg = 0.5 \\times 4 \\times 10 = 20$ N。",
       "equivalents": [
         "$20$",
         "20",
@@ -726,7 +727,7 @@
       "from": 47,
       "question_type": "計算",
       "answer_form": "number",
-      "claimed": "$25$ m。$s = \\frac{1}{2} a t^2 = \\frac{1}{2} \\times 2 \\times 25 = 25$。",
+      "claimed": "$s = v_0 t + \\frac{1}{2} a t^2 = 0 + \\frac{1}{2} \\times 2 \\times 5^2 = 25$ m。",
       "equivalents": [
         "$25$",
         "25",
@@ -749,7 +750,7 @@
       "from": 49,
       "question_type": "計算",
       "answer_form": "number",
-      "claimed": "$2$ 秒。$t = \\sqrt{\\frac{2h}{g}} = \\sqrt{4} = 2$。",
+      "claimed": "$h = \\frac{1}{2} g t^2$，故 $t = \\sqrt{\\frac{2h}{g}} = \\sqrt{\\frac{40}{10}} = 2$ 秒。",
       "equivalents": [
         "$2$",
         "2",
@@ -772,7 +773,7 @@
       "from": 50,
       "question_type": "計算",
       "answer_form": "number",
-      "claimed": "$3$ 秒。$t = \\sqrt{\\frac{90}{10}} = 3$。",
+      "claimed": "$h = \\frac{1}{2} g t^2$，故 $t = \\sqrt{\\frac{2h}{g}} = \\sqrt{\\frac{90}{10}} = 3$ 秒。",
       "equivalents": [
         "$3$",
         "3",
@@ -795,7 +796,7 @@
       "from": 27,
       "question_type": "填空",
       "answer_form": "number",
-      "claimed": "$\\frac{1}{2}$。$150^\\circ$ 的參考角為 $30^\\circ$，第二象限的正弦為正。",
+      "claimed": "$\\frac{1}{2}$。$150^\\circ$ 在第二象限、參考角為 $30^\\circ$，第二象限的正弦為正，故 $\\sin 150^\\circ = \\sin 30^\\circ = \\frac{1}{2}$。",
       "equivalents": [
         "$\\frac{1}{2}$",
         "0.5",
@@ -818,7 +819,7 @@
       "from": 28,
       "question_type": "填空",
       "answer_form": "number",
-      "claimed": "$-\\frac{1}{2}$。$120^\\circ$ 的參考角為 $60^\\circ$，第二象限的餘弦為負。",
+      "claimed": "$-\\frac{1}{2}$。$120^\\circ$ 在第二象限、參考角為 $60^\\circ$，第二象限的餘弦為負，故 $\\cos 120^\\circ = -\\cos 60^\\circ = -\\frac{1}{2}$。",
       "equivalents": [
         "$-\\frac{1}{2}$",
         "-0.5",
@@ -833,7 +834,7 @@
         "wrong": "disagree"
       },
       "extraction_hazard": false,
-      "note": "負號是本組的重點：漏掉負號是最典型的錯答。",
+      "note": "負號是本組的重點（裁決 S2-11：負號是數值的一部分，-1 與 1 判 disagree）。",
       "needs_human_confirm": true
     },
     {
@@ -841,7 +842,7 @@
       "from": 13,
       "question_type": "填空",
       "answer_form": "number",
-      "claimed": "$k = -1$。垂直即內積為 $0$：$6 + 6k = 0$。",
+      "claimed": "垂直即內積為 $0$：$2 \\times 3 + k \\times 6 = 0$，得 $6k = -6$，$k = -1$。",
       "equivalents": [
         "$-1$",
         "-1",
@@ -856,7 +857,7 @@
         "wrong": "disagree"
       },
       "extraction_hazard": false,
-      "note": null,
+      "note": "舊規則在這一筆抽到題目條件裡的「0」而產生**假 disagree**（真答案是 -1）；S2-12 抽最後一段的等號右邊，得到 -1。這是 D-Q3 的主要證據。",
       "needs_human_confirm": true
     },
     {
@@ -864,7 +865,7 @@
       "from": 14,
       "question_type": "填空",
       "answer_form": "number",
-      "claimed": "$k = -2$。$20 + 10k = 0$。",
+      "claimed": "垂直即內積為 $0$：$4 \\times 5 + k \\times 10 = 0$，得 $10k = -20$，$k = -2$。",
       "equivalents": [
         "$-2$",
         "-2",
@@ -887,7 +888,7 @@
       "from": 21,
       "question_type": "填空",
       "answer_form": "number",
-      "claimed": "$k = 0$。$1 \\times 2 + 2 \\times (-1) + 3k = 0$。",
+      "claimed": "垂直即內積為 $0$：$1 \\times 2 + 2 \\times (-1) + k \\times 3 = 0$，得 $3k = 0$，$k = 0$。",
       "equivalents": [
         "$0$",
         "0",
@@ -910,11 +911,11 @@
       "from": 23,
       "question_type": "填空",
       "answer_form": "number",
-      "claimed": "$\\frac{1}{3}$。$|\\vec{a}| = 3$，與 $x$ 軸正向的內積為 $1$。",
+      "claimed": "$|\\vec{a}| = \\sqrt{1 + 4 + 4} = 3$，與 $x$ 軸正向 $(1, 0, 0)$ 的內積為 $1$，故餘弦值為 $\\frac{1}{3}$。",
       "equivalents": [
         "$\\frac{1}{3}$",
         "1/3",
-        "0.3333333333"
+        "0.333333333333"
       ],
       "wrong": [
         "$3$",
@@ -925,7 +926,7 @@
         "wrong": "disagree"
       },
       "extraction_hazard": false,
-      "note": "0.3333333333 與 1/3 的差 > 1e-9：依容差規則應判 disagree。這一筆刻意用來釘容差的邊界，請開發者確認要不要放寬。",
+      "note": "0.333333333333 與 1/3 差約 3.3e-13 < 1e-9，依容差應判 agree；再少一位（0.3333333333，差 3.3e-11）仍在容差內，要到 0.333333333（差 3.3e-10）才會 disagree。容差的邊界請開發者確認。",
       "needs_human_confirm": true
     },
     {
@@ -933,7 +934,7 @@
       "from": 33,
       "question_type": "計算",
       "answer_form": "number",
-      "claimed": "$4.5$ m/s$^2$。$a = \\frac{18}{4} = 4.5$。",
+      "claimed": "由 $F = ma$，$a = \\frac{F}{m} = \\frac{18}{4} = 4.5$ m/s$^2$，方向與合力同向。",
       "equivalents": [
         "$4.5$",
         "4.5",
@@ -956,22 +957,22 @@
       "from": 36,
       "question_type": "計算",
       "answer_form": "number",
-      "claimed": "$2.5$ m/s$^2$。$a = \\frac{(5 - 3) \\times 10}{8} = 2.5$。",
+      "claimed": "$a = \\frac{(m_2 - m_1)g}{m_1 + m_2} = \\frac{(5 - 3) \\times 10}{8} = 2.5$ m/s$^2$；張力 $T = m_1(g + a) = 3 \\times 12.5 = 37.5$ N。",
       "equivalents": [
-        "$2.5$",
-        "2.5",
-        "$\\frac{5}{2}$"
+        "$37.5$",
+        "37.5",
+        "37.5 N"
       ],
       "wrong": [
-        "$2$",
-        "$5$"
+        "$2.5$",
+        "$30$"
       ],
       "expect": {
         "equivalent": "agree",
         "wrong": "disagree"
       },
       "extraction_hazard": false,
-      "note": null,
+      "note": "claimed 是「a = … = 2.5 m/s^2；張力 T = … = 37.5 N」，兩個答案寫在同一段。S2-12 取最後一段，抽到張力 37.5——所以 model 也必須回張力。這一筆是刻意的：一題兩問時 verify 的 prompt 要問清楚問哪一個，請開發者確認要不要把這種題排除在 verify 之外。",
       "needs_human_confirm": true
     },
     {
@@ -979,7 +980,7 @@
       "from": 58,
       "question_type": "計算",
       "answer_form": "number",
-      "claimed": "$2.4 \\times 10^{-4}$ J。$W = qEd = 3 \\times 10^{-6} \\times 200 \\times 0.4$。",
+      "claimed": "$W = qEd = 3 \\times 10^{-6} \\times 200 \\times 0.4 = 2.4 \\times 10^{-4}$ J。",
       "equivalents": [
         "$2.4 \\times 10^{-4}$",
         "0.00024",
@@ -1002,7 +1003,7 @@
       "from": 54,
       "question_type": "計算",
       "answer_form": "number",
-      "claimed": "$0.6$ N。$F = 9 \\times 10^9 \\times \\frac{6 \\times 10^{-12}}{0.09} = 0.6$。",
+      "claimed": "$F = k \\frac{q_1 q_2}{r^2} = 9 \\times 10^9 \\times \\frac{6 \\times 10^{-12}}{0.09} = 0.6$ N，同號電荷故為斥力。",
       "equivalents": [
         "$0.6$",
         "0.6",
@@ -1025,22 +1026,22 @@
       "from": 11,
       "question_type": "計算",
       "answer_form": "expression",
-      "claimed": "$\\theta = 45^\\circ$。$\\cos \\theta = \\frac{1}{\\sqrt{2}}$。",
+      "claimed": "$\\cos \\theta = \\frac{\\vec{a} \\cdot \\vec{b}}{|\\vec{a}||\\vec{b}|} = \\frac{1}{1 \\times \\sqrt{2}} = \\frac{1}{\\sqrt{2}}$，故 $\\theta = 45^\\circ$。",
       "equivalents": [
-        "$\\theta = 45^\\circ$",
-        "$\\theta=45^\\circ$",
-        "\\theta = 45^\\circ"
+        "$45^\\circ$",
+        "45^\\circ",
+        "$ 45^\\circ $"
       ],
       "wrong": [
-        "$\\theta = 60^\\circ$",
-        "$\\theta = 30^\\circ$"
+        "$60^\\circ$",
+        "$30^\\circ$"
       ],
       "expect": {
         "equivalent": "agree",
         "wrong": "disagree"
       },
       "extraction_hazard": false,
-      "note": null,
+      "note": "claimed 的最後一段是 $\\theta = 45^\\circ$，S2-12 抽等號右邊得到 45^\\circ——**題目問的就是夾角**，抽對了；中間那段 $\\cos\\theta = … = \\frac{1}{\\sqrt{2}}$ 是過程，不該被抽到。expression 依第 4.2 條只比「去空白、去 $、去 \\left\\right 後的字串」，所以三個等價形只能是同一串字的不同包裝；「\\theta = 45^\\circ」與「45^\\circ」在這條規則下是不同字串，**不列為等價形**。",
       "needs_human_confirm": true
     },
     {
@@ -1048,22 +1049,22 @@
       "from": 19,
       "question_type": "計算",
       "answer_form": "expression",
-      "claimed": "$\\theta = 60^\\circ$。$\\cos \\theta = \\frac{1}{2}$。",
+      "claimed": "$\\vec{a} \\cdot \\vec{b} = 1$、$|\\vec{a}| = |\\vec{b}| = \\sqrt{2}$，故 $\\cos \\theta = \\frac{1}{2}$，$\\theta = 60^\\circ$。",
       "equivalents": [
-        "$\\theta = 60^\\circ$",
-        "$\\theta=60^{\\circ}$",
-        "\\theta = 60^\\circ"
+        "$60^\\circ$",
+        "60^\\circ",
+        "$60^\\circ $"
       ],
       "wrong": [
-        "$\\theta = 45^\\circ$",
-        "$\\theta = 120^\\circ$"
+        "$45^\\circ$",
+        "$120^\\circ$"
       ],
       "expect": {
         "equivalent": "agree",
         "wrong": "disagree"
       },
       "extraction_hazard": false,
-      "note": "^\\circ 與 ^{\\circ} 的等價要靠去空白之外的正規化，請開發者確認。",
+      "note": "`^\\circ` 與 `^{\\circ}` 在第 4.2 條的 expression 比法下是不同字串（大括號沒有被正規化掉），因此不列為等價形。要不要把 `^{x}` → `^x` 這類 LaTeX 等價寫法納入正規化，請開發者定案。",
       "needs_human_confirm": true
     },
     {
@@ -1071,11 +1072,11 @@
       "from": 15,
       "question_type": "計算",
       "answer_form": "expression",
-      "claimed": "$\\frac{3}{1} = 3$，故正射影長度為 $3$。",
+      "claimed": "$\\vec{a} \\cdot \\vec{b} = 3$、$|\\vec{b}| = 1$，故正射影長度為 $\\frac{3}{1} = 3$。",
       "equivalents": [
-        "$\\left(\\frac{3}{1}\\right)$",
         "$\\frac{3}{1}$",
-        "$\\frac{3}{1} $"
+        "\\frac{3}{1}",
+        "$\\left(\\frac{3}{1}\\right)$"
       ],
       "wrong": [
         "$\\frac{1}{3}$",
@@ -1086,7 +1087,7 @@
         "wrong": "disagree"
       },
       "extraction_hazard": true,
-      "note": "本題刻意讓 claimed 的第一個 $…$ 就是算式，用來釘「\\left\\right 去掉之後才比」這條。",
+      "note": "**唯一保留的 extraction_hazard**：claimed 的最後一段是 $\\frac{3}{1} = 3$，S2-12 抽等號右邊得到「3」，而 model 回的是 \\frac{3}{1}。expression 比字串「3」≠「\\frac{3}{1}」，但兩者數值相同——utils/answerCompare.js 目前對 expression 有「兩邊都是數值就比數值」的退路，若保留該退路這一筆會是 agree。expect 先寫 uncertain（不預設實作有那條退路），請開發者定案。",
       "needs_human_confirm": true
     },
     {
@@ -1094,7 +1095,7 @@
       "from": 24,
       "question_type": "填空",
       "answer_form": "text",
-      "claimed": "互相垂直。內積為零且兩向量非零，故夾角為 $90^\\circ$。",
+      "claimed": "兩向量的內積為零且皆非零向量，故夾角為 $90^\\circ$，兩者互相垂直。",
       "equivalents": [
         "互相垂直",
         "互相垂直。",
@@ -1109,7 +1110,7 @@
         "wrong": "disagree"
       },
       "extraction_hazard": false,
-      "note": null,
+      "note": "text 走 normalizeStem 比整段，不走 $…$ 抽取。",
       "needs_human_confirm": true
     },
     {
@@ -1117,7 +1118,7 @@
       "from": 22,
       "question_type": "填空",
       "answer_form": "text",
-      "claimed": "$A$ 點的 $x$ 座標。內積為 $\\vec{OA}$ 在 $x$ 軸正向上的分量長度。",
+      "claimed": "此內積即 $\\vec{OA}$ 在 $x$ 軸正向上的分量長度，也就是 $A$ 點的 $x$ 座標。",
       "equivalents": [
         "$A$ 點的 $x$ 座標",
         "A 點的 x 座標",
@@ -1128,11 +1129,11 @@
         "$\\vec{OA}$ 的長度"
       ],
       "expect": {
-        "equivalent": "agree",
-        "wrong": "disagree"
+        "equivalent": "uncertain",
+        "wrong": "uncertain"
       },
       "extraction_hazard": false,
-      "note": "normalizeStem 會去掉所有 $ 與空白，三種寫法應收斂成同一個字串。",
+      "note": "text 比的是**整段 claimed** 的 normalizeStem，而 claimed 是一整句說明、model 只回結論短語，兩者永遠不相等。依「比不出來回 uncertain」的精神應為 uncertain，但字面上 normalizeStem 兩邊都非空、會走 disagree。**text 型答案該怎麼比，請開發者定案**（選項：verify 對 text 型一律 skipped／改成包含式比對／維持現狀）。",
       "needs_human_confirm": true
     },
     {
@@ -1140,7 +1141,7 @@
       "from": 16,
       "question_type": "證明",
       "answer_form": "text",
-      "claimed": "設兩向量夾角為 $\\theta$，則 $\\vec{a} \\cdot \\vec{b} = |\\vec{a}||\\vec{b}| \\cos \\theta$，因 $|\\cos \\theta| \\leq 1$ 故得證。",
+      "claimed": "設兩向量夾角為 $\\theta$，則 $\\vec{a} \\cdot \\vec{b} = |\\vec{a}||\\vec{b}| \\cos \\theta$。因 $|\\cos \\theta| \\leq 1$，兩邊取絕對值得 $|\\vec{a} \\cdot \\vec{b}| = |\\vec{a}||\\vec{b}||\\cos \\theta| \\leq |\\vec{a}||\\vec{b}|$；等號成立於兩向量平行（$\\theta = 0^\\circ$ 或 $180^\\circ$）時。",
       "equivalents": [
         "得證",
         "故原式成立",

@@ -74,6 +74,10 @@ jobs:
       # 這件事在 workflow 檔上就看得見，不必翻到別的檔案（interfaces 第 4 條）。
       EMBED_MODE: fixture
       LLM_MODE: replay
+      # fork PR 的 replay miss 降為 warning（規劃 §5.3.3、介面第 5.2 條）。
+      # 判斷本身在 eval/lib/replayMiss.js（介面明說「這個判斷不在 services/llm 裡」）；
+      # 這裡只負責把 GitHub 的事實傳進去。同 repo 分支與 main 上這個值是空的＝不降級。
+      EVAL_FORK_PR: ${{ github.event.pull_request.head.repo.fork }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
