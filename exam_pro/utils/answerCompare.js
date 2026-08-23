@@ -127,8 +127,10 @@ function stripDecoration(str) {
     return String(str)
         .normalize('NFKC')
         .replace(/\$/g, '')
-        // 單位巨集連內容一起去掉（\mathrm{m/s^2}、\text{公尺}）
-        .replace(/\\(?:text|mathrm|mathit|mathbf|operatorname|mbox|rm)\s*\{[^{}]*\}/g, '')
+        // 單位巨集連內容一起去掉（\mathrm{m/s^2}、\text{公尺}），**連同緊接在後面的指數**：
+        // `5\text{ m/s}^2` 的 ^2 屬於單位，不是 5 的平方——漏掉會把 5 算成 25 而誤報 answer_mismatch
+        //（2026-08-23 FEATURE_PIPELINE 冒煙時在真實管線抓到的假警報）。
+        .replace(/\\(?:text|mathrm|mathit|mathbf|operatorname|mbox|rm)\s*\{[^{}]*\}(?:\s*\^(?:\{[^{}]*\}|\\circ|[0-9]+))?/g, '')
         // LaTeX 的間距指令：\, \; \! \: \quad \qquad，以及「反斜線 + 空白」
         .replace(/\\(?:qquad|quad|left|right|[,;!:])/g, '')
         .replace(/\\(?=\s|$)/g, '')

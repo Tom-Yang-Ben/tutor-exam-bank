@@ -377,3 +377,14 @@ describe('answerCompare — 證明題與缺值', () => {
         }
     });
 });
+
+// 2026-08-23 FEATURE_PIPELINE 冒煙在真實管線抓到的假警報：
+// claimed「$5\text{ m/s}^2$」對驗證模型的「5 m/s^2」被判 disagree——\text{ m/s} 被去掉後 ^2 黏在 5 後面變成 25。
+// 單位巨集後面緊接的指數屬於單位，不是數字的平方。
+describe('單位巨集後的指數（\\text{ m/s}^2 的 ^2 屬於單位）', () => {
+    const c = (claimed, fa) => answerCompare({ question_type: '計算', claimed, model: { final_answer: fa, answer_form: 'number' } });
+    test('$5\\text{ m/s}^2$ 對 5 m/s^2 → agree', () => assert.equal(c('$5\\text{ m/s}^2$', '5 m/s^2'), 'agree'));
+    test('$5\\text{ m/s}^2$ 對 6 → disagree（不是 uncertain：兩邊都抽得出數字）', () => assert.equal(c('$5\\text{ m/s}^2$', '6'), 'disagree'));
+    test('$5\\mathrm{m/s^2}$ 對 5 → agree', () => assert.equal(c('$5\\mathrm{m/s^2}$', '5'), 'agree'));
+    test('$3^2$ 對 9 → agree（沒有單位巨集時 ^2 仍是平方）', () => assert.equal(c('$3^2$', '9'), 'agree'));
+});
