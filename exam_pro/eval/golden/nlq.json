@@ -1,6 +1,6 @@
 {
   "_notice": "全部 50 句查詢由本專案作者自行編寫，模擬家教老師平常會怎麼問；不取自任何考卷、題本、出版品或真實對話（見 repo 根目錄 NOTICE 第 2 條）。學生名一律是「小明／小華／小美／阿哲」這類代稱，不是任何真實學生。",
-  "_status": "draft 2026-08-23 — needs_human_confirm 全為 true。expect 的四欄與 relevant 由 WS-C 草擬，尚未經開發者本人逐句定案；定案前 eval/run.js 不得 --write-baseline（第 8.4 條）。",
+  "_status": "confirmed 2026-08-24 — 開發者本人定案（50 句 expect／relevant 以 WS-C 草稿為準，於整合對話中拍板）；自製內容，不取自任何考卷。",
   "_schema": "entries[]：\n  id                  string，唯一\n  query               string，1~200 字；送進 POST /api/questions/search-nl 的原句\n  expect              期望的 filters 七欄（subject／chapters／question_types／difficulty_min／difficulty_max／exclude_student_name／semantic_text）\n  expect_path         'rules'|'llm'；'rules' = 規則就該抓到章節（confident=true），'llm' = 規則抓不到、必須走 LLM 輔路徑\n  relevant            number[]；期望命中的 eval/fixtures/questions.public.json 題 id（Recall@10 的正樣本）\n  note                string|null；標註有爭議時寫給開發者看的一句話\n  needs_human_confirm boolean；true = 尚未人工定案，suite 只當骨架驗證用",
   "_annotations": {
     "涵蓋面（第 8.4 條）": "nlq-001~008 只有章節；009~017 章節+難度；018~025 章節+題型+學生；026~035 口語別名；036~043 完全沒章節只有概念詞（走 LLM）；044~050 模糊句。六類都有。",
@@ -36,7 +36,7 @@
         16
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-002",
@@ -64,7 +64,7 @@
         8
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-003",
@@ -91,7 +91,7 @@
         31
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-004",
@@ -119,7 +119,7 @@
         39
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-005",
@@ -146,7 +146,7 @@
         46
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-006",
@@ -173,7 +173,7 @@
         53
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-007",
@@ -200,7 +200,7 @@
         60
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-008",
@@ -228,7 +228,7 @@
         24
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-009",
@@ -250,7 +250,7 @@
         16
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-010",
@@ -275,7 +275,7 @@
         8
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-011",
@@ -299,7 +299,7 @@
         37
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-012",
@@ -323,7 +323,7 @@
         43
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-013",
@@ -348,7 +348,7 @@
         51
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-014",
@@ -372,7 +372,7 @@
         60
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-015",
@@ -394,7 +394,7 @@
         26
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-016",
@@ -421,7 +421,7 @@
         24
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-017",
@@ -443,7 +443,7 @@
         6
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-018",
@@ -470,7 +470,7 @@
         15
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-019",
@@ -494,7 +494,7 @@
         39
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-020",
@@ -517,7 +517,7 @@
         46
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-021",
@@ -540,7 +540,7 @@
         7
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-022",
@@ -566,7 +566,7 @@
         50
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-023",
@@ -594,7 +594,7 @@
         60
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-024",
@@ -618,7 +618,7 @@
         28
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-025",
@@ -642,7 +642,7 @@
         23
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-026",
@@ -670,7 +670,7 @@
         37
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-027",
@@ -697,7 +697,7 @@
         46
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-028",
@@ -720,7 +720,7 @@
         7
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-029",
@@ -746,7 +746,7 @@
         50
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-030",
@@ -770,7 +770,7 @@
         60
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-031",
@@ -797,7 +797,7 @@
         45
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-032",
@@ -823,7 +823,7 @@
         31
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-033",
@@ -850,7 +850,7 @@
         22
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-034",
@@ -874,7 +874,7 @@
         39
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-035",
@@ -898,7 +898,7 @@
         14
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-036",
@@ -920,7 +920,7 @@
         41
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-037",
@@ -942,7 +942,7 @@
         35
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-038",
@@ -964,7 +964,7 @@
         37
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-039",
@@ -986,7 +986,7 @@
         60
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-040",
@@ -1008,7 +1008,7 @@
         6
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-041",
@@ -1029,7 +1029,7 @@
         30
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-042",
@@ -1051,7 +1051,7 @@
         14
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-043",
@@ -1072,7 +1072,7 @@
         45
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-044",
@@ -1099,7 +1099,7 @@
         46
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-045",
@@ -1126,7 +1126,7 @@
         60
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-046",
@@ -1153,7 +1153,7 @@
         53
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-047",
@@ -1176,7 +1176,7 @@
         7
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-048",
@@ -1203,7 +1203,7 @@
         31
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-049",
@@ -1227,7 +1227,7 @@
         53
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "nlq-050",
@@ -1259,7 +1259,7 @@
         23
       ],
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     }
   ]
 }

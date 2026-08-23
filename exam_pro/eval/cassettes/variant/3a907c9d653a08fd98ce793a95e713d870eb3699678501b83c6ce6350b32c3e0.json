@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:17:35.738Z",
+    "recorded_at": "2026-08-23T17:58:45.061Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -31,18 +31,18 @@
   "response": {
     "data": {
       "chapter": "三角函數的定義",
-      "chapter_confidence": 0.99,
+      "chapter_confidence": 1,
       "question_type": "單選",
       "difficulty": 2,
-      "question_text": "在遊樂園的旋轉咖啡杯設施中，某個咖啡杯從初始位置開始，總共逆時針旋轉了 $1150^\\circ$ 後停止。請問此旋轉角度的最小正同界角為多少度，以表示咖啡杯最終相對於初始位置的淨旋轉角度？ (A) $50^\\circ$　(B) $70^\\circ$　(C) $90^\\circ$　(D) $110^\\circ$",
-      "answer_text": "(B)。計算 $1150^\\circ$ 的同界角，需將其減去 $360^\\circ$ 的整數倍使其落在 $0^\\circ$ 到 $360^\\circ$ 之間。因為 $1150^\\circ = 360^\\circ \\times 3 + 70^\\circ$，即 $1150^\\circ - 1080^\\circ = 70^\\circ$，故其最小正同界角為 $70^\\circ$。"
+      "question_text": "在電腦動畫設計中，工程師設定一個物件沿著中心軸旋轉了 $860^\\circ$。為了讓程式計算簡化，系統會自動將此角度換算為同界的最小正角，以決定物件最終面向的方位。請問與 $860^\\circ$ 同界的最小正角為何？ (A) $40^\\circ$　(B) $140^\\circ$　(C) $220^\\circ$　(D) $320^\\circ$",
+      "answer_text": "(B)。$860^\\circ - 360^\\circ \\times 2 = 860^\\circ - 720^\\circ = 140^\\circ$，故與其同界的最小正角為 $140^\\circ$。"
     },
     "usage": {
       "tokenIn": 1180,
-      "tokenOut": 308,
-      "tokenThinking": 1769,
+      "tokenOut": 226,
+      "tokenThinking": 3203,
       "tokenCached": 0
     },
-    "latencyMs": 265232
+    "latencyMs": 28907
   }
 }

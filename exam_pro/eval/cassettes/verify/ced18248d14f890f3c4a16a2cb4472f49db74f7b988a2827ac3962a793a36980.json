@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:09:40.612Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 161,
+        "sha256": "9f1e1afe3fc707f190b0e67a58887db73396a95f17daa8319f659c1aec58a9b6"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "在一個絕緣支架上固定著一顆帶有靜電的小銅球，其帶電量為 $Q = -4 \times 10^{-7}$ C。若將此小球視為點電荷，請計算在距離球心 $0.6$ m 處的空間中所建立的電場量值為何？（已知庫侖常數 $k = 9 \times 10^9$ N·m$^2$/C$^2$）",
+      "questionType": "計算",
+      "sampleNo": 2
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "10000 N/C",
+      "answer_form": "text",
+      "steps_summary": "1. 根據點電荷的電場量值公式：E = k|Q| / r^2。\n2. 代入已知數值：庫侖常數 k = 9 × 10^9 N·m^2/C^2、電荷量絕對值 |Q| = |-4 × 10^{-7}| = 4 × 10^{-7} C、距離 r = 0.6 m。\n3. 計算分子部分：k|Q| = (9 × 10^9) × (4 × 10^{-7}) = 3600。\n4. 計算分母部分：r^2 = (0.6)^2 = 0.36。\n5. 求得電場量值：E = 3600 / 0.36 = 10000 N/C。"
+    },
+    "usage": {
+      "tokenIn": 214,
+      "tokenOut": 230,
+      "tokenThinking": 1376,
+      "tokenCached": 0
+    },
+    "latencyMs": 12425
+  }
+}

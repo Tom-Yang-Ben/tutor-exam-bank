@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:20:58.333Z",
+    "recorded_at": "2026-08-23T18:02:15.420Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -31,15 +31,15 @@
       "chapter_confidence": 1,
       "question_type": "單選",
       "difficulty": 1,
-      "question_text": "在水杯上平放一張硬紙板，並將一枚硬幣置於紙板上。當用手指快速將紙板水平彈飛時，硬幣會垂直落入杯中而沒有跟著紙板飛走。造成此現象的主要原因為何？\n(A) 硬幣具有慣性而維持原靜止狀態\n(B) 硬幣受到紙板的向心力作用\n(C) 硬幣受到的重力瞬間變大\n(D) 硬幣與紙板間的摩擦力消失",
-      "answer_text": "(A)。由牛頓第一運動定律，硬幣原先處於靜止狀態，當紙板被快速抽走時，硬幣因慣性傾向維持原本的靜止狀態，不會隨著紙板水平移動，隨後因失去支撐受重力作用而垂直落入杯中。"
+      "question_text": "魔術表演中，魔術師快速將桌巾從餐桌上平滑抽走，而桌上的餐具卻幾乎停留在原位沒有跟著移動。這個現象主要是下列哪一個物理概念的展現？\n(A) 慣性　(B) 向心力　(C) 重力變大　(D) 作用力與反作用力",
+      "answer_text": "(A)。由牛頓第一運動定律可知，物體具有維持原有運動狀態的特性。桌上的餐具原本處於靜止，當桌巾被快速抽走時，餐具因慣性傾向維持原本的靜止狀態，故幾乎停留在原位。"
     },
     "usage": {
       "tokenIn": 1063,
-      "tokenOut": 245,
-      "tokenThinking": 1325,
+      "tokenOut": 208,
+      "tokenThinking": 1098,
       "tokenCached": 0
     },
-    "latencyMs": 15926
+    "latencyMs": 12694
   }
 }

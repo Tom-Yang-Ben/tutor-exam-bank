@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T17:57:08.093Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 144,
+        "sha256": "5fd1f6b7607d89b640b638233d7f082ead53c72c0109a087fda6fa674a6b6c68"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "工程師在進行建築結構分析時，需要求出 $\\sin^2 72^\\circ + \\cos^2 72^\\circ$ 的結果以化簡公式。請問此結果為何？\n(A) $0$　(B) $\\frac{1}{2}$　(C) $1$　(D) 需使用計算機才能得知",
+      "questionType": "單選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(C)",
+      "answer_form": "option",
+      "steps_summary": "根據三角恆等式中的平方關係：對於任意角度 $\\theta$，皆滿足 $\\sin^2 \\theta + \\cos^2 \\theta = 1$。將 $\\theta = 72^\\circ$ 代入該恆等式中，即可直接得到 $\\sin^2 72^\\circ + \\cos^2 72^\\circ = 1$。因此，答案為 (C)。"
+    },
+    "usage": {
+      "tokenIn": 196,
+      "tokenOut": 114,
+      "tokenThinking": 258,
+      "tokenCached": 0
+    },
+    "latencyMs": 6729
+  }
+}

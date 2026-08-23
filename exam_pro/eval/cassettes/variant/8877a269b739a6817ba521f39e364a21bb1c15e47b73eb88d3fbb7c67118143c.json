@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:11:07.686Z",
+    "recorded_at": "2026-08-23T17:55:58.104Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "填空",
       "difficulty": 3,
-      "question_text": "在三維空間座標系中，某無人機的直線位移向量為 $\\vec{s} = (2, 4, 3)$（單位為公尺），期間受到一恆定側風的作用，其風力向量可表示為 $\\vec{F} = (4, -5, m)$（單位為牛頓）。若已知此風力對無人機作功為 $0$（即作用力向量與位移向量互相垂直），求實數 $m$ 的值。",
-      "answer_text": "風力作功為 $0$，即 $\\vec{F}$ 與 $\\vec{s}$ 互相垂直，兩向量的內積為 $0$：$4 \\times 2 + (-5) \\times 4 + m \\times 3 = 0$，得到 $8 - 20 + 3m = 0$，$3m = 12$，解得 $m = 4$。"
+      "question_text": "在一個三維坐標空間中，一台無人機正以速度向量 $\\vec{v} = (3, -2, 5)$（單位：公尺/秒）等速直線飛行。突然遭遇一陣陣風，其風力向量可表示為 $\\vec{F} = (4, m, 2)$（單位：牛頓）。若已知此陣風對無人機的飛行方向不作功（即風力方向與無人機飛行方向互相垂直），求實數 $m$ 的值。",
+      "answer_text": "因為風力對飛行方向不作功，代表風力向量 $\\vec{F}$ 與速度向量 $\\vec{v}$ 互相垂直，即兩者的內積為 $0$。計算內積可得 $4 \\times 3 + m \\times (-2) + 2 \\times 5 = 0$，化簡為 $12 - 2m + 10 = 0$，即 $22 - 2m = 0$，解得 $m = 11$。"
     },
     "usage": {
       "tokenIn": 1160,
-      "tokenOut": 266,
-      "tokenThinking": 1273,
+      "tokenOut": 292,
+      "tokenThinking": 1187,
       "tokenCached": 0
     },
-    "latencyMs": 11173
+    "latencyMs": 23771
   }
 }

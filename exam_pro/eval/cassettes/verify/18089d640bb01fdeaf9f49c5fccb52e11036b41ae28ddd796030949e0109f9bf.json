@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:07:43.436Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 135,
+        "sha256": "ff34de402d0abc685cb694276bd604d6d7a5abe2532b0ec5db1338cc3a7b342d"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "交通警察在路邊使用手持雷射測速槍，對著一輛行駛中的汽車進行測量，測速槍螢幕上顯示出 $85\\text{ km/h}$。請問此數值代表該汽車的何種物理量？\n(A) 平均速度　(B) 瞬時速度　(C) 平均速率　(D) 瞬時速率",
+      "questionType": "單選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(D)",
+      "answer_form": "option",
+      "steps_summary": "雷射測速槍是在極短的時間內連續測量汽車的距離變化，藉此計算出車輛的運動快慢，因此測量結果代表「瞬時」的物理量。又因為螢幕上顯示的數值 $85\\text{ km/h}$ 僅有大小，未標示方向，屬於純量，因此該數值代表的是「瞬時速率」。"
+    },
+    "usage": {
+      "tokenIn": 202,
+      "tokenOut": 118,
+      "tokenThinking": 389,
+      "tokenCached": 0
+    },
+    "latencyMs": 5906
+  }
+}

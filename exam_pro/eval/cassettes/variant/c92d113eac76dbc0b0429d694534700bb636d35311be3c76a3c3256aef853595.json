@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:08:02.706Z",
+    "recorded_at": "2026-08-23T17:51:26.008Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "計算",
       "difficulty": 3,
-      "question_text": "海面上一座雷達站偵測到兩艘漁船同時從港口出發。若以港口為原點建立直角坐標系，發現第一艘漁船的航線方向向量為 $\\vec{u} = (3, -3\\sqrt{3})$，第二艘漁船的航線方向向量為 $\\vec{v} = (0, -4)$。求這兩艘漁船航線方向的夾角 $\\theta$。",
-      "answer_text": "由向量內積公式 $\\vec{u} \\cdot \\vec{v} = |\\vec{u}| |\\vec{v}| \\cos\\theta$，可得 $\\cos\\theta = \\frac{\\vec{u} \\cdot \\vec{v}}{|\\vec{u}| |\\vec{v}|}$。計算內積與各向量的長度：$\\vec{u} \\cdot \\vec{v} = 3 \\times 0 + (-3\\sqrt{3}) \\times (-4) = 12\\sqrt{3}$，$|\\vec{u}| = \\sqrt{3^2 + (-3\\sqrt{3})^2} = \\sqrt{9 + 27} = 6$，$|\\vec{v}| = \\sqrt{0^2 + (-4)^2} = 4$。代入公式得到 $\\cos\\theta = \\frac{12\\sqrt{3}}{6 \\times 4} = \\frac{\\sqrt{3}}{2}$。因為 $0^\\circ \\leq \\theta \\leq 180^\\circ$，故 $\\theta = 30^\\circ$。"
+      "question_text": "在一款平面戰略遊戲中，玩家的戰機正朝著向量 $\\vec{v} = (\\sqrt{3}, 1)$ 的方向飛行，而偵測雷達顯示一股強風正以向量 $\\vec{w} = (0, 2)$ 的方向吹襲。若戰機飛行方向與強風吹襲方向的夾角為 $\\theta$，求 $\\theta$ 的度數。",
+      "answer_text": "由內積公式可知 $\\cos \\theta = \\frac{\\vec{v} \\cdot \\vec{w}}{|\\vec{v}||\\vec{w}|}$。計算內積 $\\vec{v} \\cdot \\vec{w} = \\sqrt{3} \\times 0 + 1 \\times 2 = 2$，且長度分別為 $|\\vec{v}| = \\sqrt{(\\sqrt{3})^2 + 1^2} = 2$、$|\\vec{w}| = \\sqrt{0^2 + 2^2} = 2$。代入公式得 $\\cos \\theta = \\frac{2}{2 \\times 2} = \\frac{1}{2}$，故 $\\theta = 60^\\circ$。"
     },
     "usage": {
       "tokenIn": 1155,
-      "tokenOut": 421,
-      "tokenThinking": 1855,
+      "tokenOut": 327,
+      "tokenThinking": 1596,
       "tokenCached": 0
     },
-    "latencyMs": 19577
+    "latencyMs": 17535
   }
 }

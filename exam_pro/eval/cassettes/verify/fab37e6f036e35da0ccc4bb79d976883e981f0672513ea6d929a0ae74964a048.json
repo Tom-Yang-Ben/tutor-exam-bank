@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:08:53.647Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 210,
+        "sha256": "8776380d1cc9b872119875dabf7dd271fe563286820aba456ddefdf0a96c654c"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "在靜電實驗中，有兩顆體積甚小的絕緣小球 A 與 B，分別帶有 $q_A = -5 \\times 10^{-6}$ C 與 $q_B = 2 \\times 10^{-6}$ C 的電荷。若將兩球固定在相距 $0.3$ m 的位置，試求兩球間靜電力的大小，並說明其為吸引力或排斥力。（庫侖常數取 $k = 9 \\times 10^9$ N$\\cdot$m$^2$/C$^2$）。",
+      "questionType": "計算",
+      "sampleNo": 2
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "1 N，吸引力",
+      "answer_form": "text",
+      "steps_summary": "根據庫侖定律，兩帶電質點間的靜電力大小公式為 $F = k \\frac{|q_A q_B|}{r^2}$。將已知數值代入公式計算：\n$F = 9 \\times 10^9 \\times \\frac{|-5 \\times 10^{-6} \\times 2 \\times 10^{-6}|}{0.3^2}$\n$F = 9 \\times 10^9 \\times \\frac{10 \\times 10^{-12}}{0.09}$\n$F = 9 \\times 10^9 \\times \\frac{10^{-11}}{9 \\times 10^{-2}}$\n$F = 1$ N。\n因為兩球分別帶有正電與負電（異性電荷），根據同性相斥、異性相吸的原則，此靜電力為吸引力。"
+    },
+    "usage": {
+      "tokenIn": 237,
+      "tokenOut": 242,
+      "tokenThinking": 768,
+      "tokenCached": 0
+    },
+    "latencyMs": 8262
+  }
+}

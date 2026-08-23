@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:17:48.412Z",
+    "recorded_at": "2026-08-23T17:58:56.493Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "單選",
       "difficulty": 2,
-      "question_text": "已知一個標準位置角 $\\alpha$ 落在第三象限，試問下列哪一個三角函數的值必為正數？\n(A) $\\sin \\alpha$\n(B) $\\cos \\alpha$\n(C) $\\tan \\alpha$\n(D) 無法確定",
-      "answer_text": "(C)。在第三象限中，坐標的特徵為 $x < 0$、$y < 0$。根據三角函數的定義，距離 $r > 0$，故 $\\sin \\alpha = \\frac{y}{r} < 0$ 恆為負，$\\cos \\alpha = \\frac{x}{r} < 0$ 恆為負，而 $\\tan \\alpha = \\frac{y}{x} > 0$ 恆為正。"
+      "question_text": "阿明在遊樂園搭乘摩天輪，若將摩天輪的中心設為直角坐標系的原點，阿明所在的車廂剛好轉到了第三象限的位置。假設此時車廂的標準位置角為 $\\alpha$，則關於 $\\cos \\alpha$ 的正負號，下列何者正確？\n(A) 恆為正\n(B) 恆為負\n(C) 恆為零\n(D) 無法判斷",
+      "answer_text": "(B)。在第三象限中，坐標 $(x, y)$ 滿足 $x < 0$ 且 $y < 0$，又因為距離 $r > 0$，故 $\\cos \\alpha = \\frac{x}{r} < 0$，恆為負。"
     },
     "usage": {
       "tokenIn": 1183,
       "tokenOut": 236,
-      "tokenThinking": 1136,
+      "tokenThinking": 1024,
       "tokenCached": 0
     },
-    "latencyMs": 12296
+    "latencyMs": 11029
   }
 }

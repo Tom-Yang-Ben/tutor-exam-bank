@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:26:55.230Z",
+    "recorded_at": "2026-08-23T18:07:56.429Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "計算",
       "difficulty": 3,
-      "question_text": "在物理實驗室中，研究人員將兩個絕緣小球分別固定在水平桌面上，已知球 A 帶有 $5 \\times 10^{-5}$ C 的正電荷，球 B 帶有 $-2 \\times 10^{-5}$ C 的負電荷，且兩球球心之間的距離為 $1.5$ m。若將小球視為點電荷，請計算這兩個小球間的靜電力大小，並說明此力為吸引力或排斥力。（取庫侖常數 $k = 9 \\times 10^9$ N$\\cdot$m$^2$/C$^2$）",
-      "answer_text": "根據庫侖定律，$F = k \\frac{|Q_A Q_B|}{r^2} = 9 \\times 10^9 \\times \\frac{5 \\times 10^{-5} \\times 2 \\times 10^{-5}}{(1.5)^2} = \\frac{9 \\times 10^9 \\times 10^{-9}}{2.25} = \\frac{9}{2.25} = 4$ N。由於兩小球帶異號電荷，因此兩者之間的作用力為吸引力。"
+      "question_text": "在一個靜電實驗中，有兩顆被固定在絕緣底座上的金屬小球。甲球帶有電量 $Q_A = -2 \times 10^{-5}$ C，乙球帶有電量 $Q_B = 5 \times 10^{-6}$ C。若兩球中心相距 $0.5$ m 且可視為點電荷，請計算兩球之間靜電力的大小，並說明此力為引力或斥力。（已知庫侖常數 $k = 9 \times 10^9$ $\text{N}\boldsymbol{\text{m}}^2/\text{C}^2$）",
+      "answer_text": "根據庫侖定律，$F = k \frac{|Q_A Q_B|}{r^2} = 9 \times 10^9 \times \frac{2 \times 10^{-5} \times 5 \times 10^{-6}}{0.5^2} = 9 \times 10^9 \times \frac{10^{-10}}{0.25} = 3.6$ N。因為兩球帶異號電荷，故此靜電力為引力。"
     },
     "usage": {
       "tokenIn": 1335,
-      "tokenOut": 328,
-      "tokenThinking": 1874,
+      "tokenOut": 323,
+      "tokenThinking": 1360,
       "tokenCached": 0
     },
-    "latencyMs": 20520
+    "latencyMs": 12964
   }
 }

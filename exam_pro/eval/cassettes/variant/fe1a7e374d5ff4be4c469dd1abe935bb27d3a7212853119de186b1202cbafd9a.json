@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:12:57.397Z",
+    "recorded_at": "2026-08-23T17:57:56.124Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "填空",
       "difficulty": 2,
-      "question_text": "在航海導航系統中，船隻的航向有時會以坐標平面的廣義角來表示。假設一艘探測船目前的航行方向對應的廣義角為 $210^\triangle$，系統為了解析其南北方向的速度分量，需要計算 $\\sin 210^\\circ$ 的數值。請問 $\\sin 210^\\circ$ 之值為何？",
-      "answer_text": "$-\\frac{1}{2}$。廣義角 $210^\\circ$ 落在第三象限，其與 $x$ 軸的夾角（參考角）為 $210^\\circ - 180^\\circ = 30^\\circ$。因為在第三象限的 $y$ 坐標為負，即正弦值為負，故 $\\sin 210^\\circ = -\\sin 30^\\circ = -\\frac{1}{2}$。"
+      "question_text": "在一款雷達偵測系統中，目標物的方位角 $\\theta$ 是以正東方（$x$ 軸正向）為始邊，依逆時針方向旋轉所形成的廣義角。若系統偵測到一台無人機目前所在的方位角為 $225^\\circ$，且程式需要計算此角度的餘弦值來判定其在東西方向的投影比例。試求 $\\cos 225^\\circ$ 之值為何？",
+      "answer_text": "$-\\frac{\\sqrt{2}}{2}$。$225^\\circ$ 落在第三象限，其參考角為 $45^\\circ$（即 $225^\\circ - 180^\\circ$），且第三象限的餘弦值為負，故 $\\cos 225^\\circ = -\\cos 45^\\circ = -\\frac{\\sqrt{2}}{2}$。"
     },
     "usage": {
       "tokenIn": 1106,
-      "tokenOut": 272,
-      "tokenThinking": 1743,
+      "tokenOut": 269,
+      "tokenThinking": 1228,
       "tokenCached": 0
     },
-    "latencyMs": 15849
+    "latencyMs": 14010
   }
 }

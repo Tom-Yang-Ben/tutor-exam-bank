@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:12:27.513Z",
+    "recorded_at": "2026-08-23T17:57:24.542Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -32,15 +32,15 @@
       "chapter_confidence": 1,
       "question_type": "單選",
       "difficulty": 1,
-      "question_text": "一位高中生在進行單擺實驗時，記錄下擺線與鉛垂線的夾角為 $28^\\circ$。在處理實驗數據時，他需要求出 $\\sin^2 28^\\circ + \\cos^2 28^\\circ$ 的值以化簡公式。請問此計算結果為何？\n(A) $0$\n(B) $\\frac{1}{2}$\n(C) $1$\n(D) 需查閱三角函數表才能確定",
-      "answer_text": "(C)。根據三角函數的畢氏恆等式 $\\sin^2 \\theta + \\cos^2 \\theta = 1$，可知無論 $\\theta$ 的角度為何，其正弦平方與餘弦平方之和必定為 $1$。"
+      "question_text": "在撰寫某個建築模擬程式時，工程師定義了一個用來檢核角度運算正確性的參數 $K = \\sin^2 71^\\circ + \\cos^2 71^\\circ$。請問 $K$ 的精確值為何？ (A) $1$ (B) $0$ (C) $\\frac{1}{2}$ (D) 需要查閱三角函數表才能確定",
+      "answer_text": "(A)。根據三角函數的畢氏恆等式，對於任意角度 $\\theta$ 皆滿足 $\\sin^2 \\theta + \\cos^2 \\theta = 1$，與角度大小無關，因此 $K = 1$。"
     },
     "usage": {
       "tokenIn": 1077,
-      "tokenOut": 233,
-      "tokenThinking": 1311,
+      "tokenOut": 209,
+      "tokenThinking": 1624,
       "tokenCached": 0
     },
-    "latencyMs": 12664
+    "latencyMs": 16418
   }
 }

@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:13:10.138Z",
+    "recorded_at": "2026-08-23T17:58:15.752Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "單選",
       "difficulty": 2,
-      "question_text": "某體操選手在空中進行特技跳躍，身體以逆時針方向連續旋轉了 $1250^\floatcirc$ 後落地。若將起跳時面向的方位角定為 $0^\floatcirc$，則選手落地時面向方位的最小正同界角為何？\n(A) $70^\floatcirc$\n(B) $170^\floatcirc$\n(C) $250^\floatcirc$\n(D) $350^\floatcirc$",
-      "answer_text": "(B)。$1250^\floatcirc - 3 \\times 360^\floatcirc = 1250^\floatcirc - 1080^\floatcirc = 170^\floatcirc$，故最小正同界角為 $170^\floatcirc$。"
+      "question_text": "一位花式溜冰選手在冰面上練習旋轉動作。若將選手起跳時面向的正前方設為 $0^\\circ$，並規定逆時針方向為正。已知該選手在一次跳躍中，在空中完成了 $1050^\\circ$ 的旋轉後落地，則選手落地時所面向的位置，可用下列哪一個最小正同界角來表示？ (A) $30^\\circ$　(B) $150^\\circ$　(C) $330^\\circ$　(D) $690^\\circ$",
+      "answer_text": "(C)。將總旋轉角度扣除 $360^\\circ$ 的整數倍，可得 $1050^\\circ = 360^\\circ \\times 2 + 330^\\circ$。這代表選手旋轉了兩整圈後，又多轉了 $330^\\circ$，因此落地位置對應的最小正同界角為 $330^\\circ$。"
     },
     "usage": {
       "tokenIn": 1180,
-      "tokenOut": 239,
-      "tokenThinking": 1325,
+      "tokenOut": 298,
+      "tokenThinking": 2017,
       "tokenCached": 0
     },
-    "latencyMs": 12392
+    "latencyMs": 19257
   }
 }

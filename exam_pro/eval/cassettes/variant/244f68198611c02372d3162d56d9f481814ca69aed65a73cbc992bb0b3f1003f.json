@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:12:41.188Z",
+    "recorded_at": "2026-08-23T17:57:41.745Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "填空",
       "difficulty": 2,
-      "question_text": "小明在玩一款轉盤抽獎遊戲，轉盤的中心設定在坐標平面的原點 $(0, 0)$，指針長度為 $1$ 單位。一開始指針朝向正 $x$ 軸方向，當小明啟動開關後，指針逆時針旋轉了 $240^\\circ$ 停下。試問此時指針尖端所在的 $y$ 坐標為何？",
-      "answer_text": "$-\\frac{\\sqrt{3}}{2}$。根據廣義角三角函數的定義，指針尖端的 $y$ 坐標即為 $\\sin 240^\\circ$。因為 $240^\\circ$ 落在第三象限，其參考角為 $60^\\circ$，且第三象限的正弦值為負，故 $\\sin 240^\\circ = -\\sin 60^\\circ = -\\frac{\\sqrt{3}}{2}$。"
+      "question_text": "有一座風力發電機，其葉片長度為 $20$ 公尺。我們將葉片的旋轉中心設為直角坐標平面的原點 $(0,0)$。若某個葉片尖端的初始位置在 $x$ 軸的正向上，隨後該葉片逆時針旋轉了 $330^\\circ$，則此時該葉片尖端所在位置的 $y$ 坐標為何？",
+      "answer_text": "$-10$。葉片尖端的 $y$ 坐標為半徑乘以旋轉角的正弦值，即 $20 \\sin 330^\\circ$。因為 $330^\\circ$ 落在第四象限，參考角為 $30^\\circ$，且第四象限的正弦值為負，故 $\\sin 330^\\circ = -\\sin 30^\\circ = -\\frac{1}{2}$。計算可得 $y = 20 \\times \\left(-\\frac{1}{2}\\right) = -10$。"
     },
     "usage": {
       "tokenIn": 1106,
-      "tokenOut": 277,
-      "tokenThinking": 1289,
+      "tokenOut": 297,
+      "tokenThinking": 1298,
       "tokenCached": 0
     },
-    "latencyMs": 13330
+    "latencyMs": 16828
   }
 }

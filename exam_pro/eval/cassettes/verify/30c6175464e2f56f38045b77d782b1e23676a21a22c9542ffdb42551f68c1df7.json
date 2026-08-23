@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:01:01.769Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 187,
+        "sha256": "25441e2e52f296a0bd5df7ac25c93b7fce29df845b5d3ab1a55294fdd111bfaa"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "在一項物理實驗中，學生模擬電梯的配重系統，將一條極輕的細繩跨過無摩擦的定滑輪，繩子兩端分別懸掛著質量為 $14$ kg 的模型電梯車廂與質量為 $6$ kg 的配重塊。若由靜止狀態同時釋放兩者，求模型電梯車廂下降的加速度大小以及細繩上的張力大小（取重力加速度 $g = 10$ m/s$^2$，忽略滑輪與細繩的質量及空氣阻力）。",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "4 m/s^2，84 N",
+      "answer_form": "text",
+      "steps_summary": "1. 根據牛頓第二運動定律，對電梯車廂與配重塊分別列出運動方程式。\n2. 設電梯車廂下降的加速度大小為 a，細繩張力大小為 T，並取重力加速度 g = 10 m/s^2。\n3. 對質量 m1 = 14 kg 的電梯車廂，受重力向下與張力向上，向下加速：m1 g - T = m1 a。\n4. 對質量 m2 = 6 kg 的配重塊，受重力向下與張力向上，向上加速：T - m2 g = m2 a。\n5. 將兩式相加，消去 T 可得加速度 a = (m1 - m2)g / (m1 + m2) = (14 - 6) × 10 / (14 + 6) = 4 m/s^2。\n6. 將 a = 4 m/s^2 代入配重塊的方程式中，可解得張力 T = m2 (a + g) = 6 × (4 + 10) = 84 N。"
+    },
+    "usage": {
+      "tokenIn": 233,
+      "tokenOut": 298,
+      "tokenThinking": 900,
+      "tokenCached": 0
+    },
+    "latencyMs": 9413
+  }
+}

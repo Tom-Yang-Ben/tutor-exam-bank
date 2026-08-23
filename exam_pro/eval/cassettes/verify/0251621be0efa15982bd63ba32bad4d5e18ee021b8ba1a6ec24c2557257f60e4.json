@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:08:05.044Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 235,
+        "sha256": "b33c1bb402497f5ca45edfd58f10371230656a00eb42b657b125869f336f1856"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "在一個靜電實驗中，有兩顆被固定在絕緣底座上的金屬小球。甲球帶有電量 $Q_A = -2 \times 10^{-5}$ C，乙球帶有電量 $Q_B = 5 \times 10^{-6}$ C。若兩球中心相距 $0.5$ m 且可視為點電荷，請計算兩球之間靜電力的大小，並說明此力為引力或斥力。（已知庫侖常數 $k = 9 \times 10^9$ $\text{N}\boldsymbol{\text{m}}^2/\text{C}^2$）",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "3.6 N，引力",
+      "answer_form": "text",
+      "steps_summary": "1. 根據庫侖定律，靜電力大小公式為 $F = k \\frac{|Q_A Q_B|}{r^2}$。\n2. 代入已知數值：庫侖常數 $k = 9 \\times 10^9$、電荷量 $Q_A = -2 \\times 10^{-5}$ C、$Q_B = 5 \\times 10^{-6}$ C、距離 $r = 0.5$ m。\n3. 計算靜電力大小：$F = 9 \\times 10^9 \\times \\frac{|-2 \\times 10^{-5} \\times 5 \\times 10^{-6}|}{0.5^2} = 9 \\times 10^9 \\times \\frac{10^{-10}}{0.25} = \\frac{0.9}{0.25} = 3.6$ N。\n4. 因為甲球與乙球帶有異性電荷（一負一正），異性電荷互相吸引，故此靜電力為引力。"
+    },
+    "usage": {
+      "tokenIn": 263,
+      "tokenOut": 277,
+      "tokenThinking": 816,
+      "tokenCached": 0
+    },
+    "latencyMs": 8227
+  }
+}

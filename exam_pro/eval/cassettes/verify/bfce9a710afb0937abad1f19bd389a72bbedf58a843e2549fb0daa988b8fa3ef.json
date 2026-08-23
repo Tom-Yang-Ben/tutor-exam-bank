@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:03:21.246Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 124,
+        "sha256": "145c3c61e1222370ef25915e44fd81a37fb5c67cc92216b425194e130c423a7f"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "一條長度為 $1.5$ m 的堅固細線，一端固定在光滑冰面上的木樁，另一端綁著一顆質量為 $2$ kg 的冰上曲棍球。若曲棍球以 $6$ m/s 的速率在冰面上作等速圓周運動，求細線對曲棍球的拉力大小。",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "48 N",
+      "answer_form": "text",
+      "steps_summary": "曲棍球在光滑冰面上作等速圓周運動，其所需的向心力完全由細線的拉力提供。根據向心力公式：F = m * v^2 / r，已知質量 m = 2 kg，速率 v = 6 m/s，圓周運動半徑（細線長度） r = 1.5 m。將數值代入公式可得：F = 2 * (6)^2 / 1.5 = 2 * 36 / 1.5 = 72 / 1.5 = 48 (N)。因此，細線對曲棍球的拉力大小為 48 N。"
+    },
+    "usage": {
+      "tokenIn": 190,
+      "tokenOut": 182,
+      "tokenThinking": 1233,
+      "tokenCached": 0
+    },
+    "latencyMs": 11958
+  }
+}

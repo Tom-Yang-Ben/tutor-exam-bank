@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T17:55:34.298Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 132,
+        "sha256": "bb4c529635a962255179fa907cd3c106f310592de8f0da44bdf6f305797f4ecf"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "在一個三維空間的裝置藝術中，有兩束雷射光從原點 $O(0, 0, 0)$ 發射，第一束光線精準地打向點 $A(-1, 1, 0)$，第二束光線則打向點 $B(0, -1, 1)$。求這兩束雷射光的夾角 $\theta$。",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "120^\\circ",
+      "answer_form": "expression",
+      "steps_summary": "1. 找出兩束雷射光的向量表示：$\\vec{OA} = (-1, 1, 0)$，$\\vec{OB} = (0, -1, 1)$。\n2. 計算這兩個向量的內積：$\\vec{OA} \\cdot \\vec{OB} = (-1)\\times 0 + 1\\times (-1) + 0\\times 1 = -1$。\n3. 分別計算兩個向量的長度：$|\\vec{OA}| = \\sqrt{(-1)^2 + 1^2 + 0^2} = \\sqrt{2}$，$|\\vec{OB}| = \\sqrt{0^2 + (-1)^2 + 1^2} = \\sqrt{2}$。\n4. 利用內積公式求夾角 $\\theta$ 的餘弦值：$\\cos\\theta = \\frac{\\vec{OA} \\cdot \\vec{OB}}{|\\vec{OA}| |\\vec{OB}|} = \\frac{-1}{\\sqrt{2} \\times \\sqrt{2}} = -\\frac{1}{2}$。\n5. 因為夾角 $0^\\circ \\le \\theta \\le 180^\\circ$，可推得 $\\theta = 120^\\circ$（或 $\\frac{2\\pi}{3}$）。"
+    },
+    "usage": {
+      "tokenIn": 198,
+      "tokenOut": 338,
+      "tokenThinking": 912,
+      "tokenCached": 0
+    },
+    "latencyMs": 10650
+  }
+}

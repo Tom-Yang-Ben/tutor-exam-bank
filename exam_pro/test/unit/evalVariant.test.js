@@ -39,9 +39,12 @@ describe('eval/golden/variant.json 的硬閘門（第 8.4 條）', () => {
         assert.ok(types.has('多選'), 'golden 要有多選題');
     });
 
-    test('全部仍是 needs_human_confirm（沒定案之前不得寫 thresholds 初值）', () => {
+    test('golden 已於 2026-08-24 定案：needs_human_confirm 全為 false、_status 以 confirmed 開頭', () => {
+        // 定案之前這一條釘的是 pendingConfirm === 30（沒定案不得寫 thresholds 初值）。
         const golden = suite.loadVariantGolden({ fixtureById: fixture.byId });
-        assert.equal(golden.pendingConfirm, 30);
+        assert.equal(golden.pendingConfirm, 0);
+        const raw = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', '..', 'eval', 'golden', 'variant.json'), 'utf8'));
+        assert.match(String(raw._status), /^confirmed 2026-08-24/);
     });
 
     test('抓得到壞掉的標註：id 格式、藍本不在 fixture、欄位與 fixture 不符、重複藍本', () => {
@@ -139,9 +142,9 @@ describe('runVariantSuite', () => {
         assert.deepEqual(res.failures, [], '沒錄 cassette 不是失敗，是還沒量');
     });
 
-    test('golden 還沒定案時要有 warning（run.js 的 stub guard 同一條線）', async () => {
+    test('golden 定案後不再出現 needs_human_confirm 的 warning（run.js 的 stub guard 同一條線）', async () => {
         const res = await suite.runVariantSuite({});
-        assert.ok(res.warnings.some(w => w.includes('needs_human_confirm')));
+        assert.ok(!res.warnings.some(w => w.includes('needs_human_confirm')), res.warnings.join('；'));
     });
 
     test('校準旁欄：門檻越高覆蓋率單調不增', async () => {

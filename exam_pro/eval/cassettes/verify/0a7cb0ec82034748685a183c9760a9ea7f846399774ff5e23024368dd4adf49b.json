@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:11:07.419Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 192,
+        "sha256": "94e8668380a8db20b8337159156d6bb76a180f3f433ac19b9b2553a03869a35b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "在探討靜電場的特性時，我們經常會利用等電位面與電場線來視覺化空間中的電場分布。若在某區域中存在一個帶電體，且其周圍某曲面上所有點的電位皆相同（即等電位面），則穿過此曲面的電場線與該面在交點處的幾何夾角必定為何？\n(A) $0^\\circ$\n(B) $45^\\circ$\n(C) $90^\\circ$\n(D) 夾角視電場量值而定，無特定數值",
+      "questionType": "單選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(C)",
+      "answer_form": "option",
+      "steps_summary": "在靜電學中，電場與電位之間的關係可表示為 $\\vec{E} = -\\nabla V$。由於等電位面上各點的電位 $V$ 皆相同，根據梯度運算的數學性質，其方向必定垂直於等值面。換言之，若電場在等電位面上具有平行分量，則沿著該面移動電荷將會作功，導致電位改變，這與等電位面的定義矛盾。因此，電場線與等電位面在任何交點處的幾何夾角必定為 $90^\\circ$。"
+    },
+    "usage": {
+      "tokenIn": 245,
+      "tokenOut": 165,
+      "tokenThinking": 286,
+      "tokenCached": 0
+    },
+    "latencyMs": 5003
+  }
+}

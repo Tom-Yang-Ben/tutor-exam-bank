@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:06:16.967Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 101,
+        "sha256": "40a78502acb26545023eb62b276706102852360e05f7b8ad437c112d48f0d948"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "一顆棒球從一座 $80$ 公尺高的建築物頂樓邊緣不慎掉落。若忽略空氣阻力，試求這顆棒球落到地面所需的時間。（取重力加速度 $g = 10$ m/s$^2$）",
+      "questionType": "計算",
+      "sampleNo": 2
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "4 s",
+      "answer_form": "number",
+      "steps_summary": "1. 棒球從靜止落下，做自由落體運動，初速度為 0。\n2. 根據自由落體的位移公式：h = (1/2)gt^2。\n3. 將已知數值代入：高度 h = 80 m，重力加速度 g = 10 m/s^2。\n4. 得到算式：80 = (1/2) * 10 * t^2。\n5. 化簡得到：80 = 5t^2，即 t^2 = 16。\n6. 解得落到地面所需的時間 t = 4 秒。"
+    },
+    "usage": {
+      "tokenIn": 168,
+      "tokenOut": 175,
+      "tokenThinking": 454,
+      "tokenCached": 0
+    },
+    "latencyMs": 8192
+  }
+}

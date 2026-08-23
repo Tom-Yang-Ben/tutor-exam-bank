@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:18:48.572Z",
+    "recorded_at": "2026-08-23T18:00:01.156Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "計算",
       "difficulty": 3,
-      "question_text": "建築工地的一台起重機正以 $2$ m/s$^2$ 的加速度垂直向下吊降一個貨箱。貨箱內部平放著一個壓力感測器，感測器上方放置了一塊質量為 $50$ kg 的水泥預鑄板。求感測器所測得的水泥板下壓力量大小（取 $g = 10$ m/s$^2$）。",
-      "answer_text": "以水泥預鑄板為分析系統，其受到向下的重力 $mg$ 與感測器向上的支持力 $N$。由於整體以加速度 $a = 2$ m/s$^2$ 向下運動，由牛頓第二運動定律可得：$mg - N = ma$。因此，感測器向上的支持力 $N = m(g - a) = 50 \times (10 - 2) = 400$ N。依據作用力與反作用力定律，水泥板對感測器的下壓力量大小亦為 $400$ N。"
+      "question_text": "一台物流無人機正在運送一個質量為 $4$ kg 的包裹。當無人機垂直下降準備著陸時，以 $2.5$ m/s$^2$ 的加速度減速。求此時包裹底部所受無人機托盤的正向力大小為何？（取重力加速度 $g = 10$ m/s$^2$）",
+      "answer_text": "包裹隨無人機垂直下降且減速，代表其加速度方向為向上，大小為 $a = 2.5$ m/s$^2$。以包裹為受力分析對象，受到向上的正向力 $N$ 與向下的重力 $mg$，由牛頓第二定律可得：$N - mg = ma$，故 $N = m(g + a) = 4 \\times (10 + 2.5) = 50$ N。"
     },
     "usage": {
       "tokenIn": 1297,
-      "tokenOut": 286,
-      "tokenThinking": 1299,
+      "tokenOut": 252,
+      "tokenThinking": 1747,
       "tokenCached": 0
     },
-    "latencyMs": 14783
+    "latencyMs": 18673
   }
 }

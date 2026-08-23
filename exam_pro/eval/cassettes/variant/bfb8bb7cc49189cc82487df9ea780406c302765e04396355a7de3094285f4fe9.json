@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:19:03.206Z",
+    "recorded_at": "2026-08-23T18:00:15.195Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "計算",
       "difficulty": 3,
-      "question_text": "一台起重機利用鋼索垂直懸吊著質量 $500$ kg 的水泥塊。若起重機啟動後，將水泥塊以 $2.5$ m/s$^2$ 的加速度向上吊起，求在此加速過程中，鋼索對水泥塊的張力大小為多少？（取重力加速度 $g = 10$ m/s$^2$）",
-      "answer_text": "以水泥塊為系統，設向上為正方向，鋼索張力為 $T$。根據牛頓第二定律：$T - mg = ma$，可得 $T = m(g + a) = 500 \times (10 + 2.5) = 6250$ N。"
+      "question_text": "一名質量為 $65$ kg 的太空人坐在火箭內的發射座椅上。當火箭發射升空，以 $20$ m/s$^2$ 的加速度垂直向上加速時，求座椅對太空人的正向力大小（取 $g = 10$ m/s$^2$）。",
+      "answer_text": "以太空人為系統，受向下的重力 $mg$ 與向上的正向力 $N$，根據牛頓第二運動定律：$N - mg = ma$。故 $N = m(g + a) = 65 \times (10 + 20) = 1950$ N。"
     },
     "usage": {
       "tokenIn": 1297,
-      "tokenOut": 218,
-      "tokenThinking": 1041,
+      "tokenOut": 201,
+      "tokenThinking": 1228,
       "tokenCached": 0
     },
-    "latencyMs": 14244
+    "latencyMs": 13653
   }
 }

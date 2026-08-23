@@ -150,12 +150,12 @@ S3-R8 把它改成**只看「數字遮罩後文字相同」**（每段連續數�
 ## 4. 量測結果（`--suite variant`）
 
 環境：`LLM_MODE=replay`、`EMBED_MODE=fixture`、`VARIANT_RETRIEVE_SIM_MIN=0.80`、
-`VARIANT_OFFTOPIC_SIM_MIN=0.92`、golden 30 藍本（尚未人工定案）。
+`VARIANT_OFFTOPIC_SIM_MIN=0.90`（S3-R29）、golden 30 藍本（2026-08-24 定案）。
 
 | 指標 | 值 | 說明 |
 |---|---:|---|
 | `retrieved_coverage` | **0.8667** | 30 個藍本中有 26 個「純檢索就找得到 ≥ 2 題」 |
-| `gate_pass_rate` | **0.1500** | 2026-08-24 第一次錄製（60 次生成、76 次 LLM 呼叫、60 筆新向量）：9/60 全過。**26/30 藍本停在 `off_topic`**、1/30 停在 `verify`、3/30 兩題全過——跑題閾值 0.92 是主要瓶頸，見下方「閾值掃描」 |
+| `gate_pass_rate` | **0.2500** | 2026-08-24 以 0.90 重錄（60 次生成、91 次 LLM 呼叫）：15/60 全過；**21/30 藍本停在 `off_topic`**、4/30 停在 `verify`、5/30 兩題全過。第一次錄製（閾值 0.92，76 次 LLM）是 0.1500（26 停 off_topic／1 停 verify／3 全過） |
 | 每題成本 | **n/a** | `config/pricing.js` 全 0，`cost_usd` 恆 0（非本節範圍） |
 
 **跑題閾值掃描**（replay 模式、同一批 cassette；降閾值後多出來的 verify 呼叫沒錄過，所以只看「停在 off_topic 的藍本數」）：
@@ -169,6 +169,8 @@ S3-R8 把它改成**只看「數字遮罩後文字相同」**（每段連續數�
 | **0.92**（現值） | **26 / 30** | 合格變式與藍本的餘弦多落在 0.85～0.92 之間 |
 
 要調閾值就得在 `.env` 改值後**重錄一次**（新放行的題會走到 classify／lint／verify，cassette 才會補上）。
+
+**門檻（`eval/thresholds.json`，2026-08-24 `--write-baseline`，量測 −0.03、只升不降）**：`retrieved_coverage ≥ 0.8367`、`gate_pass_rate ≥ 0.22`。
 
 **每個藍本檢索到幾題**（`VARIANT_RETRIEVE_SIM_MIN=0.80`、鎖定同一難度、排除自己與整個家族）：
 

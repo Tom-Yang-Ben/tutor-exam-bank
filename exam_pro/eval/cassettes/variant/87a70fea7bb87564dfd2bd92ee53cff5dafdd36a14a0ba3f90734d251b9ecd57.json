@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:18:33.417Z",
+    "recorded_at": "2026-08-23T17:59:42.079Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "計算",
       "difficulty": 2,
-      "question_text": "一質量為 $6$ kg 的木塊放置於光滑水平桌面上。若對木塊施以一水平推力 $15$ N，試求木塊的加速度大小。",
-      "answer_text": "根據牛頓第二運動定律 $F = ma$，木塊的加速度大小為 $a = \\frac{F}{m} = \\frac{15}{6} = 2.5$ m/s$^2$。"
+      "question_text": "一個質量為 $15$ kg 的行李箱置於光滑無摩擦的水平地板上。若有人對其施加一大小為 $45$ N 的水平固定推力，求此行李箱的加速度大小為多少？",
+      "answer_text": "根據牛頓第二運動定律 $F = ma$，可得 $a = \\frac{F}{m} = \\frac{45}{15} = 3$ m/s$^2$。故加速度大小為 $3$ m/s$^2$。"
     },
     "usage": {
       "tokenIn": 1130,
-      "tokenOut": 150,
-      "tokenThinking": 819,
+      "tokenOut": 170,
+      "tokenThinking": 853,
       "tokenCached": 0
     },
-    "latencyMs": 9862
+    "latencyMs": 10590
   }
 }

@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:01:39.051Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 218,
+        "sha256": "3a4bf901ed67e2b0f2b34f6877e2940d98c1ff58399c19656404a4af304b8f77"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "在建築工地的簡易物料升降系統中，一條跨過固定於高處的無摩擦輕質定滑輪的鋼索，其一端懸掛著載滿物料的吊籃（總質量 $150$ kg），另一端則懸掛著實心金屬配重塊（總質量 $250$ kg）。若一開始兩端皆保持靜止，當操作員鬆開煞車卡榫後，系統開始自由運動。試求配重塊的加速度大小以及鋼索在運動過程中的張力大小為何？（假設鋼索質量不計且不可伸長，重力加速度 $g = 10$ m/s$^2$）",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "加速度為 2.5 m/s^2，張力為 1875 N",
+      "answer_form": "text",
+      "steps_summary": "1. 設配重塊質量 $m_2 = 250$ kg，吊籃質量 $m_1 = 150$ kg，系統加速度大小為 $a$，鋼索張力為 $T$。\n2. 根據牛頓第二定律，對向下運動的配重塊列式：$m_2 g - T = m_2 a$。\n3. 對向上運動的吊籃列式：$T - m_1 g = m_1 a$。\n4. 將兩式相加消去 $T$，得到 $(m_2 - m_1)g = (m_1 + m_2)a$。代入數值得 $100 \times 10 = 400 a$，解出 $a = 2.5$ m/s$^2$。\n5. 將 $a$ 代回任一式中求 $T$，例如 $T = m_1(g + a) = 150 \times (10 + 2.5) = 1875$ N。\n6. 故配重塊加速度大小為 $2.5$ m/s$^2$，鋼索張力大小為 $1875$ N。"
+    },
+    "usage": {
+      "tokenIn": 262,
+      "tokenOut": 327,
+      "tokenThinking": 967,
+      "tokenCached": 0
+    },
+    "latencyMs": 10703
+  }
+}

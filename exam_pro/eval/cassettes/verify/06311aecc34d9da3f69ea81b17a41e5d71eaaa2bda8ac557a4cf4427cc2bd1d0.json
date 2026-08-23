@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:04:55.611Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 102,
+        "sha256": "09a11046f61593ac703882ad0f45b2e55e2b201ad6b67c50af7e6c6a7748b363"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "一輛跑車在平直的測試賽道上由靜止開始加速，若其加速度保持在 $4$ m/s$^2$ 的等加速度，請計算這輛跑車在啟動後 $6$ 秒內總共行駛了多少公尺的距離？",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "72",
+      "answer_form": "number",
+      "steps_summary": "根據等加速度直線運動的位移公式 $s = v_0 t + \\frac{1}{2} a t^2$，其中初速度 $v_0 = 0$，加速度 $a = 4 \\text{ m/s}^2$，時間 $t = 6 \\text{ s}$。代入公式計算可得：$s = 0 \\times 6 + \\frac{1}{2} \\times 4 \\times 6^2 = 2 \\times 36 = 72$（公尺）。因此，跑車在啟動後 6 秒內總共行駛了 72 公尺的距離。"
+    },
+    "usage": {
+      "tokenIn": 171,
+      "tokenOut": 162,
+      "tokenThinking": 374,
+      "tokenCached": 0
+    },
+    "latencyMs": 5770
+  }
+}

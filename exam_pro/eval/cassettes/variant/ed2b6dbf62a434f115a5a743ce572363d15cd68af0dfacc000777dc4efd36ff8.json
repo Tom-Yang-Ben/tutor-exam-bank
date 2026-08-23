@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:21:16.314Z",
+    "recorded_at": "2026-08-23T18:02:29.849Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -31,18 +31,18 @@
   "response": {
     "data": {
       "chapter": "摩擦力與向心力",
-      "chapter_confidence": 1,
+      "chapter_confidence": 0.99,
       "question_type": "計算",
       "difficulty": 3,
-      "question_text": "工廠裡有一條與水平面夾角為 $37^\\circ$ 的卸貨斜坡。一個質量 $20$ kg 的木箱從斜坡頂端自靜止開始下滑。已知木箱與斜坡表面之間的動摩擦係數 $\\mu = 0.25$，若重力加速度取 $g = 10$ m/s$^2$，求木箱沿斜坡下滑時的加速度大小。（已知 $\\sin 37^\\circ = 0.6$，$\\cos 37^\\circ = 0.8$）",
-      "answer_text": "根據牛頓第二運動定律，木箱在沿斜面方向受重力平行斜面分力與動摩擦力作用。木箱沿斜面向下的重力分力為 $mg \\sin 37^\\circ$，正向力為 $N = mg \\cos 37^\\circ$，故受到的動摩擦力為 $f_k = \\mu N = \\mu mg \\cos 37^\\circ$。合力 $F = mg \\sin 37^\\circ - \\mu mg \\cos 37^\\circ = ma$，可得加速度 $a = g(\\sin 37^\\circ - \\mu \\cos 37^\\circ) = 10 \\times (0.6 - 0.25 \\times 0.8) = 10 \\times (0.6 - 0.2) = 4$ m/s$^2$。"
+      "question_text": "送貨員利用一塊長木板作為滑道，將一個質量 $8$ kg 的包裹從貨車上卸下。若滑道與水平面夾角為 $37^\\circ$，且包裹與木板之間的動摩擦係數 $\\mu = 0.25$，請計算包裹沿著滑道下滑時的加速度大小為多少？（假設重力加速度 $g = 10$ m/s$^2$，$\\sin 37^\\circ = \\frac{3}{5}$，$\\cos 37^\\circ = \\frac{4}{5}$）",
+      "answer_text": "包裹沿斜面向下的重力分力為 $mg \\sin 37^\\circ$，受到的動摩擦力為 $\\mu mg \\cos 37^\\circ$。由牛頓第二定律可得 $a = g(\\sin 37^\\circ - \\mu \\cos 37^\\circ) = 10 \\times (\\frac{3}{5} - 0.25 \\times \\frac{4}{5}) = 10 \\times (0.6 - 0.2) = 4$ m/s$^2$。"
     },
     "usage": {
       "tokenIn": 1320,
-      "tokenOut": 391,
-      "tokenThinking": 1401,
+      "tokenOut": 324,
+      "tokenThinking": 1463,
       "tokenCached": 0
     },
-    "latencyMs": 17628
+    "latencyMs": 13995
   }
 }

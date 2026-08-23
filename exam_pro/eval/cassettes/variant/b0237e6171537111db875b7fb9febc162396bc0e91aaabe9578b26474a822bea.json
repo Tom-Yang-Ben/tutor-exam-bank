@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:18:23.180Z",
+    "recorded_at": "2026-08-23T17:59:31.097Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "計算",
       "difficulty": 2,
-      "question_text": "在完全光滑的水平地面上，小明用 $45$ N 的水平推力推動一台裝滿貨物的推車。若推車與貨物的總質量為 $15$ kg，求推車產生的加速度大小。",
-      "answer_text": "根據牛頓第二運動定律 $F = ma$，可得推車的加速度 $a = \\frac{F}{m} = \\frac{45}{15} = 3$ m/s$^2$。"
+      "question_text": "一位質量為 $60$ kg 的太空人在無重力且無阻力的太空中進行活動，他啟動了背後的推進器，產生了 $150$ N 的恆定推力。請問這位太空人因此獲得的加速度大小為多少？",
+      "answer_text": "根據牛頓第二運動定律 $F = ma$，可得加速度 $a = \\frac{F}{m} = \\frac{150}{60} = 2.5$ m/s$^2$。"
     },
     "usage": {
       "tokenIn": 1130,
-      "tokenOut": 161,
-      "tokenThinking": 661,
+      "tokenOut": 165,
+      "tokenThinking": 1268,
       "tokenCached": 0
     },
-    "latencyMs": 9220
+    "latencyMs": 14557
   }
 }

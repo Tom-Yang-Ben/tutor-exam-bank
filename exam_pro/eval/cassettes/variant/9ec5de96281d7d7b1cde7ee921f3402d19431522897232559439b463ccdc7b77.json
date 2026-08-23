@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:24:28.632Z",
+    "recorded_at": "2026-08-23T18:04:49.441Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "計算",
       "difficulty": 2,
-      "question_text": "一輛電動車在測試跑道上由靜止開始啟動，以 $4$ m/s$^2$ 的等加速度直線加速前進。請計算在啟動後的 $6$ 秒內，這輛電動車總共行駛了多少距離？",
-      "answer_text": "根據等加速度直線運動的位移公式 $s = v_0 t + \\frac{1}{2} a t^2$，其中初速度 $v_0 = 0$，加速度 $a = 4$ m/s$^2$，時間 $t = 6$ s。代入數值可得 $s = 0 + \\frac{1}{2} \\times 4 \\times 6^2 = 2 \\times 36 = 72$ m。"
+      "question_text": "一輛跑車在平直的測試賽道上由靜止開始加速，若其加速度保持在 $4$ m/s$^2$ 的等加速度，請計算這輛跑車在啟動後 $6$ 秒內總共行駛了多少公尺的距離？",
+      "answer_text": "根據等加速度直線運動公式 $s = v_0 t + \\frac{1}{2} a t^2$，跑車由靜止出發（$v_0 = 0$），代入 $a = 4$ m/s$^2$ 與 $t = 6$ s，可得位移 $s = 0 + \\frac{1}{2} \\times 4 \\times 6^2 = 72$ m。"
     },
     "usage": {
       "tokenIn": 1132,
-      "tokenOut": 223,
-      "tokenThinking": 1117,
+      "tokenOut": 221,
+      "tokenThinking": 1162,
       "tokenCached": 0
     },
-    "latencyMs": 13136
+    "latencyMs": 11146
   }
 }

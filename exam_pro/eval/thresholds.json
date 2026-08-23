@@ -103,21 +103,60 @@
   "nlq": {
     "_note": "門檻為 null = 尚未建立基準線，只報告不擋。rule_coverage 依定義只在 rules 欄有值（llm 欄恆為 null）；filters_exact 的 rules 欄只算 expect_path=rules 的句子、llm 欄只算 expect_path=llm 的句子。有數字之後，量不到那一欄就算失敗——否則「cassette 被誤刪」會表現成 CI 全綠。",
     "rules": {
-      "rule_coverage": null,
-      "filters_exact": null,
-      "recall10": null
+      "rule_coverage": 0.81,
+      "filters_exact": 0.97,
+      "recall10": 0.97
     },
     "llm": {
       "rule_coverage": null,
-      "filters_exact": null,
-      "recall10": null
+      "filters_exact": 0.72,
+      "recall10": 0.845
     }
   },
   "variant": {
     "_note": "門檻為 null = 尚未建立基準線，只報告不擋。只放「越高越好」的兩個指標；每題 cost_usd 與各閘門通過數只在報表呈現、不設門檻（interfaces-stage3.md 第 8.3 條：成本越低越好，放進 ratchet 會變成反向門檻）。",
     "variant": {
-      "retrieved_coverage": null,
-      "gate_pass_rate": null
+      "retrieved_coverage": 0.8367,
+      "gate_pass_rate": 0.22
+    }
+  },
+  "_nlq_measured_with": {
+    "service": "services/nlqService.js",
+    "llmMode": "replay",
+    "embedMode": "fixture",
+    "cassetteDir": "eval/cassettes",
+    "golden": "eval/golden/nlq.json",
+    "goldenEntries": 50,
+    "goldenPending": 0,
+    "fixture": "eval/fixtures/questions.public.json",
+    "sources": {
+      "normalizeStem": "utils/normalizeStem.js",
+      "answerCompare": "utils/answerCompare.js",
+      "parseLatexStrict": "utils/textFormatter.js",
+      "pricing": "config/pricing.js",
+      "anyStub": false
+    }
+  },
+  "_variant_measured_with": {
+    "agent": "agents/generateVariant.js",
+    "llmMode": "replay",
+    "embedMode": "fixture",
+    "cassetteDir": "eval/cassettes",
+    "golden": "eval/golden/variant.json",
+    "goldenEntries": 30,
+    "goldenPending": 0,
+    "fixture": "eval/fixtures/questions.public.json",
+    "embeddings": "eval/fixtures/embeddings.gemini-embedding-001.768.json",
+    "perSource": 2,
+    "variantRetrieveSimMin": 0.8,
+    "variantOfftopicSimMin": 0.9,
+    "engine": "memory",
+    "sources": {
+      "normalizeStem": "utils/normalizeStem.js",
+      "answerCompare": "utils/answerCompare.js",
+      "parseLatexStrict": "utils/textFormatter.js",
+      "pricing": "config/pricing.js",
+      "anyStub": false
     }
   }
 }

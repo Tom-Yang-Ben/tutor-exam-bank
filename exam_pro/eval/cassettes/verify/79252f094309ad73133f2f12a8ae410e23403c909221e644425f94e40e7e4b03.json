@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:10:23.772Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 204,
+        "sha256": "f6742fa9f3424d309f4aec75c1a64293a5cd8f9c5edf89df10dc8ed6ab11db28"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "在一次靜電學實驗中，研究人員將一顆帶有 $8 \\times 10^{-6}$ C 電量的小金屬球固定於絕緣支架上，並假設其可視為一個點電荷。若在距離球心 $0.4$ m 處放置一電場探測儀器，則該處測得的電場量值為多少？（庫侖常數 $k = 9 \\times 10^9$ $\\frac{\\text{N}\\cdot\\text{m}^2}{\\text{C}^2}$）",
+      "questionType": "計算",
+      "sampleNo": 2
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "4.5 \\times 10^5 \\text{ N/C}",
+      "answer_form": "text",
+      "steps_summary": "根據點電荷的電場公式：$E = k \\frac{|q|}{r^2}$。\n代入已知數值：\n庫侖常數 $k = 9 \\times 10^9 \\text{ N}\\cdot\\text{m}^2/\\text{C}^2$，\n電荷量 $q = 8 \\times 10^{-6} \\text{ C}$，\n距離 $r = 0.4 \\text{ m}$。\n計算過程如下：\n$E = \\frac{9 \\times 10^9 \\times 8 \\times 10^{-6}}{(0.4)^2} = \\frac{72 \\times 10^3}{0.16} = 4.5 \\times 10^5 \\text{ N/C}$。\n故該處測得的電場量值為 $4.5 \\times 10^5 \\text{ N/C}$。"
+    },
+    "usage": {
+      "tokenIn": 233,
+      "tokenOut": 261,
+      "tokenThinking": 1259,
+      "tokenCached": 0
+    },
+    "latencyMs": 12292
+  }
+}

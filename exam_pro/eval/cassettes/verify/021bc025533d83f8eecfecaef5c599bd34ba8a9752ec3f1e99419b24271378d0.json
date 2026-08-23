@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:10:46.643Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 189,
+        "sha256": "d5648a52b9f53b083250bd7619e8770b0f3a0510b1cf9ef97715f589f530b477"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "在探究空間中靜電場特性的實驗裡，研究人員發現當一個帶正電的點電荷沿著某個特定曲面移動時，電場對該電荷所作的功始終為零。根據此一觀察結果，在該曲面上任意一點，電場方向與該曲面切線方向（即電荷移動方向）的夾角應為何？\n(A) $0^\\circ$\n(B) $45^\\circ$\n(C) $90^\\circ$\n(D) $180^\\circ$",
+      "questionType": "單選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(C)",
+      "answer_form": "option",
+      "steps_summary": "1. 根據功的定義，電場對點電荷所作的功為 $W = \\int \\vec{F} \\cdot d\\vec{s} = \\int q\\vec{E} \\cdot d\\vec{s}$。\n2. 題目指出電荷沿該曲面移動時，電場作功始終為零，這表示對於曲面上任意微小位移 $d\\vec{s}$，內積 $\\vec{E} \\cdot d\\vec{s}$ 皆必須為零。\n3. 當兩個非零向量的內積為零時，表示這兩個向量互相垂直。\n4. 位移 $d\\vec{s}$ 的方向即為曲面的切線方向（電荷移動方向），因此電場方向與該曲面切線方向的夾角必為 $90^\\circ$。\n5. 故選 (C)。"
+    },
+    "usage": {
+      "tokenIn": 233,
+      "tokenOut": 229,
+      "tokenThinking": 461,
+      "tokenCached": 0
+    },
+    "latencyMs": 6460
+  }
+}

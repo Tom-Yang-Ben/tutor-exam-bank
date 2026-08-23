@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:05:23.211Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 87,
+        "sha256": "d272063f4ed0b55b2fd61419d3e26e83acdea3f32cccf968b36d7947341276d6"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "一輛賽車在筆直的賽道上由靜止起步，以 $6$ m/s$^2$ 的等加速度直線衝刺。請問經過 $5$ 秒後，賽車前進的距離為多少？",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "75 m",
+      "answer_form": "text",
+      "steps_summary": "已知賽車初速 $v_0 = 0$ m/s，等加速度 $a = 6$ m/s$^2$，行駛時間 $t = 5$ s。根據等加速度直線運動的位移公式 $s = v_0 t + \\frac{1}{2} a t^2$，將數值代入計算：$s = 0 \\times 5 + \\frac{1}{2} \\times 6 \\times 5^2 = 3 \\times 25 = 75$ (m)。因此經過 5 秒後，賽車前進的距離為 75 m。"
+    },
+    "usage": {
+      "tokenIn": 160,
+      "tokenOut": 173,
+      "tokenThinking": 831,
+      "tokenCached": 0
+    },
+    "latencyMs": 8538
+  }
+}

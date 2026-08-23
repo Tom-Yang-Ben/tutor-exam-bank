@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:07:42.783Z",
+    "recorded_at": "2026-08-23T17:51:08.094Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "計算",
       "difficulty": 2,
-      "question_text": "在一個二維座標平面上，某物體受到一定力 $\\vec{F} = (5, -2)$ （單位：牛頓）的作用，並產生了位移 $\\vec{d} = (4, 3)$ （單位：公尺）。已知力對物體所作的功 $W$ 定義為力向量與位移向量的內積，即 $W = \\vec{F} \\cdot \\vec{d}$。求此力對物體所作的功為多少焦耳？",
-      "answer_text": "根據內積的坐標公式，$W = \\vec{F} \\cdot \\vec{d} = 5 \\times 4 + (-2) \\times 3 = 20 - 6 = 14$。故作功為 $14$ 焦耳。"
+      "question_text": "在物理學中，恆力對物體作功的大小等於作用力向量與位移向量的內積。若某物體在平面上受到恆定推力 $\\vec{F} = (5, -2)$ 牛頓的作用，並因此產生位移 $\\vec{S} = (4, 3)$ 公尺，求此恆力對物體作功（即 $\\vec{F} \\cdot \\vec{S}$）為多少焦耳？",
+      "answer_text": "作功 $W$ 等於力向量 $\\vec{F}$ 與位移向量 $\\vec{S}$ 的內積。計算可得：$\\vec{F} \\cdot \\vec{S} = 5 \\times 4 + (-2) \\times 3 = 20 - 6 = 14$ 焦耳。"
     },
     "usage": {
       "tokenIn": 1137,
-      "tokenOut": 224,
-      "tokenThinking": 1566,
+      "tokenOut": 241,
+      "tokenThinking": 906,
       "tokenCached": 0
     },
-    "latencyMs": 13881
+    "latencyMs": 10958
   }
 }

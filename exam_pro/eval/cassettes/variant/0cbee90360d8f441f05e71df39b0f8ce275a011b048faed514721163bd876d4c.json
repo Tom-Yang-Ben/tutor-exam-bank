@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:07:28.534Z",
+    "recorded_at": "2026-08-23T17:50:56.754Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "計算",
       "difficulty": 2,
-      "question_text": "小明在平坦的地面上推動一個箱子，他施加的推力可用平面向量表示為 $\\vec{F} = (4, -3)$（單位：牛頓），箱子隨後產生的位移可用向量 $\\vec{S} = (6, 5)$（單位：公尺）來表示。已知力對物體作的功 $W$ 為施力向量與位移向量的內積，請問小明對箱子作的功 $W = \\vec{F} \\cdot \\vec{S}$ 為多少焦耳？",
-      "answer_text": "$W = \\vec{F} \\cdot \\vec{S} = 4 \\times 6 + (-3) \\times 5 = 24 - 15 = 9$ 焦耳。"
+      "question_text": "在平面坐標系中，某質點受到一固定的力 $\\vec{F} = (4, -2)$ 作用，並產生位移 $\\vec{d} = (3, 5)$。若力的單位為牛頓、位移的單位為公尺，求該定力對質點所作的功 $W = \\vec{F} \\cdot \\vec{d}$ 為多少焦耳？",
+      "answer_text": "$W = \\vec{F} \\cdot \\vec{d} = 4 \\times 3 + (-2) \\times 5 = 12 - 10 = 2$ 焦耳。"
     },
     "usage": {
       "tokenIn": 1137,
-      "tokenOut": 231,
-      "tokenThinking": 997,
+      "tokenOut": 200,
+      "tokenThinking": 574,
       "tokenCached": 0
     },
-    "latencyMs": 10882
+    "latencyMs": 8078
   }
 }

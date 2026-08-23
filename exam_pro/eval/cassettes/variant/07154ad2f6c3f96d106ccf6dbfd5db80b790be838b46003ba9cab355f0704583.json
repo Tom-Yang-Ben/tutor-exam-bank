@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:11:56.986Z",
+    "recorded_at": "2026-08-23T17:56:48.278Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -31,18 +31,18 @@
   "response": {
     "data": {
       "chapter": "空間向量內積",
-      "chapter_confidence": 1,
+      "chapter_confidence": 0.99,
       "question_type": "填空",
       "difficulty": 3,
-      "question_text": "一架無人機從空間座標系的原點 $O$ 沿直線等速爬升，經過一段時間後到達點 $P(3, -4, 12)$。若鉛直向上的方向為 $z$ 軸正向，試求無人機飛行方向與鉛直向上方向之夾角的餘弦值。",
-      "answer_text": "無人機飛行的位移向量為 $\\vec{OP} = (3, -4, 12)$，其長度 $|\\vec{OP}| = \\sqrt{3^2 + (-4)^2 + 12^2} = \\sqrt{169} = 13$。鉛直向上的單位向量為 $\\vec{k} = (0, 0, 1)$，兩向量的內積為 $\\vec{OP} \\cdot \\vec{k} = 3 \\times 0 + (-4) \\times 0 + 12 \\times 1 = 12$。由內積定義可知 $\\vec{OP} \\cdot \\vec{k} = |\\vec{OP}| |\\vec{k}| \\cos\\theta$，故夾角的餘弦值 $\\cos\\theta = \\frac{12}{13 \\times 1} = \\frac{12}{13}$。"
+      "question_text": "某天文台為了追蹤一顆低軌道人造衛星，將雷射測距儀對準該衛星。若以天文台為原點 $(0, 0, 0)$ 建立空間座標系，已知在某時刻衛星的座標位置為 $(3, 12, 4)$（單位為公里）。請問雷射測距儀的發射方向與正上方（即 $z$ 軸正向）夾角的餘弦值為何？",
+      "answer_text": "雷射測距儀發射方向的向量為 $\\vec{v} = (3, 12, 4)$。其長度為 $|\\vec{v}| = \\sqrt{3^2 + 12^2 + 4^2} = \\sqrt{9 + 144 + 16} = 13$。正上方為 $z$ 軸正向，可取單位向量 $\\vec{k} = (0, 0, 1)$。兩向量的內積為 $\\vec{v} \\cdot \\vec{k} = 3 \\times 0 + 12 \\times 0 + 4 \\times 1 = 4$。由內積公式可得夾角的餘弦值為 $\\cos\\theta = \\frac{\\vec{v} \\cdot \\vec{k}}{|\\vec{v}||\\vec{k}|} = \\frac{4}{13 \\times 1} = \\frac{4}{13}$。"
     },
     "usage": {
       "tokenIn": 1178,
-      "tokenOut": 349,
-      "tokenThinking": 1337,
+      "tokenOut": 388,
+      "tokenThinking": 1623,
       "tokenCached": 0
     },
-    "latencyMs": 13156
+    "latencyMs": 15867
   }
 }

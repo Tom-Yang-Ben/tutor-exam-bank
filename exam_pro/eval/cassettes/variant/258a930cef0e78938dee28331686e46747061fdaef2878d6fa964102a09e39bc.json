@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:20:04.554Z",
+    "recorded_at": "2026-08-23T18:01:27.935Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -31,15 +31,15 @@
       "chapter_confidence": 1,
       "question_type": "計算",
       "difficulty": 4,
-      "question_text": "某物理實驗室內，學生設計了一套自動升降裝置。裝置主體為一個固定於天花板的理想定滑輪（滑輪質量與摩擦力皆忽略不計），兩端用極輕且不可伸長的細繩分別綁著質量 $4$ kg 的實驗儀器與質量 $1$ kg 的配重砝碼。將系統由靜止釋放後，求實驗儀器的加速度大小與細繩的張力大小。（取重力加速度 $g = 10$ m/s$^2$）",
-      "answer_text": "實驗儀器的加速度為 $a = 6$ m/s$^2$，細繩張力為 $T = 16$ N。設實驗儀器質量為 $M = 4$ kg，配重砝碼為 $m = 1$ kg。由牛頓第二運動定律，對實驗儀器有 $Mg - T = Ma$，對配重砝碼有 $T - mg = ma$。解聯立方程式得加速度 $a = \\frac{M - m}{M + m}g = \\frac{4 - 1}{4 + 1} \\times 10 = 6$ m/s$^2$；細繩張力 $T = m(g + a) = 1 \\times (10 + 6) = 16$ N。"
+      "question_text": "在建築工地的簡易物料升降系統中，一條跨過固定於高處的無摩擦輕質定滑輪的鋼索，其一端懸掛著載滿物料的吊籃（總質量 $150$ kg），另一端則懸掛著實心金屬配重塊（總質量 $250$ kg）。若一開始兩端皆保持靜止，當操作員鬆開煞車卡榫後，系統開始自由運動。試求配重塊的加速度大小以及鋼索在運動過程中的張力大小為何？（假設鋼索質量不計且不可伸長，重力加速度 $g = 10$ m/s$^2$）",
+      "answer_text": "配重塊的加速度 $a = \\frac{m_2 - m_1}{m_1 + m_2}g = \\frac{250 - 150}{150 + 250} \\times 10 = 2.5$ m/s$^2$；鋼索的張力 $T = m_1(g + a) = 150 \\times (10 + 2.5) = 1875$ N。"
     },
     "usage": {
       "tokenIn": 1141,
-      "tokenOut": 353,
-      "tokenThinking": 1397,
+      "tokenOut": 321,
+      "tokenThinking": 1458,
       "tokenCached": 0
     },
-    "latencyMs": 16565
+    "latencyMs": 16360
   }
 }

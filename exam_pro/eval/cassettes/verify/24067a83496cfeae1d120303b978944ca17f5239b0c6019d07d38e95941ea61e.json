@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:04:09.764Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 181,
+        "sha256": "e44be818c0515636899c0814235b5a23894f2a531680f3974d6693497ab6c595"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "遊樂園中的「旋轉飛椅」在穩定運轉時，乘客於水平面上作等速率圓周運動。關於此時乘客的運動與受力狀況，下列敘述哪些是正確的？\n(A) 乘客的運動速率維持不變\n(B) 乘客的運動速度維持不變\n(C) 乘客所受的合力恆指向水平圓的圓心\n(D) 乘客處於力平衡狀態，所受合力為零\n(E) 乘客的加速度方向恆與其速度方向互相垂直",
+      "questionType": "多選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(A)(C)(E)",
+      "answer_form": "option",
+      "steps_summary": "乘客於水平面上作等速率圓周運動。\n(A)等速率圓周運動的速率保持不變，正確。\n(B)速度是向量，因為運動方向隨時在改變，所以速度並非維持不變，錯誤。\n(C)作等速率圓周運動的物體，其所受合力提供為向心力，恆指向水平圓周的圓心，正確。\n(D)物體具有向心加速度，合力不為零，並非處於力平衡狀態，錯誤。\n(E)向心加速度方向恆指向圓心，而速度方向為圓周切線方向，兩者互相垂直，正確。\n故正確選項為 (A)(C)(E)。"
+    },
+    "usage": {
+      "tokenIn": 232,
+      "tokenOut": 196,
+      "tokenThinking": 787,
+      "tokenCached": 0
+    },
+    "latencyMs": 8579
+  }
+}

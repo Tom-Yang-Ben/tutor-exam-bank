@@ -77,14 +77,29 @@ describe('thresholds.json 的兩節', () => {
         }
     });
 
-    test('目前全是 null＝尚未建立基準線，compareSuite 只報告不擋', () => {
+    test('基準線已於 2026-08-24 建立：nlq／variant 的門檻是 0~1 的數字，量不到那一欄就算失敗', () => {
+        // 2026-08-24 之前這一條釘的是「全是 null、只報告不擋」的骨架狀態；
+        // golden 定案 + cassette 錄好 + --write-baseline 之後翻成硬門檻（thresholds.js 檔頭第 2 點）。
+        // rule_coverage 的 llm 欄依定義恆為 null（nlq._note），那一格不算。
+        const ALWAYS_NULL = new Set(['nlq.llm.rule_coverage']);
         for (const suite of ['nlq', 'variant']) {
+            let numbers = 0;
+            for (const col of thresholds.SUITE_METRICS[suite].columns) {
+                for (const m of thresholds.SUITE_METRICS[suite].metrics) {
+                    const v = doc[suite][col][m];
+                    if (ALWAYS_NULL.has(`${suite}.${col}.${m}`)) { assert.equal(v, null); continue; }
+                    assert.ok(typeof v === 'number' && v >= 0 && v <= 1, `${suite}.${col}.${m} 應為 0~1 的數字，得到 ${v}`);
+                    numbers += 1;
+                }
+            }
+            assert.ok(numbers > 0, `${suite} 沒有任何門檻數字`);
+            // 有數字之後，一欄都沒量到 → 每一欄各一條失敗（cassette 被誤刪不得表現成全綠）
             const measured = Object.fromEntries(
                 thresholds.SUITE_METRICS[suite].columns.map(c => [c, null]));
             const cmp = thresholds.compareSuite(doc, suite, measured);
-            assert.deepEqual(cmp.failures, [], `${suite} 在骨架階段就擋人了`);
+            assert.equal(cmp.failures.length, thresholds.SUITE_METRICS[suite].columns.length,
+                `${suite}：${cmp.failures.join('；')}`);
             assert.equal(cmp.checked, 0);
-            assert.equal(cmp.skipped.length, thresholds.SUITE_METRICS[suite].columns.length);
         }
     });
 

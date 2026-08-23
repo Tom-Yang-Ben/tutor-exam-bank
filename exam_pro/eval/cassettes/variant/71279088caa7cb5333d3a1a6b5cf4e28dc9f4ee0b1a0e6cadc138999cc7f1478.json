@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:24:40.924Z",
+    "recorded_at": "2026-08-23T18:05:14.268Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "計算",
       "difficulty": 2,
-      "question_text": "一輛電動車在路口等待綠燈亮起後，由靜止開始以 $4$ m/s$^2$ 的等加速度沿平直道路向前行駛。請問經過 $8$ 秒後，該輛電動車行駛的距離為多少公尺？",
-      "answer_text": "由等加速度運動公式可知，位移 $s = v_0 t + \\frac{1}{2} a t^2 = 0 + \\frac{1}{2} \\times 4 \\times 8^2 = 128$ 公尺。"
+      "question_text": "一輛賽車在筆直的賽道上由靜止起步，以 $6$ m/s$^2$ 的等加速度直線衝刺。請問經過 $5$ 秒後，賽車前進的距離為多少？",
+      "answer_text": "$s = v_0 t + \\frac{1}{2} a t^2 = 0 + \\frac{1}{2} \\times 6 \\times 5^2 = 75$ m。"
     },
     "usage": {
       "tokenIn": 1132,
-      "tokenOut": 177,
-      "tokenThinking": 1198,
+      "tokenOut": 156,
+      "tokenThinking": 2127,
       "tokenCached": 0
     },
-    "latencyMs": 11927
+    "latencyMs": 18624
   }
 }

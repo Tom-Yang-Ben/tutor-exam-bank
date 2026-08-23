@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:27:32.399Z",
+    "recorded_at": "2026-08-23T18:08:36.423Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "計算",
       "difficulty": 3,
-      "question_text": "在靜電實驗中，有兩顆固定在絕緣支架上的金屬小球，可視為點電荷。已知小球 A 帶有 $q_A = -5 \\times 10^{-6}$ C 的電量，小球 B 帶有 $q_B = 2 \\times 10^{-6}$ C 的電量，兩球中心相距 $0.3$ m。試求兩者間的靜電力大小，並指出其為吸引力或排斥力（取 $k = 9 \\times 10^9$ $\\frac{\\text{N} \\cdot \\text{m}^2}{\\text{C}^2}$）。",
-      "answer_text": "靜電力大小為 $F = k \\frac{|q_A q_B|}{r^2} = 9 \\times 10^9 \\times \\frac{10 \\times 10^{-12}}{0.09} = 1$ N。由於兩小球帶異號電荷，故此靜電力為吸引力。"
+      "question_text": "在靜電實驗中，有兩顆體積甚小的絕緣小球 A 與 B，分別帶有 $q_A = -5 \\times 10^{-6}$ C 與 $q_B = 2 \\times 10^{-6}$ C 的電荷。若將兩球固定在相距 $0.3$ m 的位置，試求兩球間靜電力的大小，並說明其為吸引力或排斥力。（庫侖常數取 $k = 9 \\times 10^9$ N$\\cdot$m$^2$/C$^2$）。",
+      "answer_text": "$F = k \\frac{|q_A q_B|}{r^2} = 9 \\times 10^9 \\times \\frac{10 \\times 10^{-12}}{0.09} = 1$ N，因兩球帶異號電荷，故為吸引力。"
     },
     "usage": {
       "tokenIn": 1335,
-      "tokenOut": 291,
-      "tokenThinking": 4117,
+      "tokenOut": 255,
+      "tokenThinking": 2159,
       "tokenCached": 0
     },
-    "latencyMs": 36806
+    "latencyMs": 19009
   }
 }

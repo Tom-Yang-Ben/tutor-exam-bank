@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:10:56.160Z",
+    "recorded_at": "2026-08-23T17:55:23.215Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "計算",
       "difficulty": 3,
-      "question_text": "在一個 3D 列印機的空間座標系統中，雷射發射器位於原點 $O(0, 0, 0)$。為了進行平台校準，發射器先後朝向空間中的兩點 $A(2, 1, -1)$ 與 $B(1, 2, 1)$ 射出兩道筆直的光束。求這兩道光束方向的夾角 $\\theta$。",
-      "answer_text": "兩道光束的方向向量分別為 $\\vec{OA} = (2, 1, -1)$ 與 $\\vec{OB} = (1, 2, 1)$。\n計算其內積與長度：\n$\\vec{OA} \\cdot \\vec{OB} = 2 \\times 1 + 1 \\times 2 + (-1) \\times 1 = 3$\n$|\\vec{OA}| = \\sqrt{2^2 + 1^2 + (-1)^2} = \\sqrt{6}$\n$|\\vec{OB}| = \\sqrt{1^2 + 2^2 + 1^2} = \\sqrt{6}$\n利用內積公式，求出夾角的餘弦值：\n$\\cos \\theta = \\frac{\\vec{OA} \\cdot \\vec{OB}}{|\\vec{OA}| |\\vec{OB}|} = \\frac{3}{\\sqrt{6} \\times \\sqrt{6}} = \\frac{3}{6} = \\frac{1}{2}$\n因此，夾角 $\\theta = 60^\\circ$。"
+      "question_text": "在一個三維空間的裝置藝術中，有兩束雷射光從原點 $O(0, 0, 0)$ 發射，第一束光線精準地打向點 $A(-1, 1, 0)$，第二束光線則打向點 $B(0, -1, 1)$。求這兩束雷射光的夾角 $\theta$。",
+      "answer_text": "由題意可知，兩束光的方向向量分別為 $\\vec{OA} = (-1, 1, 0)$ 與 $\\vec{OB} = (0, -1, 1)$。\n計算其內積為 $\\vec{OA} \\cdot \\vec{OB} = (-1) \\times 0 + 1 \\times (-1) + 0 \\times 1 = -1$。\n兩向量的長度分別為 $|\\vec{OA}| = \\sqrt{(-1)^2 + 1^2 + 0^2} = \\sqrt{2}$，以及 $|\\vec{OB}| = \\sqrt{0^2 + (-1)^2 + 1^2} = \\sqrt{2}$。\n根據內積公式可得 $\\cos \\theta = \\frac{\\vec{OA} \\cdot \\vec{OB}}{|\\vec{OA}||\\vec{OB}|} = \\frac{-1}{\\sqrt{2} \\times \\sqrt{2}} = -\\frac{1}{2}$。\n因為夾角範圍為 $0^\\circ \\leq \\theta \\leq 180^\\circ$，故 $\\theta = 120^\\circ$。"
     },
     "usage": {
       "tokenIn": 1177,
-      "tokenOut": 413,
-      "tokenThinking": 3737,
+      "tokenOut": 418,
+      "tokenThinking": 2248,
       "tokenCached": 0
     },
-    "latencyMs": 34210
+    "latencyMs": 47034
   }
 }

@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:07:07.262Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 173,
+        "sha256": "b9bb87063c040ad67bd180d3195638066648319b5546281e7903b38d78cdce84"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "在物理實驗課中，小華記錄了玩具車在直線軌道上運動的數據，並繪製出速度—時間圖（$v$-$t$ 圖）。若小華想要推算出玩具車在這段記錄時間內的總位移，他應該計算圖形中的哪一項幾何特徵？\n(A) 圖形與時間軸所圍成的面積\n(B) 圖形上各點切線的斜率\n(C) 圖形的最高點數值\n(D) 圖形在橫軸上的截距",
+      "questionType": "單選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(A)",
+      "answer_form": "option",
+      "steps_summary": "根據運動學原理，在速度—時間圖（$v$-$t$ 圖）中，速度對時間的積分代表物體的位移。從幾何意義上來看，這等同於圖形曲線與時間軸所圍成的面積。若要推算玩具車的總位移，應計算圖形與時間軸所圍成的面積；而圖形上各點的切線斜率則代表物體的加速度。因此正確答案為 (A)。"
+    },
+    "usage": {
+      "tokenIn": 227,
+      "tokenOut": 123,
+      "tokenThinking": 335,
+      "tokenCached": 0
+    },
+    "latencyMs": 10513
+  }
+}

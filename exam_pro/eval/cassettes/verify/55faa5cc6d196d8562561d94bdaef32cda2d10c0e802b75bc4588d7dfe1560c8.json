@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:03:00.321Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 203,
+        "sha256": "aeb074c2309ef26093935fe6d5bc8c3ad18125238ec36cf033ee5305b92eaae0"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "一名質量為 $60$ kg 的滑雪者（含裝備），從傾角為 $37^\\circ$ 的直線雪道上由靜止開始向下滑行。若滑雪板與雪面間的動摩擦係數 $\\mu = 0.05$，且忽略空氣阻力，試求該滑雪者下滑時的加速度大小？（取重力加速度 $g = 10$ m/s$^2$，已知 $\\sin 37^\\circ = 0.6$、$\\cos 37^\\circ = 0.8$）",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "5.6",
+      "answer_form": "number",
+      "steps_summary": "1. 找出滑雪者在斜面上受到的重力平行分力：$F_g = mg \\sin 37^\\circ$。\n2. 垂直斜面的正向力為 $N = mg \\cos 37^\\circ$。\n3. 滑雪板與雪面間的動摩擦力為 $f_k = \\mu N = \\mu mg \\cos 37^\\circ$。\n4. 根據牛頓第二運動定律，沿斜面向下的合力 $F_{net} = ma$。故 $ma = mg \\sin 37^\\circ - \\mu mg \\cos 37^\\circ$。\n5. 將質量 $m$ 消去，得到加速度 $a = g(\\sin 37^\\circ - \\mu \\cos 37^\\circ)$。\n6. 將已知數值代入：$a = 10 \\times (0.6 - 0.05 \\times 0.8) = 10 \\times (0.6 - 0.04) = 10 \\times 0.56 = 5.6$ m/s$^2$。"
+    },
+    "usage": {
+      "tokenIn": 236,
+      "tokenOut": 296,
+      "tokenThinking": 1133,
+      "tokenCached": 0
+    },
+    "latencyMs": 12203
+  }
+}

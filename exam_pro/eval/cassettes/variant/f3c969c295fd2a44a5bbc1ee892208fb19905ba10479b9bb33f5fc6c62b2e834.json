@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:11:43.434Z",
+    "recorded_at": "2026-08-23T17:56:32.042Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "填空",
       "difficulty": 3,
-      "question_text": "在三維空間座標系中，工程師測試一束雷射光，光束從原點沿著直線發射，並精準照射到空間中的標靶點 $P(2, -3, 6)$。若將雷射光的發射方向視為一個空間向量，求此向量與 $z$ 軸正向夾角的餘弦值。",
-      "answer_text": "雷射光發射方向的向量為 $\\vec{v} = (2, -3, 6)$。其長度為 $|\\vec{v}| = \\sqrt{2^2 + (-3)^2 + 6^2} = \\sqrt{49} = 7$。因為 $z$ 軸正向的單位向量為 $(0, 0, 1)$，兩向量的內積為 $2 \\times 0 + (-3) \\times 0 + 6 \\times 1 = 6$，故所求的夾角餘弦值為 $\\frac{6}{7 \\times 1} = \\frac{6}{7}$。"
+      "question_text": "在進行室內測量時，設計師以房間的角落為原點建構一個空間坐標系。一束測距用的雷射光從原點射向點 $P(2, -3, 6)$ 的位置。若定義 $z$ 軸正向為鉛直向上的方向，請求出這束雷射光與鉛直向上方向夾角的餘弦值。",
+      "answer_text": "雷射光的方向可表示為空間向量 $\\vec{v} = (2, -3, 6)$，而鉛直向上的方向即為 $z$ 軸正向，可取其單位向量 $\\vec{k} = (0, 0, 1)$。先求出 $\\vec{v}$ 的長度為 $|\\vec{v}| = \\sqrt{2^2 + (-3)^2 + 6^2} = \\sqrt{49} = 7$。接著計算兩向量的內積為 $\\vec{v} \\cdot \\vec{k} = 2 \\times 0 + (-3) \\times 0 + 6 \\times 1 = 6$。故所求夾角的餘弦值為 $\\frac{\\vec{v} \\cdot \\vec{k}}{|\\vec{v}| |\\vec{k}|} = \\frac{6}{7 \\times 1} = \\frac{6}{7}$。"
     },
     "usage": {
       "tokenIn": 1178,
-      "tokenOut": 292,
-      "tokenThinking": 1343,
+      "tokenOut": 367,
+      "tokenThinking": 1907,
       "tokenCached": 0
     },
-    "latencyMs": 14505
+    "latencyMs": 20207
   }
 }

@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:28:35.437Z",
+    "recorded_at": "2026-08-23T18:09:58.854Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "計算",
       "difficulty": 2,
-      "question_text": "在靜電學實驗中，將一個帶有 $q = -4 \\times 10^{-6}$ C 電荷的微小金屬小球固定於絕緣架上。若將此小球視為點電荷，試求距離該小球球心 $0.2$ m 處的電場量值為何？（已知庫侖常數 $k = 9 \\times 10^9$ N$\\cdot$m$^2$/C$^2$）",
-      "answer_text": "根據點電荷電場公式，電場量值為 $E = k \\frac{|q|}{r^2} = 9 \\times 10^9 \\times \\frac{4 \\times 10^{-6}}{0.04} = 9 \\times 10^5$ N/C。"
+      "question_text": "在一次靜電學實驗中，研究人員將一顆帶有 $8 \\times 10^{-6}$ C 電量的小金屬球固定於絕緣支架上，並假設其可視為一個點電荷。若在距離球心 $0.4$ m 處放置一電場探測儀器，則該處測得的電場量值為多少？（庫侖常數 $k = 9 \\times 10^9$ $\\frac{\\text{N}\\cdot\\text{m}^2}{\\text{C}^2}$）",
+      "answer_text": "根據點電荷電場公式 $E = k \\frac{Q}{r^2}$，代入數值可得 $E = 9 \\times 10^9 \\times \\frac{8 \\times 10^{-6}}{0.4^2} = \\frac{7.2 \\times 10^4}{0.16} = 4.5 \\times 10^5$ $\\frac{\\text{N}}{\\text{C}}$。"
     },
     "usage": {
       "tokenIn": 1228,
-      "tokenOut": 238,
-      "tokenThinking": 2173,
+      "tokenOut": 295,
+      "tokenThinking": 2190,
       "tokenCached": 0
     },
-    "latencyMs": 21716
+    "latencyMs": 18236
   }
 }

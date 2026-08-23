@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:25:38.985Z",
+    "recorded_at": "2026-08-23T18:06:38.726Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "單選",
       "difficulty": 2,
-      "question_text": "阿華在物理實驗課中分析滑車的直線運動，並繪製了滑車的速度對時間的關係圖（即 $v$-$t$ 圖）。若阿華想要從此關係圖中求得滑車在某段時間內的位移，他應該計算圖形中的哪一個幾何特徵？\n(A) 曲線的切線斜率\n(B) 曲線與時間軸所圍成的面積\n(C) 曲線在縱軸上的截距\n(D) 曲線與橫軸的交點",
-      "answer_text": "(B)。在 $v$-$t$ 圖中，速度對時間的積分 $\\int v \\, dt$ 即為位移，在幾何上對應於曲線與時間軸所圍成的面積。另外，圖形的切線斜率代表的是瞬時加速度。"
+      "question_text": "在探討物體直線運動的速度—時間（$v$-$t$）圖時，若將縱軸設定為速度、橫軸設定為時間，則圖形與時間軸所圍成面積的物理單位，會與下列哪一個物理量的單位相同？ (A) 加速度 (B) 位移 (C) 作用力 (D) 速率",
+      "answer_text": "(B)。速度的定義為單位時間內的位移，將速度與時間相乘（即計算圖形面積）便可求得位移。從單位來分析，速度的單位乘上時間的單位，得到的結果為長度單位，因此與位移的單位相同。"
     },
     "usage": {
       "tokenIn": 1180,
-      "tokenOut": 238,
-      "tokenThinking": 898,
+      "tokenOut": 198,
+      "tokenThinking": 2328,
       "tokenCached": 0
     },
-    "latencyMs": 11341
+    "latencyMs": 21728
   }
 }

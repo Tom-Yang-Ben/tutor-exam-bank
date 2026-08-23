@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:23:40.863Z",
+    "recorded_at": "2026-08-23T18:03:34.065Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "計算",
       "difficulty": 3,
-      "question_text": "遊樂園裡的某個測試裝置中，一個質量 $1.2$ kg 的座艙模型被一根長度為 $3$ m 的輕質鋼纜連接在中心轉軸上。該模型在光滑的水平平台上，以 $5$ m/s 的速率作等速圓周運動。求此時鋼纜上的張力大小。",
-      "answer_text": "鋼纜的張力提供座艙模型作等速圓周運動所需的向心力，根據向心力公式可得：\n$T = \\frac{mv^2}{r} = \\frac{1.2 \\times 5^2}{3} = 10$ N。"
+      "question_text": "在平坦且無摩擦的結冰湖面上，小明用一根長 $5$ m 的結實繩子拉住一個質量為 $10$ kg 的雪橇，使雪橇以 $3$ m/s 的速率繞著他作等速圓周運動。求這根繩子所受到的拉力大小。",
+      "answer_text": "繩子的拉力提供雪橇作等速圓周運動所需的向心力：$F = \\frac{mv^2}{r} = \\frac{10 \\times 3^2}{5} = 18$ N。"
     },
     "usage": {
       "tokenIn": 1347,
-      "tokenOut": 203,
-      "tokenThinking": 1228,
+      "tokenOut": 189,
+      "tokenThinking": 1237,
       "tokenCached": 0
     },
-    "latencyMs": 15302
+    "latencyMs": 12786
   }
 }

@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:24:52.459Z",
+    "recorded_at": "2026-08-23T18:05:31.948Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "計算",
       "difficulty": 2,
-      "question_text": "一顆小石頭從距離水面 $80$ 公尺高的橋面上自由落下，不計空氣阻力，取重力加速度 $g = 10$ m/s$^2$。試求石頭從開始落下到擊中水面需要經歷多少時間？",
-      "answer_text": "根據自由落體公式 $h = \\frac{1}{2} g t^2$，將 $h = 80$ 與 $g = 10$ 代入，可得 $80 = \\frac{1}{2} \\times 10 \\times t^2$，解得 $t = \\sqrt{\\frac{160}{10}} = 4$ 秒。"
+      "question_text": "在一個建築工地中，一名工人不小心讓一把扳手從高空的鷹架上自由落下。若該處距離地面 $80$ m，在不計空氣阻力的情況下，請求出扳手落至地面所需的時間。（取重力加速度 $g = 10$ m/s$^2$）",
+      "answer_text": "根據自由落體公式 $h = \\frac{1}{2} g t^2$，代入 $h = 80$ 與 $g = 10$，可得 $80 = \\frac{1}{2} \\times 10 \\times t^2$。整理得到 $5t^2 = 80$，即 $t^2 = 16$，故 $t = 4$ 秒。"
     },
     "usage": {
       "tokenIn": 1116,
-      "tokenOut": 205,
-      "tokenThinking": 1004,
+      "tokenOut": 223,
+      "tokenThinking": 769,
       "tokenCached": 0
     },
-    "latencyMs": 11158
+    "latencyMs": 8707
   }
 }

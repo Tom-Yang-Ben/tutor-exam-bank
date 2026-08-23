@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:20:42.029Z",
+    "recorded_at": "2026-08-23T18:02:02.336Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -31,15 +31,15 @@
       "chapter_confidence": 1,
       "question_type": "單選",
       "difficulty": 1,
-      "question_text": "魔術師在表演時，將桌上鋪著的桌布瞬間快速抽走，但原本放在桌布上的玻璃杯卻幾乎留在原處沒有跟著移動。此現象主要與下列哪一個物理原理有關？\n(A) 慣性\n(B) 萬有引力\n(C) 反作用力\n(D) 能量守恆",
-      "answer_text": "(A)。根據牛頓第一運動定律（慣性定律），物體會傾向維持原有的運動狀態。玻璃杯原本處於靜止狀態，當桌布被瞬間快速抽走時，杯子本身傾向保持靜止，因此會留在原處。"
+      "question_text": "魔術師在表演時，迅速將桌面上的一塊桌布抽走，但原本放在桌布上的玻璃杯卻幾乎留在原處，沒有跟著桌布移動。這種現象主要是下列哪一種物理概念的體現？\n(A) 慣性\n(B) 萬有引力\n(C) 反作用力\n(D) 向心力",
+      "answer_text": "(A)。由牛頓第一運動定律，物體具有維持其原有運動狀態的特性，稱為慣性。玻璃杯原本處於靜止狀態，當桌布被迅速抽走時，玻璃杯因慣性而傾向維持靜止，故能留在原處。"
     },
     "usage": {
       "tokenIn": 1063,
-      "tokenOut": 202,
-      "tokenThinking": 962,
+      "tokenOut": 206,
+      "tokenThinking": 1128,
       "tokenCached": 0
     },
-    "latencyMs": 13081
+    "latencyMs": 12129
   }
 }

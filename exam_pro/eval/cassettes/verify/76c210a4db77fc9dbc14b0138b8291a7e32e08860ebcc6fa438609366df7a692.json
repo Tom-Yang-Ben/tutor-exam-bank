@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:06:45.463Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 132,
+        "sha256": "b5c30d081299973f135e94f360e531b7ff898b79ff82a53a4410f34b9836bc6f"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "在探討物體直線運動的速度—時間（$v$-$t$）圖時，若將縱軸設定為速度、橫軸設定為時間，則圖形與時間軸所圍成面積的物理單位，會與下列哪一個物理量的單位相同？ (A) 加速度 (B) 位移 (C) 作用力 (D) 速率",
+      "questionType": "單選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(B)",
+      "answer_form": "option",
+      "steps_summary": "在速度—時間（$v$-$t$）圖中，縱軸代表速度（單位為 m/s），橫軸代表時間（單位為 s）。圖形與時間軸所圍成的面積相當於速度與時間的乘積，其計算單位的過程為 (m/s) × s = m（公尺）。這與長度或位移的單位相同。比較各選項：(A) 加速度單位為 m/s²，(B) 位移單位為 m，(C) 作用力單位為 N (kg·m/s²)，(D) 速率單位為 m/s。因此，面積的物理單位與位移的單位相同，故選 (B)。"
+    },
+    "usage": {
+      "tokenIn": 189,
+      "tokenOut": 185,
+      "tokenThinking": 439,
+      "tokenCached": 0
+    },
+    "latencyMs": 6340
+  }
+}

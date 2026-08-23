@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:00:29.675Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 122,
+        "sha256": "4319589014f573ff6416cf2f781884f43aa1369de9359346251e14f8ab1dee54"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "一名質量為 $65$ kg 的太空人坐在火箭內的發射座椅上。當火箭發射升空，以 $20$ m/s$^2$ 的加速度垂直向上加速時，求座椅對太空人的正向力大小（取 $g = 10$ m/s$^2$）。",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "1950 N",
+      "answer_form": "number",
+      "steps_summary": "依據牛頓第二運動定律，太空人受到的合力等於其質量乘以加速度。我們設定向上為正方向，太空人在垂直方向上受到向上的座椅正向力 N 以及向下的重力 mg。根據合力方程式可列出：N - mg = ma。將重力移項可得正向力的算式：N = m(g + a)。接著代入題目已知數值：太空人質量 m = 65 kg，重力加速度 g = 10 m/s^2，以及火箭向上的加速度 a = 20 m/s^2。計算可得正向力 N = 65 × (10 + 20) = 65 × 30 = 1950 N。因此，座椅對太空人的正向力大小為 1950 N。"
+    },
+    "usage": {
+      "tokenIn": 178,
+      "tokenOut": 219,
+      "tokenThinking": 1543,
+      "tokenCached": 0
+    },
+    "latencyMs": 14042
+  }
+}

@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:23:13.916Z",
+    "recorded_at": "2026-08-23T18:03:08.900Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "計算",
       "difficulty": 3,
-      "question_text": "在無摩擦的水平氣墊桌上，一根長度為 $0.8$ m 的輕質細線一端固定，另一端連接著一塊質量為 $0.5$ kg 的金屬滑塊。若滑塊以 $4$ m/s 的速率繞著固定端點作等速圓周運動，試求細線所承受的張力大小。",
-      "answer_text": "滑塊在水平面上作等速圓周運動，其向心力完全由細線的張力提供。根據向心力公式：$T = \\frac{mv^2}{r}$，代入已知數值可得 $T = \\frac{0.5 \\times 4^2}{0.8} = \\frac{0.5 \\times 16}{0.8} = \\frac{8}{0.8} = 10$ N。"
+      "question_text": "一條長度為 $1.5$ m 的堅固細線，一端固定在光滑冰面上的木樁，另一端綁著一顆質量為 $2$ kg 的冰上曲棍球。若曲棍球以 $6$ m/s 的速率在冰面上作等速圓周運動，求細線對曲棍球的拉力大小。",
+      "answer_text": "細線對曲棍球的拉力提供向心力：$T = \\frac{mv^2}{r} = \\frac{2 \\times 6^2}{1.5} = 48$ N。"
     },
     "usage": {
       "tokenIn": 1347,
-      "tokenOut": 252,
-      "tokenThinking": 944,
+      "tokenOut": 192,
+      "tokenThinking": 647,
       "tokenCached": 0
     },
-    "latencyMs": 100648
+    "latencyMs": 8543
   }
 }

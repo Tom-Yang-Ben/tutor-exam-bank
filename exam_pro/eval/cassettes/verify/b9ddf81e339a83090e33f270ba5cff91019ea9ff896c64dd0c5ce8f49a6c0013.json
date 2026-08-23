@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:04:38.289Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 173,
+        "sha256": "dff0faae446c049b2f2e33a11dc10cc388edce2f937d0daf0dbe5235f6e3b6a4"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "一輛無人測試車在平坦的水平圓形賽道上，以恆定的速率 $v$ 進行繞圈測試。關於該測試車在繞行期間的物理狀態，下列敘述哪些正確？ (A) 測試車的瞬時速度保持不變 (B) 測試車的瞬時速率保持不變 (C) 測試車的加速度恆為零 (D) 測試車所受的合力方向恆指向賽道圓心 (E) 測試車處於力學平衡狀態",
+      "questionType": "多選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(B)(D)",
+      "answer_form": "option",
+      "steps_summary": "1. 無人測試車作等速率圓周運動，其運動方向（切線方向）隨時在改變，因此瞬時速度是變動的，(A)錯誤。\n2. 題目已知車子以恆定的速率 $v$ 繞行，因此瞬時速率保持不變，(B)正確。\n3. 由於速度方向不斷改變，測試車必定具有向心加速度，加速度不為零，(C)錯誤。\n4. 等速率圓周運動的向心加速度恆指向圓心，根據牛頓第二運動定律，物體所受的合力也必定恆指向圓心，(D)正確。\n5. 測試車受有指向圓心的合力，合力不為零，因此並非處於力學平衡狀態，(E)錯誤。\n綜上所述，正確的選項為 (B) 與 (D)。"
+    },
+    "usage": {
+      "tokenIn": 225,
+      "tokenOut": 228,
+      "tokenThinking": 774,
+      "tokenCached": 0
+    },
+    "latencyMs": 9104
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:01:11.570Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 187,
+        "sha256": "25441e2e52f296a0bd5df7ac25c93b7fce29df845b5d3ab1a55294fdd111bfaa"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "在一項物理實驗中，學生模擬電梯的配重系統，將一條極輕的細繩跨過無摩擦的定滑輪，繩子兩端分別懸掛著質量為 $14$ kg 的模型電梯車廂與質量為 $6$ kg 的配重塊。若由靜止狀態同時釋放兩者，求模型電梯車廂下降的加速度大小以及細繩上的張力大小（取重力加速度 $g = 10$ m/s$^2$，忽略滑輪與細繩的質量及空氣阻力）。",
+      "questionType": "計算",
+      "sampleNo": 2
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "加速度 4 m/s^2，張力 84 N",
+      "answer_form": "text",
+      "steps_summary": "設模型電梯車廂質量 m₁ = 14 kg，配重塊質量 m₂ = 6 kg，加速度大小為 a，細繩張力為 T。根據牛頓第二運動定律，對下降的車廂列式：m₁g - T = m₁a；對上升的配重塊列式：T - m₂g = m₂a。將兩式相加可得 (m₁ - m₂)g = (m₁ + m₂)a。代入數值：(14 - 6) × 10 = (14 + 6)a，即 80 = 20a，解得加速度 a = 4 m/s²。將 a 的數值代入第二式可得 T - 60 = 6 × 4，解得細繩張力 T = 84 N。"
+    },
+    "usage": {
+      "tokenIn": 233,
+      "tokenOut": 234,
+      "tokenThinking": 989,
+      "tokenCached": 0
+    },
+    "latencyMs": 9796
+  }
+}

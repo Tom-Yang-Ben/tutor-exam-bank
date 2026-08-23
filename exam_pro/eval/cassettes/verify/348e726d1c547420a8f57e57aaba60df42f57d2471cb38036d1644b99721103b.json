@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:05:50.533Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 123,
+        "sha256": "bb5c52635df69ea3d8985873b829e1c5245292a8f35fc0b901d0e594e0fc35e7"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "在一個建築工地中，一名工人不小心讓一把扳手從高空的鷹架上自由落下。若該處距離地面 $80$ m，在不計空氣阻力的情況下，請求出扳手落至地面所需的時間。（取重力加速度 $g = 10$ m/s$^2$）",
+      "questionType": "計算",
+      "sampleNo": 2
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "4 s",
+      "answer_form": "number",
+      "steps_summary": "1. 扳手作自由落體運動，初速 v₀ = 0，下落距離 h = 80 m，重力加速度 g = 10 m/s²。\n2. 根據等加速度運動公式（或自由落體公式）：h = 1/2 * g * t²。\n3. 將數值代入公式中：80 = 1/2 * 10 * t²。\n4. 化簡方程式得：5t² = 80，即 t² = 16。\n5. 解得 t = 4（負值不合）。\n故扳手落至地面所需的時間為 4 秒。"
+    },
+    "usage": {
+      "tokenIn": 180,
+      "tokenOut": 174,
+      "tokenThinking": 691,
+      "tokenCached": 0
+    },
+    "latencyMs": 7962
+  }
+}

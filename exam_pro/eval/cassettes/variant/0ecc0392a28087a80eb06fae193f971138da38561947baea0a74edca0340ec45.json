@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:29:30.138Z",
+    "recorded_at": "2026-08-23T18:11:02.008Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "單選",
       "difficulty": 2,
-      "question_text": "在物理實驗室中，學生利用探針測量並繪製出帶電導體周圍的等位面。若學生想在同一張圖上標示出電場線的方向，根據靜電學原理，電場線與等位面在相交處的幾何關係應該為何？ (A) 恆互相平行 (B) 恆互相垂直 (C) 夾角恆為 $45^\\circ$ (D) 夾角大小取決於空間中的電場強度",
-      "answer_text": "(B)。因為沿著等位面移動測試電荷時，電位沒有變化，代表電場力對電荷作功為零。由此可知，電場在平行於等位面的方向上沒有分量，故電場線必定與等位面互相垂直。"
+      "question_text": "在探討靜電場的特性時，我們經常會利用等電位面與電場線來視覺化空間中的電場分布。若在某區域中存在一個帶電體，且其周圍某曲面上所有點的電位皆相同（即等電位面），則穿過此曲面的電場線與該面在交點處的幾何夾角必定為何？\n(A) $0^\\circ$\n(B) $45^\\circ$\n(C) $90^\\circ$\n(D) 夾角視電場量值而定，無特定數值",
+      "answer_text": "(C)。因為在等電位面上任意移動電荷時，靜電力所作的功為零，這表示電場在等電位面的切線方向分量必須為零。因此，電場線必定與等電位面互相垂直，兩者在交點處的夾角為 $90^\\circ$。"
     },
     "usage": {
       "tokenIn": 1245,
-      "tokenOut": 230,
-      "tokenThinking": 1749,
+      "tokenOut": 274,
+      "tokenThinking": 1479,
       "tokenCached": 0
     },
-    "latencyMs": 18623
+    "latencyMs": 15330
   }
 }

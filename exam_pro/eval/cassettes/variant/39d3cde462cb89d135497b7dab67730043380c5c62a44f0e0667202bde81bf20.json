@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:26:25.830Z",
+    "recorded_at": "2026-08-23T18:07:37.108Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -31,15 +31,15 @@
       "chapter_confidence": 1,
       "question_type": "單選",
       "difficulty": 1,
-      "question_text": "交通警察在公路旁使用雷達測速槍取締超速車輛。當測速槍螢幕上顯示出某輛汽車的數值時，請問此數值代表該車輛的何種物理量？ (A) 平均速度 (B) 平均速率 (C) 瞬時速率 (D) 路徑長",
-      "answer_text": "(C)。測速槍量測的是汽車在被偵測到那一瞬間的速率大小，並不包含方向資訊，也不是一段時間內的平均值，因此為瞬時速率。"
+      "question_text": "交通警察在路邊使用手持雷射測速槍，對著一輛行駛中的汽車進行測量，測速槍螢幕上顯示出 $85\\text{ km/h}$。請問此數值代表該汽車的何種物理量？\n(A) 平均速度　(B) 瞬時速度　(C) 平均速率　(D) 瞬時速率",
+      "answer_text": "(D)。測速槍所測得的是汽車在被測量那一瞬間的快慢，屬於瞬時值；且螢幕僅顯示數值大小，並未包含方向資訊，因此為瞬時速率。"
     },
     "usage": {
       "tokenIn": 1050,
-      "tokenOut": 169,
-      "tokenThinking": 1534,
+      "tokenOut": 199,
+      "tokenThinking": 1247,
       "tokenCached": 0
     },
-    "latencyMs": 16829
+    "latencyMs": 16406
   }
 }

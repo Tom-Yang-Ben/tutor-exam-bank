@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:25:50.450Z",
+    "recorded_at": "2026-08-23T18:06:56.368Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "單選",
       "difficulty": 2,
-      "question_text": "在分析一輛跑車於直線賽道上測試性能的過程中，工程師繪製了該車的「速度—時間圖」（$v$-$t$ 圖）。請問此圖形中曲線上某一點的切線斜率，代表該跑車在該時刻的哪一個物理量？\n(A) 瞬時位移\n(B) 瞬時速度\n(C) 瞬時加速度\n(D) 所受合力",
-      "answer_text": "(C)。$v$-$t$ 圖上一點的切線斜率等於極短時間內速度的變化率 $\\frac{dv}{dt}$，其物理意義為瞬時加速度；而該圖形與時間軸所圍成的面積代表位移。"
+      "question_text": "在物理實驗課中，小華記錄了玩具車在直線軌道上運動的數據，並繪製出速度—時間圖（$v$-$t$ 圖）。若小華想要推算出玩具車在這段記錄時間內的總位移，他應該計算圖形中的哪一項幾何特徵？\n(A) 圖形與時間軸所圍成的面積\n(B) 圖形上各點切線的斜率\n(C) 圖形的最高點數值\n(D) 圖形在橫軸上的截距",
+      "answer_text": "(A)。$v$-$t$ 圖中，圖形與時間軸所圍成的面積等於速度對時間的積分 $\\int v \\, dt$，代表物體在該段時間內的位移；而圖形切線的斜率則代表加速度。"
     },
     "usage": {
       "tokenIn": 1180,
-      "tokenOut": 218,
-      "tokenThinking": 861,
+      "tokenOut": 238,
+      "tokenThinking": 993,
       "tokenCached": 0
     },
-    "latencyMs": 11078
+    "latencyMs": 10870
   }
 }

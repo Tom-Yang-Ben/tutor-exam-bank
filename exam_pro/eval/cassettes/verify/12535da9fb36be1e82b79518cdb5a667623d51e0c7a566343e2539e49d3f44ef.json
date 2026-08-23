@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T18:03:46.840Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 116,
+        "sha256": "0b15cd72177316a847e579131acba569248c43ab781cce1ba490dda57ccd9f59"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "在平坦且無摩擦的結冰湖面上，小明用一根長 $5$ m 的結實繩子拉住一個質量為 $10$ kg 的雪橇，使雪橇以 $3$ m/s 的速率繞著他作等速圓周運動。求這根繩子所受到的拉力大小。",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "18 N",
+      "answer_form": "text",
+      "steps_summary": "雪橇在平坦且無摩擦的冰面上作等速圓周運動，其所需的向心力完全由繩子的拉力提供。已知雪橇質量 $m = 10$ kg，圓周運動的半徑即為繩長 $R = 5$ m，切線速率 $v = 3$ m/s。根據向心力公式，繩子的拉力 $F$ 為：\n$F = \\frac{mv^2}{R} = \\frac{10 \\times 3^2}{5} = \\frac{10 \\times 9}{5} = 18$ N。\n故這根繩子所受到的拉力大小為 18 牛頓（N）。"
+    },
+    "usage": {
+      "tokenIn": 184,
+      "tokenOut": 195,
+      "tokenThinking": 1154,
+      "tokenCached": 0
+    },
+    "latencyMs": 12388
+  }
+}

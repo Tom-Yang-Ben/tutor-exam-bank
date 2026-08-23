@@ -3,7 +3,7 @@
     "agent": "variant",
     "model": "gemini-3.1-pro-preview",
     "template": "variant.v1",
-    "recorded_at": "2026-08-23T17:08:34.533Z",
+    "recorded_at": "2026-08-23T17:52:01.739Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -34,15 +34,15 @@
       "chapter_confidence": 1,
       "question_type": "填空",
       "difficulty": 3,
-      "question_text": "在物理學中，當作用於物體的定力向量與物體的位移向量互相垂直時，該力對物體不作功。若一物體在二維平面上受到一定力 $\\vec{F} = (-4, 7)$ 的作用，並產生了位移 $\\vec{S} = (k, 12)$。已知此定力對該物體不作功，求常數 $k$ 的值。",
-      "answer_text": "定力對物體不作功代表力向量與位移向量互相垂直，即兩向量的內積為 $0$。由 $\\vec{F} \\cdot \\vec{S} = 0$ 列式得 $-4 \\times k + 7 \\times 12 = 0$，整理得 $-4k + 84 = 0$，解得 $k = 21$。"
+      "question_text": "在城市規劃的設計圖上，有兩條筆直的道路交會於一點，且要求這兩條道路互相垂直。若將設計圖視為坐標平面，這兩條道路的方向向量分別為 $\\vec{u} = (3, 5)$ 與 $\\vec{v} = (t, -6)$，求 $t$ 的值。",
+      "answer_text": "兩道路互相垂直，代表其方向向量的內積為 $0$：\n$\\vec{u} \\cdot \\vec{v} = 3 \\times t + 5 \\times (-6) = 0$\n$3t - 30 = 0$\n解得 $t = 10$。"
     },
     "usage": {
       "tokenIn": 1127,
-      "tokenOut": 252,
-      "tokenThinking": 1399,
+      "tokenOut": 212,
+      "tokenThinking": 1519,
       "tokenCached": 0
     },
-    "latencyMs": 15317
+    "latencyMs": 18920
   }
 }
