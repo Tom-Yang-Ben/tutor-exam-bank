@@ -128,7 +128,21 @@ const SUITE_METRICS = {
     // classify：cassette 回放 vs golden（規劃 §5.3.2、§3.8）
     classify: { columns: ['classify'], metrics: ['accuracy', 'macro_f1'] },
     // pipeline：對 sample_exam.pdf 跑整條管線（A-T14）
-    pipeline: { columns: ['pipeline'], metrics: ['saved_rate', 'gate_pass_rate', 'answer_agree_rate'] }
+    pipeline: { columns: ['pipeline'], metrics: ['saved_rate', 'gate_pass_rate', 'answer_agree_rate'] },
+
+    // ── 階段 3 的兩個 suite（interfaces-stage3.md 第 8.2、8.3 條）──
+    //
+    // nlq：兩欄分開量是刻意的。rule_coverage 問的是「規則就夠了嗎」（＝要不要花錢），
+    //      只有 rules 欄有值、llm 欄恆為 null；filters_exact 則是 rules 欄只算
+    //      expect_path='rules' 的句子、llm 欄只算 expect_path='llm' 的句子。
+    //      把兩條路徑混成一個平均值，會讓「規則變差但 LLM 補回來」看起來像沒事。
+    nlq: { columns: ['rules', 'llm'], metrics: ['rule_coverage', 'filters_exact', 'recall10'] },
+
+    // variant：retrieved_coverage 是「純檢索就夠用的比例」＝零 LLM 費用的那一段；
+    //          gate_pass_rate 是「生成的題六個閘門全過的比例」。
+    //          每題 cost_usd 與各閘門通過數**只報告不設門檻**（第 8.3 條）——
+    //          成本越低越好，放進 ratchet 會變成反向門檻。
+    variant: { columns: ['variant'], metrics: ['retrieved_coverage', 'gate_pass_rate'] }
 };
 
 /**

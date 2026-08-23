@@ -15,6 +15,7 @@ const path = require('path');
 
 const { shortSha, today, REPORT_DIR } = require('./report');
 const { round4 } = require('./metrics');
+const { SUITE_METRICS } = require('./thresholds');
 
 /** @param {number|null} v @returns {string} */
 function cell(v) {
@@ -121,6 +122,44 @@ function markdownPipeline(res) {
 }
 
 /**
+ * 階段 3 兩個 suite（nlq／variant）的通用 Markdown（interfaces-stage3.md 第 8 條）。
+ *
+ * 為什麼不各寫一支像 classify／pipeline 那樣的專用表：那兩支的形狀是階段 2 談好的
+ * （混淆對、節點通過率），而第 8.1 條對階段 3 只凍結了**必要鍵**（suite／measured／
+ * failures／warnings／meta／perEntry／isPrivate），其餘自由。所以報表這一層照
+ * SUITE_METRICS 的欄與指標把 measured 攤開就好；suite 自己想多報的數字放在
+ * `res.extra`（自由格式，例如第 8.3 條「只報告不設門檻」的 cost_usd 與各閘門通過數）。
+ *
+ * @param {object} res
+ * @returns {string}
+ */
+function markdownGeneric(res) {
+    const spec = SUITE_METRICS[res.suite];
+    if (!spec) return `\n## ${res.suite} eval\n\n（thresholds.js 的 SUITE_METRICS 沒有這個 suite，無法排版）\n`;
+
+    const lines = ['', `## ${res.suite} eval（\`--suite ${res.suite}\`）`, '',
+        `| 指標 | ${spec.columns.join(' | ')} |`,
+        `|---|${spec.columns.map(() => '---:').join('|')}|`];
+    for (const metric of spec.metrics) {
+        const cells = spec.columns.map(col => {
+            const m = res.measured && res.measured[col];
+            return cell(m ? m[metric] : null);
+        });
+        lines.push(`| ${metric} | ${cells.join(' | ')} |`);
+    }
+    lines.push('');
+
+    if (res.extra && Object.keys(res.extra).length) {
+        lines.push('**只報告、不設門檻的數字**（第 8.3 條）：', '');
+        for (const [k, v] of Object.entries(res.extra)) {
+            lines.push(`- ${k}：${v !== null && typeof v === 'object' ? JSON.stringify(v) : cell(v)}`);
+        }
+        lines.push('');
+    }
+    return lines.join('\n');
+}
+
+/**
  * 輸出報表。
  * @param {object} opts
  * @param {object} opts.res     suite 的回傳
@@ -130,7 +169,9 @@ function markdownPipeline(res) {
  */
 function emit(opts) {
     const res = opts.res;
-    const md = (res.suite === 'classify' ? markdownClassify(res) : markdownPipeline(res)) + '\n' +
+    // classify／pipeline 有各自談好的專用表；階段 3 的 nlq／variant 走通用表（第 8 條）。
+    const RENDERER = { classify: markdownClassify, pipeline: markdownPipeline };
+    const md = (RENDERER[res.suite] || markdownGeneric)(res) + '\n' +
         [
             `- golden／答案卷：${res.meta.golden || res.meta.pdfSha256 || '—'}` +
             (res.meta.goldenPending ? `（其中 ${res.meta.goldenPending} 筆仍是 needs_human_confirm 草稿）` : ''),
@@ -172,4 +213,4 @@ function emit(opts) {
     return { file, doc };
 }
 
-module.exports = { emit, markdownClassify, markdownPipeline, cell };
+module.exports = { emit, markdownClassify, markdownPipeline, markdownGeneric, cell };

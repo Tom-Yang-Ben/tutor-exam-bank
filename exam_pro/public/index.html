@@ -10,6 +10,14 @@
          需要再加一行替換 __FEATURE_PIPELINE__；在那之前這裡會保持佔位字串，
          public/js/review.js 的 parseBool 會判成 false（＝旗標關閉，走舊流程），是安全的預設。 -->
     <meta name="feature-pipeline" content="__FEATURE_PIPELINE__">
+    <!-- 階段 3 的三個旗標注入點（interfaces-stage3.md 第 7.2 條第 1 列、第 7.3 條）。
+         語意與上面的 feature-pipeline 完全一致：app.js 的 serveIndex 用 replaceAll 換掉佔位字串
+         （replaceAll 不是 replace——佔位字串在這段註解裡也有一份，__FEATURE_PIPELINE__ 踩過這個坑）。
+         WS-A 的三個 replaceAll 合入之前，這裡會保持佔位字串，
+         public/js/students|nlq|variants.js 的 parseBool 會判成 false ＝ 旗標關閉、整段不渲染。 -->
+    <meta name="feature-students" content="__FEATURE_STUDENTS__">
+    <meta name="feature-nlq" content="__FEATURE_NLQ__">
+    <meta name="feature-variants" content="__FEATURE_VARIANTS__">
     <title>家教專用數學物理題庫系統</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link
@@ -267,6 +275,7 @@
             <nav class="hidden md:flex items-center gap-1 text-sm font-semibold text-slate-600" aria-label="主要導覽">
                 <a href="#create" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">建立題目</a>
                 <a href="#paper" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">智慧組卷</a>
+                <a href="#students" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">學生</a>
                 <a href="#library" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">題庫管理</a>
             </nav>
             <span class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
@@ -511,6 +520,15 @@
         <!-- 階段 2 的複核分頁錨點（interfaces-stage2.md 第 8 條：index.html 只插這一個 section
              與底下一行 <script type="module">）。內容全部由 public/js/review.js 建立。 -->
         <section id="review"></section>
+
+        <!-- 階段 3 的三個空錨點（interfaces-stage3.md 第 7.2 條第 3 列）。
+             內容全部由 public/js/students.js｜variants.js｜nlq.js 建立；
+             對應的 FEATURE_* 關閉時三個 module 一律**整段不渲染**（第 7.2 條：不得只是隱藏），
+             所以這裡看到的空 <section> 就是旗標關閉時畫面上的全部。
+             #nlq 緊貼在 #library 上方＝規劃 §4.3.5「題庫管理搜尋框旁」的落點。 -->
+        <section id="students"></section>
+        <section id="variants"></section>
+        <section id="nlq"></section>
 
         <section id="library" class="manager-shell mt-7 rounded-[1.65rem] p-5 sm:p-7 scroll-mt-24">
             <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6 border-b border-slate-100 pb-5">
@@ -1025,19 +1043,40 @@
                 resultBox.classList.remove('hidden');
 
                 if (response.ok) {
+                    // paper_id 是 interfaces.md 第 7 條**既有**的回應欄位，這裡只是把它一起留在快取裡，
+                    // 讓「立即批改」跳得到那一張卷（interfaces-stage3.md 第 7.1、7.2 條第 5 列）。
+                    // downloadWord 只解構 paper_title／student_name／question_ids，多這個鍵不影響匯出。
                     currentPaperCache = {
                         paper_title: result.paper_title,
                         student_name: data.student_name,
-                        question_ids: result.question_ids
+                        question_ids: result.question_ids,
+                        paper_id: result.paper_id ?? null
                     };
 
                     const resultTitle = document.getElementById('resultTitle');
                     resultTitle.innerHTML = `
                         <span class="text-emerald-900"></span>
-                        <button type="button" onclick="downloadWordFile()" class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold py-2.5 px-4 rounded-xl shadow-lg shadow-indigo-600/15 transition-all cursor-pointer">
-                            下載 Word 考卷 (.docx)
-                        </button>
+                        <span class="flex w-full sm:w-auto flex-col sm:flex-row gap-2">
+                            <button type="button" id="gradeNowBtn" class="hidden w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold py-2.5 px-4 rounded-xl shadow-lg shadow-emerald-600/15 transition-all cursor-pointer">
+                                立即批改
+                            </button>
+                            <button type="button" onclick="downloadWordFile()" class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold py-2.5 px-4 rounded-xl shadow-lg shadow-indigo-600/15 transition-all cursor-pointer">
+                                下載 Word 考卷 (.docx)
+                            </button>
+                        </span>
                     `;
+                    // 「立即批改」是次要入口（規劃 §4.3.5：主要入口是學生分頁的試卷列表）。
+                    // 只有在「FEATURE_STUDENTS 開著」且「這次回應真的有 paper_id」時才出現——
+                    // 按了跳不到任何地方的按鈕，比沒有按鈕更糟。
+                    const gradeBtn = document.getElementById('gradeNowBtn');
+                    if (gradeBtn && featureOn('students') && currentPaperCache.paper_id) {
+                        gradeBtn.classList.remove('hidden');
+                        gradeBtn.addEventListener('click', () => {
+                            // 事件本身不帶資料：paper_id 與 student_name 由 students.js 從
+                            // ExamApp.getPaperCache() 讀（第 7.1 條的 getter 就是為此存在）。
+                            document.dispatchEvent(new CustomEvent('examapp:grade-paper'));
+                        });
+                    }
                     // paper_title 由使用者輸入的學生姓名組成，必須走 textContent 才不會被當成 HTML 執行
                     resultTitle.querySelector('span').textContent = `✨ ${result.paper_title}`;
 
@@ -1094,18 +1133,62 @@
         }
 
         // ─────────────────────────────────────────────────────────────
+        // 階段 3 的旗標讀取（interfaces-stage3.md 第 7.2 條）。
+        //
+        // 布林規則與 config/features.js 的 parseBool **逐字相同**：只有 '1' 與 'true'
+        // （不分大小寫）為真。佔位字串（app.js 還沒替換）判為 false ＝ 旗標關閉的安全預設。
+        // 這份 inline script 之所以自己有一份，是因為它不是 module、拿不到
+        // public/js/*.js 匯出的 parseBool；三個 module 各自也有一份同樣的規則。
+        // ─────────────────────────────────────────────────────────────
+        function featureOn(name) {
+            const meta = document.querySelector(`meta[name="feature-${name}"]`);
+            const v = String((meta ? meta.content : '') ?? '').trim().toLowerCase();
+            return v === '1' || v === 'true';
+        }
+
+        /**
+         * 捲到某個區段（interfaces-stage3.md 第 7.1 條的 showSection）。
+         * 沒有這個 id 時什麼都不做——module 不該因為錨點被移走就整個炸掉。
+         * @param {string} id
+         */
+        function showSection(id) {
+            const node = document.getElementById(id);
+            if (!node) return;
+            node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // ─────────────────────────────────────────────────────────────
         // 階段 2 的橋接（interfaces-stage2.md 第 8 條）——**只加，不改任何既有程式**。
         //
         // public/js/review.js 是 ES module，抓不到這份 inline script 的區域函式，
         // 所以把它需要的五個掛上 window.ExamApp。掛的是同一個函式參照，
         // 不是複製品：createQuestionEditor 之後怎麼改，複核分頁就跟著怎麼變。
+        //
+        // 階段 3 再加五個（interfaces-stage3.md 第 7.1 條、裁決 S3-19）。
+        // **為什麼是 getter／setter 而不是直接掛值**：currentPaperCache、allChapters、
+        // chapterWhitelist 都是這份 inline script 裡會被**重新賦值**的 let 變數。
+        // 直接 Object.assign 掛的是當下那個值的快照（組卷之前是 null），
+        // module 之後怎麼讀都還是那個 null。
         // ─────────────────────────────────────────────────────────────
         window.ExamApp = Object.assign(window.ExamApp || {}, {
-            apiFetch, showToast, renderMath, escapeHtml, createQuestionEditor
+            apiFetch, showToast, renderMath, escapeHtml, createQuestionEditor,
+            getPaperCache: () => currentPaperCache,
+            setPaperCache: (patch) => {
+                currentPaperCache = Object.assign({}, currentPaperCache || {}, patch || {});
+                return currentPaperCache;
+            },
+            getChapters: () => allChapters,
+            getChapterWhitelist: () => chapterWhitelist,
+            showSection
         });
     </script>
     <!-- 階段 2 複核分頁（WS-D，A-T13）。module 預設 defer，所以一定在上面那段之後才執行。 -->
     <script type="module" src="/js/review.js"></script>
+    <!-- 階段 3 的三個分頁（WS-D，P-05／P-09／P-13）。module 預設 defer，
+         所以一定在上面那段 inline script（含 window.ExamApp 橋接）之後才執行。 -->
+    <script type="module" src="/js/students.js"></script>
+    <script type="module" src="/js/nlq.js"></script>
+    <script type="module" src="/js/variants.js"></script>
 </body>
 
 </html>

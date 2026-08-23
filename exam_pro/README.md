@@ -20,6 +20,58 @@
 
 ---
 
+## 📊 每個功能的「問題 → 決策 → 數字」
+
+> **這張表是整份 README 的骨幹**（規劃 §4.3.6）。每個功能一列：
+> **問題**＝改之前具體壞在哪（引程式碼行號或規劃章節，不寫「效能不好」這種話）；
+> **決策**＝選了什麼做法、放棄了什麼；
+> **數字**＝**只能來自 `eval/` 腳本的輸出**，並附量測日期、模型 ID 與 commit。
+>
+> 「數字」欄寫**「待 eval」**代表那個功能的量測腳本還沒有基準線——
+> 不是忘了填，是**還沒有可以引用的數字**。在有數字之前，這一格不得填任何從別處抄來的比例、
+> 也不得填「明顯變好」這種形容詞：那正是這張表要取代的東西。
+> 補數字是 P-15b 的工作（`docs/roadmap-plan.md` §1 任務表），前提是對應的 suite 已有基準線。
+>
+> 量測環境一律是**公開層**（自製 fixture 與自編 golden、`LLM_MODE=replay`、`EMBED_MODE=fixture`），
+> 不連外、不需要金鑰。私有層（真題庫）的數字不進版控。
+
+| 功能 | 問題（引行號／章節） | 決策 | 數字（eval 輸出，含日期與模型 ID） |
+|---|---|---|---|
+| **LaTeX → Word 公式** | `utils/textFormatter.js:265-266、273-281` 對未知指令與解析失敗**靜默降級成純文字**，症狀只在 Word 打開時看得到（規劃 §3.2） | 手寫 LaTeX→OOXML 解析器 + 表格式單元測試；另有 strict 版本當閘門，降級改成可觀測 | `npm test` 的 `textFormatter` 40 項全綠；`test/e2e/paperWord.e2e.test.js` 斷言匯出的 `.docx` 真的含 `<m:oMath>`／`<m:f>`／`<m:sSup>`／`<m:rad>`（2026-08-23，不需模型） |
+| **抽題隨機性** | 舊寫法 `sort(() => 0.5 - Math.random())` 分佈不均，而**隨機性錯了不會噴錯**，只讓某些題長期抽不到 | Fisher-Yates + 固定種子 PRNG 的一萬次卡方分佈測試；並測「檢定本身的鑑別力」 | 5 元素 10,000 次的位置卡方 0.5~4.0（臨界值 18.467）；改回舊寫法會有 5 項轉紅（`test/unit/shuffle.test.js`，2026-08-22） |
+| **hybrid 檢索／`/similar`** | 組卷與找相似只有 `WHERE subject=? AND chapter=?` 加 `LIKE '%q%'`（`examController.js:30`、`questionController.js:108`）；「換個數字的同一題」找不到 | pgvector 768 維 + 應用層 jieba 分詞的全文，RRF 融合；同一段 SQL（`queries/hybrid.js`）服務 API 與 eval | Recall@5：`LIKE` 0.875 → hybrid **1.000**；MRR 純向量 0.988、hybrid 0.824（2026-08-22，`gemini-embedding-001`／768 維，commit `a02f7e4`，`npm run eval -- --suite retrieval`，對 `postgres_test`） |
+| **拆題管線與硬閘門** | `services/aiService.js:4-49` 是一個巨型 prompt、無 schema、`JSON.parse` 完就回；一題壞掉整批 400（`questionController.js:77-79`） | `jobs` 狀態機 + 五個 sub-agent + 六道閘門，逐題推進、逐題重試、部分入庫 | saved_rate／gate_pass_rate／answer_agree_rate 的門檻已建立於 `eval/thresholds.json`；**README 引用的數字待 eval**（`npm run eval:pipeline`，P-15b） |
+| **章節分類** | 章節白名單在 prompt 裡手抄一份（`aiService.js:14-27`），與 `config/chapters.js:4-31` 是兩份真相 | 零成本閘門先擋，過不了才呼叫第二層 LLM；`responseSchema` 直接鎖 enum，伺服器再驗一次 | accuracy／macro-F1 的門檻已建立於 `eval/thresholds.json`；**README 引用的數字待 eval**（`npm run eval:classify`，P-15b） |
+| **答案驗證** | 拆題模型會把答案抄錯，而錯得像模像樣——沒有第二個來源就查不出來 | 另一個模型獨立重算，`utils/answerCompare.js` 比對；不一致就進複核，不自動覆蓋 | **待 eval**（answer_agree_rate 由 `npm run eval:pipeline` 產生，P-15b） |
+| **去重** | 「去重只看 ID」：同一題換個數字、換個排版就當成新題 | 兩段式：`dedup0` 比正規化題幹的雜湊（零成本），`dedup1` 比向量餘弦 | **待 eval**（`npm run eval:pipeline` 的 needs_review 原因分佈，P-15b） |
+| **人工複核佇列** | 舊流程的「人工複核」是**全人工、無差別**：老師逐題看 30 題，系統不說哪一題有疑慮（`public/index.html:885-919`） | 只把有疑慮的題送進佇列，每題附**機器產生的具體原因**（「驗證模型算出 (B)，拆題模型說 (C)」） | 八種 `review_reason` 各有一句具體說明，`test/unit/publicAssets.test.js` 逐一釘住（2026-08-22，不需模型） |
+| **學生弱點面板** | 作答歷史塞在 `schema.sql:15` 的 `history_json` 裡、以姓名為 key；只記「出過」不記對錯，`GROUP BY chapter` 的錯誤率做不出來（規劃 §4.2） | `students`／`attempts` 正規化 + 即時 SQL 聚合（CTE 外包一層）；`graded < WEAKNESS_MIN_N` 標「樣本不足」 | 正確性由 `test/integration/students.pg.test.js` 保證（1,000 筆 fixture 逐欄比對 + `EXPLAIN` 含 `idx_attempts_student_date`）；**面板本身沒有 eval 分數，這一列的「數字」就是那支 db-test** |
+| **批改回填** | `routes/index.js` 十支路由沒有任何一支能把「第 3 題答錯」寫回去（規劃 §4.2） | `PATCH /api/papers/:id/results` 單一交易、全有全無；三態（對／錯／未批），`null` 是真的要送出去的值 | **待 eval**（無 eval 指標；正確性由整合測試與 `test/e2e/paperWord.e2e.test.js` 的 attempts 斷言保證） |
+| **組卷家族互斥** | 變式題入庫後是一般題，同一家族可能被抽進同一張卷 | `utils/pickOnePerFamily.js`：每個 `COALESCE(variant_of, id)` 家族只留一題，抽題語意從「每題等機率」改成「**每家族等機率**」 | **待 eval**（分佈測試比照 `shuffle.test.js`，由 WS-A 提供） |
+| **相似題／變式題** | 錯題之後沒有「同概念、難度 +1」的下一題可出 | **先檢索、再生成、生成也走同一組閘門**；首輪一律停在 `needs_review('awaiting_approval')` 等人核准 | **待 eval**（`npm run eval:variant` 的 `retrieved_coverage`／`gate_pass_rate`；`eval/thresholds.json` 的 `variant` 節目前全是 `null`＝尚未建立基準線） |
+| **檢索式 few-shot 分類** | 分類 agent 的範例是寫死的，與題庫實際長相脫節 | 範例改從向量最近鄰取，且**只有人工確認過的標籤有投票權**（`chapter_src='human'`）——自動標籤餵回自動投票是閉環放大器 | **待 eval**（短路率與 accuracy 的變化由 `npm run eval:classify` 量，P-15b） |
+| **自然語言查題** | 老師必須記得白名單裡「摩擦力與向心力」這種精確名稱（`config/chapters.js:21`）才篩得到題 | 規則為主、LLM 為輔、受限 JSON、SQL 固定；四級回退階梯，任一層失敗都有退路；`filters` 回寫下拉讓人看得見機器的理解 | **待 eval**（`npm run eval:nlq` 的 `rule_coverage`／`filters_exact`／`recall10`；`eval/thresholds.json` 的 `nlq` 節目前全是 `null`） |
+| **前端（三個新分頁）** | 前端是單一 1,100+ 行的 `public/index.html`，曾因截斷出過事故（commit `6ada1ce`）；再塞 400 行面板同類事故會重演 | vanilla + ES module，經 `window.ExamApp` 橋接；`index.html` 只加五個插入點，舊程式一行不改 | `npm run check:html` 對 6 段程式碼做 `node --check` 並斷言階段 2／3 的接點；`test/unit/stage3Ui.test.js` 55 項（2026-08-23，不需模型） |
+| **端到端** | 單元與整合測試各自綠燈，不代表**接線**沒斷（controller、runner、multipart、docx 之間） | `test/e2e/` 兩條：上傳 PDF → 部分入庫；組卷 → Word 含 `<m:oMath>` | 11 項全綠（`npm run test:e2e`，2026-08-23，對 `postgres_test`、`LLM_MODE=replay` 讀 `eval/cassettes/`，零 replay miss） |
+
+**怎麼補「待 eval」那幾格**（P-15b）：
+
+```bash
+npm run eval -- --suite retrieval     # 檢索三欄對照（已有基準線）
+npm run eval:classify                 # 章節分類（已有基準線）
+npm run eval:pipeline                 # 整條管線（已有基準線）
+npm run eval:nlq                      # 自然語言查題（待 WS-C 的 suite 合入）
+npm run eval:variant                  # 變式題（待 WS-B 的 suite 合入）
+npm run eval:trend                    # 印出與上一次的差值
+```
+
+每支都會把報表寫進 `eval/reports/<suite>-<日期>-<sha>.json`，裡面帶**完整的量測環境**
+（模型 ID、cassette 目錄、golden 檔與筆數、轉接層是否還有 stub）。
+填進上表時**連同這些欄位一起引用**——沒有量測環境的數字不能拿來互相比較，
+而「用 stub 跑」與「用真 agent 跑」的數字長得一模一樣。
+
+---
+
 ## 🖼 成果展示
 
 ### 匯出的 Word 考卷
@@ -197,10 +249,11 @@ npm run dev    # 開發（nodemon 熱重載）
 ## 🧪 測試
 
 ```bash
-npm test        # 268 個單元測試（test/unit/），使用 Node 內建的 node:test，無額外相依套件
+npm test        # 單元測試（test/unit/），使用 Node 內建的 node:test，無額外相依套件
+npm run check:html   # public/ 的 inline script 與 public/js/*.js 語法 + 前端接點檢查
 ```
 
-每次 push 與 PR 都會由 [GitHub Actions](../.github/workflows/ci.yml) 在 Node 22.x / 24.x 上自動執行單元層，另有一個 `integration` job 起 `pgvector/pgvector:pg16` service 跑整合測試與檢索 eval（badge 見本頁最上方）。
+每次 push 與 PR 都會由 [GitHub Actions](../.github/workflows/ci.yml) 在 Node 22.x / 24.x 上自動執行單元層，另有一個 `integration` job 起 `pgvector/pgvector:pg16` service 跑整合測試、**端到端測試**與五個 eval suite（badge 見本頁最上方）。
 `npm test` **不連資料庫、不呼叫 Gemini、不需要任何 secrets**——任何人都能在不設定 `.env` 的情況下看到驗證結果。
 
 ### 需要資料庫的整合測試（`test/integration/`）
@@ -221,6 +274,28 @@ node --env-file=.env --env-file=eval/.env.replay --test --test-concurrency=1 "te
   在本機會整層 skip——那支是給 CI 用的（CI 由 workflow 的 env 提供）。本機請用上面那行。
 - ⚠️ Node 24 在 Windows 上 `node --test <目錄>` 會把目錄當成模組去 require 而失敗，
   一定要用上面的 glob 形式。
+
+### 端到端測試（`test/e2e/`，E-X15）
+
+```bash
+docker compose up -d --wait                                    # 起 postgres_test（埠 5433）
+node --env-file=.env --env-file=eval/.env.replay --test --test-concurrency=1 "test/e2e/**/*.test.js"
+```
+
+兩條，量的都不是「某個函式對不對」，而是**接線有沒有斷**：
+
+| # | 走的路 | 斷言 |
+|---|---|---|
+| ① | `POST /api/jobs` 上傳自製樣卷 → 真的 `workers/jobRunner.js` 走完狀態機 → `GET /api/jobs/:id` | `state=done`、四個 `counts` 相加等於 `job_questions` 總數、**部分入庫**（至少一題進 `questions` 且章節在白名單內）、沒過閘門的題停在 `needs_review` 並帶得出 `review_reason`、`payload` 只有凍結的那幾個鍵、**零 replay miss** |
+| ② | `POST /api/generate-paper` → `POST /api/download-word` | 回應帶 `paper_id`、`attempts` 真的被寫出來（未批改）、把 `.docx` 解壓後 `word/document.xml` 含 `<m:oMath>`／`<m:f>`／`<m:sSup>`／`<m:rad>` |
+
+- 與 `npm run eval:pipeline` **不重疊**：那支用 `eval/lib/pipelineDriver.js` 量分數，全程不經 HTTP、不碰 `jobs`／`job_questions` 兩張表。
+  eval 全綠而 e2e 紅，代表管線本身沒事、是 controller 或 runner 接錯了——這正是 e2e 存在的理由。
+- 同樣**不連外**：`LLM_MODE=replay` 讀 `eval/cassettes/`、`EMBED_MODE=fixture`。沒有金鑰、沒有網路。
+  `LLM_MODE` 不是 `replay` 時 ① 會直接丟錯而不是靜默改打 Gemini。
+- ② 的三題自製題題幹帶 `[E2E-WORD]` 記號，並先把「這一章裡不是自己的題」記成該生已寫過——
+  測試庫是共用的，不這樣做的話抽到的三題不見得是自己插的那三題，`<m:f>` 的斷言就變成擲骰子。
+- `npm run test:e2e` 與整合測試一樣只帶 `eval/.env.replay`，本機沒設 `TEST_DATABASE_URL` 會整層 skip。
 
 單元測試集中在兩支模組，共同點是**壞掉不會噴錯**：
 
