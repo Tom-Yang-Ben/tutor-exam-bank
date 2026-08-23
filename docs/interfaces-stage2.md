@@ -489,7 +489,7 @@ module.exports = { answerCompare };
 規則（凍結；裁決 S2-11／S2-12 改寫）：
 - `單選`／`多選`：兩邊各抽出**選項代號集合**（`(A)`、`A`、`A.`、`甲` 不算），集合相等 → `agree`；任一邊抽不到代號 → `uncertain`。
 - `填空`／`計算`：先從 `claimed` 抽 `final_answer`——**取最後一個 `$…$`**；該段含 `=` 或 `\approx` 就再取**最後一個 `=`／`\approx` 之後**的片段；只含上下標的片段（例如單位的 `$^2$`）視為單位的一部分**跳過**，往前找上一段 `$…$`；沒有任何 `$…$` 就取整段文字最後一個 `=`／`\approx` 之後；抽不到 → `uncertain`。（WS-D 對 fixture 45 題實測：舊規則「第一個 `$…$`」只抽對 4 題，本規則抽對 39 題。）
-- 抽出後依 `answer_form` 比：`number`——`\frac{a}{b}`、小數、`a/b`、百分比三種寫法先化成同一個有理數，單位後綴去掉，**負號視為數值的一部分**（`-1` 與 `1` → `disagree`），`±` 只與 `±` 比量值、`±2` 對上單值 `2` → `uncertain`，容差 `1e-9`；`option` 同單選；`expression` 比去空白、去 `$`、去 `\left\right` 後的字串；`text` 比 `normalizeStem` 後的字串。
+- 抽出後依 `answer_form` 比：`number`——`\frac{a}{b}`、小數、`a/b`、百分比、科學記號（`a \times 10^{n}`／`2.4e-4`）、可數值化的根式與 `\pi` 先化成同一個數值，`\mathrm{…}`／`\text{…}` 與單位後綴去掉，**負號視為數值的一部分**（`-1` 與 `1` → `disagree`），`±` 只與 `±` 比量值、`±2` 對上單值 `2` → `uncertain`，容差 `1e-9`；`option` 同單選；`expression`——去空白、`$`、`\left\right` 後字串相等 → `agree`，否則兩邊都能數值化就照 `number` 比，否則 `uncertain`；`text`——`normalizeStem` 後相等 → `agree`，否則一律 `uncertain`（不回 `disagree`）。細則見 §12.1 裁決 S2-26。
 - `證明` 一律 `uncertain`（實務上 verify 節點會先 `skipped`，不會呼叫到）。
 - **任何比不出來的情況都回 `uncertain`，不回 `disagree`**：誤報一次 `answer_mismatch` 的成本（老師白看一題）遠低於漏報。
 
@@ -954,5 +954,14 @@ Windows 提醒：PowerShell 5.1 的 `>` 會寫成 UTF-16LE，要用 `npm start |
 | S2-24 | C 的 `agents/_schema.js` 橋接在 B 合入後改用 `agents/schemas/index.js` 的 `buildSchema` 並刪除 | C-5 |
 | S2-25 | B 改了 `test/unit/llmEmbed.test.js` 一項斷言（接受）；新檔 `cassette.js`／`templates.js`／`promptParts.js`／`record_cassettes.js` 歸 B | B-Q10／B-Q7 |
 | 人工 | fixture #47（直線運動 vs 物體的運動）、#54（電場與電位 vs 靜電學）的章節由開發者決定；開發庫 `text_hash` 碰撞 #2/#3、#5/#38 由開發者確認 | B 附帶／S0 |
+
+### 12.1 第二輪補裁（2026-08-23，第二輪合併後 `test/unit/answerGolden.test.js` 250 案例有 20 筆不符）
+
+**S2-26：`answerCompare` 第 4.2 條細則補齊**（裁判 = D 的 250 案例 golden；C 改實作、D 改少數期望）：
+
+- `number` 的正規化再加三種寫法：科學記號 `a \times 10^{n}`／`a×10^n`／`2.4e-4`；`\mathrm{…}`、`\text{…}`、`\,`、`\ ` 與其後的單位整段視為單位去掉；`\sqrt{n}`、`\frac{\sqrt{a}}{b}`、`\pi` 這類可數值化的式子**算出數值**再比（容差 `1e-9`）——兩邊都算得出且不等 → `disagree`。
+- `text`：`normalizeStem` 後相等 → `agree`；**不相等一律 `uncertain`，永遠不回 `disagree`**（文字答案的「不同」分不出是錯還是換句話說）。
+- `expression`：去空白、`$`、`\left`／`\right` 後字串相等 → `agree`；否則兩邊都能數值化就照 `number` 比（`\frac{3}{1}` 對 `3` → `agree`）；否則 `uncertain`。
+- D 的 golden 對應改：`ans-047`（expression `\frac{3}{1}`）三筆 `eq*` 期望改 `agree`；其餘 17 筆維持 golden 的期望、由 C 的實作對齊。
 
 ---
