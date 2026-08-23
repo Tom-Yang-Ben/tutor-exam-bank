@@ -312,7 +312,7 @@ async function runVariantSuite(args = {}) {
     const legacySimMin = Number.parseFloat(process.env.VARIANT_SIM_MIN);
     const legacy = Number.isFinite(legacySimMin) ? legacySimMin : null;
     const retrieveSimMin = numFromEnv('VARIANT_RETRIEVE_SIM_MIN', legacy ?? 0.80);
-    const offtopicSimMin = numFromEnv('VARIANT_OFFTOPIC_SIM_MIN', legacy ?? 0.92);
+    const offtopicSimMin = numFromEnv('VARIANT_OFFTOPIC_SIM_MIN', legacy ?? 0.90);   // S3-R29
     const engine = args.engine === 'pg' ? 'pg' : 'memory';
 
     // ── ① retrieved_coverage（零 LLM、零 embedding 呼叫）──

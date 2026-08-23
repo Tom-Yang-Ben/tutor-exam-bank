@@ -19,7 +19,7 @@ const { TERMINAL_STATES } = require('../../pipeline/stateMachine');
 describe('loadStage3Config（第 9 條的五個新變數）', () => {
     test('全空的環境用預設值（裁決 S3-R9：兩個門檻分家，預設不同）', () => {
         assert.deepEqual(runner.loadStage3Config({}), {
-            variantRetrieveSimMin: 0.80, variantOfftopicSimMin: 0.92,
+            variantRetrieveSimMin: 0.80, variantOfftopicSimMin: 0.90,   // S3-R29
             variantMinEdit: 0.08, knnVoteSim: 0.90,
             variantLintRetries: 2, variantAutoApprove: false
         });
@@ -64,7 +64,7 @@ describe('loadStage3Config（第 9 條的五個新變數）', () => {
     test('亂填的數字退回預設，不會變成 NaN', () => {
         const c = runner.loadStage3Config({ VARIANT_RETRIEVE_SIM_MIN: 'abc', VARIANT_SIM_MIN: 'x', KNN_VOTE_SIM: '' });
         assert.equal(c.variantRetrieveSimMin, 0.80);
-        assert.equal(c.variantOfftopicSimMin, 0.92);
+        assert.equal(c.variantOfftopicSimMin, 0.90);   // S3-R29
         assert.equal(c.knnVoteSim, 0.90);
     });
 

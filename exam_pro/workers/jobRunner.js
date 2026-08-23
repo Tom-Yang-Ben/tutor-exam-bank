@@ -130,7 +130,7 @@ function loadStage3Config(env = process.env) {
     return {
         // 四個門檻會進 ctx.config.thresholds（agent 一律不得自己讀 process.env）
         variantRetrieveSimMin: num('VARIANT_RETRIEVE_SIM_MIN', legacySimMin ?? 0.80),
-        variantOfftopicSimMin: num('VARIANT_OFFTOPIC_SIM_MIN', legacySimMin ?? 0.92),
+        variantOfftopicSimMin: num('VARIANT_OFFTOPIC_SIM_MIN', legacySimMin ?? 0.90),   // S3-R29：0.92 → 0.90
         variantMinEdit: num('VARIANT_MIN_EDIT', 0.08),
         knnVoteSim: num('KNN_VOTE_SIM', 0.90),
         // 只影響變式 job 的 lint 重試上限（第 4.6 條），預設與階段 2 同值

@@ -34,7 +34,7 @@ const { buildEmbedText } = require('../utils/embedText');
 const TEMPLATE = 'variant.v1';
 
 // ctx.config.thresholds 沒帶到時的保底（值與 .env.example 一致；agent 不讀 process.env）
-const DEFAULT_OFFTOPIC_SIM_MIN = 0.92;   // 裁決 S3-R9：跑題閾值與 retrieved 下限分家後的新預設
+const DEFAULT_OFFTOPIC_SIM_MIN = 0.90;   // 裁決 S3-R9 分家、S3-R29 由 0.92 下修（實錄：合格變式餘弦多在 0.85～0.92）
 const DEFAULT_MIN_EDIT = 0.08;
 
 /** 錨點鄰居最多幾題（第 4.2 條：藍本 + 前 5 題鄰居） */

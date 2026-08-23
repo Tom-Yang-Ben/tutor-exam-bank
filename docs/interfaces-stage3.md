@@ -894,7 +894,7 @@ features.FEATURE_VARIANTS   // boolean getter
 | S3-R6 | `EXPLAIN` 斷言在交易內 `SET LOCAL enable_seqscan = off` 後做——驗的是「謂詞走得到索引」，不是「小表會不會用索引」 | A-6 |
 | S3-R7 | `npm run test:integration` 維持 CI 語意（由 workflow 提供 `TEST_DATABASE_URL`）；本機用 README 那行 `--env-file=.env`。WS-D 在 README 再標一次 | A-7 |
 | S3-R8 | **只改字閘門規則 2 改為「數字遮罩後文字相同」即 `numbers_only`**（拿掉「多重集合相同」的 AND 條件）；第 4.3 條據此改寫，`VARIANT_MIN_EDIT` 不動 | B-1 |
-| S3-R9 | **`VARIANT_SIM_MIN` 拆成兩個**：`VARIANT_RETRIEVE_SIM_MIN=0.80`（retrieved 分支下限）與 `VARIANT_OFFTOPIC_SIM_MIN=0.92`（生成後跑題閾值）；`.env.example`、第 3.1／4.4／9 條與 `ctx.config.thresholds`（`variantRetrieveSimMin`／`variantOfftopicSimMin`）同步 | B-2 |
+| S3-R9 | **`VARIANT_SIM_MIN` 拆成兩個**：`VARIANT_RETRIEVE_SIM_MIN=0.80`（retrieved 分支下限）與 `VARIANT_OFFTOPIC_SIM_MIN=0.92`（生成後跑題閾值；**S3-R29 下修為 0.90**）；`.env.example`、第 3.1／4.4／9 條與 `ctx.config.thresholds`（`variantRetrieveSimMin`／`variantOfftopicSimMin`）同步 | B-2 |
 | S3-R10 | approve 的 `chapter_src`：送出的 `chapter` 與 `payload.classify.chapter` **不同 → `'human'`**；**相同 → 依 `payload.classify.source` 映射（`gate`／`llm`→`'ai'`、`knn`→`'knn'`）**，與 `saveNode` 同一張表（第 5.2 條為準，第 4.7 條的「相同→'ai'」改寫） | B-3 |
 | S3-R11 | kNN 短路的 `job_events`：`token_in` 記那一次 embedding 的實際 token 數（非 NULL）、`model=NULL`、`cost_usd=0`、`detail.source='knn'`——照實記比較誠實；第 5.2 條「`token_* = NULL`」改寫 | B-4 |
 | S3-R12 | `generateVariant` 以 `outcome.gate = { text_gate, sim }` 交棒給 runner 組 `payload.variant`；`outcome.data` 維持第 4.2 條的形狀（第 4.2 條補一句） | B-5 |
@@ -914,3 +914,4 @@ features.FEATURE_VARIANTS   // boolean getter
 | S3-R26 | 弱點面板 `days` 選項先用 30／90／180／365，第 2 週試用後再調 | D-7 |
 | S3-R27 | `eval/run.js` 的兩個「替身」單元測試（第 8.5 條）在真 suite 合入後改為斷言「真 suite 已接上、`anyStub=false`」 | 合併測試 |
 | S3-R28 | `suiteNlq.js` 在 `EMBED_MODE=record` 時先把缺的查詢向量錄進 fixture 再量（否則 record 模式被「先檢查、查不到就 n/a」短路，查詢向量永遠錄不進去）；由開發者直接落地。nlq cassette 與 50 句查詢向量已於 2026-08-23 錄好（rules：coverage 0.84、filters_exact 1.0、recall10 1.0；llm：filters_exact 0.75、recall10 0.875）。LLM 路徑的 `semantic_text` 多為關鍵詞形式（「斜面 物體受力平衡」），與 golden 的整句期望不同——只是警告，定案 golden 時由開發者決定 llm 路徑的 `semantic_text` 要不要比對 | 錄製 |
+| S3-R29 | **`VARIANT_OFFTOPIC_SIM_MIN` 由 0.92 下修為 0.90**（2026-08-24，開發者裁決；`.env.example`、`agents/generateVariant.js`／`workers/jobRunner.js`／`eval/lib/suiteVariant.js` 的預設值同步）。理由：S3-R9 的 0.92 是用 fixture 裡「同概念換數字」的現成題對校準的（餘弦下限 0.9298），但「只換數字」正是只改字閘門（S3-R8）要退回的東西——合格變式必須改寫敘述，與藍本的餘弦天然更低。第一次錄製（60 題）實測：0.92 擋掉 26/30 藍本、`gate_pass_rate` 0.15；replay 掃描 0.90→19／0.88→14／0.85→5 個藍本停在 off_topic；0.90 時 fixture 的跨章誤收仍只有 0.76%。變式 cassette 依新值重錄。 | 錄製結果 |
