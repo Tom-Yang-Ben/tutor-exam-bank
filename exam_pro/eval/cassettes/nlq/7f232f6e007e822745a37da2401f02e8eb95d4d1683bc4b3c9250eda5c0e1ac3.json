@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "agent": "nlq",
+    "model": "gemini-3.5-flash",
+    "template": "nlq.v1",
+    "recorded_at": "2026-08-23T15:56:42.801Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 776,
+        "sha256": "696e69c87ac8822c2ee1d70777a3d85e9cfa95e1e560bbed994d4e49ccadfc8f"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "nlq.v1",
+      "query": "汽車轉彎時輪胎抓地力不夠會打滑"
+    }
+  },
+  "response": {
+    "data": {
+      "subject": "物理",
+      "chapters": [
+        "摩擦力與向心力"
+      ],
+      "question_types": [],
+      "semantic_text": "汽車 轉彎 輪胎 抓地力 打滑",
+      "keywords": [
+        "汽車",
+        "轉彎",
+        "輪胎",
+        "抓地力",
+        "打滑"
+      ]
+    },
+    "usage": {
+      "tokenIn": 642,
+      "tokenOut": 54,
+      "tokenThinking": 598,
+      "tokenCached": 0
+    },
+    "latencyMs": 3008
+  }
+}

@@ -213,6 +213,17 @@ async function measureRecall(rows, opts) {
         };
     }
 
+    // EMBED_MODE=record 時先把缺的查詢向量錄進 fixture（裁決 S3-R20：「同時開 record 跑一次」就該補齊）。
+    // 沒有這一段，record 模式會在下面那一行短路（先檢查、查不到就 n/a），查詢向量永遠錄不進去。
+    if (String(process.env.EMBED_MODE || '').toLowerCase() === 'record') {
+        const pre = queryVectorsAvailable(rows);
+        if (pre.missing.length) {
+            const llm = require('../../services/llm');
+            await llm.embed({ texts: pre.missing.map(m => m.text), taskType: 'RETRIEVAL_QUERY' });
+            warnings.push(`[record] 已為 ${pre.missing.length} 句查詢補錄向量進 eval/fixtures/embeddings.*.json。`);
+        }
+    }
+
     // 查詢向量在不在？沒有的話 embed() 會丟錯，retrieve() 會退到 LIKE（fallback_level 3），
     // 量到的就不是 hybrid 的 Recall——寧可 n/a，也不要一個名不副實的數字。
     const check = queryVectorsAvailable(rows);

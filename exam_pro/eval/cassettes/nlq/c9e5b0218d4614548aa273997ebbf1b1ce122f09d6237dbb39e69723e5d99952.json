@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "nlq",
+    "model": "gemini-3.5-flash",
+    "template": "nlq.v1",
+    "recorded_at": "2026-08-23T15:56:36.980Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 777,
+        "sha256": "4c502dec678e4c635692b77f163ebe7a940ec844844f535cb244c012a81de6c2"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "nlq.v1",
+      "query": "角的終邊通過某一點，求它的三角比"
+    }
+  },
+  "response": {
+    "data": {
+      "subject": "數學",
+      "chapters": [
+        "三角函數的定義"
+      ],
+      "question_types": [],
+      "semantic_text": "角 終邊 三角比",
+      "keywords": [
+        "角的終邊",
+        "三角比"
+      ]
+    },
+    "usage": {
+      "tokenIn": 639,
+      "tokenOut": 37,
+      "tokenThinking": 261,
+      "tokenCached": 0
+    },
+    "latencyMs": 2122
+  }
+}

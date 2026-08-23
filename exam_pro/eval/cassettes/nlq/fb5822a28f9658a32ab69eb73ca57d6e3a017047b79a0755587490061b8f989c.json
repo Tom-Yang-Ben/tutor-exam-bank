@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "agent": "nlq",
+    "model": "gemini-3.5-flash",
+    "template": "nlq.v1",
+    "recorded_at": "2026-08-23T15:56:32.535Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 778,
+        "sha256": "67370cb908b44194941adeb23b011c1b103a425c4390bd8913657e37106eb5a8"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "nlq.v1",
+      "query": "把電荷從一點移到另一點需要作多少功"
+    }
+  },
+  "response": {
+    "data": {
+      "subject": "物理",
+      "chapters": [
+        "電場與電位",
+        "靜電學"
+      ],
+      "question_types": [],
+      "semantic_text": "電荷 移動 作功",
+      "keywords": [
+        "電荷",
+        "移動",
+        "作功"
+      ]
+    },
+    "usage": {
+      "tokenIn": 640,
+      "tokenOut": 40,
+      "tokenThinking": 464,
+      "tokenCached": 0
+    },
+    "latencyMs": 2902
+  }
+}

@@ -913,3 +913,4 @@ features.FEATURE_VARIANTS   // boolean getter
 | S3-R25 | **加第四個注入點 `<meta name="feature-similar">`**（`app.js` 多一個 `replaceAll`，WS-A；`index.html` 加 meta，WS-D）；「找相似」由 `feature-similar` 控制、「出變式」由 `feature-variants` 控制 | D-6 |
 | S3-R26 | 弱點面板 `days` 選項先用 30／90／180／365，第 2 週試用後再調 | D-7 |
 | S3-R27 | `eval/run.js` 的兩個「替身」單元測試（第 8.5 條）在真 suite 合入後改為斷言「真 suite 已接上、`anyStub=false`」 | 合併測試 |
+| S3-R28 | `suiteNlq.js` 在 `EMBED_MODE=record` 時先把缺的查詢向量錄進 fixture 再量（否則 record 模式被「先檢查、查不到就 n/a」短路，查詢向量永遠錄不進去）；由開發者直接落地。nlq cassette 與 50 句查詢向量已於 2026-08-23 錄好（rules：coverage 0.84、filters_exact 1.0、recall10 1.0；llm：filters_exact 0.75、recall10 0.875）。LLM 路徑的 `semantic_text` 多為關鍵詞形式（「斜面 物體受力平衡」），與 golden 的整句期望不同——只是警告，定案 golden 時由開發者決定 llm 路徑的 `semantic_text` 要不要比對 | 錄製 |

@@ -1,0 +1,44 @@
+{
+  "meta": {
+    "agent": "nlq",
+    "model": "gemini-3.5-flash",
+    "template": "nlq.v1",
+    "recorded_at": "2026-08-23T15:56:29.624Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 775,
+        "sha256": "83fef1356b418ff7f53d3e1e30c23bd086862125f378f9e12f734c01dd0e16d1"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "nlq.v1",
+      "query": "滑輪兩端掛重物求系統的加速度"
+    }
+  },
+  "response": {
+    "data": {
+      "subject": "物理",
+      "chapters": [
+        "牛頓運動定律"
+      ],
+      "question_types": [],
+      "semantic_text": "滑輪 掛重物 系統 加速度",
+      "keywords": [
+        "滑輪",
+        "重物",
+        "加速度"
+      ]
+    },
+    "usage": {
+      "tokenIn": 639,
+      "tokenOut": 41,
+      "tokenThinking": 429,
+      "tokenCached": 0
+    },
+    "latencyMs": 2490
+  }
+}
