@@ -47,11 +47,14 @@ app.use(express.json({ limit: '2mb' }));
 // index: false → 不讓 static 直接吐出 index.html，改由下方路由注入 API 金鑰
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
-// 2. 首頁路由：把伺服器端才知道的兩個值注入頁面
+// 2. 首頁路由：把伺服器端才知道的五個值注入頁面
 //    __API_KEY__          讓同源前端自動帶上 x-api-key
 //    __FEATURE_PIPELINE__ 上傳區要不要改走 POST /api/jobs（裁決 S2-20）
 //                         旗標**不得寫死在 JS**（interfaces-stage2.md 第 8 條），
 //                         所以由這裡注入，前端從 <meta name="feature-pipeline"> 讀。
+//    __FEATURE_STUDENTS__ 學生分頁（弱點面板與批改）  ┐ 階段 3 的三個同款旗標
+//    __FEATURE_NLQ__      自然語言查題框              │（interfaces-stage3.md 第 7.3 條）
+//    __FEATURE_VARIANTS__ 變式題分頁                  ┘ 讀法與 feature-pipeline 逐字相同
 function serveIndex(req, res, next) {
     fs.readFile(path.join(PUBLIC_DIR, 'index.html'), 'utf8', (err, html) => {
         if (err) return next(err);
@@ -59,11 +62,15 @@ function serveIndex(req, res, next) {
         // 未設定時注入字面 'false'，而不是空字串：前端的 parseBool 對空字串與
         // 「沒被替換掉的佔位字串」會得到同樣的結果，但留 'false' 讀起來才不會像壞掉。
         const pipeline = process.env.FEATURE_PIPELINE || 'false';
-        // 用 replaceAll 而不是 replace：兩個佔位字串在 index.html 裡都不只出現一次
+        // 用 replaceAll 而不是 replace：佔位字串在 index.html 裡都不只出現一次
         // （__FEATURE_PIPELINE__ 在 <meta> 上方的說明註解裡也有一份），
         // replace 只換第一個，會換到註解而讓真正的 <meta> 留著佔位字串。
         res.type('html').send(
-            html.replaceAll('__API_KEY__', key).replaceAll('__FEATURE_PIPELINE__', pipeline));
+            html.replaceAll('__API_KEY__', key)
+                .replaceAll('__FEATURE_PIPELINE__', pipeline)
+                .replaceAll('__FEATURE_STUDENTS__', process.env.FEATURE_STUDENTS || 'false')
+                .replaceAll('__FEATURE_NLQ__', process.env.FEATURE_NLQ || 'false')
+                .replaceAll('__FEATURE_VARIANTS__', process.env.FEATURE_VARIANTS || 'false'));
     });
 }
 app.get('/', serveIndex);

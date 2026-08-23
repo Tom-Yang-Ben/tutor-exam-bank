@@ -106,6 +106,24 @@ router.post('/review/:jqId/reject', reviewController.reject);
 // ─────────────────────────────────────────────────────────────
 
 // ===== [WS3-A: students] =====
+// 五支學生／試卷／批改／弱點 API（docs/interfaces-stage3.md 第 1 條，P-04）。
+// FEATURE_STUDENTS 未開啟時「不掛載」這五條路由，請求會落到 Express 的預設 404
+// （與上方 FEATURE_SIMILAR 同一種做法）。
+//
+// 變數名帶 Ws3A 前綴是為了 rebase：四個階段 3 區塊都可能要 require config/features，
+// 用同一個 const 名稱會在合併後變成「已宣告」的語法錯誤，而衝突只落在相鄰行時
+// 兩邊都保留正是本檔的合併規則。
+const featuresWs3A = require('../config/features');
+if (featuresWs3A.FEATURE_STUDENTS) {
+    const studentController = require('../controllers/studentController');
+    const paperController = require('../controllers/paperController');
+
+    router.get('/students', studentController.listStudents);
+    router.get('/students/:id/papers', studentController.listStudentPapers);
+    router.get('/students/:id/weakness', studentController.getWeakness);
+    router.get('/papers/:id', paperController.getPaper);
+    router.patch('/papers/:id/results', paperController.patchResults);
+}
 // ===== [/WS3-A: students] =====
 
 // ===== [WS3-B: variants] =====
