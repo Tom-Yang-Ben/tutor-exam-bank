@@ -40,28 +40,28 @@
 | **LaTeX → Word 公式** | `utils/textFormatter.js:265-266、273-281` 對未知指令與解析失敗**靜默降級成純文字**，症狀只在 Word 打開時看得到（規劃 §3.2） | 手寫 LaTeX→OOXML 解析器 + 表格式單元測試；另有 strict 版本當閘門，降級改成可觀測 | `npm test` 的 `textFormatter` 40 項全綠；`test/e2e/paperWord.e2e.test.js` 斷言匯出的 `.docx` 真的含 `<m:oMath>`／`<m:f>`／`<m:sSup>`／`<m:rad>`（2026-08-23，不需模型） |
 | **抽題隨機性** | 舊寫法 `sort(() => 0.5 - Math.random())` 分佈不均，而**隨機性錯了不會噴錯**，只讓某些題長期抽不到 | Fisher-Yates + 固定種子 PRNG 的一萬次卡方分佈測試；並測「檢定本身的鑑別力」 | 5 元素 10,000 次的位置卡方 0.5~4.0（臨界值 18.467）；改回舊寫法會有 5 項轉紅（`test/unit/shuffle.test.js`，2026-08-22） |
 | **hybrid 檢索／`/similar`** | 組卷與找相似只有 `WHERE subject=? AND chapter=?` 加 `LIKE '%q%'`（`examController.js:30`、`questionController.js:108`）；「換個數字的同一題」找不到 | pgvector 768 維 + 應用層 jieba 分詞的全文，RRF 融合；同一段 SQL（`queries/hybrid.js`）服務 API 與 eval | Recall@5：`LIKE` 0.875 → hybrid **1.000**；MRR 純向量 0.988、hybrid 0.824（2026-08-22，`gemini-embedding-001`／768 維，commit `a02f7e4`，`npm run eval -- --suite retrieval`，對 `postgres_test`） |
-| **拆題管線與硬閘門** | `services/aiService.js:4-49` 是一個巨型 prompt、無 schema、`JSON.parse` 完就回；一題壞掉整批 400（`questionController.js:77-79`） | `jobs` 狀態機 + 五個 sub-agent + 六道閘門，逐題推進、逐題重試、部分入庫 | saved_rate／gate_pass_rate／answer_agree_rate 的門檻已建立於 `eval/thresholds.json`；**README 引用的數字待 eval**（`npm run eval:pipeline`，P-15b） |
-| **章節分類** | 章節白名單在 prompt 裡手抄一份（`aiService.js:14-27`），與 `config/chapters.js:4-31` 是兩份真相 | 零成本閘門先擋，過不了才呼叫第二層 LLM；`responseSchema` 直接鎖 enum，伺服器再驗一次 | accuracy／macro-F1 的門檻已建立於 `eval/thresholds.json`；**README 引用的數字待 eval**（`npm run eval:classify`，P-15b） |
-| **答案驗證** | 拆題模型會把答案抄錯，而錯得像模像樣——沒有第二個來源就查不出來 | 另一個模型獨立重算，`utils/answerCompare.js` 比對；不一致就進複核，不自動覆蓋 | **待 eval**（answer_agree_rate 由 `npm run eval:pipeline` 產生，P-15b） |
-| **去重** | 「去重只看 ID」：同一題換個數字、換個排版就當成新題 | 兩段式：`dedup0` 比正規化題幹的雜湊（零成本），`dedup1` 比向量餘弦 | **待 eval**（`npm run eval:pipeline` 的 needs_review 原因分佈，P-15b） |
+| **拆題管線與硬閘門** | `services/aiService.js:4-49` 是一個巨型 prompt、無 schema、`JSON.parse` 完就回；一題壞掉整批 400（`questionController.js:77-79`） | `jobs` 狀態機 + 五個 sub-agent + 六道閘門，逐題推進、逐題重試、部分入庫 | saved_rate **0.90**、gate_pass_rate **1.00**、answer_agree_rate **0.90**（golden 10 題；2026-08-24 replay，拆題 `gemini-3.5-flash`／驗證 `gemini-3.1-pro-preview`，commit `f4a15ca`，`npm run eval:pipeline`；門檻 0.87／0.97／0.87，只升不降） |
+| **章節分類** | 章節白名單在 prompt 裡手抄一份（`aiService.js:14-27`），與 `config/chapters.js:4-31` 是兩份真相 | 零成本閘門先擋，過不了才呼叫第二層 LLM；`responseSchema` 直接鎖 enum，伺服器再驗一次 | accuracy **0.9000**、macro-F1 **0.9256**（golden 90 筆＝60 fixture + 30 drift；2026-08-24 replay，`gemini-3.5-flash`，commit `f4a15ca`，`npm run eval:classify`；門檻已建立於 `eval/thresholds.json`，只升不降） |
+| **答案驗證** | 拆題模型會把答案抄錯，而錯得像模像樣——沒有第二個來源就查不出來 | 另一個模型獨立重算，`utils/answerCompare.js` 比對；不一致就進複核，不自動覆蓋 | answer_agree_rate **0.90**：golden 10 題中 1 題 `answer_mismatch`（驗證模型算出的答案與拆題模型不一致）進複核——正是這道閘門要抓的東西（2026-08-24，驗證 `gemini-3.1-pro-preview`，commit `f4a15ca`，`npm run eval:pipeline`） |
+| **去重** | 「去重只看 ID」：同一題換個數字、換個排版就當成新題 | 兩段式：`dedup0` 比正規化題幹的雜湊（零成本），`dedup1` 比向量餘弦 | pipeline eval 的 needs_review 原因分佈：10 題只有 1 題（`answer_mismatch`），**0 題 dedup 類**——golden fixture 沒有重複題，dedup0（雜湊）／dedup1（餘弦 ≥ 0.97）的行為由單元與整合測試逐條釘住（2026-08-24，commit `f4a15ca`） |
 | **人工複核佇列** | 舊流程的「人工複核」是**全人工、無差別**：老師逐題看 30 題，系統不說哪一題有疑慮（`public/index.html:885-919`） | 只把有疑慮的題送進佇列，每題附**機器產生的具體原因**（「驗證模型算出 (B)，拆題模型說 (C)」） | 八種 `review_reason` 各有一句具體說明，`test/unit/publicAssets.test.js` 逐一釘住（2026-08-22，不需模型） |
 | **學生弱點面板** | 作答歷史塞在 `schema.sql:15` 的 `history_json` 裡、以姓名為 key；只記「出過」不記對錯，`GROUP BY chapter` 的錯誤率做不出來（規劃 §4.2） | `students`／`attempts` 正規化 + 即時 SQL 聚合（CTE 外包一層）；`graded < WEAKNESS_MIN_N` 標「樣本不足」 | 正確性由 `test/integration/students.pg.test.js` 保證（1,000 筆 fixture 逐欄比對 + `EXPLAIN` 含 `idx_attempts_student_date`）；**面板本身沒有 eval 分數，這一列的「數字」就是那支 db-test** |
-| **批改回填** | `routes/index.js` 十支路由沒有任何一支能把「第 3 題答錯」寫回去（規劃 §4.2） | `PATCH /api/papers/:id/results` 單一交易、全有全無；三態（對／錯／未批），`null` 是真的要送出去的值 | **待 eval**（無 eval 指標；正確性由整合測試與 `test/e2e/paperWord.e2e.test.js` 的 attempts 斷言保證） |
-| **組卷家族互斥** | 變式題入庫後是一般題，同一家族可能被抽進同一張卷 | `utils/pickOnePerFamily.js`：每個 `COALESCE(variant_of, id)` 家族只留一題，抽題語意從「每題等機率」改成「**每家族等機率**」 | **待 eval**（分佈測試比照 `shuffle.test.js`，由 WS-A 提供） |
-| **相似題／變式題** | 錯題之後沒有「同概念、難度 +1」的下一題可出 | **先檢索、再生成、生成也走同一組閘門**；首輪一律停在 `needs_review('awaiting_approval')` 等人核准 | **待 eval**（suite 已合入、量得出 `retrieved_coverage`，但 `gate_pass_rate` 仍是 n/a——`eval/cassettes/variant/` 尚未錄製；`eval/thresholds.json` 的 `variant` 節全是 `null`＝尚未建立基準線，P-15b 補） |
-| **檢索式 few-shot 分類** | 分類 agent 的範例是寫死的，與題庫實際長相脫節 | 範例改從向量最近鄰取，且**只有人工確認過的標籤有投票權**（`chapter_src='human'`）——自動標籤餵回自動投票是閉環放大器 | **待 eval**（短路率與 accuracy 的變化由 `npm run eval:classify` 量，P-15b） |
-| **自然語言查題** | 老師必須記得白名單裡「摩擦力與向心力」這種精確名稱（`config/chapters.js:21`）才篩得到題 | 規則為主、LLM 為輔、受限 JSON、SQL 固定；四級回退階梯，任一層失敗都有退路；`filters` 回寫下拉讓人看得見機器的理解 | **待 eval**（suite 與 cassette 都已合入、`npm run eval:nlq` 三個指標都量得出來；`eval/thresholds.json` 的 `nlq` 節仍全是 `null`＝基準線尚未定案，P-15b 補） |
+| **批改回填** | `routes/index.js` 十支路由沒有任何一支能把「第 3 題答錯」寫回去（規劃 §4.2） | `PATCH /api/papers/:id/results` 單一交易、全有全無；三態（對／錯／未批），`null` 是真的要送出去的值 | 無 eval 指標（不是漏填）；正確性由整合測試與 `test/e2e/paperWord.e2e.test.js` 的 attempts 斷言保證 |
+| **組卷家族互斥** | 變式題入庫後是一般題，同一家族可能被抽進同一張卷 | `utils/pickOnePerFamily.js`：每個 `COALESCE(variant_of, id)` 家族只留一題，抽題語意從「每題等機率」改成「**每家族等機率**」 | `test/unit/pickOnePerFamily.test.js`：契約 + 固定種子卡方分佈測試（比照 `shuffle.test.js` 的做法；家族內等機率、家族間互斥都有斷言；不需模型，2026-08-24） |
+| **相似題／變式題** | 錯題之後沒有「同概念、難度 +1」的下一題可出 | **先檢索、再生成、生成也走同一組閘門**；首輪一律停在 `needs_review('awaiting_approval')` 等人核准 | retrieved_coverage **0.8667**（26/30 藍本純檢索就 ≥ 2 題）、gate_pass_rate **0.25**（60 次生成 15 過六道閘門；跑題閾值 0.90＝裁決 S3-R29，21/30 藍本停在 `off_topic`、4 停 `verify`）（2026-08-24，生成／驗證 `gemini-3.1-pro-preview`、embed `gemini-embedding-001`，commit `f4a15ca`，`npm run eval:variant`；門檻 0.8367／0.22，只升不降） |
+| **檢索式 few-shot 分類** | 分類 agent 的範例是寫死的，與題庫實際長相脫節 | 範例改從向量最近鄰取，且**只有人工確認過的標籤有投票權**（`chapter_src='human'`）——自動標籤餵回自動投票是閉環放大器 | accuracy／macro-F1 與改動前持平（**0.9000／0.9256**，`npm run eval:classify`，2026-08-24）；kNN 投票短路在 eval 量不到（裁決 S2-8：eval 的 `ctx.db=null`），開發庫的短路率誠實起點是 **0**——`chapter_src='human'` 的題還太少（`docs/variants.md` 第 6 節） |
+| **自然語言查題** | 老師必須記得白名單裡「摩擦力與向心力」這種精確名稱（`config/chapters.js:21`）才篩得到題 | 規則為主、LLM 為輔、受限 JSON、SQL 固定；四級回退階梯，任一層失敗都有退路；`filters` 回寫下拉讓人看得見機器的理解 | rules 路徑（42/50 句）：rule_coverage **0.84**、filters_exact **1.000**、recall@10 **1.000**；LLM 路徑（8/50 句）：filters_exact **0.75**、recall@10 **0.875**（2026-08-24，`gemini-3.5-flash` + `gemini-embedding-001`，commit `f4a15ca`，`npm run eval:nlq`；golden 50 句已定案，門檻＝量測 −0.03 已寫入） |
 | **前端（三個新分頁）** | 前端是單一 1,100+ 行的 `public/index.html`，曾因截斷出過事故（commit `6ada1ce`）；再塞 400 行面板同類事故會重演 | vanilla + ES module，經 `window.ExamApp` 橋接；`index.html` 只加五個插入點，舊程式一行不改 | `npm run check:html` 對 6 段程式碼做 `node --check` 並斷言階段 2／3 的四個注入點；`test/unit/stage3Ui.test.js` 56 項（契約）＋ `stage3Render.test.js` 32 項（用 `test/unit/lib/miniDom.js` 真的把三個 module 跑起來渲染一遍）（2026-08-24，不需模型） |
 | **端到端** | 單元與整合測試各自綠燈，不代表**接線**沒斷（controller、runner、multipart、docx 之間） | `test/e2e/` 兩條：上傳 PDF → 部分入庫；組卷 → Word 含 `<m:oMath>` | 11 項全綠（`npm run test:e2e`，2026-08-23，對 `postgres_test`、`LLM_MODE=replay` 讀 `eval/cassettes/`，零 replay miss） |
 
-**怎麼補「待 eval」那幾格**（P-15b）：
+**怎麼重跑上表的數字**（P-15b 已於 2026-08-24 補完；表格數字過期時照下面重量）：
 
 ```bash
 npm run eval -- --suite retrieval     # 檢索三欄對照（已有基準線）
 npm run eval:classify                 # 章節分類（已有基準線）
 npm run eval:pipeline                 # 整條管線（已有基準線）
-npm run eval:nlq                      # 自然語言查題（suite 已合入，cassette 已錄）
-npm run eval:variant                  # 變式題（suite 已合入；gate_pass_rate 待 cassette）
+npm run eval:nlq                      # 自然語言查題（已有基準線）
+npm run eval:variant                  # 變式題（已有基準線）
 npm run eval:trend                    # 印出與上一次的差值
 ```
 
