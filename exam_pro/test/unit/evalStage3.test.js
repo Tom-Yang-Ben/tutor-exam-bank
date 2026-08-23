@@ -168,6 +168,17 @@ describe('package.json 與 ci.yml 的接線', () => {
         assert.equal(pkg.scripts['check:html'], 'node eval/tools/check_html.js');
     });
 
+    test('test:e2e 存在、走 --test-concurrency=1、且帶 .env.replay（E-X15）', () => {
+        const e2e = pkg.scripts['test:e2e'];
+        assert.ok(e2e, 'package.json 少了 test:e2e');
+        assert.ok(e2e.includes('eval/.env.replay'), 'e2e 必須 replay，不得真的呼叫 Gemini');
+        // 兩支 e2e 都會 TRUNCATE 管線三張表；並行跑會互相清掉對方的資料。
+        assert.ok(e2e.includes('--test-concurrency=1'), 'e2e 必須序列執行');
+        assert.ok(e2e.includes('test/e2e/'), e2e);
+        // npm test 只跑 test/unit/：e2e 需要 DB，不能混進不連 DB 的那一層。
+        assert.ok(!pkg.scripts.test.includes('e2e'), 'npm test 不該跑 e2e');
+    });
+
     test('ci.yml 的 integration job 有兩個新步驟，且沒有任何金鑰', () => {
         const ci = fs.readFileSync(path.resolve(ROOT, '..', '.github', 'workflows', 'ci.yml'), 'utf8');
         assert.ok(ci.includes('npm run eval:nlq'), 'ci.yml 少了 eval:nlq');
@@ -176,5 +187,9 @@ describe('package.json 與 ci.yml 的接線', () => {
         assert.ok(!/GEMINI_API_KEY/.test(ci), 'ci.yml 出現了金鑰');
         assert.ok(ci.includes('LLM_MODE: replay') && ci.includes('EMBED_MODE: fixture'),
             'CI 必須恆為 replay/fixture（第 8.5 條）');
+        assert.ok(ci.includes('npm run test:e2e'), 'ci.yml 少了 e2e（E-X15）');
+        // e2e 要排在整合測試之後：整合測試會把 questions 清乾淨，e2e 才拿得到乾淨起點。
+        assert.ok(ci.indexOf('npm run test:e2e') > ci.indexOf('npm run test:integration'),
+            'e2e 必須排在整合測試之後');
     });
 });

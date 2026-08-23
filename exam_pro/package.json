@@ -9,6 +9,7 @@
     "seed": "node seed_questions.js",
     "test": "node --test \"test/unit/**/*.test.js\"",
     "test:integration": "node --env-file=eval/.env.replay --test --test-concurrency=1 \"test/integration/**/*.test.js\"",
+    "test:e2e": "node --env-file=eval/.env.replay --test --test-concurrency=1 \"test/e2e/**/*.test.js\"",
     "check:html": "node eval/tools/check_html.js",
     "eval": "node --env-file=eval/.env.replay eval/run.js",
     "eval:retrieval": "npm run eval -- --suite retrieval",

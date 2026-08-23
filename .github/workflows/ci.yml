@@ -99,6 +99,15 @@ jobs:
       - name: 整合測試
         run: npm run test:integration
 
+      # ── e2e（E-X15，階段 3）──
+      # 兩條端到端：① POST /api/jobs 上傳自製樣卷 → 真 runner 走完 → 部分入庫；
+      #             ② 組卷 → download-word，解開 .docx 斷言公式是 <m:oMath> 不是純文字。
+      # 與 eval:pipeline 量的不是同一件事：那支量分數、不經 HTTP 也不碰 jobs 兩張表，
+      # 這兩條量的是「接線有沒有斷」。同樣不連外（LLM_MODE=replay、EMBED_MODE=fixture）。
+      # 排在整合測試之後：整合測試會把 questions 清乾淨，e2e 因此拿到一個乾淨的起點。
+      - name: e2e（上傳→入庫、組卷→Word）
+        run: npm run test:e2e
+
       # 檢索 eval：向量走 fixture、不呼叫任何外部服務。
       # 目前 queries/hybrid.js（WS-C 的 D-R1）與向量 fixture（D-V0）尚未合入，
       # run.js 會把向量／hybrid 欄印成 n/a 並在報表列出原因，門檻為 null 時只報告不擋；
