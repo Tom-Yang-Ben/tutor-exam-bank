@@ -47,7 +47,7 @@ app.use(express.json({ limit: '2mb' }));
 // index: false → 不讓 static 直接吐出 index.html，改由下方路由注入 API 金鑰
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
-// 2. 首頁路由：把伺服器端才知道的五個值注入頁面
+// 2. 首頁路由：把伺服器端才知道的六個值注入頁面
 //    __API_KEY__          讓同源前端自動帶上 x-api-key
 //    __FEATURE_PIPELINE__ 上傳區要不要改走 POST /api/jobs（裁決 S2-20）
 //                         旗標**不得寫死在 JS**（interfaces-stage2.md 第 8 條），
@@ -55,6 +55,12 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 //    __FEATURE_STUDENTS__ 學生分頁（弱點面板與批改）  ┐ 階段 3 的三個同款旗標
 //    __FEATURE_NLQ__      自然語言查題框              │（interfaces-stage3.md 第 7.3 條）
 //    __FEATURE_VARIANTS__ 變式題分頁                  ┘ 讀法與 feature-pipeline 逐字相同
+//    __FEATURE_SIMILAR__  最近錯題的「找相似」按鈕（裁決 S3-R25）
+//                         這一個對應的是**階段 1 就有**的 FEATURE_SIMILAR：
+//                         `GET /api/questions/:id/similar` 沒掛載時（routes/index.js 的
+//                         [WS-C: retrieval] 區塊）「找相似」會打到 404，所以按鈕得跟著關。
+//                         「找相似」歸 feature-similar、「出變式」歸 feature-variants——
+//                         兩顆按鈕在同一列，但背後是兩條各自獨立的路由。
 function serveIndex(req, res, next) {
     fs.readFile(path.join(PUBLIC_DIR, 'index.html'), 'utf8', (err, html) => {
         if (err) return next(err);
@@ -70,7 +76,8 @@ function serveIndex(req, res, next) {
                 .replaceAll('__FEATURE_PIPELINE__', pipeline)
                 .replaceAll('__FEATURE_STUDENTS__', process.env.FEATURE_STUDENTS || 'false')
                 .replaceAll('__FEATURE_NLQ__', process.env.FEATURE_NLQ || 'false')
-                .replaceAll('__FEATURE_VARIANTS__', process.env.FEATURE_VARIANTS || 'false'));
+                .replaceAll('__FEATURE_VARIANTS__', process.env.FEATURE_VARIANTS || 'false')
+                .replaceAll('__FEATURE_SIMILAR__', process.env.FEATURE_SIMILAR || 'false'));
     });
 }
 app.get('/', serveIndex);
