@@ -877,3 +877,39 @@ features.FEATURE_VARIANTS   // boolean getter
 5. **繁體中文註解與 commit，小步 commit，不 push `main`。**
 6. **Windows 11**：檔案一律由 Node 寫；路徑含中文要 `path.resolve` + UTF-8；PowerShell 沒有行內 `VAR=x`。
 7. **介面有問題就停下來**：寫 `docs/questions3-ws<X>.md` 並在回報中明講，不要自行改介面繞過。
+
+---
+
+## 15. 第一輪裁決（2026-08-23，回應 `questions3-ws*.md` 共 24 條；編號 S3-R*）
+
+四條 WS 第一輪已全部合入 main。以下裁決**優先於上文對應條文**（條文不逐句回改，以本節為準）。
+
+| # | 裁決 | 來源 |
+|---|---|---|
+| S3-R1 | `PATCH /papers/:id/results` 的 400 檢查優先序＝第 1.4 條表格的列順序（重複檢查在型別檢查之前；body 驗證在試卷存在性之前） | A-1 |
+| S3-R2 | `/api/papers/:id`、`PATCH …/results`、`/api/students/:id/*` 的 `:id` 非整數一律 404（與第 1.2 條同） | A-2 |
+| S3-R3 | `graded_ratio` 分母＝該生全部 `attempts` | A-3 |
+| S3-R4 | `GET /api/papers/:id` 用 INNER JOIN；`question_ids` 裡不存在的題直接不出現（現行 DDL 下不可能發生） | A-4 |
+| S3-R5 | weakness 的錯誤順序：路徑參數 → 查詢參數 → 資料存在性 | A-5 |
+| S3-R6 | `EXPLAIN` 斷言在交易內 `SET LOCAL enable_seqscan = off` 後做——驗的是「謂詞走得到索引」，不是「小表會不會用索引」 | A-6 |
+| S3-R7 | `npm run test:integration` 維持 CI 語意（由 workflow 提供 `TEST_DATABASE_URL`）；本機用 README 那行 `--env-file=.env`。WS-D 在 README 再標一次 | A-7 |
+| S3-R8 | **只改字閘門規則 2 改為「數字遮罩後文字相同」即 `numbers_only`**（拿掉「多重集合相同」的 AND 條件）；第 4.3 條據此改寫，`VARIANT_MIN_EDIT` 不動 | B-1 |
+| S3-R9 | **`VARIANT_SIM_MIN` 拆成兩個**：`VARIANT_RETRIEVE_SIM_MIN=0.80`（retrieved 分支下限）與 `VARIANT_OFFTOPIC_SIM_MIN=0.92`（生成後跑題閾值）；`.env.example`、第 3.1／4.4／9 條與 `ctx.config.thresholds`（`variantRetrieveSimMin`／`variantOfftopicSimMin`）同步 | B-2 |
+| S3-R10 | approve 的 `chapter_src`：送出的 `chapter` 與 `payload.classify.chapter` **不同 → `'human'`**；**相同 → 依 `payload.classify.source` 映射（`gate`／`llm`→`'ai'`、`knn`→`'knn'`）**，與 `saveNode` 同一張表（第 5.2 條為準，第 4.7 條的「相同→'ai'」改寫） | B-3 |
+| S3-R11 | kNN 短路的 `job_events`：`token_in` 記那一次 embedding 的實際 token 數（非 NULL）、`model=NULL`、`cost_usd=0`、`detail.source='knn'`——照實記比較誠實；第 5.2 條「`token_* = NULL`」改寫 | B-4 |
+| S3-R12 | `generateVariant` 以 `outcome.gate = { text_gate, sim }` 交棒給 runner 組 `payload.variant`；`outcome.data` 維持第 4.2 條的形狀（第 4.2 條補一句） | B-5 |
+| S3-R13 | `config/models.js` 加 `MODEL_VARIANT` getter；runner 的 `ctx.config.models.variant = MODEL_VARIANT || MODEL_VERIFY` | B-6 |
+| S3-R14 | `agents/generate.js` 三行轉接檔（同 `dedup0.js` 做法）；`loadStage3Config()` 另函式合併——接受 | B-7 |
+| S3-R15 | variant golden 載入器留在 `suiteVariant.js`；`retrieved_coverage` 用 memory 引擎——接受 | B-8／B-9 |
+| S3-R16 | PDF job 被 kNN 短路分類時 `chapter_src='knn'`（第 5 條本意）；`dedup1` 的選用鍵 `exclude_family_root` 未給時 SQL 逐位元不變——接受 | B C-3／C-4 |
+| S3-R17 | **`semantic_text` 以第 6 條與第 8.4 條的兩個範例為準**：概念詞（章節本名／別名）原文保留、條件詞整段拿掉、自由文字剝頭尾虛詞；第 6.1 條那行散文改寫 | C-1 |
+| S3-R18 | `question_types` 以 `excludeIds` 實作精確篩選（做法 b），`buildHybridQuery` 簽名不動 | C-2 |
+| S3-R19 | 句子裡指名的「X 沒寫過」優先於 body 的 `student_id`（不取聯集） | C-3 |
+| S3-R20 | nlq 與 variant 的 cassette 由開發者在 main 統一錄（`LLM_MODE=record` + `EMBED_MODE=record` 一起開）；CI 兩個 suite 維持必跑 | C-4 |
+| S3-R21 | 第 6.4 條的順序：先反推 `subject`（第 6 點）再逐一驗章節（第 1 點）；`keywords` 含題型（散文為準，前端 chip 由 WS-D 決定是否顯示） | C-5／C-6 |
+| S3-R22 | level 3 的 LIKE：`semantic_text` 逐段 ILIKE 以 OR 連接（最多 5 段）；放寬順序＝先丟 ILIKE 留 metadata、再丟章節（第 6.6 條 level 3 改寫） | C-7 |
+| S3-R23 | 前端兩個 `CustomEvent`（`examapp:variant-request`、`examapp:grade-paper`，detail 形狀照 questions3-wsD.md §1）寫進第 7.1 條；`#nlq` 放在 `#library` 正上方；inline script 的 `featureOn()` 與 `parseBool` 規則逐字相同（`check_html` 守）；`variants.js` 每輪同時打 `GET /api/jobs/:id` 與 `/questions` | D-1～D-4 |
+| S3-R24 | **「出變式」UI 提供兩個下拉**：數量 1~3（預設 1）、難度 −1／0／+1（預設 0）——與介面預設一致；eval 用 `count=2` 是 eval 的事 | D-5 |
+| S3-R25 | **加第四個注入點 `<meta name="feature-similar">`**（`app.js` 多一個 `replaceAll`，WS-A；`index.html` 加 meta，WS-D）；「找相似」由 `feature-similar` 控制、「出變式」由 `feature-variants` 控制 | D-6 |
+| S3-R26 | 弱點面板 `days` 選項先用 30／90／180／365，第 2 週試用後再調 | D-7 |
+| S3-R27 | `eval/run.js` 的兩個「替身」單元測試（第 8.5 條）在真 suite 合入後改為斷言「真 suite 已接上、`anyStub=false`」 | 合併測試 |
