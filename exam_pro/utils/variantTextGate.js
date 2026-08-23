@@ -11,25 +11,24 @@
 //
 // 依序判斷，第一個命中就回傳（兩邊都先過 utils/normalizeStem.js 的 normalizeStem）：
 //   1. 正規化後完全相同                                   → identical（edit_ratio: 0）
-//   2. 數字多重集合相同 **且** 數字遮罩後文字相同          → numbers_only
+//   2. **數字遮罩後文字相同**（每段連續數字換成 `#`）      → numbers_only
 //   3. edit_ratio < minEdit                               → too_close
 //   4. 其餘                                               → ok
+//
+// 規則 2 的「數字多重集合相同」在**裁決 S3-R8 拿掉了**（原 docs/questions3-wsB.md 第 1 條）。
+// 原本的 AND 條件只擋得住「數字對調」；換成**別的**數字時多重集合就不同了，於是整條規則失效，
+// 只剩規則 3 的編輯距離在擋——而短題幹改四個數字就有 ~10% > VARIANT_MIN_EDIT=0.08，會漏。
+// 實測反例（40 字題幹）：
+//   藍本 設 $\vec{a}=(3,4)$、$\vec{b}=(1,2)$，求兩向量的夾角餘弦值。
+//   變式 設 $\vec{a}=(6,8)$、$\vec{b}=(2,4)$，求兩向量的夾角餘弦值。
+// 只看遮罩後相同就抓得到它，而且不會誤傷合格變式——合格變式的敘述本來就重寫過，
+// 遮罩後不可能相同。「數字對調」仍被同一條涵蓋（遮罩後當然也相同）。
 // ─────────────────────────────────────────────────────────────
 
 const { normalizeStem } = require('./normalizeStem');
 
 /** 一段連續數字算一個「數字」；小數點與負號不併入（'3.5' → ['3','5']，兩邊規則一致即可比較）。 */
 const DIGITS_RE = /\d+/g;
-
-/**
- * 取出字串裡的數字多重集合（排序後的字串陣列）。
- * 用多重集合而不是集合：`$2$ 與 $3$` 和 `$2$ 與 $2$` 不該被視為同一組數字。
- * @param {string} s
- * @returns {string[]} 由小到大（字典序即可，只用來比相等）
- */
-function numberMultiset(s) {
-    return (String(s).match(DIGITS_RE) || []).slice().sort();
-}
 
 /**
  * 把每段連續數字換成 `#`：用來判斷「除了數字以外一模一樣」。
@@ -97,24 +96,17 @@ function textGate({ source_text, variant_text, minEdit = 0.08 } = {}) {
 
     const ratio = editRatio(a, b);
 
-    // 2. 只換了數字（含「數字對調」：多重集合相同、遮罩後也相同）
-    const sameNumbers = arrayEqual(numberMultiset(a), numberMultiset(b));
-    if (sameNumbers && maskNumbers(a) === maskNumbers(b)) {
+    // 2. 只換了數字（裁決 S3-R8：**只看遮罩後相不相同**，不再要求數字多重集合相同）。
+    //    「數字對調」與「換成別的數字」都落在這一條，長題幹也擋得住。
+    if (maskNumbers(a) === maskNumbers(b)) {
         return { ok: false, reason: 'numbers_only', edit_ratio: ratio };
     }
 
-    // 3. 改得太少（「只換數字」的題多半會先被這一條擋下——正規化後編輯距離極小）
+    // 3. 改得太少（規則 2 沒抓到、但字面上幾乎沒動的情況）
     const threshold = Number.isFinite(Number(minEdit)) ? Number(minEdit) : 0.08;
     if (ratio < threshold) return { ok: false, reason: 'too_close', edit_ratio: ratio };
 
     return { ok: true, reason: null, edit_ratio: ratio };
 }
 
-/** @param {string[]} a @param {string[]} b */
-function arrayEqual(a, b) {
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-    return true;
-}
-
-module.exports = { textGate, levenshtein, editRatio, numberMultiset, maskNumbers };
+module.exports = { textGate, levenshtein, editRatio, maskNumbers };
