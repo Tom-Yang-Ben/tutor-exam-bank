@@ -6,7 +6,7 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { textGate, levenshtein, editRatio, numberMultiset, maskNumbers } = require('../../utils/variantTextGate');
+const { textGate, levenshtein, editRatio, maskNumbers } = require('../../utils/variantTextGate');
 
 describe('levenshtein／editRatio', () => {
     test('相同字串距離 0、比例 0', () => {
@@ -34,20 +34,23 @@ describe('levenshtein／editRatio', () => {
     });
 });
 
-describe('numberMultiset／maskNumbers', () => {
-    test('多重集合保留重複的數字', () => {
-        assert.deepEqual(numberMultiset('2 與 2 與 3'), ['2', '2', '3']);
-        assert.notDeepEqual(numberMultiset('2 與 2'), numberMultiset('2 與 3'));
-    });
-
-    test('一段連續數字算一個', () => {
-        assert.deepEqual(numberMultiset('12x34'), ['12', '34']);
+describe('maskNumbers', () => {
+    test('一段連續數字換成一個 #（不是一位一個）', () => {
         assert.equal(maskNumbers('12x34'), '#x#');
+        assert.equal(maskNumbers('a1b22c333'), 'a#b#c#');
     });
 
-    test('沒有數字時回空陣列、遮罩後原樣', () => {
-        assert.deepEqual(numberMultiset('求證兩向量垂直'), []);
+    test('位數不同的數字遮罩後相同——裁決 S3-R8 靠的就是這一點', () => {
+        assert.equal(maskNumbers('速率 3 公尺'), maskNumbers('速率 120 公尺'));
+    });
+
+    test('沒有數字時原樣回傳', () => {
         assert.equal(maskNumbers('求證兩向量垂直'), '求證兩向量垂直');
+    });
+
+    test('小數與負號不是數字的一部分（兩邊規則一致即可比較）', () => {
+        assert.equal(maskNumbers('3.5'), '#.#');
+        assert.equal(maskNumbers('-7'), '-#');
     });
 });
 
@@ -68,7 +71,7 @@ describe('textGate 的四條規則（第 4.3 條，順序凍結）', () => {
         assert.equal(r.reason, 'identical');
     });
 
-    test('② 數字對調 → numbers_only（多重集合相同、遮罩後相同）', () => {
+    test('② 數字對調 → numbers_only', () => {
         const r = textGate({
             source_text: '設 $\\vec{a}=(3,4)$，求 $|\\vec{a}|$。',
             variant_text: '設 $\\vec{a}=(4,3)$，求 $|\\vec{a}|$。'
@@ -78,13 +81,23 @@ describe('textGate 的四條規則（第 4.3 條，順序凍結）', () => {
         assert.ok(r.edit_ratio > 0, '數字對調的編輯距離不是 0');
     });
 
-    test('② 換了數字但字面骨架相同 → 先被 too_close 攔下（數字不同時多重集合就不同了）', () => {
+    test('② 換成別的數字 → 也是 numbers_only（裁決 S3-R8 拿掉了「多重集合相同」的 AND）', () => {
         const r = textGate({
             source_text: '設 $\\vec{a}=(3,4)$，求 $|\\vec{a}|$。',
             variant_text: '設 $\\vec{a}=(6,8)$，求 $|\\vec{a}|$。'
         });
         assert.equal(r.ok, false);
-        assert.equal(r.reason, 'too_close', '規則 2 只吃「數字集合相同」的情況，其餘由規則 3 接手');
+        assert.equal(r.reason, 'numbers_only');
+    });
+
+    test('② 位數也變了照樣抓得到（舊規則會漏，這是 S3-R8 的主因）', () => {
+        const r = textGate({
+            source_text: '一物體以 $3$ 公尺每秒等速前進 $7$ 秒，求位移為多少公尺？',
+            variant_text: '一物體以 $120$ 公尺每秒等速前進 $45$ 秒，求位移為多少公尺？'
+        });
+        assert.equal(r.ok, false);
+        assert.equal(r.reason, 'numbers_only');
+        assert.ok(r.edit_ratio > 0.08, `這一題的 edit_ratio 是 ${r.edit_ratio}，規則 3 擋不住它`);
     });
 
     test('③ 改得太少 → too_close', () => {

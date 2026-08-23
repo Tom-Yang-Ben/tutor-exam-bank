@@ -104,8 +104,8 @@ function loadConfig(env = process.env) {
  * `createRunner()` 把兩份設定合起來用，行為與寫在同一支裡完全相同。
  *
  * @param {object} [env] 預設 process.env
- * @returns {{variantSimMin:number, variantMinEdit:number, knnVoteSim:number,
- *           variantLintRetries:number, variantAutoApprove:boolean}}
+ * @returns {{variantRetrieveSimMin:number, variantOfftopicSimMin:number, variantMinEdit:number,
+ *           knnVoteSim:number, variantLintRetries:number, variantAutoApprove:boolean}}
  */
 function loadStage3Config(env = process.env) {
     const int = (name, dflt) => {
@@ -123,9 +123,14 @@ function loadStage3Config(env = process.env) {
         if (raw === undefined || String(raw).trim() === '') return dflt;
         return require('../config/features').parseBool(raw);
     };
+    // 裁決 S3-R9：`VARIANT_SIM_MIN` 拆成兩個，因為同一個數字兼任「檢索下限」與「跑題閾值」時
+    // 最佳值方向相反（docs/variants.md 第 3 節）。舊名仍是**退路**（只在新變數沒設時生效），
+    // 讓還沒更新 .env 的環境行為不變；.env.example 註明過渡期後移除。
+    const legacySimMin = num('VARIANT_SIM_MIN', null);
     return {
-        // 三個門檻會進 ctx.config.thresholds（agent 一律不得自己讀 process.env）
-        variantSimMin: num('VARIANT_SIM_MIN', 0.80),
+        // 四個門檻會進 ctx.config.thresholds（agent 一律不得自己讀 process.env）
+        variantRetrieveSimMin: num('VARIANT_RETRIEVE_SIM_MIN', legacySimMin ?? 0.80),
+        variantOfftopicSimMin: num('VARIANT_OFFTOPIC_SIM_MIN', legacySimMin ?? 0.92),
         variantMinEdit: num('VARIANT_MIN_EDIT', 0.08),
         knnVoteSim: num('KNN_VOTE_SIM', 0.90),
         // 只影響變式 job 的 lint 重試上限（第 4.6 條），預設與階段 2 同值
@@ -463,8 +468,10 @@ function createRunner(opts = {}) {
                     pdfChunkPages: config.pdfChunkPages,
                     inlineMaxBytes: config.inlineMaxBytes,
                     nodeTimeoutMs: config.nodeTimeoutMs,
-                    // 階段 3 的三個（第 4.5 條）：generateVariant 的兩道閘門與 classify 的 kNN 短路
-                    variantSimMin: config.variantSimMin,
+                    // 階段 3（第 4.5 條 + 裁決 S3-R9）：generateVariant 的兩道閘門與 classify 的 kNN 短路。
+                    // 跑題閾值走 variantOfftopicSimMin；檢索下限（variantRetrieveSimMin）不進 ctx——
+                    // 那是 services/variantService.js 的事，agent 用不到。
+                    variantOfftopicSimMin: config.variantOfftopicSimMin,
                     variantMinEdit: config.variantMinEdit,
                     knnVoteSim: config.knnVoteSim
                 },

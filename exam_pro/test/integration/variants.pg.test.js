@@ -41,7 +41,10 @@ function runSuite() {
     delete process.env.API_KEY;
     process.env.JOB_RUNNER = 'off';              // 測試自己驅動 tick，不要背景 runner 插隊
     process.env.FEATURE_VARIANTS = 'true';       // 旗標關閉時路由不掛載（第 3 條）
-    process.env.VARIANT_SIM_MIN = '0.80';
+    // 裁決 S3-R9：兩個門檻分家，整合測試兩個都明寫（不靠舊名的退路）
+    process.env.VARIANT_RETRIEVE_SIM_MIN = '0.80';
+    process.env.VARIANT_OFFTOPIC_SIM_MIN = '0.92';
+    delete process.env.VARIANT_SIM_MIN;
     process.env.VARIANT_MAX_PER_REQUEST = '3';
     process.env.VARIANT_TOKEN_BUDGET_USD = '0.30';
 
@@ -209,7 +212,7 @@ function runSuite() {
             }
         });
 
-        test('餘弦低於 VARIANT_SIM_MIN 的不算數 → 池不足就走 202', async () => {
+        test('餘弦低於 VARIANT_RETRIEVE_SIM_MIN 的不算數 → 池不足就走 202', async () => {
             const source = await insertQuestion({ theta: 0 });
             await insertQuestion({ theta: 1.2 });                   // cos ≈ 0.362，遠低於 0.80
             const res = await request(freshApp()).post(`/api/questions/${source}/variants`).send({ count: 1 });
@@ -458,7 +461,9 @@ function runSuite() {
             assert.equal(spy.length, 1);
             assert.equal(spy[0].job.kind, 'variant');
             assert.equal(spy[0].job.pdf_sha256, null);
-            assert.equal(spy[0].thresholds.variantSimMin, 0.80);
+            assert.equal(spy[0].thresholds.variantOfftopicSimMin, 0.92, '跑題閾值走 OFFTOPIC（裁決 S3-R9）');
+            assert.equal(spy[0].thresholds.variantRetrieveSimMin, undefined,
+                '檢索下限是 services/variantService.js 的事，不進 ctx');
             assert.equal(spy[0].thresholds.variantMinEdit, 0.08);
             assert.equal(spy[0].thresholds.knnVoteSim, 0.90);
             assert.ok(spy[0].models.variant, 'MODEL_VARIANT 未設時要退回 MODEL_VERIFY');

@@ -14,7 +14,7 @@
 //
 // 節點內部自己先做兩道閘門，順序是「便宜的先做」：
 //   ① 只改字閘門（utils/variantTextGate.js，第 4.3 條）——純文字比對，零成本。
-//   ② 跑題檢查（第 4.4 條）——cos(embed(變式), embed(藍本)) ≥ VARIANT_SIM_MIN，一次 embed 呼叫。
+//   ② 跑題檢查（第 4.4 條）——cos(embed(變式), embed(藍本)) ≥ VARIANT_OFFTOPIC_SIM_MIN，一次 embed 呼叫。
 // 兩道都不過就 fail，feedback 寫清楚是哪一道、數值多少，下一次重試會餵回 prompt。
 //
 // ⚠ 兩個「不得」（第 3.1 條的 agent 合約）：不得自己 require('../config/db')、
@@ -34,7 +34,7 @@ const { buildEmbedText } = require('../utils/embedText');
 const TEMPLATE = 'variant.v1';
 
 // ctx.config.thresholds 沒帶到時的保底（值與 .env.example 一致；agent 不讀 process.env）
-const DEFAULT_SIM_MIN = 0.80;
+const DEFAULT_OFFTOPIC_SIM_MIN = 0.92;   // 裁決 S3-R9：跑題閾值與 retrieved 下限分家後的新預設
 const DEFAULT_MIN_EDIT = 0.08;
 
 /** 錨點鄰居最多幾題（第 4.2 條：藍本 + 前 5 題鄰居） */
@@ -177,12 +177,17 @@ function cosine(a, b) {
     return dot;
 }
 
+/**
+ * 跑題閾值走 `ctx.config.thresholds.variantOfftopicSimMin`（裁決 S3-R9：由 `VARIANT_OFFTOPIC_SIM_MIN`
+ * 組出來，與 retrieved 分支的 `VARIANT_RETRIEVE_SIM_MIN` 分家——兩者的最佳值方向相反）。
+ * 舊鍵 `variantSimMin` 仍當退路讀一次，讓還沒更新的呼叫端（例如舊的整合測試）行為不變。
+ */
 function thresholdsOf(ctx) {
     const t = (ctx && ctx.config && ctx.config.thresholds) || {};
-    const simMin = Number(t.variantSimMin);
+    const offtopic = Number(t.variantOfftopicSimMin ?? t.variantSimMin);
     const minEdit = Number(t.variantMinEdit);
     return {
-        variantSimMin: Number.isFinite(simMin) ? simMin : DEFAULT_SIM_MIN,
+        variantOfftopicSimMin: Number.isFinite(offtopic) ? offtopic : DEFAULT_OFFTOPIC_SIM_MIN,
         variantMinEdit: Number.isFinite(minEdit) ? minEdit : DEFAULT_MIN_EDIT
     };
 }
@@ -223,7 +228,7 @@ async function run(ctx, input = {}) {
         const source = input.source || {};
         const idx = Number.isInteger(input.idx) ? input.idx : 1;
         const delta = Number.isInteger(input.difficulty_delta) ? input.difficulty_delta : 0;
-        const { variantSimMin, variantMinEdit } = thresholdsOf(ctx);
+        const { variantOfftopicSimMin, variantMinEdit } = thresholdsOf(ctx);
 
         if (!isValidSubject(source.subject)) {
             return {
@@ -329,11 +334,11 @@ async function run(ctx, input = {}) {
         if (sim === null) {
             return { kind: 'error', errorClass: 'provider_error', message: 'generateVariant：embed 沒有回傳可用的向量，算不出跑題餘弦。' };
         }
-        if (sim < variantSimMin) {
+        if (sim < variantOfftopicSimMin) {
             return {
                 kind: 'fail',
                 reason: 'off_topic',
-                feedback: `跑題檢查未通過：與藍本的概念餘弦 ${sim.toFixed(4)} < ${variantSimMin}。` +
+                feedback: `跑題檢查未通過：與藍本的概念餘弦 ${sim.toFixed(4)} < ${variantOfftopicSimMin}。` +
                     '請維持與藍本相同的考點與解法，只換情境與數字。',
                 data: { sim, text_gate: gate }
             };
@@ -360,5 +365,5 @@ module.exports = {
     run,
     // 給 runner、cassette 錄製腳本與單元測試用的內部零件
     buildPrompt, neighborsText, anchorIdsOf, targetDifficulty, familyRoot, cosine,
-    TEMPLATE, SYSTEM, PROMPT_TEMPLATE, MAX_NEIGHBORS, INHERITED_CHAPTER_CONFIDENCE
+    TEMPLATE, SYSTEM, PROMPT_TEMPLATE, MAX_NEIGHBORS, INHERITED_CHAPTER_CONFIDENCE, DEFAULT_OFFTOPIC_SIM_MIN
 };

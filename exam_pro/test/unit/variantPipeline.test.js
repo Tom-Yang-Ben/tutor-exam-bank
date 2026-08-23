@@ -17,22 +17,37 @@ const dedup = require('../../agents/dedup');
 const { TERMINAL_STATES } = require('../../pipeline/stateMachine');
 
 describe('loadStage3Config（第 9 條的五個新變數）', () => {
-    test('全空的環境用預設值', () => {
+    test('全空的環境用預設值（裁決 S3-R9：兩個門檻分家，預設不同）', () => {
         assert.deepEqual(runner.loadStage3Config({}), {
-            variantSimMin: 0.80, variantMinEdit: 0.08, knnVoteSim: 0.90,
+            variantRetrieveSimMin: 0.80, variantOfftopicSimMin: 0.92,
+            variantMinEdit: 0.08, knnVoteSim: 0.90,
             variantLintRetries: 2, variantAutoApprove: false
         });
     });
 
     test('讀得到就用環境值', () => {
         const c = runner.loadStage3Config({
-            VARIANT_SIM_MIN: '0.85', VARIANT_MIN_EDIT: '0.12', KNN_VOTE_SIM: '0.93',
+            VARIANT_RETRIEVE_SIM_MIN: '0.78', VARIANT_OFFTOPIC_SIM_MIN: '0.94',
+            VARIANT_MIN_EDIT: '0.12', KNN_VOTE_SIM: '0.93',
             VARIANT_LINT_RETRIES: '4', VARIANT_AUTO_APPROVE: 'true'
         });
         assert.deepEqual(c, {
-            variantSimMin: 0.85, variantMinEdit: 0.12, knnVoteSim: 0.93,
+            variantRetrieveSimMin: 0.78, variantOfftopicSimMin: 0.94,
+            variantMinEdit: 0.12, knnVoteSim: 0.93,
             variantLintRetries: 4, variantAutoApprove: true
         });
+    });
+
+    test('舊名 VARIANT_SIM_MIN 是退路：兩個新變數都沒設時，兩處都吃它', () => {
+        const c = runner.loadStage3Config({ VARIANT_SIM_MIN: '0.85' });
+        assert.equal(c.variantRetrieveSimMin, 0.85);
+        assert.equal(c.variantOfftopicSimMin, 0.85, '還沒更新 .env 的環境行為要與 S3-R9 之前相同');
+    });
+
+    test('新變數蓋過舊名（只蓋自己那一個）', () => {
+        const c = runner.loadStage3Config({ VARIANT_SIM_MIN: '0.85', VARIANT_OFFTOPIC_SIM_MIN: '0.92' });
+        assert.equal(c.variantRetrieveSimMin, 0.85, 'RETRIEVE 沒設，仍吃舊名');
+        assert.equal(c.variantOfftopicSimMin, 0.92);
     });
 
     test('VARIANT_AUTO_APPROVE 走凍結的布林規則：只有 1／true 為真', () => {
@@ -47,8 +62,9 @@ describe('loadStage3Config（第 9 條的五個新變數）', () => {
     });
 
     test('亂填的數字退回預設，不會變成 NaN', () => {
-        const c = runner.loadStage3Config({ VARIANT_SIM_MIN: 'abc', KNN_VOTE_SIM: '' });
-        assert.equal(c.variantSimMin, 0.80);
+        const c = runner.loadStage3Config({ VARIANT_RETRIEVE_SIM_MIN: 'abc', VARIANT_SIM_MIN: 'x', KNN_VOTE_SIM: '' });
+        assert.equal(c.variantRetrieveSimMin, 0.80);
+        assert.equal(c.variantOfftopicSimMin, 0.92);
         assert.equal(c.knnVoteSim, 0.90);
     });
 
@@ -105,14 +121,20 @@ describe('reviewController.variantChapterSrc（裁決 S3-12）', () => {
     const { variantChapterSrc } = require('../../controllers/reviewController');
     if (original === undefined) delete process.env.DATABASE_URL;
 
-    test('章節沒被改過 → ai（老師按一次核准不該量產人工標籤）', () => {
-        const payload = { classify: { chapter: '向量內積' } };
-        assert.equal(variantChapterSrc(payload, '向量內積'), 'ai');
+    test('章節沒被改過 → 依 source 映射，與 saveNode 同一張表（裁決 S3-R10）', () => {
+        assert.equal(variantChapterSrc({ classify: { chapter: '向量內積', source: 'gate' } }, '向量內積'), 'ai');
+        assert.equal(variantChapterSrc({ classify: { chapter: '向量內積', source: 'llm' } }, '向量內積'), 'ai');
+        assert.equal(variantChapterSrc({ classify: { chapter: '向量內積', source: 'knn' } }, '向量內積'), 'knn');
     });
 
-    test('章節被改過 → human（真的有人逐題看過並改了）', () => {
-        const payload = { classify: { chapter: '向量內積' } };
-        assert.equal(variantChapterSrc(payload, '空間向量內積'), 'human');
+    test('章節被改過 → human，不管 source 是什麼（真的有人逐題看過並改了）', () => {
+        for (const source of ['gate', 'llm', 'knn']) {
+            assert.equal(variantChapterSrc({ classify: { chapter: '向量內積', source } }, '空間向量內積'), 'human', source);
+        }
+    });
+
+    test('沒有 source 時保守回 ai（絕不會自己產生 human）', () => {
+        assert.equal(variantChapterSrc({ classify: { chapter: '向量內積' } }, '向量內積'), 'ai');
     });
 
     test('classify 沒跑過就退回 extract 的章節比對', () => {

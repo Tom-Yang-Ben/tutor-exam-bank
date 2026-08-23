@@ -50,9 +50,20 @@ function maxPerRequest(env = process.env) {
     return Math.max(1, intEnv('VARIANT_MAX_PER_REQUEST', DEFAULT_MAX_PER_REQUEST, env));
 }
 
-/** ① retrieved 分支的餘弦下限；② 生成後的跑題閾值（第 9 條，同一個數字） */
+/**
+ * retrieved 分支的餘弦下限（裁決 S3-R9：`VARIANT_RETRIEVE_SIM_MIN`）。
+ *
+ * 原本這裡與 `agents/generateVariant.js` 的跑題閾值共用一個 `VARIANT_SIM_MIN`，
+ * 但兩者的最佳值方向相反（`docs/variants.md` 第 3 節的實測）：
+ *   - 當**檢索下限**用，低一點好——門檻越高，能直接推薦的題越少、越常要花錢生成；
+ *   - 當**跑題閾值**用，高一點好——0.80 時跨章的題有 12% 過得了。
+ * 所以拆成兩個變數，這一支只讀 `VARIANT_RETRIEVE_SIM_MIN`。
+ *
+ * 舊名 `VARIANT_SIM_MIN` 仍是**退路**（只在新變數沒設時生效），讓還沒更新 `.env` 的環境
+ * 行為不變；`.env.example` 註明過渡期後移除。
+ */
 function simMin(env = process.env) {
-    return numEnv('VARIANT_SIM_MIN', DEFAULT_SIM_MIN, env);
+    return numEnv('VARIANT_RETRIEVE_SIM_MIN', numEnv('VARIANT_SIM_MIN', DEFAULT_SIM_MIN, env), env);
 }
 
 /** 每個變式 job 的成本上限，建立時複製進 jobs.budget_usd */

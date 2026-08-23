@@ -65,7 +65,7 @@ function fakeCtx({ data = GOOD, sim = 0.96, thresholds = {}, models = {}, embedT
             config: {
                 models: { extract: 'gemini:gemini-3.5-flash', verify: 'gemini:gemini-3.1-pro-preview', ...models },
                 limits: {},
-                thresholds: { variantSimMin: 0.80, variantMinEdit: 0.08, ...thresholds }
+                thresholds: { variantOfftopicSimMin: 0.92, variantMinEdit: 0.08, ...thresholds }
             },
             signal: undefined
         }
@@ -174,10 +174,10 @@ describe('pass 路徑', () => {
     });
 
     test('outcome.gate 帶著 text_gate 與 sim 交棒給 runner 寫 payload.variant', async () => {
-        const { ctx } = fakeCtx({ sim: 0.91 });
+        const { ctx } = fakeCtx({ sim: 0.93 });      // 剛好過 VARIANT_OFFTOPIC_SIM_MIN=0.92
         const outcome = await agent.run(ctx, INPUT);
         assert.equal(outcome.gate.text_gate.ok, true);
-        assert.ok(Math.abs(outcome.gate.sim - 0.91) < 1e-9);
+        assert.ok(Math.abs(outcome.gate.sim - 0.93) < 1e-9);
     });
 
     test('figure_desc 有內容才出現這個鍵', async () => {
@@ -256,17 +256,21 @@ describe('兩道閘門', () => {
         assert.equal(outcome.data.text_gate.reason, 'numbers_only');
     });
 
-    test('已知缺口：只換數字但位數變了、題幹又短 → 文字閘門放行（見 docs/questions3-wsB.md 第 1 條）', async () => {
-        // 第 4.3 條的規則 2 要求「數字多重集合相同」，換成別的數字就不成立；
-        // 規則 3 只看編輯距離比例，短題幹改四個數字就有 10% > VARIANT_MIN_EDIT=0.08。
-        // 這一題會往下走到跑題檢查與 dedup（L0 雜湊擋不住、L1 餘弦會極高 → duplicate），
-        // 所以不是「沒有防線」，但文字閘門本身確實漏了它。行為以凍結介面為準，缺口寫進 questions3。
+    test('只改字：換成別的數字也擋得下來（裁決 S3-R8 補上的缺口）', async () => {
+        // S3-R8 之前：規則 2 要求「數字多重集合相同」，換成別的數字就不成立；
+        // 規則 3 只看編輯距離，短題幹改四個數字就有 10% > VARIANT_MIN_EDIT=0.08 → 放行。
+        // S3-R8 之後：規則 2 只看「遮罩後相同」，這一題直接被判 numbers_only，
+        // 而且**在跑題檢查之前**就退回——連那一次 embed 的錢都省下來了。
         const f = fakeCtx({
             data: { ...GOOD, question_text: '設 $\\vec{a}=(6,8)$、$\\vec{b}=(2,4)$，求兩向量的夾角餘弦值。' }
         });
         const outcome = await agent.run(f.ctx, INPUT);
-        assert.equal(outcome.kind, 'pass');
-        assert.ok(outcome.gate.text_gate.edit_ratio >= 0.08);
+        assert.equal(outcome.kind, 'fail');
+        assert.equal(outcome.reason, 'text_gate');
+        assert.equal(outcome.data.text_gate.reason, 'numbers_only');
+        assert.ok(outcome.data.text_gate.edit_ratio >= 0.08,
+            '這一題的編輯距離本來就過得了規則 3——擋下它的是規則 2');
+        assert.equal(f.calls.embed.length, 0);
     });
 
     test('跑題：餘弦低於門檻 → fail(off_topic)，feedback 含實際數值', async () => {
@@ -279,9 +283,9 @@ describe('兩道閘門', () => {
     });
 
     test('門檻由 ctx.config.thresholds 決定（agent 不讀 process.env）', async () => {
-        const strict = await agent.run(fakeCtx({ sim: 0.85, thresholds: { variantSimMin: 0.9 } }).ctx, INPUT);
+        const strict = await agent.run(fakeCtx({ sim: 0.85, thresholds: { variantOfftopicSimMin: 0.9 } }).ctx, INPUT);
         assert.equal(strict.reason, 'off_topic');
-        const loose = await agent.run(fakeCtx({ sim: 0.85, thresholds: { variantSimMin: 0.5 } }).ctx, INPUT);
+        const loose = await agent.run(fakeCtx({ sim: 0.85, thresholds: { variantOfftopicSimMin: 0.5 } }).ctx, INPUT);
         assert.equal(loose.kind, 'pass');
     });
 });

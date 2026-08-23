@@ -43,9 +43,11 @@ function computeTextHash(questionText) {
 }
 
 /**
- * 變式題核准時的 `chapter_src`（interfaces-stage3.md 第 4.7 條、裁決 S3-12）。
+ * 變式題核准時的 `chapter_src`（interfaces-stage3.md 第 4.7 條、裁決 S3-12，**S3-R10 改寫**）。
  *
- * **送出的 chapter 與機器判定的 `payload.classify.chapter` 相同時寫 `'ai'`，不同才寫 `'human'`。**
+ * - 送出的 `chapter` 與機器判定的 `payload.classify.chapter` **不同** → `'human'`（人真的改過了）；
+ * - **相同** → 依 `payload.classify.source` 映射，**與 `saveNode` 同一張表**
+ *   （`gate`／`llm` → `'ai'`、`knn` → `'knn'`；第 5.2 條為準）。
  *
  * 為什麼變式題與 PDF 題不同（PDF 路徑一律 `'human'`，行為不變）：
  * `VARIANT_AUTO_APPROVE=false` 時**每一題**變式都會進複核，若照 PDF 路徑一律寫 `'human'`，
@@ -53,13 +55,17 @@ function computeTextHash(questionText) {
  * 只信 `'human'`，那正是規劃 §4.4 要防的自我強化。
  * 這條規則與 `PUT /api/questions/:id` 既有的 `CASE WHEN chapter IS DISTINCT FROM …` 是同一套語意。
  *
+ * S3-R10 之前這一格一律寫 `'ai'`，於是「kNN 短路決定、人看過沒改」的題在庫裡與
+ * 「LLM 決定的」混在一起，報表分不出來；改成查同一張表就一致了。
+ *
  * @param {object} payload    job_questions.payload
  * @param {string} submitted  老師送出的章節（已過 validateQuestionFields 正規化）
- * @returns {'ai'|'human'}
+ * @returns {'ai'|'human'|'knn'}
  */
 function variantChapterSrc(payload, submitted) {
     const machine = payload?.classify?.chapter ?? payload?.extract?.chapter ?? null;
-    return machine !== null && submitted === machine ? 'ai' : 'human';
+    if (machine === null || submitted !== machine) return 'human';
+    return payload?.classify?.source === 'knn' ? 'knn' : 'ai';
 }
 
 // ─────────────────────── 6.4 GET /api/review ───────────────────────

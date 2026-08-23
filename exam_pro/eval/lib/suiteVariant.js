@@ -148,6 +148,12 @@ function cosine(a, b) {
 
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 
+/** 讀環境變數的浮點數；缺值或壞值退回預設 */
+function numFromEnv(name, dflt) {
+    const n = Number.parseFloat(process.env[name]);
+    return Number.isFinite(n) ? n : dflt;
+}
+
 /**
  * 記憶體版的第 3.1 條候選條件。fixture 沒有 `archived_at`／`attempts`／`variant_of`，
  * 所以那三條在這裡分別是「恆真」「恆真」「家族鍵 = id」——與 pgEngine.seedFixture 灌進去的
@@ -301,7 +307,12 @@ async function runVariantSuite(args = {}) {
     const emb = loadEmbeddings({ questions: fixture.questions });
     assertComplete(emb);
 
-    const simMin = Number(process.env.VARIANT_SIM_MIN || 0.80);
+    // 裁決 S3-R9：兩個門檻分家。retrieved_coverage 量的是「檢索側」，用 RETRIEVE；
+    // 生成後的跑題檢查（gate_pass_rate 的第二道）用 OFFTOPIC。舊名 VARIANT_SIM_MIN 是退路。
+    const legacySimMin = Number.parseFloat(process.env.VARIANT_SIM_MIN);
+    const legacy = Number.isFinite(legacySimMin) ? legacySimMin : null;
+    const retrieveSimMin = numFromEnv('VARIANT_RETRIEVE_SIM_MIN', legacy ?? 0.80);
+    const offtopicSimMin = numFromEnv('VARIANT_OFFTOPIC_SIM_MIN', legacy ?? 0.92);
     const engine = args.engine === 'pg' ? 'pg' : 'memory';
 
     // ── ① retrieved_coverage（零 LLM、零 embedding 呼叫）──
@@ -310,7 +321,7 @@ async function runVariantSuite(args = {}) {
     for (const e of golden.entries) {
         const source = fixture.byId.get(e.source_question_id);
         const hits = retrieveInMemory({
-            source, questions: fixture.questions, vectorOf: emb.vectorOf, simMin
+            source, questions: fixture.questions, vectorOf: emb.vectorOf, simMin: retrieveSimMin
         });
         const enough = hits.length >= (e.expect?.min_retrieved ?? 2);
         if (enough) covered += 1;
@@ -362,7 +373,7 @@ async function runVariantSuite(args = {}) {
         );
     } else {
         const driver = await runGeneration({
-            golden, fixture, emb, simMin, generateFn, failures, warnings,
+            golden, fixture, emb, offtopicSimMin, generateFn, failures, warnings,
             agentOverrides: args.agents || {}
         });
         gatePassRate = driver.rate;
@@ -390,7 +401,8 @@ async function runVariantSuite(args = {}) {
         gateCounts,
         costUsd,
         generations,
-        simMin,
+        retrieveSimMin,
+        offtopicSimMin,
         coverageSweep: sweep,
         engine,
         failures,
@@ -408,7 +420,8 @@ async function runVariantSuite(args = {}) {
             fixture: path.relative(ROOT, fixture.file).replace(/\\/g, '/'),
             embeddings: path.relative(ROOT, emb.file).replace(/\\/g, '/'),
             perSource: PER_SOURCE,
-            variantSimMin: simMin,
+            variantRetrieveSimMin: retrieveSimMin,
+            variantOfftopicSimMin: offtopicSimMin,
             engine,
             sources: shims.sources()
         },
@@ -420,7 +433,7 @@ async function runVariantSuite(args = {}) {
  * 30 藍本 × 2 題，逐題跑完六個閘門。
  * @returns {Promise<{rate:number|null, counts:object, costUsd:number|null, generations:number, byEntry:Map}>}
  */
-async function runGeneration({ golden, fixture, emb, simMin, generateFn, failures, warnings, agentOverrides }) {
+async function runGeneration({ golden, fixture, emb, offtopicSimMin, generateFn, failures, warnings, agentOverrides }) {
     const llm = require('../../services/llm');
     const models = require('../../config/models');
     const { textHash } = require('../../utils/normalizeStem');
@@ -466,7 +479,7 @@ async function runGeneration({ golden, fixture, emb, simMin, generateFn, failure
         let stoppedAt = null;
         for (let idx = 1; idx <= PER_SOURCE; idx++) {
             generations += 1;
-            const ctx = makeCtx({ llm, models, simMin });
+            const ctx = makeCtx({ llm, models, offtopicSimMin });
             let outcome;
             try {
                 outcome = generateFn
@@ -570,7 +583,7 @@ function dedup1InMemory({ fields, source, fixture, emb, buildEmbedText }) {
 }
 
 /** eval 的 ctx：ctx.db 一律 null（裁決 S2-8，cassette 鍵才可重現） */
-function makeCtx({ llm, models, simMin }) {
+function makeCtx({ llm, models, offtopicSimMin }) {
     const usage = { calls: 0, costUsd: 0 };
     const pricing = safeRequire(path.resolve(ROOT, 'config', 'pricing.js'));
     return {
@@ -610,7 +623,7 @@ function makeCtx({ llm, models, simMin }) {
                 classifyMinConf: Number(process.env.CLASSIFY_MIN_CONF || 0.8),
                 dedupDup: Number(process.env.DEDUP_DUP_THRESHOLD || 0.97),
                 dedupVariant: Number(process.env.DEDUP_VARIANT_THRESHOLD || 0.90),
-                variantSimMin: simMin,
+                variantOfftopicSimMin: offtopicSimMin,
                 variantMinEdit: Number(process.env.VARIANT_MIN_EDIT || 0.08),
                 knnVoteSim: Number(process.env.KNN_VOTE_SIM || 0.90)
             },
