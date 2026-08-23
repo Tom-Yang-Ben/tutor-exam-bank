@@ -22,13 +22,13 @@
 | 階段 2 Agent 管線 | **完成**（三輪合併、cassette 錄齊、CI 綠；`FEATURE_PIPELINE=true` 已在本機 `.env`）；A-T16 前後對照**使用者選擇先跳過** | `docs/interfaces-stage2.md`（S0-1～6、S2-1～30）、`docs/stage2-parallel-prompts.md`、`docs/ws-notices-round2/3-stage2.md` |
 | 階段 3 產品面 | **第一輪合入 main（`b64f149`），裁決 S3-R1～R28 已發（`106a546`），nlq cassette 已錄（`fd5cf5b`），第二輪小修四條合入 main（`5facafe`，2026-08-24）**；WS 端已無待合併工作 | `docs/interfaces-stage3.md`（§15 = 裁決）、`docs/stage3-parallel-prompts.md`、`docs/ws-notices-round2-stage3.md` |
 
-main 最新：`5facafe`（單元 1403/1403、整合 253/253、五個 suite replay 通過、check:html 通過）。CI **全綠**（unit 22/24 + integration）。四個 worktree 已 ff 到同一點。
+main 最新：`18db34d`（第二輪合併 `5facafe` → NUL 修正 `5e26224` → variant cassette `18db34d`）。單元 1403/1403、整合 253/253、五個 suite replay 通過。CI **全綠**（unit 22/24 + integration）。四個 worktree 已 ff 到同一點。
 
 ## 3. 階段 3 現在卡在哪、下一步
 
 1. ~~第二輪小修~~ **已完成**（2026-08-24 合入 `5facafe`，A／B／C／D 的 questions3-ws*.md 全部結案）。目前沒有發給 WS 的新工作；若第三輪有需要，再開新分支貼新提示詞。
-2. 小瑕疵待處理：`exam_pro/utils/nlqHeuristics.js` 原始碼含 3 個**字面 NUL 位元組**（`'\0'` 直接寫成 NUL 字元），git 視為二進位（diff 顯示 Bin、衝突無法文字化解）——可改成 `'\u0000'` 逸出（一個小 commit）。WS-B 留下的私有測試庫 `tutor_exam_bank_wsb_test` 不用了可 DROP。
-3. **variant cassette 尚未錄**：30 藍本 × 2 生成 + Pro 驗證，估 **2–3 美元**——已問使用者、**等他同意**才錄（錄法見 §7）。
+2. ~~nlqHeuristics.js 的字面 NUL~~ **已修**（`5e26224`，改成 `'\u0000'` 逸出）。WS-B 留下的私有測試庫 `tutor_exam_bank_wsb_test` 不用了可 DROP。
+3. ~~variant cassette 尚未錄~~ **已錄（2026-08-24，`18db34d`）**：60 次生成、76 次 LLM、60 筆新向量；`gate_pass_rate` **0.15**（9/60）。**26/30 藍本停在 `off_topic`**（`VARIANT_OFFTOPIC_SIM_MIN=0.92`）、1 停 verify、3 全過；replay 掃描 0.85→5、0.88→14、0.90→19 個藍本停在 off_topic（數字在 `docs/variants.md` 第 4 節）。**待裁決：要不要把跑題閾值下修到 0.88～0.90**——改了要**重錄**（新放行的題會走到 classify／lint／verify；record 模式會重呼叫全部 ≈ 再一次費用）。順手修了 `suiteVariant.js` 的雞生蛋閘門（record 模式空目錄永遠不生成）。
 4. 人工 lane（使用者）：定案 `eval/golden/nlq.json` 50 句、`eval/golden/variant.json` 30 藍本 → 我跑 `--write-baseline`；之後 `.env` 開 `FEATURE_STUDENTS／FEATURE_NLQ／FEATURE_VARIANTS／FEATURE_SIMILAR=true` 試用三個新分頁；P-15b 把數字填進 `exam_pro/README.md` 的「問題→決策→數字」表。
 5. 階段 3 結案後沒有階段 4 規劃；可選的後續：A-T16 前後對照、`config/pricing.js` 填官方價格（目前全 0，`cost_usd` 恆 0）、私有 golden（真題庫）。
 
@@ -69,7 +69,7 @@ for s in retrieval classify pipeline nlq variant; do node --env-file=.env --env-
 ```bash
 cd exam_pro
 LLM_MODE=record EMBED_MODE=record node --env-file=.env --env-file=eval/.env.replay eval/run.js --suite nlq       # 已錄
-LLM_MODE=record EMBED_MODE=record node --env-file=.env --env-file=eval/.env.replay eval/run.js --suite variant   # 未錄，等使用者同意
+LLM_MODE=record EMBED_MODE=record node --env-file=.env --env-file=eval/.env.replay eval/run.js --suite variant   # 已錄（約 25 分鐘；背景 Bash 10 分鐘會逾時，用 PowerShell Start-Process 分離跑）
 node --env-file=.env --env-file=eval/.env.replay eval/run.js --suite <s>   # replay 驗證
 git add eval/cassettes eval/fixtures/embeddings.*.json
 ```
