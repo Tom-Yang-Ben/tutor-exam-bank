@@ -1,6 +1,6 @@
 {
   "_notice": "公式解析 golden（公開層）。全部由本專案作者自寫的教科書型公式片段與刻意寫壞的變體，不取自任何考卷、題本或出版品（NOTICE 第 2 條）。",
-  "_status": "draft 2026-08-22 — expect / ooxml 由 parseLatexStrict 自動預填，尚未定案；需要開發者開 Word 目視確認的清單見 _needs_word_check。",
+  "_status": "confirmed 2026-08-23 — 開發者本人逐筆定案完成（150 筆）；自製內容，不取自任何考卷。",
   "_schema": "{ id, latex, expect: \"ok\"|\"degrade\", ooxml: string[], group, source, note, needs_human_confirm, _auto:{events, lint_ok, lint_rules} }；_ 開頭與 _auto 是標註輔助資訊，測試只讀 latex / expect / ooxml。",
   "_how_built": "既有測試案例 20（test/unit/textFormatter.test.js:40-110）+ fix_formulas 型樣 10（fix_formulas.js:12-54）+ audit_formulas 六類規則各 20（$ 不成對／大括號不對稱／斜線分數／Unicode 數學符號／未包 $ 的 LaTeX／parseLatexStrict 的降級事件）= 150 筆。",
   "_how_to_confirm": "expect 的定義是「Word 打開後長得對不對」，不是「parseLatexStrict 說了算」。定案方式：npm run start 後從題庫匯出一份含這些片段的 Word，逐筆看有沒有變成純文字或空格子；確認後把該筆的 needs_human_confirm 改成 false。expect=\"ok\" 的 ooxml 若與目視結果不符，以目視為準並改 ooxml。",
@@ -133,7 +133,7 @@
       "group": "existing_test",
       "source": "test/unit/textFormatter.test.js:40-110",
       "note": "分數必須是直式 m:f，不能退成斜線",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -155,7 +155,7 @@
       "group": "existing_test",
       "source": "test/unit/textFormatter.test.js:40-110",
       "note": "\\dfrac 同樣是 m:f",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -175,7 +175,7 @@
       "group": "existing_test",
       "source": "test/unit/textFormatter.test.js:40-110",
       "note": "\\tfrac 同樣是 m:f",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -195,7 +195,7 @@
       "group": "existing_test",
       "source": "test/unit/textFormatter.test.js:40-110",
       "note": "上標 m:sSup",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -217,7 +217,7 @@
       "group": "existing_test",
       "source": "test/unit/textFormatter.test.js:40-110",
       "note": "下標 m:sSub",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -240,7 +240,7 @@
       "group": "existing_test",
       "source": "test/unit/textFormatter.test.js:40-110",
       "note": "上下標並存 m:sSubSup",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -263,7 +263,7 @@
       "group": "existing_test",
       "source": "test/unit/textFormatter.test.js:40-110",
       "note": "書寫順序相反，仍是 m:sSubSup",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -286,7 +286,7 @@
       "group": "existing_test",
       "source": "test/unit/textFormatter.test.js:40-110",
       "note": "根號 m:rad",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -308,7 +308,7 @@
       "group": "existing_test",
       "source": "test/unit/textFormatter.test.js:40-110",
       "note": "含次方根的 m:rad",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -333,7 +333,7 @@
       "group": "existing_test",
       "source": "test/unit/textFormatter.test.js:40-110",
       "note": "級數 m:nary",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -357,7 +357,7 @@
       "group": "existing_test",
       "source": "test/unit/textFormatter.test.js:40-110",
       "note": "積分 m:nary",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -379,7 +379,7 @@
       "group": "existing_test",
       "source": "test/unit/textFormatter.test.js:40-110",
       "note": "極限 m:limLow",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -401,7 +401,7 @@
       "group": "existing_test",
       "source": "test/unit/textFormatter.test.js:40-110",
       "note": "巢狀分數仍是單一 m:f",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -420,7 +420,7 @@
       "group": "existing_test",
       "source": "test/unit/textFormatter.test.js:40-110",
       "note": "希臘字母轉 Unicode θ",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -439,7 +439,7 @@
       "group": "existing_test",
       "source": "test/unit/textFormatter.test.js:40-110",
       "note": "大寫希臘字母轉 Ω",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -456,7 +456,7 @@
       "group": "existing_test",
       "source": "test/unit/textFormatter.test.js:40-110",
       "note": "運算符號轉 ×",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -475,7 +475,7 @@
       "group": "existing_test",
       "source": "test/unit/textFormatter.test.js:40-110",
       "note": "關係符號轉 ≤",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -494,7 +494,7 @@
       "group": "existing_test",
       "source": "test/unit/textFormatter.test.js:40-110",
       "note": "無限大轉 ∞",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -513,7 +513,7 @@
       "group": "existing_test",
       "source": "test/unit/textFormatter.test.js:40-110",
       "note": "函數名保持原樣（不可拆成三個變數）",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -532,7 +532,7 @@
       "group": "existing_test",
       "source": "test/unit/textFormatter.test.js:40-110",
       "note": "重音符號附加組合字元",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -554,7 +554,7 @@
       "group": "fix_formulas_pattern",
       "source": "fix_formulas.js:12-54",
       "note": "已知毀損字串；formulaFix 的 special_fix 精準修正",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -578,7 +578,7 @@
       "group": "fix_formulas_pattern",
       "source": "fix_formulas.js:12-54",
       "note": "殘留 [FRAC:a|b]",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -596,7 +596,7 @@
       "group": "fix_formulas_pattern",
       "source": "fix_formulas.js:12-54",
       "note": "殘留 [SUPER:a|b]",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -614,7 +614,7 @@
       "group": "fix_formulas_pattern",
       "source": "fix_formulas.js:12-54",
       "note": "殘留 [SUB:a|n]",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -632,7 +632,7 @@
       "group": "fix_formulas_pattern",
       "source": "fix_formulas.js:12-54",
       "note": "殘留 [SQRT:a]（右界為 ]）",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -650,7 +650,7 @@
       "group": "fix_formulas_pattern",
       "source": "fix_formulas.js:12-54",
       "note": "殘留 [SQRT:a]（右界為 }，毀損更深）",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -671,7 +671,7 @@
       "group": "fix_formulas_pattern",
       "source": "fix_formulas.js:12-54",
       "note": "上標被擠到 $ 外",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -696,7 +696,7 @@
       "group": "fix_formulas_pattern",
       "source": "fix_formulas.js:12-54",
       "note": "下標被擠到 $ 外",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -724,7 +724,7 @@
       "group": "fix_formulas_pattern",
       "source": "fix_formulas.js:12-54",
       "note": "結束的 $ 落在右大括號之前",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -746,7 +746,7 @@
       "group": "fix_formulas_pattern",
       "source": "fix_formulas.js:12-54",
       "note": "裸希臘字母未包 $",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -769,7 +769,7 @@
       "group": "rule:dollar_unbalanced",
       "source": "audit_formulas.js:21-22",
       "note": "單一 $ 未閉合",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -793,7 +793,7 @@
       "group": "rule:dollar_unbalanced",
       "source": "audit_formulas.js:21-22",
       "note": "左界有、右界無",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -817,7 +817,7 @@
       "group": "rule:dollar_unbalanced",
       "source": "audit_formulas.js:21-22",
       "note": "右界有、左界無",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -838,7 +838,7 @@
       "group": "rule:dollar_unbalanced",
       "source": "audit_formulas.js:21-22",
       "note": "第二段未閉合",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -858,7 +858,7 @@
       "group": "rule:dollar_unbalanced",
       "source": "audit_formulas.js:21-22",
       "note": "尾端多一個 $",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -881,7 +881,7 @@
       "group": "rule:dollar_unbalanced",
       "source": "audit_formulas.js:21-22",
       "note": "展示公式左右界不對稱",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -904,7 +904,7 @@
       "group": "rule:dollar_unbalanced",
       "source": "audit_formulas.js:21-22",
       "note": "展示公式右界多一個",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -927,7 +927,7 @@
       "group": "rule:dollar_unbalanced",
       "source": "audit_formulas.js:21-22",
       "note": "句末未閉合",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -947,7 +947,7 @@
       "group": "rule:dollar_unbalanced",
       "source": "audit_formulas.js:21-22",
       "note": "選項最後一格未閉合",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -970,7 +970,7 @@
       "group": "rule:dollar_unbalanced",
       "source": "audit_formulas.js:21-22",
       "note": "同時缺 } 與 $",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -993,7 +993,7 @@
       "group": "rule:dollar_unbalanced",
       "source": "audit_formulas.js:21-22",
       "note": "只有一個 $",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -1013,7 +1013,7 @@
       "group": "rule:dollar_unbalanced",
       "source": "audit_formulas.js:21-22",
       "note": "兩段中的第二段未閉合",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -1039,7 +1039,7 @@
       "group": "rule:dollar_unbalanced",
       "source": "audit_formulas.js:21-22",
       "note": "尾端多一個 $",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -1062,7 +1062,7 @@
       "group": "rule:dollar_unbalanced",
       "source": "audit_formulas.js:21-22",
       "note": "三段中的第三段未閉合",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -1082,7 +1082,7 @@
       "group": "rule:dollar_unbalanced",
       "source": "audit_formulas.js:21-22",
       "note": "句尾多餘的 $",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -1102,7 +1102,7 @@
       "group": "rule:dollar_unbalanced",
       "source": "audit_formulas.js:21-22",
       "note": "整條公式未閉合",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -1122,7 +1122,7 @@
       "group": "rule:dollar_unbalanced",
       "source": "audit_formulas.js:21-22",
       "note": "尾端多餘",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -1148,7 +1148,7 @@
       "group": "rule:dollar_unbalanced",
       "source": "audit_formulas.js:21-22",
       "note": "微分式未閉合",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -1175,7 +1175,7 @@
       "group": "rule:dollar_unbalanced",
       "source": "audit_formulas.js:21-22",
       "note": "單位段未閉合",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -1199,7 +1199,7 @@
       "group": "rule:dollar_unbalanced",
       "source": "audit_formulas.js:21-22",
       "note": "第二段未閉合",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -1222,7 +1222,7 @@
       "group": "rule:brace_unbalanced",
       "source": "audit_formulas.js:25-27",
       "note": "分母缺右大括號",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -1250,7 +1250,7 @@
       "group": "rule:brace_unbalanced",
       "source": "audit_formulas.js:25-27",
       "note": "fixture #8 的型樣",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -1279,7 +1279,7 @@
       "group": "rule:brace_unbalanced",
       "source": "audit_formulas.js:25-27",
       "note": "根號缺右大括號",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -1304,7 +1304,7 @@
       "group": "rule:brace_unbalanced",
       "source": "audit_formulas.js:25-27",
       "note": "重音符號缺右大括號",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -1332,7 +1332,7 @@
       "group": "rule:brace_unbalanced",
       "source": "audit_formulas.js:25-27",
       "note": "上標缺右大括號",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -1360,7 +1360,7 @@
       "group": "rule:brace_unbalanced",
       "source": "audit_formulas.js:25-27",
       "note": "下標缺右大括號",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -1388,7 +1388,7 @@
       "group": "rule:brace_unbalanced",
       "source": "audit_formulas.js:25-27",
       "note": "巢狀分數少一個 }",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -1419,7 +1419,7 @@
       "group": "rule:brace_unbalanced",
       "source": "audit_formulas.js:25-27",
       "note": "級數上界缺 }",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -1450,7 +1450,7 @@
       "group": "rule:brace_unbalanced",
       "source": "audit_formulas.js:25-27",
       "note": "極限式尾端缺 }",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -1478,7 +1478,7 @@
       "group": "rule:brace_unbalanced",
       "source": "audit_formulas.js:25-27",
       "note": "多一個右大括號",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -1498,7 +1498,7 @@
       "group": "rule:brace_unbalanced",
       "source": "audit_formulas.js:25-27",
       "note": "尾端多一個 }",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": false,
@@ -1521,7 +1521,7 @@
       "group": "rule:brace_unbalanced",
       "source": "audit_formulas.js:25-27",
       "note": "第二段缺 }",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -1549,7 +1549,7 @@
       "group": "rule:brace_unbalanced",
       "source": "audit_formulas.js:25-27",
       "note": "fixture #30 的型樣",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -1583,7 +1583,7 @@
       "group": "rule:brace_unbalanced",
       "source": "audit_formulas.js:25-27",
       "note": "fixture #23 的型樣（內層閉合、外層未閉合）",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -1614,7 +1614,7 @@
       "group": "rule:brace_unbalanced",
       "source": "audit_formulas.js:25-27",
       "note": "fixture #45 的型樣",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -1642,7 +1642,7 @@
       "group": "rule:brace_unbalanced",
       "source": "audit_formulas.js:25-27",
       "note": "fixture #15 的型樣",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -1674,7 +1674,7 @@
       "group": "rule:brace_unbalanced",
       "source": "audit_formulas.js:25-27",
       "note": "fixture #41 的型樣",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -1705,7 +1705,7 @@
       "group": "rule:brace_unbalanced",
       "source": "audit_formulas.js:25-27",
       "note": "連續兩層都沒閉合",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -1735,7 +1735,7 @@
       "group": "rule:brace_unbalanced",
       "source": "audit_formulas.js:25-27",
       "note": "積分上界缺 }",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -1760,7 +1760,7 @@
       "group": "rule:brace_unbalanced",
       "source": "audit_formulas.js:25-27",
       "note": "未支援的環境指令加上未閉合",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -1782,7 +1782,7 @@
       "group": "rule:slash_fraction",
       "source": "audit_formulas.js:30-32",
       "note": "純數字斜線分數",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -1799,7 +1799,7 @@
       "group": "rule:slash_fraction",
       "source": "audit_formulas.js:30-32",
       "note": "變數斜線分數",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -1816,7 +1816,7 @@
       "group": "rule:slash_fraction",
       "source": "audit_formulas.js:30-32",
       "note": "Unicode π 的斜線分數",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -1834,7 +1834,7 @@
       "group": "rule:slash_fraction",
       "source": "audit_formulas.js:30-32",
       "note": "單位裡的斜線——只能是 warn，不可擋",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -1851,7 +1851,7 @@
       "group": "rule:slash_fraction",
       "source": "audit_formulas.js:30-32",
       "note": "單位斜線（大寫字母）",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -1868,7 +1868,7 @@
       "group": "rule:slash_fraction",
       "source": "audit_formulas.js:30-32",
       "note": "單位斜線",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -1885,7 +1885,7 @@
       "group": "rule:slash_fraction",
       "source": "audit_formulas.js:30-32",
       "note": "單位斜線",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -1902,7 +1902,7 @@
       "group": "rule:slash_fraction",
       "source": "audit_formulas.js:30-32",
       "note": "數字分數",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -1919,7 +1919,7 @@
       "group": "rule:slash_fraction",
       "source": "audit_formulas.js:30-32",
       "note": "含負號的斜線分數",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -1941,7 +1941,7 @@
       "group": "rule:slash_fraction",
       "source": "audit_formulas.js:30-32",
       "note": "$…$ 內的斜線分數",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -1958,7 +1958,7 @@
       "group": "rule:slash_fraction",
       "source": "audit_formulas.js:30-32",
       "note": "字母比例",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -1975,7 +1975,7 @@
       "group": "rule:slash_fraction",
       "source": "audit_formulas.js:30-32",
       "note": "括號包住的斜線分數",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -1990,7 +1990,7 @@
       "group": "rule:slash_fraction",
       "source": "audit_formulas.js:30-32",
       "note": "倒數形式",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2007,7 +2007,7 @@
       "group": "rule:slash_fraction",
       "source": "audit_formulas.js:30-32",
       "note": "兩個斜線分數",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2024,7 +2024,7 @@
       "group": "rule:slash_fraction",
       "source": "audit_formulas.js:30-32",
       "note": "物理量比值",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2041,7 +2041,7 @@
       "group": "rule:slash_fraction",
       "source": "audit_formulas.js:30-32",
       "note": "單位斜線（含數字）",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2058,7 +2058,7 @@
       "group": "rule:slash_fraction",
       "source": "audit_formulas.js:30-32",
       "note": "簡單分數",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2075,7 +2075,7 @@
       "group": "rule:slash_fraction",
       "source": "audit_formulas.js:30-32",
       "note": "百分比寫成分數",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2092,7 +2092,7 @@
       "group": "rule:slash_fraction",
       "source": "audit_formulas.js:30-32",
       "note": "含係數的斜線分數",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2109,7 +2109,7 @@
       "group": "rule:slash_fraction",
       "source": "audit_formulas.js:30-32",
       "note": "網址不該被誤判成分數",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2124,7 +2124,7 @@
       "group": "rule:unicode_math",
       "source": "audit_formulas.js:12,35",
       "note": "乘號",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2141,7 +2141,7 @@
       "group": "rule:unicode_math",
       "source": "audit_formulas.js:12,35",
       "note": "除號",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2158,7 +2158,7 @@
       "group": "rule:unicode_math",
       "source": "audit_formulas.js:12,35",
       "note": "小於等於",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2175,7 +2175,7 @@
       "group": "rule:unicode_math",
       "source": "audit_formulas.js:12,35",
       "note": "大於等於",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2192,7 +2192,7 @@
       "group": "rule:unicode_math",
       "source": "audit_formulas.js:12,35",
       "note": "不等於",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2209,7 +2209,7 @@
       "group": "rule:unicode_math",
       "source": "audit_formulas.js:12,35",
       "note": "正負號",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2226,7 +2226,7 @@
       "group": "rule:unicode_math",
       "source": "audit_formulas.js:12,35",
       "note": "希臘字母 π",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2243,7 +2243,7 @@
       "group": "rule:unicode_math",
       "source": "audit_formulas.js:12,35",
       "note": "希臘字母 θ",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2260,7 +2260,7 @@
       "group": "rule:unicode_math",
       "source": "audit_formulas.js:12,35",
       "note": "根號符號",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2277,7 +2277,7 @@
       "group": "rule:unicode_math",
       "source": "audit_formulas.js:12,35",
       "note": "箭頭與無限大",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2294,7 +2294,7 @@
       "group": "rule:unicode_math",
       "source": "audit_formulas.js:12,35",
       "note": "級數符號",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2311,7 +2311,7 @@
       "group": "rule:unicode_math",
       "source": "audit_formulas.js:12,35",
       "note": "積分符號",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2328,7 +2328,7 @@
       "group": "rule:unicode_math",
       "source": "audit_formulas.js:12,35",
       "note": "子集符號",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2345,7 +2345,7 @@
       "group": "rule:unicode_math",
       "source": "audit_formulas.js:12,35",
       "note": "聯集交集",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2362,7 +2362,7 @@
       "group": "rule:unicode_math",
       "source": "audit_formulas.js:12,35",
       "note": "屬於符號",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2379,7 +2379,7 @@
       "group": "rule:unicode_math",
       "source": "audit_formulas.js:12,35",
       "note": "度數符號",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2396,7 +2396,7 @@
       "group": "rule:unicode_math",
       "source": "audit_formulas.js:12,35",
       "note": "兩個希臘字母",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2413,7 +2413,7 @@
       "group": "rule:unicode_math",
       "source": "audit_formulas.js:12,35",
       "note": "大寫 Delta",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2430,7 +2430,7 @@
       "group": "rule:unicode_math",
       "source": "audit_formulas.js:12,35",
       "note": "推論符號",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2447,7 +2447,7 @@
       "group": "rule:unicode_math",
       "source": "audit_formulas.js:12,35",
       "note": "Unicode 符號 + 斜線單位",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2470,7 +2470,7 @@
       "group": "rule:latex_without_dollar",
       "source": "audit_formulas.js:13,38-41",
       "note": "希臘指令 + 上標，未包 $",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2492,7 +2492,7 @@
       "group": "rule:latex_without_dollar",
       "source": "audit_formulas.js:13,38-41",
       "note": "分數未包 $",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2515,7 +2515,7 @@
       "group": "rule:latex_without_dollar",
       "source": "audit_formulas.js:13,38-41",
       "note": "根號未包 $",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2540,7 +2540,7 @@
       "group": "rule:latex_without_dollar",
       "source": "audit_formulas.js:13,38-41",
       "note": "級數未包 $",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2564,7 +2564,7 @@
       "group": "rule:latex_without_dollar",
       "source": "audit_formulas.js:13,38-41",
       "note": "積分未包 $",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2589,7 +2589,7 @@
       "group": "rule:latex_without_dollar",
       "source": "audit_formulas.js:13,38-41",
       "note": "極限未包 $",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2608,7 +2608,7 @@
       "group": "rule:latex_without_dollar",
       "source": "audit_formulas.js:13,38-41",
       "note": "重音未包 $",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2627,7 +2627,7 @@
       "group": "rule:latex_without_dollar",
       "source": "audit_formulas.js:13,38-41",
       "note": "希臘字母未包 $",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2649,7 +2649,7 @@
       "group": "rule:latex_without_dollar",
       "source": "audit_formulas.js:13,38-41",
       "note": "只有上標，沒有指令",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2671,7 +2671,7 @@
       "group": "rule:latex_without_dollar",
       "source": "audit_formulas.js:13,38-41",
       "note": "只有下標",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2693,7 +2693,7 @@
       "group": "rule:latex_without_dollar",
       "source": "audit_formulas.js:13,38-41",
       "note": "對數未包 $",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2712,7 +2712,7 @@
       "group": "rule:latex_without_dollar",
       "source": "audit_formulas.js:13,38-41",
       "note": "三角函數未包 $",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2734,7 +2734,7 @@
       "group": "rule:latex_without_dollar",
       "source": "audit_formulas.js:13,38-41",
       "note": "分數未包 $",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2756,7 +2756,7 @@
       "group": "rule:latex_without_dollar",
       "source": "audit_formulas.js:13,38-41",
       "note": "混合",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2775,7 +2775,7 @@
       "group": "rule:latex_without_dollar",
       "source": "audit_formulas.js:13,38-41",
       "note": "兩個希臘字母",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2797,7 +2797,7 @@
       "group": "rule:latex_without_dollar",
       "source": "audit_formulas.js:13,38-41",
       "note": "上標未包 $",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2819,7 +2819,7 @@
       "group": "rule:latex_without_dollar",
       "source": "audit_formulas.js:13,38-41",
       "note": "分數未包 $",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2838,7 +2838,7 @@
       "group": "rule:latex_without_dollar",
       "source": "audit_formulas.js:13,38-41",
       "note": "函數 + 大括號",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2858,7 +2858,7 @@
       "group": "rule:latex_without_dollar",
       "source": "audit_formulas.js:13,38-41",
       "note": "含希臘字母的分數",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2877,7 +2877,7 @@
       "group": "rule:latex_without_dollar",
       "source": "audit_formulas.js:13,38-41",
       "note": "單一函數",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -2896,7 +2896,7 @@
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
       "note": "unknown_command：\\vecc 不存在（fixture #24）",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -2920,7 +2920,7 @@
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
       "note": "unknown_command：\\relvel 不存在（fixture #52）",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -2944,7 +2944,7 @@
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
       "note": "unknown_command：完全未知的指令",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -2968,7 +2968,7 @@
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
       "note": "unknown_command：\\mathbb 未支援",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -2992,7 +2992,7 @@
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
       "note": "unknown_command：\\overrightarrow 未支援",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -3019,7 +3019,7 @@
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
       "note": "missing_rbrace：分母未閉合",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -3048,7 +3048,7 @@
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
       "note": "missing_rbrace：根號未閉合",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -3076,7 +3076,7 @@
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
       "note": "missing_rbrace：上標未閉合",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -3101,7 +3101,7 @@
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
       "note": "missing_rbrace：重音（overline）未閉合",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -3129,7 +3129,7 @@
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
       "note": "missing_rbrace：下標未閉合",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -3157,7 +3157,7 @@
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
       "note": "bare_script：上標沒有內容（fixture #38）",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -3184,7 +3184,7 @@
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
       "note": "bare_script：上標沒有內容（fixture #59）",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -3211,7 +3211,7 @@
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
       "note": "bare_script：下標沒有內容",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -3233,7 +3233,7 @@
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
       "note": "bare_script（純文字）：填空題的底線，只該是 warn",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -3267,7 +3267,7 @@
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
       "note": "empty_fallback：解析不出任何元件",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -3293,7 +3293,7 @@
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
       "note": "empty_fallback：只有空白",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [],
         "lint_ok": true,
@@ -3310,7 +3310,7 @@
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
       "note": "empty_fallback：\\left. 代表無括號，什麼都不留",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -3334,7 +3334,7 @@
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
       "note": "混合：unknown_command + missing_rbrace",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -3367,7 +3367,7 @@
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
       "note": "混合：missing_rbrace + unknown_command",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {
@@ -3403,7 +3403,7 @@
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
       "note": "混合：bare_script + missing_rbrace",
-      "needs_human_confirm": true,
+      "needs_human_confirm": false,
       "_auto": {
         "events": [
           {

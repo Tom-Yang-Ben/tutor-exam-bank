@@ -966,6 +966,7 @@ Windows 提醒：PowerShell 5.1 的 `>` 會寫成 UTF-16LE，要用 `npm start |
 
 **S2-27（2026-08-23，第三輪後剩 `ans-048` 五筆）：`text` 改為「包含」判定**——`claimed` 是整段敘述、模型給的是結論短語，兩邊 `normalizeStem` 並剝句尾標點後，`claimed` **包含**模型答案 → `agree`；否則一律 `uncertain`（包含關係只判得出「對」，判不出「錯」）。golden `ans-048` 的 `wrong` 期望改 `uncertain`。由開發者直接落地於 `utils/answerCompare.js` 與 `eval/golden/answer.json`。
 **S2-29（2026-08-23）：專案開通付費後 `MODEL_VERIFY=gemini:gemini-3.1-pro-preview`**（S0-5 的「開通付費後改 Pro」條件成立；免費層每模型每日 20 次的限制同時解除）。`.env.example` 已改；`report:jobs` 的「同家同級驗證」標示改為「同家異級」。`GEMINI_RPM` 本機放寬到 30，`.env.example` 仍保留 5 當保守預設。
+**S2-30（2026-08-23）：golden 全部定案、門檻初值寫入、`text_hash` 唯一化**——開發者本人確認 classify 90／answer 50／dedup 30／formula 150 與樣卷答案卷全部正確（`needs_human_confirm` 全清），`npm run eval -- --suite classify|pipeline --write-baseline` 寫入 `thresholds.json`（第一次量測 −0.03、只升不降）；fixture #47（直線運動）、#54（電場與電位）維持原標註；開發庫 `text_hash` 碰撞 #2/#3、#5/#38 確認為真重複 → attempts 併入保留題、#3／#38 封存，`migrations/0005_text_hash_unique.sql` 建部分唯一索引（未封存且非 NULL）。
 **S2-28：`pipelineDriver` 有任一 replay miss 即 `ok:false`**（部分 cassette 不是可信量測；對齊 S2-14），`reason` 指出第一個 miss。由開發者直接落地。
 
 ---

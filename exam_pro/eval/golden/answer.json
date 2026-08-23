@@ -1,6 +1,6 @@
 {
   "_notice": "本檔的題目與答案全部由本專案作者自行編寫；40 筆的 claimed 直接沿用 eval/fixtures/questions.public.json 的 answer_text 原文，不取自任何考卷、題本或出版品（見 repo 根目錄 NOTICE 第 2 條）。",
-  "_status": "needs_human_confirm — 50 筆全部尚未由開發者本人逐筆定案（A-T6 草稿；2026-08-22 依裁決 S2-12 改寫，2026-08-23 依裁決 S2-26 定案 ans-047）。",
+  "_status": "confirmed 2026-08-23 — 開發者本人逐筆定案完成（50 筆）；自製內容，不取自任何考卷。",
   "_schema": "entries[]：一筆 = 一題，展開後 = 3 個等價案例 + 2 個錯答案例，共 5 個 answerCompare 呼叫。\n  id                  string，唯一\n  from                number|null，來源 fixture 題 id（null = 本檔手寫）\n  question_type       '單選'|'多選'|'填空'|'計算'|'證明'（config/chapters.js 的 QUESTION_TYPES）\n  answer_form         'option'|'number'|'expression'|'text'（interfaces-stage2.md 第 3.2 條）\n  claimed             string，拆題模型抄下來的原始 answer_text——**真實寫法（過程 = 結論）**，\n                      40 筆直接沿用 fixture 的 answer_text 原文\n  equivalents         string[3]，驗證模型可能回的等價 final_answer\n  wrong               string[2]，典型錯答\n  expect.equivalent   'agree'|'uncertain'——equivalents 每一項的期望結果\n  expect.wrong        'disagree'|'uncertain'——wrong 每一項的期望結果\n  extraction_hazard   boolean；true = 抽取規則在這一筆上仍有爭議。\n                      裁決 S2-12（抽取）與 S2-26（expression 退回數值比）之後**已全部歸零**，\n                      欄位保留是為了下一次規則改動時還有地方標。\n  note                string|null\n  needs_human_confirm boolean\n\n呼叫方式：answerCompare({ question_type, claimed, model: { final_answer: <equivalents[i]|wrong[i]>, answer_form } })",
   "_annotations": {
     "S2-12 的改寫": "舊版為了不與「取第一個 $…$」的舊規則牴觸，把 claimed 都寫成「答案在最前面」——fixture 的 45 題填空／計算裡只有 6 題長那樣，那不是真實分佈。S2-12 定案為「最後一個 $…$，含 = 或 \\approx 取其後，純上下標片段跳過」之後，claimed 一律改回真實寫法。本檔在產生時會用一份 S2-12 的參考抽取器自我檢查每一筆 claimed 抽得到預期的答案，抽不到就拒絕產出。",
@@ -31,7 +31,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-002",
@@ -54,7 +54,7 @@
       },
       "extraction_hazard": false,
       "note": "「（Ｃ）」是全形括號 + 全形字母，要靠 NFKC 才會收斂。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-003",
@@ -77,7 +77,7 @@
       },
       "extraction_hazard": false,
       "note": "第 4.2 條列的合法寫法是 (A)／A／A.；「A)」（只有右括號）不在其中，故不列入等價形。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-004",
@@ -100,7 +100,7 @@
       },
       "extraction_hazard": false,
       "note": "小寫 (a) 是否等同 (A)：第 4.2 條沒明講，先當 agree（utils/answerCompare.js 目前 toUpperCase，符合）。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-005",
@@ -123,7 +123,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-006",
@@ -146,7 +146,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-007",
@@ -169,7 +169,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-008",
@@ -192,7 +192,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-009",
@@ -215,7 +215,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-010",
@@ -238,7 +238,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-011",
@@ -261,7 +261,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-012",
@@ -284,7 +284,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-013",
@@ -307,7 +307,7 @@
       },
       "extraction_hazard": false,
       "note": "「AC」這種無括號連寫是否抽得出兩個代號，是本組要釘的行為。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-014",
@@ -330,7 +330,7 @@
       },
       "extraction_hazard": false,
       "note": "「B、D」（頓號分隔）目前抽不出兩個代號，見 docs/questions2-wsD.md Q6；本筆改用半形逗號分隔的 B, D，那是已驗證可用的寫法。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-015",
@@ -353,7 +353,7 @@
       },
       "extraction_hazard": false,
       "note": "claimed 把代號寫在句尾——這是拆題模型很常見的抄法，代號抽取不該只看句首。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-016",
@@ -376,7 +376,7 @@
       },
       "extraction_hazard": false,
       "note": "代號到 (E)：第 4.2 條的正規化只到 [A-Ha-h]，(E) 在範圍內。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-017",
@@ -399,7 +399,7 @@
       },
       "extraction_hazard": false,
       "note": "舊規則（第一個 $…$）在這一筆抽到整串算式而比不出來；S2-12 之後抽到 11。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-018",
@@ -422,7 +422,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-019",
@@ -445,7 +445,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-020",
@@ -468,7 +468,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-021",
@@ -491,7 +491,7 @@
       },
       "extraction_hazard": false,
       "note": "claimed 抽出「4」，model 可能回「x = 4」；number 的比法會取等號右邊，兩者必須算 agree。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-022",
@@ -514,7 +514,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-023",
@@ -537,7 +537,7 @@
       },
       "extraction_hazard": false,
       "note": "單位後綴「位數」要被去掉再比（第 4.2 條）。claimed 的最後一段是 $16$，前面的 $15.05$ 不該被抽到。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-024",
@@ -560,7 +560,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-025",
@@ -583,7 +583,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-026",
@@ -606,7 +606,7 @@
       },
       "extraction_hazard": false,
       "note": "本筆是 S2-12「純上下標片段跳過」的主案例：claimed 結尾是 m/s$^2$，最後一段 $…$ 是「^2」，必須跳過它往前找到 $a = \\frac{10}{2} = 5$ 才抽得到 5。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-027",
@@ -629,7 +629,7 @@
       },
       "extraction_hazard": false,
       "note": "科學記號 $6.0\\times10^2$ 是否算 number 的等價形，請開發者定案。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-028",
@@ -652,7 +652,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-029",
@@ -675,7 +675,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-030",
@@ -698,7 +698,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-031",
@@ -721,7 +721,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-032",
@@ -744,7 +744,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-033",
@@ -767,7 +767,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-034",
@@ -790,7 +790,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-035",
@@ -813,7 +813,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-036",
@@ -836,7 +836,7 @@
       },
       "extraction_hazard": false,
       "note": "負號是本組的重點（裁決 S2-11：負號是數值的一部分，-1 與 1 判 disagree）。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-037",
@@ -859,7 +859,7 @@
       },
       "extraction_hazard": false,
       "note": "舊規則在這一筆抽到題目條件裡的「0」而產生**假 disagree**（真答案是 -1）；S2-12 抽最後一段的等號右邊，得到 -1。這是 D-Q3 的主要證據。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-038",
@@ -882,7 +882,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-039",
@@ -905,7 +905,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-040",
@@ -928,7 +928,7 @@
       },
       "extraction_hazard": false,
       "note": "0.333333333333 與 1/3 差約 3.3e-13 < 1e-9，依容差應判 agree；再少一位（0.3333333333，差 3.3e-11）仍在容差內，要到 0.333333333（差 3.3e-10）才會 disagree。容差的邊界請開發者確認。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-041",
@@ -951,7 +951,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-042",
@@ -974,7 +974,7 @@
       },
       "extraction_hazard": false,
       "note": "claimed 是「a = … = 2.5 m/s^2；張力 T = … = 37.5 N」，兩個答案寫在同一段。S2-12 取最後一段，抽到張力 37.5——所以 model 也必須回張力。這一筆是刻意的：一題兩問時 verify 的 prompt 要問清楚問哪一個，請開發者確認要不要把這種題排除在 verify 之外。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-043",
@@ -997,7 +997,7 @@
       },
       "extraction_hazard": false,
       "note": "科學記號的三種寫法要收斂；e 記法是否支援請開發者定案。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-044",
@@ -1020,7 +1020,7 @@
       },
       "extraction_hazard": false,
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-045",
@@ -1043,7 +1043,7 @@
       },
       "extraction_hazard": false,
       "note": "claimed 的最後一段是 $\\theta = 45^\\circ$，S2-12 抽等號右邊得到 45^\\circ——**題目問的就是夾角**，抽對了；中間那段 $\\cos\\theta = … = \\frac{1}{\\sqrt{2}}$ 是過程，不該被抽到。expression 依第 4.2 條只比「去空白、去 $、去 \\left\\right 後的字串」，所以三個等價形只能是同一串字的不同包裝；「\\theta = 45^\\circ」與「45^\\circ」在這條規則下是不同字串，**不列為等價形**。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-046",
@@ -1066,7 +1066,7 @@
       },
       "extraction_hazard": false,
       "note": "`^\\circ` 與 `^{\\circ}` 在第 4.2 條的 expression 比法下是不同字串（大括號沒有被正規化掉），因此不列為等價形。要不要把 `^{x}` → `^x` 這類 LaTeX 等價寫法納入正規化，請開發者定案。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-047",
@@ -1089,7 +1089,7 @@
       },
       "extraction_hazard": false,
       "note": "裁決 S2-26 把 expression 的比法定案為三段：去空白／$／\\left\\right 後字串相等 → agree；否則兩邊都能數值化就照 number 比；否則 uncertain。claimed 的最後一段是 $\\frac{3}{1} = 3$，S2-12 抽等號右邊得到「3」，model 回 \\frac{3}{1}——字串不等但數值都是 3，走第二段 → **agree**。\\left\\right 去掉之後同理。兩個錯答 \\frac{1}{3}（0.333…）與 \\frac{4}{1}（4）也都數值化得出來且不等於 3 → disagree。本檔因此不再有 extraction_hazard。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-048",
@@ -1112,7 +1112,7 @@
       },
       "extraction_hazard": false,
       "note": "text 走 normalizeStem 比整段，不走 $…$ 抽取。（裁決 S2-27：text 走「claimed 包含模型答案」→ agree，否則一律 uncertain，不回 disagree）",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-049",
@@ -1135,7 +1135,7 @@
       },
       "extraction_hazard": false,
       "note": "裁決 S2-27：text 走「claimed 包含模型答案」→ agree，否則 uncertain（不回 disagree）。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "ans-050",
@@ -1158,7 +1158,7 @@
       },
       "extraction_hazard": false,
       "note": "第 4.2 條：「證明」一律回 uncertain，不論兩邊寫什麼。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     }
   ]
 }

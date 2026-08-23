@@ -40,16 +40,63 @@
   "classify": {
     "_note": "門檻為 null = 尚未建立基準線，只報告不擋（與階段 1 retrieval 的語意一致）。有數字之後，量不到那一欄就算失敗——否則「cassette 被誤刪」會表現成 CI 全綠。",
     "classify": {
-      "accuracy": null,
-      "macro_f1": null
+      "accuracy": 0.87,
+      "macro_f1": 0.8956
     }
   },
   "pipeline": {
     "_note": "只放「越高越好」的指標。needs_review 的比率越低越好，放進 ratchet 會變成「只准更多題進複核」，那不是門檻；它只在報表裡呈現分佈。",
     "pipeline": {
-      "saved_rate": null,
-      "gate_pass_rate": null,
-      "answer_agree_rate": null
+      "saved_rate": 0.87,
+      "gate_pass_rate": 0.97,
+      "answer_agree_rate": 0.87
+    }
+  },
+  "_classify_measured_with": {
+    "agent": "agents/classify.js",
+    "llmMode": "replay",
+    "cassetteDir": "eval/cassettes",
+    "golden": "eval/golden/classify.json",
+    "goldenEntries": 90,
+    "goldenPending": 0,
+    "fixture": "eval/fixtures/questions.public.json",
+    "sources": {
+      "normalizeStem": "utils/normalizeStem.js",
+      "answerCompare": "utils/answerCompare.js",
+      "parseLatexStrict": "utils/textFormatter.js",
+      "pricing": "config/pricing.js",
+      "anyStub": false
+    }
+  },
+  "_pipeline_measured_with": {
+    "pdf": "eval/fixtures/sample_exam.pdf",
+    "pdfSha256": "f1a15d77282523b60f88d12fa65b45f21ad46ae708bc0eb92963af9f00fc3622",
+    "questionsExpected": 10,
+    "agentSources": {
+      "extract": "agents/extract.js",
+      "classify": "agents/classify.js",
+      "lint": "agents/lint.js",
+      "verify": "agents/verify.js",
+      "dedup": "agents/dedup.js"
+    },
+    "stateMachine": "pipeline/stateMachine.js",
+    "db": "TEST_DATABASE_URL",
+    "llmMode": "replay",
+    "cassetteDir": "eval/cassettes",
+    "thresholds": {
+      "classifyMinConf": 0.8,
+      "dedupDup": 0.97,
+      "dedupVariant": 0.9,
+      "pdfChunkPages": 20,
+      "inlineMaxBytes": 15728640,
+      "nodeTimeoutMs": 120000
+    },
+    "sources": {
+      "normalizeStem": "utils/normalizeStem.js",
+      "answerCompare": "utils/answerCompare.js",
+      "parseLatexStrict": "utils/textFormatter.js",
+      "pricing": "config/pricing.js",
+      "anyStub": false
     }
   }
 }

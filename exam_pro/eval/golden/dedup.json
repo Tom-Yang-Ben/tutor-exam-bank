@@ -1,6 +1,6 @@
 {
   "_notice": "本檔題幹全部取自 eval/fixtures/questions.public.json（由本專案作者自行編寫）或其手寫改寫，不取自任何考卷、題本或出版品（見 repo 根目錄 NOTICE 第 2 條）。",
-  "_status": "needs_human_confirm — 30 組全部尚未由開發者本人逐組定案（A-T6 草稿）。",
+  "_status": "confirmed 2026-08-23 — 開發者本人逐筆定案完成（30 組）；自製內容，不取自任何考卷。",
   "_schema": "entries[]：一筆 = 一組兩題的比較。\n  id                  string，唯一；dd-vb-* 逐字重複、dd-rs-* 重傳、dd-nc-* 換數字、dd-df-* 不同題\n  kind                'verbatim'|'resend'|'numeric_change'|'different'\n  a / b               { from: number|null（fixture 題 id）, text: string（送進 dedup0 的 question_text）}\n  expect_l0           'hit'|'miss'——textHash(a.text) === textHash(b.text) 是否成立（utils/normalizeStem.js）\n  expect_l1           'duplicate'|'variant'|'unique'——dedup1 的向量判定（interfaces-stage2.md 第 3.2 條 payload.dedup1.verdict）\n  note                string|null；這一組要釘的是哪一條規則\n  needs_human_confirm boolean\n\n驗收（規劃 §3.8）：L0 對 verbatim + resend 的 recall 必須是 100%（16/16），\n                   對 numeric_change + different 的誤報必須是 0（14/14 miss）。",
   "_annotations": {
     "L0 與 L1 的分工": "L0 是雜湊，只回「一樣／不一樣」，跑在任何 LLM 呼叫之前，成本為零；L1 是向量餘弦，要等階段 1 的 embedding。expect_l0 是 CI 守得住的硬數字，expect_l1 在 D-V0 的向量 fixture 錄好之前只是待驗證的預期。",
@@ -22,7 +22,7 @@
       "expect_l0": "hit",
       "expect_l1": "duplicate",
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-vb-02",
@@ -38,7 +38,7 @@
       "expect_l0": "hit",
       "expect_l1": "duplicate",
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-vb-03",
@@ -54,7 +54,7 @@
       "expect_l0": "hit",
       "expect_l1": "duplicate",
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-vb-04",
@@ -70,7 +70,7 @@
       "expect_l0": "hit",
       "expect_l1": "duplicate",
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-vb-05",
@@ -86,7 +86,7 @@
       "expect_l0": "hit",
       "expect_l1": "duplicate",
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-vb-06",
@@ -102,7 +102,7 @@
       "expect_l0": "hit",
       "expect_l1": "duplicate",
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-vb-07",
@@ -118,7 +118,7 @@
       "expect_l0": "hit",
       "expect_l1": "duplicate",
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-vb-08",
@@ -134,7 +134,7 @@
       "expect_l0": "hit",
       "expect_l1": "duplicate",
       "note": null,
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-rs-01",
@@ -150,7 +150,7 @@
       "expect_l0": "hit",
       "expect_l1": "duplicate",
       "note": "只動第 2 步：剝掉 [附圖描述：…]。拆題模型每次對同一張圖的描述都會不同，若不剝掉，同一份 PDF 重傳就永遠去不了重。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-rs-02",
@@ -166,7 +166,7 @@
       "expect_l0": "hit",
       "expect_l1": "duplicate",
       "note": "第 3 步（NFKC 全形→半形）+ 第 4a 步（全形括號的選項代號統一成 (A)）。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-rs-03",
@@ -182,7 +182,7 @@
       "expect_l0": "hit",
       "expect_l1": "duplicate",
       "note": "第 4b 步：行首的「A.」要能被認成 (A)。這一步必須在第 6 步（去空白）之前，否則認不出行首。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-rs-04",
@@ -198,7 +198,7 @@
       "expect_l0": "hit",
       "expect_l1": "duplicate",
       "note": "第 5 步：去掉所有 $。老師手打時常常不加 $…$，模型抄時會加——這是最常見的「同一題兩種抄法」。注意「上標符號本身」不會被去掉：b 仍寫成 m/s^2，若把它抄成 m/s2 就會變成不同的雜湊（已實測）。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-rs-05",
@@ -214,7 +214,7 @@
       "expect_l0": "hit",
       "expect_l1": "duplicate",
       "note": "第 6 步：選項從同一行改成分行、加縮排，去掉所有空白後必須一致。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-rs-06",
@@ -230,7 +230,7 @@
       "expect_l0": "hit",
       "expect_l1": "duplicate",
       "note": "b 在句尾多了一個零寬不斷行空格（U+FEFF）——PDF 抽文字時很常見。NFKC 不會刪掉它，靠的是第 6 步的 /\\s+/：JS 的 \\s 涵蓋 U+FEFF，因此兩邊收斂（已對 scripts/backfill_text_hash.js 的參考實作實測）。WS-C 的 utils/normalizeStem.js 若改用別的空白字元類別，這一筆會第一個轉紅。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-rs-07",
@@ -246,7 +246,7 @@
       "expect_l0": "hit",
       "expect_l1": "duplicate",
       "note": "第 3 步（全形 ？→ ?）+ 第 4a 步的小寫代號要轉大寫 + 第 7 步 toLowerCase。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-rs-08",
@@ -262,7 +262,7 @@
       "expect_l0": "hit",
       "expect_l1": "duplicate",
       "note": "混合案例：附圖描述 + 去 $ + 上標寫法不同。這是「同一份 PDF 用兩個不同模型拆題」的真實長相。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-nc-01",
@@ -278,7 +278,7 @@
       "expect_l0": "miss",
       "expect_l1": "variant",
       "note": "同 variant_group：log-add。expect_l1='variant' 代表餘弦落在 [DEDUP_VARIANT_THRESHOLD, DEDUP_DUP_THRESHOLD) 且照常入庫；實際餘弦要等 D-V0 的向量 fixture 才量得到，門檻是否合適請開發者看過數字再定案。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-nc-02",
@@ -294,7 +294,7 @@
       "expect_l0": "miss",
       "expect_l1": "variant",
       "note": "同 variant_group：exp-eq。expect_l1='variant' 代表餘弦落在 [DEDUP_VARIANT_THRESHOLD, DEDUP_DUP_THRESHOLD) 且照常入庫；實際餘弦要等 D-V0 的向量 fixture 才量得到，門檻是否合適請開發者看過數字再定案。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-nc-03",
@@ -310,7 +310,7 @@
       "expect_l0": "miss",
       "expect_l1": "variant",
       "note": "同 variant_group：dot-basic。expect_l1='variant' 代表餘弦落在 [DEDUP_VARIANT_THRESHOLD, DEDUP_DUP_THRESHOLD) 且照常入庫；實際餘弦要等 D-V0 的向量 fixture 才量得到，門檻是否合適請開發者看過數字再定案。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-nc-04",
@@ -326,7 +326,7 @@
       "expect_l0": "miss",
       "expect_l1": "variant",
       "note": "同 variant_group：newton-fma。expect_l1='variant' 代表餘弦落在 [DEDUP_VARIANT_THRESHOLD, DEDUP_DUP_THRESHOLD) 且照常入庫；實際餘弦要等 D-V0 的向量 fixture 才量得到，門檻是否合適請開發者看過數字再定案。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-nc-05",
@@ -342,7 +342,7 @@
       "expect_l0": "miss",
       "expect_l1": "variant",
       "note": "同 variant_group：circular-tension。expect_l1='variant' 代表餘弦落在 [DEDUP_VARIANT_THRESHOLD, DEDUP_DUP_THRESHOLD) 且照常入庫；實際餘弦要等 D-V0 的向量 fixture 才量得到，門檻是否合適請開發者看過數字再定案。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-nc-06",
@@ -358,7 +358,7 @@
       "expect_l0": "miss",
       "expect_l1": "variant",
       "note": "同 variant_group：free-fall。expect_l1='variant' 代表餘弦落在 [DEDUP_VARIANT_THRESHOLD, DEDUP_DUP_THRESHOLD) 且照常入庫；實際餘弦要等 D-V0 的向量 fixture 才量得到，門檻是否合適請開發者看過數字再定案。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-nc-07",
@@ -374,7 +374,7 @@
       "expect_l0": "miss",
       "expect_l1": "variant",
       "note": "同 variant_group：efield-point。expect_l1='variant' 代表餘弦落在 [DEDUP_VARIANT_THRESHOLD, DEDUP_DUP_THRESHOLD) 且照常入庫；實際餘弦要等 D-V0 的向量 fixture 才量得到，門檻是否合適請開發者看過數字再定案。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-df-01",
@@ -390,7 +390,7 @@
       "expect_l0": "miss",
       "expect_l1": "unique",
       "note": "跨章字面相近：平面向量內積 vs 空間向量內積，題幹幾乎同構，只差一個維度。這一組若被判 duplicate，就是閾值太鬆。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-df-02",
@@ -406,7 +406,7 @@
       "expect_l0": "miss",
       "expect_l1": "unique",
       "note": "跨章字面相近：夾角題的平面版與空間版。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-df-03",
@@ -422,7 +422,7 @@
       "expect_l0": "miss",
       "expect_l1": "unique",
       "note": "跨章字面相近：垂直求 k 的平面版與空間版。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-df-04",
@@ -438,7 +438,7 @@
       "expect_l0": "miss",
       "expect_l1": "unique",
       "note": "同章不同概念：對數相加 vs 換底公式。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-df-05",
@@ -454,7 +454,7 @@
       "expect_l0": "miss",
       "expect_l1": "unique",
       "note": "同章不同概念：繩張力提供向心力 vs 摩擦力提供向心力。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-df-06",
@@ -470,7 +470,7 @@
       "expect_l0": "miss",
       "expect_l1": "unique",
       "note": "同章不同題型：等加速度位移計算 vs v-t 圖觀念單選。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     },
     {
       "id": "dd-df-07",
@@ -486,7 +486,7 @@
       "expect_l0": "miss",
       "expect_l1": "unique",
       "note": "同章不同概念：庫侖力 vs 電場力作功。",
-      "needs_human_confirm": true
+      "needs_human_confirm": false
     }
   ]
 }
