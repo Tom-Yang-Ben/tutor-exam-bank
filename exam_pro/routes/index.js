@@ -112,6 +112,19 @@ router.post('/review/:jqId/reject', reviewController.reject);
 // ===== [/WS3-B: variants] =====
 
 // ===== [WS3-C: nlq] =====
+// POST /api/questions/search-nl — 自然語言查題（docs/interfaces-stage3.md 第 6 條，P-08）
+// FEATURE_NLQ 未開啟時「不掛載」這條路由，因此請求會落到 Express 的預設 404。
+// 限流 30/min（第 6 條），與 aiRateLimit 的 10/min 分開：這一支多數請求只跑規則解析，
+// 不會產生費用，用同一個桶會讓查題把 PDF 拆題的額度吃光。
+const nlqService = require('../services/nlqService');
+if (nlqService.isNlqEnabled()) {
+    const nlqRateLimit = createRateLimiter({
+        windowMs: 60 * 1000,
+        max: 30,
+        message: '自然語言查題請求過於頻繁，請稍候再試（每分鐘最多 30 次）。'
+    });
+    router.post('/questions/search-nl', nlqRateLimit, nlqService.searchNlHandler);
+}
 // ===== [/WS3-C: nlq] =====
 
 // ===== [WS3-D: frontend] =====
