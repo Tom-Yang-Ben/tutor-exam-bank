@@ -6,12 +6,24 @@
 > **本檔沒有任何一條是自行修改介面繞過**。所有實作都照凍結的簽名與字串做；
 > 下面第 1–4 條是「介面沒有規定、我做了決定」的地方（做法與理由都寫清楚，供開發者本人裁決是否要寫回介面），
 > 第 5–8 條是需要開發者本人拍板的疑問，第 9–11 條是給其他 workstream 的備註。
+>
+> ---
+>
+> ## ✅ 已結案（2026-08-24）
+>
+> 十一條全部有裁決，落地也全部完成。對應的裁決寫在
+> `docs/interfaces-stage3.md` §15（第一輪裁決 S3-R*），每一條下面標了「**裁決：S3-Rn**」。
+> 需要改程式的三條（R24 兩個下拉、R25 第四個 `<meta>`、R27 替身測試改寫）已於
+> 分支 `ws3-d/frontend` 落地並通過 `npm test`／`npm run check:html`。
+> **本檔之後只當紀錄看，不再是待辦清單。**
 
 ---
 
 ## A. 介面沒規定、WS-D 自行決定的部分（請確認要不要寫回介面）
 
 ### 1. 兩個 module 之間用 CustomEvent，不互相 import、不加 `window.ExamApp` 的鍵
+
+> **裁決：S3-R23（接受，並寫進介面）**——兩個事件名與 `detail` 形狀寫進 `interfaces-stage3.md` 第 7.1 條，以本檔 §1 的形狀為準。實作不動。
 
 第 7.1 條把 `window.ExamApp` 的鍵**逐一凍結**成十個（階段 2 五個 + 階段 3 五個）。
 但 P-05 要求「最近錯題每列『找相似／出變式』按鈕（**呼叫 variants.js**）」，
@@ -52,6 +64,8 @@ export const GRADE_EVENT = 'examapp:grade-paper';
 
 ### 2. `<section id="nlq">` 放在 `#library` 正上方
 
+> **裁決：S3-R23（接受現況）**——`#nlq` 維持在 `#library` 正上方，不為了塞進篩選列而開第六個插入點。
+
 第 7.2 條第 3 列說三個空錨點放在「`<section id="review">` 附近」，
 規劃 §4.3.5 的表格則說 NL 查題框在「`index.html:539-541` 搜尋框旁」——兩者位置不同。
 
@@ -62,6 +76,8 @@ export const GRADE_EVENT = 'examapp:grade-paper';
 那會變成**第六個**插入點，而第 7.2 條寫的是「只有這五處」。
 
 ### 3. `index.html` 的 inline script 自己有一份 `parseBool`
+
+> **裁決：S3-R23（接受現況）**——inline script 不是 module，拿不到 `public/js/*.js` 的匯出，因此保留自己那一份；但規則必須與 `config/features.js` **逐字相同**，由 `eval/tools/check_html.js` 逐字比對守住。
 
 第 7.2 條要求三個 module 的 `parseBool` 與 `config/features.js` **逐字相同**。
 但「立即批改」按鈕要不要出現，也得看 `FEATURE_STUDENTS`——那段判斷在 inline script 裡，
@@ -75,6 +91,8 @@ export const GRADE_EVENT = 'examapp:grade-paper';
 可接受，或要改成別的做法？
 
 ### 4. `variants.js` 每一輪多打一支 `GET /api/jobs/:id/questions`
+
+> **裁決：S3-R23（接受現況）**——每輪同時打 `GET /api/jobs/:id` 與 `GET /api/jobs/:id/questions`。兩支都是階段 2 凍結的唯讀端點，形狀不變。
 
 第 3.2 條只說「每 2 秒輪詢 `GET /api/jobs/:id`，最多 60 秒」，而 P-13 要求
 「**每題**狀態 chip（生成中／檢查中／待核准／已入庫／失敗+原因）」。
@@ -91,6 +109,10 @@ export const GRADE_EVENT = 'examapp:grade-paper';
 
 ### 5. 「出變式」的 `count` 與 `difficulty_delta` 要不要讓老師選？
 
+> **裁決：S3-R24（要，已落地）**——面板頂端加兩個下拉：數量 1~3（**預設 1**）、難度 −1／0／+1（**預設 0**），與第 3 條的 body 預設逐字一致；送出的 body 用選到的值。eval 用 `count=2` 是 eval 自己的事，前端不跟。
+>
+> 落地：`public/js/variants.js` 的 `COUNT_OPTIONS`／`DELTA_OPTIONS`／`requestOptions()`，測試在 `test/unit/stage3Render.test.js`（四則）與 `stage3Ui.test.js`（選項與預設值）。
+
 第 3 條的預設是 `count: 1`、`difficulty_delta: 0`，上限 `VARIANT_MAX_PER_REQUEST=3`。
 目前前端**寫死送 `count: 2, difficulty_delta: 0`**，理由是第 8.3 條的 `gate_pass_rate`
 定義就是「30 藍本 × 2 題 = 60 次生成」，前端與 eval 用同一個數字比較好對帳。
@@ -99,6 +121,10 @@ export const GRADE_EVENT = 'examapp:grade-paper';
 要的話 UI 要多兩個下拉（數量 1~3、難度 −1/0/+1）。**待裁決**。
 
 ### 6. 「找相似」的旗標：`FEATURE_SIMILAR` 沒有 `<meta>` 注入點
+
+> **裁決：S3-R25（要加，已落地）**——`index.html` 加第四個注入點 `<meta name="feature-similar" content="__FEATURE_SIMILAR__">`（WS-D），`app.js` 的第六個 `replaceAll` 由 WS-A 補；「找相似」由 `feature-similar` 控制、「出變式」由 `feature-variants` 控制，兩顆按鈕各自出現或消失，少掉哪一顆都會說出是哪個旗標關著。
+>
+> 落地：`public/js/students.js` 的 `FEATURE_META`／`similarEnabled()`／`variantsEnabled()`、`eval/tools/check_html.js` 的 `STAGE3_EXTRA_METAS`，測試在 `test/unit/stage3Render.test.js`（三種旗標組合）。
 
 第 7.2 條只注入三個新旗標（`feature-students|nlq|variants`），
 但「找相似」打的是階段 1 的 `GET /api/questions/:id/similar`，它由 `FEATURE_SIMILAR` 控制，
@@ -114,11 +140,15 @@ export const GRADE_EVENT = 'examapp:grade-paper';
 
 ### 7. 弱點面板的 `days` 下拉沒有凍結的選項清單
 
+> **裁決：S3-R26（接受現況）**——先用 30／90／180／365，第 2 週人工試用後再調。
+
 第 1.5 條凍結了 `days` 的合法範圍（1~365，預設 90）但沒說前端要給哪些選項。
 目前給 `30 / 90 / 180 / 365` 四個。若老師實際上習慣看「這學期」「上個月」，
 這四個值要換。**待回饋**（人工 lane 第 2 週試用時一併決定）。
 
 ### 8. `PATCH /api/papers/:id/results` 的 100 筆上限在 UI 上碰不到
+
+> **裁決：無需裁決（備註）**——前端仍然擋，不偷偷分批送（分批會破壞「全有全無」）。
 
 第 1.4 條的 `results 最多 100 筆。`；而 `generatePaper` 的 `MAX_QUESTIONS` 是 50
 （`controllers/examController.js:4`），所以一張卷最多 50 題，改滿也只有 50 筆。
@@ -130,6 +160,8 @@ export const GRADE_EVENT = 'examapp:grade-paper';
 ## C. 給其他 workstream 的備註
 
 ### 9. 給 WS-C（nlq）與 WS-B（variant）：suite 的匯出名稱與 `run.js` 的替身
+
+> **裁決：S3-R27（已結案）**——兩支 suite 都已合入 main，`--suite nlq|variant` 現在接到的是真的那一支、`anyStub` 為 `false`。`test/unit/evalStage3.test.js` 原本那兩則「替身回全部 n/a」「替身 `anyStub=true`」的斷言已改成反過來釘：接到的是真 suite、`anyStub=false`、量得出真數字。替身的程式碼保留（suite 檔被誤刪時只讓那一個 suite 變 n/a，不炸掉整個 eval 入口），但它從此是不該被走到的那條路。
 
 `eval/run.js` 已經接好 `--suite nlq` 與 `--suite variant`，用**惰性 require**：
 
@@ -151,15 +183,20 @@ eval/lib/suiteVariant.js  →  module.exports = { runVariantSuite };
 
 ### 10. 給 WS-A：`app.js` 的三個 `replaceAll` 還沒合入
 
+> **裁決：已完成（三個）＋ 新增一個**——三個 `replaceAll` 已在 main（`app.js:71-73`）。裁決 S3-R25 之後還缺 `__FEATURE_SIMILAR__` 的第六個 `replaceAll`，**在 WS-A 補上之前，「找相似」按鈕會因為佔位字串被 `parseBool` 判成 false 而不出現**（安全預設，不是壞掉）。
+
 `public/index.html` 的三個 `<meta>` 目前是佔位字串 `__FEATURE_STUDENTS__` 等。
 在第 7.3 條的三行 `replaceAll` 合入之前，`parseBool` 會判成 `false`＝三個分頁都不渲染
-（這是安全預設，不是壞掉）。本機驗收可用 `?students=1&nlq=1&variants=1&mock=1`。
+（這是安全預設，不是壞掉）。本機驗收可用 `?students=1&nlq=1&variants=1&similar=1&mock=1`
+（`similar=1` 是裁決 S3-R25 之後新加的那一個）。
 
 另外，`GET /api/students` 的下拉會顯示「姓名（N 卷，已批 X%）」，
 姓名另外存在 `option.dataset.name`——**請確認 `graded_ratio` 在沒有 attempts 時回 `0` 而不是 `null`**
 （第 1.1 條寫的是 `0`），否則會顯示成「已批 —」。
 
 ### 11. 給全部：`test/e2e/` 是新的一層，不在 `npm test` 裡
+
+> **裁決：S3-R7（相關）**——`npm run test:integration`／`npm run test:e2e` 維持 CI 語意；本機一律多帶 `--env-file=.env`，否則整層 skip 而且是綠的。README 的「問題→決策→數字」那一節已再標一次。
 
 ```bash
 npm run test:e2e     # 需要 TEST_DATABASE_URL；本機沒設會整層 skip

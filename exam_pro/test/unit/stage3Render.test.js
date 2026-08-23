@@ -30,11 +30,12 @@ async function loadFresh(name) {
 }
 
 const ALL_META = {
-    'feature-students': 'true', 'feature-nlq': 'true', 'feature-variants': 'true'
+    'feature-students': 'true', 'feature-nlq': 'true', 'feature-variants': 'true',
+    'feature-similar': 'true'                        // 第四個注入點（裁決 S3-R25）
 };
 const OFF_META = {
     'feature-students': '__FEATURE_STUDENTS__',      // app.js 還沒替換掉的佔位字串
-    'feature-nlq': 'false', 'feature-variants': '0'
+    'feature-nlq': 'false', 'feature-variants': '0', 'feature-similar': 'false'
 };
 
 let env = null;
@@ -177,16 +178,37 @@ describe('students.js 對 ?mock=1 真的渲染得出來（P-05）', () => {
         assert.equal(seen[0].student_id, 3, '要帶目前選到的學生，才排除得掉他寫過的題');
     });
 
-    test('FEATURE_VARIANTS 關閉時不畫那兩顆按鈕，而是說明為什麼', async () => {
-        env = install({
-            meta: { ...ALL_META, 'feature-variants': 'false' },
-            sections: ['students', 'nlq', 'variants'], search: '?mock=1', examApp: fakeBridge()
-        });
+    // ── 裁決 S3-R25：兩顆按鈕由兩個不同的旗標控制 ──
+    async function mountWith(meta) {
+        env = install({ meta, sections: ['students', 'nlq', 'variants'], search: '?mock=1', examApp: fakeBridge() });
         const mod = await loadFresh('students.js');
         await mod.init();
         await flush();
-        assert.equal(env.document.querySelectorAll('[data-variant-action]').length, 0);
-        assert.ok(env.document.getElementById('stuWeakness').textContent.includes('FEATURE_VARIANTS 未開啟'));
+        return env.document.querySelectorAll('[data-variant-action]');
+    }
+
+    test('只開 FEATURE_SIMILAR：只畫「找相似」，並說明 variants 關著（S3-R25）', async () => {
+        const buttons = await mountWith({ ...ALL_META, 'feature-variants': 'false' });
+        assert.deepEqual([...new Set(buttons.map(b => b.dataset.variantAction))], ['similar']);
+        assert.equal(buttons.length, 3, '三題各一顆「找相似」');
+        const text = env.document.getElementById('stuWeakness').textContent;
+        assert.ok(text.includes('FEATURE_VARIANTS 未開啟'), text.slice(0, 200));
+        assert.ok(!text.includes('FEATURE_SIMILAR 未開啟'), '不該說 similar 也關著');
+    });
+
+    test('只開 FEATURE_VARIANTS：只畫「出變式」（S3-R25）', async () => {
+        const buttons = await mountWith({ ...ALL_META, 'feature-similar': 'false' });
+        assert.deepEqual([...new Set(buttons.map(b => b.dataset.variantAction))], ['variant']);
+        const text = env.document.getElementById('stuWeakness').textContent;
+        assert.ok(text.includes('FEATURE_SIMILAR 未開啟'), text.slice(0, 200));
+        assert.ok(!text.includes('FEATURE_VARIANTS 未開啟'));
+    });
+
+    test('兩個都關：一顆按鈕都沒有，但兩個旗標都被指名（S3-R25）', async () => {
+        const buttons = await mountWith({ ...ALL_META, 'feature-similar': 'false', 'feature-variants': 'false' });
+        assert.equal(buttons.length, 0);
+        const text = env.document.getElementById('stuWeakness').textContent;
+        assert.ok(text.includes('FEATURE_SIMILAR 未開啟') && text.includes('FEATURE_VARIANTS 未開啟'), text.slice(0, 300));
     });
 
     test('展開試卷 → 每題三顆按鈕（對／錯／未批），且反映既有的 result', async () => {
@@ -343,6 +365,57 @@ describe('variants.js 對 ?mock=1 真的渲染得出來（P-13）', () => {
         }));
         await flush(); await flush();
     }
+
+    // ── 裁決 S3-R24：「出變式」的兩個下拉 ──
+
+    test('兩個下拉都在，預設值與第 3 條的 body 預設逐字一致（1 題、難度不變）', async () => {
+        await mount();
+        const count = env.document.getElementById('varCount');
+        const delta = env.document.getElementById('varDelta');
+        assert.ok(count && delta, '少了 varCount／varDelta');
+        assert.deepEqual(count.options.map(o => o.value), ['1', '2', '3'], '數量只能 1~3（VARIANT_MAX_PER_REQUEST）');
+        assert.deepEqual(delta.options.map(o => o.value), ['-1', '0', '1']);
+        assert.equal(count.value, '1', '預設必須是 1，不是 eval 用的 2');
+        assert.equal(delta.value, '0');
+    });
+
+    test('送出的 body 用的是下拉選到的值（不是寫死的）', async () => {
+        // 這一則**不走 ?mock=1**：mock 在 apiFetch 之前就攔掉了，看不到真正送出去的 body。
+        // 走真的 apiFetch（假橋接會回 501），要驗的「送了什麼」在那之前就已經定案。
+        env = install({
+            meta: ALL_META, sections: ['students', 'nlq', 'variants'], search: '', examApp: fakeBridge()
+        });
+        const mod = await loadFresh('variants.js');
+        await mod.init();
+        await flush();
+
+        env.document.getElementById('varCount').value = '3';
+        env.document.getElementById('varDelta').value = '-1';
+        await fire(mod, 'variant');
+
+        const post = env.window.ExamApp.calls.fetches.find(f => f.method === 'POST');
+        assert.ok(post, `沒有送出 POST：${JSON.stringify(env.window.ExamApp.calls.fetches)}`);
+        assert.equal(post.url, '/api/questions/87/variants');
+        assert.deepEqual(post.body, {
+            count: 3, difficulty_delta: -1, student_id: 3, force_generate: false
+        });
+    });
+
+    test('下拉不存在時退回介面預設（1 / 0），不送非法值', async () => {
+        const { mod } = await mount();
+        env.document.getElementById('varCount').remove();
+        env.document.getElementById('varDelta').remove();
+        assert.deepEqual(mod.requestOptions(), { count: 1, difficulty_delta: 0 });
+    });
+
+    test('面板標題會說出這一次生幾題、難度怎麼調', async () => {
+        const { mod, body } = await mount();
+        env.document.getElementById('varCount').value = '2';
+        env.document.getElementById('varDelta').value = '1';
+        await fire(mod, 'variant');
+        assert.ok(body.textContent.includes('生 2 題'), body.textContent.slice(0, 160));
+        assert.ok(body.textContent.includes('難度 +1'), body.textContent.slice(0, 160));
+    });
 
     test('骨架長出來，且一開始是空狀態說明', async () => {
         const { body } = await mount();

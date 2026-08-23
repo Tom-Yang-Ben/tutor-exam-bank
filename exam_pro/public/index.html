@@ -18,6 +18,12 @@
     <meta name="feature-students" content="__FEATURE_STUDENTS__">
     <meta name="feature-nlq" content="__FEATURE_NLQ__">
     <meta name="feature-variants" content="__FEATURE_VARIANTS__">
+    <!-- 第四個注入點（裁決 S3-R25）。FEATURE_SIMILAR 是階段 1 就有的旗標
+         （GET /api/questions/:id/similar），但一直沒有注入到前端。
+         學生分頁的「找相似」與「出變式」是兩支不同的 API、兩個不同的開關，
+         綁在一起會讓「similar 開著、variants 關著」時連「找相似」都消失。
+         app.js 的第六個 replaceAll 由 WS-A 補上。 -->
+    <meta name="feature-similar" content="__FEATURE_SIMILAR__">
     <title>家教專用數學物理題庫系統</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link

@@ -384,6 +384,18 @@ describe('variants.js 的純函式（P-13）', () => {
             'students.js 的按鈕沒有標上 data-variant-action');
     });
 
+    test('COUNT／DELTA 的選項與預設值照介面（裁決 S3-R24）', async () => {
+        const { COUNT_OPTIONS, DEFAULT_COUNT, DELTA_OPTIONS, DEFAULT_DELTA } = await load('variants.js');
+        // 上限 3 = VARIANT_MAX_PER_REQUEST 的預設；預設 1／0 與第 3 條的 body 預設逐字一致。
+        assert.deepEqual(COUNT_OPTIONS, [1, 2, 3]);
+        assert.equal(DEFAULT_COUNT, 1);
+        assert.deepEqual(DELTA_OPTIONS.map(([v]) => v), [-1, 0, 1]);
+        assert.equal(DEFAULT_DELTA, 0);
+        // 前端不得再寫死 count（之前是 2，那是 eval 的數字不是產品的）
+        assert.ok(!/count:\s*2/.test(source('variants.js')), 'variants.js 還把 count 寫死成 2');
+        assert.ok(source('variants.js').includes('requestOptions()'), '沒有從下拉讀值');
+    });
+
     test('顯示的是實際 cost_usd，不是預算', () => {
         const src = source('variants.js');
         assert.ok(src.includes('formatCost(job.cost_usd)'), '沒有顯示實際花費');
@@ -453,7 +465,8 @@ describe('index.html 的橋接（interfaces-stage3.md 第 7.1 條）', () => {
 
     test('三個 <meta> 的佔位字串沒被改掉（第 7.3 條的 replaceAll 對象）', () => {
         for (const [name, ph] of [['feature-students', '__FEATURE_STUDENTS__'],
-            ['feature-nlq', '__FEATURE_NLQ__'], ['feature-variants', '__FEATURE_VARIANTS__']]) {
+            ['feature-nlq', '__FEATURE_NLQ__'], ['feature-variants', '__FEATURE_VARIANTS__'],
+            ['feature-similar', '__FEATURE_SIMILAR__']]) {                    // 第四個（裁決 S3-R25）
             assert.ok(html.includes(`<meta name="${name}" content="${ph}">`), `${name} 的注入點不對`);
         }
     });

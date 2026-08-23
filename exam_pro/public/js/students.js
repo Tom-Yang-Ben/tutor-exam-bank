@@ -87,20 +87,41 @@ export function parseBool(value) {
     return v === '1' || v === 'true';
 }
 
-/** @returns {boolean} FEATURE_STUDENTS 是否開啟 */
-function studentsEnabled() {
-    const meta = document.querySelector('meta[name="feature-students"]');
+// 本檔讀的三個注入點（第 7.2 條、裁決 S3-R25）。選擇器寫成字面值而不是用樣板字串組出來：
+// 這是「students.js 會看哪幾個旗標」的清單，`eval/tools/check_html.js` 也靠它逐字比對
+// ——組出來的選擇器在原始碼裡找不到，檢查器就只能放行。
+const FEATURE_META = {
+    students: 'meta[name="feature-students"]',
+    similar: 'meta[name="feature-similar"]',
+    variants: 'meta[name="feature-variants"]'
+};
+
+/**
+ * 讀一個 `FEATURE_*` 旗標（注入點在 index.html 的 `<meta>`，第 7.2 條）。
+ * `?<key>=1` 是本機驗收用的手動開關，不影響後端旗標的權威性
+ * （review.js 的 `?pipeline=1` 同一條線）。
+ * @param {'students'|'similar'|'variants'} key
+ * @returns {boolean}
+ */
+function featureOn(key) {
+    const meta = document.querySelector(FEATURE_META[key]);
     if (parseBool(meta ? meta.content : '')) return true;
-    // 本機驗收用的手動開關；不影響後端旗標的權威性（review.js 的 ?pipeline=1 同一條線）。
-    return new URLSearchParams(location.search).get('students') === '1';
+    return new URLSearchParams(location.search).get(key) === '1';
 }
 
-/** @returns {boolean} FEATURE_VARIANTS 是否開啟（決定要不要畫「找相似／出變式」兩顆按鈕） */
-function variantsEnabled() {
-    const meta = document.querySelector('meta[name="feature-variants"]');
-    if (parseBool(meta ? meta.content : '')) return true;
-    return new URLSearchParams(location.search).get('variants') === '1';
-}
+// 裁決 S3-R25：兩顆按鈕由**兩個不同的旗標**控制。
+//   「找相似」打的是階段 1 的 GET /api/questions/:id/similar → FEATURE_SIMILAR
+//   「出變式」打的是階段 3 的 POST /api/questions/:id/variants → FEATURE_VARIANTS
+// 之前兩顆共用 feature-variants，會讓「similar 開著、variants 關著」時
+// 明明可用的「找相似」也消失——那是把兩個獨立的開關綁在一起。
+/** @returns {boolean} FEATURE_STUDENTS 是否開啟（決定整個學生分頁渲不渲染） */
+function studentsEnabled() { return featureOn('students'); }
+
+/** @returns {boolean} FEATURE_SIMILAR 是否開啟（決定要不要畫「找相似」） */
+function similarEnabled() { return featureOn('similar'); }
+
+/** @returns {boolean} FEATURE_VARIANTS 是否開啟（決定要不要畫「出變式」） */
+function variantsEnabled() { return featureOn('variants'); }
 
 /** @returns {boolean} 是否走本檔內的手寫假資料 */
 function mockEnabled() {
@@ -488,7 +509,16 @@ function recentWrongList(app, rows, studentIdOf) {
         return box;
     }
 
-    const canVariants = variantsEnabled();
+    // 裁決 S3-R25：兩顆按鈕各自看自己的旗標，不再綁在一起。
+    const buttons = [
+        ['similar', '找相似', 'border-indigo-200 text-indigo-700 hover:bg-indigo-50', similarEnabled()],
+        ['variant', '出變式', 'border-violet-200 text-violet-700 hover:bg-violet-50', variantsEnabled()]
+    ].filter(([, , , on]) => on);
+    const offNote = [
+        !similarEnabled() ? 'FEATURE_SIMILAR 未開啟：「找相似」暫時不可用。' : '',
+        !variantsEnabled() ? 'FEATURE_VARIANTS 未開啟：「出變式」暫時不可用。' : ''
+    ].filter(Boolean).join('　');
+
     const list = el('div', 'space-y-2');
     for (const row of rows) {
         const card = el('div', 'rounded-xl border border-slate-100 bg-slate-50/60 p-3');
@@ -500,12 +530,9 @@ function recentWrongList(app, rows, studentIdOf) {
         card.appendChild(stem);
         app.renderMath(stem);
 
-        if (canVariants) {
+        if (buttons.length) {
             const actions = el('div', 'mt-2 flex flex-wrap gap-2');
-            for (const [action, label, cls] of [
-                ['similar', '找相似', 'border-indigo-200 text-indigo-700 hover:bg-indigo-50'],
-                ['variant', '出變式', 'border-violet-200 text-violet-700 hover:bg-violet-50']
-            ]) {
+            for (const [action, label, cls] of buttons) {
                 // data-variant-action 是給 variants.js 的：輪詢期間它會把畫面上所有
                 // 帶這個屬性的按鈕一起停用（第 3.2 條的 60 秒輪詢，不該讓人連按五次）。
                 const btn = el('button', `text-xs px-3 py-1.5 rounded-lg border bg-white font-bold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${cls}`, {
@@ -525,10 +552,10 @@ function recentWrongList(app, rows, studentIdOf) {
                 actions.appendChild(btn);
             }
             card.appendChild(actions);
-        } else {
-            card.appendChild(el('p', 'mt-2 text-[11px] text-slate-400', {
-                textContent: 'FEATURE_VARIANTS 未開啟：找相似／出變式暫時不可用。'
-            }));
+        }
+        if (offNote) {
+            // 少掉的那顆按鈕要說出是哪個旗標關著——不然看起來就只是「功能不見了」。
+            card.appendChild(el('p', 'mt-2 text-[11px] text-slate-400', { textContent: offNote }));
         }
         list.appendChild(card);
     }

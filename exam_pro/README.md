@@ -48,10 +48,10 @@
 | **學生弱點面板** | 作答歷史塞在 `schema.sql:15` 的 `history_json` 裡、以姓名為 key；只記「出過」不記對錯，`GROUP BY chapter` 的錯誤率做不出來（規劃 §4.2） | `students`／`attempts` 正規化 + 即時 SQL 聚合（CTE 外包一層）；`graded < WEAKNESS_MIN_N` 標「樣本不足」 | 正確性由 `test/integration/students.pg.test.js` 保證（1,000 筆 fixture 逐欄比對 + `EXPLAIN` 含 `idx_attempts_student_date`）；**面板本身沒有 eval 分數，這一列的「數字」就是那支 db-test** |
 | **批改回填** | `routes/index.js` 十支路由沒有任何一支能把「第 3 題答錯」寫回去（規劃 §4.2） | `PATCH /api/papers/:id/results` 單一交易、全有全無；三態（對／錯／未批），`null` 是真的要送出去的值 | **待 eval**（無 eval 指標；正確性由整合測試與 `test/e2e/paperWord.e2e.test.js` 的 attempts 斷言保證） |
 | **組卷家族互斥** | 變式題入庫後是一般題，同一家族可能被抽進同一張卷 | `utils/pickOnePerFamily.js`：每個 `COALESCE(variant_of, id)` 家族只留一題，抽題語意從「每題等機率」改成「**每家族等機率**」 | **待 eval**（分佈測試比照 `shuffle.test.js`，由 WS-A 提供） |
-| **相似題／變式題** | 錯題之後沒有「同概念、難度 +1」的下一題可出 | **先檢索、再生成、生成也走同一組閘門**；首輪一律停在 `needs_review('awaiting_approval')` 等人核准 | **待 eval**（`npm run eval:variant` 的 `retrieved_coverage`／`gate_pass_rate`；`eval/thresholds.json` 的 `variant` 節目前全是 `null`＝尚未建立基準線） |
+| **相似題／變式題** | 錯題之後沒有「同概念、難度 +1」的下一題可出 | **先檢索、再生成、生成也走同一組閘門**；首輪一律停在 `needs_review('awaiting_approval')` 等人核准 | **待 eval**（suite 已合入、量得出 `retrieved_coverage`，但 `gate_pass_rate` 仍是 n/a——`eval/cassettes/variant/` 尚未錄製；`eval/thresholds.json` 的 `variant` 節全是 `null`＝尚未建立基準線，P-15b 補） |
 | **檢索式 few-shot 分類** | 分類 agent 的範例是寫死的，與題庫實際長相脫節 | 範例改從向量最近鄰取，且**只有人工確認過的標籤有投票權**（`chapter_src='human'`）——自動標籤餵回自動投票是閉環放大器 | **待 eval**（短路率與 accuracy 的變化由 `npm run eval:classify` 量，P-15b） |
-| **自然語言查題** | 老師必須記得白名單裡「摩擦力與向心力」這種精確名稱（`config/chapters.js:21`）才篩得到題 | 規則為主、LLM 為輔、受限 JSON、SQL 固定；四級回退階梯，任一層失敗都有退路；`filters` 回寫下拉讓人看得見機器的理解 | **待 eval**（`npm run eval:nlq` 的 `rule_coverage`／`filters_exact`／`recall10`；`eval/thresholds.json` 的 `nlq` 節目前全是 `null`） |
-| **前端（三個新分頁）** | 前端是單一 1,100+ 行的 `public/index.html`，曾因截斷出過事故（commit `6ada1ce`）；再塞 400 行面板同類事故會重演 | vanilla + ES module，經 `window.ExamApp` 橋接；`index.html` 只加五個插入點，舊程式一行不改 | `npm run check:html` 對 6 段程式碼做 `node --check` 並斷言階段 2／3 的接點；`test/unit/stage3Ui.test.js` 55 項（2026-08-23，不需模型） |
+| **自然語言查題** | 老師必須記得白名單裡「摩擦力與向心力」這種精確名稱（`config/chapters.js:21`）才篩得到題 | 規則為主、LLM 為輔、受限 JSON、SQL 固定；四級回退階梯，任一層失敗都有退路；`filters` 回寫下拉讓人看得見機器的理解 | **待 eval**（suite 與 cassette 都已合入、`npm run eval:nlq` 三個指標都量得出來；`eval/thresholds.json` 的 `nlq` 節仍全是 `null`＝基準線尚未定案，P-15b 補） |
+| **前端（三個新分頁）** | 前端是單一 1,100+ 行的 `public/index.html`，曾因截斷出過事故（commit `6ada1ce`）；再塞 400 行面板同類事故會重演 | vanilla + ES module，經 `window.ExamApp` 橋接；`index.html` 只加五個插入點，舊程式一行不改 | `npm run check:html` 對 6 段程式碼做 `node --check` 並斷言階段 2／3 的四個注入點；`test/unit/stage3Ui.test.js` 56 項（契約）＋ `stage3Render.test.js` 32 項（用 `test/unit/lib/miniDom.js` 真的把三個 module 跑起來渲染一遍）（2026-08-24，不需模型） |
 | **端到端** | 單元與整合測試各自綠燈，不代表**接線**沒斷（controller、runner、multipart、docx 之間） | `test/e2e/` 兩條：上傳 PDF → 部分入庫；組卷 → Word 含 `<m:oMath>` | 11 項全綠（`npm run test:e2e`，2026-08-23，對 `postgres_test`、`LLM_MODE=replay` 讀 `eval/cassettes/`，零 replay miss） |
 
 **怎麼補「待 eval」那幾格**（P-15b）：
@@ -60,8 +60,8 @@
 npm run eval -- --suite retrieval     # 檢索三欄對照（已有基準線）
 npm run eval:classify                 # 章節分類（已有基準線）
 npm run eval:pipeline                 # 整條管線（已有基準線）
-npm run eval:nlq                      # 自然語言查題（待 WS-C 的 suite 合入）
-npm run eval:variant                  # 變式題（待 WS-B 的 suite 合入）
+npm run eval:nlq                      # 自然語言查題（suite 已合入，cassette 已錄）
+npm run eval:variant                  # 變式題（suite 已合入；gate_pass_rate 待 cassette）
 npm run eval:trend                    # 印出與上一次的差值
 ```
 
@@ -69,6 +69,19 @@ npm run eval:trend                    # 印出與上一次的差值
 （模型 ID、cassette 目錄、golden 檔與筆數、轉接層是否還有 stub）。
 填進上表時**連同這些欄位一起引用**——沒有量測環境的數字不能拿來互相比較，
 而「用 stub 跑」與「用真 agent 跑」的數字長得一模一樣。
+
+> ⚠️ **本機跑需要資料庫的那幾格**（上表的 hybrid 列、學生弱點面板列、端到端列）
+> **不能**用 `npm run test:integration`／`npm run test:e2e`：
+> 這兩個 script 只帶 `--env-file=eval/.env.replay`（CI 語意，`TEST_DATABASE_URL` 由 workflow 提供），
+> 在本機會**整層 skip 而且是綠的**——看起來跑過了，其實一條都沒跑（裁決 S3-R7）。
+> 本機一律多帶一個 `--env-file=.env`：
+>
+> ```bash
+> docker compose up -d --wait     # 先起 postgres_test（埠 5433）
+> node --env-file=.env --env-file=eval/.env.replay --test --test-concurrency=1 "test/integration/**/*.test.js"
+> node --env-file=.env --env-file=eval/.env.replay --test --test-concurrency=1 "test/e2e/**/*.test.js"
+> node --env-file=.env --env-file=eval/.env.replay eval/run.js --suite retrieval   # 對真 PG 量 hybrid
+> ```
 
 ---
 
