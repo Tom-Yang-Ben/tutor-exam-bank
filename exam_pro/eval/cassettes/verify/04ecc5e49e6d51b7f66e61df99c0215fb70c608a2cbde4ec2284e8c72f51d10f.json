@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T17:17:55.559Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 130,
+        "sha256": "1fae9ef8e96dce2828a503355cd07dcae56a53afff01f25f3b7db3b73369b96d"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "已知一個標準位置角 $\\alpha$ 落在第三象限，試問下列哪一個三角函數的值必為正數？\n(A) $\\sin \\alpha$\n(B) $\\cos \\alpha$\n(C) $\\tan \\alpha$\n(D) 無法確定",
+      "questionType": "單選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(C)",
+      "answer_form": "option",
+      "steps_summary": "1. 題目已知標準位置角 $\\alpha$ 落在第三象限。\n2. 根據第三象限的性質，終邊上一點的坐標 $(x, y)$ 必滿足 $x < 0$ 且 $y < 0$。\n3. 由三角函數的定義可知：\n   $\\sin \\alpha = \\frac{y}{r}$，因為 $y < 0$ 且 $r > 0$，所以 $\\sin \\alpha < 0$；\n   $\\cos \\alpha = \\frac{x}{r}$，因為 $x < 0$ 且 $r > 0$，所以 $\\cos \\alpha < 0$；\n   $\\tan \\alpha = \\frac{y}{x}$，因為 $y < 0$ 且 $x < 0$，兩負數相除，所以 $\\tan \\alpha > 0$。\n4. 因此，$\\tan \\alpha$ 的值必為正數，故選 (C)。"
+    },
+    "usage": {
+      "tokenIn": 171,
+      "tokenOut": 255,
+      "tokenThinking": 432,
+      "tokenCached": 0
+    },
+    "latencyMs": 6768
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:12:57.397Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1524,
+        "sha256": "b1faa71bc3050fe75373010af5219891bc204e5139b90ac90da8fe4fc6b19462"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 27,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        4,
+        17,
+        28,
+        29,
+        31
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "三角函數的定義",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 2,
+      "question_text": "在航海導航系統中，船隻的航向有時會以坐標平面的廣義角來表示。假設一艘探測船目前的航行方向對應的廣義角為 $210^\triangle$，系統為了解析其南北方向的速度分量，需要計算 $\\sin 210^\\circ$ 的數值。請問 $\\sin 210^\\circ$ 之值為何？",
+      "answer_text": "$-\\frac{1}{2}$。廣義角 $210^\\circ$ 落在第三象限，其與 $x$ 軸的夾角（參考角）為 $210^\\circ - 180^\\circ = 30^\\circ$。因為在第三象限的 $y$ 坐標為負，即正弦值為負，故 $\\sin 210^\\circ = -\\sin 30^\\circ = -\\frac{1}{2}$。"
+    },
+    "usage": {
+      "tokenIn": 1106,
+      "tokenOut": 272,
+      "tokenThinking": 1743,
+      "tokenCached": 0
+    },
+    "latencyMs": 15849
+  }
+}

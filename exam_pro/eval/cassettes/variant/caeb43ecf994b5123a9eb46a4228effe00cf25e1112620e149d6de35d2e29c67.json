@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:24:15.110Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1550,
+        "sha256": "861cf06fbba915dfec5d4e3edab10aea20c9a64a24fefa3a07aab1335e7c077b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 46,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        32,
+        33,
+        44,
+        51,
+        59
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "摩擦力與向心力",
+      "chapter_confidence": 1,
+      "question_type": "多選",
+      "difficulty": 2,
+      "question_text": "一架遙控飛機在水平面上以恆定速率進行圓周飛行。關於此遙控飛機的物理狀態，下列敘述哪些正確？\n(A) 飛機的飛行速度保持定值\n(B) 飛機的瞬時速率維持不變\n(C) 飛機的法向加速度為零\n(D) 飛機所受的合外力不為零，且恆指向飛行軌跡的圓心",
+      "answer_text": "(B)(D)。\n(A)錯誤，飛機在圓周軌道上各點的切線方向不同，故速度方向持續改變，速度為向量，因此並非常數。\n(B)正確，等速圓周運動的速率（即速度的大小）保持不變。\n(C)錯誤，圓周運動必須具有指向圓心的法向（向心）加速度，用以改變速度方向。\n(D)正確，做圓周運動時，必須有指向圓心的合外力來提供向心力，因此合外力不為零且恆指向圓心。"
+    },
+    "usage": {
+      "tokenIn": 1190,
+      "tokenOut": 299,
+      "tokenThinking": 1201,
+      "tokenCached": 0
+    },
+    "latencyMs": 16743
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:09:40.659Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1593,
+        "sha256": "4f36a3c3c97a6dad7ceeab9e49f05d4dcff03c4190ea1a699c3e1ae2e726760e"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 17,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        9,
+        10,
+        18,
+        24,
+        28
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "空間向量內積",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "在物理學中，力對物體所作的功定義為力向量與位移向量的內積。某工程團隊利用機械臂在三維空間中搬運重物，若機械臂施加於重物的力向量為 $\\vec{F} = (5, 2, -3)$（單位：牛頓），並使重物產生位移向量 $\\vec{S} = (4, -1, -2)$（單位：公尺）。試計算該機械臂對重物所作的功為多少焦耳？",
+      "answer_text": "機械臂對重物作的功即為兩向量的內積，計算如下：$W = \\vec{F} \\cdot \\vec{S} = 5 \\times 4 + 2 \\times (-1) + (-3) \\times (-2) = 20 - 2 + 6 = 24$。故所作的功為 $24$ 焦耳。"
+    },
+    "usage": {
+      "tokenIn": 1147,
+      "tokenOut": 270,
+      "tokenThinking": 1158,
+      "tokenCached": 0
+    },
+    "latencyMs": 11097
+  }
+}

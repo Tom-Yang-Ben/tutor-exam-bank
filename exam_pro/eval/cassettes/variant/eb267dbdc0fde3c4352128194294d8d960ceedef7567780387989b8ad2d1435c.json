@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:25:50.450Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1549,
+        "sha256": "7cd7ab9d0f37c2724133d8b9fccdfd6868d6a476e7c5f562c6761e1005dfe3a5"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 51,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        46,
+        47,
+        48,
+        49,
+        59
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "直線運動",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "在分析一輛跑車於直線賽道上測試性能的過程中，工程師繪製了該車的「速度—時間圖」（$v$-$t$ 圖）。請問此圖形中曲線上某一點的切線斜率，代表該跑車在該時刻的哪一個物理量？\n(A) 瞬時位移\n(B) 瞬時速度\n(C) 瞬時加速度\n(D) 所受合力",
+      "answer_text": "(C)。$v$-$t$ 圖上一點的切線斜率等於極短時間內速度的變化率 $\\frac{dv}{dt}$，其物理意義為瞬時加速度；而該圖形與時間軸所圍成的面積代表位移。"
+    },
+    "usage": {
+      "tokenIn": 1180,
+      "tokenOut": 218,
+      "tokenThinking": 861,
+      "tokenCached": 0
+    },
+    "latencyMs": 11078
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:26:55.230Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1787,
+        "sha256": "5cf7cad1608fa41a36f80915fce1f40ac02b62909ef081c1eb37f010222d108a"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 55,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        42,
+        43,
+        54,
+        58,
+        60
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "電場與電位",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 3,
+      "question_text": "在物理實驗室中，研究人員將兩個絕緣小球分別固定在水平桌面上，已知球 A 帶有 $5 \\times 10^{-5}$ C 的正電荷，球 B 帶有 $-2 \\times 10^{-5}$ C 的負電荷，且兩球球心之間的距離為 $1.5$ m。若將小球視為點電荷，請計算這兩個小球間的靜電力大小，並說明此力為吸引力或排斥力。（取庫侖常數 $k = 9 \\times 10^9$ N$\\cdot$m$^2$/C$^2$）",
+      "answer_text": "根據庫侖定律，$F = k \\frac{|Q_A Q_B|}{r^2} = 9 \\times 10^9 \\times \\frac{5 \\times 10^{-5} \\times 2 \\times 10^{-5}}{(1.5)^2} = \\frac{9 \\times 10^9 \\times 10^{-9}}{2.25} = \\frac{9}{2.25} = 4$ N。由於兩小球帶異號電荷，因此兩者之間的作用力為吸引力。"
+    },
+    "usage": {
+      "tokenIn": 1335,
+      "tokenOut": 328,
+      "tokenThinking": 1874,
+      "tokenCached": 0
+    },
+    "latencyMs": 20520
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T17:20:18.293Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 184,
+        "sha256": "b5a8c7cfa8545fc9bfc8847afa52743c5d75c31a7991c2c9941462d5feeece13"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "某物理實驗室內，學生設計了一套自動升降裝置。裝置主體為一個固定於天花板的理想定滑輪（滑輪質量與摩擦力皆忽略不計），兩端用極輕且不可伸長的細繩分別綁著質量 $4$ kg 的實驗儀器與質量 $1$ kg 的配重砝碼。將系統由靜止釋放後，求實驗儀器的加速度大小與細繩的張力大小。（取重力加速度 $g = 10$ m/s$^2$）",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "加速度 6 m/s^2，張力 16 N",
+      "answer_form": "text",
+      "steps_summary": "設實驗儀器的質量為 m1 = 4 kg，配重砝碼的質量為 m2 = 1 kg，系統的加速度大小為 a，細繩的張力大小為 T。取重力加速度 g = 10 m/s^2。\n根據牛頓第二運動定律，分別對兩物體列出運動方程式：\n對質量較大的實驗儀器（向下加速）：\nm1 * g - T = m1 * a\n=> 40 - T = 4a ... (式1)\n對質量較小的配重砝碼（向上加速）：\nT - m2 * g = m2 * a\n=> T - 10 = 1a ... (式2)\n將(式1)與(式2)相加，消去 T 可得：\n30 = 5a\n解得 a = 6 m/s^2。\n將 a = 6 代入(式2)：\nT - 10 = 6\n解得 T = 16 N。\n故實驗儀器的加速度大小為 6 m/s^2，細繩的張力大小為 16 N。"
+    },
+    "usage": {
+      "tokenIn": 227,
+      "tokenOut": 307,
+      "tokenThinking": 1122,
+      "tokenCached": 0
+    },
+    "latencyMs": 13359
+  }
+}

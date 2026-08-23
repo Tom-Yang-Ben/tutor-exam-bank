@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:26:02.867Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1369,
+        "sha256": "f8ac8c7dc7b5733aa5f1e00dd8e245814602b3771bdbf6985952a6dd4004f796"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 53,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        38,
+        39
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "直線運動",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 1,
+      "question_text": "交通警察在公路上使用雷射測速槍取締超速，當測速槍對準一輛行駛中的汽車時，螢幕上顯示出 $115$ 的數值（單位為 $\\text{km/h}$）。請問這個數值代表該汽車的何種物理量？\n(A) 平均速率\n(B) 平均速度\n(C) 瞬時速率\n(D) 瞬時速度",
+      "answer_text": "(C)。測速槍所測得的是汽車在被測量那一瞬間的運動快慢程度，由於數值僅表示大小而不包含方向資訊，因此代表的是瞬時速率。"
+    },
+    "usage": {
+      "tokenIn": 1050,
+      "tokenOut": 199,
+      "tokenThinking": 964,
+      "tokenCached": 0
+    },
+    "latencyMs": 12037
+  }
+}

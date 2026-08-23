@@ -356,7 +356,10 @@ async function runVariantSuite(args = {}) {
     // ── ② gate_pass_rate（需要 cassette）──
     const agentExists = fs.existsSync(AGENT_PATH);
     const generateFn = args.generateFn || null;
-    const canGenerate = agentExists && (generateFn !== null || hasCassettes('variant'));
+    // LLM_MODE=record 時 cassette 目錄本來就是空的（第一次錄製就是為了把它填起來）——
+    // 只看 hasCassettes 會讓錄製永遠短路成 n/a（與 suiteNlq 的 S3-R20 補錄同一個道理）。
+    const recording = String(process.env.LLM_MODE || '').toLowerCase() === 'record';
+    const canGenerate = agentExists && (generateFn !== null || recording || hasCassettes('variant'));
 
     let gatePassRate = null;
     let gateCounts = null;

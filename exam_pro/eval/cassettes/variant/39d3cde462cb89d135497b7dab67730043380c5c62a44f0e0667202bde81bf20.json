@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:26:25.830Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1369,
+        "sha256": "f8ac8c7dc7b5733aa5f1e00dd8e245814602b3771bdbf6985952a6dd4004f796"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 53,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        38,
+        39
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "直線運動",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 1,
+      "question_text": "交通警察在公路旁使用雷達測速槍取締超速車輛。當測速槍螢幕上顯示出某輛汽車的數值時，請問此數值代表該車輛的何種物理量？ (A) 平均速度 (B) 平均速率 (C) 瞬時速率 (D) 路徑長",
+      "answer_text": "(C)。測速槍量測的是汽車在被偵測到那一瞬間的速率大小，並不包含方向資訊，也不是一段時間內的平均值，因此為瞬時速率。"
+    },
+    "usage": {
+      "tokenIn": 1050,
+      "tokenOut": 169,
+      "tokenThinking": 1534,
+      "tokenCached": 0
+    },
+    "latencyMs": 16829
+  }
+}

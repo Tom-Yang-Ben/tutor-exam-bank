@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:17:48.412Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1613,
+        "sha256": "bdd312e9e7873a2ff7b83c9608eb84ada32a54a045c5a9f6bd4af0d560e4cacf"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 31,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        8,
+        24,
+        27,
+        28,
+        29
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "三角函數的定義",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "已知一個標準位置角 $\\alpha$ 落在第三象限，試問下列哪一個三角函數的值必為正數？\n(A) $\\sin \\alpha$\n(B) $\\cos \\alpha$\n(C) $\\tan \\alpha$\n(D) 無法確定",
+      "answer_text": "(C)。在第三象限中，坐標的特徵為 $x < 0$、$y < 0$。根據三角函數的定義，距離 $r > 0$，故 $\\sin \\alpha = \\frac{y}{r} < 0$ 恆為負，$\\cos \\alpha = \\frac{x}{r} < 0$ 恆為負，而 $\\tan \\alpha = \\frac{y}{x} > 0$ 恆為正。"
+    },
+    "usage": {
+      "tokenIn": 1183,
+      "tokenOut": 236,
+      "tokenThinking": 1136,
+      "tokenCached": 0
+    },
+    "latencyMs": 12296
+  }
+}

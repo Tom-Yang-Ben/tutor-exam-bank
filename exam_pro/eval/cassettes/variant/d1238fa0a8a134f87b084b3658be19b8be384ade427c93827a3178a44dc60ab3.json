@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:12:27.513Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1449,
+        "sha256": "7883807662cc29eff362968fa439b8a38dbf664e170f0027764b69b6b80d0347"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 25,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        1,
+        2,
+        26
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "三角函數的定義",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 1,
+      "question_text": "一位高中生在進行單擺實驗時，記錄下擺線與鉛垂線的夾角為 $28^\\circ$。在處理實驗數據時，他需要求出 $\\sin^2 28^\\circ + \\cos^2 28^\\circ$ 的值以化簡公式。請問此計算結果為何？\n(A) $0$\n(B) $\\frac{1}{2}$\n(C) $1$\n(D) 需查閱三角函數表才能確定",
+      "answer_text": "(C)。根據三角函數的畢氏恆等式 $\\sin^2 \\theta + \\cos^2 \\theta = 1$，可知無論 $\\theta$ 的角度為何，其正弦平方與餘弦平方之和必定為 $1$。"
+    },
+    "usage": {
+      "tokenIn": 1077,
+      "tokenOut": 233,
+      "tokenThinking": 1311,
+      "tokenCached": 0
+    },
+    "latencyMs": 12664
+  }
+}

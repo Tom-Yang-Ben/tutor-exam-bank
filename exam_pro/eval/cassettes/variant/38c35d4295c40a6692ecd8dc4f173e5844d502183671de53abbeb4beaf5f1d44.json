@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:05:20.851Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1443,
+        "sha256": "d81237bbc6266e5f8dfbbf5c114cf4e41ed6feeceb9d70ab04ad0dbe303e3392"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 1,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        2,
+        25,
+        26
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 1,
+      "question_text": "在某款網路遊戲中，系統定義玩家的「戰力星級」$S$ 與其「戰鬥積分」$P$ 滿足對數關係 $S = \\log_{5} P$。已知玩家阿明的戰鬥積分為 $125$ 分，玩家小華的戰鬥積分為 $25$ 分，請問阿明與小華兩人的戰力星級總和為何？ (A) $3$　(B) $5$　(C) $6$　(D) $30$",
+      "answer_text": "(B)。阿明的戰力星級為 $S_1 = \\log_{5} 125 = 3$；小華的戰力星級為 $S_2 = \\log_{5} 25 = 2$。兩人的戰力星級總和為 $3 + 2 = 5$。"
+    },
+    "usage": {
+      "tokenIn": 1082,
+      "tokenOut": 259,
+      "tokenThinking": 1995,
+      "tokenCached": 0
+    },
+    "latencyMs": 21532
+  }
+}

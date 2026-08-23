@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:18:33.417Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1500,
+        "sha256": "0b443d4af207f9593ec7c2883cad215313da3eb4718d01063d435f52ba632955"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 33,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        32,
+        44,
+        47,
+        48,
+        49
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "一質量為 $6$ kg 的木塊放置於光滑水平桌面上。若對木塊施以一水平推力 $15$ N，試求木塊的加速度大小。",
+      "answer_text": "根據牛頓第二運動定律 $F = ma$，木塊的加速度大小為 $a = \\frac{F}{m} = \\frac{15}{6} = 2.5$ m/s$^2$。"
+    },
+    "usage": {
+      "tokenIn": 1130,
+      "tokenOut": 150,
+      "tokenThinking": 819,
+      "tokenCached": 0
+    },
+    "latencyMs": 9862
+  }
+}

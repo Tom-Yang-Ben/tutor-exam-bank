@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:28:13.335Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1644,
+        "sha256": "38092d51a8e970bf5950021f14575f10b19ec93f49c5f533eae532ab127679b2"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 57,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        32,
+        47,
+        48,
+        56,
+        59
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "電場與電位",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "在實驗室中，有一顆帶電量為 $Q = 4 \times 10^{-8}$ C 的微小金屬球，由於體積極小，可將其視為點電荷。若不計其他物體的影響，試求在距離該金屬球中心 $0.6$ m 處，其所建立的電場量值為多少 N/C？（取庫侖常數 $k = 9 \times 10^9$ N·m$^2$/C$^2$）",
+      "answer_text": "$E = k \frac{Q}{r^2} = 9 \times 10^9 \times \frac{4 \times 10^{-8}}{0.6^2} = \frac{360}{0.36} = 1000$ N/C。"
+    },
+    "usage": {
+      "tokenIn": 1228,
+      "tokenOut": 242,
+      "tokenThinking": 1567,
+      "tokenCached": 0
+    },
+    "latencyMs": 17110
+  }
+}

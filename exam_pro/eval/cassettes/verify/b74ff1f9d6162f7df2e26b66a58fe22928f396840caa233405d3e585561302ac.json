@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T17:25:08.383Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 105,
+        "sha256": "c8624ab6fb3d6aa54a1952df45d446a45351999cf10b322a02dc176904e77ea8"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "一顆小石頭從距離水面 $80$ 公尺高的橋面上自由落下，不計空氣阻力，取重力加速度 $g = 10$ m/s$^2$。試求石頭從開始落下到擊中水面需要經歷多少時間？",
+      "questionType": "計算",
+      "sampleNo": 2
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "4",
+      "answer_form": "number",
+      "steps_summary": "根據自由落體公式 h = (1/2)gt^2，將已知高度 h = 80 公尺與重力加速度 g = 10 m/s^2 代入公式中，可得 80 = (1/2) * 10 * t^2。化簡後得到 5t^2 = 80，即 t^2 = 16。因為時間必須為正值，解得 t = 4。因此，石頭從開始落下到擊中水面需要經歷 4 秒。"
+    },
+    "usage": {
+      "tokenIn": 168,
+      "tokenOut": 150,
+      "tokenThinking": 440,
+      "tokenCached": 0
+    },
+    "latencyMs": 5859
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:08:34.533Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1542,
+        "sha256": "b2a269ff84b4311fe725561e7ed9e74384fa86073d6909402738cdf32998f333"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 13,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        11,
+        12,
+        14,
+        20,
+        21
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 3,
+      "question_text": "在物理學中，當作用於物體的定力向量與物體的位移向量互相垂直時，該力對物體不作功。若一物體在二維平面上受到一定力 $\\vec{F} = (-4, 7)$ 的作用，並產生了位移 $\\vec{S} = (k, 12)$。已知此定力對該物體不作功，求常數 $k$ 的值。",
+      "answer_text": "定力對物體不作功代表力向量與位移向量互相垂直，即兩向量的內積為 $0$。由 $\\vec{F} \\cdot \\vec{S} = 0$ 列式得 $-4 \\times k + 7 \\times 12 = 0$，整理得 $-4k + 84 = 0$，解得 $k = 21$。"
+    },
+    "usage": {
+      "tokenIn": 1127,
+      "tokenOut": 252,
+      "tokenThinking": 1399,
+      "tokenCached": 0
+    },
+    "latencyMs": 15317
+  }
+}

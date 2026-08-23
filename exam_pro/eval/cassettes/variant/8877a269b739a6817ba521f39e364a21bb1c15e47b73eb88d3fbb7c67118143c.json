@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:11:07.686Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1582,
+        "sha256": "24e7897521d4eda8fb0d5ddf35fb95e23c6dc646b7fef4739b0023099c56a000"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 21,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        13,
+        14,
+        19,
+        20,
+        23
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "空間向量內積",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 3,
+      "question_text": "在三維空間座標系中，某無人機的直線位移向量為 $\\vec{s} = (2, 4, 3)$（單位為公尺），期間受到一恆定側風的作用，其風力向量可表示為 $\\vec{F} = (4, -5, m)$（單位為牛頓）。若已知此風力對無人機作功為 $0$（即作用力向量與位移向量互相垂直），求實數 $m$ 的值。",
+      "answer_text": "風力作功為 $0$，即 $\\vec{F}$ 與 $\\vec{s}$ 互相垂直，兩向量的內積為 $0$：$4 \\times 2 + (-5) \\times 4 + m \\times 3 = 0$，得到 $8 - 20 + 3m = 0$，$3m = 12$，解得 $m = 4$。"
+    },
+    "usage": {
+      "tokenIn": 1160,
+      "tokenOut": 266,
+      "tokenThinking": 1273,
+      "tokenCached": 0
+    },
+    "latencyMs": 11173
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:23:40.863Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1825,
+        "sha256": "a18f4fa8080f3d3540c514475efeb49d6c551bac6e62d68b62766432ec269dfd"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 43,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        40,
+        41,
+        42,
+        54,
+        55
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "摩擦力與向心力",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 3,
+      "question_text": "遊樂園裡的某個測試裝置中，一個質量 $1.2$ kg 的座艙模型被一根長度為 $3$ m 的輕質鋼纜連接在中心轉軸上。該模型在光滑的水平平台上，以 $5$ m/s 的速率作等速圓周運動。求此時鋼纜上的張力大小。",
+      "answer_text": "鋼纜的張力提供座艙模型作等速圓周運動所需的向心力，根據向心力公式可得：\n$T = \\frac{mv^2}{r} = \\frac{1.2 \\times 5^2}{3} = 10$ N。"
+    },
+    "usage": {
+      "tokenIn": 1347,
+      "tokenOut": 203,
+      "tokenThinking": 1228,
+      "tokenCached": 0
+    },
+    "latencyMs": 15302
+  }
+}

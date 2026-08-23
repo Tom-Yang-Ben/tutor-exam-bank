@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:24:52.459Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1497,
+        "sha256": "b2a0891e8d4608ec5f7dc6a619fdc5860419d93efbc438c5b2a56a2721248831"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 49,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        32,
+        33,
+        47,
+        48,
+        50
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "直線運動",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "一顆小石頭從距離水面 $80$ 公尺高的橋面上自由落下，不計空氣阻力，取重力加速度 $g = 10$ m/s$^2$。試求石頭從開始落下到擊中水面需要經歷多少時間？",
+      "answer_text": "根據自由落體公式 $h = \\frac{1}{2} g t^2$，將 $h = 80$ 與 $g = 10$ 代入，可得 $80 = \\frac{1}{2} \\times 10 \\times t^2$，解得 $t = \\sqrt{\\frac{160}{10}} = 4$ 秒。"
+    },
+    "usage": {
+      "tokenIn": 1116,
+      "tokenOut": 205,
+      "tokenThinking": 1004,
+      "tokenCached": 0
+    },
+    "latencyMs": 11158
+  }
+}

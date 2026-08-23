@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:09:05.004Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1339,
+        "sha256": "9959460ceeac8f25c57b50b3009325526513e54398b1a14b0ac8d36b69c5ee78"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 16,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "chapter_confidence": 1,
+      "question_type": "證明",
+      "difficulty": 5,
+      "question_text": "在物理學中，一個恆力 $\\vec{F}$ 作用於物體使其產生位移 $\\vec{s}$，則此力對物體所作的功 $W$ 定義為力向量與位移向量的內積，即 $W = \\vec{F} \\cdot \\vec{s}$。試從向量內積的幾何定義出發，證明此力作功的絕對值 $|W|$ 必然小於或等於恆力大小與位移大小的乘積（即 $|W| \\leq |\\vec{F}||\\vec{s}|$），並具體說明在何種物理狀態下等號會成立。",
+      "answer_text": "根據向量內積的定義，功可以寫為 $W = \\vec{F} \\cdot \\vec{s} = |\\vec{F}||\\vec{s}| \\cos \\theta$，其中 $\\theta$ 為恆力 $\\vec{F}$ 與位移 $\\vec{s}$ 的夾角。將方程式兩邊取絕對值可得 $|W| = |\\vec{F}||\\vec{s}||\\cos \\theta|$。因為對任意角度 $\\theta$ 皆滿足 $|\\cos \\theta| \\leq 1$，故推得 $|W| \\leq |\\vec{F}||\\vec{s}|$。當 $|\\cos \\theta| = 1$ 時等號成立，此時 $\\theta = 0^\\circ$ 或 $180^\\circ$。以物理狀態而言，這代表恆力的方向與物體的位移方向互相平行（即完全同向作最大正功，或完全反向作最大負功）時，作功的絕對值才會與兩向量大小的乘積相等。"
+    },
+    "usage": {
+      "tokenIn": 947,
+      "tokenOut": 436,
+      "tokenThinking": 1838,
+      "tokenCached": 0
+    },
+    "latencyMs": 15956
+  }
+}

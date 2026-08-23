@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T17:19:47.981Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 210,
+        "sha256": "fe6d9407c0ec0dd5c94dffe0a222b44c6f73634c82587e115c23b3f9ad4d8ee5"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "在一個建築工地上，工人使用固定在高處的無摩擦定滑輪來運送物料。輕繩的跨過滑輪，兩端分別懸掛著質量為 $4$ kg 的配重鐵塊與裝有磚塊的吊籃，已知吊籃與磚塊的總質量為 $16$ kg。若工人將兩者由靜止狀態同時放手，請計算此系統的加速度大小，以及繩子在運動過程中承受的張力大小。（假設繩子不可伸長且與滑輪的質量皆可忽略不計，並取重力加速度 $g = 10$ m/s$^2$）",
+      "questionType": "計算",
+      "sampleNo": 2
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "6 m/s^2, 64 N",
+      "answer_form": "text",
+      "steps_summary": "根據阿特午機（Atwood machine）模型，設系統的加速度大小為 $a$，繩子張力大小為 $T$。由牛頓第二運動定律，對質量 $m_1=4$ kg 的配重鐵塊與 $m_2=16$ kg 的吊籃分別列出運動方程式：\n對 $m_2$（向下運動）：$m_2 g - T = m_2 a \\Rightarrow 160 - T = 16a$\n對 $m_1$（向上運動）：$T - m_1 g = m_1 a \\Rightarrow T - 40 = 4a$\n將兩式相加可消去 $T$，得到：\n$160 - 40 = (16 + 4)a \\Rightarrow 120 = 20a$\n解得加速度大小 $a = 6$ m/s$^2$。\n接著將 $a = 6$ m/s$^2$ 代入第二式，求得張力 $T$：\n$T = 4a + 40 = 4 \\times 6 + 40 = 64$ N。\n故系統加速度大小為 6 m/s$^2$，繩子張力為 64 N。"
+    },
+    "usage": {
+      "tokenIn": 252,
+      "tokenOut": 331,
+      "tokenThinking": 1373,
+      "tokenCached": 0
+    },
+    "latencyMs": 15455
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:13:10.138Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1608,
+        "sha256": "6f80c13721e9bc3a26b1b6c742011cc804344d99f54480d3c2cee844018de485"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 29,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        8,
+        24,
+        27,
+        28,
+        31
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "三角函數的定義",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "某體操選手在空中進行特技跳躍，身體以逆時針方向連續旋轉了 $1250^\floatcirc$ 後落地。若將起跳時面向的方位角定為 $0^\floatcirc$，則選手落地時面向方位的最小正同界角為何？\n(A) $70^\floatcirc$\n(B) $170^\floatcirc$\n(C) $250^\floatcirc$\n(D) $350^\floatcirc$",
+      "answer_text": "(B)。$1250^\floatcirc - 3 \\times 360^\floatcirc = 1250^\floatcirc - 1080^\floatcirc = 170^\floatcirc$，故最小正同界角為 $170^\floatcirc$。"
+    },
+    "usage": {
+      "tokenIn": 1180,
+      "tokenOut": 239,
+      "tokenThinking": 1325,
+      "tokenCached": 0
+    },
+    "latencyMs": 12392
+  }
+}

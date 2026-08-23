@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:25:38.985Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1549,
+        "sha256": "7cd7ab9d0f37c2724133d8b9fccdfd6868d6a476e7c5f562c6761e1005dfe3a5"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 51,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        46,
+        47,
+        48,
+        49,
+        59
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "直線運動",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "阿華在物理實驗課中分析滑車的直線運動，並繪製了滑車的速度對時間的關係圖（即 $v$-$t$ 圖）。若阿華想要從此關係圖中求得滑車在某段時間內的位移，他應該計算圖形中的哪一個幾何特徵？\n(A) 曲線的切線斜率\n(B) 曲線與時間軸所圍成的面積\n(C) 曲線在縱軸上的截距\n(D) 曲線與橫軸的交點",
+      "answer_text": "(B)。在 $v$-$t$ 圖中，速度對時間的積分 $\\int v \\, dt$ 即為位移，在幾何上對應於曲線與時間軸所圍成的面積。另外，圖形的切線斜率代表的是瞬時加速度。"
+    },
+    "usage": {
+      "tokenIn": 1180,
+      "tokenOut": 238,
+      "tokenThinking": 898,
+      "tokenCached": 0
+    },
+    "latencyMs": 11341
+  }
+}

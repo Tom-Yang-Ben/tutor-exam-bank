@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:17:35.738Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1608,
+        "sha256": "6f80c13721e9bc3a26b1b6c742011cc804344d99f54480d3c2cee844018de485"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 29,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        8,
+        24,
+        27,
+        28,
+        31
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "三角函數的定義",
+      "chapter_confidence": 0.99,
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "在遊樂園的旋轉咖啡杯設施中，某個咖啡杯從初始位置開始，總共逆時針旋轉了 $1150^\\circ$ 後停止。請問此旋轉角度的最小正同界角為多少度，以表示咖啡杯最終相對於初始位置的淨旋轉角度？ (A) $50^\\circ$　(B) $70^\\circ$　(C) $90^\\circ$　(D) $110^\\circ$",
+      "answer_text": "(B)。計算 $1150^\\circ$ 的同界角，需將其減去 $360^\\circ$ 的整數倍使其落在 $0^\\circ$ 到 $360^\\circ$ 之間。因為 $1150^\\circ = 360^\\circ \\times 3 + 70^\\circ$，即 $1150^\\circ - 1080^\\circ = 70^\\circ$，故其最小正同界角為 $70^\\circ$。"
+    },
+    "usage": {
+      "tokenIn": 1180,
+      "tokenOut": 308,
+      "tokenThinking": 1769,
+      "tokenCached": 0
+    },
+    "latencyMs": 265232
+  }
+}

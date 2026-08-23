@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:11:43.434Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1606,
+        "sha256": "125b45a94850fa2298ab83697de3c2d61f2cb031dfee7792f198f1b1b1562260"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 23,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        11,
+        12,
+        19,
+        20,
+        21
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "空間向量內積",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 3,
+      "question_text": "在三維空間座標系中，工程師測試一束雷射光，光束從原點沿著直線發射，並精準照射到空間中的標靶點 $P(2, -3, 6)$。若將雷射光的發射方向視為一個空間向量，求此向量與 $z$ 軸正向夾角的餘弦值。",
+      "answer_text": "雷射光發射方向的向量為 $\\vec{v} = (2, -3, 6)$。其長度為 $|\\vec{v}| = \\sqrt{2^2 + (-3)^2 + 6^2} = \\sqrt{49} = 7$。因為 $z$ 軸正向的單位向量為 $(0, 0, 1)$，兩向量的內積為 $2 \\times 0 + (-3) \\times 0 + 6 \\times 1 = 6$，故所求的夾角餘弦值為 $\\frac{6}{7 \\times 1} = \\frac{6}{7}$。"
+    },
+    "usage": {
+      "tokenIn": 1178,
+      "tokenOut": 292,
+      "tokenThinking": 1343,
+      "tokenCached": 0
+    },
+    "latencyMs": 14505
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:21:32.892Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1782,
+        "sha256": "1d52746e5ad0e2eaad482baad8babec9aa7dbf6020cc19071025b08594fd5b63"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 41,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        34,
+        35,
+        40,
+        42,
+        43
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "摩擦力與向心力",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 3,
+      "question_text": "在物流中心，一個質量為 $8$ kg 的包裹被放置在傾角為 $37^\\circ$ 的直線送貨滑道上。已知包裹與滑道表面之間的動摩擦係數為 $\\mu = 0.25$，且重力加速度取 $g = 10$ m/s$^2$。若包裹由靜止開始沿著滑道下滑，請計算包裹下滑時的加速度大小（已知 $\\sin 37^\\circ = 0.6$，$\\cos 37^\\circ = 0.8$）。",
+      "answer_text": "$4$ m/s$^2$。根據牛頓第二運動定律，包裹沿滑道方向的合力為 $F = mg \\sin 37^\\circ - f_k$，其中動摩擦力 $f_k = \\mu N = \\mu mg \\cos 37^\\circ$。因此加速度 $a = \\frac{F}{m} = g(\\sin 37^\\circ - \\mu \\cos 37^\\circ)$。代入數值可得 $a = 10 \\times (0.6 - 0.25 \\times 0.8) = 10 \\times (0.6 - 0.2) = 4$ m/s$^2$。"
+    },
+    "usage": {
+      "tokenIn": 1320,
+      "tokenOut": 351,
+      "tokenThinking": 1409,
+      "tokenCached": 0
+    },
+    "latencyMs": 16223
+  }
+}

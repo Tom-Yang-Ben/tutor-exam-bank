@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:09:29.203Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1339,
+        "sha256": "9959460ceeac8f25c57b50b3009325526513e54398b1a14b0ac8d36b69c5ee78"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 16,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "chapter_confidence": 1,
+      "question_type": "證明",
+      "difficulty": 5,
+      "question_text": "在物理學中，力 $\\vec{F}$ 對物體作功 $W$ 的數值定義為力向量與位移向量 $\\vec{S}$ 的內積，即 $W = \\vec{F} \\cdot \\vec{S}$。假設某無人機在空中受一固定大小的陣風風力 $|\\vec{F}| = 50$ 牛頓吹拂，並在此期間產生了大小固定的位移 $|\\vec{S}| = 20$ 公尺。試以向量內積的幾何定義，證明該陣風對無人機作功的絕對值 $|W|$ 絕不會超過 $1000$ 焦耳（即證明 $|W| \\leq 1000$），並說明力向量 $\\vec{F}$ 與位移向量 $\\vec{S}$ 在何種幾何關係下等號會成立。",
+      "answer_text": "設風力向量 $\\vec{F}$ 與位移向量 $\\vec{S}$ 的夾角為 $\\theta$。根據向量內積的定義，作功 $W = \\vec{F} \\cdot \\vec{S} = |\\vec{F}||\\vec{S}| \\cos \\theta$。代入已知數值可得 $W = 50 \\times 20 \\times \\cos \\theta = 1000 \\cos \\theta$。因為對於任意角度 $\\theta$ 皆滿足 $|\\cos \\theta| \\leq 1$，將等式兩邊取絕對值得 $|W| = |1000 \\cos \\theta| = 1000 |\\cos \\theta| \\leq 1000$。故得證作功的絕對值 $|W| \\leq 1000$ 恆成立。當 $|\\cos \\theta| = 1$ 時等式達到最大值，此時夾角 $\\theta = 0^\\circ$ 或 $180^\\circ$，亦即當力向量 $\\vec{F}$ 與位移向量 $\\vec{S}$ 互相平行（同向或反向）時，等號會成立。"
+    },
+    "usage": {
+      "tokenIn": 947,
+      "tokenOut": 532,
+      "tokenThinking": 2777,
+      "tokenCached": 0
+    },
+    "latencyMs": 23819
+  }
+}

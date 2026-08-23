@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:23:13.916Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1825,
+        "sha256": "a18f4fa8080f3d3540c514475efeb49d6c551bac6e62d68b62766432ec269dfd"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 43,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        40,
+        41,
+        42,
+        54,
+        55
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "摩擦力與向心力",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 3,
+      "question_text": "在無摩擦的水平氣墊桌上，一根長度為 $0.8$ m 的輕質細線一端固定，另一端連接著一塊質量為 $0.5$ kg 的金屬滑塊。若滑塊以 $4$ m/s 的速率繞著固定端點作等速圓周運動，試求細線所承受的張力大小。",
+      "answer_text": "滑塊在水平面上作等速圓周運動，其向心力完全由細線的張力提供。根據向心力公式：$T = \\frac{mv^2}{r}$，代入已知數值可得 $T = \\frac{0.5 \\times 4^2}{0.8} = \\frac{0.5 \\times 16}{0.8} = \\frac{8}{0.8} = 10$ N。"
+    },
+    "usage": {
+      "tokenIn": 1347,
+      "tokenOut": 252,
+      "tokenThinking": 944,
+      "tokenCached": 0
+    },
+    "latencyMs": 100648
+  }
+}

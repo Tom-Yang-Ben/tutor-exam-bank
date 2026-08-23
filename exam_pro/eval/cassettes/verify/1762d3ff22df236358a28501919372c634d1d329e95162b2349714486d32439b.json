@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T17:19:32.519Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 210,
+        "sha256": "fe6d9407c0ec0dd5c94dffe0a222b44c6f73634c82587e115c23b3f9ad4d8ee5"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "在一個建築工地上，工人使用固定在高處的無摩擦定滑輪來運送物料。輕繩的跨過滑輪，兩端分別懸掛著質量為 $4$ kg 的配重鐵塊與裝有磚塊的吊籃，已知吊籃與磚塊的總質量為 $16$ kg。若工人將兩者由靜止狀態同時放手，請計算此系統的加速度大小，以及繩子在運動過程中承受的張力大小。（假設繩子不可伸長且與滑輪的質量皆可忽略不計，並取重力加速度 $g = 10$ m/s$^2$）",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "6 m/s^2，64 N",
+      "answer_form": "text",
+      "steps_summary": "1. 設配重鐵塊質量為 m1 = 4 kg，吊籃與磚塊總質量為 m2 = 16 kg，重力加速度 g = 10 m/s^2。\n2. 根據牛頓第二運動定律，對兩個物體分別列出運動方程式：\n   對質量較大的 m2：m2*g - T = m2*a\n   對質量較小的 m1：T - m1*g = m1*a\n3. 將兩式相加，消去張力 T，可得系統加速度：\n   a = (m2 - m1) / (m1 + m2) * g = (16 - 4) / (16 + 4) * 10 = 6 m/s^2。\n4. 將加速度 a = 6 m/s^2 代回方程式求張力 T：\n   T = m1 * (g + a) = 4 * (10 + 6) = 64 N。\n5. 故系統的加速度大小為 6 m/s^2，繩子承受的張力大小為 64 N。"
+    },
+    "usage": {
+      "tokenIn": 252,
+      "tokenOut": 292,
+      "tokenThinking": 1104,
+      "tokenCached": 0
+    },
+    "latencyMs": 11822
+  }
+}

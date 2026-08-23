@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:29:30.138Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1627,
+        "sha256": "d82a2aae3e7f148b0a639aa0ee4892ec89847522918f2ce3e9bee5b57430b838"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 59,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        46,
+        47,
+        51,
+        56,
+        57
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "電場與電位",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "在物理實驗室中，學生利用探針測量並繪製出帶電導體周圍的等位面。若學生想在同一張圖上標示出電場線的方向，根據靜電學原理，電場線與等位面在相交處的幾何關係應該為何？ (A) 恆互相平行 (B) 恆互相垂直 (C) 夾角恆為 $45^\\circ$ (D) 夾角大小取決於空間中的電場強度",
+      "answer_text": "(B)。因為沿著等位面移動測試電荷時，電位沒有變化，代表電場力對電荷作功為零。由此可知，電場在平行於等位面的方向上沒有分量，故電場線必定與等位面互相垂直。"
+    },
+    "usage": {
+      "tokenIn": 1245,
+      "tokenOut": 230,
+      "tokenThinking": 1749,
+      "tokenCached": 0
+    },
+    "latencyMs": 18623
+  }
+}

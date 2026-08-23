@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:05:36.628Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1443,
+        "sha256": "d81237bbc6266e5f8dfbbf5c114cf4e41ed6feeceb9d70ab04ad0dbe303e3392"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 1,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        2,
+        25,
+        26
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 1,
+      "question_text": "某電腦程式在處理資料時，所需的時間 $T$（單位：微秒）可由公式 $T = \\log_{3} A + \\log_{3} B$ 來估算，其中 $A$ 與 $B$ 分別代表兩組不同資料的參數。若今日輸入的資料參數分別為 $A=81$ 與 $B=9$，請問該程式處理這些資料所需的時間估計為多少微秒？\n(A) $5$　(B) $6$　(C) $8$　(D) $12$",
+      "answer_text": "(B)。代入數值可得 $T = \\log_{3} 81 + \\log_{3} 9$。因為 $3^4 = 81$ 且 $3^2 = 9$，可知 $\\log_{3} 81 = 4$、$\\log_{3} 9 = 2$，故兩者之和為 $4 + 2 = 6$。"
+    },
+    "usage": {
+      "tokenIn": 1082,
+      "tokenOut": 284,
+      "tokenThinking": 1312,
+      "tokenCached": 0
+    },
+    "latencyMs": 15263
+  }
+}

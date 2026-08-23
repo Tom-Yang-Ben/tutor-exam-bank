@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:06:52.950Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1574,
+        "sha256": "fdb86dc1299d802772d1f9605bc53510c56f15f6866137de2ec52387f8aaf600"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 7,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        12,
+        13,
+        14,
+        21,
+        23
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 3,
+      "question_text": "在某款熱門的奇幻手機遊戲中，玩家可以在交易系統中兌換不同種類的寶石。根據遊戲設定，一顆紅寶石可以兌換 $\\log_{3} 25$ 顆藍寶石，而一顆藍寶石可以兌換 $\\log_{5} 27$ 顆綠寶石。若玩家想直接計算兌換率，請問一顆紅寶石相當於多少顆綠寶石？",
+      "answer_text": "$6$。一顆紅寶石可換得的綠寶石數量為兩次兌換比例的乘積，即 $\\log_{3} 25 \\times \\log_{5} 27$。利用對數的次方提出與換底公式，可將原式化簡為 $2\\log_{3} 5 \\times 3\\log_{5} 3 = 6 \\times (\\log_{3} 5 \\times \\log_{5} 3) = 6 \\times 1 = 6$。"
+    },
+    "usage": {
+      "tokenIn": 1139,
+      "tokenOut": 280,
+      "tokenThinking": 1739,
+      "tokenCached": 0
+    },
+    "latencyMs": 15785
+  }
+}

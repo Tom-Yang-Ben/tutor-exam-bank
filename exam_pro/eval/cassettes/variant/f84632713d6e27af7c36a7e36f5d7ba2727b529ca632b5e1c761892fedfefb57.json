@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:05:55.972Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1546,
+        "sha256": "2d01f11114152bf381830914fde17eca70b1305a8e58c136d41060c286fd53c3"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 3,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        4,
+        8,
+        10,
+        17,
+        18
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "某種細菌在適宜的環境下，其數量會隨著時間呈指數增長。已知培養皿中細菌的總數量 $N$（單位：百萬隻）與經過的時數 $t$ 滿足關係式 $N = 3^{t-2}$。若觀測到目前的細菌數量為 $27$ 百萬隻，求從開始培養到現在共經過了多少小時？",
+      "answer_text": "將 $N = 27$ 代入關係式，可得方程式 $3^{t-2} = 27$。因為 $27 = 3^3$，故 $t-2 = 3$，解得 $t = 5$。因此共經過了 $5$ 小時。"
+    },
+    "usage": {
+      "tokenIn": 1148,
+      "tokenOut": 215,
+      "tokenThinking": 655,
+      "tokenCached": 0
+    },
+    "latencyMs": 8953
+  }
+}

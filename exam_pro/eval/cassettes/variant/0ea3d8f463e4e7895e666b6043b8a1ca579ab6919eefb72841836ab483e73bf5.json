@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:18:13.586Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1613,
+        "sha256": "bdd312e9e7873a2ff7b83c9608eb84ada32a54a045c5a9f6bd4af0d560e4cacf"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 31,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        8,
+        24,
+        27,
+        28,
+        29
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "三角函數的定義",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "在航海雷達系統中，我們以船隻所在位置為原點，建立一個直角坐標平面。若探測到另一艘小艇位於船隻的第二象限區域，且該位置的標準位置角為 $\\theta$，請問 $\\sin \\theta$ 的正負為何？ (A) 恆為正 (B) 恆為負 (C) 恆為零 (D) 無法判斷",
+      "answer_text": "(A)。在第二象限中，坐標 $(x, y)$ 滿足 $x < 0$、$y > 0$。設小艇與原點的距離為 $r$，則 $r > 0$，故 $\\sin \\theta = \\frac{y}{r} > 0$，恆為正。"
+    },
+    "usage": {
+      "tokenIn": 1183,
+      "tokenOut": 228,
+      "tokenThinking": 2097,
+      "tokenCached": 0
+    },
+    "latencyMs": 18004
+  }
+}

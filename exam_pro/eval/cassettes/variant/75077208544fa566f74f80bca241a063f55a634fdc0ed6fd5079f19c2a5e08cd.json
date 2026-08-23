@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:06:13.324Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1437,
+        "sha256": "d67fc0265bc8633034d59efbb89a763f1e780500ec6984804602d6da4d71cb55"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 5,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        6,
+        15,
+        22
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 4,
+      "question_text": "在某個網路行銷活動中，發起人第一天將訊息傳送給 $5$ 個人，第二天這 $5$ 個人每個人又各自轉發給 $5$ 個新的人。依此類推，假設沒有任何人重複收到訊息，則到了第 $40$ 天，當天新增收到訊息的人數恰好為 $5^{40}$。已知 $\\log_{10} 2 = 0.3010$，試問第 $40$ 天新增的人數若展開為十進位制整數，會是一個幾位數？",
+      "answer_text": "首先利用對數來判斷位數：$\\log_{10} 5^{40} = 40 \\times \\log_{10} 5$。\n因為 $\\log_{10} 5 = \\log_{10} \\frac{10}{2} = 1 - \\log_{10} 2 = 1 - 0.3010 = 0.6990$，\n代回原式可得 $\\log_{10} 5^{40} = 40 \\times 0.6990 = 27.96$。\n這表示 $10^{27} < 5^{40} < 10^{28}$，故 $5^{40}$ 展開後為一個 $28$ 位數。"
+    },
+    "usage": {
+      "tokenIn": 1074,
+      "tokenOut": 371,
+      "tokenThinking": 1872,
+      "tokenCached": 0
+    },
+    "latencyMs": 16982
+  }
+}

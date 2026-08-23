@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:09:56.441Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1593,
+        "sha256": "4f36a3c3c97a6dad7ceeab9e49f05d4dcff03c4190ea1a699c3e1ae2e726760e"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 17,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        9,
+        10,
+        18,
+        24,
+        28
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "空間向量內積",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "在三維空間中，有一台無人機受到一股穩定風力的影響。若將此風力表示為空間向量 $\\vec{F} = (2, -3, 5)$（單位：牛頓），且無人機在風力作用期間的直線位移向量為 $\\vec{S} = (4, 2, 1)$（單位：公尺）。已知力對物體作功的計算公式為力向量與位移向量的內積，即 $W = \\vec{F} \\cdot \\vec{S}$。試求此風力對無人機所作的功為多少焦耳？",
+      "answer_text": "$W = \\vec{F} \\cdot \\vec{S} = 2 \\times 4 + (-3) \\times 2 + 5 \\times 1 = 8 - 6 + 5 = 7$。此風力對無人機作功 $7$ 焦耳。"
+    },
+    "usage": {
+      "tokenIn": 1147,
+      "tokenOut": 269,
+      "tokenThinking": 1423,
+      "tokenCached": 0
+    },
+    "latencyMs": 15429
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:06:36.796Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1437,
+        "sha256": "d67fc0265bc8633034d59efbb89a763f1e780500ec6984804602d6da4d71cb55"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 5,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        6,
+        15,
+        22
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 4,
+      "question_text": "天文學家在計算某星系中可能存在的微小粒子總數時，建立了一個數學模型，推導出該數量大約為 $5^{60} \times 2^{40}$ 個。已知 $\\log_{10} 2 = 0.3010$，請問將此數量展開為一般十進位制時，會是一個幾位數的整數？",
+      "answer_text": "設粒子數量為 $M = 5^{60} \\times 2^{40}$，將其取常用對數可得：\n$\\log_{10} M = \\log_{10} (5^{60} \\times 2^{40}) = 60 \\log_{10} 5 + 40 \\log_{10} 2$。\n由於 $\\log_{10} 5 = 1 - \\log_{10} 2 = 1 - 0.3010 = 0.6990$，\n代入計算得 $\\log_{10} M = 60 \\times 0.6990 + 40 \\times 0.3010 = 41.94 + 12.04 = 53.98$。\n（另一種較快的算法為：$\\log_{10} M = \\log_{10} (5^{20} \\times 10^{40}) = 20 \\log_{10} 5 + 40 = 20 \\times 0.6990 + 40 = 53.98$）\n因為 $53 \\leq \\log_{10} M < 54$，即 $10^{53} \\leq M < 10^{54}$，故可知該數量展開後為 $54$ 位數。"
+    },
+    "usage": {
+      "tokenIn": 1074,
+      "tokenOut": 477,
+      "tokenThinking": 2223,
+      "tokenCached": 0
+    },
+    "latencyMs": 23108
+  }
+}

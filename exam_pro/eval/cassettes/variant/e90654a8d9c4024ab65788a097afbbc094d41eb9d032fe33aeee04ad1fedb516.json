@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:07:17.287Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1574,
+        "sha256": "fdb86dc1299d802772d1f9605bc53510c56f15f6866137de2ec52387f8aaf600"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 7,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        12,
+        13,
+        14,
+        21,
+        23
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 3,
+      "question_text": "某實驗室在測試一種特殊濾光片的效能時，定義其「光學衰減常數」為 $\\log_{a} b$，其中 $a$ 與 $b$ 均為大於 $1$ 的特徵參數。已知濾光片甲的衰減常數為 $\\log_{4} 9$，濾光片乙的衰減常數為 $\\log_{9} 64$。若將這兩片濾光片疊加使用，其總衰減常數恰好為這兩個常數的乘積，求此疊加後的總衰減常數之值為何？",
+      "answer_text": "$3$。依據換底公式可將兩常數相乘展開為 $\\frac{\\log 9}{\\log 4} \\times \\frac{\\log 64}{\\log 9} = \\frac{\\log 64}{\\log 4} = \\log_{4} 64 = 3$。"
+    },
+    "usage": {
+      "tokenIn": 1139,
+      "tokenOut": 276,
+      "tokenThinking": 2181,
+      "tokenCached": 0
+    },
+    "latencyMs": 23985
+  }
+}

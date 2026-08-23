@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:07:28.534Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1575,
+        "sha256": "ba5c75f4e28617b1b2e52f6d9a5e9d5360f26d11cf7557ace257b5e9f147bcce"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 9,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        10,
+        17,
+        18,
+        24,
+        28
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "小明在平坦的地面上推動一個箱子，他施加的推力可用平面向量表示為 $\\vec{F} = (4, -3)$（單位：牛頓），箱子隨後產生的位移可用向量 $\\vec{S} = (6, 5)$（單位：公尺）來表示。已知力對物體作的功 $W$ 為施力向量與位移向量的內積，請問小明對箱子作的功 $W = \\vec{F} \\cdot \\vec{S}$ 為多少焦耳？",
+      "answer_text": "$W = \\vec{F} \\cdot \\vec{S} = 4 \\times 6 + (-3) \\times 5 = 24 - 15 = 9$ 焦耳。"
+    },
+    "usage": {
+      "tokenIn": 1137,
+      "tokenOut": 231,
+      "tokenThinking": 997,
+      "tokenCached": 0
+    },
+    "latencyMs": 10882
+  }
+}

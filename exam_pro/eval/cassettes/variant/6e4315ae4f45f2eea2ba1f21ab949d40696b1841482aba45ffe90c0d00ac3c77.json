@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:20:58.333Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1384,
+        "sha256": "cc2caf791f4c8b5b89166af0a8640366f49178a0e333f1e340a34916546e7c25"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 39,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        38,
+        53
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 1,
+      "question_text": "在水杯上平放一張硬紙板，並將一枚硬幣置於紙板上。當用手指快速將紙板水平彈飛時，硬幣會垂直落入杯中而沒有跟著紙板飛走。造成此現象的主要原因為何？\n(A) 硬幣具有慣性而維持原靜止狀態\n(B) 硬幣受到紙板的向心力作用\n(C) 硬幣受到的重力瞬間變大\n(D) 硬幣與紙板間的摩擦力消失",
+      "answer_text": "(A)。由牛頓第一運動定律，硬幣原先處於靜止狀態，當紙板被快速抽走時，硬幣因慣性傾向維持原本的靜止狀態，不會隨著紙板水平移動，隨後因失去支撐受重力作用而垂直落入杯中。"
+    },
+    "usage": {
+      "tokenIn": 1063,
+      "tokenOut": 245,
+      "tokenThinking": 1325,
+      "tokenCached": 0
+    },
+    "latencyMs": 15926
+  }
+}

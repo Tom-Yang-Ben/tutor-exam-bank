@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:23:58.006Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1550,
+        "sha256": "861cf06fbba915dfec5d4e3edab10aea20c9a64a24fefa3a07aab1335e7c077b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 46,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        32,
+        33,
+        44,
+        51,
+        59
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "摩擦力與向心力",
+      "chapter_confidence": 1,
+      "question_type": "多選",
+      "difficulty": 2,
+      "question_text": "一台質量 $2$ kg 的遙控無人機在水平面內，以恆定的速率 $5$ m/s 進行圓周飛行測試。關於此無人機在等速圓周飛行過程中的運動狀態，下列敘述哪些正確？\n(A) 無人機的速度向量保持不變\n(B) 無人機的動能保持不變\n(C) 無人機的加速度方向恆指向圓周軌跡的中心\n(D) 無人機所受的合力為零",
+      "answer_text": "(B)(C)。\n(A) 錯誤：等速圓周運動的速度方向不斷沿著切線方向改變，因此速度向量並非不變。\n(B) 正確：無人機的速率固定，故其動能 $E_k = \\frac{1}{2}mv^2$ 保持不變。\n(C) 正確：等速圓周運動具有向心加速度，其方向恆指向圓心。\n(D) 錯誤：維持圓周運動必須有向心力的作用，故合力不為零且恆指向圓心。"
+    },
+    "usage": {
+      "tokenIn": 1190,
+      "tokenOut": 309,
+      "tokenThinking": 1435,
+      "tokenCached": 0
+    },
+    "latencyMs": 16785
+  }
+}

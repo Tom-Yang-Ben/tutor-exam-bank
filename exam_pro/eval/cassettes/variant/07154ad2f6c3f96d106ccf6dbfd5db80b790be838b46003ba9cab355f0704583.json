@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:11:56.986Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1606,
+        "sha256": "125b45a94850fa2298ab83697de3c2d61f2cb031dfee7792f198f1b1b1562260"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 23,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        11,
+        12,
+        19,
+        20,
+        21
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "空間向量內積",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 3,
+      "question_text": "一架無人機從空間座標系的原點 $O$ 沿直線等速爬升，經過一段時間後到達點 $P(3, -4, 12)$。若鉛直向上的方向為 $z$ 軸正向，試求無人機飛行方向與鉛直向上方向之夾角的餘弦值。",
+      "answer_text": "無人機飛行的位移向量為 $\\vec{OP} = (3, -4, 12)$，其長度 $|\\vec{OP}| = \\sqrt{3^2 + (-4)^2 + 12^2} = \\sqrt{169} = 13$。鉛直向上的單位向量為 $\\vec{k} = (0, 0, 1)$，兩向量的內積為 $\\vec{OP} \\cdot \\vec{k} = 3 \\times 0 + (-4) \\times 0 + 12 \\times 1 = 12$。由內積定義可知 $\\vec{OP} \\cdot \\vec{k} = |\\vec{OP}| |\\vec{k}| \\cos\\theta$，故夾角的餘弦值 $\\cos\\theta = \\frac{12}{13 \\times 1} = \\frac{12}{13}$。"
+    },
+    "usage": {
+      "tokenIn": 1178,
+      "tokenOut": 349,
+      "tokenThinking": 1337,
+      "tokenCached": 0
+    },
+    "latencyMs": 13156
+  }
+}

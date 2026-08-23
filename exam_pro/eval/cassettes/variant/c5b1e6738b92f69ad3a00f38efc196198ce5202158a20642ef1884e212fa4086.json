@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:29:05.325Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1627,
+        "sha256": "d82a2aae3e7f148b0a639aa0ee4892ec89847522918f2ce3e9bee5b57430b838"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 59,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        46,
+        47,
+        51,
+        56,
+        57
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "電場與電位",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "某物理學家在探測空間中一處靜電場時，發現該區域的等位面是由一系列互相平行的水平面所組成。試問此區域內的電場線方向，與這些水平等位面具有何種關係？ (A) 互相平行 (B) 互相垂直 (C) 夾 $45^\\circ$ 角 (D) 夾 $60^\\circ$ 角",
+      "answer_text": "(B)。由於沿著等位面移動電荷時，靜電力所作的功為零，代表電場在等位面上沒有任何分量。因此，電場線必定與等位面互相垂直（即在此情境中，電場線為鉛直方向）。"
+    },
+    "usage": {
+      "tokenIn": 1245,
+      "tokenOut": 214,
+      "tokenThinking": 1746,
+      "tokenCached": 0
+    },
+    "latencyMs": 18895
+  }
+}

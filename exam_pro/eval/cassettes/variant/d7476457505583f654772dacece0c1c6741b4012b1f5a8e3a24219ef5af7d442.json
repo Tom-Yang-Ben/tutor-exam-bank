@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-08-23T17:11:28.579Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1582,
+        "sha256": "24e7897521d4eda8fb0d5ddf35fb95e23c6dc646b7fef4739b0023099c56a000"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 21,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        13,
+        14,
+        19,
+        20,
+        23
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "空間向量內積",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 3,
+      "question_text": "在建構虛擬實境（VR）的三維空間座標系時，程式設計師定義了兩道雷射光束的方向向量分別為 $\\vec{d}_1 = (3, -4, 2)$ 與 $\\vec{d}_2 = (m, 2, 7)$。若設定這兩道雷射光束的行進方向必須互相垂直，試求實數 $m$ 的值。",
+      "answer_text": "因為兩方向向量互相垂直，所以它們的內積為 $0$：$3 \\times m + (-4) \\times 2 + 2 \\times 7 = 0$，即 $3m - 8 + 14 = 0$，化簡得 $3m + 6 = 0$，解得 $m = -2$。"
+    },
+    "usage": {
+      "tokenIn": 1160,
+      "tokenOut": 232,
+      "tokenThinking": 2024,
+      "tokenCached": 0
+    },
+    "latencyMs": 20536
+  }
+}
