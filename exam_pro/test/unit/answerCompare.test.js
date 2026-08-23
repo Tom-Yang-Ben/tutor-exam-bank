@@ -57,21 +57,82 @@ describe('extractOptionCodes — 選項代號集合', () => {
     });
 });
 
-describe('extractFinalAnswer — 從 claimed 抽最終答案', () => {
-    test('第一個 $…$ 優先', () => {
+describe('extractFinalAnswer — 從 claimed 抽最終答案（裁決 S2-12 的新規則）', () => {
+    // 案例全部取自 docs/questions2-wsD.md Q3：WS-D 對 fixture 的 45 題填空／計算實測，
+    // 舊規則「第一個 $…$」只抽對 4 題，新規則「最後一個 $…$ + 跳過單位上下標」抽對 39 題。
+    const fixture = require('../../eval/fixtures/questions.public.json');
+    const answerOf = (id) => fixture.questions.find(q => q.id === id).answer_text;
+
+    test('#9 一整串算式：取最後一個 = 之後（舊規則會抽到整串算式）', () => {
+        // "$\vec{a} \cdot \vec{b} = 3 \times 1 + 4 \times 2 = 3 + 8 = 11$。"
+        assert.equal(extractFinalAnswer(answerOf(9)), '11');
+    });
+
+    test('#13 「垂直即內積為 $0$」：不能抽到題目條件裡的 0（舊規則會抽到，造成假 disagree）', () => {
+        // "垂直即內積為 $0$：$2 \times 3 + k \times 6 = 0$，得 $6k = -6$，$k = -1$。"
+        assert.equal(extractFinalAnswer(answerOf(13)), '-1');
+        assert.equal(extractFinalAnswer(answerOf(14)), '-2');
+        assert.equal(extractFinalAnswer(answerOf(21)), '0');
+    });
+
+    test('#32 單位的 $^2$ 要跳過，往前找上一段 $…$', () => {
+        // "由 $F = ma$，$a = \frac{F}{m} = \frac{10}{2} = 5$ m/s$^2$，方向與合力同向。"
+        assert.equal(extractFinalAnswer(answerOf(32)), '5');
+        assert.equal(extractFinalAnswer(answerOf(33)), '4.5');
+    });
+
+    test('#45 切割符含 \\approx 而不只是 =', () => {
+        // "…$v_{max} = \sqrt{\mu g r} = \sqrt{0.4 \times 10 \times 50} = \sqrt{200} \approx 14.1$ m/s。"
+        assert.equal(extractFinalAnswer(answerOf(45)), '14.1');
+        assert.equal(extractFinalAnswer(answerOf(41)), '6.36');
+    });
+
+    test('#45／#40 同時有 = 與 \\approx 時取「位置最後」的那一個', () => {
+        // #40 的 \approx 在中間、= 在後面 → 應取最後的 =
+        assert.equal(extractFinalAnswer(answerOf(40)), '3.27');
+    });
+
+    test('#22 答案是文字敘述：抽到的 $x$ 不是數值，但比對器只會回 uncertain 不會誤判', () => {
+        // "…此內積即 $\vec{OA}$ 在 $x$ 軸正向上的分量長度，也就是 $A$ 點的 $x$ 座標。"
+        assert.equal(extractFinalAnswer(answerOf(22)), 'x');
+        assert.equal(
+            answerCompare({ question_type: '計算', claimed: answerOf(22), model: { final_answer: '1', answer_form: 'number' } }),
+            'uncertain',
+            '抽到的不是數值時必須回 uncertain，不得回 disagree'
+        );
+    });
+
+    test('只有一段 $…$ 且不含等號時，整段就是答案', () => {
         assert.equal(extractFinalAnswer('經計算得 $5$，故選之。'), '5');
         assert.equal(extractFinalAnswer('$\\frac{1}{2}$ 是答案'), '\\frac{1}{2}');
     });
 
-    test('沒有 $…$ 時取最後一個 = 之後', () => {
+    test('完全沒有 $…$ 時對整段文字取最後一個 =／\\approx 之後', () => {
         assert.equal(extractFinalAnswer('x + 1 = 3，所以 x = 2'), '2');
         assert.equal(extractFinalAnswer('速度 = 10 m/s'), '10 m/s');
+        assert.equal(extractFinalAnswer('根號 200 \\approx 14.1'), '14.1');
+    });
+
+    test('$…$ 全都是單位上下標時，退回整段文字的等號規則', () => {
+        assert.equal(extractFinalAnswer('加速度 a = 5 m/s$^2$'), '5 m/s$^2$');
+    });
+
+    test('切出來是空字串時往前再找一段', () => {
+        assert.equal(extractFinalAnswer('先寫 $k = -1$，再補一個空的 $x =$'), '-1');
     });
 
     test('兩者都沒有時回 null', () => {
         assert.equal(extractFinalAnswer('這是一段沒有公式也沒有等號的說明'), null);
         assert.equal(extractFinalAnswer(''), null);
         assert.equal(extractFinalAnswer(null), null);
+    });
+
+    test('對 fixture 的 45 題填空／計算，抽出後可解析成數值的達 40 題', () => {
+        const qs = fixture.questions.filter(q => ['填空', '計算'].includes(q.question_type));
+        assert.equal(qs.length, 45);
+        const numeric = qs.filter(q => toNumber(extractFinalAnswer(q.answer_text)) !== null);
+        // 剩下 5 題：#22 是文字敘述型答案；#56/57/58/60 是科學記號（等 S2-12 之後的第二輪裁決）
+        assert.equal(numeric.length, 40, '抽出後可解析成數值的題數退步了');
     });
 });
 
@@ -87,6 +148,19 @@ describe('toNumber — 有理數正規化', () => {
         assert.equal(toNumber('\\frac{1}{2}'), 0.5);
         assert.equal(toNumber('$\\dfrac{1}{2}$'), 0.5);
         assert.equal(toNumber('0.5'), 0.5);
+    });
+
+    test('分數前面的負號不得被吃掉（裁決 S2-11：漏掉負號是最典型的錯答）', () => {
+        assert.equal(toNumber('-\\frac{1}{2}'), -0.5);
+        assert.equal(toNumber('$-\\dfrac{1}{2}$'), -0.5);
+        assert.equal(toNumber('-1/2'), -0.5);
+        assert.equal(toNumber('-0.5'), -0.5);
+    });
+
+    test('角度的 ^\\circ 是單位不是指數', () => {
+        assert.equal(toNumber('45^\\circ'), 45);
+        assert.equal(toNumber('45^{\\circ}'), 45);
+        assert.equal(toNumber('$60^\\circ$'), 60);
     });
 
     test('單位後綴會被剝掉', () => {

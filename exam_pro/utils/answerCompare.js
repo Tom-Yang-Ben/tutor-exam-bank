@@ -7,11 +7,13 @@
 // 核心取捨（介面明講）：**任何比不出來的情況都回 uncertain，不回 disagree**。
 // 誤報一次 answer_mismatch 的成本（老師白看一題）遠低於漏報。
 //
-// ⚠️ 對介面第 4.2 條「負號、± 一律去掉再比」的讀法：本檔**保留負號**。
-//    照字面把負號去掉，`-1` 與 `1` 會被判成 agree——而符號錯正是解題最典型的錯誤，
-//    verify 節點存在的理由之一就是抓它。因此這裡把那句讀成「這幾種寫法都要正規化後再比」，
-//    負號視為數值的一部分；`±` 因為真的無法與單值比較，另外處理成「量值相同才 agree，
-//    對上單值一律 uncertain」。已寫進 docs/questions2-wsC.md 請開發者裁決。
+// 兩條與本檔直接相關的裁決（2026-08-22，interfaces-stage2.md §12）：
+//   S2-11：`number` 的比法——負號**是數值的一部分**（`-1` 與 `1` → `disagree`，
+//          漏掉負號是最典型的錯答）；`±` 只與 `±` 比量值，`±2` 對上單值 `2` → `uncertain`。
+//   S2-12：`final_answer` 的抽取規則改成「最後一個 $…$、跳過單位上下標、含 = 或 \approx
+//          取其後」。理由是 WS-D 對 fixture 45 題實測：舊規則（第一個 $…$）只抽對 4 題，
+//          而且抽到的常是題目條件裡的中間值（「垂直即內積為 $0$」的那個 0），
+//          那不是比不出來、是**比錯對象**，會產生系統性的假 disagree。
 //
 // 純函式：無 I/O、無隨機、無時間、不讀 process.env。
 
@@ -60,19 +62,56 @@ const sameSet = (a, b) => a.size === b.size && [...a].every(x => b.has(x));
 // ───────────────────────── final_answer 抽取 ─────────────────────────
 
 /**
+ * 只含上下標的片段（單位的 `$^2$`、`$_{max}$`）——它是前面那個單位的一部分，不是答案。
+ * 例：「$a = \frac{10}{2} = 5$ m/s$^2$」的最後一個 $…$ 是 `^2`，答案在前一段。
+ */
+const SCRIPT_ONLY_RE = /^(?:[\^_](?:\{[^{}]*\}|\\[A-Za-z]+|[A-Za-z0-9]))+$/;
+
+/** `=` 或 `\approx`：中文數學答案的寫法幾乎一定是「過程 = 結論」 */
+function lastRelationIndex(s) {
+    const eq = s.lastIndexOf('=');
+    const ap = s.lastIndexOf('\\approx');
+    if (ap > eq) return { at: ap, len: '\\approx'.length };
+    if (eq >= 0) return { at: eq, len: 1 };
+    return null;
+}
+
+/**
  * 從 claimed（可能含說明與計算過程）抽出最終答案。
- * 規則凍結：**第一個 $…$**，沒有就取**最後一個 = 之後**的片段。
+ *
+ * 規則凍結（介面第 4.2 條，裁決 S2-12 改寫）：
+ *   1. 取**最後一個** `$…$`；只含上下標的片段（單位的 `$^2$`）視為單位的一部分，往前找上一段。
+ *   2. 該段含 `=` 或 `\approx` 就再取**最後一個** `=`／`\approx` 之後的片段。
+ *   3. 完全沒有 `$…$`（或全被跳過）就對整段文字做第 2 步。
+ *   4. 抽不到回 null（呼叫端一律回 uncertain）。
+ *
+ * 為什麼從「第一個」改成「最後一個」：WS-D 對 fixture 的 45 題填空／計算實測，
+ * 舊規則只抽對 4 題（多半抽到題目條件裡的中間值，例如「垂直即內積為 $0$」的那個 0，
+ * 那不是比不出來，是**比錯對象**，會產生系統性的假 disagree）；本規則抽對 39 題。
+ *
  * @returns {string|null}  抽不到回 null
  */
 function extractFinalAnswer(claimed) {
     if (typeof claimed !== 'string' || claimed.trim() === '') return null;
 
-    const dollar = claimed.match(/\$([^$]+)\$/);
-    if (dollar && dollar[1].trim() !== '') return dollar[1].trim();
+    const segments = [...claimed.matchAll(/\$([^$]+)\$/g)].map(m => m[1]);
 
-    const eq = claimed.lastIndexOf('=');
-    if (eq >= 0) {
-        const tail = claimed.slice(eq + 1).trim();
+    // 由後往前找第一個「不是純單位上下標」的 $…$
+    for (let i = segments.length - 1; i >= 0; i--) {
+        const seg = segments[i].trim();
+        if (seg === '') continue;
+        if (SCRIPT_ONLY_RE.test(seg.replace(/\s+/g, ''))) continue;   // 單位的一部分，跳過
+
+        const rel = lastRelationIndex(seg);
+        const piece = (rel ? seg.slice(rel.at + rel.len) : seg).trim();
+        if (piece !== '') return piece;
+        // 切完是空的（例如 `$x =$`）：往前再找一段
+    }
+
+    // 整段都沒有可用的 $…$：對原文做同一件事
+    const rel = lastRelationIndex(claimed);
+    if (rel) {
+        const tail = claimed.slice(rel.at + rel.len).trim();
         if (tail !== '') return tail;
     }
     return null;
@@ -88,6 +127,9 @@ function stripDecoration(str) {
         .replace(/\\(left|right|,|;|!|:|quad|qquad)/g, '')
         .replace(/\\text\{[^{}]*\}/g, '')        // \text{公尺} 這種單位
         .replace(/\\mathrm\{[^{}]*\}/g, '')
+        // 角度：$45^\circ$ 與 $45^{\circ}$ 的 ^\circ 是單位，不是指數
+        //（第 4.2 條「單位後綴一律去掉再比」；Unicode 的 45° 由下面的單位後綴規則處理）
+        .replace(/\^\s*\{?\s*\\(?:circ|degree)\s*\}?/g, '')
         .replace(/[，。、；;]+$/g, '')
         .trim();
 }
@@ -122,12 +164,14 @@ function toNumber(raw) {
     // 剝單位後綴：數字（或右括號）之後的字母／中文一律不參與數值
     s = s.replace(/^(\(?-?[\d./eE()+\-*^]*?)(?:[A-Za-z一-鿿°′″][A-Za-z一-鿿°′″/\s^\d]*)$/, '$1');
 
-    // 分數 a/b
-    const frac = s.match(/^\(?(-?\d+(?:\.\d+)?)\)?\/\(?(-?\d+(?:\.\d+)?)\)?$/);
+    // 分數 a/b（含 \frac 展開後的 (a)/(b)，以及整個分數前面的負號：
+    // -\frac{1}{2} → -(1)/(2)。漏掉這個外層負號，「-1/2 vs 1/2」就會回 uncertain 而不是
+    // disagree——而漏掉負號正是最典型的錯答，裁決 S2-11 特別點名的就是它。）
+    const frac = s.match(/^(-?)\(?(-?\d+(?:\.\d+)?)\)?\/\(?(-?\d+(?:\.\d+)?)\)?$/);
     if (frac) {
-        const den = Number(frac[2]);
+        const den = Number(frac[3]);
         if (den === 0) return null;
-        const v = Number(frac[1]) / den;
+        const v = (frac[1] === '-' ? -1 : 1) * (Number(frac[2]) / den);
         return percent ? v / 100 : v;
     }
 

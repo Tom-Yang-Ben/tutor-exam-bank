@@ -15,6 +15,13 @@
 //   error = 會讓 Word 匯出降級／內容失真（未知指令被吃掉、缺右括號、整串退成純文字…）
 //   warn  = 只是寫法不漂亮，內容一字不差（斜線分數、Unicode 符號、填空題的底線…）
 //
+// 兩條已凍結的裁決（2026-08-22，interfaces-stage2.md §12 與第 4.4 條）：
+//   S2-17：`$…$` **內**的裸上下標 = rule `bare_script`（`error`，Word 會排出一個空的方格）；
+//          純文字裡的 `^`／`_` = rule `bare_script_text`（`warn`，填空題的 `答案：___` 就長這樣）。
+//          這兩個 rule 名已凍結，不得更名。
+//   S2-18：`audit_formulas.js` 原本的 `info`（如 `latex_without_dollar`）一律併進 `warn`，
+//          **不加第三級**。
+//
 // rule 的字串值一旦定案就不能改（會進 job_events.detail 與 report:jobs），
 // 新增規則只能往後加。ISSUE_RULES 是目前的全集。
 //

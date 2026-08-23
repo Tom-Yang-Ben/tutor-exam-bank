@@ -33,23 +33,14 @@ function classifyError(err) {
 
 /**
  * FEATURE_SIMILAR 是否開啟。
- * ⚠️ 介面第 3.1 條的 ctx.config 只有 models／limits／thresholds 三個鍵，沒有帶旗標，
- *    但 dedup1 的 skipped 條件明講要看 FEATURE_SIMILAR（第 3.3 條）。
- *    這裡先支援 runner 之後補上的 ctx.config.features.similar，
- *    沒有時退回 services/retrievalService 的 isSimilarEnabled()（它讀環境變數）。
- *    已寫進 docs/questions2-wsC.md 請開發者裁決要不要把旗標補進 ctx。
+ * 裁決 S2-8：`ctx.config.features = { similar, pipeline }` 由 runner 從 config/features.js 組出來，
+ * **agent 要知道旗標只能從這裡讀**（第 3.1 條）——所以這裡不讀 process.env、不 require
+ * services/retrievalService。runner 沒給就當關閉：dedup1 一律 skipped，是安全的那一邊
+ * （不會誤判重複，最多是少擋一題，L0 的雜湊仍然擋得住逐字重複）。
  */
 function similarEnabled(ctx) {
-    const fromCtx = ctx && ctx.config && ctx.config.features
-        ? ctx.config.features.similar
-        : undefined;
-    if (typeof fromCtx === 'boolean') return fromCtx;
-    try {
-        const { isSimilarEnabled } = require('../services/retrievalService');
-        return Boolean(isSimilarEnabled());
-    } catch (e) {
-        return false;
-    }
+    const features = ctx && ctx.config && ctx.config.features;
+    return Boolean(features && features.similar);
 }
 
 // ───────────────────────── L0：雜湊 ─────────────────────────

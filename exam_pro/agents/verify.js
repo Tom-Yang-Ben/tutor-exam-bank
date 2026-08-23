@@ -13,7 +13,8 @@
 // 才有辦法回答「該不該多付一家模型的錢」（規劃 §3.8）。
 
 const { answerCompare } = require('../utils/answerCompare');
-const { buildSchema } = require('./_schema');
+const { buildSchema } = require('./schemas');
+const { registerTemplate } = require('../services/llm/templates');
 
 const TEMPLATE = 'verify.v1';
 const MAX_OUTPUT_TOKENS = 2048;
@@ -29,7 +30,8 @@ const SYSTEM = [
 /**
  * prompt 模板（把可變欄位挖空後的原文）。
  * 裡面**沒有** claimed_answer 的位置——這是刻意的，改動前請先看檔頭。
- * cassette 鍵要用 sha256(模板原文)（介面第 5.2 條），故一併匯出。
+ * cassette 的鍵要用 sha256(模板原文)（介面第 5.2 條），模組載入時註冊進
+ * services/llm/templates.js（裁決 S2-5），generateJson 只傳識別名。
  */
 const PROMPT_TEMPLATE = [
     '請解下面這一題。',
@@ -39,6 +41,9 @@ const PROMPT_TEMPLATE = [
     '【題目】',
     '{{question_text}}',
 ].join('\n');
+
+// 模組載入時註冊（裁決 S2-5）：四個 LLM 節點都必須註冊
+registerTemplate(TEMPLATE, PROMPT_TEMPLATE);
 
 function renderPrompt({ questionText, questionType }) {
     return PROMPT_TEMPLATE

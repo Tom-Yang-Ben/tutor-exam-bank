@@ -1,167 +1,177 @@
 # docs/questions2-wsC.md — WS-C 對階段 2 凍結介面的疑問與暫行處置
 
 > 規則：`docs/interfaces-stage2.md` 不得由 WS 修改。實作時發現介面有問題就寫在這裡，由開發者本人裁決後
-> 統一改 `interfaces-stage2.md` 並通知四條 WS。以下每一題都附「我先怎麼做」，程式碼**不繞過**介面，
-> 只在介面沒寫到、或寫得有兩種讀法的地方做了可回退的選擇。
+> 統一改 `interfaces-stage2.md` 並通知四條 WS。
 >
-> **狀態：待裁決（2026-08-22，分支 `ws2-c/gates`）。**
+> **狀態：全部結案（2026-08-22）。** 第一輪裁決已寫進 `docs/interfaces-stage2.md` §12（編號 S2-*）
+> 與對應條文；每一條下方的「**裁決**」就是最終結論，程式碼與測試已對齊，
+> 不需要再讀「我先怎麼做」那段來猜。第二輪新發現的問題另立一節於文末。
 
 ---
 
 ## 1.（第 4.2 條）「負號、± 一律去掉再比」照字面會讓 `-1` 與 `1` 判成 agree
 
-**介面怎麼寫**：
+**介面原本怎麼寫**：
 
 > `number` 比正規化後的有理數（`\frac{a}{b}`、小數、`a/b`、負號、`±`、單位後綴一律去掉再比，容差 `1e-9`）
 
-**問題**：這句有兩種讀法。
+**問題**：這句有兩種讀法。照字面（把負號從字串裡拿掉）的話，`answerCompare` 會對「符號算錯」一律回
+`agree`——而符號錯正是高中數理最典型的計算失誤，也是 verify 節點存在的主要理由之一。
 
-- 讀法 A（字面）：把負號從字串裡拿掉再比 → `-1` 與 `1` 相等。
-- 讀法 B：這幾種**寫法**都要先正規化成同一種表示再比，負號是數值的一部分。
+**裁決（S2-11）**：**負號是數值的一部分**，`-1` 與 `1` → `disagree`；`±` 只與 `±` 比量值，
+`±2` 對上單值 `2` → `uncertain`。第 4.2 條已改寫成這個說法。
 
-照讀法 A 實作的話，`answerCompare` 會對「符號算錯」一律回 `agree`——而符號錯正是高中數理最典型的計算失誤，
-也是 verify 節點存在的主要理由之一。等於這個閘門把它最該抓的那一類錯放掉。
-
-`±` 又是另一回事：`±2` 對上 `2` 真的比不出來（不知道對方是漏寫還是真的只有一個解），
-硬要判 agree 或 disagree 都是猜。
-
-**我先怎麼做**：採讀法 B。
-
-- 負號保留，`-1` 與 `1` → `disagree`（`test/unit/answerCompare.test.js` 有這一項）。
-- `±` 只跟 `±` 比（比量值）；`±2` 對上單值 `2` → `uncertain`，符合第 4.2 條最後一句
-  「任何比不出來的情況都回 uncertain」。
-- `\frac{a}{b}`／`a/b`／小數／百分比／單位後綴照介面正規化，容差 `1e-9`。
-
-**要裁決的**：確認採讀法 B，並把第 4.2 條那句改寫清楚（例如「`\frac{a}{b}`、小數、`a/b` 三種寫法先化成同一個
-有理數；單位後綴去掉；負號視為數值的一部分；`±` 只與 `±` 比量值，對上單值回 uncertain，容差 1e-9」）。
+**落地**：`utils/answerCompare.js` 的 `toNumber` 保留負號、`toNumberList` 單獨處理 `±`；
+`test/unit/answerCompare.test.js` 有「負號是數值的一部分，-1 與 1 是 disagree」與
+「± 只能跟 ± 比，對上單值一律 uncertain」兩項。
+第二輪另修好一個實作缺陷：`-\frac{1}{2}` 原本解析成 `null`（外層負號在 `\frac` 展開後掉了），
+使得「漏掉負號」這個 S2-11 最在意的案例反而回 `uncertain`；現已修正並補測試。
 
 ---
 
 ## 2.（第 4.3 條）`bare_script` 的埋點需要比 `:308-318` 多一處
 
-**介面怎麼寫**：埋點列在 `utils/textFormatter.js` 的 `bare_script :308-318`（都在 `renderMixedInto` 裡，
-也就是**純文字**區段裡沒有底的 `^` / `_`）。
+**問題**：`eval/fixtures/questions.public.json` 把 `#38 $F^$` 與 `#59 $E^$` 標成
+`broken_kind: "bare_script"`，但它們在 `$…$` **裡面**，走的是 `parseLatexToMath` → `parseScripted`，
+不是 `renderMixedInto`。只埋 `:308-318` 的話，fixture 的 10 題壞公式只抓得到 8 題。
 
-**問題**：`eval/fixtures/questions.public.json` 自己把 `#38 $F^$` 與 `#59 $E^$` 標成
-`broken_kind: "bare_script"`，但這兩處都在 `$…$` **裡面**，走的是 `parseLatexToMath` → `parseScripted`，
-不是 `renderMixedInto`。只埋 `:308-318` 的話，這兩題會被判成 ok，fixture 的 10 題就只抓得到 8 題。
+**裁決（S2-17）**：**凍結的是六個 kind，埋點位置由 WS-C 決定**。`bare_script` 補上 `parseScripted`
+（`$…$` 內 `^`／`_` 後面什麼都沒有）。`formulaLint` 的兩條 rule 名一併凍結：
+`$…$` 內 = `bare_script`（`error`）、純文字裡 = `bare_script_text`（`warn`）。
 
-**我先怎麼做**：在 `parseScripted` 多埋一處——`^` / `_` 後面什麼都沒有（字串結尾或群組立刻收尾）時
-發 `bare_script`。事件種類仍是凍結的六個之一，沒有新增 kind。結果：fixture 10 題全中、其餘 50 題零誤報。
-
-順帶一提，`formulaLint` 把這兩種 `bare_script` 分成兩條 rule：
-
-| 位置 | rule | sev | 理由 |
-|---|---|---|---|
-| 落在 `$…$` 內 | `bare_script` | `error` | Word 會排出一個空的上下標方格，內容是錯的 |
-| 落在純文字裡 | `bare_script_text` | `warn` | 填空題的 `答案：___` 就是這樣寫的，內容一字不差 |
-
-**要裁決的**：確認第 4.3 條的埋點清單補上 `parseScripted`（或直接寫「凍結的是六個 kind，埋點位置由 WS-C 決定」）。
+**落地**：`utils/textFormatter.js` 兩處埋點，檔頭註解寫明理由；`utils/formulaLint.js` 依事件位置
+落在哪一段決定 rule 與 sev。fixture 10 題全中、其餘 50 題零誤報。
 
 ---
 
 ## 3.（第 3.1 條）`ctx` 沒有帶 `FEATURE_SIMILAR`，但 dedup1 的 `skipped` 條件要看它
 
-**介面怎麼寫**：
+**問題**：第 3.1 條的 `ctx.config` 只有 `models`／`limits`／`thresholds`，又明講「agent 不得自己讀
+`process.env`」，但第 3.3 條要求 dedup1 在 `FEATURE_SIMILAR=false` 時 `skipped`——旗標拿不到。
 
-- 第 3.1 條：`ctx.config = { models, limits, thresholds }`——只有三個鍵。
-- 第 3.1 條又明講：「agent **不得自己讀 `process.env`**」。
-- 第 3.3 條：dedup1「來源題無向量或 **`FEATURE_SIMILAR=false`** → `skipped`」。
+**裁決（S2-8）**：`ctx.config.features = { similar, pipeline }` 由 runner 從 `config/features.js` 組出來，
+**agent 要知道旗標只能從這裡讀**。
 
-**問題**：三句話湊起來，agent 拿不到 `FEATURE_SIMILAR`。
-
-**我先怎麼做**：`agents/dedup.js` 先讀 `ctx.config.features.similar`（runner 之後補上就直接生效），
-讀不到才退回 `services/retrievalService.isSimilarEnabled()`（那支會讀環境變數）。
-單元測試一律用 `ctx.config.features.similar` 注入，所以測試本身仍然是純注入、不碰環境變數。
-
-**要裁決的**：建議把 `ctx.config` 加上 `features: { similar: boolean, pipeline: boolean }`
-（來源是 `config/features.js`，由 runner 組），並通知 WS-A。
+**落地**：`agents/dedup.js` 的 `similarEnabled(ctx)` 只讀 `ctx.config.features.similar`，
+已移除原本退回 `services/retrievalService.isSimilarEnabled()` 的那條路（它會讀環境變數）。
+runner 沒給就當關閉——dedup1 一律 `skipped`，是安全的那一邊（L0 的雜湊仍然擋得住逐字重複）。
 
 ---
 
 ## 4.（§10.1）`test/unit/` 的所有權與 WS-C 的任務清單衝突
 
-**介面怎麼寫**：§10.1 把 `test/unit/`、`test/integration/`（controller 以外）整個歸給 **WS-D**。
+**問題**：§10.1 把 `test/unit/`、`test/integration/`（controller 以外）整個歸給 WS-D，
+但 WS-C 的任務清單要求把公式表格測試、純函式測試與 `dedup.pg.test.js` 放進去。
 
-**問題**：WS-C 的任務清單（`docs/stage2-parallel-prompts.md` §2 的 WS-C 段）第 1、6、7 點要求
-「以 `node --test` 表格測試跑」「單元測試全部純函式或注入」「整合測試放 `test/integration/dedup.pg.test.js`」。
-兩邊對不起來。
+**裁決（S2-2）**：各 WS 可在 `test/unit`／`test/integration` **新增自己的測試檔，不得改別人的**。
 
-**我先怎麼做**：只**新增**檔案，一個字都不動 WS-D 既有的測試。新增的是：
-
-```
-test/unit/textFormatterStrict.test.js     A-T4 對照測試 + parseLatexStrict 事件
-test/unit/formulaGate.test.js             formulaFix / formulaLint
-test/unit/formulaGolden.test.js           eval/golden/formula.json 的表格測試
-test/unit/normalizeStem.test.js           A-T5
-test/unit/answerCompare.test.js           A-T5
-test/unit/agentsGates.test.js             A-T10a/b/c（ctx 全注入）
-test/integration/dedup.pg.test.js         A-T10c 對真 PG
-test/fixtures/textFormatter.pre-a-t4.js   凍結副本（對照基準，不是測試）
-test/fixtures/normalizeStem.s0.js         凍結副本（對照基準，不是測試）
-```
-
-**要裁決的**：合併時若 WS-D 也動了 `test/unit/`，這幾支是純新增檔，理論上不會衝突；
-但所有權表建議補一句「各 WS 可在 `test/unit/` 新增自己的測試檔，不得修改別人的檔」。
+**落地**：WS-C 新增的九個檔（六支測試 + 兩支凍結副本 + 一支整合測試）都是純新增，
+一個字都沒有動到 WS-D 既有的測試。
 
 ---
 
 ## 5.（第 3.4 條）`buildSchema` 在 WS-B 的檔案裡，WS-C 的 agent 在它合入前無法載入
 
-**介面怎麼寫**：`buildSchema(name)` 的位置是 `agents/schemas/index.js`，擁有者 **WS-B**（§10.1）。
+**問題**：`agents/verify.js` 的 `answer_form` 是 `x-enum` 佔位符，一定要經過 `buildSchema` 才送得出去；
+但兩條 workstream 平行開發，WS-B 合入前 `agents/schemas/index.js` 不存在。
 
-**問題**：`agents/verify.js` 的 `answer_form` 是 `x-enum` 佔位符，一定要經過 `buildSchema` 才能送給模型；
-但兩條 workstream 平行開發，WS-B 合入前那支檔案不存在，WS-C 的測試連跑都跑不起來。
+**裁決（S2-24）**：WS-C 的 `agents/_schema.js` 橋接在 WS-B 合入後改用
+`agents/schemas/index.js` 的 `buildSchema` 並**刪除**。
 
-**我先怎麼做**：新增 `agents/_schema.js`（底線開頭 = 暫時橋接）。
-它**先試** `require('./schemas')`，WS-B 合入後就一律走官方版；還沒合入時才用本檔內的同一套規則就地組
-（`x-enum` → `enum`，來源同樣是 `config/chapters.js`，白名單絕不手抄）。
-
-**合併注意事項**：WS-B 的 `agents/schemas/index.js` 合入 main 之後，
-`agents/_schema.js` 應該連同 `agents/lint.js`／`agents/verify.js` 的 require 一起改掉並刪除本檔。
+**落地**：`agents/lint.js`／`agents/verify.js` 改成 `require('./schemas')`，
+`agents/_schema.js` 已刪除。`agents/schemas/lint.json`／`verify.json` 仍由 WS-C 維護，
+WS-B 的 `buildSchema` 讀得到，`answer_form` 的 enum 注入實測正常。
 
 ---
 
 ## 6.（第 2.1 條 + §10.1）節點名是 `dedup0`／`dedup1`，但只有一支 `agents/dedup.js`
 
-**介面怎麼寫**：`NODE_FOR_STATE` 的節點名是 `dedup0` 與 `dedup1`（第 2.1 條）；
-§10.1 的所有權表只給 WS-C 一支 `agents/dedup.js`；WS-A 的 runner「節點實作從 `agents/<name>.js` 動態 require」。
-
 **問題**：`require('../agents/dedup0')` 會找不到檔案。
 
-**我先怎麼做**：`agents/dedup.js` 匯出 `{ run, runDedup0, runDedup1 }`（`run` 會依 `ctx.node`
-或 input 有沒有 `embed_text` 自己分辨），另外加兩支三行的轉接檔 `agents/dedup0.js`／`agents/dedup1.js`，
-內容只有 `module.exports = { run: runDedup0 }`。三條路都通，WS-A 用哪一種都行。
+**裁決（S2-6）**：`dedup0`／`dedup1` 由 `agents/dedup.js` 一支服務（匯出
+`{ run, runDedup0, runDedup1 }`）+ 兩支三行的轉接檔；runner 的解析順序是
+①`agents/<node>.js` → ②`AGENT_MODULE_FOR_NODE[node]`。層級**只能靠凍結的 input 鍵**判斷
+（`dedup0` 拿 `{question_text}`、`dedup1` 拿 `{question_id, embed_text, subject, chapter}`），
+不得看 `ctx.jq.state` 或 payload。
 
-**要裁決的**：確認轉接檔的做法可以，或改成 runner 端做 `dedup0|dedup1 → agents/dedup` 的對應。
+**落地**：三條路都通，且 `run()` 的分派只看 `ctx.node` 與 input 有沒有 `embed_text`，
+沒有碰 `ctx.jq.state`。
 
 ---
 
-## 7.（第 5.2 條）cassette 鍵要 `sha256(模板原文)`，但 `generateJson` 的參數只帶得到模板「識別名」
-
-**介面怎麼寫**：
-
-- 第 5.1 條：`generateJson({ …, agent, cacheKeyParts, template })`，`template` 是「prompt 模板的**識別名**」。
-- 第 5.2 條：`promptTemplateHash = sha256(模板原文)`；「模板＝把可變欄位挖空後的字串，**由 agent 提供**」。
+## 7.（第 5.2 條）cassette 鍵要 `sha256(模板原文)`，但 `generateJson` 只帶得到模板「識別名」
 
 **問題**：agent 提供的是識別名，`services/llm` 拿不到原文，算不出 `promptTemplateHash`。
 
-**我先怎麼做**：`agents/lint.js` 與 `agents/verify.js` 各自 `module.exports` 一個 `PROMPT_TEMPLATE`
-（把可變欄位挖成 `{{question_text}}` 這種佔位符的原文）與 `TEMPLATE`（識別名，`lint.v1`／`verify.v1`）。
-WS-B 可以 `require('../agents/lint').PROMPT_TEMPLATE` 去算雜湊，不必改介面。
+**裁決（S2-5）**：模板原文走 `services/llm/templates.js` 註冊表——
+`registerTemplate(name, text)`／`getTemplate(name)`，每個 agent 在**模組載入時**註冊，
+`services/llm` 依 `template` 識別名回查原文算雜湊。**四個 LLM 節點（extract／classify／lint／verify）
+都必須註冊**；沒註冊的識別名退回 `sha256(識別名)` 並印一次警告。
 
-**要裁決的**：確認這個約定，或改成 `generateJson` 多收一個 `promptTemplate` 參數（原文）。
-兩種都可以，但要挑一種寫進第 5 條，否則 WS-B 與 WS-C 會各做各的。
+**落地**：`agents/lint.js`／`agents/verify.js` 在模組載入時
+`registerTemplate('lint.v1'|'verify.v1', PROMPT_TEMPLATE)`，`generateJson` 只傳識別名。
+實測 `templateHash('lint.v1')`／`('verify.v1')` 已取得原文雜湊（不再落到警告那條路）。
+兩支 agent 仍然 `module.exports` 出 `PROMPT_TEMPLATE` 與 `TEMPLATE`，方便 eval 直接取用。
 
 ---
 
 ## 8.（第 4.4 條）`formulaLint` 的 `sev` 只有 error／warn，`audit_formulas` 原本有 info
 
-**介面怎麼寫**：`issues: Array<{sev:'error'|'warn', rule, at, msg}>`。
+**裁決（S2-18）**：`audit_formulas.js` 原本的 `info`（如 `latex_without_dollar`）一律併進 `warn`，
+**不加第三級**。
 
-**問題**：`audit_formulas.js:40` 的「有 LaTeX 但沒包 `$`」原本是 `info`，兩級制裡沒有它的位置。
+**落地**：`utils/formulaLint.js` 的檔頭註解寫明這條裁決；因為
+`ok === issues.every(i => i.sev !== 'error')`，併進 warn 不影響閘門。
 
-**我先怎麼做**：降級的規則歸 `error`、寫法問題歸 `warn`，原本的 `info` 一律併進 `warn`
-（`latex_without_dollar`）。因為 `ok === issues.every(i => i.sev !== 'error')`，併進 warn 不影響閘門。
+---
 
-**要裁決的**：只是知會，不需要改介面；但如果之後想在 `report:jobs` 分開統計 info，就要加第三級。
+# 第二輪：新發現（待裁決）
+
+## 9.（第 4.2 條）科學記號 `1.8 \times 10^5` 目前解析不出數值
+
+**現況**：裁決 S2-12 的新抽取規則上線後，對 `eval/fixtures/questions.public.json` 的 45 題填空／計算，
+抽出來的片段有 40 題可以解析成數值（舊規則是 35 題，且抽出來的多半是算式而非答案）。
+剩下 5 題：
+
+| 題 | 抽出來的字串 | 狀況 |
+|---|---|---|
+| #22 | `x` | 答案是文字敘述（`answer_form: 'text'`），本來就不該走數值路徑；比對器回 `uncertain`，行為正確 |
+| #56、#57、#58、#60 | `1.8 \times 10^5`、`2 \times 10^5`、`2.4 \times 10^{-4}`、`2 \times 10^{-4}` | **科學記號**，`toNumber` 認不出來 → `uncertain` |
+
+**為什麼沒有自己決定**：第 4.2 條列的等價形是「`\frac{a}{b}`、小數、`a/b`、百分比」，沒有科學記號；
+而 WS-D 在 `docs/questions2-wsD.md` 的 `eval/golden/answer.json` 裡（`ans-027`、`ans-043`）
+已經把「科學記號算不算 `number` 的等價形」「`e` 記法要不要支援」列為**待開發者定案**。
+這是同一個問題的兩面，不該由 WS-C 單方面決定。
+
+**影響**：這 4 題每次都會走「uncertain → 再採樣一次 → 仍 uncertain → `answer_mismatch` 進複核」，
+也就是多付一次模型錢再讓老師白看一題。物理科的答案很常寫成科學記號，實際佔比會比 fixture 高。
+
+**建議**：`toNumber` 支援 `a \times 10^{b}`（含負指數與 `10^{-4}` 的大括號形式），
+與既有的 `1.8e5` 科學記號一併收斂。若同意，第 4.2 條的等價形清單加一項即可，簽名不動。
+
+順帶一提，第二輪已經自行修掉的兩個實作缺陷（都在 S2-11／第 4.2 條的既有文字範圍內，不需要改介面）：
+
+- `-\frac{1}{2}` 解析成 `null`（外層負號在 `\frac` 展開後掉了）→ 已修，`-0.5`。
+- `45^\circ`／`45^{\circ}` 解析成 `null`（`^\circ` 是角度單位，屬於第 4.2 條「單位後綴一律去掉再比」）→ 已修，`45`。
+
+## 10.（S2-12 的連帶）`eval/golden/answer.json` 的 48 筆 `claimed` 還是舊寫法
+
+**現況**：S2-12 已裁決「D 的 answer golden 改回真實寫法」，但目前 `eval/golden/answer.json`
+還是為了配合舊規則而寫成「答案在最前面、說明在後面」。新規則取**最後一個** `$…$`，
+這種寫法會抽到說明裡的最後一個公式。例如 `ans-036`（S2-11 的重點案例）：
+
+```
+claimed: "$-\frac{1}{2}$。$120^\circ$ 的參考角為 $60^\circ$，第二象限的餘弦為負。"
+新規則抽出：60^\circ      ← 說明裡的參考角，不是答案
+```
+
+`answerCompare` 因此對 `equivalents` 的四種寫法全部回 `disagree`（而 golden 期望 `agree`）。
+
+**這不是新規則的缺陷**：fixture 的 45 題真實答案裡有 39 題是「過程 = 結論」的寫法，
+新規則正是為它們設計的；`ans-036` 這種「結論在最前面」的形狀是 WS-D 當初為了閃避舊規則才寫的，
+不是真實分佈。
+
+**要做的事（WS-D）**：照 S2-12 把那 48 筆的 `claimed` 改寫成真實寫法，
+`extraction_hazard: true` 的兩筆（`ans-017`、`ans-047`）的 `expect.equivalent` 從 `uncertain` 改回 `agree`。
+目前沒有任何測試消費 `answer.json`（只有 `eval/README.md` 提到），所以這件事不會讓 CI 紅燈，
+但在改寫之前，answer golden 量到的數字不能當真。

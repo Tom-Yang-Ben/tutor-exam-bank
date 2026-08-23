@@ -64,6 +64,11 @@ function stripUnsafe(str) {
 //   tokenize_error   tokenize 丟例外，整段退成 TextRun
 //   bare_script      ^ / _ 沒有可用的底或參數，退成字面上的 ^ / _
 //
+// 埋點位置：介面第 4.3 條凍結的是**六個 kind**，位置由 WS-C 決定（裁決 S2-17）。
+// `bare_script` 有兩處：renderMixedInto（純文字裡沒有底的 ^／_）與 parseScripted
+// （`$…$` 內 ^／_ 後面什麼都沒有，例如 fixture #38 的 `$F^$`）——只埋前者的話，
+// fixture 那 10 題壞公式只抓得到 8 題。
+//
 // `at` 一律是「事件發生處在被解析字串中的 0-based 字元位置」；
 // 各層以 base 參數把子字串的位移一路帶下去，parseLatexStrict 再映射回原字串。
 function emit(diag, kind, at) {
