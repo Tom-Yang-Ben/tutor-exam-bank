@@ -32,11 +32,66 @@ const replayMiss = require('./lib/replayMiss');
 const { runClassifySuite } = require('./lib/suiteClassify');
 const { runPipelineSuite } = require('./lib/suitePipeline');
 
-const USAGE = `用法：node eval/run.js --suite retrieval|classify|pipeline [選項]
+// ─────────────────────────────────────────────────────────────
+// 階段 3 的兩個 suite 由別條 workstream 提供（interfaces-stage3.md 第 8 條）：
+//   eval/lib/suiteNlq.js     runNlqSuite(args)      —— WS-C
+//   eval/lib/suiteVariant.js runVariantSuite(args)  —— WS-B
+//
+// **不能在檔頭 require**：CI 的那兩步會比那兩支檔案先合入（本檔與 ci.yml 都歸 WS-D），
+// 檔頭 require 一個不存在的模組會讓「跑 retrieval」也一起炸掉。
+// 所以改成用到才載，載不到就回一個「全部 n/a」的替身——與階段 1／2「agent 尚未合入
+// 時把分數印成 n/a 並在報表列出原因」完全同一條線（run.js 檔頭第 1 個「不」）。
+//
+// 替身的 meta.sources.anyStub 為 true，runStage2Suite 的 guard 會因此**拒絕
+// --write-baseline**：用替身寫出來的基準線一定會被真實作推翻。
+// ─────────────────────────────────────────────────────────────
+const STAGE3_SUITES = {
+    nlq: { file: './lib/suiteNlq', fn: 'runNlqSuite', owner: 'WS-C', golden: 'eval/golden/nlq.json' },
+    variant: { file: './lib/suiteVariant', fn: 'runVariantSuite', owner: 'WS-B', golden: 'eval/golden/variant.json' }
+};
+
+/**
+ * 取得某個階段 3 suite 的 runner；尚未合入時回一個只產生 n/a 的替身。
+ * @param {string} suite 'nlq' | 'variant'
+ * @returns {(args:object) => Promise<object>}
+ */
+function loadStage3Suite(suite) {
+    const spec = STAGE3_SUITES[suite];
+    let mod = null;
+    try {
+        mod = require(spec.file);
+    } catch (err) {
+        if (err.code !== 'MODULE_NOT_FOUND') throw err;
+    }
+    if (mod && typeof mod[spec.fn] === 'function') return mod[spec.fn];
+
+    const why = mod
+        ? `${spec.file}.js 存在但沒有匯出 ${spec.fn}()`
+        : `${spec.file}.js 尚未合入（擁有者：${spec.owner}）`;
+    return async () => ({
+        suite,
+        measured: Object.fromEntries(thresholds.SUITE_METRICS[suite].columns.map(c => [c, null])),
+        failures: [],
+        warnings: [`${suite} suite 的分數全部 n/a：${why}。`],
+        meta: {
+            golden: spec.golden, goldenEntries: 0, goldenPending: 0,
+            fixture: 'eval/fixtures/questions.public.json',
+            llmMode: process.env.LLM_MODE || '（未設）',
+            cassetteDir: process.env.EVAL_CASSETTE_DIR || `eval/cassettes/${suite}`,
+            sources: { suite: '（未合入）', anyStub: true }
+        },
+        perEntry: [],
+        isPrivate: false
+    });
+}
+
+const USAGE = `用法：node eval/run.js --suite retrieval|classify|pipeline|nlq|variant [選項]
 
   --suite <name>        retrieval（階段 1）｜classify｜pipeline（階段 2，A-T14）
+                        ｜nlq｜variant（階段 3，interfaces-stage3.md 第 8 條）
   --golden <path>       golden 檔（retrieval 預設 eval/golden/retrieval.json；
-                        classify 預設 eval/golden/classify.json；pipeline 為答案卷目錄）
+                        classify 預設 eval/golden/classify.json；pipeline 為答案卷目錄；
+                        nlq 預設 eval/golden/nlq.json；variant 預設 eval/golden/variant.json）
   --pdfs <path>         只有 --suite pipeline 用：PDF 路徑（預設 eval/fixtures/sample_exam.pdf）
   --mode <m>            like | vector | hybrid | all（預設 all）
   --engine <e>          memory | pg | auto（預設 auto：pg 相依齊全就用 pg，否則 memory）
@@ -332,9 +387,11 @@ async function main() {
     // 所以走各自的入口與報表，只共用 thresholds 的 ratchet 規則。
     if (args.suite === 'classify') return runStage2Suite(args, runClassifySuite);
     if (args.suite === 'pipeline') return runStage2Suite(args, runPipelineSuite);
+    // 階段 3 的兩個 suite 共用同一個外殼（第 8 條：run.js 只負責分派、報表與 ratchet）。
+    if (STAGE3_SUITES[args.suite]) return runStage2Suite(args, loadStage3Suite(args.suite));
 
     if (args.suite !== 'retrieval') {
-        throw new Error(`--suite ${args.suite} 不存在（可用：retrieval｜classify｜pipeline；formula 由 WS-C 以 node --test 表格測試跑，不走本入口）`);
+        throw new Error(`--suite ${args.suite} 不存在（可用：retrieval｜classify｜pipeline｜nlq｜variant；formula 由 WS-C 以 node --test 表格測試跑，不走本入口）`);
     }
     if (!['like', 'vector', 'hybrid', 'all'].includes(args.mode)) throw new Error(`--mode 只能是 like|vector|hybrid|all`);
     if (!['memory', 'pg', 'auto'].includes(args.engine)) throw new Error(`--engine 只能是 memory|pg|auto`);
@@ -349,4 +406,4 @@ if (require.main === module) {
         .catch(err => { console.error(`\n❌ ${err.message}`); process.exit(1); });
 }
 
-module.exports = { runRetrieval, runStage2Suite, parseArgs };
+module.exports = { runRetrieval, runStage2Suite, parseArgs, loadStage3Suite, STAGE3_SUITES };

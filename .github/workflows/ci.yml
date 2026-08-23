@@ -9,7 +9,7 @@ name: CI
 #                這個 job **刻意不設定 TEST_DATABASE_URL**：設了的話，
 #                某支測試不小心開始連 DB 也不會被發現，單元層「無 I/O」的保證就沒了。
 #   integration  Node 24 + pgvector/pgvector:pg16 的 service container。
-#                跑 migrations、整合測試與三個 eval suite；同樣不需要 secrets——
+#                跑 migrations、整合測試與五個 eval suite；同樣不需要 secrets——
 #                embedding 走 fixture（EMBED_MODE=fixture）、LLM 走 replay。
 on:
   push:
@@ -120,6 +120,21 @@ jobs:
 
       - name: 管線 eval（對自製樣卷跑整條管線）
         run: npm run eval:pipeline
+
+      # ── 階段 3 的兩個 suite（interfaces-stage3.md 第 8.5 條）──
+      # 同樣不連外：nlq 的 LLM 層讀 eval/cassettes/nlq/、variant 的生成讀 eval/cassettes/variant/，
+      # embedding 一律 EMBED_MODE=fixture（上面 job 層的 env 已經設好）。
+      #
+      # eval/lib/suiteNlq.js（WS-C）與 eval/lib/suiteVariant.js（WS-B）尚未合入時，
+      # eval/run.js 會回一組全 n/a 的替身並印出「尚未合入（擁有者：WS-x）」，
+      # thresholds.json 的兩節都是 null 所以「只報告不擋」，CI 不會因此轉紅。
+      # 兩支合入且 cassette 錄好之後，同一行指令就會開始守門檻——
+      # 那時 replay miss 會直接讓這一步失敗（interfaces-stage2.md 第 5.2 條，訊息是凍結的）。
+      - name: 自然語言查題 eval（cassette 回放）
+        run: npm run eval:nlq
+
+      - name: 變式題 eval（30 藍本，cassette 回放）
+        run: npm run eval:variant
 
       - name: 上傳 eval 報表
         if: always()

@@ -98,5 +98,26 @@
       "pricing": "config/pricing.js",
       "anyStub": false
     }
+  },
+  "_rule_stage3": "nlq／variant 的初值同樣是「第一次量測 − 0.03」，之後只升不降。前置條件：nlq 要等 utils/nlqHeuristics.js 與 services/nlqService.js 合入且 eval/cassettes/nlq/ 錄好（WS-C）；variant 要等 agents/generateVariant.js 與 services/variantService.js 合入且 eval/cassettes/variant/ 錄好（WS-B）。eval/run.js 在 suite 檔尚未合入時會回一組全 n/a 的替身，並在 --write-baseline 時拒絕執行。",
+  "nlq": {
+    "_note": "門檻為 null = 尚未建立基準線，只報告不擋。rule_coverage 依定義只在 rules 欄有值（llm 欄恆為 null）；filters_exact 的 rules 欄只算 expect_path=rules 的句子、llm 欄只算 expect_path=llm 的句子。有數字之後，量不到那一欄就算失敗——否則「cassette 被誤刪」會表現成 CI 全綠。",
+    "rules": {
+      "rule_coverage": null,
+      "filters_exact": null,
+      "recall10": null
+    },
+    "llm": {
+      "rule_coverage": null,
+      "filters_exact": null,
+      "recall10": null
+    }
+  },
+  "variant": {
+    "_note": "門檻為 null = 尚未建立基準線，只報告不擋。只放「越高越好」的兩個指標；每題 cost_usd 與各閘門通過數只在報表呈現、不設門檻（interfaces-stage3.md 第 8.3 條：成本越低越好，放進 ratchet 會變成反向門檻）。",
+    "variant": {
+      "retrieved_coverage": null,
+      "gate_pass_rate": null
+    }
   }
 }
