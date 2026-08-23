@@ -1,13 +1,14 @@
 {
   "_notice": "本檔的題目與答案全部由本專案作者自行編寫；40 筆的 claimed 直接沿用 eval/fixtures/questions.public.json 的 answer_text 原文，不取自任何考卷、題本或出版品（見 repo 根目錄 NOTICE 第 2 條）。",
-  "_status": "needs_human_confirm — 50 筆全部尚未由開發者本人逐筆定案（A-T6 草稿，2026-08-22 依裁決 S2-12 改寫）。",
-  "_schema": "entries[]：一筆 = 一題，展開後 = 3 個等價案例 + 2 個錯答案例，共 5 個 answerCompare 呼叫。\n  id                  string，唯一\n  from                number|null，來源 fixture 題 id（null = 本檔手寫）\n  question_type       '單選'|'多選'|'填空'|'計算'|'證明'（config/chapters.js 的 QUESTION_TYPES）\n  answer_form         'option'|'number'|'expression'|'text'（interfaces-stage2.md 第 3.2 條）\n  claimed             string，拆題模型抄下來的原始 answer_text——**真實寫法（過程 = 結論）**，\n                      40 筆直接沿用 fixture 的 answer_text 原文\n  equivalents         string[3]，驗證模型可能回的等價 final_answer\n  wrong               string[2]，典型錯答\n  expect.equivalent   'agree'|'uncertain'——equivalents 每一項的期望結果\n  expect.wrong        'disagree'|'uncertain'——wrong 每一項的期望結果\n  extraction_hazard   boolean；true = 抽取規則在這一筆上仍有爭議（目前只剩 ans-047）\n  note                string|null\n  needs_human_confirm boolean\n\n呼叫方式：answerCompare({ question_type, claimed, model: { final_answer: <equivalents[i]|wrong[i]>, answer_form } })",
+  "_status": "needs_human_confirm — 50 筆全部尚未由開發者本人逐筆定案（A-T6 草稿；2026-08-22 依裁決 S2-12 改寫，2026-08-23 依裁決 S2-26 定案 ans-047）。",
+  "_schema": "entries[]：一筆 = 一題，展開後 = 3 個等價案例 + 2 個錯答案例，共 5 個 answerCompare 呼叫。\n  id                  string，唯一\n  from                number|null，來源 fixture 題 id（null = 本檔手寫）\n  question_type       '單選'|'多選'|'填空'|'計算'|'證明'（config/chapters.js 的 QUESTION_TYPES）\n  answer_form         'option'|'number'|'expression'|'text'（interfaces-stage2.md 第 3.2 條）\n  claimed             string，拆題模型抄下來的原始 answer_text——**真實寫法（過程 = 結論）**，\n                      40 筆直接沿用 fixture 的 answer_text 原文\n  equivalents         string[3]，驗證模型可能回的等價 final_answer\n  wrong               string[2]，典型錯答\n  expect.equivalent   'agree'|'uncertain'——equivalents 每一項的期望結果\n  expect.wrong        'disagree'|'uncertain'——wrong 每一項的期望結果\n  extraction_hazard   boolean；true = 抽取規則在這一筆上仍有爭議。\n                      裁決 S2-12（抽取）與 S2-26（expression 退回數值比）之後**已全部歸零**，\n                      欄位保留是為了下一次規則改動時還有地方標。\n  note                string|null\n  needs_human_confirm boolean\n\n呼叫方式：answerCompare({ question_type, claimed, model: { final_answer: <equivalents[i]|wrong[i]>, answer_form } })",
   "_annotations": {
     "S2-12 的改寫": "舊版為了不與「取第一個 $…$」的舊規則牴觸，把 claimed 都寫成「答案在最前面」——fixture 的 45 題填空／計算裡只有 6 題長那樣，那不是真實分佈。S2-12 定案為「最後一個 $…$，含 = 或 \\approx 取其後，純上下標片段跳過」之後，claimed 一律改回真實寫法。本檔在產生時會用一份 S2-12 的參考抽取器自我檢查每一筆 claimed 抽得到預期的答案，抽不到就拒絕產出。",
     "為什麼 wrong 不預設 uncertain": "第 4.2 條：「任何比不出來的情況都回 uncertain，不回 disagree」。因此 wrong 那兩項只有在「兩邊都抽得出來、而且確實不等」時才該是 disagree。本檔的 wrong 全部刻意寫成「抽得出來但不相等」，才能真的測到 disagree 這條路。",
+    "S2-26 的定案": "第二輪合併後本檔的 250 案例對 utils/answerCompare.js 有 20 筆不符，裁決 S2-26 逐條分了責任：ans-047 的三個 eq 期望由 D 改成 agree（expression 字串不等時退回數值比，\frac{3}{1} 對 3 → agree）；**其餘 17 筆維持 golden 的期望，由 WS-C 的實作對齊**。也就是說這份 golden 從此是裁判，不再跟著實作走。",
     "公式 golden 不在這裡": "eval/golden/formula.json 由 WS-C 產出（分工總表）。本檔只管答案比對。"
   },
-  "version": 2,
+  "version": 3,
   "entries": [
     {
       "id": "ans-001",
@@ -1083,11 +1084,11 @@
         "$\\frac{4}{1}$"
       ],
       "expect": {
-        "equivalent": "uncertain",
+        "equivalent": "agree",
         "wrong": "disagree"
       },
-      "extraction_hazard": true,
-      "note": "**唯一保留的 extraction_hazard**：claimed 的最後一段是 $\\frac{3}{1} = 3$，S2-12 抽等號右邊得到「3」，而 model 回的是 \\frac{3}{1}。expression 比字串「3」≠「\\frac{3}{1}」，但兩者數值相同——utils/answerCompare.js 目前對 expression 有「兩邊都是數值就比數值」的退路，若保留該退路這一筆會是 agree。expect 先寫 uncertain（不預設實作有那條退路），請開發者定案。",
+      "extraction_hazard": false,
+      "note": "裁決 S2-26 把 expression 的比法定案為三段：去空白／$／\\left\\right 後字串相等 → agree；否則兩邊都能數值化就照 number 比；否則 uncertain。claimed 的最後一段是 $\\frac{3}{1} = 3$，S2-12 抽等號右邊得到「3」，model 回 \\frac{3}{1}——字串不等但數值都是 3，走第二段 → **agree**。\\left\\right 去掉之後同理。兩個錯答 \\frac{1}{3}（0.333…）與 \\frac{4}{1}（4）也都數值化得出來且不等於 3 → disagree。本檔因此不再有 extraction_hazard。",
       "needs_human_confirm": true
     },
     {

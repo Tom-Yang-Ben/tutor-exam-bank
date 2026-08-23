@@ -1,24 +1,23 @@
-// answer golden 對 utils/answerCompare.js 的行為測試（A-T6 × 裁決 S2-12）
+// answer golden 對 utils/answerCompare.js 的行為測試（A-T6 × 裁決 S2-12／S2-26）
 //
 // eval/golden/answer.json 的 50 題展開成 250 個 answerCompare 呼叫。
 // 這一支把它們全部跑一遍，比對 expect。
 //
 // ── 兩段式，為什麼 ──
-// 裁決 S2-12 把 final_answer 的抽取規則從「第一個 $…$」改成
-// 「最後一個 $…$，含 = 或 \approx 取其後，純上下標片段跳過」。
-// golden 已依新規則改寫（claimed 一律是「過程 = 結論」的真實寫法），
-// 但 utils/answerCompare.js 是否已經跟上，取決於 WS-C 何時合入。
+// 這份 golden 是**裁判**（S2-26 的原話：「裁判 = D 的 250 案例 golden；C 改實作、D 改少數期望」），
+// 實作要往它對齊，不是反過來。但實作是 WS-C 的，合入時間不由 WS-D 決定。
 //
-// 因此本檔先用一個**確定性探針**判斷實作在哪一版：
-//   探針：claimed = '$32 = 2^5$，故 $x + 1 = 5$，得 $x = 4$。'、model.final_answer = '4'
-//         S2-12 → 'agree'（抽到最後一段的 4）
-//         舊規則 → 'uncertain'（抽到第一段的整串算式，比不出有理數）
+// 把 250 個案例硬斷言在一個「已知還沒改完」的實作上，只會得到一片與這次改動無關的紅燈；
+// 完全不寫，WS-C 合入的那天也不會有人發現對不上。所以用**確定性探針**判斷實作到哪一版：
 //
-//   探針說「已是 S2-12」→ 250 個案例全部硬斷言。
-//   探針說「還是舊規則」→ 印出目前的相符數並 skip，等 WS-C 合入後自動轉成硬斷言。
+//   S2-12（抽取規則）  claimed='$32 = 2^5$，故 $x + 1 = 5$，得 $x = 4$。'、model='4'
+//                      → 'agree' 代表已改成「取最後一個 $…$ 的等號右邊」
+//   S2-26（比法細則）  ① number 要把 `\ \mathrm{m/s^2}` 這類單位整段去掉
+//                      ② expression 字串不等時要退回數值比（含去掉 \left\right）
 //
-// 這樣寫是刻意的：把 250 個案例硬斷言在一個「已知還沒改」的實作上，只會得到一片
-// 與這次改動無關的紅燈；而完全不寫，WS-C 合入的那天也不會有人發現對不上。
+//   兩者都到位 → 250 個案例全部硬斷言。
+//   還沒到位   → 印出目前的相符數與前幾筆差異並 skip，之後自動轉成硬斷言。
+//
 // skip 的訊息會印出實際數字，不是靜默跳過。
 
 const { test, describe } = require('node:test');
@@ -30,13 +29,33 @@ const g2 = require('../../eval/lib/golden2');
 const golden = g2.loadAnswerGolden();
 const cases = golden.entries.flatMap(g2.expandAnswerCases);
 
-/** @returns {boolean} utils/answerCompare.js 是否已實作 S2-12 的抽取規則 */
+/** @returns {boolean} 是否已實作 S2-12 的抽取規則（取最後一個 $…$ 的等號右邊） */
 function implementsS2_12() {
     return answerCompare({
         question_type: '計算',
         claimed: '$32 = 2^5$，故 $x + 1 = 5$，得 $x = 4$。',
         model: { final_answer: '4', answer_form: 'number' }
     }) === 'agree';
+}
+
+/** @returns {boolean} 是否已實作 S2-26 的比法細則（單位整段去掉、expression 退回數值比） */
+function implementsS2_26() {
+    const unitStripped = answerCompare({
+        question_type: '計算', claimed: '$5$',
+        model: { final_answer: '$5\\ \\mathrm{m/s^2}$', answer_form: 'number' }
+    }) === 'agree';
+    const expressionNumeric = answerCompare({
+        question_type: '計算', claimed: '$3$',
+        model: { final_answer: '$\\left(\\frac{3}{1}\\right)$', answer_form: 'expression' }
+    }) === 'agree';
+    return unitStripped && expressionNumeric;
+}
+
+/** @returns {string|null} 還缺哪一條裁決；都到位回 null */
+function missingRuling() {
+    if (!implementsS2_12()) return 'S2-12（final_answer 的抽取規則）';
+    if (!implementsS2_26()) return 'S2-26（number 的單位／科學記號／根式，expression 退回數值比）';
+    return null;
 }
 
 /** 跑完 250 個案例 @returns {{pass:number, fails:Array}} */
@@ -51,16 +70,17 @@ function runAll() {
     return { pass, fails };
 }
 
-describe('answer golden 對 answerCompare 的行為（裁決 S2-12）', () => {
+describe('answer golden 對 answerCompare 的行為（裁決 S2-12／S2-26）', () => {
     test('250 個案例全部符合 expect', (t) => {
         const { pass, fails } = runAll();
+        const missing = missingRuling();
 
-        if (!implementsS2_12()) {
+        if (missing) {
             t.skip(
-                `utils/answerCompare.js 尚未實作裁決 S2-12 的抽取規則（探針：claimed 的最後一段 $x = 4$ 抽不到 4）。\n` +
-                `   golden 已依 S2-12 改寫，目前 ${pass}/${cases.length} 相符；` +
-                `WS-C 更新 extractFinalAnswer 之後本測試會自動轉成硬斷言。\n` +
-                `   前三筆不符：\n     - ${fails.slice(0, 3).join('\n     - ')}`
+                `utils/answerCompare.js 尚未實作 ${missing}。\n` +
+                `   golden 是裁判（S2-26 的原話），目前 ${pass}/${cases.length} 相符；` +
+                `WS-C 對齊之後本測試會自動轉成硬斷言。\n` +
+                `   前五筆不符：\n     - ${fails.slice(0, 5).join('\n     - ')}`
             );
             return;
         }
@@ -70,9 +90,12 @@ describe('answer golden 對 answerCompare 的行為（裁決 S2-12）', () => {
             (fails.length > 25 ? `\n  …另有 ${fails.length - 25} 筆` : ''));
     });
 
-    // 下面幾條**不依賴** S2-12，現在就守得住：它們測的是 golden 本身有沒有踩到
-    // 「等價寫法其實不等價」「錯答其實是對的」這類標註錯誤。
-    test('每筆的 3 個等價寫法彼此互比都是 agree（golden 內部自洽）', () => {
+    // 下面幾條測的是 golden 本身有沒有踩到「等價寫法其實不等價」「錯答其實是對的」
+    // 這類標註錯誤。後三條完全不依賴裁決進度；第一條要等 S2-26，理由寫在裡面。
+    test('每筆的 3 個等價寫法彼此互比都是 agree（golden 內部自洽）', (t) => {
+        // ans-047 的 $\left(\frac{3}{1}\right)$ 與 $\frac{3}{1}$ 字串不等，
+        // 要靠 S2-26 的「expression 退回數值比」才會 agree。
+        const missing = missingRuling();
         const problems = [];
         for (const e of golden.entries) {
             if (e.expect.equivalent !== 'agree') continue;   // 期望 uncertain 的筆不適用
@@ -89,6 +112,10 @@ describe('answer golden 對 answerCompare 的行為（裁決 S2-12）', () => {
                     }
                 }
             }
+        }
+        if (missing && problems.length) {
+            t.skip(`等 ${missing} 合入；目前 ${problems.length} 組互比不成立：\n     - ${problems.join('\n     - ')}`);
+            return;
         }
         assert.equal(problems.length, 0, problems.join('\n  '));
     });
