@@ -779,6 +779,9 @@ async function loadStudents(app) {
     for (const s of items) {
         sel.appendChild(el('option', '', {
             value: String(s.id),
+            // 姓名另外存一份在 data-name：選項文字後面接了統計數字，
+            // 而學生姓名本身就可能含有全形括號——從顯示文字反推姓名遲早會錯。
+            'data-name': s.name,
             textContent: `${s.name}（${s.papers} 卷，已批 ${formatPercent(s.graded_ratio)}）`
         }));
     }
@@ -893,8 +896,8 @@ async function handleGradeRequest(app) {
 
     const sel = document.getElementById('stuStudent');
     if (!sel) return;
-    // 學生下拉的文字是「姓名（N 卷，已批 X%）」，比對時只取姓名那一段。
-    const match = [...sel.options].find(o => o.textContent.split('（')[0] === cache.student_name);
+    // 用 data-name 比對，不從顯示文字反推（姓名本身可能含全形括號）。
+    const match = [...sel.options].find(o => o.dataset.name === cache.student_name);
     if (match && sel.value !== match.value) {
         sel.value = match.value;
         pendingPaperId = cache.paper_id;
