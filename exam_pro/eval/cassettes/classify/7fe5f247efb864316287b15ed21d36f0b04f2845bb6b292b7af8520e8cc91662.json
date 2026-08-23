@@ -3,7 +3,7 @@
     "agent": "classify",
     "model": "gemini-3.5-flash",
     "template": "classify.v1",
-    "recorded_at": "2026-08-23T11:23:43.075Z",
+    "recorded_at": "2026-08-23T12:37:12.031Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -24,14 +24,14 @@
     "data": {
       "chapter": "指數與對數",
       "confidence": 1,
-      "rationale": "題目要求計算對數表達式 $\\log_{3} 27 + \\log_{3} 9$ 的值，涉及對數的定義與運算性質，屬於「指數與對數」章節。"
+      "rationale": "題目要求計算對數（log_3 27 與 log_3 9）的和，屬於「指數與對數」的基本性質與運算。"
     },
     "usage": {
       "tokenIn": 1925,
-      "tokenOut": 79,
-      "tokenThinking": 187,
+      "tokenOut": 57,
+      "tokenThinking": 171,
       "tokenCached": 0
     },
-    "latencyMs": 1999
+    "latencyMs": 1692
   }
 }

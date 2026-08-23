@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T12:41:23.628Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 83,
+        "sha256": "815e458584895bc2a4f196061ec568adb12dcf1a7e48c7ccef5483411398d844"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "$\\log_2 8 + \\log_2 4$ 之值為何？\n(A) $5$ (B) $6$ (C) $7$ (D) $12$",
+      "questionType": "單選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(A)",
+      "answer_form": "option",
+      "steps_summary": "首先利用對數的定義與性質來化簡每一個對數項：$\\log_2 8 = \\log_2 (2^3) = 3$，$\\log_2 4 = \\log_2 (2^2) = 2$。接著將兩者相加得到 $3 + 2 = 5$。故選 (A)。"
+    },
+    "usage": {
+      "tokenIn": 154,
+      "tokenOut": 99,
+      "tokenThinking": 244,
+      "tokenCached": 0
+    },
+    "latencyMs": 4661
+  }
+}

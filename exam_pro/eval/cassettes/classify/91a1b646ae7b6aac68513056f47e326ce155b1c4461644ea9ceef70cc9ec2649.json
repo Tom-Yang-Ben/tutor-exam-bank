@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:41:01.812Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2366,
+        "sha256": "642368d25ed26dd140e99317712f41ab3715aa973ac7b51a5001aaf469dd9cfa"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "依庫侖定律，點電荷 $Q = 5 \\times 10^{-6}$ C 在 $0.5$ m 處造成的電場強度為何（$k = 9 \\times 10^9$）？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "電場與電位",
+      "confidence": 1,
+      "rationale": "題目要求計算點電荷在特定距離所產生的「電場強度」，使用公式 $E = kQ/r^2$，這屬於「電場與電位」章節的核心概念。"
+    },
+    "usage": {
+      "tokenIn": 1879,
+      "tokenOut": 74,
+      "tokenThinking": 298,
+      "tokenCached": 0
+    },
+    "latencyMs": 2249
+  }
+}

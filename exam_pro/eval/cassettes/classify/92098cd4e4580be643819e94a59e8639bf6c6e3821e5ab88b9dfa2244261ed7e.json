@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:37:58.825Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2504,
+        "sha256": "1675c02ae28bfb52858349af02810c987baf05f0be53e5dfbb6b371f7f7622bf"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "設空間向量 $\\vec{a} = (1, 2, k)$ 與 $\\vec{b} = (2, -1, 3)$ 互相垂直，求 $k$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "空間向量內積",
+      "confidence": 1,
+      "rationale": "題目給定兩個空間向量且彼此垂直，解題關鍵在於利用「空間向量內積為零」的性質建立方程式以求得未知數，故歸類於「空間向量內積」。"
+    },
+    "usage": {
+      "tokenIn": 1912,
+      "tokenOut": 76,
+      "tokenThinking": 361,
+      "tokenCached": 0
+    },
+    "latencyMs": 2482
+  }
+}

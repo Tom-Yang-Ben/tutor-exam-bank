@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:39:08.629Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2350,
+        "sha256": "0d6b26ac3a3f9c3c8eaaafb450a0dc5d77ef6f80beefcd918980569858882cd4"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "關於等速圓周運動，下列敘述何者正確？（複選）\n(A) 速率不變　(B) 速度不變　(C) 加速度指向圓心　(D) 合力為零",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "平面運動",
+      "confidence": 0.9,
+      "rationale": "本題探討「等速圓周運動」的物理量變化，包含速率、速度方向、向心加速度方向以及合力（向心力）的概念。在高中物理中，等速圓周運動的運動學描述（速度與加速度的向量特性）屬於「平面運動」章節的核心授課內容。"
+    },
+    "usage": {
+      "tokenIn": 1885,
+      "tokenOut": 99,
+      "tokenThinking": 695,
+      "tokenCached": 0
+    },
+    "latencyMs": 3855
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T12:42:41.879Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 72,
+        "sha256": "a43a8c2554a870c478706c50918eb36fb8af7ece0922384845569553524e1184"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "物體由靜止出發，以 $2\\text{ m/s}^2$ 的等加速度直線前進，求 $5$ 秒後的位移。",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "25 m",
+      "answer_form": "number",
+      "steps_summary": "根據等加速度直線運動公式，位移 s = v0*t + (1/2)*a*t^2。已知物體由靜止出發，初速度 v0 = 0 m/s，加速度 a = 2 m/s^2，經過時間 t = 5 s。將數值代入公式，可得位移 s = 0 * 5 + (1/2) * 2 * (5)^2 = 25 m。因此，5秒後的位移為25公尺。"
+    },
+    "usage": {
+      "tokenIn": 145,
+      "tokenOut": 137,
+      "tokenThinking": 924,
+      "tokenCached": 0
+    },
+    "latencyMs": 10058
+  }
+}

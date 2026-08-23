@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:39:40.714Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2378,
+        "sha256": "8b3d248f0d8731dc25c6daa75aec1cf84f2c7ea2cf52c2b6f0217078126853dd"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "點電荷 $Q = 2 \\times 10^{-6}$ C 在距離 $0.3$ m 處產生的電場量值為何（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "電場與電位",
+      "confidence": 1,
+      "rationale": "題目要求點電荷在特定距離產生的電場量值，此計算需直接應用點電荷電場公式 $E = \\frac{kQ}{r^2}$，明確屬於「電場與電位」範疇。"
+    },
+    "usage": {
+      "tokenIn": 1888,
+      "tokenOut": 82,
+      "tokenThinking": 296,
+      "tokenCached": 0
+    },
+    "latencyMs": 2175
+  }
+}

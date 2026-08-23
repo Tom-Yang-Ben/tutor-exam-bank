@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T12:41:39.500Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 110,
+        "sha256": "593381e90125967e8583ba8a803eedbf6f2cee11ed822e29b973b97129cfecbf"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "$\\sin^2 40^\\circ + \\cos^2 40^\\circ$ 之值為何？\n(A) $1$ (B) $0$ (C) $\\frac{1}{2}$ (D) 需查表才能得知",
+      "questionType": "單選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(A)",
+      "answer_form": "option",
+      "steps_summary": "根據三角函數的平方關係式（畢氏關係）：對於任意角度 $\\theta$，均滿足 $\\sin^2 \\theta + \\cos^2 \\theta = 1$。將 $\\theta = 40^\\circ$ 代入，即可直接得到 $\\sin^2 40^\\circ + \\cos^2 40^\\circ = 1$。"
+    },
+    "usage": {
+      "tokenIn": 166,
+      "tokenOut": 106,
+      "tokenThinking": 151,
+      "tokenCached": 0
+    },
+    "latencyMs": 4641
+  }
+}

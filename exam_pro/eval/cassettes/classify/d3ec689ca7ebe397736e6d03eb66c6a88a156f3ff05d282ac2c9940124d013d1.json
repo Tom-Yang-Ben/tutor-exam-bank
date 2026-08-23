@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:39:04.769Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2388,
+        "sha256": "4a6203948d6c99765151a8f707323177dce2d15fc6417d3d4901d9d777b85f7d"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "汽車在半徑 $50$ m 的水平彎道上轉彎，輪胎與路面的靜摩擦係數為 $0.4$，依 $v_{max} = \\sqrt{\\mu g r$ 求不打滑的最大速率（取 $g = 10$ m/s$^2$）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "摩擦力與向心力",
+      "confidence": 1,
+      "rationale": "此題計算汽車在水平彎道轉彎不打滑的最大速率，物理機制為摩擦力提供作為向心力，直接涉及摩擦力與向心力的結合應用。"
+    },
+    "usage": {
+      "tokenIn": 1896,
+      "tokenOut": 71,
+      "tokenThinking": 318,
+      "tokenCached": 0
+    },
+    "latencyMs": 2382
+  }
+}

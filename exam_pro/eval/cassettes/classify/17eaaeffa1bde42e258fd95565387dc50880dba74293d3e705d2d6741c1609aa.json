@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:40:46.759Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2493,
+        "sha256": "39442d316f4dd1e72dd92956157c6b30401fb2e41a8c6725d15a700e14baba02"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "角 $\\theta$ 的終邊通過點 $P(-3, 4)$，試依廣義角的定義求 $\\cos \\theta$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "三角函數的定義",
+      "confidence": 1,
+      "rationale": "題目要求利用廣義角的定義，根據終邊上的一點 $P(-3, 4)$ 求出餘弦值 $\\cos \\theta$，這屬於三角函數基本定義與廣義角定義的範疇。"
+    },
+    "usage": {
+      "tokenIn": 1901,
+      "tokenOut": 69,
+      "tokenThinking": 161,
+      "tokenCached": 0
+    },
+    "latencyMs": 1957
+  }
+}

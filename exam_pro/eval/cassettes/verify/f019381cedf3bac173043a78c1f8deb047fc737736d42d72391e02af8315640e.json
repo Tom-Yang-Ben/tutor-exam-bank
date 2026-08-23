@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T12:42:06.947Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 68,
+        "sha256": "ea58604f473830bad39b5301a834d65159f9d755a8495cba73096b56eb8dc1ad"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "質量 $2\\text{ kg}$ 的物體受到合力 $10\\text{ N}$，求其加速度。",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "5 m/s^2",
+      "answer_form": "text",
+      "steps_summary": "根據牛頓第二運動定律，物體受到的合力 $F$ 與其質量 $m$、加速度 $a$ 的關係為 $F = ma$。將題目已知條件質量 $m = 2\\text{ kg}$ 與合力 $F = 10\\text{ N}$ 代入公式，可得 $10 = 2 \\times a$，解得 $a = 5\\text{ m/s}^2$。因此，該物體的加速度為 $5\\text{ m/s}^2$。"
+    },
+    "usage": {
+      "tokenIn": 136,
+      "tokenOut": 153,
+      "tokenThinking": 515,
+      "tokenCached": 0
+    },
+    "latencyMs": 7269
+  }
+}

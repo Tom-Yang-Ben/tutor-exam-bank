@@ -3,7 +3,7 @@
     "agent": "classify",
     "model": "gemini-3.5-flash",
     "template": "classify.v1",
-    "recorded_at": "2026-08-23T11:25:43.745Z",
+    "recorded_at": "2026-08-23T12:37:31.556Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -24,14 +24,14 @@
     "data": {
       "chapter": "向量內積",
       "confidence": 1,
-      "rationale": "題目給定兩個平面向量並要求計算其內積 $\\vec{a}\\cdot\\vec{b}$，此為典型的平面向量內積運算。"
+      "rationale": "題目給定兩個平面向量的坐標表示，並要求計算其內積 $\\vec{a} \\cdot \\vec{b}$，此為典型的平面向量內積基本運算。"
     },
     "usage": {
       "tokenIn": 1913,
-      "tokenOut": 57,
-      "tokenThinking": 238,
+      "tokenOut": 72,
+      "tokenThinking": 480,
       "tokenCached": 0
     },
-    "latencyMs": 2631
+    "latencyMs": 2619
   }
 }

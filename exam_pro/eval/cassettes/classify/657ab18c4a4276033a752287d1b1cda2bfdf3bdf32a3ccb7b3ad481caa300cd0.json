@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:38:54.378Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2432,
+        "sha256": "d7718a3dafebd8de05f53c06448d96c1c454469bda9fc2f1dd2585ea682dcc5c"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "質量 $5$ kg 的物體置於傾角 $45^\\circ$ 的斜面上（$\\sin 45^\\circ = \\cos 45^\\circ = \\frac{\\sqrt{2}}{2$），與斜面間的動摩擦係數 $\\mu = 0.1$，求物體沿斜面下滑的加速度（取 $g = 10$ m/s$^2$）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "摩擦力與向心力",
+      "confidence": 0.9,
+      "rationale": "題目涉及物體在斜面上運動，需利用動摩擦係數計算動摩擦力（$f_k = \\mu N$），再結合牛頓第二運動定律求加速度，屬於「摩擦力與向心力」章節中對摩擦力的力學分析應用。"
+    },
+    "usage": {
+      "tokenIn": 1918,
+      "tokenOut": 85,
+      "tokenThinking": 751,
+      "tokenCached": 0
+    },
+    "latencyMs": 4575
+  }
+}

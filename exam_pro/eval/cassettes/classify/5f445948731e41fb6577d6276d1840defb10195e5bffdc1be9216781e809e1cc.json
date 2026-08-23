@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:39:58.121Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2518,
+        "sha256": "7845c36c83312b06bb08a2cd1e0194ce5af55148cd8fcb9f3afc883e75f6763b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "平面上有兩向量 $\\vec{u} = (3, 4)$ 與 $\\vec{v} = (1, 2)$，試求 $\\vec{u} \\cdot \\vec{v}$ 的值。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "confidence": 1,
+      "rationale": "題目直接要求計算平面上兩向量 $\\vec{u}$ 與 $\\vec{v}$ 的內積 $\\vec{u} \\cdot \\vec{v}$，這是向量內積的最基礎計算，故歸類於「向量內積」。"
+    },
+    "usage": {
+      "tokenIn": 1917,
+      "tokenOut": 86,
+      "tokenThinking": 135,
+      "tokenCached": 0
+    },
+    "latencyMs": 1735
+  }
+}

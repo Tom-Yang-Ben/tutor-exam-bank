@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:40:10.726Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2465,
+        "sha256": "e663b9edc382e8d9de427e3c8476827111f289da296e930bf81b9b4622532f04"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "請寫出角度 $150^\\circ$ 的正弦函數值。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "三角函數的定義",
+      "confidence": 1,
+      "rationale": "本題要求計算 150 度的正弦值。這涉及廣義角三角比的求解（利用參考角或象限角定義進行轉換），因此屬於「三角函數的定義」範圍。"
+    },
+    "usage": {
+      "tokenIn": 1887,
+      "tokenOut": 68,
+      "tokenThinking": 505,
+      "tokenCached": 0
+    },
+    "latencyMs": 2893
+  }
+}

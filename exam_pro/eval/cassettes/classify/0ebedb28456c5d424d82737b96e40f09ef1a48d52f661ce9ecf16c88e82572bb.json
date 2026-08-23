@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:39:38.533Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2378,
+        "sha256": "e9843133f374becc617791d162abd09bb49e35e9bec5791715dbd1e59c053f81"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "點電荷 $Q = 5 \\times 10^{-6}$ C 在距離 $0.5$ m 處產生的電場量值為何（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "電場與電位",
+      "confidence": 1,
+      "rationale": "題目要求計算點電荷在特定距離所產生的電場強度，使用公式 E = kQ/r^2，這完全符合「電場與電位」章節中點電荷電場與電位觀念的計算。"
+    },
+    "usage": {
+      "tokenIn": 1888,
+      "tokenOut": 83,
+      "tokenThinking": 243,
+      "tokenCached": 0
+    },
+    "latencyMs": 1958
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T12:41:28.954Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 93,
+        "sha256": "9f12155a028e6aab7cdc68c96790bbf3a13754074ecfd446095dc4e77a950043"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "設平面向量 $\\vec{a} = (3, 4)$、$\\vec{b} = (1, 2)$，求 $\\vec{a} \\cdot \\vec{b}$。",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "11",
+      "answer_form": "number",
+      "steps_summary": "1. 根據平面向量內積的定義，$\\vec{a} \\cdot \\vec{b} = a_x b_x + a_y b_y$。\n2. 將已知向量 $\\vec{a} = (3, 4)$ 與 $\\vec{b} = (1, 2)$ 代入公式。\n3. 計算 $3 \\times 1 + 4 \\times 2 = 3 + 8 = 11$。\n4. 得出內積結果為 11。"
+    },
+    "usage": {
+      "tokenIn": 152,
+      "tokenOut": 137,
+      "tokenThinking": 254,
+      "tokenCached": 0
+    },
+    "latencyMs": 5313
+  }
+}

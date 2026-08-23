@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:40:28.531Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2368,
+        "sha256": "fb9aa71390a75036b77b73029633ed1588c4a37ca0f1a2c2270880ec63da3ba4"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "均勻電場的量值為 $200$ N/C，一個帶電量 $3 \\times 10^{-6}$ C 的電荷順著電場方向移動 $0.4$ m，試問電場力對它作了多少功？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "電場與電位",
+      "confidence": 0.95,
+      "rationale": "題目給定均勻電場 $E$、電荷量 $q$ 與移動距離 $d$，並要求計算電場力作功。此題核心概念為電場力 $F=qE$ 與電位能變化（即電場力作功），屬於「電場與電位」章節中的均勻電場與電位能觀念。"
+    },
+    "usage": {
+      "tokenIn": 1887,
+      "tokenOut": 113,
+      "tokenThinking": 342,
+      "tokenCached": 0
+    },
+    "latencyMs": 2834
+  }
+}

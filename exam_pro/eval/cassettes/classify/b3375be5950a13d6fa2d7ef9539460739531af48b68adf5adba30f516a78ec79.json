@@ -3,7 +3,7 @@
     "agent": "classify",
     "model": "gemini-3.5-flash",
     "template": "classify.v1",
-    "recorded_at": "2026-08-23T11:26:49.149Z",
+    "recorded_at": "2026-08-23T12:37:44.635Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -24,14 +24,14 @@
     "data": {
       "chapter": "向量內積",
       "confidence": 1,
-      "rationale": "題目要求計算平面向量在另一向量上的正射影長度，此概念為平面向量內積的核心幾何應用，解題需使用向量內積公式，故屬於「向量內積」。"
+      "rationale": "題目要求計算向量在另一向量上的正射影長度，其核心計算公式涉及兩向量的內積（a · b），故歸類於「向量內積」章節。"
     },
     "usage": {
       "tokenIn": 1923,
-      "tokenOut": 74,
-      "tokenThinking": 399,
+      "tokenOut": 71,
+      "tokenThinking": 409,
       "tokenCached": 0
     },
-    "latencyMs": 6780
+    "latencyMs": 2601
   }
 }

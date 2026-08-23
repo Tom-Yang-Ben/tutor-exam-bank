@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T12:41:34.846Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 80,
+        "sha256": "fdc8dbcc8b49b13763e360c90a7d04a6bf61740f6c004771be6da4e7a41932fd"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "設平面向量 $\\vec{a} = (2, k)$ 與 $\\vec{b} = (3, 6)$ 互相垂直，求 $k$。",
+      "questionType": "填空",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "-1",
+      "answer_form": "number",
+      "steps_summary": "已知兩向量互相垂直，故其內積為 0。計算內積 $\\vec{a} \\cdot \\vec{b} = 2 \\times 3 + k \\times 6 = 6 + 6k$。將內積設為 0，得到方程式 $6 + 6k = 0$，解得 $k = -1$。"
+    },
+    "usage": {
+      "tokenIn": 146,
+      "tokenOut": 100,
+      "tokenThinking": 432,
+      "tokenCached": 0
+    },
+    "latencyMs": 5881
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:38:15.293Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2462,
+        "sha256": "77f874f084a7da48e39ce6caa15a2d1b9466e6252605e00c4f167dff89d7528e"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "$\\cos 120^\\circ$ 之值為何？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "三角函數的定義",
+      "confidence": 1,
+      "rationale": "求特定角度的三角函數值（如 $\\cos 120^\\circ$），屬於廣義角三角函數定義與換算的基本題型。"
+    },
+    "usage": {
+      "tokenIn": 1883,
+      "tokenOut": 58,
+      "tokenThinking": 187,
+      "tokenCached": 0
+    },
+    "latencyMs": 1984
+  }
+}

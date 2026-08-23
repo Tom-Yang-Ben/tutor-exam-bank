@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:39:46.855Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2373,
+        "sha256": "e16564d85f18f0a2f0583e000f4fd9409dc433ea6d00d5654cbbe0c136519769"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "在靜電平衡下，等位面與電場線的關係為何（提示：$E^$ 沿等位面方向的分量）？\n(A) 互相平行　(B) 互相垂直　(C) 夾 $45^\\circ$　(D) 無固定關係",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "電場與電位",
+      "confidence": 1,
+      "rationale": "題目探討靜電平衡下「等位面」與「電場線」的垂直關係，這是定義與分析電場強度與電位分布時的核心觀念，故屬於「電場與電位」章節。"
+    },
+    "usage": {
+      "tokenIn": 1900,
+      "tokenOut": 82,
+      "tokenThinking": 306,
+      "tokenCached": 0
+    },
+    "latencyMs": 2368
+  }
+}

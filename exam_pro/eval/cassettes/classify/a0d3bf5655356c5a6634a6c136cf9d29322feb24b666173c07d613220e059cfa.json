@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:40:23.312Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2341,
+        "sha256": "144b3c2d5666664a6489efa708d88ee0ad0a0e1f2a528e8d34f00e9154200e31"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "一物體從靜止開始作等加速度直線運動，加速度為 $2$ m/s$^2$，試問經過 $5$ 秒它前進了多遠？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "物體的運動（速度與加速度）",
+      "confidence": 0.9,
+      "rationale": "題目為給定初速為零、加速度與時間，求位移的等加速度直線運動計算。根據範例，此類基本的等加速度運動計算屬於「物體的運動（速度與加速度）」之範疇。"
+    },
+    "usage": {
+      "tokenIn": 1866,
+      "tokenOut": 75,
+      "tokenThinking": 875,
+      "tokenCached": 0
+    },
+    "latencyMs": 4120
+  }
+}

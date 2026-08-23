@@ -3,7 +3,7 @@
     "agent": "classify",
     "model": "gemini-3.5-flash",
     "template": "classify.v1",
-    "recorded_at": "2026-08-23T11:23:46.063Z",
+    "recorded_at": "2026-08-23T12:37:14.616Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -24,14 +24,14 @@
     "data": {
       "chapter": "指數與對數",
       "confidence": 1,
-      "rationale": "題目為求解指數方程式 $2^{x+1} = 32$（即 $2^{x+1} = 2^5$），此題型屬於指數與對數章節中的指數方程式求解。"
+      "rationale": "題目為解指數方程式 2^{x+1} = 32，需要將 32 化為 2^5 以求解指數，這屬於「指數與對數」章節的基本運算。"
     },
     "usage": {
       "tokenIn": 1885,
-      "tokenOut": 66,
-      "tokenThinking": 182,
+      "tokenOut": 67,
+      "tokenThinking": 381,
       "tokenCached": 0
     },
-    "latencyMs": 2984
+    "latencyMs": 2576
   }
 }

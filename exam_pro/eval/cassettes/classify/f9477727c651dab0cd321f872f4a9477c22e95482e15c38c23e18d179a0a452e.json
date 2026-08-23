@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:40:19.187Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2350,
+        "sha256": "9138d414898fced01168c4b4360ee05ab61a406c241a647044537443b45b3a1b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "一條長 $1$ m 的輕繩綁著 $2$ kg 的小球，在光滑水平面上以固定速率 $3$ m/s 繞圈，試求繩子所受的張力。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "摩擦力與向心力",
+      "confidence": 1,
+      "rationale": "本題計算繩子綁著小球在水平面上作等速率圓周運動時的張力。此張力即為小球作圓周運動所需的向心力，解題需使用向心力公式 $F = \\frac{mv^2}{r}$，屬於「摩擦力與向心力」章節。"
+    },
+    "usage": {
+      "tokenIn": 1875,
+      "tokenOut": 106,
+      "tokenThinking": 609,
+      "tokenCached": 0
+    },
+    "latencyMs": 3039
+  }
+}

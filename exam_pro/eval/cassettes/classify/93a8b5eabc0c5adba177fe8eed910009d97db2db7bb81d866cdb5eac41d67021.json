@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:40:42.941Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2491,
+        "sha256": "6a158f6d491c1d6bedcb443686a2cef0a351d6cba1f479eea1d683d8bae75f20"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "已知 $\\log_{10} 3 = 0.4771$，試求 $3^{20}$ 的首數，並說明它是幾位數。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "confidence": 1,
+      "rationale": "題目給定對數值並要求估算 $3^{20}$ 的首數與位數，此為常用對數的首數與尾數應用，屬於「指數與對數」章節。"
+    },
+    "usage": {
+      "tokenIn": 1907,
+      "tokenOut": 76,
+      "tokenThinking": 508,
+      "tokenCached": 0
+    },
+    "latencyMs": 2727
+  }
+}

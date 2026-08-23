@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:38:11.022Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2527,
+        "sha256": "ffec933369c379125d5231b0fdf3c38cc46d7bd457477dbf17b50942b4763ff8"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "$\\sin^2 25^\\circ + \\cos^2 25^\\circ$ 之值為何？\n(A) $0$　(B) $\\frac{1}{2}$　(C) $1$　(D) 需查表才能得知",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "三角函數的定義",
+      "confidence": 1,
+      "rationale": "題目要求計算 $\\sin^2 25^\\circ + \\cos^2 25^\\circ$ 的值，這直接應用了三角函數的基本平方關係 $\\sin^2 \\theta + \\cos^2 \\theta = 1$。此類基本恆等式與定義屬於「三角函數的定義」章節。"
+    },
+    "usage": {
+      "tokenIn": 1935,
+      "tokenOut": 106,
+      "tokenThinking": 242,
+      "tokenCached": 0
+    },
+    "latencyMs": 2121
+  }
+}

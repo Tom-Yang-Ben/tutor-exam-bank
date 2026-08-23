@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:38:22.887Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2513,
+        "sha256": "2fc11ace08e57fa9b3658b67244344d0bfbbf19c6bb816d7d987e31757ef7015"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "若 $\\theta$ 落在第二象限，則 $\\tan \\theta$ 的正負為何？\n(A) 恆為正　(B) 恆為負　(C) 恆為零　(D) 無法判斷",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "三角函數的定義",
+      "confidence": 1,
+      "rationale": "題目要求判斷第二象限角的正切函數（tan）正負值，此為廣義角三角函數定義與象限符號判定的基本概念，故屬於「三角函數的定義」。"
+    },
+    "usage": {
+      "tokenIn": 1929,
+      "tokenOut": 77,
+      "tokenThinking": 178,
+      "tokenCached": 0
+    },
+    "latencyMs": 1951
+  }
+}

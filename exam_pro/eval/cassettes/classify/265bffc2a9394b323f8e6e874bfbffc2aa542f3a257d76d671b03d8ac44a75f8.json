@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:38:20.931Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2519,
+        "sha256": "12eb40a22549c2ffb9b3faf234c6fdb21cd294f3e0914d95600741d6314896f8"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "已知角 $\\theta$ 的終邊通過點 $P(-3, 4)$，試依定義 $\\sin \\theta = \\frac{y}{r$ 求 $\\sin \\theta$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "三角函數的定義",
+      "confidence": 1,
+      "rationale": "題目給定廣義角終邊上的一點 P(-3, 4)，並要求根據定義 ̂\\sin \\theta = y/r 求值，屬於廣義角三角函數定義的基本應用，故歸類於「三角函數的定義」。"
+    },
+    "usage": {
+      "tokenIn": 1911,
+      "tokenOut": 82,
+      "tokenThinking": 399,
+      "tokenCached": 0
+    },
+    "latencyMs": 2845
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T12:42:31.813Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 105,
+        "sha256": "a1cef82c6587292cf147c9c340fd9b82ea07dd64b0850303a3df6d5e4c90f04f"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "長 $1\\text{ m}$ 的輕繩繫住質量 $2\\text{ kg}$ 的小球，在光滑水平面上以 $3\\text{ m/s}$ 的速率作等速圓周運動，求繩的張力。",
+      "questionType": "計算",
+      "sampleNo": 2
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "18 N",
+      "answer_form": "number",
+      "steps_summary": "在光滑水平面上作等速圓周運動的小球，其所需的向心力完全由輕繩的張力提供。根據向心力公式 $F_c = \\frac{mv^2}{r}$，代入已知數值：質量 $m = 2\\text{ kg}$、速率 $v = 3\\text{ m/s}$、旋轉半徑（繩長）$r = 1\\text{ m}$，可得張力 $T = \\frac{2 \\times 3^2}{1} = 18\\text{ N}$。"
+    },
+    "usage": {
+      "tokenIn": 163,
+      "tokenOut": 161,
+      "tokenThinking": 555,
+      "tokenCached": 0
+    },
+    "latencyMs": 7301
+  }
+}

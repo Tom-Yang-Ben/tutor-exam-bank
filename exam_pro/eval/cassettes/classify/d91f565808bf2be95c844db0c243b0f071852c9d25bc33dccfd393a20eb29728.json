@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:39:21.748Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2343,
+        "sha256": "a7ffdf2d133d76078e40d1b80cdf428217a8d564f0f239ab44fa00b017a5ee52"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "物體自 $45$ m 高處自由落下，求落地所需的時間（取 $g = 10$ m/s$^2$，不計空氣阻力）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "直線運動",
+      "confidence": 1,
+      "rationale": "此題探討物體從高處自由落下的運動過程，屬於一維等加速度運動（自由落體），應歸類於「直線運動」。"
+    },
+    "usage": {
+      "tokenIn": 1866,
+      "tokenOut": 55,
+      "tokenThinking": 254,
+      "tokenCached": 0
+    },
+    "latencyMs": 2072
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:38:13.302Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2462,
+        "sha256": "0dbcfa715e1646d9bcdfdca3bab083ac1661972f57fb83349b7a5a96f650f750"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "$\\sin 150^\\circ$ 之值為何？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "三角函數的定義",
+      "confidence": 1,
+      "rationale": "題目要求計算廣義角 150 度的正弦值（sin 150度），此為廣義角三角函數的基本求值問題，直接涉及三角函數的定義與同界角、補角關係，故歸類於「三角函數的定義」。"
+    },
+    "usage": {
+      "tokenIn": 1883,
+      "tokenOut": 92,
+      "tokenThinking": 255,
+      "tokenCached": 0
+    },
+    "latencyMs": 2264
+  }
+}

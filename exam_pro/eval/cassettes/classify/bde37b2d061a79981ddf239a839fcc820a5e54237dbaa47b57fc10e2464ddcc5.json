@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:41:04.886Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2327,
+        "sha256": "5cd2b83041a720a9df17bebafbf8e494309858b9ff8dde6d0755a2455cd201ad"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "靜電平衡的導體內部電場為零，其表面為一等位面。試問等位面與電場線的夾角為何？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "電場與電位",
+      "confidence": 1,
+      "rationale": "題目探討靜電平衡導體的等位面與電場線的夾角關係，這直接涉及「電位（等位面）」與「電場（電場線）」的基本定義與性質，故歸類於「電場與電位」。"
+    },
+    "usage": {
+      "tokenIn": 1862,
+      "tokenOut": 89,
+      "tokenThinking": 602,
+      "tokenCached": 0
+    },
+    "latencyMs": 3069
+  }
+}

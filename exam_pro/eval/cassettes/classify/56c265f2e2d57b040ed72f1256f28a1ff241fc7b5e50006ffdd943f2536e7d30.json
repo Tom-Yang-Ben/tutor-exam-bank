@@ -3,7 +3,7 @@
     "agent": "classify",
     "model": "gemini-3.5-flash",
     "template": "classify.v1",
-    "recorded_at": "2026-08-23T11:25:49.374Z",
+    "recorded_at": "2026-08-23T12:37:36.414Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -24,14 +24,14 @@
     "data": {
       "chapter": "向量內積",
       "confidence": 1,
-      "rationale": "題目給定兩個平面向量並要求其夾角，解法需利用平面向量內積公式 $\\cos \\theta = \\frac{\\vec{a}\\cdot\\vec{b}}{|\\vec{a}||\\vec{b}|}$ 來計算，故屬於「向量內積」章節。"
+      "rationale": "題目給定兩個平面向量並要求求出其夾角，此題型必須利用平面向量內積定義公式中的餘弦值（\\cos\\theta = (\\vec{a}\\cdot\\vec{b}) / (|\\vec{a}||\\vec{b}|)）來求解，故歸類於「向量內積」章節。"
     },
     "usage": {
       "tokenIn": 1911,
-      "tokenOut": 82,
-      "tokenThinking": 616,
+      "tokenOut": 106,
+      "tokenThinking": 305,
       "tokenCached": 0
     },
-    "latencyMs": 3637
+    "latencyMs": 2307
   }
 }

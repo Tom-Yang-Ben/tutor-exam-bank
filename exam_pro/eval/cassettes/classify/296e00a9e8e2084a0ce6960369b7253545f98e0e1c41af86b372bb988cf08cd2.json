@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:40:59.558Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2338,
+        "sha256": "3aa91db762d5e543a6877626a5b15ec63db023d8217171ac100fa4c7a07f75d6"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "不計空氣阻力，物體自 $80$ m 高處自由落下，求落地時間（$g = 10$ m/s$^2$）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "直線運動",
+      "confidence": 1,
+      "rationale": "此題探討物體在重力作用下的自由落體運動，屬於一維等加速度運動，因此歸類於「直線運動」這一章節。"
+    },
+    "usage": {
+      "tokenIn": 1865,
+      "tokenOut": 64,
+      "tokenThinking": 333,
+      "tokenCached": 0
+    },
+    "latencyMs": 2549
+  }
+}

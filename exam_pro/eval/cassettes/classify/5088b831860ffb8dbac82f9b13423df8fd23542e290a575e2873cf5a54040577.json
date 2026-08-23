@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:40:54.747Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2364,
+        "sha256": "1796a6406322afdb3d3fe1f588de28e9a14201168a7ad13236e837ceb77e43f3"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "等速圓周運動中，向心加速度為 $a = \\frac{v^2}{r}$。$2$ kg 的球以 $3$ m/s 在半徑 $1$ m 的圓上運動，求向心力。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "摩擦力與向心力",
+      "confidence": 1,
+      "rationale": "題目給予質量、速度與半徑，要求計算等速圓周運動之向心力。這直接涉及向心力公式 $F = m \\frac{v^2}{r}$ 的應用，故屬於「摩擦力與向心力」章節。"
+    },
+    "usage": {
+      "tokenIn": 1882,
+      "tokenOut": 81,
+      "tokenThinking": 693,
+      "tokenCached": 0
+    },
+    "latencyMs": 3261
+  }
+}

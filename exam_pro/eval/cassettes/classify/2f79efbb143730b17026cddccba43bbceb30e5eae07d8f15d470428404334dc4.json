@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:37:53.908Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2507,
+        "sha256": "5065288ba2a4cf8bd89f762d026514e00cc415097ff3305e334cfcba497ece68"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "設空間向量 $\\vec{a} = (1, 1, 0)$、$\\vec{b} = (0, 1, 1)$，求兩向量的夾角 $\\theta$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "空間向量內積",
+      "confidence": 1,
+      "rationale": "題目給定兩個三維空間向量並要求計算其夾角，解題關鍵在於使用空間向量內積公式與長度乘積來求出夾角的餘弦值，故屬『空間向量內積』。"
+    },
+    "usage": {
+      "tokenIn": 1915,
+      "tokenOut": 80,
+      "tokenThinking": 319,
+      "tokenCached": 0
+    },
+    "latencyMs": 2338
+  }
+}

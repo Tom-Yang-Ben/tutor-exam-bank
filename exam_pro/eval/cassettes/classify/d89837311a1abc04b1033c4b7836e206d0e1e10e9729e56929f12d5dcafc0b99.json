@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:39:44.482Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2371,
+        "sha256": "f798a5de12fae9dbfbd9c0225b7ce9b5d10f0b37091b2d03500cf235f93bd1d9"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "在量值 $E = 200$ N/C 的均勻電場中，將電量 $q = 3 \\times 10^{-6}$ C 的電荷沿電場方向移動 $0.4$ m，求電場力所作的功。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "電場與電位",
+      "confidence": 0.95,
+      "rationale": "題目涉及在均勻電場中移動電荷，並計算電場力所作的功（W = qEd），這屬於電場力、電位能與電位差之間的關係，故屬於「電場與電位」章節。"
+    },
+    "usage": {
+      "tokenIn": 1889,
+      "tokenOut": 79,
+      "tokenThinking": 828,
+      "tokenCached": 0
+    },
+    "latencyMs": 3763
+  }
+}

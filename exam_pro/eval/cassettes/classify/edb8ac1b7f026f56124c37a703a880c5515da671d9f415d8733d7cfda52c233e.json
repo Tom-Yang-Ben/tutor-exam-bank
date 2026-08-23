@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:39:02.381Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2356,
+        "sha256": "3cde8ea999bb2c844dc22ac64507f2de5e92dc014f76cf6cacd2327d50890dad"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "質量 $4$ kg 的物體靜置於水平地面，與地面間的靜摩擦係數為 $0.5$，求最大靜摩擦力（取 $g = 10$ m/s$^2$）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "摩擦力與向心力",
+      "confidence": 1,
+      "rationale": "題目要求計算物體與地面間的最大靜摩擦力，需利用正向力與靜摩擦係數相乘得出，屬於「摩擦力與向心力」的基本概念。"
+    },
+    "usage": {
+      "tokenIn": 1877,
+      "tokenOut": 64,
+      "tokenThinking": 305,
+      "tokenCached": 0
+    },
+    "latencyMs": 2110
+  }
+}

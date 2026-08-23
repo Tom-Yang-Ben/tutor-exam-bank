@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:39:56.381Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2494,
+        "sha256": "97058bbfe1c158afc1120a95664a9d958b09a3b633772c4604d1508e064901a5"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "在 $\\log_{10} 2 = 0.3010$ 的條件下，$2^{50}$ 寫成十進位整數時共有幾個數字？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "confidence": 1,
+      "rationale": "題目要求 $2^{50}$ 寫成十進位整數時的位數，需要利用常用對數的性質（首數與位數的關係）來求解，此為典型的對數應用題，屬於「指數與對數」章節。"
+    },
+    "usage": {
+      "tokenIn": 1910,
+      "tokenOut": 89,
+      "tokenThinking": 242,
+      "tokenCached": 0
+    },
+    "latencyMs": 2095
+  }
+}

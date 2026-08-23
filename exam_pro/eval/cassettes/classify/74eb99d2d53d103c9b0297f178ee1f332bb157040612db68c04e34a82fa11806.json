@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:37:47.151Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2524,
+        "sha256": "39b6d166088ce7b7e8c2ed80cf7e3169dbeaeb68ddea49a82d7981faf0a7b45b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "試證：對任意平面向量 $\\vec{a}$、$\\vec{b}$，恆有 $|\\vec{a} \\cdot \\vec{b}| \\leq |\\vec{a}||\\vec{b}|$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "confidence": 1,
+      "rationale": "題目要求證明平面向量的柯西不等式 |a·b| <= |a||b|，這直接涉及平面向量內積的定義（a·b = |a||b|cosθ）與性質，故屬於「向量內積」章節。"
+    },
+    "usage": {
+      "tokenIn": 1916,
+      "tokenOut": 77,
+      "tokenThinking": 394,
+      "tokenCached": 0
+    },
+    "latencyMs": 2510
+  }
+}

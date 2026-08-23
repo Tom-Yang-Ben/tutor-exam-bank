@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:40:07.828Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2532,
+        "sha256": "5708e9665ff0b58041a5319a22ec7bfdfca0d6af824c6ff8bda5d4d8f6035c57"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "不查表，直接寫出 $\\sin^2 40^\\circ$ 與 $\\cos^2 40^\\circ$ 的和。\n(A) $1$　(B) $0$　(C) $\\frac{1}{2}$　(D) 需查表",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "三角函數的定義",
+      "confidence": 1,
+      "rationale": "題目利用同角三角函數的平方關係 $\\sin^2\\theta + \\cos^2\\theta = 1$ 來求解，此基本恆等式屬於「三角函數的定義」章節的核心內容。"
+    },
+    "usage": {
+      "tokenIn": 1940,
+      "tokenOut": 76,
+      "tokenThinking": 272,
+      "tokenCached": 0
+    },
+    "latencyMs": 2212
+  }
+}

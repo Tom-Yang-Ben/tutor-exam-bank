@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:40:57.004Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2345,
+        "sha256": "2137e46864da5c432203d53a1f4ba6475eb1360ef9946e83bd0983028423de9c"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "水平彎道半徑 $50$ m、靜摩擦係數 $0.4$，求汽車不打滑的最大速率（$g = 10$ m/s$^2$）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "摩擦力與向心力",
+      "confidence": 1,
+      "rationale": "題目計算汽車在水平彎道轉彎不打滑的最大速率，解題關鍵在於提供向心力的來源為最大靜摩擦力，即 $f_{s,max} = \\mu_s mg = m \\frac{v^2}{R}$，這完全屬於「摩擦力與向心力」的觀念與應用。"
+    },
+    "usage": {
+      "tokenIn": 1870,
+      "tokenOut": 97,
+      "tokenThinking": 281,
+      "tokenCached": 0
+    },
+    "latencyMs": 2251
+  }
+}

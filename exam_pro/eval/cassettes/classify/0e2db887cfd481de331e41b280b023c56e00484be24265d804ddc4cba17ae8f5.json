@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:38:41.915Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2375,
+        "sha256": "9f2ed3ea5859cc3ded392ac655185ab235959729061d83b3e9e62cc1a81ca5c9"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "馬拉車前進時，馬對車的作用力 $F^$ 與車對馬的反作用力，兩者的關係為何？\n(A) 馬對車的力較大　(B) 大小相等、方向相反　(C) 車對馬的力較大　(D) 視速度而定",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "confidence": 1,
+      "rationale": "題目探討馬拉車時「作用力與反作用力」的關係，此為牛頓第三運動定律的典型觀念，故歸類於「牛頓運動定律」。"
+    },
+    "usage": {
+      "tokenIn": 1904,
+      "tokenOut": 72,
+      "tokenThinking": 479,
+      "tokenCached": 0
+    },
+    "latencyMs": 2434
+  }
+}

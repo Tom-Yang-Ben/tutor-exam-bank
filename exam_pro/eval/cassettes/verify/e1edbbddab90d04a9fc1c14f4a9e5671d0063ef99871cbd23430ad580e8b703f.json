@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-23T12:43:01.559Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 84,
+        "sha256": "fd8e294cffa9cf6be2e2b956ccb488c74ad4ab3eeb89ff4e779a8eebbcb57288"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "關於等速圓周運動，下列敘述何者正確？（複選）\n(A) 速率不變\n(B) 速度不變\n(C) 加速度指向圓心\n(D) 合力為零",
+      "questionType": "多選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(A)(C)",
+      "answer_form": "option",
+      "steps_summary": "在等速圓周運動中：\n1. 質點的「速率」（純量）保持不變，故(A)正確。\n2. 質點的「速度」（向量）方向沿著軌跡切線時刻在改變，因此速度並不守恆，故(B)錯誤。\n3. 因為速度方向持續改變，質點具有加速度。此加速度為向心加速度，方向始終指向圓心，故(C)正確。\n4. 根據牛頓第二運動定律，質點必受一個與向心加速度同方向的合力（即向心力），故合力不為零，(D)錯誤。\n綜合以上，正確敘述為(A)與(C)。"
+    },
+    "usage": {
+      "tokenIn": 161,
+      "tokenOut": 193,
+      "tokenThinking": 606,
+      "tokenCached": 0
+    },
+    "latencyMs": 8951
+  }
+}

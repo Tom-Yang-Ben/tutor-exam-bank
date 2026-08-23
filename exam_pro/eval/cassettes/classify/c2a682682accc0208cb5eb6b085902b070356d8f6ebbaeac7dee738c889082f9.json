@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:37:51.565Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2516,
+        "sha256": "23579941e85fbf6bdfb0536c32bf31f40f4d88d787fbd2b076c3688e25c4902a"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "設空間向量 $\\vec{a} = (2, 1, 4)$、$\\vec{b} = (3, 2, 0)$，求 $\\vec{a} \\cdot \\vec{b}$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "空間向量內積",
+      "confidence": 1,
+      "rationale": "題目給予兩個三維空間向量並要求計算其內積 $\\vec{a} \\cdot \\vec{b}$，此為典型的空間向量內積計算題。"
+    },
+    "usage": {
+      "tokenIn": 1919,
+      "tokenOut": 61,
+      "tokenThinking": 257,
+      "tokenCached": 0
+    },
+    "latencyMs": 2024
+  }
+}

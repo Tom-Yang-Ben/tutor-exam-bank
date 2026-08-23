@@ -3,7 +3,7 @@
     "agent": "classify",
     "model": "gemini-3.5-flash",
     "template": "classify.v1",
-    "recorded_at": "2026-08-23T11:23:34.402Z",
+    "recorded_at": "2026-08-23T12:39:12.467Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -24,14 +24,14 @@
     "data": {
       "chapter": "物體的運動（速度與加速度）",
       "confidence": 1,
-      "rationale": "此題為一維等加速度運動的位移計算，與範例中等加速度直線前進求位移的題型完全相同，故歸類於「物體的運動（速度與加速度）」"
+      "rationale": "此題為由靜止出發的等加速度直線運動，計算特定時間內的位移。其型態與範例中「汽車由靜止等加速度前進求位移」完全一致，故歸為「物體的運動（速度與加速度）」"
     },
     "usage": {
       "tokenIn": 1862,
-      "tokenOut": 80,
-      "tokenThinking": 630,
+      "tokenOut": 92,
+      "tokenThinking": 851,
       "tokenCached": 0
     },
-    "latencyMs": 3442
+    "latencyMs": 3833
   }
 }

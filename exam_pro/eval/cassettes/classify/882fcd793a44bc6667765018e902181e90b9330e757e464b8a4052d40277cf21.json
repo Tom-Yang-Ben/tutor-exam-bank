@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-08-23T12:38:18.080Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2525,
+        "sha256": "1ba96969d831caa57c7265a09a1c77380f6fec303afee633c3727dfa4d9847c2"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "與 $400^\\circ$ 同界的最小正角為何？\n(A) $20^\\circ$　(B) $40^\\circ$　(C) $60^\\circ$　(D) $340^\\circ$",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "三角函數的定義",
+      "confidence": 0.95,
+      "rationale": "題目要求尋找特定角度的最小正同界角，此為廣義角與同界角的基礎概念，屬於「三角函數的定義」章節的最前期基礎內容。"
+    },
+    "usage": {
+      "tokenIn": 1932,
+      "tokenOut": 71,
+      "tokenThinking": 507,
+      "tokenCached": 0
+    },
+    "latencyMs": 2779
+  }
+}

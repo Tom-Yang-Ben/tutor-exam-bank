@@ -3,7 +3,7 @@
     "agent": "classify",
     "model": "gemini-3.5-flash",
     "template": "classify.v1",
-    "recorded_at": "2026-08-23T11:23:10.588Z",
+    "recorded_at": "2026-08-23T12:38:25.559Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -24,14 +24,14 @@
     "data": {
       "chapter": "牛頓運動定律",
       "confidence": 1,
-      "rationale": "此題直接應用牛頓第二運動定律 F = ma，已知質量 m = 2 kg 與合力 F = 10 N 來求解加速度 a，屬於經典的「牛頓運動定律」章節。"
+      "rationale": "題目給予物體質量與所受合力，要求計算加速度，此為牛頓第二運動定律 F = ma 的直接應用，屬於「牛頓運動定律」章節。"
     },
     "usage": {
       "tokenIn": 1849,
-      "tokenOut": 77,
-      "tokenThinking": 258,
+      "tokenOut": 63,
+      "tokenThinking": 368,
       "tokenCached": 0
     },
-    "latencyMs": 35078
+    "latencyMs": 2667
   }
 }
