@@ -1,5 +1,5 @@
 const { pool } = require('../config/db');
-const { shuffle } = require('../utils/shuffle');
+const { pickOnePerFamily } = require('../utils/pickOnePerFamily');
 
 const MAX_QUESTIONS = 50; // 單次抽題上限，避免一次撈整章
 
@@ -53,21 +53,32 @@ exports.generatePaper = async (req, res, next) => {
         );
 
         // 候選池：同學科同章、未封存、且該生沒寫過
+        // 階段 3 只多撈一欄 variant_of（interfaces-stage3.md 第 2.2 條），其餘條件不變。
         const { rows: candidates } = await client.query(
-            `SELECT q.id FROM questions q
+            `SELECT q.id, q.variant_of FROM questions q
               WHERE q.subject = $1 AND q.chapter = $2 AND q.archived_at IS NULL
                 AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.question_id = q.id AND a.student_id = $3)`,
             [subject, chapter, student.id]
         );
 
-        if (candidates.length < limitCount) {
+        // 家族互斥：同一 variant_of 家族在同一張卷只取一題（規劃 §4.1）。
+        // pickOnePerFamily 內部已經做完「每組洗牌取代表 → 對代表 Fisher-Yates」，
+        // 所以這裡不再另外呼叫 shuffle——重複洗牌不會更隨機，只會多一層看不懂的間接。
+        //
+        // ⚠️ 抽題的公平性單位因此從「每題等機率」變成「**每家族等機率**」
+        //    （見 utils/pickOnePerFamily.js 的檔頭與 test/unit/pickOnePerFamily.test.js）。
+        const familyPicked = pickOnePerFamily(candidates);
+
+        // 「庫存不足」的檢查移到家族互斥**之後**（裁決 S3-6）：
+        // 先檢查再收斂會讓「通過檢查卻抽不滿」——候選池有 8 題但全屬同一家族時，
+        // 舊順序會放行然後只抽得到 1 題。${n} 因此代入**家族數**（實際抽得到的題數）。
+        // 訊息格式與 interfaces.md 第 7 條完全相同，一個字都不改。
+        if (familyPicked.length < limitCount) {
             await client.query('ROLLBACK');
-            return res.status(400).json({ message: `新題目庫存不足！該章節 [${trimmedName}] 沒寫過的題目僅剩 ${candidates.length} 題。` });
+            return res.status(400).json({ message: `新題目庫存不足！該章節 [${trimmedName}] 沒寫過的題目僅剩 ${familyPicked.length} 題。` });
         }
 
-        // Fisher-Yates；不可改用 sort(() => 0.5 - Math.random())，該寫法分佈不均勻
-        const shuffled = shuffle(candidates);
-        const rawSelectedIds = shuffled.slice(0, limitCount).map(q => q.id);
+        const rawSelectedIds = familyPicked.slice(0, limitCount).map(q => q.id);
 
         const { rows: fullQuestions } = await client.query(
             `SELECT id, question_text, question_type, difficulty, answer_text
