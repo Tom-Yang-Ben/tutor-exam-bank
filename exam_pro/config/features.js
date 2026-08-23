@@ -39,5 +39,13 @@ module.exports = {
     // 上傳區是否改走 POST /api/jobs（階段 2，interfaces-stage2.md 第 9 條）。
     // 讀取點有兩個，都經這裡：app.js 的 serveIndex 注入給前端（裁決 S2-20）、
     // workers/jobRunner.js 組 ctx.config.features.pipeline（裁決 S2-8）。
-    get FEATURE_PIPELINE() { return isEnabled('FEATURE_PIPELINE'); }
+    get FEATURE_PIPELINE() { return isEnabled('FEATURE_PIPELINE'); },
+
+    // ── 階段 3（docs/interfaces-stage3.md 第 9 條）──
+    // 三支都是「路由掛不掛載 + 前端分頁渲不渲染」的開關，預設全關。
+    // 後端由各自的 routes 區塊讀（關閉時整條路由不掛載，請求落到 Express 預設 404），
+    // 前端由 app.js 的 serveIndex 注入 <meta> 之後讀（第 7.2、7.3 條）。
+    get FEATURE_STUDENTS() { return isEnabled('FEATURE_STUDENTS'); },
+    get FEATURE_NLQ() { return isEnabled('FEATURE_NLQ'); },
+    get FEATURE_VARIANTS() { return isEnabled('FEATURE_VARIANTS'); }
 };

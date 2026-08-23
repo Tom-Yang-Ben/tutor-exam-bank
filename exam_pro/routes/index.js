@@ -96,4 +96,25 @@ router.post('/review/:jqId/reject', reviewController.reject);
 // ===== [WS2-D: eval] =====
 // ===== [/WS2-D: eval] =====
 
+// ─────────────────────────────────────────────────────────────
+// 階段 3（產品面與 RAG 三落點）的 append-only 區塊
+// 名稱凍結於 docs/interfaces-stage3.md 第 10.2 條；規則與前兩階段相同：
+// 各 workstream 只在自己的區塊內加行，不重排既有路由，rebase 衝突兩邊都保留。
+// 五支學生／試卷 API、變式題、自然語言查題全部掛在 apiKeyAuth 之後
+// （app.js 已對 /api 全域套用）；三個 FEATURE_* 關閉時「不掛載」對應路由，
+// 請求落到 Express 預設 404（與 FEATURE_SIMILAR 同一種做法）。
+// ─────────────────────────────────────────────────────────────
+
+// ===== [WS3-A: students] =====
+// ===== [/WS3-A: students] =====
+
+// ===== [WS3-B: variants] =====
+// ===== [/WS3-B: variants] =====
+
+// ===== [WS3-C: nlq] =====
+// ===== [/WS3-C: nlq] =====
+
+// ===== [WS3-D: frontend] =====
+// ===== [/WS3-D: frontend] =====
+
 module.exports = router;
