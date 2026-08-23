@@ -203,7 +203,7 @@ Remove-Item Env:LLM_MODE, Env:EMBED_MODE
   短路率就會往上一點。
 - `cacheKeyParts.fewShotIds` 的算法**一個字都沒改**（`examples` 裡的整數 id 由小到大），
   所以階段 2 錄的 90 支 classify cassette 全部不失效——
-  `npm run eval:classify` 在改動後仍是 `accuracy 0.9000 / macro-F1 0.8759`，兩個門檻都過。
+  `npm run eval:classify` 在改動後仍是 `accuracy 0.9000 / macro-F1 0.9256`，兩個門檻都過。
 
 短路率與短路正確率由 `--suite classify` 多印兩欄（第 5.2 條，**不設門檻，只報告**）；
 `job_events.detail.source` 也記了這一格是誰決定的，`report:jobs` 之後看得出來。

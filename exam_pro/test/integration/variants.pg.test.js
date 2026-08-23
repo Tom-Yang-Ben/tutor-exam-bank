@@ -363,7 +363,23 @@ function runSuite() {
             return { jobId: created.job_id, sourceId };
         }
 
-        test('tick 認領 kind=variant 的 job → 建 count 列 job_questions → jobs.state=processing', async () => {
+        test('tick 的第二條認領分支真的認得 kind=variant（第 4.1 條）', async () => {
+            const { jobId } = await seedVariantJob({ count: 1 });
+            const runner = makeRunner({ concurrency: 1 });
+
+            await runner.tick();                       // 認領 → spawn(runGenerateJob)
+            // spawn 是 fire-and-forget，等它把 job 推到 processing 為止（最多 5 秒）
+            for (let i = 0; i < 50 && runner.inFlight > 0; i++) {
+                await new Promise(r => setTimeout(r, 100));
+            }
+
+            const { rows } = await query('SELECT state FROM jobs WHERE id = $1', [jobId]);
+            assert.equal(rows[0].state, 'processing', 'tick 沒認領到變式 job');
+            const { rows: jq } = await query('SELECT COUNT(*)::int AS n FROM job_questions WHERE job_id = $1', [jobId]);
+            assert.equal(jq[0].n, 1);
+        });
+
+        test('runGenerateJob 建 count 列 job_questions → jobs.state=processing', async () => {
             const { jobId, sourceId } = await seedVariantJob({ count: 2 });
             const runner = makeRunner();
             await runner.runGenerateJob(jobId);
