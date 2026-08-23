@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "nlq.v1 — 把一句口語查題需求翻成受限的檢索條件",
+  "description": "只有在規則解析抓不到任何章節、而剩下的文字仍有實詞時才會呼叫（docs/interfaces-stage3.md 第 6.3 條）。全部欄位不是 enum 就是整數或字串陣列——SQL 是固定的，模型只負責填空。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "chapters",
+    "question_types",
+    "semantic_text",
+    "keywords"
+  ],
+  "propertyOrdering": [
+    "subject",
+    "chapters",
+    "question_types",
+    "difficulty_min",
+    "difficulty_max",
+    "exclude_student_name",
+    "semantic_text",
+    "keywords"
+  ],
+  "properties": {
+    "subject": {
+      "type": "string",
+      "x-enum": "subject",
+      "description": "這句話在問哪一科。判斷不出來就整個欄位不要輸出，不要猜——猜錯會讓整份候選集跑錯學科。"
+    },
+    "chapters": {
+      "type": "array",
+      "maxItems": 3,
+      "description": "最相關的精細章節，最多 3 個，依相關性由高到低。每個都必須完全等於白名單中的字串。想不到任何一章就回空陣列，不要硬填。",
+      "items": {
+        "type": "string",
+        "x-enum": "chapter"
+      }
+    },
+    "question_types": {
+      "type": "array",
+      "maxItems": 5,
+      "description": "使用者指定的題型。沒有指定就回空陣列——空陣列的意思是「不限題型」，不是「找不到」。",
+      "items": {
+        "type": "string",
+        "x-enum": "question_type"
+      }
+    },
+    "difficulty_min": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "難度下限（1~5）。使用者沒提到難度就整個欄位不要輸出。「難一點」「有挑戰性」這種模糊講法算有提到，可以給 4。"
+    },
+    "difficulty_max": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "難度上限（1~5）。使用者沒提到難度就整個欄位不要輸出。只講了下限就不要輸出這一欄，伺服器會自動補 5。"
+    },
+    "exclude_student_name": {
+      "type": "string",
+      "description": "「某某沒寫過／沒做過」裡的那個學生名字，只要名字本身，不含「同學」。句子裡沒有提到學生就整個欄位不要輸出。查無此人時伺服器會忽略這個條件並附上警告，不會自動建立學生。"
+    },
+    "semantic_text": {
+      "type": "string",
+      "description": "拿去做向量檢索的查詢字串：把口語的贅字（幫我、有沒有、題目、麻煩）拿掉，只留下概念詞與名詞，以空白分隔。例如「幫我找一些斜面上物體受力平衡的計算題」→「斜面上物體受力平衡」。不要加上章節名以外的自創術語。"
+    },
+    "keywords": {
+      "type": "array",
+      "maxItems": 8,
+      "description": "這句話裡的關鍵名詞，供除錯與前端顯示用；不影響 SQL。",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

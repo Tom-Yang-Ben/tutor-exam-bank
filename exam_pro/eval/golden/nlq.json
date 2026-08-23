@@ -1,0 +1,1265 @@
+{
+  "_notice": "全部 50 句查詢由本專案作者自行編寫，模擬家教老師平常會怎麼問；不取自任何考卷、題本、出版品或真實對話（見 repo 根目錄 NOTICE 第 2 條）。學生名一律是「小明／小華／小美／阿哲」這類代稱，不是任何真實學生。",
+  "_status": "draft 2026-08-23 — needs_human_confirm 全為 true。expect 的四欄與 relevant 由 WS-C 草擬，尚未經開發者本人逐句定案；定案前 eval/run.js 不得 --write-baseline（第 8.4 條）。",
+  "_schema": "entries[]：\n  id                  string，唯一\n  query               string，1~200 字；送進 POST /api/questions/search-nl 的原句\n  expect              期望的 filters 七欄（subject／chapters／question_types／difficulty_min／difficulty_max／exclude_student_name／semantic_text）\n  expect_path         'rules'|'llm'；'rules' = 規則就該抓到章節（confident=true），'llm' = 規則抓不到、必須走 LLM 輔路徑\n  relevant            number[]；期望命中的 eval/fixtures/questions.public.json 題 id（Recall@10 的正樣本）\n  note                string|null；標註有爭議時寫給開發者看的一句話\n  needs_human_confirm boolean；true = 尚未人工定案，suite 只當骨架驗證用",
+  "_annotations": {
+    "涵蓋面（第 8.4 條）": "nlq-001~008 只有章節；009~017 章節+難度；018~025 章節+題型+學生；026~035 口語別名；036~043 完全沒章節只有概念詞（走 LLM）；044~050 模糊句。六類都有。",
+    "expect.semantic_text": "凍結的預期值（第 8.4 條）：① 解析漂移時發警告；② recall10 改用它去 embed()，讓量到的是「檢索本身」而不是「這一輪解析剛好漂掉」。rules 路徑的值取自 utils/nlqHeuristics.js 目前的輸出，因此它同時是一條回歸線。",
+    "relevant": "rules 路徑由 expect 的四欄對 fixture 篩出來（章節＋難度＋題型全中的題）；llm 路徑逐句手挑最貼近的題。fixture 只涵蓋 8 個章節，所以 50 句刻意集中在這 8 章，不然 Recall@10 沒有正樣本可量。",
+    "expect_path=llm 的 8 句": "這 8 句規則一定抓不到章節（句子裡沒有任何章節本名或別名），因此必然呼叫 generateJson。eval/cassettes/nlq/ 還沒有錄音，CI 會是 replay miss——WS-D 在 cassette 錄好之前不要把 --suite nlq 加進 CI（見 docs/questions3-wsC.md 第 4 題）。"
+  },
+  "version": 1,
+  "entries": [
+    {
+      "id": "nlq-001",
+      "query": "向量內積",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "向量內積"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "向量內積"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-002",
+      "query": "指數與對數",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "指數與對數"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "指數與對數"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-003",
+      "query": "三角函數的定義",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "三角函數的定義"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "三角函數的定義"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-004",
+      "query": "牛頓運動定律",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "牛頓運動定律"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "牛頓運動定律"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-005",
+      "query": "摩擦力與向心力",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "摩擦力與向心力"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "摩擦力與向心力"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-006",
+      "query": "直線運動",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "直線運動"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "直線運動"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-007",
+      "query": "電場與電位",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "電場與電位"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "電場與電位"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-008",
+      "query": "空間向量內積",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "空間向量內積"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "空間向量內積"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-009",
+      "query": "向量內積難度 4 以上",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "向量內積"
+        ],
+        "question_types": [],
+        "difficulty_min": 4,
+        "difficulty_max": 5,
+        "exclude_student_name": null,
+        "semantic_text": "向量內積"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        15,
+        16
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-010",
+      "query": "指數與對數難度 2 以下",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "指數與對數"
+        ],
+        "question_types": [],
+        "difficulty_min": 1,
+        "difficulty_max": 2,
+        "exclude_student_name": null,
+        "semantic_text": "指數與對數"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        1,
+        2,
+        3,
+        4,
+        8
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-011",
+      "query": "牛頓運動定律難度 3~4",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "牛頓運動定律"
+        ],
+        "question_types": [],
+        "difficulty_min": 3,
+        "difficulty_max": 4,
+        "exclude_student_name": null,
+        "semantic_text": "牛頓運動定律"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        34,
+        35,
+        36,
+        37
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-012",
+      "query": "摩擦力與向心力 3 星",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "摩擦力與向心力"
+        ],
+        "question_types": [],
+        "difficulty_min": 3,
+        "difficulty_max": 3,
+        "exclude_student_name": null,
+        "semantic_text": "摩擦力與向心力"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        40,
+        41,
+        42,
+        43
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-013",
+      "query": "直線運動難度 2",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "直線運動"
+        ],
+        "question_types": [],
+        "difficulty_min": 2,
+        "difficulty_max": 2,
+        "exclude_student_name": null,
+        "semantic_text": "直線運動"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        47,
+        48,
+        49,
+        50,
+        51
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-014",
+      "query": "電場與電位難度 3 以上",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "電場與電位"
+        ],
+        "question_types": [],
+        "difficulty_min": 3,
+        "difficulty_max": 5,
+        "exclude_student_name": null,
+        "semantic_text": "電場與電位"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        54,
+        55,
+        58,
+        60
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-015",
+      "query": "三角函數的定義難度 1",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "三角函數的定義"
+        ],
+        "question_types": [],
+        "difficulty_min": 1,
+        "difficulty_max": 1,
+        "exclude_student_name": null,
+        "semantic_text": "三角函數的定義"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        25,
+        26
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-016",
+      "query": "空間向量內積難度 2 到 3",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "空間向量內積"
+        ],
+        "question_types": [],
+        "difficulty_min": 2,
+        "difficulty_max": 3,
+        "exclude_student_name": null,
+        "semantic_text": "空間向量內積"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        17,
+        18,
+        19,
+        20,
+        21,
+        23,
+        24
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-017",
+      "query": "指數與對數難度 4 以上",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "指數與對數"
+        ],
+        "question_types": [],
+        "difficulty_min": 4,
+        "difficulty_max": 5,
+        "exclude_student_name": null,
+        "semantic_text": "指數與對數"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        5,
+        6
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-018",
+      "query": "向量內積的計算題，小明沒寫過",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "向量內積"
+        ],
+        "question_types": [
+          "計算"
+        ],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": "小明",
+        "semantic_text": "向量內積"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        9,
+        10,
+        11,
+        12,
+        15
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-019",
+      "query": "牛頓運動定律的單選題，小華沒做過",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "牛頓運動定律"
+        ],
+        "question_types": [
+          "單選"
+        ],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": "小華",
+        "semantic_text": "牛頓運動定律"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        38,
+        39
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-020",
+      "query": "摩擦力與向心力的多選題，阿哲沒寫",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "摩擦力與向心力"
+        ],
+        "question_types": [
+          "多選"
+        ],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": "阿哲",
+        "semantic_text": "摩擦力與向心力"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        46
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-021",
+      "query": "指數與對數的填空題，小美沒做過",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "指數與對數"
+        ],
+        "question_types": [
+          "填空"
+        ],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": "小美",
+        "semantic_text": "指數與對數"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        7
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-022",
+      "query": "直線運動的計算題，小明還沒寫過",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "直線運動"
+        ],
+        "question_types": [
+          "計算"
+        ],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": "小明",
+        "semantic_text": "直線運動"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        47,
+        48,
+        49,
+        50
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-023",
+      "query": "電場與電位的計算題，小華沒寫過",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "電場與電位"
+        ],
+        "question_types": [
+          "計算"
+        ],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": "小華",
+        "semantic_text": "電場與電位"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        54,
+        55,
+        56,
+        57,
+        58,
+        60
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-024",
+      "query": "三角函數的定義的填空題，小美沒寫過",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "三角函數的定義"
+        ],
+        "question_types": [
+          "填空"
+        ],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": "小美",
+        "semantic_text": "三角函數的定義"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        27,
+        28
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-025",
+      "query": "空間向量內積的填空題，小明沒做過",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "空間向量內積"
+        ],
+        "question_types": [
+          "填空"
+        ],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": "小明",
+        "semantic_text": "空間向量內積"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        21,
+        23
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-026",
+      "query": "牛頓第二定律的計算題",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "牛頓運動定律"
+        ],
+        "question_types": [
+          "計算"
+        ],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "牛頓第二定律"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        32,
+        33,
+        34,
+        35,
+        36,
+        37
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-027",
+      "query": "摩擦力的題目",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "摩擦力與向心力"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "摩擦力"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-028",
+      "query": "對數的填空題",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "指數與對數"
+        ],
+        "question_types": [
+          "填空"
+        ],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "對數"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        7
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-029",
+      "query": "自由落體的計算題",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "直線運動"
+        ],
+        "question_types": [
+          "計算"
+        ],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "自由落體"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        47,
+        48,
+        49,
+        50
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-030",
+      "query": "電位差難度 3 以上",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "電場與電位"
+        ],
+        "question_types": [],
+        "difficulty_min": 3,
+        "difficulty_max": 5,
+        "exclude_student_name": null,
+        "semantic_text": "電位差"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        54,
+        55,
+        58,
+        60
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-031",
+      "query": "向心力的計算題",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "摩擦力與向心力"
+        ],
+        "question_types": [
+          "計算"
+        ],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "向心力"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        40,
+        41,
+        42,
+        43,
+        45
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-032",
+      "query": "象限角的單選題",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "三角函數的定義"
+        ],
+        "question_types": [
+          "單選"
+        ],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "象限角"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        25,
+        26,
+        29,
+        31
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-033",
+      "query": "空間內積的計算題",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "空間向量內積"
+        ],
+        "question_types": [
+          "計算"
+        ],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "空間內積"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        17,
+        18,
+        19,
+        20,
+        22
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-034",
+      "query": "慣性定律的單選題",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "牛頓運動定律"
+        ],
+        "question_types": [
+          "單選"
+        ],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "慣性定律"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        38,
+        39
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-035",
+      "query": "平面向量內積難度 3",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "向量內積"
+        ],
+        "question_types": [],
+        "difficulty_min": 3,
+        "difficulty_max": 3,
+        "exclude_student_name": null,
+        "semantic_text": "平面向量內積"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        11,
+        12,
+        13,
+        14
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-036",
+      "query": "斜面上物體受力平衡的題目",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "摩擦力與向心力"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "斜面上物體受力平衡"
+      },
+      "expect_path": "llm",
+      "relevant": [
+        40,
+        41
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-037",
+      "query": "電梯裡體重計的讀數會變成多少",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "牛頓運動定律"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "電梯裡體重計的讀數會變成多少"
+      },
+      "expect_path": "llm",
+      "relevant": [
+        34,
+        35
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-038",
+      "query": "滑輪兩端掛重物求系統的加速度",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "牛頓運動定律"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "滑輪兩端掛重物求系統的加速度"
+      },
+      "expect_path": "llm",
+      "relevant": [
+        36,
+        37
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-039",
+      "query": "把電荷從一點移到另一點需要作多少功",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "電場與電位"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "把電荷從一點移到另一點需要作多少功"
+      },
+      "expect_path": "llm",
+      "relevant": [
+        58,
+        60
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-040",
+      "query": "求 2 的 50 次方是幾位數",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "指數與對數"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "求 2 的 50 次方是幾位數"
+      },
+      "expect_path": "llm",
+      "relevant": [
+        5,
+        6
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-041",
+      "query": "角的終邊通過某一點，求它的三角比",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "三角函數的定義"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "角的終邊通過某一點，求它的三角比"
+      },
+      "expect_path": "llm",
+      "relevant": [
+        30
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-042",
+      "query": "兩個向量互相垂直時座標裡的未知數是多少",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "向量內積"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "兩個向量互相垂直時座標裡的未知數是多少"
+      },
+      "expect_path": "llm",
+      "relevant": [
+        13,
+        14
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-043",
+      "query": "汽車轉彎時輪胎抓地力不夠會打滑",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "摩擦力與向心力"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "汽車轉彎時輪胎抓地力不夠會打滑"
+      },
+      "expect_path": "llm",
+      "relevant": [
+        45
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-044",
+      "query": "最近上到摩擦力，出幾題來練習",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "摩擦力與向心力"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "最近上到 摩擦力 練習"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-045",
+      "query": "電場與電位那一章有沒有難一點的",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "電場與電位"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "電場與電位 一章難一點"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-046",
+      "query": "想找跟自由落體有關的，難度不要太高",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "直線運動"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "自由落體 難度不要太高"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-047",
+      "query": "對數那邊小美一直卡住，來幾題填空",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "指數與對數"
+        ],
+        "question_types": [
+          "填空"
+        ],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "對數 邊小美一直卡住"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        7
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-048",
+      "query": "隨便給我幾題三角函數",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "三角函數的定義"
+        ],
+        "question_types": [],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "隨便 三角函數"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-049",
+      "query": "有沒有那種考直線運動觀念的單選",
+      "expect": {
+        "subject": "物理",
+        "chapters": [
+          "直線運動"
+        ],
+        "question_types": [
+          "單選"
+        ],
+        "difficulty_min": null,
+        "difficulty_max": null,
+        "exclude_student_name": null,
+        "semantic_text": "種考 直線運動 觀念"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        51,
+        53
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "nlq-050",
+      "query": "向量內積跟空間向量內積都想練，難度 3 以上",
+      "expect": {
+        "subject": "數學",
+        "chapters": [
+          "向量內積",
+          "空間向量內積"
+        ],
+        "question_types": [],
+        "difficulty_min": 3,
+        "difficulty_max": 5,
+        "exclude_student_name": null,
+        "semantic_text": "向量內積 空間向量內積 練"
+      },
+      "expect_path": "rules",
+      "relevant": [
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        19,
+        20,
+        21,
+        22,
+        23
+      ],
+      "note": null,
+      "needs_human_confirm": true
+    }
+  ]
+}
