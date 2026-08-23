@@ -109,6 +109,19 @@ router.post('/review/:jqId/reject', reviewController.reject);
 // ===== [/WS3-A: students] =====
 
 // ===== [WS3-B: variants] =====
+// POST /api/questions/:id/variants — 相似題／變式題（docs/interfaces-stage3.md 第 3 條，P-10）
+// FEATURE_VARIANTS 未開啟時「不掛載」這條路由，請求落到 Express 預設 404（與 FEATURE_SIMILAR 同做法）。
+// 限流 10/min 與 /analyze-pdf、POST /api/jobs 同一個等級，但**是各自獨立的桶**
+// （createRateLimiter 每次呼叫都是一個新的 Map，不共用計數器）。
+const variantService = require('../services/variantService');
+if (variantService.isVariantsEnabled()) {
+    const variantRateLimit = createRateLimiter({
+        windowMs: 60 * 1000,
+        max: 10,
+        message: '變式題請求過於頻繁，請稍候再試（每分鐘最多 10 次）。'
+    });
+    router.post('/questions/:id/variants', variantRateLimit, variantService.variantsHandler);
+}
 // ===== [/WS3-B: variants] =====
 
 // ===== [WS3-C: nlq] =====
