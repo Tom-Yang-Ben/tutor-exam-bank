@@ -499,10 +499,12 @@ async function runLike(db, opts) {
         excludeStudentId, terms, limit } = opts;
 
     const values = [subjects, chapters, difficultyMin, difficultyMax, questionTypes, excludeStudentId];
-    const likeSql = terms.map((t) => {
-        values.push(t);
-        return `q.question_text ILIKE '%' || $${values.length} || '%'`;
-    }).join(' OR ');
+    const likeSql = terms.length
+        ? `AND (${terms.map((t) => {
+            values.push(t);
+            return `q.question_text ILIKE '%' || $${values.length} || '%'`;
+        }).join(' OR ')})`
+        : '';
     values.push(Math.min(limit, MAX_LIMIT));
 
     const { rows } = await db.query(
@@ -515,7 +517,7 @@ async function runLike(db, opts) {
             AND (cardinality($5::text[]) = 0 OR q.question_type = ANY($5::text[]))
             AND ($6::int IS NULL OR NOT EXISTS (
                     SELECT 1 FROM attempts a WHERE a.question_id = q.id AND a.student_id = $6::int))
-            AND (${likeSql})
+            ${likeSql}
           ORDER BY q.id DESC
           LIMIT $${values.length}`,
         values
@@ -589,10 +591,22 @@ async function retrieve(db, opts) {
         const terms = queryText.split(/\s+/).map(s => s.trim()).filter(Boolean).slice(0, LIKE_MAX_TERMS);
         if (!terms.length) terms.push(rawQuery.trim());
 
+        // LIKE 的放寬順序**與 hybrid 不同**，這是刻意的。
+        // ILIKE 比的是整段字串，而題幹幾乎不會逐字出現「牛頓第二定律」這種章節名——
+        // 照 hybrid 的順序先丟章節，只會從「一題都沒有」變成「範圍更大的一題都沒有」。
+        // 先丟掉 ILIKE 這個條件，留下 metadata 篩選，等於直接退回 listQuestions
+        // 的那張清單（第 6.6 條的原話就是「退回 listQuestions 的 LIKE」）：
+        // 至少是「這一章這個難度的題目」，而不是空白。
+        const likeLadder = [
+            { chapters: filters.chapters, questionTypes: filters.question_types, difficultyMin, difficultyMax, terms },
+            { chapters: filters.chapters, questionTypes: filters.question_types, difficultyMin, difficultyMax, terms: [] },
+            { chapters: [], questionTypes: [], difficultyMin: 1, difficultyMax: 5, terms: [] }
+        ];
+
         let results = [];
         let step = 0;
-        for (; step < ladder.length; step++) {
-            const rung = ladder[step];
+        for (; step < likeLadder.length; step++) {
+            const rung = likeLadder[step];
             results = await runLike(db, {
                 subjects,
                 chapters: rung.chapters,
@@ -600,7 +614,7 @@ async function retrieve(db, opts) {
                 difficultyMin: rung.difficultyMin,
                 difficultyMax: rung.difficultyMax,
                 excludeStudentId,
-                terms,
+                terms: rung.terms,
                 limit
             });
             if (results.length) break;
