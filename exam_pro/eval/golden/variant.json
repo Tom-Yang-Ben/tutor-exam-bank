@@ -1,0 +1,398 @@
+{
+  "_notice": "藍本全部取自 eval/fixtures/questions.public.json（本專案作者自製的常見教科書型例題），不取自任何特定考卷、題本或出版品（見 repo 根目錄 NOTICE 第 2 條）。本檔只記「哪 30 題當藍本」與期望值，不含任何生成出來的題目文字。",
+  "_status": "needs_human_confirm 全部為 true — 30 個藍本由 P-11a 以機械規則挑出（fixture 的奇數 id，再把 #15→#16、#45→#46 讓「證明」與「多選」也出現），涵蓋 8 章、五種題型、難度 1~5；開發者本人逐題確認後改成 false，改完之前 eval/run.js 不得 --write-baseline。",
+  "_schema": "entries[]：id（var-NNN）／source_question_id（fixture 內部編號）／subject／chapter／difficulty／question_type／role（fixture 的角色標註，只供閱讀）／expect.min_retrieved（純檢索至少要找到幾題才算「不需要生成」）／needs_human_confirm。載入時逐筆過 config/chapters.js 的 isValidChapter 與「source_question_id 必須在 fixture 內」。",
+  "version": 1,
+  "entries": [
+    {
+      "id": "var-001",
+      "source_question_id": 1,
+      "subject": "數學",
+      "chapter": "指數與對數",
+      "difficulty": 1,
+      "question_type": "單選",
+      "role": "base",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-002",
+      "source_question_id": 3,
+      "subject": "數學",
+      "chapter": "指數與對數",
+      "difficulty": 2,
+      "question_type": "計算",
+      "role": "base",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-003",
+      "source_question_id": 5,
+      "subject": "數學",
+      "chapter": "指數與對數",
+      "difficulty": 4,
+      "question_type": "計算",
+      "role": "base",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-004",
+      "source_question_id": 7,
+      "subject": "數學",
+      "chapter": "指數與對數",
+      "difficulty": 3,
+      "question_type": "填空",
+      "role": "distractor",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-005",
+      "source_question_id": 9,
+      "subject": "數學",
+      "chapter": "向量內積",
+      "difficulty": 2,
+      "question_type": "計算",
+      "role": "base",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-006",
+      "source_question_id": 11,
+      "subject": "數學",
+      "chapter": "向量內積",
+      "difficulty": 3,
+      "question_type": "計算",
+      "role": "base",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-007",
+      "source_question_id": 13,
+      "subject": "數學",
+      "chapter": "向量內積",
+      "difficulty": 3,
+      "question_type": "填空",
+      "role": "base",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-008",
+      "source_question_id": 16,
+      "subject": "數學",
+      "chapter": "向量內積",
+      "difficulty": 5,
+      "question_type": "證明",
+      "role": "distractor",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-009",
+      "source_question_id": 17,
+      "subject": "數學",
+      "chapter": "空間向量內積",
+      "difficulty": 2,
+      "question_type": "計算",
+      "role": "base",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-010",
+      "source_question_id": 19,
+      "subject": "數學",
+      "chapter": "空間向量內積",
+      "difficulty": 3,
+      "question_type": "計算",
+      "role": "base",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-011",
+      "source_question_id": 21,
+      "subject": "數學",
+      "chapter": "空間向量內積",
+      "difficulty": 3,
+      "question_type": "填空",
+      "role": "lookalike",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-012",
+      "source_question_id": 23,
+      "subject": "數學",
+      "chapter": "空間向量內積",
+      "difficulty": 3,
+      "question_type": "填空",
+      "role": "distractor",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-013",
+      "source_question_id": 25,
+      "subject": "數學",
+      "chapter": "三角函數的定義",
+      "difficulty": 1,
+      "question_type": "單選",
+      "role": "base",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-014",
+      "source_question_id": 27,
+      "subject": "數學",
+      "chapter": "三角函數的定義",
+      "difficulty": 2,
+      "question_type": "填空",
+      "role": "base",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-015",
+      "source_question_id": 29,
+      "subject": "數學",
+      "chapter": "三角函數的定義",
+      "difficulty": 2,
+      "question_type": "單選",
+      "role": "distractor",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-016",
+      "source_question_id": 31,
+      "subject": "數學",
+      "chapter": "三角函數的定義",
+      "difficulty": 2,
+      "question_type": "單選",
+      "role": "distractor",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-017",
+      "source_question_id": 33,
+      "subject": "物理",
+      "chapter": "牛頓運動定律",
+      "difficulty": 2,
+      "question_type": "計算",
+      "role": "numeric_variant",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-018",
+      "source_question_id": 35,
+      "subject": "物理",
+      "chapter": "牛頓運動定律",
+      "difficulty": 3,
+      "question_type": "計算",
+      "role": "numeric_variant",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-019",
+      "source_question_id": 37,
+      "subject": "物理",
+      "chapter": "牛頓運動定律",
+      "difficulty": 4,
+      "question_type": "計算",
+      "role": "numeric_variant",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-020",
+      "source_question_id": 39,
+      "subject": "物理",
+      "chapter": "牛頓運動定律",
+      "difficulty": 1,
+      "question_type": "單選",
+      "role": "distractor",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-021",
+      "source_question_id": 41,
+      "subject": "物理",
+      "chapter": "摩擦力與向心力",
+      "difficulty": 3,
+      "question_type": "計算",
+      "role": "numeric_variant",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-022",
+      "source_question_id": 43,
+      "subject": "物理",
+      "chapter": "摩擦力與向心力",
+      "difficulty": 3,
+      "question_type": "計算",
+      "role": "numeric_variant",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-023",
+      "source_question_id": 46,
+      "subject": "物理",
+      "chapter": "摩擦力與向心力",
+      "difficulty": 2,
+      "question_type": "多選",
+      "role": "distractor",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-024",
+      "source_question_id": 47,
+      "subject": "物理",
+      "chapter": "直線運動",
+      "difficulty": 2,
+      "question_type": "計算",
+      "role": "base",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-025",
+      "source_question_id": 49,
+      "subject": "物理",
+      "chapter": "直線運動",
+      "difficulty": 2,
+      "question_type": "計算",
+      "role": "base",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-026",
+      "source_question_id": 51,
+      "subject": "物理",
+      "chapter": "直線運動",
+      "difficulty": 2,
+      "question_type": "單選",
+      "role": "distractor",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-027",
+      "source_question_id": 53,
+      "subject": "物理",
+      "chapter": "直線運動",
+      "difficulty": 1,
+      "question_type": "單選",
+      "role": "distractor",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-028",
+      "source_question_id": 55,
+      "subject": "物理",
+      "chapter": "電場與電位",
+      "difficulty": 3,
+      "question_type": "計算",
+      "role": "numeric_variant",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-029",
+      "source_question_id": 57,
+      "subject": "物理",
+      "chapter": "電場與電位",
+      "difficulty": 2,
+      "question_type": "計算",
+      "role": "numeric_variant",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    },
+    {
+      "id": "var-030",
+      "source_question_id": 59,
+      "subject": "物理",
+      "chapter": "電場與電位",
+      "difficulty": 2,
+      "question_type": "單選",
+      "role": "distractor",
+      "expect": {
+        "min_retrieved": 2
+      },
+      "needs_human_confirm": true
+    }
+  ]
+}
