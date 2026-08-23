@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "variant",
+  "description": "以一道藍本題為範本，改寫出一道「同概念、不同情境與數字」的新題目。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "chapter",
+    "chapter_confidence",
+    "question_type",
+    "difficulty",
+    "question_text",
+    "answer_text"
+  ],
+  "propertyOrdering": [
+    "chapter",
+    "chapter_confidence",
+    "question_type",
+    "difficulty",
+    "question_text",
+    "answer_text",
+    "figure_desc"
+  ],
+  "properties": {
+    "chapter": {
+      "type": "string",
+      "x-enum": "chapter",
+      "description": "這道新題目所屬的精細章節，必須完全等於白名單裡的字串。原則上**沿用藍本的章節**；只有在改寫後真的落到另一章時才換，換了系統會再驗一次白名單。"
+    },
+    "chapter_confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "你對上面那個章節的把握程度，0 到 1。沿用藍本章節時給高分；自己換了章節就誠實給分，低分的題目會被送去人工複核。"
+    },
+    "question_type": {
+      "type": "string",
+      "x-enum": "question_type",
+      "description": "題型。原則上與藍本相同（單選改單選、計算改計算）；要求證明某個結論的題目一律是「證明」。"
+    },
+    "difficulty": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "難度，1（最簡單）到 5（最難），以台灣高中生的程度為基準。請對齊指定的目標難度。"
+    },
+    "question_text": {
+      "type": "string",
+      "description": "新題目的完整文字（含選項）。數學式一律用 $...$ 包住的 LaTeX。**不要**把附圖描述寫進這裡。必須換掉藍本的情境與數字，不能只把數字改一改。"
+    },
+    "answer_text": {
+      "type": "string",
+      "description": "新題目的正確答案；數學式同樣用 $...$ 的 LaTeX。單選／多選必須以選項代號開頭，例如「(C)。$f(3)=7$」。答案必須是你自己算過的，會有另一個模型獨立解一次來對答案。"
+    },
+    "figure_desc": {
+      "type": "string",
+      "description": "這一題若需要附圖，把圖的解題關鍵視覺資訊（座標點、邊長、角度、受力方向、電路接法…）寫成文字放這裡。不需要附圖就整個欄位不要輸出——沒有圖檔可以配，能用文字說清楚的題目才是好變式。"
+    }
+  }
+}

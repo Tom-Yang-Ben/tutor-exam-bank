@@ -14,6 +14,13 @@ const VENDORS = ['gemini', 'anthropic', 'openai'];
 const DEFAULT_EXTRACT = 'gemini:gemini-3.5-flash';   // 裁決 S0-5
 const DEFAULT_VERIFY = 'gemini:gemini-3.1-pro-preview';   // 裁決 S2-29（付費後改 Pro；S0-5 的條件成立）。CI 沒有 .env，cassette 是對這個預設錄的
 
+// ── 階段 3（docs/interfaces-stage3.md 第 9 條，擁有者：WS-B）──
+// MODEL_VARIANT 是變式生成用的模型，**未設時退回 MODEL_VERIFY**（推理強、與拆題不同家）。
+// 「退回」這一步刻意**不寫進本檔的 getter**：第 9 條註明「MODEL_VARIANT 未設時退回
+// MODEL_VERIFY 的解析在 config/models.js 之外做」。所以這裡只誠實回報「有沒有設」
+// （沒設回 null），由 workers/jobRunner.js 組 ctx.config.models 時決定退回哪一個。
+// 既有兩個 getter 與 warnIfSameModel() 的語意因此一個字都沒動。
+
 /**
  * 解析 'vendor:model-id'；沒有冒號時 vendor 預設 'gemini'。
  * @param {string} spec
@@ -69,4 +76,9 @@ Object.defineProperty(module.exports, 'MODEL_EXTRACT', {
 Object.defineProperty(module.exports, 'MODEL_VERIFY', {
     enumerable: true,
     get: () => process.env.MODEL_VERIFY || DEFAULT_VERIFY
+});
+// 階段 3：沒設定就回 **null**（不是空字串），呼叫端寫成 `MODEL_VARIANT || MODEL_VERIFY` 退回
+Object.defineProperty(module.exports, 'MODEL_VARIANT', {
+    enumerable: true,
+    get: () => (String(process.env.MODEL_VARIANT || '').trim() || null)
 });
