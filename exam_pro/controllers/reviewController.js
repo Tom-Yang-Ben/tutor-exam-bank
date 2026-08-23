@@ -42,6 +42,26 @@ function computeTextHash(questionText) {
     return textHash(questionText);
 }
 
+/**
+ * 變式題核准時的 `chapter_src`（interfaces-stage3.md 第 4.7 條、裁決 S3-12）。
+ *
+ * **送出的 chapter 與機器判定的 `payload.classify.chapter` 相同時寫 `'ai'`，不同才寫 `'human'`。**
+ *
+ * 為什麼變式題與 PDF 題不同（PDF 路徑一律 `'human'`，行為不變）：
+ * `VARIANT_AUTO_APPROVE=false` 時**每一題**變式都會進複核，若照 PDF 路徑一律寫 `'human'`，
+ * 等於老師按一次「核准」就替系統產生一批沒人逐題驗過的人工標籤——而第 5 條的 kNN 投票
+ * 只信 `'human'`，那正是規劃 §4.4 要防的自我強化。
+ * 這條規則與 `PUT /api/questions/:id` 既有的 `CASE WHEN chapter IS DISTINCT FROM …` 是同一套語意。
+ *
+ * @param {object} payload    job_questions.payload
+ * @param {string} submitted  老師送出的章節（已過 validateQuestionFields 正規化）
+ * @returns {'ai'|'human'}
+ */
+function variantChapterSrc(payload, submitted) {
+    const machine = payload?.classify?.chapter ?? payload?.extract?.chapter ?? null;
+    return machine !== null && submitted === machine ? 'ai' : 'human';
+}
+
 // ─────────────────────── 6.4 GET /api/review ───────────────────────
 
 exports.listReview = async (req, res, next) => {
@@ -100,8 +120,13 @@ exports.approve = async (req, res, next) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
+        // 階段 3（interfaces-stage3.md 第 4.7 條）：多撈一欄 j.kind——變式題與拆題共用
+        // 同一條複核佇列，但入庫的 origin／variant_of／chapter_src 三欄不同。
+        // FOR UPDATE 只鎖 job_questions（jobs 不需要鎖，這裡只讀它的 kind）。
         const { rows } = await client.query(
-            'SELECT id, job_id, state, payload FROM job_questions WHERE id = $1 FOR UPDATE', [id]);
+            `SELECT q.id, q.job_id, q.state, q.payload, j.kind
+               FROM job_questions q JOIN jobs j ON j.id = q.job_id
+              WHERE q.id = $1 FOR UPDATE OF q`, [id]);
         if (rows.length === 0) {
             await client.query('ROLLBACK');
             return res.status(404).json({ message: NOT_FOUND });
@@ -156,24 +181,32 @@ exports.approve = async (req, res, next) => {
             return res.json({ question_id: mergeInto, merged: true });
         }
 
-        // ── 入庫：origin='pdf'、chapter_src='human'（人改過章節）、text_hash，同一交易 ──
+        // ── 入庫：kind='pdf' 走 origin='pdf'／chapter_src='human'（既有行為，第 6.6 條是契約）；
+        //         kind='variant' 走 origin='variant'／variant_of=根節點／chapter_src 依有沒有改章節
+        //         （第 4.7 條、裁決 S3-12）。text_hash 一律對修正後的題幹重算（裁決 S2-23）。
         const hash = computeTextHash(v.value.question_text);
         const { buildTsvTokens } = require('../services/embedService');
         const { chapterTokens, keywordTokens, stemTokens } =
             buildTsvTokens({ ...v.value, keywords: null, concept_summary: null });
 
+        const isVariant = jq.kind === 'variant';
+        const origin = isVariant ? 'variant' : 'pdf';
+        const variantOf = isVariant ? (jq.payload?.extract?.variant_of_root ?? null) : null;
+        const chapterSrc = isVariant ? variantChapterSrc(jq.payload, v.value.chapter) : 'human';
+
         const { rows: inserted } = await client.query(
             `INSERT INTO questions
                 (subject, chapter, question_type, difficulty, question_text, question_img,
-                 answer_text, solution_img, origin, chapter_src, text_hash, search_tsv)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pdf','human',$9,
-                     setweight(to_tsvector('simple', array_to_string($10::text[], ' ')), 'A')
-                  || setweight(to_tsvector('simple', array_to_string($11::text[], ' ')), 'A')
-                  || setweight(to_tsvector('simple', array_to_string($12::text[], ' ')), 'B'))
+                 answer_text, solution_img, origin, chapter_src, variant_of, text_hash, search_tsv)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
+                     setweight(to_tsvector('simple', array_to_string($13::text[], ' ')), 'A')
+                  || setweight(to_tsvector('simple', array_to_string($14::text[], ' ')), 'A')
+                  || setweight(to_tsvector('simple', array_to_string($15::text[], ' ')), 'B'))
              RETURNING id`,
             [v.value.subject, v.value.chapter, v.value.question_type, v.value.difficulty,
             v.value.question_text, body.question_img || null, v.value.answer_text || '略',
-            body.solution_img || null, hash, chapterTokens, keywordTokens, stemTokens]);
+            body.solution_img || null, origin, chapterSrc, variantOf, hash,
+                chapterTokens, keywordTokens, stemTokens]);
         const questionId = inserted[0].id;
 
         await client.query(
@@ -248,3 +281,5 @@ function scheduleEmbed(questionId) {
 }
 
 module.exports.REVIEW_REASONS = REVIEW_REASONS;
+// 純函式，給單元測試釘住第 4.7 條的規則（WS-B 只加這個匯出，既有匯出不動）
+module.exports.variantChapterSrc = variantChapterSrc;
