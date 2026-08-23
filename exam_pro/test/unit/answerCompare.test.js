@@ -127,12 +127,17 @@ describe('extractFinalAnswer — 從 claimed 抽最終答案（裁決 S2-12 的�
         assert.equal(extractFinalAnswer(null), null);
     });
 
-    test('對 fixture 的 45 題填空／計算，抽出後可解析成數值的達 40 題', () => {
+    test('對 fixture 的 45 題填空／計算，抽出後可解析成數值的達 44 題', () => {
         const qs = fixture.questions.filter(q => ['填空', '計算'].includes(q.question_type));
         assert.equal(qs.length, 45);
         const numeric = qs.filter(q => toNumber(extractFinalAnswer(q.answer_text)) !== null);
-        // 剩下 5 題：#22 是文字敘述型答案；#56/57/58/60 是科學記號（等 S2-12 之後的第二輪裁決）
-        assert.equal(numeric.length, 40, '抽出後可解析成數值的題數退步了');
+        // 只剩 #22：它的答案是一句文字敘述（answer_form 應為 text），本來就不走數值路徑。
+        // 科學記號的 #56/57/58/60 已由裁決 S2-26 收進 toNumber。
+        assert.equal(numeric.length, 44, '抽出後可解析成數值的題數退步了');
+        assert.deepEqual(
+            qs.filter(q => toNumber(extractFinalAnswer(q.answer_text)) === null).map(q => q.id),
+            [22]
+        );
     });
 });
 
@@ -161,6 +166,46 @@ describe('toNumber — 有理數正規化', () => {
         assert.equal(toNumber('45^\\circ'), 45);
         assert.equal(toNumber('45^{\\circ}'), 45);
         assert.equal(toNumber('$60^\\circ$'), 60);
+    });
+
+    // ── 以下三組是裁決 S2-26 補的 ──
+
+    test('S2-26：科學記號的三種寫法收斂到同一個數', () => {
+        assert.equal(toNumber('2.4 \\times 10^{-4}'), 0.00024);
+        assert.equal(toNumber('$2.4 \\times 10^{-4}$'), 0.00024);
+        assert.equal(toNumber('2.4e-4'), 0.00024);
+        assert.equal(toNumber('0.00024'), 0.00024);
+        assert.equal(toNumber('6.0 \\times 10^{2}'), 600);
+        assert.equal(toNumber('6.0×10^2'), 600);
+        assert.equal(toNumber('-2.4 \\times 10^{-4}'), -0.00024);
+    });
+
+    test('S2-26：\\mathrm{…}／\\text{…}／\\,／\\ 與其後的單位整段去掉', () => {
+        assert.equal(toNumber('$5\\ \\mathrm{m/s^2}$'), 5);
+        assert.equal(toNumber('$9.8\\,\\mathrm{m/s^2}$'), 9.8);
+        assert.equal(toNumber('$600\\ \\text{N}$'), 600);
+        assert.equal(toNumber('2.4 \\times 10^{-4}\\ \\mathrm{J}'), 0.00024);
+    });
+
+    test('S2-26：可數值化的式子算出數值再比', () => {
+        assert.ok(Math.abs(toNumber('\\sqrt{3}') - Math.sqrt(3)) < 1e-12);
+        assert.ok(Math.abs(toNumber('\\frac{\\sqrt{3}}{2}') - Math.sqrt(3) / 2) < 1e-12);
+        assert.ok(Math.abs(toNumber('-\\frac{\\sqrt{3}}{2}') + Math.sqrt(3) / 2) < 1e-12);
+        assert.ok(Math.abs(toNumber('2\\pi') - 2 * Math.PI) < 1e-12);
+        assert.equal(toNumber('2^5'), 32);
+        assert.equal(toNumber('\\sqrt{200}') > 14.1 && toNumber('\\sqrt{200}') < 14.2, true);
+    });
+
+    test('S2-26：求值器對看不懂的東西一律回 null（不猜數值）', () => {
+        for (const s of ['x + 1', '\\vec{a}', '\\sin 30', '\\sqrt[3]{8}', '1/0', '(1+2', '互相垂直', '']) {
+            assert.equal(toNumber(s), null, JSON.stringify(s));
+        }
+    });
+
+    test('S2-26：兩邊都算得出且不等 → disagree（根式對小數）', () => {
+        assert.equal(cmp('填空', '$\\frac{1}{2}$', '$\\frac{\\sqrt{3}}{2}$', 'number'), 'disagree');
+        assert.equal(cmp('填空', '$-\\frac{1}{2}$', '$-\\frac{\\sqrt{3}}{2}$', 'number'), 'disagree');
+        assert.equal(cmp('計算', '$\\sqrt{200}$', '14.142135623730951', 'number'), 'agree');
     });
 
     test('單位後綴會被剝掉', () => {
@@ -264,16 +309,30 @@ describe('answerCompare — 填空／計算：先抽 final_answer 再依 answer_
     test('expression：去空白、去 $、去 \\left\\right 後相同即 agree', () => {
         assert.equal(cmp('計算', '$\\left( x+1 \\right)^2$', '(x+1)^2', 'expression'), 'agree');
         assert.equal(cmp('計算', '$x + 1$', 'x+1', 'expression'), 'agree');
-        assert.equal(cmp('計算', '$x + 1$', 'x-1', 'expression'), 'disagree');
     });
 
-    test('expression：兩邊都是數值時退回數值比較', () => {
+    test('expression：字串不同時兩邊都能數值化才比，否則 uncertain（裁決 S2-26）', () => {
+        // 兩邊都是數值 → 照 number 比
         assert.equal(cmp('計算', '$\\frac{1}{2}$', '0.5', 'expression'), 'agree');
+        assert.equal(cmp('計算', '$\\frac{3}{1}$', '3', 'expression'), 'agree');
+        assert.equal(cmp('計算', '$\\frac{1}{3}$', '3', 'expression'), 'disagree');
+        // 有一邊算不出數值 → uncertain，不得把「看不懂」當成「不一樣」
+        assert.equal(cmp('計算', '$x + 1$', 'x-1', 'expression'), 'uncertain');
+        assert.equal(cmp('計算', '$x + 1$', '2', 'expression'), 'uncertain');
     });
 
-    test('text：normalizeStem 後相同即 agree', () => {
+    test('text：normalizeStem 後相等 → agree，不相等一律 uncertain（裁決 S2-26）', () => {
         assert.equal(cmp('填空', '$互相垂直$', '互相 垂直', 'text'), 'agree');
-        assert.equal(cmp('填空', '$互相垂直$', '互相平行', 'text'), 'disagree');
+        assert.equal(cmp('填空', '互相垂直', '互相垂直', 'text'), 'agree');
+        // 文字答案的「不同」分不出是答錯還是換句話說，永遠不回 disagree
+        assert.equal(cmp('填空', '$互相垂直$', '互相平行', 'text'), 'uncertain');
+        assert.equal(cmp('填空', '兩向量的內積為零，故兩者互相垂直。', '互相垂直', 'text'), 'uncertain');
+    });
+
+    test('text 比的是整段 claimed，不走 $…$ 抽取（裁決 S2-26）', () => {
+        // 沒有 $…$、也沒有等號的純文字答案，抽取器會回 null；text 不受影響
+        assert.equal(cmp('填空', '互相垂直', '互相垂直', 'text'), 'agree');
+        assert.equal(extractFinalAnswer('互相垂直'), null);
     });
 
     test('answer_form 不在四個值內 → uncertain', () => {

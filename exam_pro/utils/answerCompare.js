@@ -119,14 +119,19 @@ function extractFinalAnswer(claimed) {
 
 // ───────────────────────── 數值正規化 ─────────────────────────
 
-/** 把常見的「不是數字但不影響數值」的東西清掉 */
+/**
+ * 把常見的「不是數字但不影響數值」的東西清掉。
+ * 裁決 S2-26：`\mathrm{…}`、`\text{…}`、`\,`、`\ ` 與其後的單位整段視為單位去掉。
+ */
 function stripDecoration(str) {
     return String(str)
         .normalize('NFKC')
         .replace(/\$/g, '')
-        .replace(/\\(left|right|,|;|!|:|quad|qquad)/g, '')
-        .replace(/\\text\{[^{}]*\}/g, '')        // \text{公尺} 這種單位
-        .replace(/\\mathrm\{[^{}]*\}/g, '')
+        // 單位巨集連內容一起去掉（\mathrm{m/s^2}、\text{公尺}）
+        .replace(/\\(?:text|mathrm|mathit|mathbf|operatorname|mbox|rm)\s*\{[^{}]*\}/g, '')
+        // LaTeX 的間距指令：\, \; \! \: \quad \qquad，以及「反斜線 + 空白」
+        .replace(/\\(?:qquad|quad|left|right|[,;!:])/g, '')
+        .replace(/\\(?=\s|$)/g, '')
         // 角度：$45^\circ$ 與 $45^{\circ}$ 的 ^\circ 是單位，不是指數
         //（第 4.2 條「單位後綴一律去掉再比」；Unicode 的 45° 由下面的單位後綴規則處理）
         .replace(/\^\s*\{?\s*\\(?:circ|degree)\s*\}?/g, '')
@@ -134,53 +139,126 @@ function stripDecoration(str) {
         .trim();
 }
 
-/** \frac{a}{b} / \dfrac / \tfrac → (a)/(b) */
-function expandFrac(str) {
-    let s = str;
-    for (let k = 0; k < 5; k++) {
-        const next = s.replace(/\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '($1)/($2)');
-        if (next === s) break;
-        s = next;
+/**
+ * LaTeX 片段 → 可計算的算式字串。
+ * `\sqrt` 先展開再展開 `\frac`：`\frac{\sqrt{3}}{2}` 的分子本身帶大括號，
+ * 順序反過來的話 `[^{}]*` 就吃不到。
+ */
+function latexToArith(str) {
+    let s = String(str);
+    for (let k = 0; k < 6; k++) {
+        const before = s;
+        s = s.replace(/\\sqrt\s*\{([^{}]*)\}/g, '√($1)');
+        s = s.replace(/\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '(($1)/($2))');
+        if (s === before) break;
     }
-    return s;
+    return s
+        .replace(/\\pi(?![A-Za-z])/g, 'π')
+        .replace(/\\times|\\cdot|×|·/g, '*')
+        .replace(/\\div|÷/g, '/')
+        .replace(/[−–—]/g, '-')          // 各種破折號當負號
+        // 剩下的大括號是上下標的群組（10^{-4}），換成括號給求值器
+        .replace(/\{/g, '(').replace(/\}/g, ')')
+        // 隱含乘號：2\pi → 2π → 2*π、3(1+2) → 3*(1+2)、2√3 → 2*√3
+        .replace(/([\d)])(?=[π√(])/g, '$1*')
+        .replace(/π(?=[\d(√])/g, 'π*');
 }
 
 /**
- * 單一數值 → number。支援 12、-3.5、1/2、(1)/(2)、\frac{1}{2}、50%、1.2e3。
- * 認不出來回 null。單位後綴（公尺、m/s、度…）會被剝掉。
+ * 求值一段純算術字串（遞迴下降，**不用 eval／Function**）。
+ * 輸入來自模型，任何「看不懂」的字元一律讓整式失敗回 null——
+ * 猜錯數值會變成假的 agree／disagree，比回 uncertain 糟得多。
+ *
+ * 支援：數字（含 1.2e3）、+ - * / ^、括號、一元正負、√、π。
+ * @returns {number|null}
+ */
+function evalArith(src) {
+    const s = String(src).replace(/\s+/g, '');
+    let i = 0;
+    let failed = false;
+
+    const fail = () => { failed = true; return NaN; };
+    const peek = () => s[i];
+
+    function parseExpr() {
+        let v = parseTerm();
+        while (!failed && (peek() === '+' || peek() === '-')) {
+            const op = s[i++];
+            const r = parseTerm();
+            v = op === '+' ? v + r : v - r;
+        }
+        return v;
+    }
+    function parseTerm() {
+        let v = parseFactor();
+        while (!failed && (peek() === '*' || peek() === '/')) {
+            const op = s[i++];
+            const r = parseFactor();
+            v = op === '*' ? v * r : v / r;
+        }
+        return v;
+    }
+    function parseFactor() {
+        if (peek() === '-') { i++; return -parseFactor(); }
+        if (peek() === '+') { i++; return parseFactor(); }
+        return parsePower();
+    }
+    function parsePower() {
+        const base = parseAtom();
+        if (!failed && peek() === '^') { i++; return Math.pow(base, parseFactor()); }
+        return base;
+    }
+    function parseAtom() {
+        if (failed || i >= s.length) return fail();
+        const c = peek();
+        if (c === '(') {
+            i++;
+            const v = parseExpr();
+            if (failed || peek() !== ')') return fail();
+            i++;
+            return v;
+        }
+        if (c === '√') { i++; return Math.sqrt(parseAtom()); }
+        if (c === 'π') { i++; return Math.PI; }
+        const m = /^\d+(\.\d+)?([eE][+-]?\d+)?/.exec(s.slice(i));
+        if (m) { i += m[0].length; return Number(m[0]); }
+        return fail();
+    }
+
+    const v = parseExpr();
+    if (failed || i !== s.length || !Number.isFinite(v)) return null;
+    return v;
+}
+
+/**
+ * 單一數值 → number。
+ *
+ * 支援（裁決 S2-26 補齊）：
+ *   12、-3.5、1/2、\frac{1}{2}、-\frac{1}{2}、50%、1.2e3
+ *   科學記號 `2.4 \times 10^{-4}`、`6.0×10^2`、`2.4e-4`
+ *   可數值化的式子 `\sqrt{3}`、`\frac{\sqrt{3}}{2}`、`2\pi`
+ *   單位後綴（公尺、m/s、N、`\mathrm{m/s^2}`、`^\circ`、°）一律去掉
+ *
+ * 認不出來一律回 null（呼叫端會落到 uncertain）。
  */
 function toNumber(raw) {
     if (raw === null || raw === undefined) return null;
-    let s = expandFrac(stripDecoration(raw));
 
-    s = s.replace(/[−–—]/g, '-')          // 各種破折號當負號
-        .replace(/\s+/g, '')
-        .replace(/^\+/, '');
+    let s = stripDecoration(raw);
+    if (s === '') return null;
 
     // 百分比
     let percent = false;
     if (/%$/.test(s)) { percent = true; s = s.slice(0, -1); }
 
-    // 剝單位後綴：數字（或右括號）之後的字母／中文一律不參與數值
-    s = s.replace(/^(\(?-?[\d./eE()+\-*^]*?)(?:[A-Za-z一-鿿°′″][A-Za-z一-鿿°′″/\s^\d]*)$/, '$1');
+    s = latexToArith(s).replace(/\s+/g, '').replace(/^\+/, '');
 
-    // 分數 a/b（含 \frac 展開後的 (a)/(b)，以及整個分數前面的負號：
-    // -\frac{1}{2} → -(1)/(2)。漏掉這個外層負號，「-1/2 vs 1/2」就會回 uncertain 而不是
-    // disagree——而漏掉負號正是最典型的錯答，裁決 S2-11 特別點名的就是它。）
-    const frac = s.match(/^(-?)\(?(-?\d+(?:\.\d+)?)\)?\/\(?(-?\d+(?:\.\d+)?)\)?$/);
-    if (frac) {
-        const den = Number(frac[3]);
-        if (den === 0) return null;
-        const v = (frac[1] === '-' ? -1 : 1) * (Number(frac[2]) / den);
-        return percent ? v / 100 : v;
-    }
+    // 剝單位後綴：算式（數字、括號、運算子、√、π）之後的字母／中文一律不參與數值
+    s = s.replace(/^([\d.eE()+\-*/^√π]*?)(?:[A-Za-z一-鿿°′″][A-Za-z一-鿿°′″/\s^\d]*)$/, '$1');
 
-    // 單純數字（含科學記號）
-    if (/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(s)) {
-        const v = Number(s);
-        return percent ? v / 100 : v;
-    }
-    return null;
+    const v = evalArith(s);
+    if (v === null) return null;
+    return percent ? v / 100 : v;
 }
 
 /**
@@ -230,24 +308,38 @@ function compareNumber(claimedAnswer, modelAnswer) {
     return same ? 'agree' : 'disagree';
 }
 
+/**
+ * expression（裁決 S2-26）：
+ *   去空白、`$`、`\left`／`\right` 後字串相等 → agree；
+ *   否則兩邊都能數值化就照 number 比（`\frac{3}{1}` 對 `3` → agree）；
+ *   否則 uncertain——只有一邊算得出數值時，判 disagree 等於拿「看不懂」當「不一樣」。
+ */
 function compareExpression(claimedAnswer, modelAnswer) {
-    const norm = (s) => stripDecoration(s).replace(/\s+/g, '').replace(/\\(left|right)/g, '');
+    const norm = (s) => stripDecoration(s).replace(/\\(left|right)/g, '').replace(/\s+/g, '');
     const a = norm(claimedAnswer);
     const b = norm(modelAnswer);
     if (a === '' || b === '') return 'uncertain';
     if (a === b) return 'agree';
-    // 寫法不同但數值相同（$\frac{1}{2}$ vs 0.5）仍算 agree
-    const na = toNumber(a);
-    const nb = toNumber(b);
+
+    const na = toNumber(claimedAnswer);
+    const nb = toNumber(modelAnswer);
     if (na !== null && nb !== null) return nearlyEqual(na, nb) ? 'agree' : 'disagree';
-    return 'disagree';
+    return 'uncertain';
 }
 
-function compareText(claimedAnswer, modelAnswer) {
-    const a = normalizeStem(String(claimedAnswer ?? ''));
+/**
+ * text（裁決 S2-26）：`normalizeStem` 後相等 → agree；
+ * **不相等一律 uncertain，永遠不回 disagree**——文字答案的「不同」分不出是答錯
+ * 還是換句話說，判 disagree 會製造假的 answer_mismatch。
+ *
+ * 比的是**整段 claimed**，不走 `$…$` 抽取：文字型答案本來就沒有「最後一個等號右邊」，
+ * 抽出來的多半是敘述裡的某個符號（例如 `$90^\circ$`）。
+ */
+function compareText(claimedWhole, modelAnswer) {
+    const a = normalizeStem(String(claimedWhole ?? ''));
     const b = normalizeStem(String(modelAnswer ?? ''));
     if (a === '' || b === '') return 'uncertain';
-    return a === b ? 'agree' : 'disagree';
+    return a === b ? 'agree' : 'uncertain';
 }
 
 function compareOption(claimedAnswer, modelAnswer) {
@@ -294,6 +386,9 @@ function answerCompare(opts) {
     if (questionType === '單選' || questionType === '多選') {
         return compareOption(claimed, finalAnswer);
     }
+
+    // text 不走 $…$ 抽取，直接比整段（裁決 S2-26；見 compareText 的說明）
+    if (answerForm === 'text') return compareText(claimed, String(finalAnswer));
 
     // 填空／計算（以及任何其他型別）：先從 claimed 抽出 final_answer
     const claimedFinal = extractFinalAnswer(claimed);

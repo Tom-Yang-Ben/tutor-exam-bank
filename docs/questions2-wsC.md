@@ -3,9 +3,11 @@
 > 規則：`docs/interfaces-stage2.md` 不得由 WS 修改。實作時發現介面有問題就寫在這裡，由開發者本人裁決後
 > 統一改 `interfaces-stage2.md` 並通知四條 WS。
 >
-> **狀態：全部結案（2026-08-22）。** 第一輪裁決已寫進 `docs/interfaces-stage2.md` §12（編號 S2-*）
+> **狀態：全部結案（2026-08-23）。** 第一輪裁決（S2-*）與第二輪補裁（S2-26）都已寫進 `docs/interfaces-stage2.md` §12（編號 S2-*）
 > 與對應條文；每一條下方的「**裁決**」就是最終結論，程式碼與測試已對齊，
-> 不需要再讀「我先怎麼做」那段來猜。第二輪新發現的問題另立一節於文末。
+> 不需要再讀「我先怎麼做」那段來猜。
+> 第 9～11 條是第二輪（S2-26）的；第 11 條的實作已照裁決落地，但**留了一筆待開發者決定的
+> golden 衝突**（`ans-048`），細節見該條。
 
 ---
 
@@ -125,7 +127,7 @@ WS-B 的 `buildSchema` 讀得到，`answer_form` 的 enum 注入實測正常。
 
 ---
 
-# 第二輪：新發現（待裁決）
+# 第二輪：已結案
 
 ## 9.（第 4.2 條）科學記號 `1.8 \times 10^5` 目前解析不出數值
 
@@ -154,6 +156,19 @@ WS-B 的 `buildSchema` 讀得到，`answer_form` 的 enum 注入實測正常。
 - `-\frac{1}{2}` 解析成 `null`（外層負號在 `\frac` 展開後掉了）→ 已修，`-0.5`。
 - `45^\circ`／`45^{\circ}` 解析成 `null`（`^\circ` 是角度單位，屬於第 4.2 條「單位後綴一律去掉再比」）→ 已修，`45`。
 
+**裁決（S2-26）**：第 4.2 條的 `number` 補上三種寫法——科學記號（`a \times 10^{n}`／`a×10^n`／`2.4e-4`）、
+`\mathrm{…}`／`\text{…}`／`\,`／`\ ` 與其後的單位整段去掉、`\sqrt{n}`／`\frac{\sqrt{a}}{b}`／`\pi`
+這類可數值化的式子算出數值再比（容差 `1e-9`，兩邊都算得出且不等 → `disagree`）。
+
+**落地**：`utils/answerCompare.js` 換掉原本「一條正則配一種寫法」的作法，改成
+「LaTeX → 算式字串 → 遞迴下降求值器」兩段。求值器**不用 `eval`／`Function`**——輸入來自模型，
+任何看不懂的字元一律讓整式失敗回 `null`（猜錯數值會變成假的 agree／disagree，比 uncertain 糟得多）。
+對 fixture 的 45 題填空／計算，抽出後可解析成數值的由 40 題升到 44 題，只剩 #22（它的答案是一句文字敘述）。
+`expression` 一併照 S2-26 改：字串不同時兩邊都能數值化才照 `number` 比，否則 `uncertain`
+（原本落到 `disagree`，等於拿「看不懂」當「不一樣」）。
+
+---
+
 ## 10.（S2-12 的連帶）`eval/golden/answer.json` 的 48 筆 `claimed` 還是舊寫法
 
 **現況**：S2-12 已裁決「D 的 answer golden 改回真實寫法」，但目前 `eval/golden/answer.json`
@@ -171,7 +186,43 @@ claimed: "$-\frac{1}{2}$。$120^\circ$ 的參考角為 $60^\circ$，第二象限
 新規則正是為它們設計的；`ans-036` 這種「結論在最前面」的形狀是 WS-D 當初為了閃避舊規則才寫的，
 不是真實分佈。
 
-**要做的事（WS-D）**：照 S2-12 把那 48 筆的 `claimed` 改寫成真實寫法，
-`extraction_hazard: true` 的兩筆（`ans-017`、`ans-047`）的 `expect.equivalent` 從 `uncertain` 改回 `agree`。
-目前沒有任何測試消費 `answer.json`（只有 `eval/README.md` 提到），所以這件事不會讓 CI 紅燈，
-但在改寫之前，answer golden 量到的數字不能當真。
+**結案**：WS-D 已依 S2-12 把 `answer.json` 的 `claimed` 全部改寫成真實寫法
+（`_status` 標記為「2026-08-22 依裁決 S2-12 改寫」），並新增 `test/unit/answerGolden.test.js`
+把 250 個案例接上 `answerCompare`。本輪（S2-26 落地後）250 案例相符 242 筆；
+`ans-017` 的 hazard 已消失，只剩 `ans-047`（golden 要改成 `agree`，見下）與 `ans-048`（第 11 條）。
+
+---
+
+## 11.（第 4.2 條）S2-26 的 `text` 規則與 golden `ans-048` 的期望互相矛盾
+
+**裁決（S2-26）**：`text` —— `normalizeStem` 後相等 → `agree`；**不相等一律 `uncertain`，永遠不回 `disagree`**。
+
+**落地**：`compareText` 照做，並且改成比**整段 `claimed`**（不走 `$…$` 抽取）——
+文字型答案沒有「最後一個等號右邊」，抽出來的多半是敘述裡的某個符號。
+`answer.json` 的三筆 `text` 中，`ans-049`（5 個案例）與 `ans-050`（證明題）都因此變成相符。
+
+**但 `ans-048` 的 5 個案例在 S2-26 下不可能相符**，而且不是實作差一點，是期望本身還停在舊語意：
+
+```
+normalizeStem(claimed) = "兩向量的內積為零且皆非零向量,故夾角為90^\circ,兩者互相垂直。"
+  eq    "互相垂直"   → "互相垂直"   不相等   expect agree     → S2-26 只能回 uncertain
+  eq    "互相垂直。" → "互相垂直。" 不相等   expect agree     → 同上
+  eq    "互 相 垂 直" → "互相垂直"  不相等   expect agree     → 同上
+  wrong "互相平行"   → "互相平行"   不相等   expect disagree  → S2-26 明令 text 不回 disagree
+  wrong "長度相等"   → "長度相等"   不相等   expect disagree  → 同上
+```
+
+- 三筆 `eq` 要 `agree`，就必須有「claimed 以 model 結尾也算相等」這類**包含式**比對，
+  而 S2-26 寫的是「相等」。
+- 兩筆 `wrong` 要 `disagree`，直接牴觸「永遠不回 `disagree`」。
+
+`ans-049` 的結構與 `ans-048` 完全相同（claimed 是一整句說明、model 只回結論短語），
+WS-D 已經把它改成 `{equivalent:'uncertain', wrong:'uncertain'}` 並因此相符——
+**`ans-048` 看起來只是漏改的那一筆**。
+
+**要做的事（WS-D，或開發者裁決）**：兩條路擇一——
+1. 把 `ans-048` 的 `expect` 改成 `{equivalent:'uncertain', wrong:'uncertain'}`（與 `ans-049` 一致）；
+   這樣 250 案例會只剩 `ans-047` 的三筆 `eq*`（那三筆是 golden 要改成 `agree`）。
+2. 若希望「說明句結尾就是答案」能判 `agree`，那要改的是 S2-26 的 `text` 規則本身
+   （加一條「claimed 正規化後以 model 結尾 → `agree`」），並同時決定 `wrong` 要回 `uncertain` 還是 `disagree`。
+   WS-C 不自行加這條——它會讓實作與凍結條文不一致。
