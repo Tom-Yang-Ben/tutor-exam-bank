@@ -471,10 +471,24 @@
 
                     <form id="paperForm" class="space-y-5">
                         <div>
-                            <label class="block text-sm font-semibold text-slate-600 mb-1.5">學生姓名</label>
-                            <input type="text" id="student_name" placeholder="例如：林小明 (系統會自動避開他寫過的題)"
-                                class="field-control block w-full p-3 transition-all"
-                                required>
+                            <label class="block text-sm font-semibold text-slate-600 mb-1.5">學生</label>
+                            <!-- 階段 4 W1-1（裁決 S4-1）：學生用「選的」不是「打的」。
+                                 自由輸入的名字打錯一個字就靜默建出新學生，「不重複出題」的
+                                 紀錄從此分裂（students 表曾出現「小」「名」「華」）。 -->
+                            <div class="flex gap-2">
+                                <select id="student_select"
+                                    class="field-control block w-full p-3 transition-all" required>
+                                    <option value="">-- 載入學生中… --</option>
+                                </select>
+                                <button type="button" id="newStudentBtn" title="新增學生"
+                                    class="shrink-0 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer">＋ 新增</button>
+                            </div>
+                            <div id="newStudentRow" class="hidden mt-2 flex gap-2">
+                                <input type="text" id="new_student_name" placeholder="新學生姓名"
+                                    class="field-control block w-full p-2.5 transition-all">
+                                <button type="button" id="newStudentSave"
+                                    class="shrink-0 rounded-xl bg-slate-800 px-4 text-sm font-bold text-white hover:bg-slate-700 transition-colors cursor-pointer">建立</button>
+                            </div>
                         </div>
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -620,7 +634,7 @@
         let chapterWhitelist = {};
 
         document.addEventListener('DOMContentLoaded', async () => {
-            await Promise.all([fetchChapters(), loadChapterWhitelist()]);
+            await Promise.all([fetchChapters(), loadChapterWhitelist(), loadStudents()]);
             fillMgrChapters();
             initManager();
             fetchQuestions(1);
@@ -1019,89 +1033,257 @@
             } catch (error) { showToast("無法連線伺服器", 'error'); }
         });
 
-        // 4. 智慧組卷
-        async function generatePaper() {
-            const studentNameInput = document.getElementById('student_name');
-            const subjectSelect = document.getElementById('paper_subject');
+        // 4. 智慧組卷（階段 4 W1-1／W1-2：選學生、草稿 → 確認）
+        //
+        // 流程：生成 → POST /generate-paper { dry_run:true }（**整段不寫庫**）→ 預覽卡
+        //（每題可「換這題」、整卷可「重抽」）→「確認出卷」→ POST /confirm-paper 才建卷
+        // 寫 attempts。在確認之前重抽多少次都不會「燒題」——這是 W1-2 要解的：
+        // 舊流程一按就定案，連按五次就是五張卷、池子平白少 25 題。
+
+        let draftPreview = null;    // 最近一次 dry_run 的回應
+        let draftExcluded = [];     // 「換這題」累積的排除清單（重新生成時歸零）
+
+        async function loadStudents(selectId) {
+            const sel = document.getElementById('student_select');
+            try {
+                const res = await apiFetch('/api/students');
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const body = await res.json();
+                sel.innerHTML = '';
+                const placeholder = document.createElement('option');
+                placeholder.value = '';
+                placeholder.textContent = body.items.length ? '-- 請選擇學生 --' : '-- 還沒有學生，先按「＋ 新增」 --';
+                sel.appendChild(placeholder);
+                for (const st of body.items) {
+                    const o = document.createElement('option');
+                    o.value = String(st.id);
+                    o.dataset.name = st.name;   // 姓名放 dataset，顯示文字可以加註記而不影響取值
+                    o.textContent = st.papers > 0 ? `${st.name}（${st.papers} 張卷）` : st.name;
+                    if (selectId && String(selectId) === String(st.id)) o.selected = true;
+                    sel.appendChild(o);
+                }
+            } catch (e) {
+                sel.innerHTML = '<option value="">-- 載入學生失敗，請重新整理 --</option>';
+            }
+        }
+
+        document.getElementById('newStudentBtn').addEventListener('click', () => {
+            document.getElementById('newStudentRow').classList.toggle('hidden');
+            document.getElementById('new_student_name').focus();
+        });
+        document.getElementById('newStudentSave').addEventListener('click', async () => {
+            const input = document.getElementById('new_student_name');
+            const name = input.value.trim();
+            if (!name) return showToast('請輸入新學生姓名', 'error');
+            try {
+                const res = await apiFetch('/api/students', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+                const body = await res.json();
+                if (!res.ok) return showToast(body.message || '建立失敗', 'error');
+                input.value = '';
+                document.getElementById('newStudentRow').classList.add('hidden');
+                await loadStudents(body.id);
+                showToast(`已建立學生「${body.name}」`, 'success');
+            } catch { showToast('無法連線伺服器', 'error'); }
+        });
+
+        function selectedStudent() {
+            const sel = document.getElementById('student_select');
+            const opt = sel.options[sel.selectedIndex];
+            if (!sel.value || !opt) return null;
+            return { id: Number(sel.value), name: opt.dataset.name || opt.textContent };
+        }
+
+        /** 送 dry_run；成功回預覽物件，失敗回 null（訊息已顯示）。 */
+        async function requestPreview() {
+            const student = selectedStudent();
             const chapterSelect = document.getElementById('paper_chapter');
             const countInput = document.getElementById('count');
-
-            if (!studentNameInput.value.trim()) return showToast("請輸入學生姓名", 'error');
-            if (!chapterSelect.value) return showToast("請選擇出題章節", 'error');
-
+            if (!student) { showToast('請先選擇學生（或先新增）', 'error'); return null; }
+            if (!chapterSelect.value) { showToast('請選擇出題章節', 'error'); return null; }
             const data = {
-                student_name: studentNameInput.value.trim(),
-                subject: subjectSelect.value,
+                student_id: student.id,
+                subject: document.getElementById('paper_subject').value,
                 chapter: chapterSelect.value,
-                count: parseInt(countInput.value) || 5
+                count: parseInt(countInput.value) || 5,
+                dry_run: true,
+                exclude_ids: draftExcluded
             };
-
             try {
                 const response = await apiFetch('/api/generate-paper', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
                 });
-
                 const result = await response.json();
-                const resultBox = document.getElementById('resultBox');
-                const resultIds = document.getElementById('resultIds');
-                resultBox.classList.remove('hidden');
-
-                if (response.ok) {
-                    // paper_id 是 interfaces.md 第 7 條**既有**的回應欄位，這裡只是把它一起留在快取裡，
-                    // 讓「立即批改」跳得到那一張卷（interfaces-stage3.md 第 7.1、7.2 條第 5 列）。
-                    // downloadWord 只解構 paper_title／student_name／question_ids，多這個鍵不影響匯出。
-                    currentPaperCache = {
-                        paper_title: result.paper_title,
-                        student_name: data.student_name,
-                        question_ids: result.question_ids,
-                        paper_id: result.paper_id ?? null
-                    };
-
-                    const resultTitle = document.getElementById('resultTitle');
-                    resultTitle.innerHTML = `
-                        <span class="text-emerald-900"></span>
-                        <span class="flex w-full sm:w-auto flex-col sm:flex-row gap-2">
-                            <button type="button" id="gradeNowBtn" class="hidden w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold py-2.5 px-4 rounded-xl shadow-lg shadow-emerald-600/15 transition-all cursor-pointer">
-                                立即批改
-                            </button>
-                            <button type="button" onclick="downloadWordFile()" class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold py-2.5 px-4 rounded-xl shadow-lg shadow-indigo-600/15 transition-all cursor-pointer">
-                                下載 Word 考卷 (.docx)
-                            </button>
-                        </span>
-                    `;
-                    // 「立即批改」是次要入口（規劃 §4.3.5：主要入口是學生分頁的試卷列表）。
-                    // 只有在「FEATURE_STUDENTS 開著」且「這次回應真的有 paper_id」時才出現——
-                    // 按了跳不到任何地方的按鈕，比沒有按鈕更糟。
-                    const gradeBtn = document.getElementById('gradeNowBtn');
-                    if (gradeBtn && featureOn('students') && currentPaperCache.paper_id) {
-                        gradeBtn.classList.remove('hidden');
-                        gradeBtn.addEventListener('click', () => {
-                            // 事件本身不帶資料：paper_id 與 student_name 由 students.js 從
-                            // ExamApp.getPaperCache() 讀（第 7.1 條的 getter 就是為此存在）。
-                            document.dispatchEvent(new CustomEvent('examapp:grade-paper'));
-                        });
-                    }
-                    // paper_title 由使用者輸入的學生姓名組成，必須走 textContent 才不會被當成 HTML 執行
-                    resultTitle.querySelector('span').textContent = `✨ ${result.paper_title}`;
-
-                    let infoText = `本次抽出的題目 ID 清單：${JSON.stringify(result.question_ids)}\n(自動避開歷史重複題目)\n\n📝 【 線上考卷題目預覽 】：\n`;
-                    result.questions.forEach((q, index) => {
-                        infoText += `\n第 ${index + 1} 題 [${q.question_type}] (難度: ${'★'.repeat(q.difficulty)})\n👉 題目：${q.question_text}\n💡 參考答案：${q.answer_text}\n--------------------------------------`;
-                    });
-
-                    resultIds.textContent = infoText; // 🎯 安全防護
-
-                    if (window.MathJax && typeof window.MathJax.typesetPromise === 'function') {
-                        window.MathJax.typesetPromise([resultIds]);
-                    }
-                } else {
-                    document.getElementById('resultTitle').innerHTML = `<span class="text-rose-600">❌ 出題失敗原因：</span>`;
-                    resultIds.className = "text-sm text-rose-500 mt-1 font-semibold";
-                    resultIds.textContent = result.message || "未知錯誤";
+                if (!response.ok) {
+                    const resultBox = document.getElementById('resultBox');
+                    const resultIds = document.getElementById('resultIds');
+                    resultBox.classList.remove('hidden');
+                    document.getElementById('resultTitle').innerHTML = '<span class="text-rose-600">❌ 出題失敗原因：</span>';
+                    resultIds.className = 'text-sm text-rose-500 mt-1 font-semibold';
+                    resultIds.textContent = result.message || '未知錯誤';
+                    return null;
                 }
-            } catch (error) { showToast("與後端連線中斷", 'error'); }
+                result.__student = student;
+                return result;
+            } catch { showToast('與後端連線中斷', 'error'); return null; }
+        }
+
+        async function generatePaper() {
+            draftExcluded = [];                       // 重新生成＝排除清單歸零
+            const preview = await requestPreview();
+            if (preview) renderPreview(preview);
+        }
+
+        /** 換掉單一題：把它加進排除清單再要一次預覽；池不夠就把排除退回去。 */
+        async function rerollQuestion(qid) {
+            draftExcluded.push(qid);
+            const preview = await requestPreview();
+            if (preview) { renderPreview(preview); return; }
+            draftExcluded.pop();                      // 400（多半是庫存不足）→ 還原，預覽維持原狀
+        }
+
+        function renderPreview(result) {
+            draftPreview = result;
+            const resultBox = document.getElementById('resultBox');
+            const resultTitle = document.getElementById('resultTitle');
+            const resultIds = document.getElementById('resultIds');
+            resultBox.classList.remove('hidden');
+            resultIds.className = 'text-sm text-slate-700 mt-3 bg-white p-4 rounded-xl border border-slate-100 shadow-inner max-h-96 overflow-y-auto';
+            resultIds.textContent = '';
+
+            resultTitle.innerHTML = `
+                <span class="text-emerald-900"></span>
+                <span class="flex w-full sm:w-auto flex-col sm:flex-row gap-2">
+                    <button type="button" id="rerollAllBtn" class="w-full sm:w-auto bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-extrabold py-2.5 px-4 rounded-xl transition-all cursor-pointer">🎲 整卷重抽</button>
+                    <button type="button" id="confirmPaperBtn" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold py-2.5 px-4 rounded-xl shadow-lg shadow-emerald-600/15 transition-all cursor-pointer">✔ 確認出卷</button>
+                </span>`;
+            resultTitle.querySelector('span').textContent = `📝 預覽：${result.paper_title_preview}`;
+
+            const note = document.createElement('p');
+            note.className = 'text-[11px] font-bold text-amber-600 mb-3';
+            note.textContent = '尚未寫入——換題、重抽都不會扣掉題庫池；按「確認出卷」才會建卷並記入不重複紀錄。';
+            resultIds.appendChild(note);
+
+            result.questions.forEach((q, index) => {
+                const row = document.createElement('div');
+                row.className = 'mb-3 rounded-lg border border-slate-100 p-3';
+                const head = document.createElement('div');
+                head.className = 'flex items-center justify-between gap-2';
+                const label = document.createElement('p');
+                label.className = 'text-[11px] font-bold text-slate-400';
+                label.textContent = `第 ${index + 1} 題 [${q.question_type}]（難度 ${'★'.repeat(q.difficulty || 0)}）　#${q.id}`;
+                const swap = document.createElement('button');
+                swap.type = 'button';
+                swap.className = 'shrink-0 text-[11px] font-bold px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 cursor-pointer';
+                swap.textContent = '換這題';
+                swap.addEventListener('click', () => rerollQuestion(q.id));
+                head.append(label, swap);
+                const stem = document.createElement('p');
+                stem.className = 'mt-1 text-sm whitespace-pre-line';
+                stem.textContent = q.question_text;
+                const ans = document.createElement('p');
+                ans.className = 'mt-1 text-xs text-slate-400 whitespace-pre-line';
+                ans.textContent = `💡 參考答案：${q.answer_text}`;
+                row.append(head, stem, ans);
+                resultIds.appendChild(row);
+            });
+            if (window.MathJax && typeof window.MathJax.typesetPromise === 'function') {
+                window.MathJax.typesetPromise([resultIds]);
+            }
+
+            document.getElementById('rerollAllBtn').addEventListener('click', async () => {
+                const preview = await requestPreview();
+                if (preview) renderPreview(preview);
+            });
+            document.getElementById('confirmPaperBtn').addEventListener('click', confirmPaper);
+        }
+
+        async function confirmPaper() {
+            if (!draftPreview) return showToast('請先生成預覽', 'error');
+            const btn = document.getElementById('confirmPaperBtn');
+            if (btn) btn.disabled = true;
+            try {
+                const response = await apiFetch('/api/confirm-paper', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        student_id: draftPreview.student_id,
+                        question_ids: draftPreview.question_ids
+                    })
+                });
+                const result = await response.json();
+                if (!response.ok) {
+                    showToast(result.message || '確認失敗', 'error');
+                    // 409（預覽過期）：自動重新預覽一份新的
+                    if (response.status === 409) { const p = await requestPreview(); if (p) renderPreview(p); }
+                    return;
+                }
+                renderConfirmedPaper(result, draftPreview.__student.name);
+                draftPreview = null;
+                draftExcluded = [];
+                await loadStudents(document.getElementById('student_select').value);   // 卷數 +1
+            } catch { showToast('與後端連線中斷', 'error'); }
+            finally { if (btn) btn.disabled = false; }
+        }
+
+        /** 確認成功後的畫面（＝階段 3 之前 generate-paper 成功的畫面，原樣保留）。 */
+        function renderConfirmedPaper(result, studentName) {
+            // paper_id 是 interfaces.md 第 7 條**既有**的回應欄位，這裡只是把它一起留在快取裡，
+            // 讓「立即批改」跳得到那一張卷（interfaces-stage3.md 第 7.1、7.2 條第 5 列）。
+            // downloadWord 只解構 paper_title／student_name／question_ids，多這個鍵不影響匯出。
+            currentPaperCache = {
+                paper_title: result.paper_title,
+                student_name: studentName,
+                question_ids: result.question_ids,
+                paper_id: result.paper_id ?? null
+            };
+
+            const resultBox = document.getElementById('resultBox');
+            const resultIds = document.getElementById('resultIds');
+            resultBox.classList.remove('hidden');
+            resultIds.className = 'text-sm text-slate-700 mt-3 whitespace-pre-line bg-white p-4 rounded-xl border border-slate-100 shadow-inner max-h-96 overflow-y-auto';
+
+            const resultTitle = document.getElementById('resultTitle');
+            resultTitle.innerHTML = `
+                <span class="text-emerald-900"></span>
+                <span class="flex w-full sm:w-auto flex-col sm:flex-row gap-2">
+                    <button type="button" id="gradeNowBtn" class="hidden w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold py-2.5 px-4 rounded-xl shadow-lg shadow-emerald-600/15 transition-all cursor-pointer">
+                        立即批改
+                    </button>
+                    <button type="button" onclick="downloadWordFile()" class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold py-2.5 px-4 rounded-xl shadow-lg shadow-indigo-600/15 transition-all cursor-pointer">
+                        下載 Word 考卷 (.docx)
+                    </button>
+                </span>
+            `;
+            // 「立即批改」是次要入口（規劃 §4.3.5：主要入口是學生分頁的試卷列表）。
+            // 只有在「FEATURE_STUDENTS 開著」且「這次回應真的有 paper_id」時才出現——
+            // 按了跳不到任何地方的按鈕，比沒有按鈕更糟。
+            const gradeBtn = document.getElementById('gradeNowBtn');
+            if (gradeBtn && featureOn('students') && currentPaperCache.paper_id) {
+                gradeBtn.classList.remove('hidden');
+                gradeBtn.addEventListener('click', () => {
+                    // 事件本身不帶資料：paper_id 與 student_name 由 students.js 從
+                    // ExamApp.getPaperCache() 讀（第 7.1 條的 getter 就是為此存在）。
+                    document.dispatchEvent(new CustomEvent('examapp:grade-paper'));
+                });
+            }
+            // paper_title 含使用者輸入的姓名，必須走 textContent 才不會被當成 HTML 執行
+            resultTitle.querySelector('span').textContent = `✨ ${result.paper_title}`;
+
+            let infoText = `本次抽出的題目 ID 清單：${JSON.stringify(result.question_ids)}\n(已寫入不重複紀錄)\n\n📝 【 線上考卷題目預覽 】：\n`;
+            result.questions.forEach((q, index) => {
+                infoText += `\n第 ${index + 1} 題 [${q.question_type}] (難度: ${'★'.repeat(q.difficulty)})\n👉 題目：${q.question_text}\n💡 參考答案：${q.answer_text}\n--------------------------------------`;
+            });
+            resultIds.textContent = infoText; // 🎯 安全防護
+
+            if (window.MathJax && typeof window.MathJax.typesetPromise === 'function') {
+                window.MathJax.typesetPromise([resultIds]);
+            }
         }
 
         // 5. 下載 Word 檔案

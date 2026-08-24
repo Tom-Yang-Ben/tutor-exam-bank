@@ -632,6 +632,7 @@ function gradingForm(app, detail, badge, onGraded) {
     const current = original.map(r => ({ ...r }));
 
     const list = el('div', 'space-y-2');
+    const repaints = [];   // W1-3：每列的重畫函式，「未批全對」批次改值後整批重畫
     detail.questions.forEach((q, i) => {
         const row = el('div', 'rounded-xl border border-slate-100 p-3');
         row.appendChild(el('p', 'text-[11px] font-bold text-slate-400', {
@@ -663,8 +664,24 @@ function gradingForm(app, detail, badge, onGraded) {
             group.appendChild(btn);
         }
         paint();
+        repaints.push(paint);
         row.appendChild(group);
         list.appendChild(row);
+    });
+
+    // W1-3（docs/stage4-plan.md）：家教的批改習慣是「只圈錯的」——
+    // 這顆把**還沒批**的全部標為「對」，已標的（對或錯）一律不動；
+    // 之後仍走同一條 diff → PATCH 路徑，「全有全無」的交易語意不變。
+    const markRestCorrect = el('button', 'mt-3 w-full rounded-xl border border-emerald-200 bg-emerald-50 p-2.5 text-sm font-bold text-emerald-700 transition-colors hover:bg-emerald-100 cursor-pointer', {
+        type: 'button', textContent: '未批的全部標為對（只點錯的，十秒批完）'
+    });
+    markRestCorrect.addEventListener('click', () => {
+        let changed = 0;
+        for (const row of current) {
+            if ((row.result ?? null) === null) { row.result = 1; changed += 1; }
+        }
+        for (const paint of repaints) paint();
+        app.showToast(changed > 0 ? `已把 ${changed} 題標為「對」，記得按「儲存批改」。` : '沒有未批的題目。', changed > 0 ? 'success' : 'info');
     });
 
     const save = el('button', 'mt-4 w-full rounded-xl bg-emerald-600 p-3 font-extrabold text-white transition-all hover:bg-emerald-700 cursor-pointer', {
@@ -702,11 +719,116 @@ function gradingForm(app, detail, badge, onGraded) {
         }
     });
 
-    wrap.append(list, save, note);
+    wrap.append(list, markRestCorrect, save, note);
     return wrap;
 }
 
 // ───────────────────────── 版面組裝 ─────────────────────────
+
+// ───────────────────────── 學生管理（階段 4 W1-1） ─────────────────────────
+//
+// 三個動作：改名、把 A 併入 B（清理「小」「名」「華」這種打錯字生出來的分身）、
+// 刪除（連 attempts 與考卷）。全部打核心區的學生管理 API（不吃 FEATURE_STUDENTS，
+// 但面板放在學生分頁——這裡本來就是看學生的地方）。
+// 刪除與合併都不可逆：不用 window.confirm（會擋住整個分頁），用「按第二次才執行」。
+
+/** 目前選在管理面板裡的動作按鈕若處於「待確認」狀態，退回原文字。 */
+function armTwice(btn, armedText, run) {
+    btn.addEventListener('click', () => {
+        if (btn.dataset.armed === '1') { btn.dataset.armed = ''; run(); return; }
+        btn.dataset.armed = '1';
+        const original = btn.textContent;
+        btn.textContent = armedText;
+        setTimeout(() => { if (btn.dataset.armed === '1') { btn.dataset.armed = ''; btn.textContent = original; } }, 4000);
+    });
+}
+
+async function renderManagePanel(app, box) {
+    box.textContent = '';
+    const card = el('div', 'rounded-2xl border border-amber-200 bg-amber-50/50 p-4');
+    card.appendChild(el('p', 'eyebrow text-amber-600', { textContent: '管理學生' }));
+    card.appendChild(el('p', 'mt-1 mb-3 text-xs text-slate-500', {
+        textContent: '改名、合併（把打錯字生出來的分身併回本尊；同一題兩邊都寫過時保留本尊的批改）、刪除（連作答紀錄與考卷，不可逆）。'
+    }));
+
+    let items = [];
+    try {
+        const res = await request(app, '/api/students');
+        if (!res.ok) throw new Error(String(res.status));
+        items = (await res.json()).items;
+    } catch {
+        card.appendChild(el('p', 'text-sm text-rose-500', { textContent: '學生清單載入失敗，請重新整理。' }));
+        box.appendChild(card);
+        return;
+    }
+    if (items.length === 0) {
+        card.appendChild(el('p', 'text-sm text-slate-400', { textContent: '還沒有任何學生。到「智慧自動組卷」按「＋ 新增」建立。' }));
+        box.appendChild(card);
+        return;
+    }
+
+    const rowsBox = el('div', 'space-y-2');
+    for (const st of items) {
+        const row = el('div', 'flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2.5');
+        row.appendChild(el('span', 'min-w-24 text-sm font-bold text-slate-700', { textContent: st.name }));
+        row.appendChild(el('span', 'text-[11px] text-slate-400', { textContent: `${st.papers} 張卷` }));
+
+        const nameIn = el('input', 'field-control min-h-0 w-32 p-1.5 text-xs', { value: st.name, 'aria-label': `${st.name} 的新名字` });
+        const renameBtn = el('button', 'text-[11px] font-bold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 cursor-pointer', {
+            type: 'button', textContent: '改名'
+        });
+        renameBtn.addEventListener('click', async () => {
+            const name = nameIn.value.trim();
+            if (!name || name === st.name) return;
+            const res = await request(app, `/api/students/${st.id}`, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name })
+            });
+            if (!res.ok) { app.showToast(await messageOf(res), 'error'); return; }
+            app.showToast(`已改名為「${name}」`, 'success');
+            renderManagePanel(app, box);
+            loadStudentView(app).catch(() => {});
+        });
+
+        const mergeSel = el('select', 'field-control min-h-0 p-1.5 text-xs', { 'aria-label': `把 ${st.name} 併入誰` });
+        mergeSel.appendChild(el('option', '', { value: '', textContent: '併入…' }));
+        for (const other of items) {
+            if (other.id === st.id) continue;
+            mergeSel.appendChild(el('option', '', { value: String(other.id), textContent: other.name }));
+        }
+        const mergeBtn = el('button', 'text-[11px] font-bold px-2.5 py-1.5 rounded-lg border border-indigo-200 bg-white text-indigo-600 hover:bg-indigo-50 cursor-pointer', {
+            type: 'button', textContent: '合併'
+        });
+        armTwice(mergeBtn, '再按一次確認合併', async () => {
+            const into = Number(mergeSel.value);
+            if (!into) { app.showToast('先選要併入哪位學生。', 'error'); return; }
+            const res = await request(app, `/api/students/${st.id}/merge`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ into_id: into })
+            });
+            if (!res.ok) { app.showToast(await messageOf(res), 'error'); return; }
+            const body = await res.json();
+            app.showToast(`已合併：搬 ${body.moved_attempts} 筆作答、${body.moved_papers} 張卷，衝突 ${body.dropped_conflicts} 筆以本尊為準。`, 'success');
+            renderManagePanel(app, box);
+            loadStudentView(app).catch(() => {});
+        });
+
+        const delBtn = el('button', 'text-[11px] font-bold px-2.5 py-1.5 rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 cursor-pointer', {
+            type: 'button', textContent: '刪除'
+        });
+        armTwice(delBtn, '再按一次＝連紀錄一起刪', async () => {
+            const res = await request(app, `/api/students/${st.id}`, { method: 'DELETE' });
+            if (!res.ok) { app.showToast(await messageOf(res), 'error'); return; }
+            const body = await res.json();
+            app.showToast(`已刪除「${st.name}」（連 ${body.deleted.attempts} 筆作答、${body.deleted.papers} 張卷）。`, 'success');
+            renderManagePanel(app, box);
+            loadStudentView(app).catch(() => {});
+        });
+
+        row.append(nameIn, renameBtn, mergeSel, mergeBtn, delBtn);
+        rowsBox.appendChild(row);
+    }
+    card.appendChild(rowsBox);
+    box.appendChild(card);
+}
 
 /**
  * 建立 <section id="students"> 裡的骨架（index.html 只放一個空的錨點）。
@@ -746,8 +868,13 @@ function mountStudentsSection(app, section) {
     const refresh = el('button', 'text-sm px-4 py-2 rounded-xl border border-slate-200 bg-white font-bold text-slate-600 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 cursor-pointer', {
         type: 'button', id: 'stuRefresh', textContent: '重新整理'
     });
-    controls.append(studentSel, subjectSel, daysSel, refresh);
+    const manageBtn = el('button', 'text-sm px-4 py-2 rounded-xl border border-slate-200 bg-white font-bold text-slate-600 transition-colors hover:border-amber-200 hover:bg-amber-50 hover:text-amber-700 cursor-pointer', {
+        type: 'button', id: 'stuManageBtn', textContent: '⚙ 管理學生'
+    });
+    controls.append(studentSel, subjectSel, daysSel, refresh, manageBtn);
     head.append(title, controls);
+
+    const manageBox = el('div', 'hidden mb-4', { id: 'stuManage' });
 
     const status = el('p', 'rounded-xl border border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-500', {
         id: 'stuStatus', textContent: '載入中…'
@@ -755,7 +882,13 @@ function mountStudentsSection(app, section) {
     const papersBox = el('div', 'mt-4', { id: 'stuPapers' });
     const weaknessBox = el('div', 'mt-6', { id: 'stuWeakness' });
 
-    section.append(head, status, papersBox, weaknessBox);
+    section.append(head, manageBox, status, papersBox, weaknessBox);
+
+    manageBtn.addEventListener('click', () => {
+        const willOpen = manageBox.classList.contains('hidden');
+        manageBox.classList.toggle('hidden', !willOpen);
+        if (willOpen) renderManagePanel(app, manageBox);
+    });
 
     const reload = () => loadStudentView(app).catch(err => console.error('[students] 載入失敗', err));
     studentSel.addEventListener('change', reload);

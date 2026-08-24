@@ -225,6 +225,25 @@ describe('students.js 對 ?mock=1 真的渲染得出來（P-05）', () => {
         assert.equal(groups[2].children.filter(b => b.getAttribute('aria-checked') === 'true')[0].textContent, '未批');
     });
 
+    test('「未批的全部標為對」只動 result=null 的題，已批的不動（階段 4 W1-3）', async () => {
+        await mount();
+        const card = env.document.querySelectorAll('[data-paper-id="41"]')[0];
+        card.children[0].click();
+        await flush(); await flush();
+        const bulk = card.querySelectorAll('button').filter(b => b.textContent.includes('未批的全部標為對'))[0];
+        assert.ok(bulk, '找不到「未批的全部標為對」按鈕');
+        bulk.click();
+        await flush();
+        // mock 的 41 號卷：第 1 題原本就是「對」、第 3 題原本「未批」→ 按完全部都該是「對」
+        // 且第 2 題若原本是「錯」必須保持「錯」（只動未批的）
+        const groups = card.querySelectorAll('[role="radiogroup"]');
+        const checkedOf = g => g.children.filter(b => b.getAttribute('aria-checked') === 'true')[0].textContent;
+        assert.equal(checkedOf(groups[2]), '對', '原本未批的題要變成「對」');
+        for (const g of groups) {
+            assert.notEqual(checkedOf(g), '未批', '按完不該再有未批的題');
+        }
+    });
+
     test('沒有任何改動就按「儲存批改」→ 不送 PATCH，只提示', async () => {
         await mount();
         const card = env.document.querySelectorAll('[data-paper-id="41"]')[0];
