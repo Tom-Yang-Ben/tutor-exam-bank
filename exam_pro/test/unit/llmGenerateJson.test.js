@@ -109,8 +109,15 @@ describe('config/models.js — warnIfSameModel', () => {
 
 describe('config/pricing.js — estimateCost', () => {
     test('verified_on 是 null → 記 0 且 cost_estimated=false（不猜數字）', () => {
-        const r = pricing.estimateCost({ modelId: 'gemini-3.5-flash', tokenIn: 1000, tokenOut: 500, tokenThinking: 900 });
-        assert.deepEqual(r, { cost_usd: 0, cost_estimated: false });
+        // 2026-08-24 之前這裡直接拿 gemini-3.5-flash 當例子；價格查證填上後（P-15b 收尾），
+        // 改塞一個臨時的未查證模型——釘的是**行為**，不是「某個模型剛好還沒查證」這個狀態。
+        pricing.PRICING['測試用-未查證模型'] = { input: 1, output: 10, cached: 0.5, verified_on: null };
+        try {
+            const r = pricing.estimateCost({ modelId: '測試用-未查證模型', tokenIn: 1000, tokenOut: 500, tokenThinking: 900 });
+            assert.deepEqual(r, { cost_usd: 0, cost_estimated: false });
+        } finally {
+            delete pricing.PRICING['測試用-未查證模型'];
+        }
     });
 
     test('查不到的模型同樣回 0 / false', () => {

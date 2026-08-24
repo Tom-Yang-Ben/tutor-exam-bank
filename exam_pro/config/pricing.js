@@ -13,23 +13,27 @@
 // 為什麼「查不到就記 0」而不是猜一個數字：一個猜出來的成本會混進報表的加總，
 // 之後沒有人分得出哪些是量到的、哪些是掰的。記 0 + 一個旗標，至少誠實。
 //
-// ⚠ 目前四支 Flash 全部 verified_on: null。要讓成本報表有意義，請人工到
-//   https://ai.google.dev/gemini-api/docs/pricing 查證後把數字與日期一起填上
-//   （這是 WS-B 交給人工 lane 的待辦，見 docs/llm.md）。
+// 價格於 2026-08-24 自 https://ai.google.dev/gemini-api/docs/pricing 人工查證（付費層）。
+// 兩個本表刻意簡化的地方（都往「不低估」的方向靠）：
+//   1. gemini-3.1-pro-preview 官方分兩級（≤200k／>200k tokens 上下文），本專案單次呼叫
+//      遠小於 200k，一律取 ≤200k 級距（input 2／output 12／cached 0.20）。
+//   2. gemini-3.7-flash 與 3.6-flash 是促銷價（2026-12-31 止；2027-01-01 起 input 1.50／
+//      output 7.50／cached 0.15）——到期後要回來改，verified_on 就是提醒。
+//   context caching 的**儲存費**（$/1M tokens/hour）不在 token 計價模型內，本表不含。
 
 /** @type {Record<string, {input:number, output:number, cached:number, verified_on:string|null}>} */
 const PRICING = {
     // 拆題／分類／公式重寫（MODEL_EXTRACT 預設）
-    'gemini-3.5-flash': { input: 0, output: 0, cached: 0, verified_on: null },
-    // 解題驗證（MODEL_VERIFY 預設）
-    'gemini-3.7-flash': { input: 0, output: 0, cached: 0, verified_on: null },
-    // spike 當日也可用，換模型時的備位
-    'gemini-3.6-flash': { input: 0, output: 0, cached: 0, verified_on: null },
-    'gemini-2.5-flash': { input: 0, output: 0, cached: 0, verified_on: null },
-    // 開通付費後 MODEL_VERIFY 會換成它（免費層配額為 0，見裁決 S0-5）
-    'gemini-3.1-pro-preview': { input: 0, output: 0, cached: 0, verified_on: null },
-    // embedding（成本報表的完整性；embed 目前不寫 job_events，先列著）
-    'gemini-embedding-001': { input: 0, output: 0, cached: 0, verified_on: null }
+    'gemini-3.5-flash': { input: 1.50, output: 9.00, cached: 0.15, verified_on: '2026-08-24' },
+    // 解題驗證（MODEL_VERIFY 預設）；促銷價至 2026-12-31（見檔頭第 2 點）
+    'gemini-3.7-flash': { input: 0.75, output: 3.75, cached: 0.075, verified_on: '2026-08-24' },
+    // spike 當日也可用，換模型時的備位；促銷價至 2026-12-31（見檔頭第 2 點）
+    'gemini-3.6-flash': { input: 0.75, output: 3.75, cached: 0.075, verified_on: '2026-08-24' },
+    'gemini-2.5-flash': { input: 0.30, output: 2.50, cached: 0.03, verified_on: '2026-08-24' },
+    // 開通付費後 MODEL_VERIFY 會換成它（免費層配額為 0，見裁決 S0-5）；取 ≤200k 級距（見檔頭第 1 點）
+    'gemini-3.1-pro-preview': { input: 2.00, output: 12.00, cached: 0.20, verified_on: '2026-08-24' },
+    // embedding（成本報表的完整性；embed 目前不寫 job_events，先列著）。無 output／cached 計價
+    'gemini-embedding-001': { input: 0.15, output: 0, cached: 0, verified_on: '2026-08-24' }
 };
 
 const PER_MILLION = 1_000_000;
