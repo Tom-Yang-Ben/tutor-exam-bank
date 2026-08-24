@@ -20,11 +20,15 @@
 | 規劃 | `docs/roadmap-plan.md`（五章：排程、資料層、Agent 管線、產品面、橫切）；Artifact https://claude.ai/code/artifact/14b7e7a6-2a59-4991-8cee-022ecf19220f | — |
 | 階段 1 資料層 | **完成並上線**（2026-08-21 MySQL→PG 切換、D-X1 收尾：mysql2／DB_*／schema.sql 已移除） | `docs/interfaces.md`（裁決 1–27）、`docs/stage1-parallel-prompts.md`、`docs/human-lane-stage1.md`、`docs/cutover-runbook.md` |
 | 階段 2 Agent 管線 | **完成**（三輪合併、cassette 錄齊、CI 綠；`FEATURE_PIPELINE=true` 已在本機 `.env`）；A-T16 前後對照**使用者選擇先跳過** | `docs/interfaces-stage2.md`（S0-1～6、S2-1～30）、`docs/stage2-parallel-prompts.md`、`docs/ws-notices-round2/3-stage2.md` |
-| 階段 3 產品面 | **第一輪合入 main（`b64f149`），裁決 S3-R1～R28 已發（`106a546`），nlq cassette 已錄（`fd5cf5b`），第二輪小修四條合入 main（`5facafe`，2026-08-24）**；WS 端已無待合併工作 | `docs/interfaces-stage3.md`（§15 = 裁決）、`docs/stage3-parallel-prompts.md`、`docs/ws-notices-round2-stage3.md` |
+| 階段 3 產品面 | **結案（2026-08-24）**：兩輪合併、S3-R1～R29、cassette 錄齊、五個 suite 硬門檻、README 數字（P-15b）、四旗標開啟且**使用者試用通過**；pricing.js 已填官方價格 | `docs/interfaces-stage3.md`（§15 = 裁決）、`docs/stage3-parallel-prompts.md`、`docs/ws-notices-round2-stage3.md` |
 
 main 最新：`f4a15ca`（第二輪合併 `5facafe` → NUL 修正 `5e26224` → variant 第一次錄製 `18db34d` → S3-R29 `7cfacce` → golden 定案＋0.90 重錄＋nlq／variant 門檻 `f4a15ca`）。單元 1403/1403、整合 253/253、五個 suite 都有硬門檻且全過。CI **全綠**。四個 worktree 已 ff 到同一點。
 
 ## 3. 階段 3 現在卡在哪、下一步
+
+> **2026-08-24 結案**。四個旗標已在本機 .env 開啟（FEATURE_STUDENTS／NLQ／VARIANTS／SIMILAR=true），使用者實測：學生分頁、NLQ、找相似、出變式都正常——注意時間窗預設 90 天，示範資料在 5/17～5/21，要選 180 天才看得到。pricing.js 已填官方價（`7861a25`），live 路徑的 cost_usd 從此有真數字。
+> **待使用者裁決的資料問題**：students 表有「小」「名」「華」三個單字名學生（舊 MySQL 5/21 的考卷本來就這樣建，非遷移 bug）；「名」→小明、「華」→小華好猜，「小」是誰只有老師知道。答案定了再併（attempts 有 (student_id, question_id) 唯一鍵，併時要處理衝突）。
+> 下一階段沒有現成規劃——候選見 §3.5 與結案回報。
 
 1. ~~第二輪小修~~ **已完成**（2026-08-24 合入 `5facafe`，A／B／C／D 的 questions3-ws*.md 全部結案）。目前沒有發給 WS 的新工作；若第三輪有需要，再開新分支貼新提示詞。
 2. ~~nlqHeuristics.js 的字面 NUL~~ **已修**（`5e26224`，改成 `'\u0000'` 逸出）。WS-B 留下的私有測試庫 `tutor_exam_bank_wsb_test` 不用了可 DROP。
