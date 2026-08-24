@@ -2,8 +2,14 @@
 
 [![CI](https://github.com/Tom-Yang-Ben/tutor-exam-bank/actions/workflows/ci.yml/badge.svg)](https://github.com/Tom-Yang-Ben/tutor-exam-bank/actions/workflows/ci.yml)
 
-以 **Node.js + Express + PostgreSQL 16（pgvector）+ Google Gemini** 打造的家教題庫與智慧組卷後端。
-支援上傳考卷 PDF 由 AI 自動拆題入庫、依學生作答歷史智慧組卷、並匯出含數學公式排版的 Word 考卷。
+以 **Node.js 24 + Express 5 + PostgreSQL 16（pgvector）+ Google Gemini** 打造的家教題庫系統。
+上傳考卷 PDF 由**多 Agent 管線**拆題入庫（六個 sub-agent、硬閘門、部分入庫、人工複核），
+依學生作答歷史出**不重複**的卷（草稿 → 確認）、匯出 Word 原生公式考卷；
+其上疊加 **RAG**（相似題／變式題／自然語言查題／檢索式分類）與**對話式助教**（主控 agent + 只讀工具）。
+
+> 🧭 **技術選型（RAG 與多 Agent：為什麼選、優缺點、替代方案比較）**寫在
+> [根目錄 README](../README.md)（技術選型 ①②兩章）與
+> [`docs/rag-and-agents.md`](../docs/rag-and-agents.md)（完整版）；本檔聚焦「怎麼跑、怎麼驗、數字在哪」。
 
 ---
 
@@ -11,12 +17,16 @@
 
 | 功能 | 說明 |
 |------|------|
-| 📄 **PDF 智慧解題** | 上傳考卷 PDF，Gemini 2.5 Flash 自動拆解題目、判斷學科／章節／難度，並將公式轉為 LaTeX |
-| ✍️ **題庫管理** | 題目新增／編輯／刪除／搜尋／分頁，後端以「章節白名單」嚴格驗證 |
-| 🧠 **智慧組卷** | 依「學生 × 章節」抽題，**Fisher-Yates 均勻隨機**（有一萬次分佈測試把關），自動記錄作答歷史避免重複出題（交易確保一致性）|
-| 📥 **匯出 Word** | 依題型與難度排序，產生 `.docx` 考卷，內建 LaTeX → Word 數學公式轉換 |
-| 🌱 **一鍵種子題庫** | `seed_questions.js` 內建 30 題自製示範題，**集中在 4 章、每章 7~8 題**，灌完即可直接用預設值組卷 |
-| 🔒 **安全設計** | 參數化 SQL、CORS 白名單、圖片下載防 SSRF、可選 API Key 認證（timing-safe；能力邊界見[安全注意事項](#-安全注意事項)）|
+| 📄 **多 Agent 拆題管線** | 上傳 PDF → `jobs` 狀態機驅動六個 sub-agent（拆題→分類→公式修復→**異模型獨立驗答**→兩段去重），節點間硬閘門，**部分入庫**：合格的題照樣進庫，有疑慮的帶著機器寫的具體原因進複核佇列 |
+| ✍️ **題庫管理** | 題目新增／編輯／刪除／搜尋／分頁，後端以「章節白名單」嚴格驗證；出過的題刪除時自動改封存 |
+| 🧠 **智慧組卷（草稿→確認）** | 下拉選學生 → 預覽（**不寫庫**，可換單題／整卷重抽）→ 確認才建卷並記入**不重複**紀錄；Fisher-Yates 均勻隨機（一萬次分佈測試把關）＋變式家族互斥；後悔可刪卷還原題目池 |
+| 📥 **匯出 Word** | 依題型與難度排序產生 `.docx`，自製 LaTeX → OOXML 轉換——是可用 Word 方程式編輯器修改的**真公式** |
+| 🔎 **相似題／自然語言查題** | hybrid 檢索（pgvector＋jieba 全文，RRF 融合）；查題框直接打「牛頓第二定律的計算題，難度 4 以上」——規則為主、LLM 為輔、四級回退，解析結果回寫下拉可檢視 |
+| 🧬 **變式題生成** | 錯題一鍵出變式：**先檢索（免錢）、池不足才生成**；生成走九道閘門（只改字／跑題餘弦／獨立驗答／去重），首輪一律停在複核等老師核准 |
+| 📊 **學生弱點面板** | 章節錯誤率、題型／難度分佈、週趨勢、最近錯題；批改支援「只點錯的，其餘一鍵全對」 |
+| 💬 **對話式助教** | 主控 LLM 調度五個**只讀**工具（查學生弱點／白話搜題／找相似／預覽出卷），工具調用軌跡攤在 UI；出卷仍由人按確認 |
+| 🧾 **成本與品質可觀測** | 逐 token 記帳（官方單價查證）、job／日成本上限；五個 eval suite ＋ ratchet 門檻進 CI |
+| 🔒 **安全設計** | 參數化 SQL、CORS 白名單、防 SSRF、可選 API Key（timing-safe；能力邊界見[安全注意事項](#-安全注意事項)）；全部 FEATURE_* 旗標預設關 |
 
 ---
 
@@ -109,40 +119,29 @@ npm run eval:trend                    # 印出與上一次的差值
 
 ## 🗂 專案結構
 
+> 完整的逐檔說明（含 `docs/` 與 repo 根目錄）在 [根 README 的「資料夾與檔案地圖」](../README.md)。這裡是一張速查圖：
+
 ```
 exam_pro/
-├─ server.js              # 進入點：啟動 HTTP server
-├─ app.js                 # Express 設定：CORS、靜態檔、金鑰注入、全域錯誤中樞
-├─ config/
-│   ├─ db.js              # PostgreSQL 連線池（匯出 {pool, query}，型別轉換集中於此）
-│   ├─ features.js        # FEATURE_* 功能旗標（預設全關）
-│   └─ chapters.js        # 數學/物理精細章節白名單 + 驗證函式
-├─ middleware/
-│   ├─ auth.js            # 可選的 x-api-key 認證（timingSafeEqual）
-│   └─ rateLimit.js       # 記憶體型速率限制器（保護 AI 端點）
-├─ routes/index.js        # API 路由表
-├─ public/
-│   └─ index.html         # 前端單頁介面（唯一對外靜態資產）
-├─ controllers/           # 請求處理：question / exam / ai / word
-├─ services/
-│   ├─ aiService.js       # 呼叫 Gemini 解析 PDF
-│   └─ wordService.js     # 產生 Word 考卷（含防 SSRF 圖片下載）
-├─ utils/
-│   ├─ textFormatter.js   # LaTeX → OOXML 數學公式解析器
-│   └─ shuffle.js         # Fisher-Yates 洗牌（抽題的公平性核心）
-├─ docker-compose.yml     # 本機 PostgreSQL 16 + pgvector（5442 開發 / 5433 測試）
-├─ migrations/            # 只增不改的 SQL：0001_init、0002_vector、0004_origin_legacy（0003 保留給階段 2）
-├─ migrate.js             # 極簡 migration 執行器（node migrate.js up [--test] | status）
-├─ migrate/               # 一次性遷移工具（import_pg / verify / export_pg_delta；MySQL 匯出腳本已隨 D-X1 收尾退役）
-├─ seed_questions.js      # 種子題庫：30 題自製示範題（4 章 × 7~8 題）
-├─ sample_exam.docx       # 成果範例：實際匯出的 Word 考卷
-├─ test/                  # 單元測試（node:test，無額外相依）
-│   ├─ textFormatter.test.js  # 公式解析器
-│   └─ shuffle.test.js        # 抽題隨機性：一萬次分佈測試
-├─ 啟動資料庫.bat         # 雙擊即起容器 + 套 migrations（先檢查 Docker 是否啟動）
-└─ *.bat / *_formulas.js  # 題庫維運工具（見下方）
-
-../.github/workflows/ci.yml  # CI：push / PR 時在 Node 20.x、22.x 上跑 npm ci + npm test
+├─ server.js / app.js / routes/        # 進入點、Express 設定、路由表（旗標控制掛載）
+├─ config/                             # 單一真相：db、models、pricing、features、chapters(+aliases/examples)
+├─ agents/ (+schemas/)                 # 六個 sub-agent（純函式合約）＋輸出 JSON Schema
+├─ workers/jobRunner.js                # 編排：SKIP LOCKED 認領、租約、重試預算、節流、成本上限
+├─ pipeline/stateMachine.js            # jobs / job_questions 的合法狀態轉移
+├─ services/                           # llm/(gemini|fake|throttle)、retrieval、nlq、variant、
+│                                      # weakness、assistant、embed、word、ai(舊版對照)
+├─ controllers/                        # question / exam(草稿→確認) / studentAdmin / student /
+│                                      # paper(批改) / review(複核) / job / assistant / word / ai
+├─ middleware/  queries/hybrid.js      # 認證與限流；hybrid 檢索 SQL（API 與 eval 共用）
+├─ utils/                              # textFormatter(LaTeX→OOXML)、tokenize(全案唯一分詞)、
+│                                      # embedText、shuffle、pickOnePerFamily、normalizeStem、
+│                                      # answerCompare、variantTextGate、nlqHeuristics、formula*
+├─ public/index.html + public/js/      # 單頁殼 + 五個 ES module 分頁（review/students/nlq/variants/assistant）
+├─ migrations/ + migrate.js            # 只增不改的 SQL（0001~0005）＋執行器
+├─ eval/                               # run.js（五個 suite）、lib/、golden/、cassettes/、fixtures/、thresholds.json
+├─ test/  unit(1,415) · integration(259) · e2e(11)
+├─ scripts/ + *.bat                    # 備份、向量回填、成本報表、公式健檢（Windows 雙擊）
+└─ docker-compose.yml                  # PG16+pgvector：5442 開發（volume）／5433 測試（tmpfs）
 ```
 
 ---
@@ -175,7 +174,7 @@ flowchart TD
         DB["config/db.js<br/>PostgreSQL 連線池"]
     end
 
-    Gemini["🤖 Google Gemini 2.5 Flash"]
+    Gemini["🤖 Google Gemini<br/>flash 拆題/分類 · pro 驗答 · embedding-001"]
     PG[("🗄 PostgreSQL 16 + pgvector<br/>questions · students<br/>exam_papers · attempts")]
 
     Browser -- "HTTP / x-api-key" --> App
@@ -190,10 +189,15 @@ flowchart TD
     DB --> PG
 ```
 
-**兩條主要資料流**
+> 上圖是核心（題庫／組卷／匯出）的形狀；階段 2~4 疊加的管線與 RAG 見
+> [根 README 技術選型 ②](../README.md)的架構圖。
 
-1. **AI 拆題入庫**：瀏覽器上傳 PDF → `aiController` → `aiService` 呼叫 Gemini 回傳 JSON → `questionController.batchSaveQuestions` 經**章節白名單**驗證後寫入 `questions`。
-2. **智慧組卷 + 匯出**：`examController` 以 `NOT EXISTS (SELECT 1 FROM attempts …)` 濾掉該生寫過的題、抽題並在**同一交易**內建立 `exam_papers` 與 `attempts` → `wordController` / `wordService` 用 `textFormatter` 把 LaTeX 轉成 Word 數學公式，輸出 `.docx`。
+**四條主要資料流**
+
+1. **多 Agent 拆題入庫**（`FEATURE_PIPELINE`）：上傳 PDF → `POST /api/jobs` → `workers/jobRunner.js` 驅動六個 agent 逐題推進，硬閘門把關 → 合格題**部分入庫**、疑慮題進複核佇列（`public/js/review.js`）。
+2. **智慧組卷（草稿→確認）+ 匯出**：`generate-paper(dry_run)` 預覽（不寫庫）→ `confirm-paper` 在**同一交易**建 `exam_papers`＋`attempts`（`NOT EXISTS` 保證不重複）→ `wordService` 用 `textFormatter` 輸出 `.docx`。
+3. **RAG 檢索**：相似題／NLQ／變式檢索優先／kNN 分類，全部走 `queries/hybrid.js` 同一段 SQL（pgvector＋jieba 全文，RRF 融合）。
+4. **對話式助教**（`FEATURE_ASSISTANT`）：`POST /api/assistant` → 主控 LLM 以受限 JSON 調度五個只讀工具 → 回覆＋工具軌跡。
 
 ---
 
@@ -397,7 +401,7 @@ npm run eval:baseline                                                           
 
 | # | 步驟 | 通過標準 |
 |---|------|----------|
-| 6 | `npm test` | **40 passed / 0 failed / 1 skipped**（skip 的是需要 PG 的整合測試；CI 亦會在 push 後自動跑一次，見 README 上方 badge）|
+| 6 | `npm test` | **全數通過（2026-08-24 現況：1,415 passed / 0 failed）**；不連網、不連庫、零 secrets。CI 亦會在 push 後自動跑（badge 見本頁最上方）|
 | 7 | 靜態檔完整性：確認 `public/index.html` 結尾為 `</script></body></html>`，且 `<div>`、`<script>` 開闔數相等 | 檔案未被截斷（詳見下方「截斷檔自檢」）|
 | 8 | `npm start` | 終端印出 `🚀 家教題庫後端系統已成功安全啟動：http://localhost:3000` |
 
@@ -446,18 +450,32 @@ fs.writeFileSync('.tmp_inline.js',b)" && node --check .tmp_inline.js && echo "JS
 
 所有路由掛在 `/api` 之下；若設定了 `API_KEY`，需帶 `x-api-key` 標頭。
 
+**核心（恆常掛載）**
+
 | 方法 | 路徑 | 說明 |
 |------|------|------|
-| GET | `/api/questions` | 題庫列表（支援 `subject/chapter/question_type/q/page/limit` 篩選分頁）|
-| POST | `/api/questions` | 新增單題 |
-| PUT | `/api/questions/:id` | 更新題目 |
-| DELETE | `/api/questions/:id` | 刪除題目。**已有學生作答紀錄者改為封存**（`archived_at`），回 `{message, id, archived:true}`；封存的題不再出現在題庫列表與組卷候選中 |
-| POST | `/api/batch-save-questions` | 批次入庫（AI 解析結果）。**部分入庫**：通過驗證的題照樣寫入，回 `{message, saved_count, rejected:[{idx, reason}]}`；`?strict=1` 則維持舊的「一題不合格就整批 400」行為 |
-| GET | `/api/chapters` | 題庫中實際存在的章節 |
-| GET | `/api/chapter-whitelist` | 完整章節白名單（前端下拉選單）|
-| POST | `/api/generate-paper` | 智慧組卷（`student_name/subject/chapter/count`）。回應含 `paper_id`（`exam_papers.id`）|
-| POST | `/api/analyze-pdf` | 上傳 PDF（`multipart/form-data`, 欄位 `pdf`）解析題目 |
-| POST | `/api/download-word` | 依 `question_ids` 產生 Word 考卷 |
+| GET | `/api/questions` | 題庫列表（`subject/chapter/question_type/q/page/limit` 篩選分頁）|
+| POST / PUT / DELETE | `/api/questions(/:id)` | 新增／更新／刪除（**出過的題改封存** `archived:true`）|
+| POST | `/api/batch-save-questions` | 批次入庫，**部分入庫**回 `{saved_count, rejected:[{idx,reason}]}`；`?strict=1` 走舊行為 |
+| GET | `/api/chapters` ／ `/api/chapter-whitelist` | 實際存在章節／完整白名單 |
+| GET | `/api/students` | 學生清單（組卷下拉；裁決 S4-2 恆常掛載）|
+| POST / PATCH / DELETE | `/api/students(/:id)` | 建立（**唯一**的新學生入口，S4-1）／改名／刪除（連作答與考卷）|
+| POST | `/api/students/:id/merge` | 把 A 併入 B（清打錯字生出的分身；衝突題保留目標側批改）|
+| POST | `/api/generate-paper` | 組卷。收 `student_id`（或 `student_name`，查無 404 不再自動建）；`dry_run:true` 預覽不寫庫、`exclude_ids` 換題重抽 |
+| POST | `/api/confirm-paper` | 確認出卷：`{student_id, question_ids}` 同一交易建卷＋attempts；預覽過期回 409 |
+| DELETE | `/api/papers/:id` | 刪卷（連 attempts，題目回到候選池；S4-3）|
+| POST | `/api/analyze-pdf` ／ `/api/download-word` | 舊版單呼叫拆題（保留）／產生 Word 考卷 |
+
+**旗標控制掛載**（`FEATURE_*`，預設全關）
+
+| 旗標 | 路由 | 說明 |
+|------|------|------|
+| `FEATURE_PIPELINE` | POST `/api/jobs`、GET `/api/jobs/:id`、複核 `/api/review*`（approve/reject）| 多 Agent 拆題管線與人工複核 |
+| `FEATURE_SIMILAR` | GET `/api/questions/:id/similar` | 相似題（hybrid 檢索）|
+| `FEATURE_NLQ` | POST `/api/questions/search-nl`（30/min 限流）| 自然語言查題 |
+| `FEATURE_VARIANTS` | POST `/api/questions/:id/variants`、GET `/api/variants/:jobId` | 變式題（檢索優先，池不足走 jobs 生成）|
+| `FEATURE_STUDENTS` | GET `/api/students/:id/papers` 與 `…/weakness`、GET `/api/papers/:id`、PATCH `/api/papers/:id/results` | 學生分頁：試卷、弱點面板、批改回填 |
+| `FEATURE_ASSISTANT` | POST `/api/assistant`（10/min 限流）| 對話式助教（主控 agent＋五個只讀工具）|
 
 ---
 
@@ -498,10 +516,15 @@ node seed_questions.js --apply  # 實際寫入（交易保護；同題幹已存�
 
 ---
 
-## 🛣 下一階段
+## 🛣 專案歷程與現況
 
-Agent 管線（狀態機 + 五個 sub-agent）、RAG（相似題／檢索式分類／自然語言查題）、資料層（MySQL → PostgreSQL + pgvector、`attempts` 表、檢索 eval）的設計規格、建議順序與驗收指標，統一維護在專案根目錄 [`README.md` 的 Roadmap 章節](../README.md#-roadmap)，完整規劃（作法／理由／替代方案／排程）在 [`docs/roadmap-plan.md`](../docs/roadmap-plan.md)。
-**進度**：階段 1 資料層**已完成並於 2026-08-21 切換上線**——PostgreSQL 16 + pgvector（Docker，埠 5442）、`students`/`attempts` 取代 `history_json`、embedding 與 `search_tsv` 已回填、hybrid 檢索與 `GET /api/questions/:id/similar`（`FEATURE_SIMILAR=true`）、eval 體系與 CI integration job。切換紀錄：MySQL 匯出 70 題／126 卷／143 作答／5 學生，`migrate/verify.js` 七項全過，冒煙測試（列表／兩次組卷不重疊／Word 公式／`/similar`）全過；tag `v1-mysql`，MySQL 服務停用保留 14 天（回滾界線見 `docs/cutover-runbook.md` §3）。檢索三欄對照見上方「測試 › 3」。階段 2、3 尚未開工。
+四個階段（資料層 → Agent 管線 → 產品面 RAG → 產品收斂＋助教）**皆已完成**，
+演進總表與各階段內容見[根 README「系統演進」一節](../README.md)；
+完整規劃在 [`docs/roadmap-plan.md`](../docs/roadmap-plan.md)、全部裁決在 `docs/interfaces*.md`、
+目前狀態與待辦在 [`docs/HANDOFF.md`](../docs/HANDOFF.md)。
+
+**擱置區**（隨時可重啟）：P-16 高頻章節參數化模板、私有 golden（真題庫）、跑題閾值 0.88 重評、
+fixture 擴 120 題、A-T16 新舊管線前後對照、A-T17 異家（Anthropic）驗證 adapter。
 
 ---
 
