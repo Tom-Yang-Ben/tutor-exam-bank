@@ -24,6 +24,8 @@
          綁在一起會讓「similar 開著、variants 關著」時連「找相似」都消失。
          app.js 的第六個 replaceAll 由 WS-A 補上。 -->
     <meta name="feature-similar" content="__FEATURE_SIMILAR__">
+    <!-- 階段 4 A1：對話式助教。app.js 的第七個 replaceAll 對應這一個。 -->
+    <meta name="feature-assistant" content="__FEATURE_ASSISTANT__">
     <title>家教專用數學物理題庫系統</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link
@@ -282,6 +284,7 @@
                 <a href="#create" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">建立題目</a>
                 <a href="#paper" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">智慧組卷</a>
                 <a href="#students" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">學生</a>
+                <a href="#assistant" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">助教</a>
                 <a href="#library" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">題庫管理</a>
             </nav>
             <span class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
@@ -549,6 +552,10 @@
         <section id="students"></section>
         <section id="variants"></section>
         <section id="nlq"></section>
+
+        <!-- 階段 4 A1 的空錨點：內容全部由 public/js/assistant.js 建立；
+             FEATURE_ASSISTANT 關閉時整段不渲染（與階段 3 的三個分頁同一條規則）。 -->
+        <section id="assistant"></section>
 
         <section id="library" class="manager-shell mt-7 rounded-[1.65rem] p-5 sm:p-7 scroll-mt-24">
             <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6 border-b border-slate-100 pb-5">
@@ -1377,6 +1384,7 @@
     <script type="module" src="/js/students.js"></script>
     <script type="module" src="/js/nlq.js"></script>
     <script type="module" src="/js/variants.js"></script>
+    <script type="module" src="/js/assistant.js"></script>
 </body>
 
 </html>

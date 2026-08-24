@@ -63,6 +63,46 @@ async function resolveStudent({ student_id, student_name }) {
     return { student: rows[0], error: null };
 }
 
+/**
+ * 選題（**只讀不寫**）：generate-paper 與助教工具 preview_paper 共用。
+ * 候選池、家族互斥、庫存不足訊息、排序、標題——與寫入路徑用同一段程式碼，
+ * 預覽看到什麼、確認就寫什麼。
+ * @returns {Promise<{error:{status:number,message:string}}|
+ *                   {sortedQuestions:object[], finalSortedIds:number[], paperTitle:string, todayStr:string}>}
+ */
+async function selectPaperQuestions({ studentId, studentName, subject, chapter, limitCount, excludeIds = [] }) {
+    // 候選池：同學科同章、未封存、該生沒寫過、且不在排除清單內
+    const { rows: candidates } = await query(
+        `SELECT q.id, q.variant_of FROM questions q
+          WHERE q.subject = $1 AND q.chapter = $2 AND q.archived_at IS NULL
+            AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.question_id = q.id AND a.student_id = $3)
+            AND NOT (q.id = ANY($4::int[]))`,
+        [subject, chapter, studentId, excludeIds]
+    );
+
+    // 家族互斥：同一 variant_of 家族在同一張卷只取一題（規劃 §4.1）。
+    // pickOnePerFamily 內部已做「每組洗牌取代表 → 對代表 Fisher-Yates」。
+    // 「庫存不足」檢查在家族互斥**之後**（裁決 S3-6），${n} 代入家族數。
+    const familyPicked = pickOnePerFamily(candidates);
+    if (familyPicked.length < limitCount) {
+        return { error: { status: 400, message: `新題目庫存不足！該章節 [${studentName}] 沒寫過的題目僅剩 ${familyPicked.length} 題。` } };
+    }
+
+    const rawSelectedIds = familyPicked.slice(0, limitCount).map(q => q.id);
+    const { rows: fullQuestions } = await query(
+        `SELECT id, question_text, question_type, difficulty, answer_text
+           FROM questions WHERE id = ANY($1::int[])`,
+        [rawSelectedIds]
+    );
+    const sortedQuestions = sortForPaper(fullQuestions);
+    const finalSortedIds = sortedQuestions.map(q => q.id);
+    const { titleDate, todayStr } = localDates();
+    return { sortedQuestions, finalSortedIds, paperTitle: `${studentName}-${chapter}特訓卷(${titleDate})`, todayStr };
+}
+// 給助教工具（services/assistantService.js）內部共用，不是路由
+exports.selectPaperQuestions = selectPaperQuestions;
+exports.resolveStudentInternal = resolveStudent;
+
 exports.generatePaper = async (req, res, next) => {
     const { student_id, student_name, subject, chapter, count, dry_run, exclude_ids } = req.body;
 
@@ -94,33 +134,11 @@ exports.generatePaper = async (req, res, next) => {
         const { student, error } = await resolveStudent({ student_id, student_name });
         if (error) return res.status(error.status).json({ message: error.message });
 
-        // 候選池：同學科同章、未封存、該生沒寫過、且不在排除清單內
-        const { rows: candidates } = await query(
-            `SELECT q.id, q.variant_of FROM questions q
-              WHERE q.subject = $1 AND q.chapter = $2 AND q.archived_at IS NULL
-                AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.question_id = q.id AND a.student_id = $3)
-                AND NOT (q.id = ANY($4::int[]))`,
-            [subject, chapter, student.id, excludeIds]
-        );
-
-        // 家族互斥：同一 variant_of 家族在同一張卷只取一題（規劃 §4.1）。
-        // pickOnePerFamily 內部已做「每組洗牌取代表 → 對代表 Fisher-Yates」。
-        // 「庫存不足」檢查在家族互斥**之後**（裁決 S3-6），${n} 代入家族數。
-        const familyPicked = pickOnePerFamily(candidates);
-        if (familyPicked.length < limitCount) {
-            return res.status(400).json({ message: `新題目庫存不足！該章節 [${student.name}] 沒寫過的題目僅剩 ${familyPicked.length} 題。` });
-        }
-
-        const rawSelectedIds = familyPicked.slice(0, limitCount).map(q => q.id);
-        const { rows: fullQuestions } = await query(
-            `SELECT id, question_text, question_type, difficulty, answer_text
-               FROM questions WHERE id = ANY($1::int[])`,
-            [rawSelectedIds]
-        );
-        const sortedQuestions = sortForPaper(fullQuestions);
-        const finalSortedIds = sortedQuestions.map(q => q.id);
-        const { titleDate, todayStr } = localDates();
-        const paperTitle = `${student.name}-${chapter}特訓卷(${titleDate})`;
+        const picked = await selectPaperQuestions({
+            studentId: student.id, studentName: student.name, subject, chapter, limitCount, excludeIds
+        });
+        if (picked.error) return res.status(picked.error.status).json({ message: picked.error.message });
+        const { sortedQuestions, finalSortedIds, paperTitle, todayStr } = picked;
 
         // ── dry_run：到此為止，一個位元組都沒寫（W1-2 的「草稿」）──
         if (dry_run) {

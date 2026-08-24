@@ -55,6 +55,7 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 //    __FEATURE_STUDENTS__ 學生分頁（弱點面板與批改）  ┐ 階段 3 的三個同款旗標
 //    __FEATURE_NLQ__      自然語言查題框              │（interfaces-stage3.md 第 7.3 條）
 //    __FEATURE_VARIANTS__ 變式題分頁                  ┘ 讀法與 feature-pipeline 逐字相同
+//    __FEATURE_ASSISTANT__ 對話式助教分頁（階段 4 A1；工具全部只讀，出卷仍要人按確認）
 //    __FEATURE_SIMILAR__  最近錯題的「找相似」按鈕（裁決 S3-R25）
 //                         這一個對應的是**階段 1 就有**的 FEATURE_SIMILAR：
 //                         `GET /api/questions/:id/similar` 沒掛載時（routes/index.js 的
@@ -77,7 +78,8 @@ function serveIndex(req, res, next) {
                 .replaceAll('__FEATURE_STUDENTS__', process.env.FEATURE_STUDENTS || 'false')
                 .replaceAll('__FEATURE_NLQ__', process.env.FEATURE_NLQ || 'false')
                 .replaceAll('__FEATURE_VARIANTS__', process.env.FEATURE_VARIANTS || 'false')
-                .replaceAll('__FEATURE_SIMILAR__', process.env.FEATURE_SIMILAR || 'false'));
+                .replaceAll('__FEATURE_SIMILAR__', process.env.FEATURE_SIMILAR || 'false')
+                .replaceAll('__FEATURE_ASSISTANT__', process.env.FEATURE_ASSISTANT || 'false'));
     });
 }
 app.get('/', serveIndex);

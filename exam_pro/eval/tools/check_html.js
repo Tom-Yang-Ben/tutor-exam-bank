@@ -155,6 +155,11 @@ const STAGE3_EXTRA_METAS = [
     { meta: 'feature-similar', placeholder: '__FEATURE_SIMILAR__', reader: 'public/js/students.js' }
 ];
 
+// 階段 4 的分頁（形狀與 STAGE3_PAGES 相同；分開列是因為 STAGE3_PAGES 是階段 3 凍結的清單）
+const STAGE4_PAGES = [
+    { id: 'assistant', meta: 'feature-assistant', placeholder: '__FEATURE_ASSISTANT__' }
+];
+
 // 第 7.1 條凍結的 window.ExamApp 鍵：階段 2 的五個 + 階段 3 的五個。
 const BRIDGE_KEYS = [
     'apiFetch', 'showToast', 'renderMath', 'escapeHtml', 'createQuestionEditor',
@@ -194,7 +199,7 @@ function checkContracts() {
     //
     // 這裡刻意用**字面比對**而不是 regex：三個接點的寫法在第 7.2 條裡是逐字給定的，
     // 用 regex 去容忍單雙引號只會讓「差一個字」的錯誤悄悄通過，而那正是要擋的東西。
-    for (const page of STAGE3_PAGES) {
+    for (const page of [...STAGE3_PAGES, ...STAGE4_PAGES]) {
         if (!html.includes(`<meta name="${page.meta}"`)) {
             problems.push(`public/index.html 少了 <meta name="${page.meta}">（interfaces-stage3.md 第 7.2 條第 1 列）`);
         } else if (!html.includes(`<meta name="${page.meta}" content="${page.placeholder}">`)) {
@@ -265,4 +270,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { checkAll, checkContracts, extractInlineScripts, stripHtmlComments, checkSyntax, PUBLIC_DIR, STAGE3_PAGES, STAGE3_EXTRA_METAS, BRIDGE_KEYS };
+module.exports = { checkAll, checkContracts, extractInlineScripts, stripHtmlComments, checkSyntax, PUBLIC_DIR, STAGE3_PAGES, STAGE4_PAGES, STAGE3_EXTRA_METAS, BRIDGE_KEYS };

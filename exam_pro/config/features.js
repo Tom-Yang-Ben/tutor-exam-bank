@@ -47,5 +47,10 @@ module.exports = {
     // 前端由 app.js 的 serveIndex 注入 <meta> 之後讀（第 7.2、7.3 條）。
     get FEATURE_STUDENTS() { return isEnabled('FEATURE_STUDENTS'); },
     get FEATURE_NLQ() { return isEnabled('FEATURE_NLQ'); },
-    get FEATURE_VARIANTS() { return isEnabled('FEATURE_VARIANTS'); }
+    get FEATURE_VARIANTS() { return isEnabled('FEATURE_VARIANTS'); },
+
+    // ── 階段 4 A1（docs/stage4-plan.md §5.2 → 已執行）──
+    // 對話式助教：主控 LLM 用受限 JSON 調度五個只讀工具。同樣是「路由掛不掛載 +
+    // 前端分頁渲不渲染」的開關，預設關（會呼叫 LLM＝會花錢，CI 也不開）。
+    get FEATURE_ASSISTANT() { return isEnabled('FEATURE_ASSISTANT'); }
 };

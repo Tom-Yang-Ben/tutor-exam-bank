@@ -34,7 +34,9 @@ const INJECTIONS = [
     // S3-R25：第四個注入點。對應的是**階段 1 就有**的 FEATURE_SIMILAR，
     // 不是階段 3 新旗標——「找相似」打的是 GET /api/questions/:id/similar，
     // 那條路由沒掛載時按鈕得跟著關，否則老師只會拿到 404。
-    ['__FEATURE_SIMILAR__', 'FEATURE_SIMILAR']
+    ['__FEATURE_SIMILAR__', 'FEATURE_SIMILAR'],
+    // 階段 4 A1：對話式助教（第七個注入點）
+    ['__FEATURE_ASSISTANT__', 'FEATURE_ASSISTANT']
 ];
 
 describe('app.js 的 serveIndex — 階段 3 的四個 replaceAll（第 7.3 條 + S3-R25）', () => {
@@ -62,7 +64,7 @@ describe('app.js 的 serveIndex — 階段 3 的四個 replaceAll（第 7.3 條 
             '不得另造 FEATURE_SIMILAR_* 旗標——與 routes 的 isSimilarEnabled() 必須是同一個變數');
     });
 
-    test('六個注入全部用 replaceAll，沒有一個是 replace', () => {
+    test('七個注入全部用 replaceAll，沒有一個是 replace', () => {
         // 佔位字串在 index.html 的說明註解裡也會有一份；replace 只換第一個，
         // 會換到註解而讓真正的 <meta> 留著佔位字串（__FEATURE_PIPELINE__ 踩過）。
         const placeholders = ['__API_KEY__', '__FEATURE_PIPELINE__', ...INJECTIONS.map(i => i[0])];

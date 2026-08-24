@@ -174,4 +174,18 @@ if (nlqService.isNlqEnabled()) {
 // ===== [WS3-D: frontend] =====
 // ===== [/WS3-D: frontend] =====
 
+// ── 階段 4 A1：對話式助教（主控 agent + 只讀工具）──
+// FEATURE_ASSISTANT 未開啟時不掛載（與其他旗標同一種做法：落到 Express 預設 404）。
+// 這條會呼叫 LLM（花錢），所以沿用 NLQ 的節流殼——同一人狂按送出不該變成帳單。
+const featuresS4 = require('../config/features');
+if (featuresS4.FEATURE_ASSISTANT) {
+    const assistantController = require('../controllers/assistantController');
+    const assistantRateLimit = createRateLimiter({
+        windowMs: 60 * 1000,
+        max: 10,
+        message: '助教請求過於頻繁，請稍候再試（每分鐘最多 10 次）。'
+    });
+    router.post('/assistant', assistantRateLimit, assistantController.chat);
+}
+
 module.exports = router;
