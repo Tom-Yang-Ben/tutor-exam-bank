@@ -30,7 +30,7 @@
 //      而不是把兩個點直接連起來假裝那幾週是連續的。
 // ─────────────────────────────────────────────────────────────
 
-const DEFAULT_DAYS = 90;                     // 第 1.5 條的 days 預設
+const DEFAULT_DAYS = 365;                    // 裁決 S4-4：家教是長期視角，預設一年（伺服器端第 1.5 條的 90 不動，本檔恆帶參數）
 const DAYS_OPTIONS = [30, 90, 180, 365];     // 全部落在 1~365 的合法區間
 const MAX_PATCH = 100;                       // 第 1.4 條：results 最多 100 筆
 
@@ -387,7 +387,7 @@ export function trendSvg(trend) {
     const { points, spanWeeks, maxGraded } = weekPoints(trend);
     if (points.length === 0) {
         svg.appendChild(svgEl('text', { x: W / 2, y: H / 2, 'text-anchor': 'middle', fill: '#94a3b8', 'font-size': 13 }))
-            .textContent = '這段期間沒有任何批改紀錄。';
+            .textContent = '這段時間窗內沒有任何批改紀錄——出卷後記得回來批改，趨勢圖才有東西畫。';
         return svg;
     }
     const plotW = W - PAD_L - PAD_R, plotH = H - PAD_T - PAD_B;
@@ -455,7 +455,7 @@ function weaknessTable(app, spec, rows) {
         el('p', 'mt-1 mb-3 text-xs text-slate-400', { textContent: spec.hint })
     );
     if (!rows || rows.length === 0) {
-        box.appendChild(el('p', 'text-sm text-slate-400', { textContent: '這段期間沒有資料。' }));
+        box.appendChild(el('p', 'text-sm text-slate-400', { textContent: '這段時間窗內沒有已批改的作答（沒批改不等於全對）。出卷後在下方試卷列表批改，或把右上的時間窗拉長。' }));
         return box;
     }
     const list = el('div', 'space-y-2.5');
@@ -505,7 +505,7 @@ function recentWrongList(app, rows, studentIdOf) {
         el('p', 'mt-1 mb-3 text-xs text-slate-400', { textContent: '最多 20 題，由近到遠（interfaces-stage3.md 第 1.5 條）。' })
     );
     if (!rows || rows.length === 0) {
-        box.appendChild(el('p', 'text-sm text-slate-400', { textContent: '這段期間沒有答錯的題目。' }));
+        box.appendChild(el('p', 'text-sm text-slate-400', { textContent: '這段時間窗內沒有批改出來的錯題——可能是真的都對，也可能是還沒批改。批改過的錯題才會出現在這裡。' }));
         return box;
     }
 

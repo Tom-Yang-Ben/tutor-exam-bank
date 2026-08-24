@@ -32,6 +32,19 @@ router.get('/chapters', questionController.getChapters);
 router.get('/chapter-whitelist', questionController.getChapterWhitelist);
 
 router.post('/generate-paper', examController.generatePaper);
+
+// ── 階段 4（docs/stage4-plan.md §2）：學生管理與出卷生命週期 ──
+// 核心功能、不掛 FEATURE_* 旗標：組卷（選學生、確認、刪卷）不該被展示用旗標關掉。
+// GET /students 依裁決 S4-2 從下方 [WS3-A: students] 區塊搬上來（組卷下拉恆常需要）。
+const studentAdminController = require('../controllers/studentAdminController');
+const studentListController = require('../controllers/studentController');
+router.get('/students', studentListController.listStudents);
+router.post('/students', studentAdminController.createStudent);
+router.patch('/students/:id', studentAdminController.renameStudent);
+router.delete('/students/:id', studentAdminController.deleteStudent);
+router.post('/students/:id/merge', studentAdminController.mergeStudent);
+router.post('/confirm-paper', examController.confirmPaper);
+router.delete('/papers/:id', examController.deletePaper);
 router.post('/analyze-pdf', aiRateLimit, upload.single('pdf'), aiController.analyzePdf);
 router.post('/download-word', wordController.downloadWord);
 
@@ -118,7 +131,7 @@ if (featuresWs3A.FEATURE_STUDENTS) {
     const studentController = require('../controllers/studentController');
     const paperController = require('../controllers/paperController');
 
-    router.get('/students', studentController.listStudents);
+    // GET /students 已依裁決 S4-2 搬到上方核心區（組卷下拉恆常需要，不該吃這個旗標）
     router.get('/students/:id/papers', studentController.listStudentPapers);
     router.get('/students/:id/weakness', studentController.getWeakness);
     router.get('/papers/:id', paperController.getPaper);

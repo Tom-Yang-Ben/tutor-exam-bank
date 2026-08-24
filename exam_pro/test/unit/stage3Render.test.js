@@ -113,8 +113,8 @@ describe('students.js 對 ?mock=1 真的渲染得出來（P-05）', () => {
         for (const id of ['stuStudent', 'stuSubject', 'stuDays', 'stuRefresh', 'stuPapers', 'stuWeakness']) {
             assert.ok(env.document.getElementById(id), `少了 #${id}`);
         }
-        // days 的預設值是第 1.5 條的 90
-        assert.equal(env.document.getElementById('stuDays').value, '90');
+        // days 的預設值：裁決 S4-4 由 90 改為 365（家教是長期視角；伺服器端第 1.5 條不動）
+        assert.equal(env.document.getElementById('stuDays').value, '365');
     });
 
     test('學生下拉填得出來，姓名另存 data-name（不從顯示文字反推）', async () => {

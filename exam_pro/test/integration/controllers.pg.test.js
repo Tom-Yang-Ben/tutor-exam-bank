@@ -67,6 +67,13 @@ function runSuite() {
         return rows.map(r => r.id).sort((a, b) => a - b);
     }
 
+    /** 裁決 S4-1：generate-paper 不再自動建學生，測試先走唯一合法入口 POST /api/students。 */
+    async function createStudent(name) {
+        const res = await request(app).post('/api/students').send({ name });
+        assert.equal(res.status, 201, JSON.stringify(res.body));
+        return res.body.id;
+    }
+
     /** 在 attempts 上裝一個「故意搞破壞」的 BEFORE INSERT 觸發器，回傳拆除函式。 */
     async function withAttemptsTrigger(bodySql) {
         await query(`CREATE OR REPLACE FUNCTION test_attempts_sabotage() RETURNS trigger
@@ -113,6 +120,7 @@ function runSuite() {
         // ── generate-paper ────────────────────────────────────────
         test('連抽兩次不重疊，且回應帶 paper_id', async () => {
             await seedQuestions(10);
+            await createStudent('王小明');
 
             const first = await request(app).post('/api/generate-paper')
                 .send({ student_name: '王小明', subject: SUBJECT, chapter: CHAPTER, count: 5 });
@@ -142,6 +150,8 @@ function runSuite() {
 
         test('另一位學生不受影響，同一批題目照樣抽得到', async () => {
             await seedQuestions(5);
+            await createStudent('王小明');
+            await createStudent('陳大文');
             const a = await request(app).post('/api/generate-paper')
                 .send({ student_name: '王小明', subject: SUBJECT, chapter: CHAPTER, count: 5 });
             const b = await request(app).post('/api/generate-paper')
@@ -154,6 +164,7 @@ function runSuite() {
         test('庫存不足回 400，訊息逐字不變（含未削字的姓名）', async () => {
             await seedQuestions(6);
             const name = '王"小\\明';   // 新設計不再削除 " 與 \，訊息裡用的是 trim 後的原名
+            await createStudent(name);
             const ok = await request(app).post('/api/generate-paper')
                 .send({ student_name: name, subject: SUBJECT, chapter: CHAPTER, count: 5 });
             assert.equal(ok.status, 200);
@@ -188,6 +199,7 @@ function runSuite() {
             const drop = await withAttemptsTrigger(
                 `IF NEW.question_id = ${ids[0]} THEN RETURN NULL; END IF; RETURN NEW;`
             );
+            await createStudent('王小明');
             try {
                 const res = await request(app).post('/api/generate-paper')
                     .send({ student_name: '王小明', subject: SUBJECT, chapter: CHAPTER, count: 3 });
@@ -195,8 +207,8 @@ function runSuite() {
                 assert.equal(res.body.message, '部分題目已被同時指派給該學生，請重試。');
             } finally { await drop(); }
 
-            // 回滾後不得留下半張卷、半筆作答紀錄，連學生列也不該留下
-            for (const t of ['exam_papers', 'attempts', 'students']) {
+            // 回滾後不得留下半張卷、半筆作答紀錄（學生是事先建立的，S4-1 之後不歸這筆交易管）
+            for (const t of ['exam_papers', 'attempts']) {
                 const { rows } = await query(`SELECT COUNT(*) AS n FROM ${t}`);
                 assert.equal(rows[0].n, 0, `${t} 應在回滾後為空`);
             }
@@ -204,6 +216,7 @@ function runSuite() {
 
         test('第二句 INSERT 直接拋錯時整筆交易回滾（試卷不會留下）', async () => {
             await seedQuestions(3);
+            await createStudent('王小明');
             const drop = await withAttemptsTrigger(`RAISE EXCEPTION '故意讓 attempts 寫入失敗';`);
             try {
                 const res = await request(app).post('/api/generate-paper')
@@ -211,7 +224,7 @@ function runSuite() {
                 assert.equal(res.status, 500);
             } finally { await drop(); }
 
-            for (const t of ['exam_papers', 'attempts', 'students']) {
+            for (const t of ['exam_papers', 'attempts']) {
                 const { rows } = await query(`SELECT COUNT(*) AS n FROM ${t}`);
                 assert.equal(rows[0].n, 0, `${t} 應在回滾後為空`);
             }
@@ -247,6 +260,7 @@ function runSuite() {
         // ── deleteQuestion ────────────────────────────────────────
         test('出過的題改為封存並回 archived:true，未出過的題硬刪', async () => {
             const ids = await seedQuestions(5);
+            await createStudent('王小明');
             const paper = await request(app).post('/api/generate-paper')
                 .send({ student_name: '王小明', subject: SUBJECT, chapter: CHAPTER, count: 5 });
             assert.equal(paper.status, 200);
@@ -286,6 +300,7 @@ function runSuite() {
 
         test('封存後的題目不再進入組卷候選池', async () => {
             const ids = await seedQuestions(5);
+            await createStudent('王小明');
             await query('UPDATE questions SET archived_at = now() WHERE id = ANY($1::int[])', [ids.slice(0, 2)]);
             const res = await request(app).post('/api/generate-paper')
                 .send({ student_name: '王小明', subject: SUBJECT, chapter: CHAPTER, count: 5 });
@@ -416,6 +431,137 @@ function runSuite() {
             const res = await request(app).get('/api/chapters');
             assert.equal(res.status, 200);
             assert.deepEqual(res.body, [{ subject: SUBJECT, chapter: '外積' }]);
+        });
+
+        // ── 階段 4：學生管理與出卷生命週期（docs/stage4-plan.md §2）──
+        test('S4-1：查無學生回 404（不再自動建學生），students 表保持乾淨', async () => {
+            await seedQuestions(5);
+            const res = await request(app).post('/api/generate-paper')
+                .send({ student_name: '幽靈學生', subject: SUBJECT, chapter: CHAPTER, count: 3 });
+            assert.equal(res.status, 404);
+            assert.equal(res.body.message, '查無學生「幽靈學生」，請先新增學生。');
+            const { rows } = await query('SELECT COUNT(*)::int AS n FROM students');
+            assert.equal(rows[0].n, 0, '404 之後不得留下任何學生列');
+        });
+
+        test('學生 CRUD：建立 201、重名 409、改名、刪除連紀錄', async () => {
+            const id = await createStudent('收斂測試生');
+            const dup = await request(app).post('/api/students').send({ name: '收斂測試生' });
+            assert.equal(dup.status, 409);
+
+            const renamed = await request(app).patch(`/api/students/${id}`).send({ name: '收斂測試生二號' });
+            assert.equal(renamed.status, 200);
+            assert.equal(renamed.body.name, '收斂測試生二號');
+
+            // 出一張卷讓刪除有東西可連動
+            await seedQuestions(3);
+            const paper = await request(app).post('/api/generate-paper')
+                .send({ student_id: id, subject: SUBJECT, chapter: CHAPTER, count: 3 });
+            assert.equal(paper.status, 200, JSON.stringify(paper.body));
+
+            const del = await request(app).delete(`/api/students/${id}`);
+            assert.equal(del.status, 200);
+            assert.deepEqual(del.body, { deleted: { attempts: 3, papers: 1 } });
+            for (const t of ['attempts', 'exam_papers', 'students']) {
+                const { rows } = await query(`SELECT COUNT(*)::int AS n FROM ${t}`);
+                assert.equal(rows[0].n, 0, `${t} 應被連動刪除`);
+            }
+        });
+
+        test('合併：衝突題保留目標側批改、其餘搬家、來源學生消失', async () => {
+            const ids = await seedQuestions(4);
+            const fromId = await createStudent('分身');
+            const intoId = await createStudent('本尊');
+            // 本尊寫過前兩題（其中一題已批改），分身寫過第 2~4 題
+            await query(
+                `INSERT INTO attempts (student_id, question_id, assigned_at, result, graded_at)
+                 VALUES ($1,$3,CURRENT_DATE,1,now()), ($1,$4,CURRENT_DATE,NULL,NULL),
+                        ($2,$4,CURRENT_DATE,0,now()), ($2,$5,CURRENT_DATE,NULL,NULL), ($2,$6,CURRENT_DATE,NULL,NULL)`,
+                [intoId, fromId, ids[0], ids[1], ids[2], ids[3]]
+            );
+            const res = await request(app).post(`/api/students/${fromId}/merge`).send({ into_id: intoId });
+            assert.equal(res.status, 200, JSON.stringify(res.body));
+            assert.deepEqual(res.body, { moved_attempts: 2, dropped_conflicts: 1, moved_papers: 0 });
+
+            // 衝突題（ids[1]）保留目標側的 result（NULL，本尊還沒批），來源側的 0 被丟棄
+            const { rows } = await query(
+                'SELECT question_id, result FROM attempts WHERE student_id = $1 ORDER BY question_id', [intoId]);
+            assert.deepEqual(rows.map(r => [r.question_id, r.result]),
+                [[ids[0], 1], [ids[1], null], [ids[2], null], [ids[3], null]]);
+            const { rows: gone } = await query('SELECT COUNT(*)::int AS n FROM students WHERE id = $1', [fromId]);
+            assert.equal(gone[0].n, 0, '來源學生應被刪除');
+        });
+
+        test('dry_run：整段不寫庫，exclude_ids 真的排除（換一題的機制）', async () => {
+            const ids = await seedQuestions(5);
+            const sid = await createStudent('草稿生');
+            const p1 = await request(app).post('/api/generate-paper')
+                .send({ student_id: sid, subject: SUBJECT, chapter: CHAPTER, count: 3, dry_run: true });
+            assert.equal(p1.status, 200, JSON.stringify(p1.body));
+            assert.equal(p1.body.dry_run, true);
+            assert.equal(p1.body.question_ids.length, 3);
+            assert.ok(p1.body.paper_title_preview.includes('草稿生'));
+            for (const t of ['exam_papers', 'attempts']) {
+                const { rows } = await query(`SELECT COUNT(*)::int AS n FROM ${t}`);
+                assert.equal(rows[0].n, 0, `dry_run 不得寫 ${t}`);
+            }
+            // 換一題：把第一題排除，重抽 3 題必不含它
+            const excluded = p1.body.question_ids[0];
+            const p2 = await request(app).post('/api/generate-paper')
+                .send({ student_id: sid, subject: SUBJECT, chapter: CHAPTER, count: 3, dry_run: true, exclude_ids: [excluded] });
+            assert.equal(p2.status, 200);
+            assert.ok(!p2.body.question_ids.includes(excluded), 'exclude_ids 沒有生效');
+        });
+
+        test('confirm-paper：寫入與 generate 同閘門；預覽過期回 409；回應形狀一致', async () => {
+            const ids = await seedQuestions(4);
+            const sid = await createStudent('確認生');
+            const ok = await request(app).post('/api/confirm-paper')
+                .send({ student_id: sid, question_ids: ids.slice(0, 3) });
+            assert.equal(ok.status, 200, JSON.stringify(ok.body));
+            assert.ok(Number.isInteger(ok.body.paper_id));
+            assert.equal(ok.body.question_ids.length, 3);
+            assert.equal(ok.body.questions.length, 3);
+            assert.ok(ok.body.paper_title.includes('確認生'));
+
+            // 同一批題再確認一次 ⇒ attempts 唯一鍵擋下、409、不留半張卷
+            const stale = await request(app).post('/api/confirm-paper')
+                .send({ student_id: sid, question_ids: ids.slice(0, 3) });
+            assert.equal(stale.status, 409);
+            const { rows } = await query('SELECT COUNT(*)::int AS n FROM exam_papers');
+            assert.equal(rows[0].n, 1, '409 之後不得多出半張卷');
+
+            // 封存的題直接 400
+            await query('UPDATE questions SET archived_at = now() WHERE id = $1', [ids[3]]);
+            const archived = await request(app).post('/api/confirm-paper')
+                .send({ student_id: sid, question_ids: [ids[3]] });
+            assert.equal(archived.status, 400);
+            assert.equal(archived.body.message, '部分題目已不存在或已封存，請重新預覽。');
+        });
+
+        test('DELETE /papers/:id：題目回到候選池（裁決 S4-3）', async () => {
+            await seedQuestions(3);
+            const sid = await createStudent('後悔生');
+            const paper = await request(app).post('/api/generate-paper')
+                .send({ student_id: sid, subject: SUBJECT, chapter: CHAPTER, count: 3 });
+            assert.equal(paper.status, 200);
+
+            // 池已被燒光：再出一張同章卷會 400
+            const empty = await request(app).post('/api/generate-paper')
+                .send({ student_id: sid, subject: SUBJECT, chapter: CHAPTER, count: 3 });
+            assert.equal(empty.status, 400);
+
+            const del = await request(app).delete(`/api/papers/${paper.body.paper_id}`);
+            assert.equal(del.status, 200);
+            assert.equal(del.body.deleted_attempts, 3);
+
+            // 題目回池：同一批題又抽得到了
+            const again = await request(app).post('/api/generate-paper')
+                .send({ student_id: sid, subject: SUBJECT, chapter: CHAPTER, count: 3 });
+            assert.equal(again.status, 200, JSON.stringify(again.body));
+
+            const missing = await request(app).delete('/api/papers/999999');
+            assert.equal(missing.status, 404);
         });
 
         // ── wordController ────────────────────────────────────────

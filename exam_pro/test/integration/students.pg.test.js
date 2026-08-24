@@ -281,9 +281,10 @@ function runSuite() {
         // ───────── 旗標 ─────────
 
         describe('FEATURE_STUDENTS', () => {
-            test('關閉時五條路由都不掛載，落到 Express 預設 404（不是 { message }）', async () => {
+            test('關閉時四條路由都不掛載，落到 Express 預設 404（不是 { message }）', async () => {
+                // GET /api/students 依裁決 S4-2 搬到核心區（組卷下拉恆常需要），不在此列——
+                // 旗標關閉時它仍應是 200，最後一段另行斷言。
                 for (const [method, url] of [
-                    ['get', '/api/students'],
                     ['get', '/api/students/1/papers'],
                     ['get', '/api/students/1/weakness'],
                     ['get', '/api/papers/1'],
@@ -295,6 +296,9 @@ function runSuite() {
                     assert.equal(res.body.message, undefined,
                         `${url} 不該回我們自己的 { message }——那代表路由其實掛上了`);
                 }
+                // S4-2：清單路由不吃旗標
+                const list = await request(appDisabled).get('/api/students');
+                assert.equal(list.status, 200, 'GET /api/students 應恆常掛載（裁決 S4-2）');
             });
 
             test('開啟時 GET /api/students 回 200', async () => {
@@ -1002,6 +1006,7 @@ function runSuite() {
         describe('generatePaper 的家族互斥（第 2.2 條）', () => {
             /** 建一個章節內含變式家族的題庫，回傳 { rootIds, variantIds }。 */
             async function seedFamilies({ families, variantsPerFamily }) {
+                await ensureStudentA();   // 裁決 S4-1：不再自動建學生
                 const total = families * (1 + variantsPerFamily);
                 const rows = Array.from({ length: total }, (_, i) => i);
                 const { rows: inserted } = await query(
@@ -1021,6 +1026,11 @@ function runSuite() {
                         [rootIds[i % families], variantIds[i]]);
                 }
                 return { rootIds, variantIds };
+            }
+
+            /** 裁決 S4-1：generate-paper 不再自動建學生，家族互斥的案例先把學生插好。 */
+            async function ensureStudentA() {
+                await query("INSERT INTO students (name) VALUES ('測試學生A') ON CONFLICT (name) DO NOTHING");
             }
 
             test('同一家族在同一張卷只會出現一題', async () => {
@@ -1052,12 +1062,14 @@ function runSuite() {
                     '新題目庫存不足！該章節 [測試學生A] 沒寫過的題目僅剩 2 題。');
             });
 
-            test('回滾乾淨：庫存不足時不留下學生、試卷或 attempts', async () => {
+            test('回滾乾淨：庫存不足時不留下試卷或 attempts（學生為事先建立，S4-1 後不歸這筆請求管）', async () => {
                 await seedFamilies({ families: 2, variantsPerFamily: 3 });
                 await request(app).post('/api/generate-paper')
                     .send({ student_name: '測試學生A', subject: '數學', chapter: '向量內積', count: 4 });
 
-                for (const table of ['students', 'exam_papers', 'attempts']) {
+                const { rows: [stu] } = await query('SELECT COUNT(*)::int AS n FROM students');
+                assert.equal(stu.n, 1, '事先建立的學生應原封不動');
+                for (const table of ['exam_papers', 'attempts']) {
                     const { rows: [{ n }] } = await query(`SELECT COUNT(*)::int AS n FROM ${table}`);
                     assert.equal(n, 0, `${table} 應為空`);
                 }
@@ -1065,6 +1077,7 @@ function runSuite() {
 
             test('沒有任何變式時行為與階段 1 相同（回應形狀不變，既有整合測試是契約）', async () => {
                 await seedQuestions(0); // no-op，只是說明這裡刻意不建家族
+                await ensureStudentA();   // 裁決 S4-1：不再自動建學生
                 const { rows: inserted } = await query(
                     `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text)
                      SELECT '數學', '向量內積', '計算', 3,
@@ -1084,6 +1097,7 @@ function runSuite() {
             });
 
             test('組卷 → 批改 → 弱點面板：整條路徑接得起來', async () => {
+                await ensureStudentA();   // 裁決 S4-1：不再自動建學生
                 await query(
                     `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text)
                      SELECT '數學', '向量內積', '計算', 3,

@@ -152,6 +152,9 @@ function runSuite() {
         });
 
         test('組卷回 200，且回應帶 paper_id（前端「立即批改」靠它，interfaces.md 第 7 條）', async () => {
+            // 裁決 S4-1：generate-paper 不再自動建學生，先走唯一合法入口（重跑時可能已存在 → 409 也接受）
+            const created = await request(app).post('/api/students').send({ name: STUDENT });
+            assert.ok([201, 409].includes(created.status), JSON.stringify(created.body));
             const res = await request(app)
                 .post('/api/generate-paper')
                 .send({ student_name: STUDENT, subject: SUBJECT, chapter: CHAPTER, count: QUESTIONS.length });
@@ -172,6 +175,8 @@ function runSuite() {
         });
 
         test('download-word 回真的 .docx，且公式是 <m:oMath> 不是純文字', async () => {
+            const created2 = await request(app).post('/api/students').send({ name: `${STUDENT}-2` });
+            assert.ok([201, 409].includes(created2.status), JSON.stringify(created2.body));
             const paper = await request(app)
                 .post('/api/generate-paper')
                 .send({ student_name: `${STUDENT}-2`, subject: SUBJECT, chapter: CHAPTER, count: QUESTIONS.length });
