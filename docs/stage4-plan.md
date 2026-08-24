@@ -82,9 +82,8 @@ agent 管線、RAG 檢索、NLQ、變式、複核佇列、eval 與門檻——�
 ## 5. 擱置區（本階段完成後再議）
 
 1. **P-16 參數化模板**（使用者指示擱置）。
-2. **「主控 agent + 工具調用」展示**：目前的多 agent 是「程式碼編排的管線＋互相制衡」，
-   刻意沒有 LLM 主控（理由見 `docs/rag-and-agents.md` §2.9）。若面試需要**看得見的**
-   orchestrator 模式，候選做法：對話式助教端點——主控 LLM 以 function calling 掛工具
-   （search_questions＝NLQ、similar、student_weakness、generate_paper(dry_run)、
-   create_variant），工具全是既有 API，伺服器端閘門不變——一個功能同時展示兩種編排
-   哲學的取捨。等 W1 完成後決定做不做。
+2. ~~「主控 agent + 工具調用」展示~~ → **已執行（2026-08-24，`0ff47b4`）**：
+   對話式助教（FEATURE_ASSISTANT／POST /api/assistant／前端「助教」分頁）。
+   主控 LLM 以受限 JSON 調度五個**只讀**工具；工具調用軌跡直接攤在 UI 上。
+   設計細節與兩種編排哲學的對照見 `services/assistantService.js` 檔頭與
+   `docs/rag-and-agents.md` §2.10。出卷／出變式仍由人按確認——助教沒有寫入權。
