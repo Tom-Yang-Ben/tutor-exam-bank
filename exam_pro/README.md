@@ -2,14 +2,14 @@
 
 [![CI](https://github.com/Tom-Yang-Ben/tutor-exam-bank/actions/workflows/ci.yml/badge.svg)](https://github.com/Tom-Yang-Ben/tutor-exam-bank/actions/workflows/ci.yml)
 
-以 **Node.js 24 + Express 5 + PostgreSQL 16（pgvector）+ Google Gemini** 打造的家教題庫系統。
-上傳考卷 PDF 由**多 Agent 管線**拆題入庫（六個 sub-agent、硬閘門、部分入庫、人工複核），
-依學生作答歷史出**不重複**的卷（草稿 → 確認）、匯出 Word 原生公式考卷；
-其上疊加 **RAG**（相似題／變式題／自然語言查題／檢索式分類）與**對話式助教**（主控 agent + 只讀工具）。
+用 **Node.js 24 + Express 5 + PostgreSQL 16（pgvector）+ Google Gemini** 寫的家教題庫系統。
+考卷 PDF 丟上來，**多 Agent 管線**自動拆題入庫（六個 sub-agent、硬閘門、部分入庫、人工複核）；
+出卷會避開學生寫過的題（先預覽、確認才寫入），匯出的 Word 是可編輯的原生公式；
+上面再加了 **RAG**（相似題／變式題／白話搜題／檢索式分類）和**對話式助教**（主控 agent＋只讀工具）。
 
-> 🧭 **技術選型（RAG 與多 Agent：為什麼選、優缺點、替代方案比較）**寫在
-> [根目錄 README](../README.md)（技術選型 ①②兩章）與
-> [`docs/rag-and-agents.md`](../docs/rag-and-agents.md)（完整版）；本檔聚焦「怎麼跑、怎麼驗、數字在哪」。
+> 🧭 **為什麼選這些技術（RAG 與多 Agent 的選型、優缺點、替代方案比較）**寫在
+> [根目錄 README](../README.md) 的技術選型 ①② 兩章，更完整的版本在
+> [`docs/rag-and-agents.md`](../docs/rag-and-agents.md)；這一份講的是「怎麼跑起來、怎麼驗證、數字在哪」。
 
 ---
 

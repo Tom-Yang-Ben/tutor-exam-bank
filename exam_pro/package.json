@@ -45,7 +45,8 @@
     "pgvector"
   ],
   "author": "Ben Yang (楊本顥)",
-  "license": "Apache-2.0",
+  "license": "UNLICENSED",
+  "private": true,
   "type": "commonjs",
   "dependencies": {
     "@google/genai": "^2.4.0",
