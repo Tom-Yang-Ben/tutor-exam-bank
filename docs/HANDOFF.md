@@ -20,9 +20,10 @@
 | 規劃 | `docs/roadmap-plan.md`（五章：排程、資料層、Agent 管線、產品面、橫切）；Artifact https://claude.ai/code/artifact/14b7e7a6-2a59-4991-8cee-022ecf19220f | — |
 | 階段 1 資料層 | **完成並上線**（2026-08-21 MySQL→PG 切換、D-X1 收尾：mysql2／DB_*／schema.sql 已移除） | `docs/interfaces.md`（裁決 1–27）、`docs/stage1-parallel-prompts.md`、`docs/human-lane-stage1.md`、`docs/cutover-runbook.md` |
 | 階段 2 Agent 管線 | **完成**（三輪合併、cassette 錄齊、CI 綠；`FEATURE_PIPELINE=true` 已在本機 `.env`）；A-T16 前後對照**使用者選擇先跳過** | `docs/interfaces-stage2.md`（S0-1～6、S2-1～30）、`docs/stage2-parallel-prompts.md`、`docs/ws-notices-round2/3-stage2.md` |
+| 階段 4 產品收斂 | **W1 四項完成（2026-08-24，`0c79865`＋`7d7764f`）**：學生改成選的（含管理面板：改名／合併／刪除）、出卷草稿→確認（dry_run／exclude_ids／confirm-paper／刪卷）、批改「未批全對」、時間窗預設 365。裁決 S4-1～S4-4。擱置：P-16、主控 agent 展示 | `docs/stage4-plan.md` |
 | 階段 3 產品面 | **結案（2026-08-24）**：兩輪合併、S3-R1～R29、cassette 錄齊、五個 suite 硬門檻、README 數字（P-15b）、四旗標開啟且**使用者試用通過**；pricing.js 已填官方價格 | `docs/interfaces-stage3.md`（§15 = 裁決）、`docs/stage3-parallel-prompts.md`、`docs/ws-notices-round2-stage3.md` |
 
-main 最新：`f4a15ca`（第二輪合併 `5facafe` → NUL 修正 `5e26224` → variant 第一次錄製 `18db34d` → S3-R29 `7cfacce` → golden 定案＋0.90 重錄＋nlq／variant 門檻 `f4a15ca`）。單元 1403/1403、整合 253/253、五個 suite 都有硬門檻且全過。CI **全綠**。四個 worktree 已 ff 到同一點。
+main 最新：`7d7764f`（階段 4 W1 前後端）。單元 1404、整合 259、e2e 11、check:html、五個 suite 硬門檻全過；CI 全綠。四個 worktree 已 ff 到同一點。
 
 ## 3. 階段 3 現在卡在哪、下一步
 
@@ -88,6 +89,8 @@ git add eval/cassettes eval/fixtures/embeddings.*.json
 - 免費層 Gemini 每模型每日 20 次；現已付費。
 - 主目錄 `exam_pro/node_modules` 偶爾壞掉 → `npm ci`。
 - 四個 worktree 的 `.env` 是從主目錄複製的；`npm ci` 要各自跑。
+- **FEATURE_SIMILAR=true 時 e2e 的 dedup1 需要 sample PDF 題的向量**：CI 沒設這個旗標，dedup1 一路 skipped 所以恆綠；本機 .env 開著就會 embed fixture miss → 0 題入庫。已於 0c79865 補錄 16 筆向量進 fixture；之後 fixture 若重建，記得用 LLM_MODE=replay EMBED_MODE=record FEATURE_SIMILAR=true 跑一次管線補齊。
+- bash 裡 node -e 的字串**絕不能含反引號**（會被當指令替換執行——踩過兩次，一次把 nlqHeuristics.js 當 shell 跑出五個空檔案）：多行編輯一律先 Write 腳本檔再 node 執行。
 
 ## 9. 給新對話的起手式
 1. 讀本檔 + memory（自動）。
