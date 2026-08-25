@@ -1,4 +1,4 @@
-// services/llm/fixture.js — 離線用的 embedding 供應者（docs/interfaces.md 第 4 條）
+// services/llm/fixture.js — 離線用的 embedding 供應者（docs/interfaces-stage1.md 第 4 條）
 //
 // 以 sha256(embed_text)（hex 小寫）查 eval/fixtures/embeddings.<model>.<dim>.json。
 // 查不到就丟錯並提示「請在本機執行 npm run eval:record」——**不得靜默回退成假向量**：

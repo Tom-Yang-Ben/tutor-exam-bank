@@ -1,4 +1,4 @@
-// services/llm/gemini.js — Gemini adapter（docs/interfaces.md 第 4 條、interfaces-stage2.md 第 5 條）
+// services/llm/gemini.js — Gemini adapter（docs/interfaces-stage1.md 第 4 條、interfaces-stage2.md 第 5 條）
 //
 // 只有 EMBED_MODE=live|record（或 LLM_MODE=live|record）才會走到這裡；CI 永遠走 fixture／replay，
 // 因此 GitHub Actions 不需要任何金鑰。

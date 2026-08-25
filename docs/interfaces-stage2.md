@@ -6,7 +6,7 @@
 
 **這份文件是四條平行 workstream（WS-A/B/C/D）之間的不可變契約，優先於規劃文件。**
 
-- `docs/interfaces.md`（階段 1，裁決 1–27）**仍然有效**，本檔不覆蓋它；兩邊衝突時以本檔為準並在本檔明講（目前只有第 5 條的 `generateJson` 擴充與第 9 條的 `EVAL_CASSETTE_DIR`）。
+- `docs/interfaces-stage1.md`（階段 1，裁決 1–27）**仍然有效**，本檔不覆蓋它；兩邊衝突時以本檔為準並在本檔明講（目前只有第 5 條的 `generateJson` 擴充與第 9 條的 `EVAL_CASSETTE_DIR`）。
 - 任何 workstream **不得修改本檔**。實作時發現介面有問題：停下來，寫進 `docs/questions2-ws<X>.md`，並在回報中明講，**不要自行改介面繞過**。
 - 只有開發者本人可以改本檔；改動後必須通知四條 WS「第 N 條已更新為 …，請 rebase 後對齊」。
 - 「凍結」＝**簽名與形狀**凍結（參數名、回傳鍵名、SQL 欄名、HTTP 狀態碼與訊息字串、enum 的字串值）。內部實作怎麼寫是各 WS 的自由。
@@ -163,7 +163,7 @@ thoughtsTokenCount, serviceTier
 
 7. **`pdf_path` 可為 NULL**：規劃寫 `NOT NULL` 又要求「完成後清空」，自相矛盾；以可為 NULL 為準。
 8. **`id` 用 `GENERATED ALWAYS AS IDENTITY`**（與 `0001_init.sql` 一致），不用 `BIGSERIAL`。
-9. **不做 MySQL 版**：階段 1 已切到 PostgreSQL（`interfaces.md` 裁決 27），規劃「兩份 migration」的前提消失。
+9. **不做 MySQL 版**：階段 1 已切到 PostgreSQL（`interfaces-stage1.md` 裁決 27），規劃「兩份 migration」的前提消失。
 10. **`job_events.node` 不加 CHECK**：多一個節點不該需要一支 migration；`state`／`review_reason`／`error_class` 是跨 WS 的共同語彙，才用 CHECK 寫死。
 
 ### 1.3 PDF 存放
@@ -298,9 +298,9 @@ module.exports = { run };
 type Ctx = {
     llm: {
         generateJson(opts) → Promise<{data, usage, latencyMs, raw}>,   // 第 5 條
-        embed(opts)        → Promise<{vectors, usage}>                  // interfaces.md 第 4 條
+        embed(opts)        → Promise<{vectors, usage}>                  // interfaces-stage1.md 第 4 條
     },
-    db: { pool, query },                       // interfaces.md 第 8 條的形狀
+    db: { pool, query },                       // interfaces-stage1.md 第 8 條的形狀
     job: { id, budget_usd, cost_usd },         // 數字；cost_usd 是「進入本節點前」的累計
     jq:  { id, idx, payload, retries } | null, // job 層節點（extract）為 null
     logger: { info(obj), warn(obj), error(obj) },   // 一行一個 JSON（規劃 §3.3.9）
@@ -391,7 +391,7 @@ type Ctx = {
 | `save` | 整個 `payload` | `validateQuestionFields` 最後一道；同一交易 `INSERT questions`（`origin='pdf'`、`chapter_src='ai'`、`text_hash`）+ 回填 `job_questions.question_id` | `schema_invalid` | — |
 
 - `save` 節點把 `figure_desc` 以 **`[附圖描述：…]`** 併回 `question_text` 末端（與 `aiService.js` 現行格式一致，`wordService` 與前端不用改）。
-- `save` 成功後由 runner 呼叫 `embedService.embedByIds([question_id])`（fire-and-forget，失敗只記 log，比照 `interfaces.md` 第 12.4 條）。
+- `save` 成功後由 runner 呼叫 `embedService.embedByIds([question_id])`（fire-and-forget，失敗只記 log，比照 `interfaces-stage1.md` 第 12.4 條）。
 
 ### 3.4 JSON schema 與 enum 注入
 
@@ -552,7 +552,7 @@ module.exports = { validateQuestionFields };
 
 ## 5. `services/llm/`（擁有者：WS-B）
 
-### 5.1 `generateJson` 簽名（沿用 `interfaces.md` 第 4 條，只加三個選用欄位）
+### 5.1 `generateJson` 簽名（沿用 `interfaces-stage1.md` 第 4 條，只加三個選用欄位）
 
 ```js
 generateJson({
@@ -865,7 +865,7 @@ Windows 提醒：PowerShell 5.1 的 `>` 會寫成 UTF-16LE，要用 `npm start |
 | `DEDUP_VARIANT_THRESHOLD` | `0.90` | 餘弦 ≥ 此值 → `variant`（照常入庫） | WS-C |
 | `FEATURE_PIPELINE` | `false` | 前端上傳區是否改走 `POST /api/jobs` | WS-D |
 
-- 布林值的解讀沿用 `interfaces.md` 第 9 條：字串 `1` 或 `true`（不分大小寫）為真，其餘皆為假；`FEATURE_*` 一律經 `config/features.js`。
+- 布林值的解讀沿用 `interfaces-stage1.md` 第 9 條：字串 `1` 或 `true`（不分大小寫）為真，其餘皆為假；`FEATURE_*` 一律經 `config/features.js`。
 - 階段 1 的變數全部**不變**（`DATABASE_URL`、`EMBED_*`、`FEATURE_SIMILAR`…）。
 - **GitHub Actions 不放任何 LLM 金鑰**；`.bat` 不得出現金鑰。
 

@@ -1,4 +1,4 @@
-// utils/tokenize.js — 全案唯一的中文分詞器（docs/interfaces.md 第 2 條）
+// utils/tokenize.js — 全案唯一的中文分詞器（docs/interfaces-stage1.md 第 2 條）
 //
 // 寫入（search_tsv）、查詢（to_tsquery）、eval（LIKE 基準欄的關鍵字）三處都只能呼叫
 // 這一支，不得各自實作：三邊用不同的切法，量到的 Recall 就不是同一件事。

@@ -274,7 +274,7 @@ exports.reject = async (req, res, next) => {
     }
 };
 
-/** 入庫後補向量：fire-and-forget，失敗只記 log（interfaces.md 12.4）。 */
+/** 入庫後補向量：fire-and-forget，失敗只記 log（interfaces-stage1.md 12.4）。 */
 function scheduleEmbed(questionId) {
     Promise.resolve()
         .then(() => require('../services/embedService').embedByIds([questionId]))

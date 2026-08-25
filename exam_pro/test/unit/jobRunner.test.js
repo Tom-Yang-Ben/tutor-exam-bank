@@ -278,7 +278,7 @@ describe('jobRunner — readFeatures（裁決 S2-8）', () => {
         });
     });
 
-    test('沿用 interfaces.md 第 9 條的布林規則：只有 1／true 為真', () => {
+    test('沿用 interfaces-stage1.md 第 9 條的布林規則：只有 1／true 為真', () => {
         for (const [raw, expected] of [['1', true], ['true', true], ['TRUE', true],
         ['false', false], ['0', false], ['off', false], ['no', false], ['', false], ['yes', false]]) {
             withEnv({ FEATURE_SIMILAR: raw }, () => {

@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 // eval/lib/tokenize.js — 轉接 WS-C 的 utils/tokenize.js
 //
-// docs/interfaces.md 第 2 條：`utils/tokenize.js` 是**全案唯一的中文分詞器**，
+// docs/interfaces-stage1.md 第 2 條：`utils/tokenize.js` 是**全案唯一的中文分詞器**，
 // 寫入（search_tsv）、查詢（to_tsquery）、eval（LIKE 基準欄的關鍵字）三處都只能呼叫它。
 // 本檔只做兩件事：
 //   1. 有 utils/tokenize.js 就用它，一個字都不改；
@@ -72,7 +72,7 @@ function load() {
 }
 
 /**
- * 與 docs/interfaces.md 第 2 條同簽名。
+ * 與 docs/interfaces-stage1.md 第 2 條同簽名。
  * @param {string} text
  * @returns {string[]} 去空白後的 token 陣列，順序 = 出現順序；null/'' 回 []
  */

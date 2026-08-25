@@ -5,7 +5,7 @@
 // 兩條紀律：
 //   1. **miss 一律丟錯**（訊息逐字凍結），不得靜默回退成假資料。
 //      假資料會讓 eval 量到一個不存在的系統，紅燈變成噪音——與 fixture.js 對 embedding
-//      的處置完全一致（interfaces.md 第 4 條）。
+//      的處置完全一致（interfaces-stage1.md 第 4 條）。
 //      fork PR 要把 miss 降成 warning 是 **CI（WS-D）** 的判斷，不在這一層。
 //   2. meta.fixtureHash 與現況不符時印 warning，**仍然回放**（規劃 §5.3.3）：
 //      few-shot 的鍵只納入 id 清單，題幹改寫不會改鍵，這個欄位是唯一的提醒管道。

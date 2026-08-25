@@ -1,6 +1,6 @@
 // services/embedService.js 單元測試（WS-C / D-V1）
 //
-// 不連 DB：用一個假的 { pool, query } 注入（interfaces.md 第 8 條的形狀），
+// 不連 DB：用一個假的 { pool, query } 注入（interfaces-stage1.md 第 8 條的形狀），
 // embedding 走 EMBED_MODE=fixture。真的打 PG 的驗證在 test/integration/hybrid.pg.test.js。
 //
 // 執行：npm test

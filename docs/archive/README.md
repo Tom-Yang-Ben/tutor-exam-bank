@@ -1,7 +1,7 @@
 # docs/archive/ — 已結案的歷史紀錄
 
 > 2026-08-25 歸檔。這裡的檔案**全部已結案**，只作決策考古與流程紀錄，不再更新。
-> 活的契約與參考文件（`interfaces*.md`、`retrieval.md`、`llm.md`、`variants.md`、`rag-and-agents.md`、`roadmap-plan.md`、`stage4-plan.md`、`HANDOFF.md`）仍在 `docs/` 上層。
+> 活的契約與參考文件（`interfaces-stage{1,2,3}.md`、`retrieval.md`、`llm.md`、`variants.md`、`rag-and-agents.md`、`roadmap-plan.md`、`HANDOFF.md`）仍在 `docs/` 上層。
 
 ## 內容
 
@@ -21,6 +21,11 @@
 
 ## 路徑對映
 
-凍結契約 `interfaces*.md` 依制度不改動，其內文引用的 `docs/questions*-ws*.md`、
+本資料夾內的歷史文件不改動，其內文引用的 `docs/questions*-ws*.md`、
 `docs/stage*-parallel-prompts.md`、`docs/cutover-runbook.md` 等舊路徑，一律對映到本資料夾
-（`docs/archive/<同檔名>`）。若開新一輪平行作業，新的 questions／prompts 檔照舊體例開在 `docs/` 上層。
+（`docs/archive/<同檔名>`）。另外兩筆改名／併檔對映（2026-08-26）：
+
+- `docs/interfaces.md` → **`docs/interfaces-stage1.md`**（純改名，與 `-stage2`／`-stage3` 命名對齊；活文件與程式碼註解已同步，本資料夾的歷史文件保留舊名）。
+- `docs/stage4-plan.md` → **`docs/roadmap-plan.md` §6**（內容原樣併入，原檔已刪；其 §2.x 對映 §6.2.x、§5 對映 §6.5）。
+
+若開新一輪平行作業，新的 questions／prompts 檔照舊體例開在 `docs/` 上層。

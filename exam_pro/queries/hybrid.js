@@ -1,4 +1,4 @@
-// queries/hybrid.js — API 與 eval 共用的同一段 hybrid 檢索 SQL（docs/interfaces.md 第 5 條）
+// queries/hybrid.js — API 與 eval 共用的同一段 hybrid 檢索 SQL（docs/interfaces-stage1.md 第 5 條）
 //
 // 兩邊都不得自己再寫一份：eval 量到的必須就是 prod 真正跑的那條查詢路徑，
 // 唯一允許的差異是交易內的 SET LOCAL hnsw.ef_search（eval 調到不小於 fixture 題數以求等效精確）。

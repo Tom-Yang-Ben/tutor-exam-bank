@@ -448,7 +448,7 @@ describe('searchNl：200 的回應形狀', () => {
     });
 });
 
-describe('isNlqEnabled：FEATURE_NLQ 的布林解讀（interfaces.md 第 9 條）', () => {
+describe('isNlqEnabled：FEATURE_NLQ 的布林解讀（interfaces-stage1.md 第 9 條）', () => {
     test('只有 1 與 true（不分大小寫）算開啟', () => {
         const before = process.env.FEATURE_NLQ;
         try {

@@ -6,7 +6,7 @@
 //   node eval/record_embeddings.js --dry-run     只印會送出幾題、花多少字，不呼叫 API
 //
 // 輸出：eval/fixtures/embeddings.<model>.<dim>.json
-//   格式凍結於 docs/interfaces.md 第 4 條：{ "<sha256(embed_text)>": [ … dim 個小數 6 位 … ] }
+//   格式凍結於 docs/interfaces-stage1.md 第 4 條：{ "<sha256(embed_text)>": [ … dim 個小數 6 位 … ] }
 //
 // CI **永遠只讀這個檔**（EMBED_MODE=fixture），不呼叫 Gemini、不需要任何 secret。
 // 這是「CI 仍零 secrets，任何人 fork 都跑得出同一張表」這條性質的來源。
@@ -55,12 +55,12 @@ function requireEmbed() {
         if (err && err.code === 'MODULE_NOT_FOUND') {
             throw new Error(
                 'services/llm/index.js（WS-C）尚未合入，無法錄製向量。\n' +
-                '   docs/interfaces.md 第 4 條：embed({ model, texts, dim }) → { vectors, usage }。'
+                '   docs/interfaces-stage1.md 第 4 條：embed({ model, texts, dim }) → { vectors, usage }。'
             );
         }
         throw err;
     }
-    if (typeof mod.embed !== 'function') throw new Error('services/llm/index.js 沒有匯出 embed()（docs/interfaces.md 第 4 條）。');
+    if (typeof mod.embed !== 'function') throw new Error('services/llm/index.js 沒有匯出 embed()（docs/interfaces-stage1.md 第 4 條）。');
     return mod.embed;
 }
 

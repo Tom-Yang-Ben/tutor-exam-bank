@@ -12,7 +12,7 @@
 //   1. questions / exam_papers 筆數
 //   2. 各章（subject｜chapter）筆數
 //   3. 逐列 sha256(question_text + answer_text) 全等
-//   4. attempts 守恆（interfaces.md 裁決 14 的條文）：
+//   4. attempts 守恆（interfaces-stage1.md 裁決 14 的條文）：
 //        COUNT(attempts) = Σ history_json 鍵數 − 姓名合併與空姓名造成的差額
 //      差額**逐筆列在 name_merge_report.md**，經人工確認後以 --allow-merged 放行。
 //      為什麼等式本身不會成立：UNIQUE(student_id, question_id) 只容得下一列，
@@ -193,7 +193,7 @@ async function main() {
         check(Number(orphan.no_student) === 0 && Number(orphan.no_question) === 0 && Number(orphan.paper_no_student) === 0,
             '沒有孤兒列（attempts 與 exam_papers 的外鍵都對得上）',
             `孤兒列：attempts 缺學生 ${orphan.no_student}、缺題目 ${orphan.no_question}、exam_papers 缺學生 ${orphan.paper_no_student}`);
-        notes.push(`attempts.paper_id 為 NULL 的有 ${orphan.attempts_no_paper} 筆（舊資料對不上試卷屬預期，見 interfaces.md §1.3）`);
+        notes.push(`attempts.paper_id 為 NULL 的有 ${orphan.attempts_no_paper} 筆（舊資料對不上試卷屬預期，見 interfaces-stage1.md §1.3）`);
         console.log(`   ℹ️  attempts.paper_id 為 NULL：${orphan.attempts_no_paper} 筆（屬預期）`);
 
         for (const table of ['questions', 'exam_papers', 'students']) {

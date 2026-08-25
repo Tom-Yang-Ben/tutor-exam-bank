@@ -1,4 +1,4 @@
-// utils/embedText.js — 產生送去 embedding 的可重現文本（docs/interfaces.md 第 3 條）
+// utils/embedText.js — 產生送去 embedding 的可重現文本（docs/interfaces-stage1.md 第 3 條）
 //
 // 純函式：無 I/O、無隨機、無時間。同一題永遠得到同一段文字，因此
 // embed_hash = sha256(buildEmbedText(q)) 才能當作「該不該重算向量」的唯一依據。

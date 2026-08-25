@@ -2,7 +2,7 @@
 //
 // 這支排序器有兩個角色：LIKE 欄的唯一算法，以及 D-R2 裡「SQL 有沒有算對」的對照組。
 // 對照組自己算錯，是最糟的情況——兩邊一起錯的時候 Jaccard 反而會是 1。
-// 所以融合公式照 docs/interfaces.md 第 5 條**逐項對數字**，不只測「有排序」。
+// 所以融合公式照 docs/interfaces-stage1.md 第 5 條**逐項對數字**，不只測「有排序」。
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');

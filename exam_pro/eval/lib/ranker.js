@@ -9,7 +9,7 @@
 //      SQL（queries/hybrid.js）與本檔的前 10 名 Jaccard ≥ 0.9」——
 //      兩邊算出不同的東西，就代表 eval 量到的不是 prod 的查詢路徑。
 //
-// 融合公式照 docs/interfaces.md 第 5 條逐字實作，不自己發明：
+// 融合公式照 docs/interfaces-stage1.md 第 5 條逐字實作，不自己發明：
 //   mode='rrf'      score = 1/(60+vec_rank) + 1/(60+kw_rank)（缺席側以 0 計）
 //   mode='weighted' score = 0.7×向量側 + 0.3×關鍵字側（兩側各自在候選集內 min-max 正規化）
 //   排序 ORDER BY score DESC, id ASC

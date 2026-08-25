@@ -1,6 +1,6 @@
 // services/retrievalService.js 的純函式單元測試（WS-C）
 //
-// /similar 的參數規則寫在 docs/interfaces.md 第 6 條，其中 scope 在裁決 19 之後
+// /similar 的參數規則寫在 docs/interfaces-stage1.md 第 6 條，其中 scope 在裁決 19 之後
 // 只剩 chapter / subject——這支測試就是拿來釘住「給 all 要回 400，不悄悄降級」。
 // 不連 DB（parseSimilarQuery / sidesForMode / isSimilarEnabled 都不碰資料庫）。
 //
@@ -91,7 +91,7 @@ describe('sidesForMode — /similar 的 mode 對應 buildHybridQuery 的 sides',
     });
 });
 
-describe('isSimilarEnabled — 布林值解讀（interfaces.md 第 9 條）', () => {
+describe('isSimilarEnabled — 布林值解讀（interfaces-stage1.md 第 9 條）', () => {
     const backup = process.env.FEATURE_SIMILAR;
     const withFlag = (value, fn) => {
         if (value === undefined) delete process.env.FEATURE_SIMILAR; else process.env.FEATURE_SIMILAR = value;

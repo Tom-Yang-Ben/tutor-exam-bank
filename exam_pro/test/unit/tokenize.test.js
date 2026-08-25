@@ -1,6 +1,6 @@
 // utils/tokenize.js 單元測試（WS-C / D-T1）
 //
-// 這支的契約寫在 docs/interfaces.md 第 2 條：全案唯一的分詞器，寫入、查詢、eval 三處共用。
+// 這支的契約寫在 docs/interfaces-stage1.md 第 2 條：全案唯一的分詞器，寫入、查詢、eval 三處共用。
 // 因此測的是「不會爆、輸出穩定、學科名詞不被切爛」，而不是逐詞比對 jieba 的內部行為。
 //
 // 執行：npm test（Node 內建 node:test，不連 DB、不呼叫外部服務）

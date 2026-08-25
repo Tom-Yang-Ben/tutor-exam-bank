@@ -19,7 +19,7 @@
 //
 // ── 兩個必須說清楚的實作決定（介面沒有規定，屬於各 WS 的自由）──
 //
-//   a. buildHybridQuery **沒有 question_type 參數**（interfaces.md 第 5 條，凍結）。
+//   a. buildHybridQuery **沒有 question_type 參數**（interfaces-stage1.md 第 5 條，凍結）。
 //      題型條件因此以「候選排除集」表達：先用一句便宜的 metadata 查詢撈出
 //      「同 subject／chapter／難度區間，但題型不對」的 id，再經 excludeIds 傳進去。
 //      這樣題型是**精確**篩選，limit 的語意也不變（先取 limit 再過濾會少給結果）。
@@ -49,7 +49,7 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
 const MAX_CHAPTERS = 3;          // 第 6.4 條第 4 點：多章要對 buildHybridQuery 跑多次
 const CACHE_MAX = 100;           // 第 6.7 條：LRU 100 筆
-const EF_SEARCH = 100;           // 與 /similar 相同（interfaces.md 第 5 條）
+const EF_SEARCH = 100;           // 與 /similar 相同（interfaces-stage1.md 第 5 條）
 const DEFAULT_MODEL_NLQ = 'gemini:gemini-3.5-flash';
 const DEFAULT_TIMEOUT_MS = 4000;
 const LIKE_MAX_TERMS = 5;
@@ -101,7 +101,7 @@ function sha1(text) {
     return crypto.createHash('sha1').update(String(text), 'utf8').digest('hex');
 }
 
-/** interfaces.md 第 9 條凍結的布林解讀（features.js 不在時的退路） */
+/** interfaces-stage1.md 第 9 條凍結的布林解讀（features.js 不在時的退路） */
 function parseBool(value) {
     const s = String(value ?? '').trim().toLowerCase();
     return s === '1' || s === 'true';
@@ -120,11 +120,11 @@ function isNlqEnabled() {
     return parseBool(process.env.FEATURE_NLQ);
 }
 
-/** 取得 pg 版的 { pool, query }（interfaces.md 第 8 條） */
+/** 取得 pg 版的 { pool, query }（interfaces-stage1.md 第 8 條） */
 function resolveDb(injected) {
     const db = injected || require('../config/db');
     if (!db || typeof db.query !== 'function' || !db.pool || typeof db.pool.connect !== 'function') {
-        throw new Error('需要 pg 版的 { pool, query }（interfaces.md 第 8 條）。');
+        throw new Error('需要 pg 版的 { pool, query }（interfaces-stage1.md 第 8 條）。');
     }
     return db;
 }
@@ -442,7 +442,7 @@ async function runHybrid(db, opts) {
     const merged = new Map();
     try {
         await client.query('BEGIN');
-        // 召回深度：與 /similar 相同，交易內設定（interfaces.md 第 5 條）
+        // 召回深度：與 /similar 相同，交易內設定（interfaces-stage1.md 第 5 條）
         await client.query(`SET LOCAL hnsw.ef_search = ${EF_SEARCH}`);
 
         for (const subject of subjects) {
@@ -567,7 +567,7 @@ async function retrieve(db, opts) {
     try {
         const { vectors } = await (llm || require('./llm')).embed({
             texts: [queryText],
-            taskType: 'RETRIEVAL_QUERY'      // interfaces.md 第 4 條：查詢向量用這個
+            taskType: 'RETRIEVAL_QUERY'      // interfaces-stage1.md 第 4 條：查詢向量用這個
         });
         queryVector = Array.isArray(vectors) && vectors[0] ? vectors[0] : null;
         if (!queryVector) throw new Error('embed() 沒有回傳向量');

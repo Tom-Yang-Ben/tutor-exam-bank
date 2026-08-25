@@ -1,6 +1,6 @@
 // services/retrievalService.js — 相似題檢索與 GET /api/questions/:id/similar（WS-C / D-R1）
 //
-// 介面凍結於 docs/interfaces.md 第 6 條：
+// 介面凍結於 docs/interfaces-stage1.md 第 6 條：
 //   200 → { source_id, mode, results: [{ id, subject, chapter, question_type, difficulty, question_text, score, … }] }
 //   404 → :id 不存在或已封存
 //   409 → { message: '該題尚未建立向量，請執行 npm run embed:backfill' }
@@ -15,7 +15,7 @@ const { tokenize } = require('../utils/tokenize');
 const DEFAULT_K = 10;
 const MAX_K = 20;
 
-/** interfaces.md 第 9 條凍結的布林解讀：字串 1 或 true（不分大小寫）為真，其餘皆為假 */
+/** interfaces-stage1.md 第 9 條凍結的布林解讀：字串 1 或 true（不分大小寫）為真，其餘皆為假 */
 function parseBool(value) {
     const s = String(value ?? '').trim().toLowerCase();
     return s === '1' || s === 'true';
@@ -38,11 +38,11 @@ function isSimilarEnabled() {
     return parseBool(process.env.FEATURE_SIMILAR);
 }
 
-/** 取得 pg 版的 { pool, query }（interfaces.md 第 8 條） */
+/** 取得 pg 版的 { pool, query }（interfaces-stage1.md 第 8 條） */
 function resolveDb(injected) {
     const db = injected || require('../config/db');
     if (!db || typeof db.query !== 'function' || !db.pool || typeof db.pool.connect !== 'function') {
-        throw new Error('需要 pg 版的 { pool, query }（interfaces.md 第 8 條）。config/db.js 在 WS-A 的 D-D3 合入前仍是 mysql2。');
+        throw new Error('需要 pg 版的 { pool, query }（interfaces-stage1.md 第 8 條）。config/db.js 在 WS-A 的 D-D3 合入前仍是 mysql2。');
     }
     return db;
 }
@@ -157,7 +157,7 @@ async function findSimilar(sourceId, opts = {}) {
     const queryVector = source.embedding ? JSON.parse(source.embedding) : null;
     const queryTokens = mode === 'vector' ? [] : await queryTokensForSource(db, source);
 
-    // 難度：給了 delta 就鎖定「來源難度 + delta」，沒給就 ±1（interfaces.md 第 6 條）
+    // 難度：給了 delta 就鎖定「來源難度 + delta」，沒給就 ±1（interfaces-stage1.md 第 6 條）
     const difficultyMin = difficultyDelta === null ? clamp(source.difficulty - 1, 1, 5) : clamp(source.difficulty + difficultyDelta, 1, 5);
     const difficultyMax = difficultyDelta === null ? clamp(source.difficulty + 1, 1, 5) : clamp(source.difficulty + difficultyDelta, 1, 5);
 
@@ -183,7 +183,7 @@ async function findSimilar(sourceId, opts = {}) {
     let ranked;
     try {
         await client.query('BEGIN');
-        // 召回深度：交易內設定，eval 為求等效精確會調得更高（interfaces.md 第 5 條）
+        // 召回深度：交易內設定，eval 為求等效精確會調得更高（interfaces-stage1.md 第 5 條）
         await client.query('SET LOCAL hnsw.ef_search = 100');
         ranked = (await client.query(text, values)).rows;
         await client.query('COMMIT');

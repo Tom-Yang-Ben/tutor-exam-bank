@@ -15,7 +15,7 @@
 // ── recall10 為什麼常常是 n/a ──────────────────────────────────
 // 裁決 S3-20：`semantic_text` 是**新字串**，`EMBED_MODE=fixture` 在
 // eval/fixtures/embeddings.<model>.<dim>.json 裡查不到它的 sha256，`embed()` 會丟錯
-// （interfaces.md 第 4 條：不得靜默回退成假向量）。那正是 nlqService 的 fallback_level 3，
+// （interfaces-stage1.md 第 4 條：不得靜默回退成假向量）。那正是 nlqService 的 fallback_level 3，
 // 量到的會是 LIKE 而不是 hybrid。
 //
 // 所以本 suite **先檢查每一句的查詢向量在不在 fixture 裡**：
@@ -189,7 +189,7 @@ function queryVectorsAvailable(rows) {
  * 把 fixture 灌進測試庫，對每一句跑一次 nlqService.retrieve()，量 Recall@10。
  *
  * 走的是 **prod 的那一支 retrieve()**，不是 suite 自己另寫一段 SQL：
- * eval 量到的必須就是端點真正跑的路徑（interfaces.md 第 5 條的精神）。
+ * eval 量到的必須就是端點真正跑的路徑（interfaces-stage1.md 第 5 條的精神）。
  *
  * @returns {Promise<{rows:Array<object>|null, warnings:string[], reason:string|null}>}
  */

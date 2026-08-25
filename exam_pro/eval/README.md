@@ -1,7 +1,7 @@
 # eval —— 評估體系（WS-D）
 
 規格來源：`docs/roadmap-plan.md` §5.3.1–3.5、§5.6、§2.8、§3.8；
-介面契約：`docs/interfaces.md`（階段 1）與 `docs/interfaces-stage2.md`（階段 2，優先）。
+介面契約：`docs/interfaces-stage1.md`（階段 1）與 `docs/interfaces-stage2.md`（階段 2，優先）。
 
 這個目錄回答一個問題：**改了東西之後，到底變好還是變壞，好多少。**
 不是「有沒有回 200」，而是具體的數字：
@@ -307,7 +307,7 @@ npm run check:html
 
 三個硬性 guard，都是為了不留下「看起來有數字、其實是假的」的痕跡：
 
-1. **不拿假向量湊數字**。查不到向量就印 `n/a` 並說明原因（`docs/interfaces.md` 第 4 條）。
+1. **不拿假向量湊數字**。查不到向量就印 `n/a` 並說明原因（`docs/interfaces-stage1.md` 第 4 條）。
 2. **暫用實作狀態下不得寫 `thresholds.json` 初值**。基準線一定會被之後的真實作推翻，
    CI 會紅得莫名其妙，而紅燈的原因跟那次改動無關。
 3. **暫用實作狀態下不得錄向量**。鍵是 `sha256(buildEmbedText(q))`，規則差一個字元，整份表作廢。

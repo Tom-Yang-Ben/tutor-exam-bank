@@ -43,7 +43,7 @@ function parseArgs(argv) {
 
 /**
  * 取得 { pool, query }。
- * 預設走 config/db.js（interfaces.md 第 8 條）；--test 時自建連線打測試庫，
+ * 預設走 config/db.js（interfaces-stage1.md 第 8 條）；--test 時自建連線打測試庫，
  * 並沿用 migrate.js 的防呆：庫名必須以 _test 結尾，避免回填腳本誤打真題庫。
  */
 function resolveDb(useTest) {

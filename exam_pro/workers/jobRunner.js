@@ -12,7 +12,7 @@
 //   B. `job_questions` 列（六個可推進狀態）→ 跑一個節點 → transition() → 寫回
 //
 // 為什麼認領要「同一交易兩句」而不是 UPDATE … RETURNING：
-//   規劃 §3.3.1 的原始理由是要相容 MySQL；階段 1 已切 PG（interfaces.md 裁決 27），
+//   規劃 §3.3.1 的原始理由是要相容 MySQL；階段 1 已切 PG（interfaces-stage1.md 裁決 27），
 //   但介面第 7.1 條把這個形狀凍結了，照寫。SKIP LOCKED 讓兩個槽不會搶到同一列。
 //
 // 崩潰／nodemon 重啟的重跑保證＝租約過期後該列會被重新認領；extract 重跑靠
@@ -116,7 +116,7 @@ function loadStage3Config(env = process.env) {
         const n = Number.parseFloat(env[name]);
         return Number.isFinite(n) ? n : dflt;
     };
-    // 布林一律經 config/features.js 的凍結規則（interfaces.md 第 9 條：只有 '1'／'true' 為真），
+    // 布林一律經 config/features.js 的凍結規則（interfaces-stage1.md 第 9 條：只有 '1'／'true' 為真），
     // 不自己寫一份「有值就是真」——.env 寫 VARIANT_AUTO_APPROVE=false 反而會把它打開。
     const bool = (name, dflt) => {
         const raw = env[name];
@@ -251,7 +251,7 @@ function chapterSrcFor(payload) {
  * 組 `ctx.config.features`（裁決 S2-8，第 3.1 條）。
  *
  * 鍵名凍結為**小寫短名** `{ similar, pipeline }`，不是環境變數全名；
- * 值一律經 `config/features.js`（布林解讀規則凍結於 interfaces.md 第 9 條：
+ * 值一律經 `config/features.js`（布林解讀規則凍結於 interfaces-stage1.md 第 9 條：
  * 只有字串 `1`／`true` 為真）。每次組 ctx 都重讀一次，`.env` 改了不必重啟 worker。
  *
  * @returns {{similar:boolean, pipeline:boolean}}
@@ -574,7 +574,7 @@ function createRunner(opts = {}) {
         }
     }
 
-    /** 入庫後補向量：fire-and-forget，失敗只記 log（第 3.3 條、interfaces.md 12.4）。 */
+    /** 入庫後補向量：fire-and-forget，失敗只記 log（第 3.3 條、interfaces-stage1.md 12.4）。 */
     function scheduleEmbed(questionId, log) {
         Promise.resolve()
             .then(() => require('../services/embedService').embedByIds([questionId]))

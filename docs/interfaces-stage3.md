@@ -6,7 +6,7 @@
 
 **這份文件是四條平行 workstream（WS-A/B/C/D）之間的不可變契約。**
 
-- 任何 workstream **不得修改本檔**，也不得修改 `docs/interfaces.md`（階段 1，I0）與 `docs/interfaces-stage2.md`（階段 2，I0'）——**三份都仍然有效**。
+- 任何 workstream **不得修改本檔**，也不得修改 `docs/interfaces-stage1.md`（階段 1，I0）與 `docs/interfaces-stage2.md`（階段 2，I0'）——**三份都仍然有效**。
 - 實作時若發現介面有問題：停下來，把問題寫進 `docs/questions3-ws<X>.md`，並在回報中明講，**不要自行改介面繞過**。
 - 只有開發者本人可以改本檔；改動後必須通知全部四條 WS「第 N 條已更新為 …，請 rebase 後對齊」。
 - 「凍結」的意思是**簽名與形狀**凍結（參數名、回傳鍵名、SQL 輸出欄名、HTTP 狀態碼與訊息字串）。內部實作怎麼寫是各 WS 的自由。
@@ -16,7 +16,7 @@
 
 ## 0. DDL 核對結論：**不開 `0006_`**
 
-階段 3 需要的欄位在階段 1／2 就已經併入（`interfaces.md` 裁決 6、`interfaces-stage2.md` 第 1.1 條）。S0 於 2026-08-23 對**兩個庫**逐欄核對，結果全部存在：
+階段 3 需要的欄位在階段 1／2 就已經併入（`interfaces-stage1.md` 裁決 6、`interfaces-stage2.md` 第 1.1 條）。S0 於 2026-08-23 對**兩個庫**逐欄核對，結果全部存在：
 
 | 需求（規劃 §4.3.1） | 實際位置 | 開發庫 5442 | 測試庫 5433 |
 |---|---|---|---|
@@ -48,7 +48,7 @@ docker exec -i exam_pg_test psql -U exam -d tutor_exam_bank_test -c "SELECT vers
 
 - `origin='legacy'` = 來源未知（從 MySQL 遷移進來的舊題）。階段 3 所有讀 `origin` 的地方都必須認得它，**不得**假設只有四個值。
 - `chapter_src` 的寫入權責：`'human'` 只由「人動手改過章節」產生（`PUT /api/questions/:id` 既有的 `CASE WHEN chapter IS DISTINCT FROM …`、`POST /api/review/:jqId/approve`）；`'knn'` 只由第 5 條的短路產生；其餘一律 `'ai'`。
-- `archived_at IS NULL` 的套用邊界沿用 `interfaces.md` 第 12.3 條，階段 3 補三個位置：**弱點面板（第 1.5 條）與試卷明細（第 1.3 條）不排除已封存題**（歷史就是歷史，與 `downloadWord` 同一條線）；**變式候選池（第 3 條）與 kNN few-shot（第 5 條）一律排除**。
+- `archived_at IS NULL` 的套用邊界沿用 `interfaces-stage1.md` 第 12.3 條，階段 3 補三個位置：**弱點面板（第 1.5 條）與試卷明細（第 1.3 條）不排除已封存題**（歷史就是歷史，與 `downloadWord` 同一條線）；**變式候選池（第 3 條）與 kNN few-shot（第 5 條）一律排除**。
 
 ---
 
@@ -93,7 +93,7 @@ docker exec -i exam_pg_test psql -U exam -d tutor_exam_bank_test -c "SELECT vers
 
 - `questions` 的順序 = `exam_papers.question_ids` 的**陣列順序**（出題順序）。實作用 `unnest(question_ids) WITH ORDINALITY … ORDER BY ord`。
 - `result` 取自 `attempts`（同 `paper_id` + `question_id`）：`0`／`1`／`null`（未批改）。查不到對應 `attempts` 列時也是 `null`。
-- **不排除 `archived_at IS NOT NULL` 的題**：舊卷必須顯示得出全部題目（`interfaces.md` 第 12.3 條的同一條線）。
+- **不排除 `archived_at IS NOT NULL` 的題**：舊卷必須顯示得出全部題目（`interfaces-stage1.md` 第 12.3 條的同一條線）。
 - 404：`{ message: '找不到該試卷' }`。
 
 ### 1.4 `PATCH /api/papers/:id/results`
@@ -209,7 +209,7 @@ const { shuffle } = require('./shuffle');
  * 每個變式家族只留一題，再對「家族代表」洗牌。純函式：無 I/O、無時間、不讀 process.env。
  *
  * 家族鍵 = row.variant_of ?? row.id（等價於 SQL 的 COALESCE(variant_of, id)）。
- * variant_of 永遠指向家族根節點（interfaces.md 第 1.2 條），所以不需要遞迴。
+ * variant_of 永遠指向家族根節點（interfaces-stage1.md 第 1.2 條），所以不需要遞迴。
  *
  * @param {Array<{id:number, variant_of:number|null}>} rows  候選池；不會被修改
  * @param {(items:Array) => Array} [shuffleFn]               預設 utils/shuffle.js 的 shuffle
@@ -228,9 +228,9 @@ module.exports = { pickOnePerFamily };
 
 - 候選池 SQL 只多撈一欄：`SELECT q.id, q.variant_of FROM questions q WHERE …`（其餘條件不變）。
 - 順序凍結為：**撈候選 → `pickOnePerFamily` → 檢查數量 → `slice(0, limitCount)` → 依題型權重排序**。
-- 「庫存不足」的 400 檢查移到**家族互斥之後**，`${n}` 代入**家族數**（實際抽得到的題數）。訊息格式與 `interfaces.md` 第 7 條完全相同，一個字都不改：
+- 「庫存不足」的 400 檢查移到**家族互斥之後**，`${n}` 代入**家族數**（實際抽得到的題數）。訊息格式與 `interfaces-stage1.md` 第 7 條完全相同，一個字都不改：
   `新題目庫存不足！該章節 [${trimmedName}] 沒寫過的題目僅剩 ${n} 題。`
-- `POST /api/generate-paper` 的 200 回應**完全不變**（`interfaces.md` 第 7 條，已含 `paper_id`），既有整合測試是契約。
+- `POST /api/generate-paper` 的 200 回應**完全不變**（`interfaces-stage1.md` 第 7 條，已含 `paper_id`），既有整合測試是契約。
 - `utils/shuffle.js` 與 `test/unit/shuffle.test.js` 的 11 項**不得改動**。
 
 ---
@@ -280,7 +280,7 @@ module.exports = { pickOnePerFamily };
 4. 給了 `student_id` 時 `NOT EXISTS (SELECT 1 FROM attempts a WHERE a.question_id = q.id AND a.student_id = $n)`；
 5. **排除藍本整個家族**：`COALESCE(q.variant_of, q.id) <> $root`，`$root = COALESCE(藍本.variant_of, 藍本.id)`；
 6. `q.embedding IS NOT NULL`；
-7. `difficulty = clamp(藍本.difficulty + difficulty_delta, 1, 5)`（**字面語意**，同 `interfaces.md` 裁決 20：給了 delta 就鎖定單一難度）；
+7. `difficulty = clamp(藍本.difficulty + difficulty_delta, 1, 5)`（**字面語意**，同 `interfaces-stage1.md` 裁決 20：給了 delta 就鎖定單一難度）；
 8. `cosine = 1 - (q.embedding <=> $vec::vector) >= VARIANT_SIM_MIN`。
 
 排序 `ORDER BY cosine DESC, id ASC`，取 `LIMIT count`。**筆數 ≥ `count` 且 `force_generate` 為 false** → 200 `mode:'retrieved'`；否則走 202。
@@ -568,9 +568,9 @@ module.exports = { CHAPTER_ALIASES };
 
 ### 6.5 hybrid 檢索與 `queries/hybrid.js` 的接法
 
-- 查詢向量：`embed({ texts: [semantic_text || query], taskType: 'RETRIEVAL_QUERY' })`（`interfaces.md` 第 4 條）。
+- 查詢向量：`embed({ texts: [semantic_text || query], taskType: 'RETRIEVAL_QUERY' })`（`interfaces-stage1.md` 第 4 條）。
 - 關鍵字側：`queryTokens = tokenize(semantic_text || query)`（`utils/tokenize.js`，全案唯一分詞器）。
-- **`buildHybridQuery` 只吃單一 `chapter`**（`interfaces.md` 第 5 條，凍結不可改）。所以：
+- **`buildHybridQuery` 只吃單一 `chapter`**（`interfaces-stage1.md` 第 5 條，凍結不可改）。所以：
   - `chapters.length === 0` → `chapter: null` 跑一次；
   - `chapters.length === 1` → 帶那一章跑一次；
   - `chapters.length >= 2` → **每章跑一次**（最多 3 次，所以 6.4 第 4 點要截斷），結果依 `score` 由大到小合併、以 `id` 去重、再取 `limit`。
@@ -618,7 +618,7 @@ window.ExamApp = Object.assign(window.ExamApp || {}, {
 ```
 
 - **為什麼是 getter／setter 而不是直接掛值**：`currentPaperCache`、`allChapters`、`chapterWhitelist` 都是 inline script 裡會被**重新賦值**的 `let` 變數（`index.html:585-586`、`:596`、`:1028`）。直接 `Object.assign` 掛的是當下那個值的快照，組卷之後 module 讀到的還是舊的 `null`。這是 S0 對「`window.ExamApp` 再加 `{currentPaperCache, chapters, showSection}`」這句話的落地方式，**名稱與簽名以本表為準**。
-- 組卷成功時 `currentPaperCache` 多存一個 `paper_id`（`result.paper_id` 已經在回應裡，`interfaces.md` 第 7 條）。
+- 組卷成功時 `currentPaperCache` 多存一個 `paper_id`（`result.paper_id` 已經在回應裡，`interfaces-stage1.md` 第 7 條）。
 - 橋接不存在時新 module **直接停手並印一行錯誤**，不自己複製一份（`review.js` 的既有做法，第 8 條的教訓）。
 
 ### 7.2 `public/index.html` 的插入點（只有這五處）
@@ -727,7 +727,7 @@ async function runVariantSuite(args) { /* … */ }  module.exports = { runVarian
 
 - `thresholds.json` 的規則不變：**第一次量測 −0.03，之後只升不降（ratchet）**；`_nlq_measured_with`／`_variant_measured_with` 記模型 ID、cassette 目錄、golden 檔與筆數。
 - **CI 不連外**：nlq 的 LLM 層與 variant 的生成一律 `LLM_MODE=replay` 讀 `eval/cassettes/nlq/`、`eval/cassettes/variant/`；embedding 一律 `EMBED_MODE=fixture`。
-- **錄製時 `LLM_MODE=record` 與 `EMBED_MODE=record` 要一起開**：`services/llm/index.js` 的 `embed()` 在 `record` 模式會把新向量寫進 `eval/fixtures/embeddings.<model>.<dim>.json`。變式題的題幹、nlq 的 `semantic_text` 都是**新字串**，不一起錄的話 CI 會在 fixture 查不到鍵而硬失敗（這是刻意的：`interfaces.md` 第 4 條「不得靜默回退成假向量」）。
+- **錄製時 `LLM_MODE=record` 與 `EMBED_MODE=record` 要一起開**：`services/llm/index.js` 的 `embed()` 在 `record` 模式會把新向量寫進 `eval/fixtures/embeddings.<model>.<dim>.json`。變式題的題幹、nlq 的 `semantic_text` 都是**新字串**，不一起錄的話 CI 會在 fixture 查不到鍵而硬失敗（這是刻意的：`interfaces-stage1.md` 第 4 條「不得靜默回退成假向量」）。
 - WS-D 負責：`eval/run.js` 加 `--suite nlq|variant` 兩個分支（呼叫上面兩支匯出的函式，共用既有的 `runStage2Suite` 外殼）、`thresholds.js` 的 `SUITE_METRICS` 加兩節、`package.json` 加 `eval:nlq`／`eval:variant`、`ci.yml` 的 integration job 加兩步。
 - WS-B／WS-C **不得改 `eval/run.js`**（`interfaces-stage2.md` 第 10.1 條，`eval/**` 歸 WS-D；`eval/cassettes/**` 與各自的 `suiteX.js`、`golden/X.json` 除外）。
 
@@ -754,7 +754,7 @@ async function runVariantSuite(args) { /* … */ }  module.exports = { runVarian
 | `FEATURE_NLQ` | `false` | `POST /api/questions/search-nl` 與前端查題框 | WS-C、WS-D |
 | `FEATURE_VARIANTS` | `false` | `POST /api/questions/:id/variants` 與前端變式分頁 | WS-B、WS-D |
 
-- 布林值的解讀沿用 `interfaces.md` 第 9 條：字串 `1` 或 `true`（不分大小寫）為真，其餘皆為假；`FEATURE_*` 一律經 `config/features.js`。
+- 布林值的解讀沿用 `interfaces-stage1.md` 第 9 條：字串 `1` 或 `true`（不分大小寫）為真，其餘皆為假；`FEATURE_*` 一律經 `config/features.js`。
 - 階段 1／2 的變數**全部不變**。
 - `config/features.js` 加三個 getter（S0 已加，各 WS 不再動這個檔）：
 
@@ -814,11 +814,11 @@ features.FEATURE_VARIANTS   // boolean getter
 
 | 接點 | 出處 | 階段 3 怎麼用 |
 |---|---|---|
-| `GET /api/questions/:id/similar?student_id=` | `interfaces.md` 第 6 條 | `student_id` 參數**已經存在**，不需要任何改動；弱點面板的「找相似」直接打這一支 |
-| `queries/hybrid.js` 的 `buildHybridQuery` | `interfaces.md` 第 5 條 | NL 查題共用同一段 SQL（第 6.5 條）；**單一 `chapter` 的限制不改**，多章由呼叫端跑多次 |
-| `embed()` 的 `taskType` | `interfaces.md` 第 4 條 | 查詢向量用 `RETRIEVAL_QUERY`，變式的跑題檢查用 `RETRIEVAL_DOCUMENT` |
-| `utils/tokenize.js` | `interfaces.md` 第 2 條 | NL 查題的 `queryTokens` 只能用它 |
-| `POST /api/generate-paper` 的 `paper_id` | `interfaces.md` 第 7 條 | 已在回應裡；前端「立即批改」連結直接用，**回應形狀不變** |
+| `GET /api/questions/:id/similar?student_id=` | `interfaces-stage1.md` 第 6 條 | `student_id` 參數**已經存在**，不需要任何改動；弱點面板的「找相似」直接打這一支 |
+| `queries/hybrid.js` 的 `buildHybridQuery` | `interfaces-stage1.md` 第 5 條 | NL 查題共用同一段 SQL（第 6.5 條）；**單一 `chapter` 的限制不改**，多章由呼叫端跑多次 |
+| `embed()` 的 `taskType` | `interfaces-stage1.md` 第 4 條 | 查詢向量用 `RETRIEVAL_QUERY`，變式的跑題檢查用 `RETRIEVAL_DOCUMENT` |
+| `utils/tokenize.js` | `interfaces-stage1.md` 第 2 條 | NL 查題的 `queryTokens` 只能用它 |
+| `POST /api/generate-paper` 的 `paper_id` | `interfaces-stage1.md` 第 7 條 | 已在回應裡；前端「立即批改」連結直接用，**回應形狀不變** |
 | `GET /api/jobs/:id` | `interfaces-stage2.md` 第 6.2 條 | 形狀**完全不變**；`variants.js` 每 2 秒輪詢它，`counts` 與 `cost_usd` 照原義解讀 |
 | `GET /api/review`／`POST /api/review/:jqId/approve` | `interfaces-stage2.md` 第 6.4、6.6 條 | 變式題與拆題共用同一條複核佇列；approve 對 `kind='variant'` 多寫 `origin='variant'`／`variant_of`／`chapter_src`（第 4.7 條），其餘行為不變 |
 | `pipeline/stateMachine.js` | `interfaces-stage2.md` 第 2 條 | **一個字都不改**；變式 job 走同一條狀態機（唯一例外是第 4.7 條的政策停等） |
@@ -826,8 +826,8 @@ features.FEATURE_VARIANTS   // boolean getter
 | `job_events.node` 清單 | `interfaces-stage2.md` 第 7.4 條 | 加 `'generate'`（該條明說清單可增、不進 DB CHECK） |
 | `generateJson` 的 `agent`／`cacheKeyParts`／`template` | `interfaces-stage2.md` 第 5.1、5.2 條 | 新增兩個 agent 名：`'variant'`、`'nlq'`；cassette 路徑 `eval/cassettes/variant/`、`eval/cassettes/nlq/` |
 | `buildSchema(name)` | `interfaces-stage2.md` 第 3.4 條 | 不改實作；新增兩個 schema 檔 `variant.json`（WS-B）、`nlq.json`（WS-C） |
-| `config/features.js` | `interfaces.md` 第 12.2 條 | 只加三個 getter（S0 已加），形狀不變 |
-| `deleteQuestion` 的軟刪 | `interfaces.md` 第 12.1 條 | 變式家族的清除腳本一律**封存**（`archived_at`）而非 `DELETE`；`attempts` 的 `ON DELETE RESTRICT` 是硬保證 |
+| `config/features.js` | `interfaces-stage1.md` 第 12.2 條 | 只加三個 getter（S0 已加），形狀不變 |
+| `deleteQuestion` 的軟刪 | `interfaces-stage1.md` 第 12.1 條 | 變式家族的清除腳本一律**封存**（`archived_at`）而非 `DELETE`；`attempts` 的 `ON DELETE RESTRICT` 是硬保證 |
 
 ---
 
@@ -870,7 +870,7 @@ features.FEATURE_VARIANTS   // boolean getter
 
 ## 14. 施工前的提醒（給四條 WS）
 
-1. **先讀三份介面再動手**：`docs/interfaces.md`（階段 1）、`docs/interfaces-stage2.md`（階段 2）、本檔。三份都是凍結的。
+1. **先讀三份介面再動手**：`docs/interfaces-stage1.md`（階段 1）、`docs/interfaces-stage2.md`（階段 2）、本檔。三份都是凍結的。
 2. **`npm test` 不連 DB、不連 Gemini**；需要 PG 的測試放 `test/integration/`（`TEST_DATABASE_URL`、庫名 `_test` 結尾、`npm run test:integration` 有 `--test-concurrency=1`）。
 3. **LLM 一律經 `services/llm` 的 `generateJson()`**（cassette record/replay 已在），embedding 一律經 `embed()`。agent 不得自己 `require('../config/db')`、不得自己讀 `process.env`。
 4. **不得把真實考卷題目或學生姓名寫進 repo**：golden 與 fixture 只能用 `eval/fixtures/questions.public.json` 的自製題與自編句子；cassette 只錄公開素材。

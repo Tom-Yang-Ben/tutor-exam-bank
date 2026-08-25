@@ -93,7 +93,7 @@ function targetDifficulty(difficulty, delta) {
 
 /**
  * 家族根節點（第 4.2 條）：`COALESCE(藍本.variant_of, 藍本.id)`。
- * variant_of 永遠指向根節點（interfaces.md 第 1.2 條），所以不必遞迴。
+ * variant_of 永遠指向根節點（interfaces-stage1.md 第 1.2 條），所以不必遞迴。
  * @param {{id:number, variant_of?:number|null}} source
  * @returns {number|null}
  */
@@ -169,7 +169,7 @@ function formatErrors(errors) {
     });
 }
 
-/** 兩個 L2 正規化過的向量的餘弦＝內積（services/llm 已正規化，interfaces.md 第 4 條） */
+/** 兩個 L2 正規化過的向量的餘弦＝內積（services/llm 已正規化，interfaces-stage1.md 第 4 條） */
 function cosine(a, b) {
     if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length || a.length === 0) return null;
     let dot = 0;
