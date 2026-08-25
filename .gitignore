@@ -30,11 +30,13 @@ Thumbs.db
 .claude/
 .vscode/
 .idea/
+.mcp.json
 
 # 大型報告素材（影片 / 簡報 / PDF，不適合進 git）
 *.mp4
 *.pptx
 *.pdf
+demo_video/
 # 公開的自製考卷 fixture（extract／pipeline 的 cassette 要靠它；真實考卷仍被上面的 *.pdf 擋住）——裁決 S2-15
 !exam_pro/eval/fixtures/*.pdf
 
