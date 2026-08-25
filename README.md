@@ -1,4 +1,4 @@
-# 期中專案 · 家教專用數理題庫系統（多 Agent × RAG）
+# tutor-exam-bank · 家教專用數理題庫系統（多 Agent × RAG）
 
 [![CI](https://github.com/Tom-Yang-Ben/tutor-exam-bank/actions/workflows/ci.yml/badge.svg)](https://github.com/Tom-Yang-Ben/tutor-exam-bank/actions/workflows/ci.yml)
 
