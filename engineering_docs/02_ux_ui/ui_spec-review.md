@@ -112,4 +112,4 @@
 | 對應需求 | FR-001（jobs 狀態機與輪詢）、FR-006（八種原因、approve/reject）；NFR-002（成本顯示）、NFR-004 |
 | 對應決策 | DEC-005、DEC-008 |
 | 對應 ADR | [ADR-003](../03_architecture/adr/ADR-003-code-orchestrated-agent-pipeline.md)、[ADR-005](../03_architecture/adr/ADR-005-server-side-whitelist-validation.md) |
-| 對應情境 | SCN-*（待補） |
+| 對應情境 | SCN-011（部分入庫：87 題入庫、3 題附原因進佇列）、SCN-012（重試預算用盡轉 needs_review），見 [prd §3.2](../01_requirements/prd.md) |

@@ -32,20 +32,20 @@
 
 ### 2.1 分頁與篩選
 
-`GET /api/questions` 支援 `subject`／`chapter`／`question_type`／`q`（關鍵字）篩選與 `page`／`limit` 分頁（頁碼式，非游標式）。其餘列表端點（`/review`、`/students`、`/students/:id/papers`）回傳全量或依 controller 內建條件，未提供統一分頁參數。
+`GET /api/questions` 與 `GET /api/jobs/:id/questions` 支援 `page`／`limit` 分頁（頁碼式，非游標式）；前者另支援 `subject`／`chapter`／`question_type`／`q`（關鍵字）篩選。`GET /api/review` 僅提供 `reason` 篩選與 `limit` 上限（預設一次最多 50 筆，無頁碼）。其餘列表端點（`/students`、`/students/:id/papers`）回傳全量或依 controller 內建條件，無分頁參數。
 
 ### 2.2 旗標控制掛載
 
 | 旗標（`exam_pro/config/features.js`，預設全關） | 控制的路由群 |
 | :--- | :--- |
-| `FEATURE_PIPELINE` | jobs／review 八支（拆題管線與人工複核） |
+| `FEATURE_PIPELINE` | **不控制任何路由掛載**——jobs／review 八支恆掛載（`routes/index.js` WS2-A 區塊無旗標包裹）；本旗標僅切換前端上傳入口與複核分頁渲染 |
 | `FEATURE_SIMILAR` | 相似題檢索 |
 | `FEATURE_VARIANTS` | 變式題 |
 | `FEATURE_NLQ` | 自然語言查題 |
 | `FEATURE_STUDENTS` | 學生試卷／弱點／批改四支 |
 | `FEATURE_ASSISTANT` | 對話式助教 |
 
-旗標關閉時路由不存在（非 403），行為與不存在的路徑一致——Express 預設 404。
+旗標關閉時路由不存在（非 403），行為與不存在的路徑一致——Express 預設 404。此規則適用於 SIMILAR／VARIANTS／NLQ／STUDENTS／ASSISTANT 五個旗標；PIPELINE 為唯一例外（管線屬階段 2 核心，路由恆掛載）。
 
 ### 2.3 冪等性與交易
 
@@ -109,14 +109,14 @@ app.use((err, req, res, next) => {
 | `DELETE /api/papers/:id` | FR-008 | 刪卷連 attempts，題目回候選池（裁決 S4-3） |
 | `POST /api/analyze-pdf` | FR-001 | 舊版單呼叫拆題（保留）；限流 10/min、PDF 上限 15 MB |
 | `POST /api/download-word` | FR-009 | Word 匯出（LaTeX→OOXML，docx 原生 Math 物件） |
+| `POST /api/jobs`（15 MB、超限 413；限流 10/min，與 `/analyze-pdf` 共用同一桶） | FR-001 | 建立拆題 job（恆掛載；FEATURE_PIPELINE 僅控制前端上傳入口） |
+| `GET /api/jobs/:id`、`GET /api/jobs/:id/questions`、`POST /api/jobs/:id/retry` | FR-001 | job 狀態／逐題清單／斷點續跑（恆掛載） |
+| `GET /api/review`、`GET /api/review/:jqId`、`POST /api/review/:jqId/approve`、`POST /api/review/:jqId/reject` | FR-006 | 人工複核佇列四支（恆掛載） |
 
 ### 5.2 旗標區
 
 | 旗標 | 方法／路徑 | FR | 限流 |
 | :--- | :--- | :--- | :--- |
-| `FEATURE_PIPELINE` | `POST /api/jobs`（15 MB、超限 413） | FR-001 | 10/min（與 `/analyze-pdf` 同桶） |
-| `FEATURE_PIPELINE` | `GET /api/jobs/:id`、`GET /api/jobs/:id/questions`、`POST /api/jobs/:id/retry` | FR-001 | — |
-| `FEATURE_PIPELINE` | `GET /api/review`、`GET /api/review/:jqId`、`POST /api/review/:jqId/approve`、`POST /api/review/:jqId/reject` | FR-006 | — |
 | `FEATURE_SIMILAR` | `GET /api/questions/:id/similar` | FR-010 | 60/min |
 | `FEATURE_VARIANTS` | `POST /api/questions/:id/variants` | FR-011 | 10/min（獨立桶） |
 | `FEATURE_NLQ` | `POST /api/questions/search-nl` | FR-012 | 30/min |
@@ -128,14 +128,16 @@ app.use((err, req, res, next) => {
 
 | 狀態碼 | 語意 | 實例 |
 | :--- | :--- | :--- |
-| 200 | 成功 | 各查詢／更新端點 |
-| 400 | 參數無效或業務前置條件不足 | 組卷剩餘題數少於抽題數；batch-save 白名單驗證失敗 |
+| 200 | 成功 | 各查詢／更新端點；`variants` 檢索命中（`mode:'retrieved'`） |
+| 202 | 已受理，非同步處理中 | `POST /api/jobs`（回 `{job_id, existing}`）；`variants` 進入生成（`mode:'generating'`）；`POST /api/jobs/:id/retry` |
+| 400 | 參數無效或業務前置條件不足 | 組卷剩餘題數少於抽題數（家族互斥後計算）；batch-save 白名單驗證失敗 |
 | 401 | 認證失敗 | 缺少或錯誤的 `x-api-key`（僅 `API_KEY` 已設定時） |
 | 404 | 資源不存在，或旗標關閉的路由未掛載 | `generate-paper` 以 `student_name` 查無學生（不自動建）；`FEATURE_*` 關閉時的對應路徑 |
-| 409 | 狀態衝突 | `confirm-paper` 的組卷預覽已過期 |
+| 409 | 狀態衝突 | `confirm-paper` 預覽過期／題目已被同學生作答；非 dry_run 組卷時題目被並發指派；`jobs/:id/retry` 狀態不允許；`variants` 來源題無 embedding |
 | 413 | 上傳超限 | `POST /api/jobs` PDF 超過 15 MB（凍結於 `docs/interfaces-stage2.md` 第 6.1 條） |
 | 429 | 超出限流 | §4 各限流器；回應帶 `Retry-After` |
 | 500 | 未預期錯誤 | 全域錯誤中樞；production 不含 `error` 細節欄位 |
+| 502 | 上游 LLM 失敗 | `POST /api/assistant` 主控模型呼叫失敗 |
 
 ## 7. 追溯
 

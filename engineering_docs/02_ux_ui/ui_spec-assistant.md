@@ -100,6 +100,6 @@
 | 項目 | ID |
 | :--- | :--- |
 | 對應需求 | FR-016（上游決策 DEC-007、DEC-008、DEC-009；NFR-001、NFR-002） |
-| 對應情境 | SCN-*（待補，見 `../05_qa/qa_tracker.md`） |
+| 對應情境 | SCN-015（空結果亦為答案、步數上限截斷）、SCN-016（工具錯誤回饋主控不中斷對話），見 [prd §3.2](../01_requirements/prd.md) |
 | 對應架構決策 | `../03_architecture/adr/ADR-007-assistant-no-native-function-calling.md` |
 | 下游 | `../03_architecture/engineering_tracker.md`（FR-016 列）、`../05_qa/qa_tracker.md`（TC-016-*） |

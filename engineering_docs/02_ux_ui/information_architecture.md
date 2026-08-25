@@ -68,7 +68,7 @@
 | :--- | :--- | :--- | :--- | :--- |
 | `#create` | `POST /api/jobs`、`GET /api/jobs/:id(/questions)`、`POST /api/questions`、`POST /api/analyze-pdf`（舊流程） | x-api-key | 無（jobs 前端入口受 FEATURE_PIPELINE 控制） | 10/min（jobs、analyze-pdf） |
 | `#paper` | `GET /api/students`、`POST /api/generate-paper`、`POST /api/confirm-paper`、`POST /api/download-word`、`DELETE /api/papers/:id` | x-api-key | 無（核心功能不掛旗標，裁決 S4-2） | — |
-| `#review` | `GET /api/review`、`GET /api/review/:jqId`、`POST /api/review/:jqId/approve|reject` | x-api-key | FEATURE_PIPELINE | — |
+| `#review` | `GET /api/review`、`GET /api/review/:jqId`、`POST /api/review/:jqId/approve|reject` | x-api-key | 無（路由恆掛載；前端渲染受 FEATURE_PIPELINE 控制，見 §4） | — |
 | `#students` | `GET /api/students/:id/papers|weakness`、`GET/PATCH /api/papers/:id(/results)`、`POST/PATCH/DELETE /api/students*` | x-api-key | FEATURE_STUDENTS（管理五支為核心區） | — |
 | `#variants` | `POST /api/questions/:id/variants`；`GET /api/questions/:id/similar` | x-api-key | FEATURE_VARIANTS；FEATURE_SIMILAR（兩支獨立開關，裁決 S3-R25） | 10/min；60/min |
 | `#nlq` | `POST /api/questions/search-nl` | x-api-key | FEATURE_NLQ | 30/min |

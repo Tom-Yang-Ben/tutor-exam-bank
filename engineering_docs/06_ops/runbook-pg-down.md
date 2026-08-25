@@ -93,4 +93,4 @@ type backups\<日期>.dump | docker compose exec -T postgres pg_restore -U exam 
 | :--- | :--- |
 | 上游需求 | DEC-004、NFR-005、NFR-006（同交易一致性、migrations 只增不改） |
 | 對應模組 | `exam_pro/docker-compose.yml`、`exam_pro/scripts/backup.js`、`exam_pro/備份資料庫.bat`、`exam_pro/啟動資料庫.bat`、`exam_pro/config/db.js` |
-| 下游文件 | `docs/cutover-runbook.md`（歷史切換紀錄）；事故覆盤紀錄（待補） |
+| 下游文件 | `docs/cutover-runbook.md`（歷史切換紀錄）；事故覆盤紀錄：尚無事故（發生時於此登錄） |

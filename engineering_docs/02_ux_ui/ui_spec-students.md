@@ -116,5 +116,5 @@
 | :--- | :--- |
 | 對應需求 | FR-013（弱點五條 SQL 的呈現）、FR-014（建立在主頁；改名／合併／刪除在此）、FR-015（批改）；NFR-006（批改單一交易） |
 | 對應決策 | DEC-003（合併收攏作答紀錄，維持不重複出題）、DEC-006、DEC-007 |
-| 對應 ADR | （待補：學生分頁無專屬 ADR，前端橋接規約沿用 [ADR-003](../03_architecture/adr/ADR-003-code-orchestrated-agent-pipeline.md) 時期的介面凍結制度） |
-| 對應情境 | SCN-*（待補） |
+| 對應 ADR | 無專屬 ADR；前端橋接規約沿用 [ADR-003](../03_architecture/adr/ADR-003-code-orchestrated-agent-pipeline.md) 時期的介面凍結制度 |
+| 對應情境 | 無（SCN-001～016 皆不落於本頁；批改與弱點面板無對應邊界場景） |

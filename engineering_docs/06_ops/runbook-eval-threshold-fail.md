@@ -78,4 +78,4 @@ npm run eval:trend
 | :--- | :--- |
 | 上游需求 | NFR-003（cassette record/replay、CI 零金鑰零網路）、NFR-004（golden＋ratchet、replay miss 於 main 視為錯誤） |
 | 對應模組 | `exam_pro/eval/run.js`、`exam_pro/eval/thresholds.json`、`exam_pro/eval/lib/replayMiss.js`、`exam_pro/eval/cassettes/` |
-| 下游文件 | [../05_qa/qa_tracker.md](../05_qa/qa_tracker.md)（五個 eval suite 執行證據）；事故覆盤紀錄（待補） |
+| 下游文件 | [../05_qa/qa_tracker.md](../05_qa/qa_tracker.md)（五個 eval suite 執行證據）；事故覆盤紀錄：尚無事故（發生時於此登錄） |

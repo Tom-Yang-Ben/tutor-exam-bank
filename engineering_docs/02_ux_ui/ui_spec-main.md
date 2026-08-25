@@ -117,4 +117,4 @@ Topbar（sticky 導覽＋系統就緒指示）＋ Hero（工作流三步說明�
 | 對應需求 | FR-001（上傳入口）、FR-007、FR-008、FR-009、FR-014（新增學生入口）；NFR-001 |
 | 對應決策 | DEC-001、DEC-002、DEC-003、DEC-007 |
 | 對應 ADR | [ADR-004](../03_architecture/adr/ADR-004-custom-latex-ooxml-over-pandoc.md)、[ADR-005](../03_architecture/adr/ADR-005-server-side-whitelist-validation.md) |
-| 對應情境 | SCN-*（待補） |
+| 對應情境 | SCN-009、SCN-010（UAT 主流程：組卷→匯出、避免重複出題，[uat_plan](../05_qa/uat_plan.md) §2.3） |

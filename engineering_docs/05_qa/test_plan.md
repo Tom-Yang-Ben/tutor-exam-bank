@@ -77,13 +77,13 @@
 | TC-004-1 | 拆題答案與獨立驗算不一致 | eval:pipeline | 該題以 `answer_mismatch` 進複核，不自動覆蓋（10 題中 1 題實證） | FR-004 |
 | TC-006-1 | 複核佇列 approve／reject | 整合 | 狀態轉移正確、reject 不入庫 | FR-006 |
 | TC-008-1 | 同學生二次組卷 | 整合 | NOT EXISTS attempts 排除已作答題，零重複 | FR-008、DEC-003 |
-| TC-008-2 | 抽題隨機性突變測試 | 單元（`exam_pro/test/unit/shuffle.test.js`） | 固定種子一萬次卡方 0.5~4.0；改回舊寫法 5 項轉紅 | FR-008 |
 | TC-008-3 | 家族互斥抽題 | 單元（`exam_pro/test/unit/pickOnePerFamily.test.js`） | 每 `COALESCE(variant_of, id)` 家族至多一題、家族間等機率 | FR-008 |
-| TC-009-1 | 組卷 → download-word → 解開 `.docx` | e2e（`exam_pro/test/e2e/paperWord.e2e.test.js`） | 公式為 `<m:oMath>`／`<m:f>`／`<m:sSup>`／`<m:rad>` 原生物件，非純文字 | FR-009、DEC-002 |
+| TC-008-4 | 抽題隨機性突變測試 | 單元（`exam_pro/test/unit/shuffle.test.js`） | 固定種子一萬次卡方 0.5~4.0；改回舊寫法 5 項轉紅 | FR-008 |
+| TC-009-2 | 組卷 → download-word → 解開 `.docx` | e2e（`exam_pro/test/e2e/paperWord.e2e.test.js`） | 公式為 `<m:oMath>`／`<m:f>`／`<m:sSup>`／`<m:rad>` 原生物件，非純文字 | FR-009、DEC-002 |
 | TC-010-1 | 相似題 hybrid 檢索品質 | eval retrieval | 三欄不低於 §2 門檻；hybrid R@5 ≥ LIKE | FR-010 |
 | TC-011-1 | 變式題檢索優先與偏題閘門 | eval:variant | retrieved_coverage ≥ 0.8367、gate_pass_rate ≥ 0.22 | FR-011 |
 | TC-012-1 | 自然語言查題規則路徑 | eval:nlq | rules 欄 filters_exact ≥ 0.97、recall10 ≥ 0.97 | FR-012 |
-| TC-015-1 | 批改結果回填 | 整合＋e2e attempts 斷言 | `PATCH /api/papers/:id/results` 單一交易全有全無，三態含 `null` | FR-015、NFR-006 |
+| TC-015-1 | 批改結果回填 | 整合 | `PATCH /api/papers/:id/results` 單一交易全有全無，三態含 `null` | FR-015、NFR-006 |
 | TC-016-1 | 助教出卷僅 dry-run | 整合 | `POST /api/assistant` 出卷工具只回預覽、不寫入 | FR-016 |
 
 ## 6. 缺陷回報格式

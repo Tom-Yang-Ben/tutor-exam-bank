@@ -109,6 +109,6 @@
 | 項目 | ID |
 | :--- | :--- |
 | 對應需求 | FR-010、FR-011（上游決策 DEC-006、DEC-008；NFR-002、NFR-004） |
-| 對應情境 | SCN-*（待補，見 `../05_qa/qa_tracker.md`） |
+| 對應情境 | SCN-014（變式題池不足才生成、偏題閘門攔截，[prd §3.2](../01_requirements/prd.md)） |
 | 契約來源 | `docs/interfaces-stage3.md` 第 3、7、11 條、`docs/interfaces.md` 第 6 條、裁決 S3-8／S3-R24（repo 內文件） |
 | 下游 | `../03_architecture/engineering_tracker.md`（FR-010／FR-011 列）、`../05_qa/qa_tracker.md`（TC-010-*、TC-011-*） |

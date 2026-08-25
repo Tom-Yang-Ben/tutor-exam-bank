@@ -63,7 +63,7 @@ SELECT COALESCE(SUM(cost_usd),0) FROM job_events WHERE created_at >= date_trunc(
 
 1. worker 中斷：重啟 `npm start` 即可——租約過期後自動重新認領；extract 重跑靠 `UNIQUE (job_id, idx)` + `ON CONFLICT DO NOTHING` 不會重複建列（斷點續跑為設計保證）。
 2. 租約殘留且確認無 worker 在跑：`UPDATE job_questions SET locked_until = NULL WHERE id = <id>;`（jobs 表同理）。
-3. `budget_exceeded` 進 needs_review：至人工複核佇列（`public/review.html`）approve／reject，或提高 `JOB_COST_BUDGET_USD` 後重送。
+3. `budget_exceeded` 進 needs_review：至人工複核佇列（首頁 `#review` 分頁，`exam_pro/public/js/review.js` 掛載）approve／reject，或提高 `JOB_COST_BUDGET_USD` 後重送。
 4. 當日觸頂：等隔日視窗重置，或確認費用合理後調高 `.env` 的 `DAILY_COST_BUDGET_USD` 並重啟。
 
 ## 6. Recovery（恢復確認）
@@ -84,4 +84,4 @@ SELECT COALESCE(SUM(cost_usd),0) FROM job_events WHERE created_at >= date_trunc(
 | :--- | :--- |
 | 上游需求 | DEC-005、FR-001、FR-011、NFR-005（租約認領、斷點續跑、退避重試） |
 | 對應模組 | `exam_pro/workers/jobRunner.js`、`exam_pro/pipeline/stateMachine.js`、`exam_pro/scripts/report_jobs.js` |
-| 下游文件 | [../05_qa/qa_tracker.md](../05_qa/qa_tracker.md)（TC-001-*）；事故覆盤紀錄（待補） |
+| 下游文件 | [../05_qa/qa_tracker.md](../05_qa/qa_tracker.md)（TC-001-*）；事故覆盤紀錄：尚無事故（發生時於此登錄） |

@@ -49,6 +49,7 @@
 | 階段 4 | DEC-007 | 各階段功能以 FEATURE_* 旗標控制掛載（預設全關） | exam_pro/config/features.js；routes append-only 區塊 |
 | 2026-08-24 | DEC-009 | 授權由 Apache-2.0 改為版權所有、僅供瀏覽評估 | 個人工具與作品集定位；歷史版本授權僅及於該等版本（`LICENSE`） |
 | 階段 4 | DEC-007 | 對話式助教限定五個只讀工具、出卷僅 dry-run 預覽 | 寫入權限保留給既有閘門流程；ADR-007 |
+| 2026-08-25 | P-16（DEC-007 範圍） | 參數化模板由「使用者指示擱置」改「核准重啟」 | Owner 裁示；未動工，規劃待啟動（[prd §5](./prd.md)） |
 
 ## 3. Gate 簽核
 
@@ -68,4 +69,4 @@ Gate 判定原則：
 
 - 上游：使用者痛點與成功標準（`README.md` 問題背景章）、四階段裁決紀錄（`docs/interfaces*.md`：階段 1 裁決 1–27、S2-1～30、S3-1～R29）。
 - 下游：DEC-001～009 → FR-001～016／NFR-001～006（[engineering_tracker](../03_architecture/engineering_tracker.md)）；Gate 證據 → TC 與 eval（[qa_tracker](../05_qa/qa_tracker.md)）；重大取捨 → ADR-001～008（[adr/](../03_architecture/adr/)）。
-- 快照：`requirements_tracker.xlsx` 由本檔轉出，僅作發布快照；在欄位不失真的雙向轉換（round-trip）驗證完成前，不以 xlsx 作雙向單一事實來源。
+- 快照：**md 為唯一權威（2026-08-25 Owner 定案）**——`requirements_tracker.xlsx` 僅於需要時由本檔單向轉出作發布副本，不回寫、不做雙向同步；原「round-trip 驗證後改雙向」的暫行條款隨之免除。

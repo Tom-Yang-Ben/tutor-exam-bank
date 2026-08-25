@@ -73,6 +73,16 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 | `IMAGE_HOST_ALLOWLIST` | Word 匯圖允許的圖片網域（防 SSRF） | 空 |
 | `NODE_ENV` | `production` 時錯誤不回傳細節 | `development` |
 | `BACKUP_DIR`／`BACKUP_KEEP`／`BACKUP_COPY_DIR`／`BACKUP_PG_SERVICE` | 備份輸出、保留份數、異地複製、compose 服務名 | `exam_pro/backups`／14／空／`postgres` |
+| `JOB_RUNNER` | `inline` 時 server 內建啟動 jobRunner；設為其他值則不啟動（`workers/jobRunner.js` startInlineRunner） | `inline` |
+| `JOB_CONCURRENCY` | worker 認領槽數，**兼 LLM 併發桶上限**（`services/llm/throttle.js` 沿用同值） | `2` |
+| `JOB_POLL_MS`／`JOB_LEASE_MS` | 認領輪詢間隔／租約時長（NFR-005 斷點續跑） | `2000`／`180000` |
+| `JOB_NODE_TIMEOUT_MS` | 單節點逾時（Promise.race＋AbortController，逾時歸 `error:timeout`） | `120000` |
+| `JOB_COST_BUDGET_USD`／`DAILY_COST_BUDGET_USD` | 單 job／每日成本上限（NFR-002；觸頂行為見 [runbook-llm-cost-quota.md](./runbook-llm-cost-quota.md)） | `0.5`／`5` |
+| `GEMINI_RPM`（通式 `<VENDOR>_RPM`） | 每供應商出口 RPM 節流（滑動 60 秒視窗） | `60` |
+| `ASSISTANT_MAX_STEPS` | 助教 ReAct 迴圈每輪工具呼叫上限（1–10） | `5` |
+| `VARIANT_AUTO_APPROVE` | `false` 時變式過全部閘門仍停 `awaiting_approval` 待人工核准 | `false` |
+| `VARIANT_MAX_PER_REQUEST` | 單次變式請求題數上限 | `3` |
+| `WEAKNESS_MIN_N` | 弱點面板 `low_sample` 標記門檻（graded 低於此值） | `5` |
 
 ### 3.3 升級前檢查
 
@@ -103,7 +113,7 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 
 | 類別 | 機制 | 出處 |
 | :--- | :--- | :--- |
-| AI 成本 | 逐 token 計費紀錄、單 job 與每日成本上限（NFR-002；上限值（待補）） | `exam_pro/workers/jobRunner.js`、`config/pricing.js` |
+| AI 成本 | 逐 token 計費紀錄、單 job 與每日成本上限（NFR-002；`JOB_COST_BUDGET_USD` 預設 0.5、`DAILY_COST_BUDGET_USD` 預設 5） | `exam_pro/workers/jobRunner.js`、`config/pricing.js` |
 | job 狀態 | `npm run report:jobs` 成本／狀態報表；卡住處置見 [runbook-job-stuck.md](./runbook-job-stuck.md) | `exam_pro/scripts/report_jobs.js` |
 | 備份失敗 | 任一步失敗寫 `backups/LAST_FAILED.txt` 並非零碼退出，`.bat` 停在畫面不關視窗；成功時刪除該檔 | `exam_pro/scripts/backup.js` |
 | 品質退化 | 五個 eval suite ratchet 門檻進 CI，低於門檻轉紅；處置見 [runbook-eval-threshold-fail.md](./runbook-eval-threshold-fail.md) | `exam_pro/eval/thresholds.json` |

@@ -27,8 +27,10 @@ TC 依 FR 分組（`TC-<FR 號>-<序>`）；層級：U=單元、I=整合、E=e2e
 | TC-005-1 | FR-005 | 正規化雜湊去重→向量餘弦去重兩段順序與閾值 | U＋I | 通過 |
 | TC-006-1 | FR-006 | needs_review 八種原因歸類；review approve/reject | I＋E | 通過 |
 | TC-007-1 | FR-007 | batch-save 白名單硬驗證（章節、question_type 五種、difficulty 1–5） | U＋I | 通過 |
-| TC-008-1 | FR-008 | NOT EXISTS attempts 排除已作答；pickOnePerFamily 家族互斥 | U＋I | 通過 |
+| TC-008-1 | FR-008 | NOT EXISTS attempts 排除已作答（同學生二次組卷零重複） | I | 通過 |
 | TC-008-2 | FR-008 | 草稿→確認與作答歷史同交易，失敗全數回滾 | I | 通過 |
+| TC-008-3 | FR-008 | pickOnePerFamily 家族互斥：每 `COALESCE(variant_of, id)` 家族至多一題、家族間等機率 | U | 通過 |
+| TC-008-4 | FR-008 | 抽題隨機性突變測試（Fisher-Yates；固定種子一萬次卡方 0.5–4.0，改回舊寫法 5 項轉紅） | U | 通過 |
 | TC-009-1 | FR-009 | LaTeX→OOXML tokenizer＋遞迴下降；未知指令降級為純文字 | U | 通過 |
 | TC-009-2 | FR-009 | 組卷→Word 匯出全路徑，docx 原生 Math 物件 | E | 通過 |
 | TC-010-1 | FR-010 | hybrid（RRF k=60）檢索品質對 golden 40 筆 | EV | 通過 |

@@ -105,6 +105,6 @@
 | 項目 | ID |
 | :--- | :--- |
 | 對應需求 | FR-012（上游決策 DEC-006、DEC-008；NFR-001） |
-| 對應情境 | SCN-*（待補，見 `../05_qa/qa_tracker.md`） |
+| 對應情境 | SCN-013（NLQ 解析失敗四級回退，[prd §3.2](../01_requirements/prd.md)） |
 | 契約來源 | `docs/interfaces-stage3.md` 第 6、7 條（repo 內文件） |
 | 下游 | `../03_architecture/engineering_tracker.md`（FR-012 列）、`../05_qa/qa_tracker.md`（TC-012-*） |

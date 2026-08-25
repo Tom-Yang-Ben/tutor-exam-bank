@@ -2,7 +2,7 @@
 
 > **版本:** v1.0 | **更新:** 2026-08-25 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
-> **定位:** 本資料夾是專案的正式工程文件**實例**；模板庫（作業格式）在 [`../VibeCoding_Workflow_Templates/`](../VibeCoding_Workflow_Templates/INDEX.md)。本檔回答「哪份文件在哪裡、回答什麼問題、ID 如何互相追溯」，不重述各文件內容。
+> **定位:** 本資料夾是專案的正式工程文件**實例**；產出所依據的模板庫（`VibeCoding_Workflow_Templates/`，作業格式）**不在本 repo 版控內**，位於本機另一工作區（`Desktop/claude-Godzilla-z/`）。本檔回答「哪份文件在哪裡、回答什麼問題、ID 如何互相追溯」，不重述各文件內容。
 
 ## 1. 目錄結構
 
@@ -80,6 +80,6 @@
 
 ## 3. 與模板庫的關係
 
-- [`VibeCoding_Workflow_Templates/`](../VibeCoding_Workflow_Templates/INDEX.md) 是可裁剪的作業格式（模板）；本資料夾是依其結構產出的**專案實例**，多實例模板依穩定錨點展開（ADR 每決策一檔、ui_spec 每頁一份、runbook 每症狀一份）。
+- `VibeCoding_Workflow_Templates/` 是可裁剪的作業格式（模板；不在本 repo 版控內，見文件頂部定位說明）；本資料夾是依其結構產出的**專案實例**，多實例模板依穩定錨點展開（ADR 每決策一檔、ui_spec 每頁一份、runbook 每症狀一份）。
 - 三本追蹤簿（requirements／engineering／qa）以本資料夾的 Markdown 為發布快照，`*_tracker.xlsx` 由 md 轉出；人工維護欄位以 md 為準。
 - 專案事實以原始碼與 `exam_pro/` README 為準；本資料夾不另立第二真相源。

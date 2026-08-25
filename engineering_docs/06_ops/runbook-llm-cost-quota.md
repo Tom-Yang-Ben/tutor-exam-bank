@@ -85,4 +85,4 @@ SELECT id, kind, state, cost_usd, budget_usd FROM jobs ORDER BY updated_at DESC 
 | :--- | :--- |
 | 上游需求 | DEC-008、NFR-002（限流、RPM 節流、逐 token 計費、單 job／每日上限） |
 | 對應模組 | `exam_pro/services/llm/throttle.js`、`exam_pro/config/pricing.js`、`exam_pro/workers/jobRunner.js`（dailySpentUsd／chargeJob） |
-| 下游文件 | [runbook-job-stuck.md](./runbook-job-stuck.md)；事故覆盤紀錄（待補） |
+| 下游文件 | [runbook-job-stuck.md](./runbook-job-stuck.md)；事故覆盤紀錄：尚無事故（發生時於此登錄） |
