@@ -142,7 +142,7 @@ node scripts/backfill_embeddings.js --test         # 改打 TEST_DATABASE_URL（
 | `weighted` | `0.7 × 向量側 + 0.3 × 關鍵字側`，兩側各自在自己那 50 名內 min-max 正規化到 0~1（整側同分時給 1） |
 
 **選用參數 `sides`**（預設 `['vec','kw']`）：`/similar` 的 `mode=vector` 傳 `['vec']`、`mode=keyword` 傳 `['kw']`，
-讓三種模式共用同一段 SQL 而不是各寫一份。詳見 `docs/questions-wsC.md` 第 2 題。
+讓三種模式共用同一段 SQL 而不是各寫一份。詳見 `docs/archive/questions-wsC.md` 第 2 題。
 
 呼叫端要在**同一個交易**內設 `SET LOCAL hnsw.ef_search = 100`；eval 為求等效精確，設為不小於 fixture 題數。
 

@@ -213,7 +213,7 @@ eval/private/pdf_golden/<sha256>.json    真實考卷的人工標註，永不進
 WS-B 的 A-T8 會把 `aiService.analyzePdfContent` 換成新 extract agent 的**相容包裝**——
 那一刻起，`--method legacy` 量到的其實是新管線，兩欄數字會神奇地一模一樣而不會有任何錯誤。
 腳本會檢查 `aiService.js` 裡還在不在「手抄的章節白名單」這個 legacy 指紋，不在就大聲警告。
-`services/legacy/analyzePdf.js` 目前**沒有主人**（不在所有權表內），見 `docs/questions2-wsD.md` Q1。
+`services/legacy/analyzePdf.js` 目前**沒有主人**（不在所有權表內），見 `docs/archive/questions2-wsD.md` Q1。
 
 ---
 
@@ -351,7 +351,7 @@ npm run check:html
 - `ans-045`／`ans-046`：`expression` 只比「去空白、去 `$`、去 `\left\right` 後的字串」，
   所以 `^{\circ}` 與 `^\circ`、`\theta = 45^\circ` 與 `45^\circ` 都算不同字串——
   要不要把 LaTeX 的等價寫法納入正規化
-- **`extraction_hazard: true` 的 1 筆（`ans-047`）**：見 `docs/questions2-wsD.md` Q3 與裁決 S2-12。
+- **`extraction_hazard: true` 的 1 筆（`ans-047`）**：見 `docs/archive/questions2-wsD.md` Q3 與裁決 S2-12。
   抽取規則已改為「最後一個 `$…$`，含 `=`／`\approx` 取其後，純上下標片段跳過」，
   其餘各筆的 `expect` 都已改回 `agree`。
 

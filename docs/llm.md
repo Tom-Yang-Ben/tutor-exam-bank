@@ -1,7 +1,7 @@
 # docs/llm.md — LLM 層操作手冊（`services/llm/`）
 
 > 擁有者：WS-B（階段 2，A-T3／A-T8／A-T9）。
-> 契約：`docs/interfaces-stage2.md` 第 3、5 條與 `docs/interfaces.md` 第 4 條。**這兩份是凍結介面，本檔不覆蓋它們**；有出入時以介面文件為準，並把問題寫進 `docs/questions2-wsB.md`。
+> 契約：`docs/interfaces-stage2.md` 第 3、5 條與 `docs/interfaces.md` 第 4 條。**這兩份是凍結介面，本檔不覆蓋它們**；有出入時以介面文件為準，並把問題寫進 `docs/archive/questions2-wsB.md`。
 
 全案所有的 LLM 呼叫都只經過一個出入口：
 

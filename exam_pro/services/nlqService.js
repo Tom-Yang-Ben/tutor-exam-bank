@@ -23,11 +23,11 @@
 //      題型條件因此以「候選排除集」表達：先用一句便宜的 metadata 查詢撈出
 //      「同 subject／chapter／難度區間，但題型不對」的 id，再經 excludeIds 傳進去。
 //      這樣題型是**精確**篩選，limit 的語意也不變（先取 limit 再過濾會少給結果）。
-//      見 docs/questions3-wsC.md 第 2 題。
+//      見 docs/archive/questions3-wsC.md 第 2 題。
 //
 //   b. body 的 student_id 與句子裡解析出的「某某沒寫過」都會落到同一個
 //      excludeStudentId：句子裡指名的優先（那是使用者當下明確講的），
-//      沒指名時才用 body 帶進來的。見 docs/questions3-wsC.md 第 3 題。
+//      沒指名時才用 body 帶進來的。見 docs/archive/questions3-wsC.md 第 3 題。
 //
 // 這一支是 service 不是 agent，所以可以讀 process.env（agent 不得自己讀，
 // interfaces-stage2.md 第 3.1 條；那條規範的是 agents/**）。
@@ -181,7 +181,7 @@ function _resetCacheForTest() {
  * 一個順序上的說明：第 6.4 條把「subject 反推」列在第 6 點、把「chapters 逐一過
  * isValidChapter」列在第 1 點。照字面順序做的話，subject 為 null 時第 1 點會把每一章
  * 都判成不合法（isValidChapter(null, x) 恆為 false），第 6 點就沒有章節可以反推了。
- * 因此這裡先反推 subject 再驗章節——兩點的意圖顯然是這樣，見 docs/questions3-wsC.md 第 5 題。
+ * 因此這裡先反推 subject 再驗章節——兩點的意圖顯然是這樣，見 docs/archive/questions3-wsC.md 第 5 題。
  *
  * @param {object} filters parseQuery 或 LLM 給的七欄
  * @returns {{filters:object, warnings:string[]}}

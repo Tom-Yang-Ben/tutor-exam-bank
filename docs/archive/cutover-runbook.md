@@ -1,4 +1,6 @@
-# docs/cutover-runbook.md — MySQL → PostgreSQL 切換手冊
+# docs/archive/cutover-runbook.md — MySQL → PostgreSQL 切換手冊
+
+> **📦 歷史紀錄（2026-08-25 歸檔）**：切換已於 **2026-08-21** 依本手冊執行完畢並上線（PG 開發庫埠 5442）；回滾窗口至 **2026-09-04**（MySQL 停而不刪，見 §「回滾界線」；窗口過後才可解除安裝 MySQL80 與刪資料目錄）。本檔保留作為切換之夜的完整紀錄，日常維運改看 `engineering_docs/06_ops/runbook-pg-down.md` 與 `deployment_and_operations.md`。
 
 > 擁有者：WS-B（遷移與維運）。對應規劃 `docs/roadmap-plan.md` §2.3.5、§5.3.6；介面以 `docs/interfaces.md` 為準。
 > 這份是**切換之夜照著念的稿子**：每一步都有可以複製貼上的指令、預期看到什麼、不對的話怎麼辦。

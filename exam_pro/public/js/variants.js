@@ -662,7 +662,7 @@ export function init() {
     mountVariantsSection(section);
 
     // students.js 的「找相似／出變式」是唯一的入口（兩個 module 不互相 import，
-    // 只靠這個事件通訊；detail 的形狀寫在 docs/questions3-wsD.md 第 1 條）。
+    // 只靠這個事件通訊；detail 的形狀寫在 docs/archive/questions3-wsD.md 第 1 條）。
     document.addEventListener(VARIANT_EVENT, (event) => {
         const detail = (event && event.detail) || {};
         if (!Number.isInteger(detail.question_id)) return;

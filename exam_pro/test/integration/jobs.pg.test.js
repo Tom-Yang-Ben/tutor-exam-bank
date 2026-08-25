@@ -720,7 +720,7 @@ function runSuite() {
                 assert.ok(res.body.elapsed_ms >= 0);
             });
 
-            test('還沒拆題的 job：四個 counts 都是 0（見 docs/questions2-wsA.md 第 5 條）', async () => {
+            test('還沒拆題的 job：四個 counts 都是 0（見 docs/archive/questions2-wsA.md 第 5 條）', async () => {
                 const { rows } = await query(
                     `INSERT INTO jobs (kind, pdf_sha256, state, budget_usd) VALUES ('pdf', repeat('a',64), 'queued', 0.5) RETURNING id`);
                 const res = await request(app).get(`/api/jobs/${rows[0].id}`);

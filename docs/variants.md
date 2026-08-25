@@ -286,8 +286,10 @@ LLM 決定的混在一起，報表分不出來；改成查同一張表就一致�
 1. ~~只改字閘門對「短題幹 + 換數字」有漏~~ → **裁決 S3-R8 已補**（第 2.1 節）：
    規則 2 改成只看「數字遮罩後文字相同」，fixture 的 20 對「同概念換數字」攔截率 11/20 → 15/20。
 2. ~~`gate_pass_rate` 尚未有數字~~ → **2026-08-24 已錄**（第 4 節）。0.92 時 0.15、擋掉 26/30 藍本 → **S3-R29 下修為 0.90 並重錄**（數字見第 4 節）。
-3. **golden 尚未人工定案**：30 個藍本是機械挑的（fixture 的奇數 id，再換兩題讓「證明」與
-   「多選」出現），`needs_human_confirm` 全部是 `true`，所以**現在不得 `--write-baseline`**。
+3. ~~golden 尚未人工定案~~ → **2026-08-24 已定案並 `--write-baseline`**（門檻見第 4 節：
+   `retrieved_coverage ≥ 0.8367`、`gate_pass_rate ≥ 0.22`，量測 −0.03、只升不降）。
+   30 個藍本原是機械挑的（fixture 奇數 id，再換兩題讓「證明」與「多選」出現），
+   定案時由開發者本人逐筆確認、`needs_human_confirm` 已清。
 4. **`--engine pg` 只是驗證用**：`retrieved_coverage` 的數字一律以 memory 引擎為準
    （兩邊算的是同一個餘弦）；那段 SQL 的正確性由 `test/integration/variants.pg.test.js`
    的 9 項條件斷言保證。

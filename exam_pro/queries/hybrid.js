@@ -40,7 +40,7 @@ function assertInt(value, name, min, max) {
  *   mode: 'rrf'|'weighted',
  *   limit: number,                   // 1..50
  *   sides?: ('vec'|'kw')[]           // 選用擴充，預設 ['vec','kw']；/similar 的 mode=vector|keyword 用它
- *                                    // 關掉單側。見 docs/questions-wsC.md 第 2 題。
+ *                                    // 關掉單側。見 docs/archive/questions-wsC.md 第 2 題。
  * }} opts
  * @returns {{text: string, values: any[]}}  直接餵給 config/db.js 的 query(text, values)
  */

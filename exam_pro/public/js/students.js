@@ -40,7 +40,7 @@ let pendingPaperId = null;
 // students.js →（找相似／出變式）→ variants.js 的唯一通道。
 // 用 CustomEvent 而不是互相 import：兩個 module 因此可以各自被 data: URL 載入做單元測試，
 // 也不必在 window.ExamApp 上多掛一個第 7.1 條沒有凍結的鍵。
-// 事件名與 detail 的形狀寫在 docs/questions3-wsD.md 第 1 條，variants.js 是唯一的聽眾。
+// 事件名與 detail 的形狀寫在 docs/archive/questions3-wsD.md 第 1 條，variants.js 是唯一的聽眾。
 export const VARIANT_EVENT = 'examapp:variant-request';
 
 // index.html 組卷結果區的「立即批改」按鈕發的事件。詳情由 ExamApp.getPaperCache() 取，

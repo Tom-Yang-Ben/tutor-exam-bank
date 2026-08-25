@@ -41,7 +41,7 @@
 |---|---|---|---|
 | 重構 v1 | DEC-001、DEC-002 | 原型 `exam/` 標記 ARCHIVED，系統本體移至 `exam_pro/` | 原型曾以 `express.static(__dirname)` 對外暴露 `.env`；重構補齊認證、CORS、防 SSRF、交易 |
 | 階段 1 | DEC-003 | 已作答排除自組卷邏輯正規化為 `students`／`attempts` 表 | 排除條件與向量檢索同庫同查詢（DEC-004 的前提） |
-| 2026-08-21 | DEC-004 | MySQL→PG16+pgvector 正式切換上線 | 切換之夜依 `docs/cutover-runbook.md` 執行；保留回滾窗口 |
+| 2026-08-21 | DEC-004 | MySQL→PG16+pgvector 正式切換上線 | 切換之夜依 `docs/archive/cutover-runbook.md` 執行；保留回滾窗口 |
 | 階段 2 | DEC-005 | 「一題不合格即整批退回」改為部分入庫 | 曾發生單題格式錯誤導致整批 400 失敗的事故（README 技術選型 ②） |
 | 階段 2 | DEC-008 | 成本上限（單 job／每日）與 RPM 節流納入管線編排 | 閘門依成本由低至高排序（文字比對→embedding→LLM）；逐 token 計費記入 job_events |
 | 階段 3 | DEC-006（變式） | 變式採檢索優先策略（相似度 ≥0.80 命中即不生成） | 多數請求無 LLM 費用（README 技術選型 ①） |

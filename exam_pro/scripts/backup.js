@@ -118,7 +118,7 @@ function main() {
         for (const f of olds) { safeUnlink(path.join(outDir, f)); console.log(`   已清掉舊備份 ${f}`); }
 
         safeUnlink(failFile);
-        console.log(`   保留最近 ${keep} 份；還原方式見 docs/cutover-runbook.md 的「回滾」段。`);
+        console.log(`   保留最近 ${keep} 份；還原方式見 docs/archive/cutover-runbook.md 的「回滾」段。`);
     } catch (err) {
         const msg = `[${new Date().toISOString()}] 備份失敗：${err.message}\n`;
         try {

@@ -180,7 +180,7 @@ exports.createJob = async (req, res, next) => {
 
 /**
  * 只給 POST /api/jobs 用的 multer 錯誤轉換（第 6.1 條的 413）。
- * 不動 app.js 的全域錯誤中樞，也不動 /analyze-pdf 的既有行為（見 docs/questions2-wsA.md 第 4 條）。
+ * 不動 app.js 的全域錯誤中樞，也不動 /analyze-pdf 的既有行為（見 docs/archive/questions2-wsA.md 第 4 條）。
  */
 exports.handleUploadError = (err, req, res, next) => {
     if (err && err.code === 'LIMIT_FILE_SIZE') {
