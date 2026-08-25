@@ -359,4 +359,4 @@ verify 用不同模型重算答案（單一模型抄錯會錯得像模像樣，�
 | 答案比對／題幹正規化 | `exam_pro/utils/answerCompare.js`、`utils/normalizeStem.js` |
 | eval 入口／套件／門檻 | `exam_pro/eval/run.js`、`eval/lib/suite*.js`、`eval/thresholds.json` |
 | 變式題專章（九道閘門、校準、S3-R8/R9/R29） | `docs/variants.md` |
-| 全部裁決 | `docs/interfaces.md`、`interfaces-stage2.md`、`interfaces-stage3.md` |
+| 全部裁決 | `docs/interfaces-stage1.md`、`interfaces-stage2.md`、`interfaces-stage3.md` |

@@ -15,16 +15,16 @@
 //   --skip-bad-dates         history_json 的日期不是 YYYY-MM-DD 時略過該筆（預設直接中止）
 //   --tz=Asia/Taipei         MySQL 的 DATETIME 沒有時區，用這個時區解讀成 TIMESTAMPTZ
 //
-// 設計要點（來自 §1.5 的裁決與 interfaces.md）：
+// 設計要點（來自 §1.5 的裁決與 interfaces-stage1.md）：
 //   1. **單一交易**。任何一項檢查不過就 ROLLBACK，資料庫回到匯入前的樣子。
 //   2. **保留原 id**：0001_init.sql 用 GENERATED ALWAYS AS IDENTITY，必須寫
 //      `OVERRIDING SYSTEM VALUE`；最後對 questions / exam_papers / students 各跑一次 setval，
-//      否則上線後第一筆 INSERT 就主鍵衝突（interfaces.md §1.5 第 9 條）。
+//      否則上線後第一筆 INSERT 就主鍵衝突（interfaces-stage1.md §1.5 第 9 條）。
 //   3. **history_json 在 PG 端展開**：JSONL 先批次灌進 TEMP 表，再用一條
 //      `jsonb_each_text` 的 INSERT … SELECT 展成 students + attempts，
 //      不在 Node 迴圈裡逐筆 INSERT（規劃 §2.3.5 步驟 3）。
 //   4. **question_ids 是 INT[]**（不是 JSON），**exam_papers.student_id 是 NOT NULL**，
-//      **attempts.question_id 是 ON DELETE RESTRICT**（interfaces.md §1.5 第 1~3 條）。
+//      **attempts.question_id 是 ON DELETE RESTRICT**（interfaces-stage1.md §1.5 第 1~3 條）。
 //   5. **姓名正規化只有一條規則**，JS 與 SQL 兩份實作在匯入前先逐筆對過（自我檢查）。
 //   6. **舊題一律 `origin='legacy'`**（裁決 13，需先套用 `0004_origin_legacy.sql`）；
 //      只有題幹與 `seed_questions.js` 完全相同的 30 題寫 `'seed'` + `chapter_src='human'`。
@@ -91,7 +91,7 @@ async function main() {
         const ids = report.dropped.paperNames.map(d => d.paperId).join(', ');
         throw new Error(
             `有 ${report.totals.papersDropped} 張試卷的 student_name 正規化後是空字串（exam_papers.id = ${ids}）。\n` +
-            '   exam_papers.student_id 是 NOT NULL（interfaces.md §1.5 第 2 條），不能自己編一個學生塞進去，\n' +
+            '   exam_papers.student_id 是 NOT NULL（interfaces-stage1.md §1.5 第 2 條），不能自己編一個學生塞進去，\n' +
             '   也不會靜默丟掉這幾張卷。\n' +
             '   → 依裁決 15：回舊 MySQL 把這幾張卷的 student_name 補好，再重跑 export_mysql.js。\n' +
             '     （--unknown-student="未知學生" 只保留給「真的查不出是誰」的例外，不建議使用；\n' +
@@ -181,7 +181,7 @@ async function main() {
         await assertNormalizeAgrees(client, historyKeys, paperNames);
 
         // ── 7. questions（保留原 id）────────────────────────
-        // origin 一律寫 'legacy'（interfaces.md 裁決 13 / migrations/0004_origin_legacy.sql）：
+        // origin 一律寫 'legacy'（interfaces-stage1.md 裁決 13 / migrations/0004_origin_legacy.sql）：
         // 舊 schema 分不出這題是 AI 拆 PDF 進來的還是老師手動新增的，'legacy' 就是
         // 「來源未知」的誠實說法，不要拿 'pdf' 假裝知道。chapter_src 用 DDL 預設的 'ai'。
         const qIns = await client.query(`
@@ -267,7 +267,7 @@ async function main() {
         console.log(`   attempts ${stats.attempts} 筆`);
 
         // ── 11. 回填 paper_id：同學生、同一天、且該卷含這一題 ──
-        // 對不上就留 NULL（interfaces.md §1.3 的註解已明說允許）。
+        // 對不上就留 NULL（interfaces-stage1.md §1.3 的註解已明說允許）。
         // 多張卷同時符合時取最小的 paper_id，讓結果可重現。
         const pidUpd = await client.query(`
             UPDATE attempts a SET paper_id = m.paper_id

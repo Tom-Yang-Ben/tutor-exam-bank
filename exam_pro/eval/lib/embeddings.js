@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 // eval/lib/embeddings.js — 讀 fixture 向量檔
 //
-// docs/interfaces.md 第 4 條把檔名與格式一起凍結了：
+// docs/interfaces-stage1.md 第 4 條把檔名與格式一起凍結了：
 //   eval/fixtures/embeddings.<model>.<dim>.json
 //   { "<sha256(embed_text)>": [ … dim 個小數 6 位的數字 … ], … }
 // 查不到就丟錯並印「請在本機執行 npm run eval:record」，**不得靜默回退成假向量**。

@@ -3,7 +3,7 @@
 // 裁決 S2-5（interfaces-stage2.md 第 5.1、12 條）：模板原文一律走這張註冊表，
 // **四個 LLM 節點（extract／classify／lint／verify）都必須 registerTemplate**。
 //
-// 為什麼需要這一支（原 docs/questions2-wsB.md Q1，已結案）：
+// 為什麼需要這一支（原 docs/archive/questions2-wsB.md Q1，已結案）：
 //   interfaces-stage2.md 第 5.2 條把 cassette 的鍵定義成
 //       sha256(agent + '\n' + modelId + '\n' + promptTemplateHash + '\n' + schemaHash + '\n' + …)
 //   其中「promptTemplateHash = sha256(模板原文)；模板＝把可變欄位挖空後的字串，由 agent 提供」，

@@ -1,14 +1,18 @@
-# 題庫系統下一階段整體規劃
+# 題庫系統整體規劃（階段 1–4）
 
-> 對應根目錄 `README.md` Roadmap 的三個階段（資料層 → Agent 管線 → 產品面）與一條橫切工作流（評估／測試／CI／遷移／Windows 環境）。每一章都回答同樣五個問題：**怎麼做、為什麼這樣做、優點是什麼、有哪些替代方案與它們的優點、為什麼不選它們與它們的缺點**；最後一章把四章的任務合併成一張相依圖、關鍵路徑、可最大化平行的 workstream 與決策速查表。
+> 對應根目錄 `README.md` Roadmap 的三個階段（資料層 → Agent 管線 → 產品面）與一條橫切工作流（評估／測試／CI／遷移／Windows 環境）。每一章都回答同樣五個問題：**怎麼做、為什麼這樣做、優點是什麼、有哪些替代方案與它們的優點、為什麼不選它們與它們的缺點**；§1 把四章的任務合併成一張相依圖、關鍵路徑、可最大化平行的 workstream 與決策速查表。[§6](#sec-stage4) 是三階段結案後追加的**階段 4 產品收斂**計畫（2026-08-24 凍結；2026-08-26 併自 `docs/stage4-plan.md`，該檔已移除）。
 >
-> 基準：repo `main` @ `2c31bd1`（2026-08-21）。文中所有 `檔案:行號` 都對過這個版本的程式碼。
+> 基準：§1–§5 凍結於 repo `main` @ `2c31bd1`（2026-08-21），文中所有 `檔案:行號` 都對過這個版本的程式碼；§6 凍結於 2026-08-24。
+>
+> **⚠️ 本檔是凍結的規劃，不滾動記錄完成狀態**——各章開頭的一行狀態註記僅供導覽。實際進度以 [`HANDOFF.md`](HANDOFF.md) §2 為準；規劃與實作的落差以裁決檔（`interfaces*.md`）與 ADR 為準。
 
 ## 導讀
 
 ### 這份文件怎麼來的
 
 四條工作流（資料層、Agent 管線、產品面＋RAG、橫切評估）各由一個代理讀 repo 與 Roadmap 後獨立設計，再由一個對抗式審查者逐條核對程式碼事實、挑替代方案的稻草人、檢查 Windows 一人開發的可行性與假相依，設計者依審查修訂；最後一個代理把四章的任務表合併、裁決章節間的分歧、排出平行 workstream。四份審查總共開出 40 條必修項（例如：弱點 SQL 在 PostgreSQL 會報錯、`textFormatter` 解析器根本不會丟例外所以「嚴格模式」要改成事件計數、eval fixture 不能用真題庫、thinking tokens 漏算會讓預算閘門失效），修訂版已全部處理。
+
+§6（階段 4 產品收斂）不是這個四代理流程的產物：它是階段 1–3 結案後、針對日常主流程被三個設計反噬的問題，由使用者逐項核准的單線收斂計畫，2026-08-26 自獨立檔 `docs/stage4-plan.md` 併入本檔。
 
 ### 怎麼讀
 
@@ -18,8 +22,9 @@
 | 為什麼不選別的（速查） | [§1.6 決策總表](#sec-schedule)：每個決策的最終選擇、最強替代方案、**改選條件** |
 | 每個階段的具體設計（DDL、API、函式、環境變數） | 各章 **§3 作法** |
 | 每個決策的理由與替代方案的完整取捨 | 各章 **§4 為什麼這樣做**、**§5 優點**、**§6 替代方案與取捨** |
-| §1 任務 ID 的前綴 D-／A-／P-／E- 分別對應 | §2 資料層／§3 管線／§4 產品面／§5 橫切（§1 內文的「D §3.2」即「§2 資料層的 3.2 小節」） |
+| §1 任務 ID 的前綴 D-／A-／P-／E- 分別對應 | §2 資料層／§3 管線／§4 產品面／§5 橫切（§1 內文的「D §3.2」即「§2 資料層的 3.2 小節」）；階段 4 的 W1-*／S4-* 見 §6 |
 | 怎麼驗收、怎麼進 CI | 各章 **§8**，加上 [§5 橫切](#sec-eval) 的 eval 體系 |
+| 階段 4 產品收斂的範圍、API 契約、測試計畫與擱置區 | [§6 階段 4](#sec-stage4)（W1-1～W1-4、裁決 S4-1～S4-4、對話式助教） |
 
 ### 一頁摘要
 
@@ -31,6 +36,7 @@
 | **階段 2 Agent 管線** | `jobs` 狀態機（純函式）+ DB-polling worker + 五個節點各有硬閘門、重試預算、成本記帳；部分入庫取代整批退回 | 協調層是程式碼不是 LLM；便宜的閘門（雜湊去重、白名單）排在 LLM 前；驗證用確定性比對器，異家模型等 eval 數字再接 |
 | **階段 3 產品面** | 先純檢索相似題、再生成變式題（走同一組閘門、首輪人工核准）；弱點面板即時 SQL 聚合；NL 查題規則為主 LLM 為輔 | 3A（不碰 LLM）可先交付；變式題「只改字」用文字比對而非 embedding；前端維持 vanilla + ES module，不引框架 |
 | **橫切 評估與上線** | 公開／私有兩層 golden、record/replay 讓 CI 零 secrets、門檻從基準線長出來（ratchet）、遷移 export→import→verify、Windows 用 Docker Desktop | 「prompt 不是保證，伺服器端驗證才是」延伸到 eval：golden 由人定、門檻由 CI 執行 |
+| **階段 4 產品收斂**（§6 追加） | 學生改成選的、出卷草稿→確認、批改輕量化、對話式助教（主控 LLM 調度五個只讀工具） | 單線施工不開 worktree；`generate-paper` 不再自動建學生（垃圾人名的根因）；助教只讀、寫入永遠由人按確認 |
 
 **Day 1 就能同時開始、不需要 DB 也不需要金鑰的工作有 20 項、約 25 人日**（釘 `EMBED_DIM`、`@google/genai` structured output spike、Docker compose、PR-A 部分入庫、fixture 60 題、管線 golden、legacy 基準線、NL golden、狀態機純函式、`parseLatexStrict`、答案比對器、eval 腳手架、弱點 SQL 純函式、三個前端分頁的 mock 版……）。全案最早的「所有人都在等」節點是 **D-D3（controller 改 `pg`）**，必須在第一週內合入。
 
@@ -51,6 +57,8 @@
 <a id="sec-schedule"></a>
 
 ## §1 跨階段相依圖、關鍵路徑與最大化平行的 workstream 排程
+
+> **狀態（2026-08-26 註）**：階段 1–3 已依本章排程以四條 workstream 完成；本章保留為排程與相依分析的紀錄。現況以 [HANDOFF §2](HANDOFF.md) 為準。
 
 ### 1. 跨階段任務總表
 
@@ -245,7 +253,7 @@ flowchart LR
 
 | 里程碑 | 時機 | 可量測驗收（引各章指標） | No-Go 時的動作 |
 |---|---|---|---|
-| **M0 環境與介面** | Day 2 | Docker 起得來且中文路徑 bind mount 成功（D §9）；A-T0 spike 結論寫入 `.env.example`（enum 支援、inlineData 門檻、模型 ID）；`EMBED_DIM=768` 定案；I0 清單全部寫進 `docs/interfaces.md` | Docker 失敗→改 PGlite 或原生 PG（D §6.3）；enum 不支援→`ajv` 為最終閘門、prompt 列舉（A §9） |
+| **M0 環境與介面** | Day 2 | Docker 起得來且中文路徑 bind mount 成功（D §9）；A-T0 spike 結論寫入 `.env.example`（enum 支援、inlineData 門檻、模型 ID）；`EMBED_DIM=768` 定案；I0 清單全部寫進 `docs/interfaces-stage1.md` | Docker 失敗→改 PGlite 或原生 PG（D §6.3）；enum 不支援→`ajv` 為最終閘門、prompt 列舉（A §9） |
 | **M1 資料層切換** | 第 3 週 | `verify.js` 0 差異、`COUNT(attempts)` = Σ `history_json` 鍵數、20 題逐位元 diff（D §8、E §8）；`npm test` 40 項全過；integration job 綠，supertest 打 `/api/generate-paper` 兩次不重疊、`total` 為 number；姓名合併報告已人工確認 | 任一不等即 `ROLLBACK`，MySQL 唯讀保留 14 天、tag `v1-mysql`（E §3.6） |
 | **M2 檢索上線** | 第 4 週 | 回填 `embedding IS NULL` = 0；CI 層 hybrid Recall@5 ≥ 基準 − 0.03 且 hybrid ≥ LIKE；SQL 與記憶體排序器前 10 名 Jaccard ≥ 0.9；`/similar` p95 < 100 ms；私有 golden 三欄數字進 README | hybrid 不優於 LIKE→先查 `embed_text` 規則與分詞，不開 `concept_summary`；trgm 與 jieba 差 ≤ 2 點→砍 D-T1（D §6.4） |
 | **M3 管線上線（PR-C）** | 第 5 週 | 狀態機 100% 分支覆蓋、任意序列 `Σ maxRetries + 6` 步達終態；公式 golden `ok` 全過、`degrade` 100% 產事件；預算測試「超線不再呼叫」；A-T16 對照表：新管線 `saved > 0` 而 legacy 整批 400 記 `saved=0`、chapter_acc ≥ 現況、strict 率與每份 PDF `cost_usd` 有數字；classify 零成本閘門通過率有數字 | `answer_mismatch` > 15% 先查 prompt；Pro 驗 Flash 檢出率比異家低 ≥ 10 點→啟動 A-T17 |
@@ -325,6 +333,8 @@ flowchart LR
 <a id="sec-data"></a>
 
 ## §2 階段 1 資料層：PostgreSQL + pgvector 遷移、students/attempts 正規化、embedding 與 hybrid 檢索
+
+> **狀態（2026-08-26 註）：已完成並上線**——2026-08-21 切換 PostgreSQL（開發庫埠 5442），D-X1 收尾完成。實際凍結介面與裁決 1–27 見 [`interfaces-stage1.md`](interfaces-stage1.md)。
 
 ### 1. 目標與範圍
 
@@ -696,6 +706,8 @@ SELECT COALESCE(vec.id, kw.id) AS id,
 
 ## §3 階段 2 Agent 管線：jobs 狀態機、五個 sub-agent、硬閘門、重試預算、人工複核、模型路由
 
+> **狀態（2026-08-26 註）：已完成**——三輪合併、cassette 錄齊、CI 綠；A-T16 前後對照經使用者裁決先跳過。實際介面與裁決 S0-1～6、S2-1～30 見 [`interfaces-stage2.md`](interfaces-stage2.md)。
+
 ### 1. 目標與範圍
 
 **交付**：把現在「一次 Gemini 呼叫 → 前端預覽 → 整批入庫或整批退回」改成「每份 PDF 一個 `jobs` 列、每一題一個 `job_questions` 列、由確定性狀態機逐節點推進」的管線。節點順序：拆題 → 去重 L0（雜湊）→ 分類 → 公式檢查 → 解題驗證 → 去重 L1（向量）→ 入庫。每個節點有 JSON 合約、硬閘門、重試上限；通過的題直接入庫，沒通過的進 `needs_review` 佇列並附機器產生的具體原因，老師在現有 `index.html` 裡複核。模型 ID 全部改成環境變數，LLM 呼叫統一經過一層薄抽象，每次呼叫的 token（含 thinking）、成本、延遲、失敗原因都落地到 `job_events`。
@@ -997,6 +1009,8 @@ CI 維持 `npm test`、無 secrets：LLM 全走 `fake.js`；新管線程式碼�
 <a id="sec-product"></a>
 
 ## §4 階段 3：產品面與 RAG 三落點——相似題／變式題生成、學生弱點面板、自然語言查題、前端整合
+
+> **狀態（2026-08-26 註）：已結案（2026-08-24）**——四旗標開啟、使用者試用通過。實際介面與裁決 S3-1～R29 見 [`interfaces-stage3.md`](interfaces-stage3.md) §15。
 
 ### 1. 目標與範圍
 
@@ -1375,6 +1389,8 @@ CI：`npm test` 維持不連任何服務，新增 `test/weaknessSql.test.js`（�
 
 ## §5 橫切：評估與量測體系、測試策略、CI、資料遷移與上線策略、Windows 一人開發環境
 
+> **狀態（2026-08-26 註）：已落地**——五個 eval suite 硬門檻進 CI（record/replay 零 secrets）、每日備份排程運行中；門檻現值見 `eval/thresholds.json`（首測 −0.03、只升不降）。
+
 ### 1. 目標與範圍
 
 這條工作流交付「**讓三個階段的每一項改動都能被數字驗證、且驗證不依賴外部服務**」的基礎設施，不交付任何使用者看得到的功能：
@@ -1632,3 +1648,101 @@ CI 仍零 secrets，任何人 fork 都跑得出同一張表；每個 sub-agent �
 | 門檻被調低求綠燈 | ratchet 只升；改 `thresholds.json` 需 PR 說明；`trend.js` 印差值 |
 | 維護面超過兼職開發者能養的量 | 單一 `eval/run.js` 入口；公式與比對器 golden 併入單元測試；e2e 延到階段 2 後；X1b 分批 |
 
+
+---
+
+<a id="sec-stage4"></a>
+
+## §6 階段 4 產品收斂：學生管理、出卷草稿→確認、批改輕量化、對話式助教（2026-08-24 凍結）
+
+> **狀態（2026-08-26 註）：W1 四項與對話式助教已完成**（2026-08-24，CI 全綠）；擱置 P-16 與 B 批。現況以 [HANDOFF §2](HANDOFF.md) 為準。
+>
+> 本章 2026-08-26 併自 `docs/stage4-plan.md`（該檔已移除，內容原樣保留）。
+>
+> 背景：階段 1–3 把「多 agent + RAG」的作品集蓋好了，但日常主流程（選學生 → 出不重複
+> 的卷 → 匯出）被三個設計反噬：學生是打字打出來的（打錯字＝靜默分裂不重複紀錄）、
+> 出卷一按就定案（重抽會燒題）、弱點面板要的批改資料日常流程不生產。
+> 本階段**單線施工**（不開四個 worktree），四項全部由使用者 2026-08-24 核准。
+> 擱置區（全部處理完再議）：P-16 參數化模板；「主控 agent + 工具調用」展示（見 §6.5）。
+
+### 1. 範圍（四項）
+
+| # | 項目 | 一句話 |
+|---|---|---|
+| W1-1 | 學生改成選的 | 組卷表單下拉選學生＋明確「新增」；學生管理（改名／合併／刪除）；`generate-paper` **不再自動建學生** |
+| W1-2 | 出卷改成草稿→確認 | 預覽不寫庫、可換一題／重抽；「確認出卷」才寫卷與 attempts；補「刪除考卷」還原題目池 |
+| W1-3 | 批改輕量化 | 批改表單加「未批的全部標為對」——只點錯的，十秒批完一張卷 |
+| W1-4 | 小修 | 弱點面板時間窗預設 90 → 365；空狀態文案講人話 |
+
+### 2. API 契約（本階段凍結；裁決 S4-*）
+
+#### 2.1 學生管理（掛在核心區，**不在** FEATURE_STUDENTS 旗標內）
+
+- `GET /api/students` —— 由 [WS3-A] 旗標區**搬到核心區**（組卷下拉需要它恆常在）。
+  回應形狀不變：`{items:[{id,name,papers,graded_ratio}]}`。（裁決 S4-2）
+- `POST /api/students {name}` → 201 `{id,name}`；trim 後空 → 400；重名 → 409。
+- `PATCH /api/students/:id {name}` → 200 `{id,name}`；重名 → 409；查無 → 404。
+- `DELETE /api/students/:id` → 200 `{deleted:{attempts,papers}}`——同一交易刪
+  attempts → exam_papers → student。**不可逆**，前端二次確認。
+- `POST /api/students/:id/merge {into_id}` → 200
+  `{moved_attempts, dropped_conflicts, moved_papers}`——同一交易：
+  ① 刪來源中與目標衝突的 attempts（同 question_id，**保留目標側**的批改）；
+  ② 其餘 attempts `UPDATE student_id`；③ exam_papers `UPDATE student_id`；④ 刪來源學生。
+  自併（id === into_id）→ 400。
+
+#### 2.2 組卷（`POST /api/generate-paper` 改契約）
+
+- 收 `student_id`（優先）**或** `student_name`（相容）。
+- **裁決 S4-1：不再自動建學生**——`student_name` 查無此人 → 404
+  `「查無學生「<name>」，請先新增學生。」`。自動建立正是垃圾人名（小／名／華）的根因。
+- 新參數 `dry_run: true` → 走完全相同的選題邏輯但**整段不寫庫**（不建卷、不寫 attempts），
+  回 `{dry_run:true, student_id, paper_title_preview, question_ids, questions}`。
+- 新參數 `exclude_ids: int[]`（僅 dry_run 需要；confirm 不收）——候選池額外排除這些題，
+  「換一題」＝把那題加進 exclude_ids 再 dry_run 一次；「整卷重抽」＝exclude_ids 不變重叫
+  （洗牌自然給出不同組合）。上限 200 個。
+- 不帶 `dry_run` 的舊行為（直接成卷）保留——但前端一律走 dry_run → confirm。
+
+#### 2.3 確認與刪卷
+
+- `POST /api/confirm-paper {student_id, question_ids}` → 交易內重驗（未封存、該生未寫過、
+  家族互斥不重驗——題目就是預覽選出的那批）→ 建卷＋attempts（`ON CONFLICT DO NOTHING`
+  ＋rowCount 檢查，409 語意與 generate-paper 相同）→ 200
+  `{paper_id, paper_title, question_ids, questions}`（形狀與 generate-paper 成功回應一致，
+  前端共用同一段渲染與 Word 匯出）。題數 1..50。
+- `DELETE /api/papers/:id` → 200 `{deleted_attempts}`——同一交易刪該卷 attempts 與卷。
+  **已批改的紀錄會一併消失**（前端警告文案明說）。掛核心區。（裁決 S4-3）
+
+#### 2.4 前端
+
+- 組卷表單：`<input student_name>` → `<select id="student_select">`（載入 `GET /api/students`）
+  ＋「＋ 新增學生」（inline 輸入 → POST → 重載下拉並選中）。
+- 組卷流程：生成 → **預覽卡**（每題「換這題」、整卷「重抽」「確認出卷」）→ 確認後
+  才出現「下載 Word」「立即批改」。預覽狀態明標「尚未寫入，重抽不會燒題」。
+- 學生管理 UI 放**學生分頁**（FEATURE_STUDENTS 內）：每列加「改名／合併到…／刪除」。
+  組卷下拉不依賴該分頁。
+- 批改表單：儲存鍵旁加「未批的全部標為對」（只改前端狀態，仍走原本的 diff → PATCH）。
+- `public/js/students.js` `DEFAULT_DAYS` 90 → 365（裁決 S4-4：家教場景「不重複」與弱點
+  都是長期視角；伺服器端第 1.5 條 days 預設 90 不動，前端恆帶參數）。
+
+### 3. 不動的東西
+
+agent 管線、RAG 檢索、NLQ、變式、複核佇列、eval 與門檻——全部不碰。
+`index.html` 舊 inline script 這次**在範圍內**（組卷區就住在那裡）；改動仍過
+`npm run check:html` 的語法與接點檢查。
+
+### 4. 測試計畫
+
+- 整合測試更新：`controllers.pg.test.js` 的 generate-paper 案例先建學生（新契約 S4-1）；
+  新增學生管理 CRUD＋merge、dry_run 不落痕跡、confirm 原子性、刪卷還原題目池等案例。
+- e2e 兩條照跑（組卷那條改走 dry_run → confirm）。
+- 單元：`diffResults` 不變；「未批全對」的純函式行為。
+- 驗收：單元＋整合＋e2e＋`check:html` 全綠，CI 綠。
+
+### 5. 擱置區（本階段完成後再議）
+
+1. **P-16 參數化模板**（使用者指示擱置）。
+2. ~~「主控 agent + 工具調用」展示~~ → **已執行（2026-08-24，`0ff47b4`）**：
+   對話式助教（FEATURE_ASSISTANT／POST /api/assistant／前端「助教」分頁）。
+   主控 LLM 以受限 JSON 調度五個**只讀**工具；工具調用軌跡直接攤在 UI 上。
+   設計細節與兩種編排哲學的對照見 `services/assistantService.js` 檔頭與
+   `docs/rag-and-agents.md` §2.10。出卷／出變式仍由人按確認——助教沒有寫入權。

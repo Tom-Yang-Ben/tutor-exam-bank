@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// controllers/studentAdminController.js — 學生管理（階段 4 W1-1，docs/stage4-plan.md §2.1）
+// controllers/studentAdminController.js — 學生管理（階段 4 W1-1，docs/roadmap-plan.md §6.2.1）
 //
 //   POST   /api/students             建立（唯一合法的「新學生」入口，裁決 S4-1）
 //   PATCH  /api/students/:id         改名

@@ -138,7 +138,7 @@ function runSuite() {
      * 清空管線與題庫的所有表，**遇到死結就重試**。
      *
      * 為什麼需要重試：入庫成功後 runner 與 approve 都會 fire-and-forget 呼叫
-     * `embedService.embedByIds()`（第 3.3 條、interfaces.md 12.4 都明訂如此），
+     * `embedService.embedByIds()`（第 3.3 條、interfaces-stage1.md 12.4 都明訂如此），
      * 它是刻意不被 await 的，因此可能跨到下一個案例才跑完。那個交易在
      * `questions` 上持有列鎖並要做 FK 檢查（RowShareLock），而 TRUNCATE 要的是
      * AccessExclusiveLock——兩邊互等就是 40P01。
@@ -273,7 +273,7 @@ function runSuite() {
                     assert.equal(row.origin, 'pdf');
                     assert.equal(row.chapter_src, 'ai');
                     assert.match(row.text_hash, /^[0-9a-f]{64}$/, 'dedup0 算的 text_hash 要一起寫進 questions');
-                    assert.equal(row.has_tsv, true, '新題必須立刻有 search_tsv（interfaces.md 12.4）');
+                    assert.equal(row.has_tsv, true, '新題必須立刻有 search_tsv（interfaces-stage1.md 12.4）');
                 }
                 assert.equal(jqIds.length, 3);
             });
@@ -720,7 +720,7 @@ function runSuite() {
                 assert.ok(res.body.elapsed_ms >= 0);
             });
 
-            test('還沒拆題的 job：四個 counts 都是 0（見 docs/questions2-wsA.md 第 5 條）', async () => {
+            test('還沒拆題的 job：四個 counts 都是 0（見 docs/archive/questions2-wsA.md 第 5 條）', async () => {
                 const { rows } = await query(
                     `INSERT INTO jobs (kind, pdf_sha256, state, budget_usd) VALUES ('pdf', repeat('a',64), 'queued', 0.5) RETURNING id`);
                 const res = await request(app).get(`/api/jobs/${rows[0].id}`);

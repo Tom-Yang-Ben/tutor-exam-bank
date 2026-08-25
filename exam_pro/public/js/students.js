@@ -40,7 +40,7 @@ let pendingPaperId = null;
 // students.js →（找相似／出變式）→ variants.js 的唯一通道。
 // 用 CustomEvent 而不是互相 import：兩個 module 因此可以各自被 data: URL 載入做單元測試，
 // 也不必在 window.ExamApp 上多掛一個第 7.1 條沒有凍結的鍵。
-// 事件名與 detail 的形狀寫在 docs/questions3-wsD.md 第 1 條，variants.js 是唯一的聽眾。
+// 事件名與 detail 的形狀寫在 docs/archive/questions3-wsD.md 第 1 條，variants.js 是唯一的聽眾。
 export const VARIANT_EVENT = 'examapp:variant-request';
 
 // index.html 組卷結果區的「立即批改」按鈕發的事件。詳情由 ExamApp.getPaperCache() 取，
@@ -77,7 +77,7 @@ function bridge() {
 
 /**
  * 布林旗標的解讀，與後端 config/features.js 的 parseBool 逐字相同
- * （interfaces.md 第 9 條）：只有 '1' 與 'true' 為真。
+ * （interfaces-stage1.md 第 9 條）：只有 '1' 與 'true' 為真。
  * 佔位字串沒被 app.js 替換掉時判為 false ＝「旗標關閉」的安全預設。
  * @param {any} value
  * @returns {boolean}
@@ -669,7 +669,7 @@ function gradingForm(app, detail, badge, onGraded) {
         list.appendChild(row);
     });
 
-    // W1-3（docs/stage4-plan.md）：家教的批改習慣是「只圈錯的」——
+    // W1-3（docs/roadmap-plan.md §6）：家教的批改習慣是「只圈錯的」——
     // 這顆把**還沒批**的全部標為「對」，已標的（對或錯）一律不動；
     // 之後仍走同一條 diff → PATCH 路徑，「全有全無」的交易語意不變。
     const markRestCorrect = el('button', 'mt-3 w-full rounded-xl border border-emerald-200 bg-emerald-50 p-2.5 text-sm font-bold text-emerald-700 transition-colors hover:bg-emerald-100 cursor-pointer', {

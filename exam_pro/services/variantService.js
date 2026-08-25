@@ -72,14 +72,14 @@ function tokenBudgetUsd(env = process.env) {
 }
 
 /**
- * FEATURE_VARIANTS 是否開啟（旗標一律經 config/features.js，interfaces.md 第 9 條）。
+ * FEATURE_VARIANTS 是否開啟（旗標一律經 config/features.js，interfaces-stage1.md 第 9 條）。
  * @returns {boolean}
  */
 function isVariantsEnabled() {
     return require('../config/features').isEnabled('FEATURE_VARIANTS');
 }
 
-/** 取得 pg 版的 { pool, query }（interfaces.md 第 8 條） */
+/** 取得 pg 版的 { pool, query }（interfaces-stage1.md 第 8 條） */
 function resolveDb(injected) {
     return injected || require('../config/db');
 }

@@ -86,7 +86,7 @@ function bridge() {
 
 /**
  * 布林旗標的解讀，與後端 config/features.js 的 parseBool 逐字相同
- * （interfaces.md 第 9 條）：只有 '1' 與 'true' 為真。
+ * （interfaces-stage1.md 第 9 條）：只有 '1' 與 'true' 為真。
  * @param {any} value
  * @returns {boolean}
  */

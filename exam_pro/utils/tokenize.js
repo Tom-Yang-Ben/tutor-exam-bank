@@ -1,4 +1,4 @@
-// utils/tokenize.js — 全案唯一的中文分詞器（docs/interfaces.md 第 2 條）
+// utils/tokenize.js — 全案唯一的中文分詞器（docs/interfaces-stage1.md 第 2 條）
 //
 // 寫入（search_tsv）、查詢（to_tsquery）、eval（LIKE 基準欄的關鍵字）三處都只能呼叫
 // 這一支，不得各自實作：三邊用不同的切法，量到的 Recall 就不是同一件事。
@@ -8,7 +8,7 @@
 //   1. @node-rs/jieba 內建的 dict.txt（簡體為主，但 HMM 對繁體仍有相當作用）
 //   2. config/chapters.js 的全部章節名（含拆出的子詞，如「摩擦力與向心力」→ 向心力）
 //   3. 本檔的 EXAM_TERMS：手寫的高中數理繁體名詞
-//   4. 選用：JIEBA_DICT_BIG 指到 dict.txt.big 時額外載入（預設不啟用，見 docs/questions-wsC.md）
+//   4. 選用：JIEBA_DICT_BIG 指到 dict.txt.big 時額外載入（預設不啟用，見 docs/archive/questions-wsC.md）
 //
 // 輸出可能含 f(x)、a:b、x2 這類殘留符號——這是刻意的。呼叫端一律以 text[] 參數傳進 SQL，
 // 在 SQL 端用 quote_literal 組裝 to_tsquery，不得在 JS 端拼字串。
@@ -110,7 +110,7 @@ function getJieba() {
     jieba = Jieba.withDict(dict);
 
     // 選用的繁體大詞典。預設不啟用：本機有、CI 沒有的話，同一題在兩邊會切出不同的 token，
-    // 寫入端與查詢端就不再一致（詳見 docs/questions-wsC.md 第 1 題）。
+    // 寫入端與查詢端就不再一致（詳見 docs/archive/questions-wsC.md 第 1 題）。
     const bigDictPath = process.env.JIEBA_DICT_BIG;
     if (bigDictPath) {
         try {

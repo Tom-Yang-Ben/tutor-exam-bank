@@ -33,7 +33,7 @@ router.get('/chapter-whitelist', questionController.getChapterWhitelist);
 
 router.post('/generate-paper', examController.generatePaper);
 
-// ── 階段 4（docs/stage4-plan.md §2）：學生管理與出卷生命週期 ──
+// ── 階段 4（docs/roadmap-plan.md §6.2）：學生管理與出卷生命週期 ──
 // 核心功能、不掛 FEATURE_* 旗標：組卷（選學生、確認、刪卷）不該被展示用旗標關掉。
 // GET /students 依裁決 S4-2 從下方 [WS3-A: students] 區塊搬上來（組卷下拉恆常需要）。
 const studentAdminController = require('../controllers/studentAdminController');
@@ -49,7 +49,7 @@ router.post('/analyze-pdf', aiRateLimit, upload.single('pdf'), aiController.anal
 router.post('/download-word', wordController.downloadWord);
 
 // ─────────────────────────────────────────────────────────────
-// 階段 1 平行開發用的 append-only 區塊（名稱凍結於 docs/interfaces.md 第 10.2 條）
+// 階段 1 平行開發用的 append-only 區塊（名稱凍結於 docs/interfaces-stage1.md 第 10.2 條）
 // 各 workstream 只在自己的區塊內加行，不重排既有路由；rebase 衝突只會落在相鄰行，兩邊都保留即可。
 // ─────────────────────────────────────────────────────────────
 
@@ -60,7 +60,7 @@ router.post('/download-word', wordController.downloadWord);
 // ===== [/WS-B: ops] =====
 
 // ===== [WS-C: retrieval] =====
-// GET /api/questions/:id/similar — 相似題（docs/interfaces.md 第 6 條）
+// GET /api/questions/:id/similar — 相似題（docs/interfaces-stage1.md 第 6 條）
 // FEATURE_SIMILAR 未開啟時「不掛載」這條路由，因此請求會落到 Express 的預設 404。
 // 查詢向量直接取來源題的 embedding，不呼叫 Gemini，所以本端點可離線、可進 CI。
 const retrievalService = require('../services/retrievalService');

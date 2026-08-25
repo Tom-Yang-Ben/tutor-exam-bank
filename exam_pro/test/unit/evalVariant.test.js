@@ -198,7 +198,7 @@ describe('runVariantSuite', () => {
         assert.equal(res.gateCounts.verify, 60);
 
         // dedup1 需要「變式題幹」的向量，fixture 裡不會有。
-        // interfaces.md 第 4 條：**不得靜默回退成假向量**——所以這一道回 0、留下 failure，
+        // interfaces-stage1.md 第 4 條：**不得靜默回退成假向量**——所以這一道回 0、留下 failure，
         // 而且整個 gate_pass_rate 誠實回 n/a（部分量到的比例不能拿來跟完整的一輪比）。
         assert.equal(res.gateCounts.dedup1, 0);
         assert.equal(res.measured.variant.gate_pass_rate, null);

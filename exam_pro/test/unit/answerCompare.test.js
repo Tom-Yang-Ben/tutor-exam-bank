@@ -58,7 +58,7 @@ describe('extractOptionCodes — 選項代號集合', () => {
 });
 
 describe('extractFinalAnswer — 從 claimed 抽最終答案（裁決 S2-12 的新規則）', () => {
-    // 案例全部取自 docs/questions2-wsD.md Q3：WS-D 對 fixture 的 45 題填空／計算實測，
+    // 案例全部取自 docs/archive/questions2-wsD.md Q3：WS-D 對 fixture 的 45 題填空／計算實測，
     // 舊規則「第一個 $…$」只抽對 4 題，新規則「最後一個 $…$ + 跳過單位上下標」抽對 39 題。
     const fixture = require('../../eval/fixtures/questions.public.json');
     const answerOf = (id) => fixture.questions.find(q => q.id === id).answer_text;

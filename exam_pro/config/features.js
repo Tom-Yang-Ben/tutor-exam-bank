@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// features.js — 功能旗標的唯一出入口（docs/interfaces.md 第 9 條）
+// features.js — 功能旗標的唯一出入口（docs/interfaces-stage1.md 第 9 條）
 //
 // 規則：
 //   1. 只放**新功能**的開關，預設全關；DB 驅動層（config/db.js）不放旗標。
@@ -49,7 +49,7 @@ module.exports = {
     get FEATURE_NLQ() { return isEnabled('FEATURE_NLQ'); },
     get FEATURE_VARIANTS() { return isEnabled('FEATURE_VARIANTS'); },
 
-    // ── 階段 4 A1（docs/stage4-plan.md §5.2 → 已執行）──
+    // ── 階段 4 A1（docs/roadmap-plan.md §6.5 → 已執行）──
     // 對話式助教：主控 LLM 用受限 JSON 調度五個只讀工具。同樣是「路由掛不掛載 +
     // 前端分頁渲不渲染」的開關，預設關（會呼叫 LLM＝會花錢，CI 也不開）。
     get FEATURE_ASSISTANT() { return isEnabled('FEATURE_ASSISTANT'); }

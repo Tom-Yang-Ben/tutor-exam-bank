@@ -65,7 +65,7 @@ function bridge() {
 }
 
 /**
- * 布林旗標的解讀，與後端 config/features.js 的 parseBool 逐字相同（interfaces.md 第 9 條）。
+ * 布林旗標的解讀，與後端 config/features.js 的 parseBool 逐字相同（interfaces-stage1.md 第 9 條）。
  * @param {any} value
  * @returns {boolean}
  */

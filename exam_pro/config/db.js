@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 // db.js — PostgreSQL 連線池（階段 1 D-D3 由 mysql2 換底）
 //
-// 介面凍結於 docs/interfaces.md 第 8 條：
+// 介面凍結於 docs/interfaces-stage1.md 第 8 條：
 //   module.exports = { pool, query }
 //   query(text, values) → Promise<{ rows, rowCount }>
 //   需要交易時用 pool.connect() 取 client，自行 BEGIN / COMMIT / ROLLBACK / release()
@@ -19,13 +19,13 @@ types.setTypeParser(20, v => (v === null ? null : parseInt(v, 10)));
 // 台灣早上 8 點前會整個差一天。直接回 'YYYY-MM-DD' 字串最不會出事。
 types.setTypeParser(1082, v => v);
 
-// 連線來源：只認 DATABASE_URL（docs/interfaces.md 第 8 條、裁決 22／27）。
+// 連線來源：只認 DATABASE_URL（docs/interfaces-stage1.md 第 8 條、裁決 22／27）。
 // D-X1 收尾（2026-08-21）已移除 DB_* 退路：舊 MySQL 的 DB_* 變數已從 .env 刪除，
 // 缺 DATABASE_URL 直接丟錯，不再猜連線參數。
 if (!process.env.DATABASE_URL) {
     throw new Error(
         '缺少 DATABASE_URL。請在 exam_pro/.env 設定，例如 ' +
-        'DATABASE_URL=postgres://exam:exam@localhost:5442/tutor_exam_bank（埠是 5442，見 docs/interfaces.md 第 9 條）。'
+        'DATABASE_URL=postgres://exam:exam@localhost:5442/tutor_exam_bank（埠是 5442，見 docs/interfaces-stage1.md 第 9 條）。'
     );
 }
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 10 });

@@ -1,7 +1,7 @@
 # eval —— 評估體系（WS-D）
 
 規格來源：`docs/roadmap-plan.md` §5.3.1–3.5、§5.6、§2.8、§3.8；
-介面契約：`docs/interfaces.md`（階段 1）與 `docs/interfaces-stage2.md`（階段 2，優先）。
+介面契約：`docs/interfaces-stage1.md`（階段 1）與 `docs/interfaces-stage2.md`（階段 2，優先）。
 
 這個目錄回答一個問題：**改了東西之後，到底變好還是變壞，好多少。**
 不是「有沒有回 200」，而是具體的數字：
@@ -213,7 +213,7 @@ eval/private/pdf_golden/<sha256>.json    真實考卷的人工標註，永不進
 WS-B 的 A-T8 會把 `aiService.analyzePdfContent` 換成新 extract agent 的**相容包裝**——
 那一刻起，`--method legacy` 量到的其實是新管線，兩欄數字會神奇地一模一樣而不會有任何錯誤。
 腳本會檢查 `aiService.js` 裡還在不在「手抄的章節白名單」這個 legacy 指紋，不在就大聲警告。
-`services/legacy/analyzePdf.js` 目前**沒有主人**（不在所有權表內），見 `docs/questions2-wsD.md` Q1。
+`services/legacy/analyzePdf.js` 目前**沒有主人**（不在所有權表內），見 `docs/archive/questions2-wsD.md` Q1。
 
 ---
 
@@ -307,7 +307,7 @@ npm run check:html
 
 三個硬性 guard，都是為了不留下「看起來有數字、其實是假的」的痕跡：
 
-1. **不拿假向量湊數字**。查不到向量就印 `n/a` 並說明原因（`docs/interfaces.md` 第 4 條）。
+1. **不拿假向量湊數字**。查不到向量就印 `n/a` 並說明原因（`docs/interfaces-stage1.md` 第 4 條）。
 2. **暫用實作狀態下不得寫 `thresholds.json` 初值**。基準線一定會被之後的真實作推翻，
    CI 會紅得莫名其妙，而紅燈的原因跟那次改動無關。
 3. **暫用實作狀態下不得錄向量**。鍵是 `sha256(buildEmbedText(q))`，規則差一個字元，整份表作廢。
@@ -351,7 +351,7 @@ npm run check:html
 - `ans-045`／`ans-046`：`expression` 只比「去空白、去 `$`、去 `\left\right` 後的字串」，
   所以 `^{\circ}` 與 `^\circ`、`\theta = 45^\circ` 與 `45^\circ` 都算不同字串——
   要不要把 LaTeX 的等價寫法納入正規化
-- **`extraction_hazard: true` 的 1 筆（`ans-047`）**：見 `docs/questions2-wsD.md` Q3 與裁決 S2-12。
+- **`extraction_hazard: true` 的 1 筆（`ans-047`）**：見 `docs/archive/questions2-wsD.md` Q3 與裁決 S2-12。
   抽取規則已改為「最後一個 `$…$`，含 `=`／`\approx` 取其後，純上下標片段跳過」，
   其餘各筆的 `expect` 都已改回 `agree`。
 

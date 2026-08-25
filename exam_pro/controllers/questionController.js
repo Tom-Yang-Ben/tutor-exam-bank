@@ -2,7 +2,7 @@ const { query, pool } = require('../config/db');
 const { CHAPTERS, isValidSubject, isValidChapter, isValidQuestionType, normalizeDifficulty, QUESTION_TYPES } = require('../config/chapters');
 
 // ─────────────────────────────────────────────────────────────
-// 檢索欄位的同步（docs/interfaces.md 第 12.4 條）
+// 檢索欄位的同步（docs/interfaces-stage1.md 第 12.4 條）
 //
 // 新增／修改題目後必須讓 search_tsv 與 embedding 跟上，否則新題永遠檢索不到。
 // 兩者的可靠度不同，所以拆成兩條路徑：
@@ -17,7 +17,7 @@ const { CHAPTERS, isValidSubject, isValidChapter, isValidQuestionType, normalize
 // 也不該讓不碰資料庫的單元測試被迫裝 @node-rs/jieba。
 // ─────────────────────────────────────────────────────────────
 
-// interfaces.md 第 2 條：不提供 toTsvSql()，寫入端自己組這段 SQL；
+// interfaces-stage1.md 第 2 條：不提供 toTsvSql()，寫入端自己組這段 SQL；
 // 三段 token 一律由 embedService 匯出的純函式產生（裁決 21），不得自行 tokenize。
 const SEARCH_TSV_ASSIGN = `search_tsv = setweight(to_tsvector('simple', array_to_string($2::text[], ' ')), 'A')
                                      || setweight(to_tsvector('simple', array_to_string($3::text[], ' ')), 'A')
@@ -103,7 +103,7 @@ exports.createQuestion = async (req, res, next) => {
             chapterTokens, keywordTokens, stemTokens
         ]);
         res.status(201).json({ message: '題目錄入成功！', questionId: rows[0].id });
-        // 回應送出後才補向量（interfaces.md 12.4）：embedding IS NULL 本來就會被 backfill 撿到
+        // 回應送出後才補向量（interfaces-stage1.md 12.4）：embedding IS NULL 本來就會被 backfill 撿到
         scheduleEmbed(rows[0].id);
     } catch (err) { next(err); }
 };
@@ -229,7 +229,7 @@ exports.updateQuestion = async (req, res, next) => {
         // 都是改動前的內容：
         //   chapter_src  老師手動改過章節 ⇒ 章節來源不再是 AI，標記 'human'（規劃 §4.3.1）
         //   embed_hash   embed_text 的來源欄位有變 ⇒ 設 NULL，讓 backfill 的 --missing-only
-        //                一定撿得到（interfaces.md 12.4）。embedding 刻意留著不清空，
+        //                一定撿得到（interfaces-stage1.md 12.4）。embedding 刻意留著不清空，
         //                否則向量補上之前這題會直接從 /similar 消失。
         const { rows } = await client.query(
             `UPDATE questions
@@ -264,7 +264,7 @@ exports.updateQuestion = async (req, res, next) => {
 
 // 刪除單一題目
 //
-// attempts.question_id 是 ON DELETE RESTRICT（interfaces.md §1.5 裁決 1）：作答紀錄是階段 3
+// attempts.question_id 是 ON DELETE RESTRICT（interfaces-stage1.md §1.5 裁決 1）：作答紀錄是階段 3
 // 弱點面板的基底，不能隨題目消失。因此刪題語意改為
 //   有 attempts 紀錄 → 軟刪除（archived_at = now()），回 { archived: true }
 //   沒有紀錄        → 照舊硬刪

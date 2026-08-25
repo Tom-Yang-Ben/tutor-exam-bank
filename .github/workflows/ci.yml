@@ -92,7 +92,7 @@ jobs:
       - run: npm ci
 
       # 用 migrate:test 而不是 migrate：後者讀 DATABASE_URL，
-      # 且不做「庫名以 _test 結尾」的檢查（docs/interfaces.md 第 1.1 條）。
+      # 且不做「庫名以 _test 結尾」的檢查（docs/interfaces-stage1.md 第 1.1 條）。
       - name: 套用 migrations
         run: npm run migrate:test
 

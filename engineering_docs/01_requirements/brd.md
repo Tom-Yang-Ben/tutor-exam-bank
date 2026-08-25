@@ -46,7 +46,7 @@ flowchart LR
 ```
 
 - 與 As-Is 的關鍵差異：拆題與入庫全自動（含分類、公式修復、獨立驗答、去重；有疑慮的題目進人工複核佇列而不阻塞其餘題目）；已作答排除由資料庫（attempts）取代人工記憶；公式排版由自製 LaTeX→OOXML 轉換取代手動操作。
-- 過渡期並行策略：原型 `exam/` 封存（ARCHIVED）僅作重構對照，實際執行一律使用 `exam_pro/`；資料層由 MySQL 切換至 PostgreSQL 16 + pgvector，於 2026-08-21 依 `docs/cutover-runbook.md` 切換上線並定義回滾界線。
+- 過渡期並行策略：原型 `exam/` 封存（ARCHIVED）僅作重構對照，實際執行一律使用 `exam_pro/`；資料層由 MySQL 切換至 PostgreSQL 16 + pgvector，於 2026-08-21 依 `docs/archive/cutover-runbook.md` 切換上線並定義回滾界線。
 - 成功標準：上傳 PDF → 自動拆題入庫 → 選學生一鍵組卷 → 匯出可直接列印的 Word，全程零手動排版；同一學生保證不會拿到寫過的題目（來源：根 README「成功標準」）。
 
 ## 4. 業務規則：需求決策的商業層對應 (Business Rules)

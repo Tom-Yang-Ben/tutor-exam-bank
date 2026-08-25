@@ -3,7 +3,7 @@
 // 這裡只測「組出來的 SQL 與參數」——不連 DB。真的跑在 PG 上的行為在
 // test/integration/hybrid.pg.test.js（沒設 TEST_DATABASE_URL 就整組 skip）。
 //
-// 為什麼要把 SQL 字串當契約測：interfaces.md 第 5 條列了幾條「否則 eval 與 API 會量到不同東西」
+// 為什麼要把 SQL 字串當契約測：interfaces-stage1.md 第 5 條列了幾條「否則 eval 與 API 會量到不同東西」
 // 的實作約束（先 ORDER BY 再 LIMIT、NOT EXISTS 而非 NOT IN、SQL 端 quote_literal），
 // 這些一旦被改掉，功能測試不會紅，但量測結果會悄悄失真。
 //
@@ -51,7 +51,7 @@ describe('buildHybridQuery — 回傳形狀', () => {
     });
 });
 
-describe('buildHybridQuery — interfaces.md 第 5 條的實作約束', () => {
+describe('buildHybridQuery — interfaces-stage1.md 第 5 條的實作約束', () => {
     const sql = buildHybridQuery(BASE).text;
 
     test('候選 CTE 含 archived_at IS NULL', () => {

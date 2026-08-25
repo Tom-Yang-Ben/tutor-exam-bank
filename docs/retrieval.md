@@ -1,7 +1,7 @@
 # docs/retrieval.md — 檢索零件說明（WS-C）
 
 > 擁有者：WS-C（分支 `ws-c/retrieval`）。對應任務：D-T1、D-E3、A-T3 的 `embed()`、D-V1、D-R1。
-> 介面契約在 `docs/interfaces.md` 第 2～6 條，本檔只解釋「怎麼用、為什麼這樣寫、量到什麼」，不重複契約。
+> 介面契約在 `docs/interfaces-stage1.md` 第 2～6 條，本檔只解釋「怎麼用、為什麼這樣寫、量到什麼」，不重複契約。
 
 檢索由五個零件串起來，寫入端與查詢端共用同一套規則：
 
@@ -90,7 +90,7 @@ buildTsvTokens(q) → { chapterTokens: string[], keywordTokens: string[], stemTo
 三處都只能呼叫它**，不得自行 `tokenize(buildEmbedText(q))`——那樣會少掉章節名拆出來的子詞，
 PG 裡的 lexeme 集合就與記憶體排序器對不起來（D-R2 的 Jaccard 斷言會量到假差異）。
 
-**`search_tsv` 的組成**（規劃 §2.3.7 的權重規則，寫入端各自組，`interfaces.md` 第 2 條明講不提供 `toTsvSql()`）：
+**`search_tsv` 的組成**（規劃 §2.3.7 的權重規則，寫入端各自組，`interfaces-stage1.md` 第 2 條明講不提供 `toTsvSql()`）：
 
 ```sql
 search_tsv = setweight(to_tsvector('simple', array_to_string($chapter_tokens::text[], ' ')), 'A')
@@ -142,7 +142,7 @@ node scripts/backfill_embeddings.js --test         # 改打 TEST_DATABASE_URL（
 | `weighted` | `0.7 × 向量側 + 0.3 × 關鍵字側`，兩側各自在自己那 50 名內 min-max 正規化到 0~1（整側同分時給 1） |
 
 **選用參數 `sides`**（預設 `['vec','kw']`）：`/similar` 的 `mode=vector` 傳 `['vec']`、`mode=keyword` 傳 `['kw']`，
-讓三種模式共用同一段 SQL 而不是各寫一份。詳見 `docs/questions-wsC.md` 第 2 題。
+讓三種模式共用同一段 SQL 而不是各寫一份。詳見 `docs/archive/questions-wsC.md` 第 2 題。
 
 呼叫端要在**同一個交易**內設 `SET LOCAL hnsw.ef_search = 100`；eval 為求等效精確，設為不小於 fixture 題數。
 
@@ -187,7 +187,7 @@ node scripts/backfill_embeddings.js --test         # 改打 TEST_DATABASE_URL（
 - **HNSW 在這個規模不會被規劃器選用**：候選 CTE 與 `questions` join 之後走 Bitmap Heap Scan + top-N 排序。
   把條件內聯到向量側（讓 `ORDER BY … LIMIT` 有機會走索引）、甚至加上 pgvector 0.8 的
   `hnsw.iterative_scan = relaxed_order` 實測都**沒有變快**（同章 19 ms vs 17 ms、同科 97 ms vs 70 ms），
-  因此不改 `interfaces.md` 第 5 條的 SQL 形狀。這與規劃 §2.3.7「萬級以下常走 seq scan，屬正常」一致。
+  因此不改 `interfaces-stage1.md` 第 5 條的 SQL 形狀。這與規劃 §2.3.7「萬級以下常走 seq scan，屬正常」一致。
 
 **檢索品質**：CI 層的 Recall@5／Recall@10／MRR 三欄對照由 WS-D 的 `eval/run.js` 產出（D-R2），
 本 WS 只保證「eval 與 API 走同一段 SQL」。

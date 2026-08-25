@@ -8,7 +8,7 @@
 // `POST /api/review/:jqId/approve`（第 6.6 條「人也要過閘門」）都要跑同一道驗證。
 // 留在 controller 裡當模組私有函式，就會變成兩份會慢慢走鐘的真相。
 //
-// ⚠ 回傳形狀的兩個鍵（介面衝突，已記在 docs/questions2-wsA.md 第 1 條）：
+// ⚠ 回傳形狀的兩個鍵（介面衝突，已記在 docs/archive/questions2-wsA.md 第 1 條）：
 //   interfaces-stage2.md 第 4.5 條把簽名凍結成 `{ok, errors: string[], value?}`，
 //   但同一條又要求「行為一字不改」，而現況回的是 `{ok, error: string}`（單數字串）。
 //   在開發者裁決前，兩個鍵**同時**提供，兩邊都不會壞：

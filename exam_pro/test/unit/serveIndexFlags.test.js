@@ -7,7 +7,7 @@
 // 任何「打 / 看回應」的測試都會空轉通過。
 //
 // 而 app.js 又沒辦法在 npm test 裡啟動：它 require config/db.js，
-// 缺 DATABASE_URL 就直接丟錯（interfaces.md 第 8 條、D-X1 移除 DB_* 退路之後）。
+// 缺 DATABASE_URL 就直接丟錯（interfaces-stage1.md 第 8 條、D-X1 移除 DB_* 退路之後）。
 //
 // 所以這裡驗的是**原始碼層級**的三件事，它們正好對應第 7.3 條踩過的坑：
 //   1. 四個佔位字串一字不差（打錯一個字元 = 前端永遠讀到未替換的字串）

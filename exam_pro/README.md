@@ -251,7 +251,7 @@ docker compose down           # 停止（加 -v 才會刪掉 pgdata）
   ```bash
   docker compose exec -T postgres psql -U exam -d tutor_exam_bank < migrations/0001_init.sql
   ```
-- **開發埠是 5442，不是 5432**：這台開發機已安裝並啟動了原生的 PostgreSQL 17 服務（`postgresql-x64-17`）占用 5432。兩個行程同時 LISTEN 同一埠時，連線會被先啟動的那個接走，症狀是「密碼驗證失敗」這種看起來與 Docker 無關的錯誤。若日後停用該服務，要改回 5432 只需同步改 `docker-compose.yml` 與 `.env`／`docs/interfaces.md` 第 9 條。
+- **開發埠是 5442，不是 5432**：這台開發機已安裝並啟動了原生的 PostgreSQL 17 服務（`postgresql-x64-17`）占用 5432。兩個行程同時 LISTEN 同一埠時，連線會被先啟動的那個接走，症狀是「密碼驗證失敗」這種看起來與 Docker 無關的錯誤。若日後停用該服務，要改回 5432 只需同步改 `docker-compose.yml` 與 `.env`／`docs/interfaces-stage1.md` 第 9 條。
 - 舊的 MySQL 版 `schema.sql` 與 `migrate/export_mysql.js` 已於 D-X1 收尾（2026-08-21）移除；歷史版本見 git tag `v1-mysql`。
 
 ### 5. 啟動

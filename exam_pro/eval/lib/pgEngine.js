@@ -39,7 +39,7 @@ function requireDb() {
     const url = process.env.TEST_DATABASE_URL;
     if (!url) {
         throw new Error(
-            'TEST_DATABASE_URL 未設。eval 的 pg engine 只對測試庫跑（docs/interfaces.md 第 9 條），不會碰 DATABASE_URL；\n' +
+            'TEST_DATABASE_URL 未設。eval 的 pg engine 只對測試庫跑（docs/interfaces-stage1.md 第 9 條），不會碰 DATABASE_URL；\n' +
             '   本機請 node --env-file=.env --env-file=eval/.env.replay eval/run.js …，或改用 --engine memory。'
         );
     }
@@ -72,7 +72,7 @@ function requireHybrid() {
         throw err;
     }
     if (typeof mod.buildHybridQuery !== 'function') {
-        throw new Error('queries/hybrid.js 沒有匯出 buildHybridQuery（docs/interfaces.md 第 5 條）。');
+        throw new Error('queries/hybrid.js 沒有匯出 buildHybridQuery（docs/interfaces-stage1.md 第 5 條）。');
     }
     return mod.buildHybridQuery;
 }

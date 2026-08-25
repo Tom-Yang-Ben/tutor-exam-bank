@@ -8,7 +8,7 @@
 //
 // search_tsv 的權重規則（規劃 §2.3.7）：章節 A、關鍵詞 A、題幹 B；
 // 三段都先過 utils/tokenize.js，再以 to_tsvector('simple', array_to_string($n::text[], ' ')) 組。
-// interfaces.md 第 2 條明講不提供 toTsvSql()，因此這段 SQL 在本檔與 WS-A 的 controller 各有一份，
+// interfaces-stage1.md 第 2 條明講不提供 toTsvSql()，因此這段 SQL 在本檔與 WS-A 的 controller 各有一份，
 // 規則以 docs/retrieval.md 為準，改動要同步。
 
 const crypto = require('crypto');
@@ -86,14 +86,14 @@ function planRows(rows, { model, force = false } = {}) {
 }
 
 /**
- * 取得 DB 存取層。interfaces.md 第 8 條：config/db.js 匯出 { pool, query }。
+ * 取得 DB 存取層。interfaces-stage1.md 第 8 條：config/db.js 匯出 { pool, query }。
  * 注意 mysql2 的 pool 也有 query／pool 兩個屬性，所以要認 pg 專有的 pool.connect()，
  * 否則 D-D3 合入前會一路跑到「連不上 MySQL」那種看不懂的錯誤。
  */
 function resolveDb(injected) {
     const db = injected || require('../config/db');
     if (!db || typeof db.query !== 'function' || !db.pool || typeof db.pool.connect !== 'function') {
-        throw new Error('需要 pg 版的 { pool, query }（interfaces.md 第 8 條）。config/db.js 在 WS-A 的 D-D3 合入前仍是 mysql2，請以 embedByIds(ids, { db }) 注入。');
+        throw new Error('需要 pg 版的 { pool, query }（interfaces-stage1.md 第 8 條）。config/db.js 在 WS-A 的 D-D3 合入前仍是 mysql2，請以 embedByIds(ids, { db }) 注入。');
     }
     return db;
 }

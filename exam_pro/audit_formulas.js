@@ -3,7 +3,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-// 連線一律走 config/db.js，不自建連線（docs/interfaces.md 第 8 條）
+// 連線一律走 config/db.js，不自建連線（docs/interfaces-stage1.md 第 8 條）
 const { query, pool } = require('./config/db');
 
 let buildParagraphComponents = null;

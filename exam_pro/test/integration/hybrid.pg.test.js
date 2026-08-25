@@ -184,7 +184,7 @@ async function search(sourceKey, overrides = {}) {
     };
     const { text, values } = buildHybridQuery(opts);
 
-    // 呼叫端負責在同一交易內調 hnsw.ef_search（interfaces.md 第 5 條）
+    // 呼叫端負責在同一交易內調 hnsw.ef_search（interfaces-stage1.md 第 5 條）
     const client = await pool.connect();
     try {
         await client.query('BEGIN');

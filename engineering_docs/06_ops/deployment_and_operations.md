@@ -132,7 +132,7 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 
 ### 6.3 資料庫切換沿革（cutover）
 
-2026-08-21 依 DEC-004 完成 MySQL→PostgreSQL 16+pgvector 一次切換（不雙寫；凍結一晚→export→import→verify→切 `.env`，逐步指令見 `docs/cutover-runbook.md`）。MySQL 停而不刪保留 14 天作回滾窗口（至 2026-09-04），最終回復手段為切換夜的 `mysqldump` 整庫備份；窗口過後 MySQL 正式退役，舊版程式見 git tag `v1-mysql`，`schema.sql` 與 `migrate/export_mysql.js` 已於 D-X1 收尾移除。
+2026-08-21 依 DEC-004 完成 MySQL→PostgreSQL 16+pgvector 一次切換（不雙寫；凍結一晚→export→import→verify→切 `.env`，逐步指令見 `docs/archive/cutover-runbook.md`）。MySQL 停而不刪保留 14 天作回滾窗口（至 2026-09-04），最終回復手段為切換夜的 `mysqldump` 整庫備份；窗口過後 MySQL 正式退役，舊版程式見 git tag `v1-mysql`，`schema.sql` 與 `migrate/export_mysql.js` 已於 D-X1 收尾移除。
 
 ## 7. 追溯與相關文件
 

@@ -2,10 +2,10 @@ const { pool, query } = require('../config/db');
 const { pickOnePerFamily } = require('../utils/pickOnePerFamily');
 
 const MAX_QUESTIONS = 50; // 單次抽題上限，避免一次撈整章
-const MAX_EXCLUDE = 200;  // 換一題／重抽的排除清單上限（stage4-plan.md §2.2）
+const MAX_EXCLUDE = 200;  // 換一題／重抽的排除清單上限（roadmap-plan.md §6.2.2）
 
 // ─────────────────────────────────────────────────────────────
-// 智慧組卷（D-D4 重寫；階段 4 W1-1/W1-2 改契約，docs/stage4-plan.md §2.2）
+// 智慧組卷（D-D4 重寫；階段 4 W1-1/W1-2 改契約，docs/roadmap-plan.md §6.2.2）
 //
 // 與 D-D4 版的三個差異（其餘照舊）：
 //   1. 裁決 S4-1：**不再自動建學生**。收 student_id（優先）或 student_name（相容），
@@ -205,7 +205,7 @@ async function writePaper({ studentId, paperTitle, questionIds, todayStr }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// POST /api/confirm-paper（W1-2 的「確認」；docs/stage4-plan.md §2.3）
+// POST /api/confirm-paper（W1-2 的「確認」；docs/roadmap-plan.md §6.2.3）
 //
 // 收 { student_id, question_ids }——題目就是 dry_run 預覽選出的那批，所以這裡
 // **不重跑**家族互斥與抽題，只重驗「題目還在、沒封存」，然後走與 generate 相同的

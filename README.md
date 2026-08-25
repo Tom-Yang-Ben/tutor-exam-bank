@@ -61,7 +61,7 @@
 |---|---|
 | **[`exam_pro/`](./exam_pro)** | 🌟 **主要成品**——可執行的系統本體（下表展開） |
 | [`exam/`](./exam) | 早期原型（ARCHIVED）：單檔 `server.js`，保留當重構前後對照與 A-T16 基準 |
-| [`docs/`](./docs) | 全部設計文件：規劃、凍結介面與裁決、技術選型、交接檔（下表展開） |
+| [`docs/`](./docs) | 全部設計文件：規劃、凍結介面與裁決、技術選型、交接檔；已結案的協調文件歸檔於 `docs/archive/`（下表展開） |
 | [`screenshots/`](./screenshots) | README 用截圖 |
 | [`期中專題報告/`](./期中專題報告) | 開發紀實簡報（HTML，請下載後用瀏覽器開啟） |
 | [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) | CI：unit（Node 22/24 矩陣）＋ integration（起 pgvector service → migrations → 整合測試 → e2e → 五個 eval suite） |
@@ -145,14 +145,12 @@ exam_pro/
 
 | 檔案 | 內容 |
 |---|---|
-| [`roadmap-plan.md`](./docs/roadmap-plan.md) | 五章總規劃：排程、資料層、Agent 管線、產品面、橫切（作法／理由／替代方案／驗收） |
-| [`interfaces.md`](./docs/interfaces.md) ／ [`-stage2`](./docs/interfaces-stage2.md) ／ [`-stage3`](./docs/interfaces-stage3.md) | 三份**凍結介面**與全部裁決（階段 1 裁決 1–27、S2-1～30、S3-1～R29）——平行開發的契約 |
-| [`stage4-plan.md`](./docs/stage4-plan.md) | 階段 4 產品收斂（S4-1～S4-4、對話式助教） |
+| [`roadmap-plan.md`](./docs/roadmap-plan.md) | 六章總規劃：排程、資料層、Agent 管線、產品面、橫切、階段 4 產品收斂（作法／理由／替代方案／驗收；§6 含 S4-1～S4-4 與對話式助教） |
+| [`interfaces-stage1.md`](./docs/interfaces-stage1.md) ／ [`-stage2`](./docs/interfaces-stage2.md) ／ [`-stage3`](./docs/interfaces-stage3.md) | 三份**凍結介面**與全部裁決（階段 1 裁決 1–27、S2-1～30、S3-1～R29）——平行開發的契約 |
 | [`rag-and-agents.md`](./docs/rag-and-agents.md) | RAG 與多 Agent 技術決策全紀錄（本 README 技術選型章的完整版） |
 | [`variants.md`](./docs/variants.md) ／ [`retrieval.md`](./docs/retrieval.md) ／ [`llm.md`](./docs/llm.md) | 變式題九道閘門與閾值校準／檢索設計／LLM 層 |
-| [`cutover-runbook.md`](./docs/cutover-runbook.md) | MySQL→PG 切換之夜的 runbook 與回滾界線 |
-| [`stage*-parallel-prompts.md`](./docs) ／ `questions*-ws*.md` ／ `ws-notices-*.md` | 四條平行 workstream 的分工提示詞、各 WS 的提問、裁決通知——**多人（多 agent）協作制度的完整紀錄** |
 | [`HANDOFF.md`](./docs/HANDOFF.md) | 交接檔：角色、狀態、標準流程、踩過的坑 |
+| [`archive/`](./docs/archive) | 已結案的歷史紀錄：`cutover-runbook.md`（MySQL→PG 切換之夜，2026-08-21 已執行）、`stage*-parallel-prompts.md` ／ `questions*-ws*.md`（四條平行 workstream 的分工提示詞與提問裁決）——**多人（多 agent）協作制度的完整紀錄**，索引見該資料夾 README |
 
 ---
 
@@ -373,7 +371,7 @@ Gemini 已回傳 JSON，為何不直接入庫？
 
 ## 🧰 技術棧
 
-- **後端**：Node.js 24 · Express 5 · PostgreSQL 16 + pgvector（Docker；2026-08-21 由 MySQL 切換，runbook 見 [`docs/cutover-runbook.md`](./docs/cutover-runbook.md)）
+- **後端**：Node.js 24 · Express 5 · PostgreSQL 16 + pgvector（Docker；2026-08-21 由 MySQL 切換，runbook 見 [`docs/archive/cutover-runbook.md`](./docs/archive/cutover-runbook.md)）
 - **AI**：Google Gemini（`@google/genai`）——拆題／分類／變式 `gemini-3.5-flash`、獨立驗答 `gemini-3.1-pro-preview`、embedding `gemini-embedding-001`（768 維）；模型 ID 單一真相在 [`exam_pro/config/models.js`](./exam_pro/config/models.js)
 - **文件**：`docx`（自製 LaTeX → OOXML 數學公式轉換）
 - **前端**：單頁 HTML + Tailwind（CDN）+ MathJax + 五個 ES module 分頁（零打包器）

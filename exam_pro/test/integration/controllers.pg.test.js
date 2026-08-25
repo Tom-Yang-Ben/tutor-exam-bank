@@ -350,7 +350,7 @@ function runSuite() {
             const { rows } = await query(
                 `SELECT search_tsv IS NOT NULL AS has_tsv, embedding IS NULL AS no_vec,
                         search_tsv::text AS tsv FROM questions WHERE id = $1`, [id]);
-            assert.equal(rows[0].has_tsv, true, '新題必須立刻有 search_tsv（interfaces.md 12.4）');
+            assert.equal(rows[0].has_tsv, true, '新題必須立刻有 search_tsv（interfaces-stage1.md 12.4）');
             // 章節段權重 A、題幹段權重 B；兩段都要進得去
             assert.match(rows[0].tsv, /'向心力':\d+A/, '章節 token 必須是權重 A');
             assert.match(rows[0].tsv, /'圓周運動':\d+B/, '題幹 token 必須是權重 B');
@@ -433,7 +433,7 @@ function runSuite() {
             assert.deepEqual(res.body, [{ subject: SUBJECT, chapter: '外積' }]);
         });
 
-        // ── 階段 4：學生管理與出卷生命週期（docs/stage4-plan.md §2）──
+        // ── 階段 4：學生管理與出卷生命週期（docs/roadmap-plan.md §6.2）──
         test('S4-1：查無學生回 404（不再自動建學生），students 表保持乾淨', async () => {
             await seedQuestions(5);
             const res = await request(app).post('/api/generate-paper')

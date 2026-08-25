@@ -3,7 +3,7 @@
 > **版本:** v1.0 | **更新:** 2026-08-25 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
-> **實例:** 每故障症狀一份（`runbook-<symptom>.md`）。本文件僅處理「PG 容器起不來、連線失敗、備份還原」；MySQL→PG 切換之夜的完整流程與回滾界線歸 `docs/cutover-runbook.md`（切換已於 2026-08-21 完成並跳過回滾窗口，該文件保留為歷史紀錄）。
+> **實例:** 每故障症狀一份（`runbook-<symptom>.md`）。本文件僅處理「PG 容器起不來、連線失敗、備份還原」；MySQL→PG 切換之夜的完整流程與回滾界線歸 `docs/archive/cutover-runbook.md`（切換已於 2026-08-21 完成並跳過回滾窗口，該文件保留為歷史紀錄）。
 
 ## 目錄
 
@@ -77,7 +77,7 @@ type backups\<日期>.dump | docker compose exec -T postgres pg_restore -U exam 
 ## 6. Recovery（恢復確認）
 
 - `啟動資料庫.bat` 印「[OK] 資料庫已就緒」；`node migrate.js status` 五支 migrations 均已套用。
-- 冒煙四項（沿用 `docs/cutover-runbook.md` §2-10）：題庫列表載入、組卷 200、同學生同章再組不重疊、Word 下載公式正常。
+- 冒煙四項（沿用 `docs/archive/cutover-runbook.md` §2-10）：題庫列表載入、組卷 200、同學生同章再組不重疊、Word 下載公式正常。
 - 手動跑一次 `npm run db:backup` 成功且無 `LAST_FAILED.txt`，確認備份鏈恢復。
 
 ## 7. Escalation（升級條件）
@@ -93,4 +93,4 @@ type backups\<日期>.dump | docker compose exec -T postgres pg_restore -U exam 
 | :--- | :--- |
 | 上游需求 | DEC-004、NFR-005、NFR-006（同交易一致性、migrations 只增不改） |
 | 對應模組 | `exam_pro/docker-compose.yml`、`exam_pro/scripts/backup.js`、`exam_pro/備份資料庫.bat`、`exam_pro/啟動資料庫.bat`、`exam_pro/config/db.js` |
-| 下游文件 | `docs/cutover-runbook.md`（歷史切換紀錄）；事故覆盤紀錄：尚無事故（發生時於此登錄） |
+| 下游文件 | `docs/archive/cutover-runbook.md`（歷史切換紀錄）；事故覆盤紀錄：尚無事故（發生時於此登錄） |

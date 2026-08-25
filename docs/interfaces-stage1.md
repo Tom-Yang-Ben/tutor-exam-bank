@@ -1,4 +1,4 @@
-# docs/interfaces.md — 階段 1 凍結介面（I0）
+# docs/interfaces-stage1.md — 階段 1 凍結介面（I0）
 
 > 產出者：S0（基礎與介面凍結），分支 `s0/foundation`。
 > 對應規劃：`docs/roadmap-plan.md` §1.5（跨章節裁決）、§2（階段 1 資料層）、§5.3.3–3.6。
@@ -376,7 +376,7 @@ types.setTypeParser(1082, v => v);              // DATE：回 'YYYY-MM-DD' 字�
 
 | Workstream | 擁有的檔案 |
 |---|---|
-| **S0**（已完成） | `docker-compose.yml`、`migrations/*.sql`、`migrate.js`、`.env.example`、`docs/interfaces.md`、`啟動資料庫.bat` |
+| **S0**（已完成） | `docker-compose.yml`、`migrations/*.sql`、`migrate.js`、`.env.example`、`docs/interfaces-stage1.md`、`啟動資料庫.bat` |
 | **WS-A** DB 與 controller | `config/db.js`、`config/features.js`、`controllers/*`、`seed_questions.js`、`audit_formulas.js`、`fix_formulas.js`、`setup_index_views.js`（刪除）、`test/integration/controllers*` |
 | **WS-B** 遷移與維運 | `migrate/*`、`scripts/backup.js`、所有 `.bat`（`啟動資料庫.bat` 於 S0 合併後移交 WS-B）、`docs/cutover-runbook.md` |
 | **WS-C** 檢索零件 | `utils/tokenize.js`、`utils/embedText.js`、`services/llm/*`、`services/embedService.js`、`services/retrievalService.js`、`queries/hybrid.js`、`scripts/backfill_embeddings.js`、`docs/retrieval.md`；`utils/textFormatter.js` **只加匯出** |

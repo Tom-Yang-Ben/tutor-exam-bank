@@ -4,7 +4,7 @@
 // 契約：docs/interfaces-stage3.md 第 3 條（`POST /api/questions/:id/variants` 的
 //       200 `retrieved`／202 `generating` 兩個分支、錯誤字串、合流的 `existing`）、
 //       第 7 條（橋接、旗標、插入點）、第 11 條（`GET /api/jobs/:id` 形狀不變）
-//       與 docs/interfaces.md 第 6 條（`GET /api/questions/:id/similar`）。
+//       與 docs/interfaces-stage1.md 第 6 條（`GET /api/questions/:id/similar`）。
 //
 // 這一頁要說清楚的三件事（規劃 §4.4「先檢索、再生成、生成也走同一組閘門」）：
 //
@@ -27,7 +27,7 @@
 
 const POLL_MS = 2000;        // 第 3.2 條：每 2 秒輪詢一次
 const POLL_MAX_MS = 60000;   // 第 3.2 條：最多 60 秒
-const SIMILAR_K = 5;         // 「找相似」一次看 5 題就夠了（interfaces.md 第 6 條的 k）
+const SIMILAR_K = 5;         // 「找相似」一次看 5 題就夠了（interfaces-stage1.md 第 6 條的 k）
 
 // 「出變式」的兩個下拉（裁決 S3-R24）。上限 3 = VARIANT_MAX_PER_REQUEST 的預設；
 // 預設值與第 3 條的 body 預設**逐字一致**（count=1、difficulty_delta=0），
@@ -99,7 +99,7 @@ function bridge() {
 }
 
 /**
- * 布林旗標的解讀，與後端 config/features.js 的 parseBool 逐字相同（interfaces.md 第 9 條）。
+ * 布林旗標的解讀，與後端 config/features.js 的 parseBool 逐字相同（interfaces-stage1.md 第 9 條）。
  * @param {any} value
  * @returns {boolean}
  */
@@ -662,7 +662,7 @@ export function init() {
     mountVariantsSection(section);
 
     // students.js 的「找相似／出變式」是唯一的入口（兩個 module 不互相 import，
-    // 只靠這個事件通訊；detail 的形狀寫在 docs/questions3-wsD.md 第 1 條）。
+    // 只靠這個事件通訊；detail 的形狀寫在 docs/archive/questions3-wsD.md 第 1 條）。
     document.addEventListener(VARIANT_EVENT, (event) => {
         const detail = (event && event.detail) || {};
         if (!Number.isInteger(detail.question_id)) return;

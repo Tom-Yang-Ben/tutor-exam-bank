@@ -151,7 +151,7 @@ function runSuite() {
             await pool.end();
         });
 
-        test('組卷回 200，且回應帶 paper_id（前端「立即批改」靠它，interfaces.md 第 7 條）', async () => {
+        test('組卷回 200，且回應帶 paper_id（前端「立即批改」靠它，interfaces-stage1.md 第 7 條）', async () => {
             // 裁決 S4-1：generate-paper 不再自動建學生，先走唯一合法入口（重跑時可能已存在 → 409 也接受）
             const created = await request(app).post('/api/students').send({ name: STUDENT });
             assert.ok([201, 409].includes(created.status), JSON.stringify(created.body));

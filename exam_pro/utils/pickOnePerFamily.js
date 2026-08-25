@@ -15,7 +15,7 @@
 //   否則生越多變式的章節就越容易被抽到，正好與變式題的用意相反。
 //
 // 家族鍵 = `row.variant_of ?? row.id`，等價於 SQL 的 COALESCE(variant_of, id)。
-// variant_of 永遠指向家族**根節點**（interfaces.md 第 1.2 條），所以不需要遞迴——
+// variant_of 永遠指向家族**根節點**（interfaces-stage1.md 第 1.2 條），所以不需要遞迴——
 // 不會有 A → B → C 這種鏈，藍本本身的 variant_of 是 NULL、鍵就是它自己的 id。
 //
 // 純函式：無 I/O、無時間、不讀 process.env。隨機性全部經注入的 shuffleFn 進來，

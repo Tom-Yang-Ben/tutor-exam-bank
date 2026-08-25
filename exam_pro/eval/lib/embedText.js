@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 // eval/lib/embedText.js — 轉接 WS-C 的 utils/embedText.js
 //
-// docs/interfaces.md 第 3 條凍結了 buildEmbedText() 的輸出格式，而
+// docs/interfaces-stage1.md 第 3 條凍結了 buildEmbedText() 的輸出格式，而
 // `embed_hash = sha256(buildEmbedText(q))` 是 fixture 向量檔的鍵。
 // 也就是說：**這一支只要和 WS-C 的實作差一個字元，整份 embeddings.*.json 就查不到。**
 //
@@ -75,7 +75,7 @@ function load() {
 }
 
 /**
- * 與 docs/interfaces.md 第 3 條同簽名。
+ * 與 docs/interfaces-stage1.md 第 3 條同簽名。
  * @param {object} q
  * @returns {string}
  */

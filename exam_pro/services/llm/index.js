@@ -1,4 +1,4 @@
-// services/llm/index.js — LLM 與 embedding 的唯一出入口（docs/interfaces.md 第 4 條）
+// services/llm/index.js — LLM 與 embedding 的唯一出入口（docs/interfaces-stage1.md 第 4 條）
 //
 //   embed({ model, texts, dim })
 //     → { vectors: number[][], usage: { tokenIn } }      vectors[i] 對應 texts[i]，已 L2 正規化
