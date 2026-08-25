@@ -1,0 +1,637 @@
+# openapi-exam-pro-v1.yaml — 家教專用數理題庫系統 API 契約
+# 版本: v1.0 | 更新: 2026-08-25 | 狀態: 活躍 | Owner: Ben（楊本顥）
+# 追溯：上游 FR-001～FR-016、NFR-001（x-api-key／限流）、NFR-002（成本節流）
+#       下游 ../05_qa/test_plan.md（TC-* 依本檔端點派生）、../05_qa/qa_tracker.md
+# 端點來源：exam_pro/routes/index.js（核心區＋各階段 append-only 區塊）；
+# FEATURE_* 旗標（exam_pro/config/features.js，預設全關）未開啟時對應路由不掛載，請求落到 404。
+openapi: 3.1.0
+info:
+  title: exam_pro API
+  version: 1.0.0
+  description: |
+    家教專用數理題庫系統（exam_pro）之 HTTP API 契約。版本 v1.0，更新 2026-08-25，Owner：Ben（楊本顥）。
+    本檔為端點清單唯一權威（對應 exam_pro/routes/index.js）；設計約定（錯誤格式、分頁、驗證規則）
+    見 api_spec.md，文件不重複維護端點清單。全部 /api 路由經 apiKeyAuth（x-api-key，timing-safe）。
+    對應需求：FR-001～FR-016。
+servers:
+  - url: http://localhost:3000/api
+security:
+  - ApiKeyAuth: []
+tags:
+  - { name: questions, description: 題庫管理（FR-007） }
+  - { name: papers, description: 組卷與批改（FR-008、FR-015） }
+  - { name: students, description: 學生管理與弱點面板（FR-013、FR-014） }
+  - { name: jobs, description: 拆題管線 jobs／複核（FR-001、FR-006） }
+  - { name: ai, description: AI 解析／檢索／變式／NLQ／助教（FR-010～FR-012、FR-016） }
+  - { name: export, description: Word 匯出（FR-009） }
+paths:
+  /questions:
+    get:
+      tags: [questions]
+      summary: 題庫列表（分頁＋篩選）
+      operationId: listQuestions
+      parameters:
+        - { name: subject, in: query, schema: { type: string } }
+        - { name: chapter, in: query, schema: { type: string } }
+        - { name: question_type, in: query, schema: { type: string } }
+        - { name: q, in: query, schema: { type: string }, description: 關鍵字 }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200": { description: 成功；回傳分頁清單, content: { application/json: { schema: { $ref: "#/components/schemas/PagedQuestions" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [questions]
+      summary: 手動新增題目（白名單硬驗證）
+      operationId: createQuestion
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/QuestionCreate" } } }
+      responses:
+        "201": { description: 已建立 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+  /questions/{id}:
+    parameters: [{ $ref: "#/components/parameters/IdPath" }]
+    put:
+      tags: [questions]
+      summary: 更新題目
+      operationId: updateQuestion
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/QuestionCreate" } } }
+      responses:
+        "200": { description: 已更新 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [questions]
+      summary: 刪除（封存）題目
+      operationId: deleteQuestion
+      responses:
+        "200": { description: 已刪除 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /batch-save-questions:
+    post:
+      tags: [questions]
+      summary: 批次入庫（AI 解析結果；伺服器端白名單硬驗證，ADR-005）
+      operationId: batchSaveQuestions
+      parameters:
+        - { name: strict, in: query, schema: { type: string, enum: ["1"] }, description: strict=1 時任一筆驗證失敗即整批拒絕 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [questions]
+              properties:
+                questions:
+                  type: array
+                  items: { $ref: "#/components/schemas/QuestionCreate" }
+      responses:
+        "200": { description: 成功；回傳逐筆入庫結果 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+  /chapters:
+    get:
+      tags: [questions]
+      summary: 題庫現有章節清單
+      operationId: getChapters
+      responses:
+        "200": { description: 成功 }
+  /chapter-whitelist:
+    get:
+      tags: [questions]
+      summary: 章節白名單（config/chapters.js）
+      operationId: getChapterWhitelist
+      responses:
+        "200": { description: 成功 }
+  /generate-paper:
+    post:
+      tags: [papers]
+      summary: 組卷草稿（NOT EXISTS attempts 排除已作答；家族互斥 pickOnePerFamily）
+      operationId: generatePaper
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subject, chapter, count]
+              properties:
+                student_id: { type: integer, description: 指定學生（排除其已作答題） }
+                student_name: { type: string }
+                subject: { type: string }
+                chapter: { type: string }
+                count: { type: integer, minimum: 1 }
+                dry_run: { type: boolean, description: 僅預覽不建卷 }
+                exclude_ids: { type: array, items: { type: integer }, description: 另行排除的題目 ID }
+      responses:
+        "200": { description: 成功；回傳草稿題目清單 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { description: 可用題數不足等衝突 }
+  /confirm-paper:
+    post:
+      tags: [papers]
+      summary: 確認出卷（建立 exam_papers 與作答歷史，同一交易，NFR-006）
+      operationId: confirmPaper
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [student_id, question_ids]
+              properties:
+                student_id: { type: integer }
+                question_ids: { type: array, items: { type: integer }, minItems: 1 }
+      responses:
+        "200": { description: 已確認建卷 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: 題目已被同學生作答等衝突 }
+  /papers/{id}:
+    parameters: [{ $ref: "#/components/parameters/IdPath" }]
+    get:
+      tags: [papers]
+      summary: 取得試卷（批改頁；FEATURE_STUDENTS）
+      operationId: getPaper
+      responses:
+        "200": { description: 成功；含題目與逐題批改結果 }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [papers]
+      summary: 刪除試卷
+      operationId: deletePaper
+      responses:
+        "200": { description: 已刪除 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /papers/{id}/results:
+    patch:
+      tags: [papers]
+      summary: 批改結果回寫（僅限卷內題號；FEATURE_STUDENTS）
+      operationId: patchPaperResults
+      parameters: [{ $ref: "#/components/parameters/IdPath" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [question_id, result]
+                    properties:
+                      question_id: { type: integer }
+                      result: { type: ["integer", "null"], description: 批改結果；null 表取消批改（graded_at 一併清除） }
+      responses:
+        "200": { description: 已更新 }
+        "400": { description: 題號不在卷內或格式錯誤 }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /students:
+    get:
+      tags: [students]
+      summary: 學生清單（組卷下拉恆常需要，不掛旗標；裁決 S4-2）
+      operationId: listStudents
+      responses:
+        "200": { description: 成功 }
+    post:
+      tags: [students]
+      summary: 建立學生
+      operationId: createStudent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1 }
+      responses:
+        "201": { description: 已建立 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { description: 姓名重複 }
+  /students/{id}:
+    parameters: [{ $ref: "#/components/parameters/IdPath" }]
+    patch:
+      tags: [students]
+      summary: 學生改名
+      operationId: renameStudent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1 }
+      responses:
+        "200": { description: 已更新 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: 姓名重複 }
+    delete:
+      tags: [students]
+      summary: 刪除學生
+      operationId: deleteStudent
+      responses:
+        "200": { description: 已刪除 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /students/{id}/merge:
+    post:
+      tags: [students]
+      summary: 學生併名（:id 併入 into_id；attempts 衝突保留目標側）
+      operationId: mergeStudent
+      parameters: [{ $ref: "#/components/parameters/IdPath" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [into_id]
+              properties:
+                into_id: { type: integer, minimum: 1, description: 併入目標學生 ID；不得等於來源 ID }
+      responses:
+        "200":
+          description: 已合併
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  moved_attempts: { type: integer }
+                  dropped_conflicts: { type: integer, description: 目標已寫過同題而刪除的來源列數 }
+                  moved_papers: { type: integer, description: （待補）欄位名以實際回應為準 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /students/{id}/papers:
+    get:
+      tags: [students]
+      summary: 學生歷史試卷清單（FEATURE_STUDENTS）
+      operationId: listStudentPapers
+      parameters: [{ $ref: "#/components/parameters/IdPath" }]
+      responses:
+        "200": { description: 成功 }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /students/{id}/weakness:
+    get:
+      tags: [students]
+      summary: 學生弱點面板（五條純函式 SQL；FEATURE_STUDENTS）
+      operationId: getStudentWeakness
+      parameters:
+        - { $ref: "#/components/parameters/IdPath" }
+        - { name: subject, in: query, schema: { type: string }, description: 科目白名單；空字串視為不分科 }
+        - { name: days, in: query, schema: { type: integer }, description: 統計視窗天數 }
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  by_chapter: { type: array, items: { type: object } }
+                  by_type: { type: array, items: { type: object } }
+                  by_difficulty: { type: array, items: { type: object } }
+                  trend_weekly: { type: array, items: { type: object }, description: （待補）欄位名以實際回應為準 }
+                  recent_wrong: { type: array, items: { type: object }, description: （待補）欄位名以實際回應為準 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /analyze-pdf:
+    post:
+      tags: [ai]
+      summary: 同步 AI 解析 PDF（原型路徑；限流 10 次/分，NFR-002）
+      operationId: analyzePdf
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [pdf]
+              properties:
+                pdf: { type: string, format: binary, description: PDF 檔，上限 15 MB }
+      responses:
+        "200": { description: 成功；回傳題目陣列, content: { application/json: { schema: { type: array, items: { type: object } } } } }
+        "400": { description: 沒有上傳檔案或非 PDF }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { description: AI 回傳 JSON 格式錯誤 }
+  /download-word:
+    post:
+      tags: [export]
+      summary: 匯出 Word（自製 LaTeX→OOXML，docx 原生 Math 物件；ADR-004）
+      operationId: downloadWord
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question_ids]
+              properties:
+                paper_title: { type: string }
+                student_name: { type: string }
+                question_ids: { type: array, items: { type: integer }, minItems: 1, description: 順序即出卷順序；封存題仍可印出 }
+      responses:
+        "200":
+          description: 成功；回傳 .docx 二進位
+          content:
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/BadRequest" }
+  /questions/{id}/similar:
+    get:
+      tags: [ai]
+      summary: 相似題檢索（hybrid RRF；FEATURE_SIMILAR；限流 60 次/分；不呼叫 Gemini，可離線）
+      operationId: getSimilarQuestions
+      parameters:
+        - { $ref: "#/components/parameters/IdPath" }
+        - { name: k, in: query, schema: { type: integer, minimum: 1 }, description: 回傳筆數；limit 為別名 }
+        - { name: mode, in: query, schema: { type: string, enum: [hybrid, vector, keyword], default: hybrid } }
+        - { name: scope, in: query, schema: { type: string }, description: 不接受 all（裁決 19，給 all 回 400） }
+      responses:
+        "200": { description: 成功；回傳相似題清單 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /questions/{id}/variants:
+    post:
+      tags: [ai]
+      summary: 變式題（檢索優先 ≥0.80，池不足才生成；FEATURE_VARIANTS；限流 10 次/分）
+      operationId: requestVariants
+      parameters: [{ $ref: "#/components/parameters/IdPath" }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                count: { type: integer, minimum: 1, description: 需求題數；上限依伺服器設定 }
+                difficulty_delta: { type: integer, enum: [-1, 0, 1] }
+                force_generate: { type: boolean, description: 跳過檢索直接生成；同藍本進行中 job 不繞過（裁決 S3-8） }
+      responses:
+        "200": { description: "檢索命中；回傳 {mode: retrieved, questions}" }
+        "202": { description: "已排生成 job；回傳 {mode: generating, job_id, state, existing}" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: 來源題無 embedding }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /questions/search-nl:
+    post:
+      tags: [ai]
+      summary: 自然語言查題（規則主、LLM 輔、四級回退；FEATURE_NLQ；限流 30 次/分）
+      operationId: searchNl
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query: { type: string, minLength: 1, description: 自然語言查詢句；長度有上限 }
+                student_id: { type: integer, minimum: 1, description: 帶入時可排除該生已作答題 }
+                limit: { type: integer, minimum: 1 }
+      responses:
+        "200": { description: 成功；含解析出的結構化篩選條件與題目清單 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /jobs:
+    post:
+      tags: [jobs]
+      summary: 建立拆題 job（非同步管線；同 PDF 冪等；限流 10 次/分）
+      operationId: createJob
+      parameters:
+        - { name: force, in: query, schema: { type: string, enum: ["1"] }, description: force=1 時略過同 sha256 冪等檢查 }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [pdf]
+              properties:
+                pdf: { type: string, format: binary, description: PDF 檔，上限 15 MB }
+      responses:
+        "202":
+          description: 已受理
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [job_id, existing]
+                properties:
+                  job_id: { type: integer }
+                  existing: { type: boolean, description: true 表命中冪等、回既有 job }
+        "400": { description: 沒有上傳檔案或非 PDF }
+        "413": { description: 檔案超過 15 MB（multer LIMIT_FILE_SIZE 轉譯） }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /jobs/{id}:
+    get:
+      tags: [jobs]
+      summary: 查詢 job 狀態（queued→extracting→processing→done/failed）
+      operationId: getJob
+      parameters: [{ $ref: "#/components/parameters/IdPath" }]
+      responses:
+        "200": { description: 成功；含 state、進度與成本統計（欄位細目（待補）以實際回應為準） }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /jobs/{id}/questions:
+    get:
+      tags: [jobs]
+      summary: job 逐題狀態清單（extracted→…→saved/needs_review/rejected）
+      operationId: listJobQuestions
+      parameters:
+        - { $ref: "#/components/parameters/IdPath" }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  page: { type: integer }
+                  limit: { type: integer }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        jq_id: { type: integer }
+                        idx: { type: integer }
+                        state: { type: string }
+                        review_reason: { type: ["string", "null"] }
+                        stem_preview: { type: string }
+                        question_id: { type: ["integer", "null"] }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /jobs/{id}/retry:
+    post:
+      tags: [jobs]
+      summary: 失敗 job 斷點續跑（可補充預算）
+      operationId: retryJob
+      parameters: [{ $ref: "#/components/parameters/IdPath" }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                budget_usd: { type: number, description: 本次重試的成本上限（NFR-002） }
+      responses:
+        "202": { description: 已重新排入 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: job 狀態不允許重試 }
+  /review:
+    get:
+      tags: [jobs]
+      summary: 人工複核佇列（needs_review 八種原因）
+      operationId: listReview
+      parameters:
+        - { name: reason, in: query, schema: { type: string }, description: 依 review_reason 過濾；非法值回 400 }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200": { description: 成功 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+  /review/{jqId}:
+    get:
+      tags: [jobs]
+      summary: 複核單筆明細
+      operationId: getReviewItem
+      parameters: [{ $ref: "#/components/parameters/JqIdPath" }]
+      responses:
+        "200": { description: 成功 }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /review/{jqId}/approve:
+    post:
+      tags: [jobs]
+      summary: 核可入庫（欄位與公式雙閘門，與手動錄入同一驗證；可 merge_into 併入既有題）
+      operationId: approveReviewItem
+      parameters: [{ $ref: "#/components/parameters/JqIdPath" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: "#/components/schemas/QuestionCreate" }
+                - type: object
+                  properties:
+                    accept_plain_text: { type: boolean, description: true 時放行公式降級為純文字 }
+                    merge_into: { type: ["integer", "null"], description: 不入新題，標記為既有題目之變體 }
+      responses:
+        "200": { description: 已入庫或已合併 }
+        "400": { description: 欄位驗證失敗或公式 lint 未過 }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: 已處理（saved/rejected）不可重複操作 }
+  /review/{jqId}/reject:
+    post:
+      tags: [jobs]
+      summary: 標記不採用（review_reason 保留原值供報表）
+      operationId: rejectReviewItem
+      parameters: [{ $ref: "#/components/parameters/JqIdPath" }]
+      responses:
+        "200":
+          description: 已標記
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  jq_id: { type: integer }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: 已處理（saved/rejected）不可重複操作 }
+  /assistant:
+    post:
+      tags: [ai]
+      summary: 對話式助教（主控 LLM ReAct 迴圈＋五個只讀工具；FEATURE_ASSISTANT；限流 10 次/分；ADR-007）
+      operationId: assistantChat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string, minLength: 1 }
+                history: { type: array, items: { type: object }, description: 既往對話回合；結構（待補）以 assistantController 驗證為準 }
+      responses:
+        "200": { description: 成功；回傳助教回覆與工具呼叫軌跡 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "502": { description: 上游 LLM 失敗 }
+        "429": { $ref: "#/components/responses/RateLimited" }
+components:
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    JqIdPath:
+      name: jqId
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+      description: job_questions 列 ID
+  schemas:
+    QuestionCreate:
+      type: object
+      required: [subject, chapter, question_type, difficulty, question_text, answer_text]
+      description: 欄位白名單硬驗證（ADR-005）；chapter 必須在 config/chapters.js 白名單內
+      properties:
+        subject: { type: string }
+        chapter: { type: string }
+        question_type: { type: string }
+        difficulty: { type: integer, description: 難度值域（待補）以 validateQuestionFields 為準 }
+        question_text: { type: string, description: 含 LaTeX 的題幹 }
+        question_img: { type: ["string", "null"], description: 圖片 URL；經 isSafeImageUrl 防 SSRF（NFR-001） }
+        answer_text: { type: string }
+        solution_img: { type: ["string", "null"] }
+    PagedQuestions:
+      type: object
+      properties:
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+        items: { type: array, items: { type: object } }
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string, description: 人可讀訊息；正式環境不含內部錯誤細節（NFR-001） }
+        errors: { type: array, items: { type: object }, description: 欄位級錯誤（僅驗證類 400 出現） }
+  responses:
+    BadRequest:
+      description: 參數或欄位驗證失敗
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unauthorized:
+      description: x-api-key 缺失或不符
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: 資源不存在（含 FEATURE_* 旗標關閉時路由未掛載）
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    RateLimited:
+      description: 超過該端點限流（各端點獨立計數桶）
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: app.js 對 /api 全域套用之 apiKeyAuth；timing-safe 比對（NFR-001）
