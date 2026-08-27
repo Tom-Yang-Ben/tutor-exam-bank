@@ -186,6 +186,33 @@ describe('formulaLint — warn 級規則（內容一字不差，只是寫法不�
         assert.equal(formulaLint('$F^$').ok, false);
         assert.equal(formulaLint('求 __ 之值').ok, true);
     });
+
+    // 2026-08-27（job #5）：矩陣考卷 11 題全卡 formula_unparsable 的修正。
+    // 矩陣類語法改由 textFormatter 以線性形式支援，不再是 unknown_command → error。
+    test('矩陣類語法不再擋入庫（bmatrix／cases 環境、plain TeX matrix、cr）', () => {
+        const cases = [
+            String.raw`令 $A \begin{bmatrix} 1 & 2 \\ 1 & 1 \end{bmatrix} = \begin{bmatrix} 1 & 2 \\ 1 & 1 \end{bmatrix}$`,
+            String.raw`$I = \left[ \matrix{1 & 0 \\ 0 & 1} \right]$`,
+            String.raw`$\begin{cases} x + y = 1 \\ x - y = 0 \end{cases}$`,
+            String.raw`$\left[ \matrix{ a_1 & -1 \cr a_2 & -2 } \right]$`,
+        ];
+        for (const c of cases) {
+            const r = formulaLint(c);
+            assert.equal(r.ok, true, `${c.slice(0, 40)} → ${JSON.stringify(r.issues.filter(i => i.sev === 'error'))}`);
+        }
+    });
+
+    test('沒關的環境仍然是 error（missing_rbrace）——F070 golden 的語意不變', () => {
+        const r = formulaLint(String.raw`$\begin{cases} x + y = 1 \\ x - y = 3$`);
+        assert.equal(r.ok, false);
+        assert.ok(r.issues.some(i => i.rule === 'missing_rbrace' && i.sev === 'error'));
+    });
+
+    test('不認得的環境維持 unknown_command → error', () => {
+        const r = formulaLint(String.raw`$\begin{tabular} a \end{tabular}$`);
+        assert.equal(r.ok, false);
+        assert.ok(r.issues.some(i => i.rule === 'unknown_command'));
+    });
 });
 
 describe('formulaLint — ok 的定義與健壯性', () => {

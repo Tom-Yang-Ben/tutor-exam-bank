@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-27T09:09:42.105Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 83,
+        "sha256": "c7e2168ed4213150f25e302266907a1c09ac23f5b6a733bd459ee5524257ec14"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "$\\log_2 8 + \\log_2 4$ 之值為何？ (A) $5$ (B) $6$ (C) $7$ (D) $12$",
+      "questionType": "單選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(A)",
+      "answer_form": "option",
+      "steps_summary": "1. 根據對數定義，計算 $\\log_2 8$：因為 $2^3 = 8$，所以 $\\log_2 8 = 3$。\n2. 計算 $\\log_2 4$：因為 $2^2 = 4$，所以 $\\log_2 4 = 2$。\n3. 將兩者相加得到 $3 + 2 = 5$。\n4. 另外也可以使用對數律計算：$\\log_2 8 + \\log_2 4 = \\log_2 (8 \\times 4) = \\log_2 32 = 5$。故答案選 (A)。"
+    },
+    "usage": {
+      "tokenIn": 153,
+      "tokenOut": 170,
+      "tokenThinking": 285,
+      "tokenCached": 0
+    },
+    "latencyMs": 41378
+  }
+}

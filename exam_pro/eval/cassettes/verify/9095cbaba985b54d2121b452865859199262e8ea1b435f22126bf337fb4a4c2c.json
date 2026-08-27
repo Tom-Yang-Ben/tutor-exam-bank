@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-27T09:16:21.697Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 103,
+        "sha256": "f9a844d81af23f9b9b01321a6ed5c17ecb346a67400fe94a924b1a8d578db1f8"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "馬拉車前進時，馬對車的作用力與車對馬的反作用力，兩者的關係為何？ (A) 馬對車的力較大 (B) 大小相等、方向相反 (C) 車對馬的力較大 (D) 視速度而定",
+      "questionType": "單選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(B)",
+      "answer_form": "option",
+      "steps_summary": "根據牛頓第三運動定律（作用力與反作用力定律），當兩個物體互相作用時，彼此施加於對方的力，其大小必然相等、方向相反，且作用在同一直線上。在此題中，「馬對車的作用力」與「車對馬的反作用力」正是一對作用力與反作用力。因此，無論馬與車的運動狀態如何（靜止、等速或加速），這兩個力必定大小相等、方向相反。故選 (B)。"
+    },
+    "usage": {
+      "tokenIn": 172,
+      "tokenOut": 132,
+      "tokenThinking": 246,
+      "tokenCached": 0
+    },
+    "latencyMs": 52449
+  }
+}

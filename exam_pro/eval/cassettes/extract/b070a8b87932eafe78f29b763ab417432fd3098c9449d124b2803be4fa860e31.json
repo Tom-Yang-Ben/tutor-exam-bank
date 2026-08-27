@@ -3,7 +3,7 @@
     "agent": "extract",
     "model": "gemini-3.5-flash",
     "template": "extract.v1",
-    "recorded_at": "2026-08-27T07:57:05.050Z",
+    "recorded_at": "2026-08-27T09:09:00.643Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -35,8 +35,8 @@
           "chapter_confidence": 1,
           "question_type": "單選",
           "difficulty": 1,
-          "question_text": "$\\log_2 8 + \\log_2 4$ 之值為何？\n(A) $5$ (B) $6$ (C) $7$ (D) $12$",
-          "answer_text": "(A)。$\\log_2 8 + \\log_2 4 = 3 + 2 = 5$"
+          "question_text": "$\\log_2 8 + \\log_2 4$ 之值為何？ (A) $5$ (B) $6$ (C) $7$ (D) $12$",
+          "answer_text": "(A)。$5$"
         },
         {
           "idx": 2,
@@ -62,11 +62,11 @@
           "idx": 4,
           "subject": "數學",
           "chapter": "三角函數的定義",
-          "chapter_confidence": 1,
+          "chapter_confidence": 0.9,
           "question_type": "單選",
           "difficulty": 1,
-          "question_text": "$\\sin^2 40^\\circ + \\cos^2 40^\\circ$ 之值為何？\n(A) $1$ (B) $0$ (C) $\\frac{1}{2}$ (D) 需查表才能得知",
-          "answer_text": "(A)。因 $\\sin^2 \\theta + \\cos^2 \\theta = 1$ 恆成立"
+          "question_text": "$\\sin^2 40^\\circ + \\cos^2 40^\\circ$ 之值為何？ (A) $1$ (B) $0$ (C) $\\frac{1}{2}$ (D) 需查表才能得知",
+          "answer_text": "(A)。$1$"
         },
         {
           "idx": 5,
@@ -82,7 +82,7 @@
           "idx": 6,
           "subject": "物理",
           "chapter": "摩擦力與向心力",
-          "chapter_confidence": 0.95,
+          "chapter_confidence": 0.9,
           "question_type": "計算",
           "difficulty": 2,
           "question_text": "長 $1\\text{ m}$ 的輕繩繫住質量 $2\\text{ kg}$ 的小球，在光滑水平面上以 $3\\text{ m/s}$ 的速率作等速圓周運動，求繩的張力。",
@@ -105,8 +105,8 @@
           "chapter_confidence": 1,
           "question_type": "單選",
           "difficulty": 1,
-          "question_text": "已知 $\\log_{10} 2 = 0.3010$，利用 $\\log_{10} 5 = \\log_{10} \\frac{10}{2}$ 求 $\\log_{10} 5$ 之近似值。\n(A) $0.6990$ (B) $0.3010$ (C) $0.1505$ (D) $1.6990$",
-          "answer_text": "(A)。$\\log_{10} 5 = \\log_{10} 10 - \\log_{10} 2 = 1 - 0.3010 = 0.6990$"
+          "question_text": "已知 $\\log_{10} 2 = 0.3010$，利用 $\\log_{10} 5 = \\log_{10} \\frac{10}{2}$ 求 $\\log_{10} 5$ 之近似值。 (A) $0.6990$ (B) $0.3010$ (C) $0.1505$ (D) $1.6990$",
+          "answer_text": "(A)。$0.6990$"
         },
         {
           "idx": 9,
@@ -114,9 +114,9 @@
           "chapter": "牛頓運動定律",
           "chapter_confidence": 1,
           "question_type": "單選",
-          "difficulty": 2,
-          "question_text": "馬拉車前進時，馬對車的作用力與車對馬的反作用力，兩者的關係為何？\n(A) 馬對車的力較大 (B) 大小相等、方向相反 (C) 車對馬的力較大 (D) 視速度而定",
-          "answer_text": "(B)。作用力與反作用力必大小相等、方向相反"
+          "difficulty": 1,
+          "question_text": "馬拉車前進時，馬對車的作用力與車對馬的反作用力，兩者的關係為何？ (A) 馬對車的力較大 (B) 大小相等、方向相反 (C) 車對馬的力較大 (D) 視速度而定",
+          "answer_text": "(B)。大小相等、方向相反"
         },
         {
           "idx": 10,
@@ -125,17 +125,17 @@
           "chapter_confidence": 0.9,
           "question_type": "多選",
           "difficulty": 2,
-          "question_text": "關於等速圓周運動，下列敘述何者正確？（複選）\n(A) 速率不變 (B) 速度不變 (C) 加速度指向圓心 (D) 合力為零",
-          "answer_text": "(A)(C)。(A) 等速圓周運動其速率保持不變；(C) 其加速度即向心加速度，指向圓心。速度方向隨時在變，故 (B) 錯誤；合力不為零以提供向心力，故 (D) 錯誤。"
+          "question_text": "關於等速圓周運動，下列敘述何者正確？（複選） (A) 速率不變 (B) 速度不變 (C) 加速度指向圓心 (D) 合力為零",
+          "answer_text": "(A)(C)"
         }
       ]
     },
     "usage": {
       "tokenIn": 1642,
-      "tokenOut": 1542,
-      "tokenThinking": 3628,
+      "tokenOut": 1019,
+      "tokenThinking": 3954,
       "tokenCached": 0
     },
-    "latencyMs": 29012
+    "latencyMs": 25624
   }
 }

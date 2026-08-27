@@ -20,7 +20,12 @@ const { buildSchema } = require('./schemas');
 const { registerTemplate } = require('../services/llm/templates');
 
 const TEMPLATE = 'lint.v1';
-const MAX_OUTPUT_TOKENS = 4096;
+// 兩個數字成對設定，不要單獨調（同 agents/verify.js 的教訓；2026-08-27 job #5 的
+// lint 節點也出現 4 次「Unterminated string in JSON」）：MODEL_EXTRACT 是 thinking
+// 模型，思考 token 計入 maxOutputTokens 額度，不設 thinkingBudget 時長題的重寫
+// 會被截斷、誤歸 schema_invalid。
+const MAX_OUTPUT_TOKENS = 8192;
+const THINKING_BUDGET = 1024;
 
 const SYSTEM = [
     '你是數學與物理題庫的 LaTeX 校對員。',
@@ -52,7 +57,7 @@ const PROMPT_TEMPLATE = [
     '要求：',
     '1. 行內公式一律用 $…$ 包起來，展示公式用 $$…$$。',
     '2. 分數用 \\frac{分子}{分母}，根號用 \\sqrt{…}，上下標用 ^{…} 與 _{…}，大括號必須成對。',
-    '3. 不要使用 \\begin{…}、\\mathbb、\\overrightarrow 這類指令，本系統的轉換器不支援。',
+    '3. 矩陣與方程組可用 \\begin{bmatrix}…\\end{bmatrix}、\\begin{pmatrix}…\\end{pmatrix}、\\begin{cases}…\\end{cases} 或 \\matrix{…}（列以 \\\\ 分隔、欄以 & 分隔），這些本系統支援、不要改寫掉；\\mathbb、\\overrightarrow 這類指令仍不支援，請改寫（如 \\overrightarrow 改 \\vec）。',
     '4. 中文敘述、數字、單位、選項內容保持原樣。',
 ].join('\n');
 
@@ -141,6 +146,7 @@ async function run(ctx, input) {
             }) }],
             schema: buildSchema('lint'),
             maxOutputTokens: MAX_OUTPUT_TOKENS,
+            thinkingBudget: THINKING_BUDGET,
             signal: ctx.signal,
             agent: 'lint',
             template: TEMPLATE,

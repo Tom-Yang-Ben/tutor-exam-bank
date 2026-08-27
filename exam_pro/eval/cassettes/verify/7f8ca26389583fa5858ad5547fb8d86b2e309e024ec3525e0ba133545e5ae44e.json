@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-27T09:15:29.246Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 164,
+        "sha256": "b06754cb2e5ace4c1533e007d61e6d23a52a415d8fff2f9aa9e8839c7c8869a4"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "已知 $\\log_{10} 2 = 0.3010$，利用 $\\log_{10} 5 = \\log_{10} \\frac{10}{2}$ 求 $\\log_{10} 5$ 之近似值。 (A) $0.6990$ (B) $0.3010$ (C) $0.1505$ (D) $1.6990$",
+      "questionType": "單選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(A)",
+      "answer_form": "option",
+      "steps_summary": "根據對數的除法性質，$\\log_{10} 5$ 可以改寫為 $\\log_{10} \\frac{10}{2}$。這等同於 $\\log_{10} 10 - \\log_{10} 2$。已知 $\\log_{10} 10 = 1$ 且 $\\log_{10} 2 = 0.3010$，因此 $\\log_{10} 5 = 1 - 0.3010 = 0.6990$。故選 (A)。"
+    },
+    "usage": {
+      "tokenIn": 210,
+      "tokenOut": 156,
+      "tokenThinking": 172,
+      "tokenCached": 0
+    },
+    "latencyMs": 97324
+  }
+}

@@ -41,6 +41,17 @@ const ACCENTS = {
     widetilde: '̃', check: '̌', acute: '́', grave: '̀'
 };
 
+// 矩陣類環境 → 線性表示的左右括號（2026-08-27，job #5 的矩陣考卷 11 題全卡
+// formula_unparsable 的修正）。docx 9.6.1 沒有原生矩陣元件（m:m），Word 端以
+// 「欄以空白分隔、列以 ; 分隔」的線性形式呈現：內容一字不失、可讀，但不是二維排版
+// ——原生 OMML 矩陣列在 docs/roadmap-plan.md §6.5 擱置區。
+// 網頁端（MathJax）不經過這裡，矩陣照常二維渲染。
+const MATRIX_ENVS = {
+    matrix: ['', ''], smallmatrix: ['', ''], aligned: ['', ''], array: ['', ''],
+    pmatrix: ['(', ')'], bmatrix: ['[', ']'], Bmatrix: ['{', '}'],
+    vmatrix: ['|', '|'], Vmatrix: ['‖', '‖'], cases: ['{', '']
+};
+
 const isCJK = (ch) => /[⺀-鿿　-〿＀-￯㐀-䶿]/.test(ch);
 
 // 清掉 emoji 與控制字元（保留所有數學語法）
@@ -160,6 +171,107 @@ function createParser(tokens, stopCJK, diag = null) {
             }
         }
         return text;
+    }
+
+    // ── 矩陣類環境的四個輔助（MATRIX_ENVS 的說明見檔頭）──
+
+    /** 窺看 tokens[k] 起的 {…} 群組名稱；k 不是 lbrace 或群組沒關回 null。**不消耗、不發事件** */
+    function peekGroupName(k) {
+        if (!tokens[k] || tokens[k].type !== 'lbrace') return null;
+        let name = '';
+        k++;
+        while (tokens[k] && tokens[k].type !== 'rbrace') {
+            const t = tokens[k];
+            name += t.type === 'char' ? t.value : (t.type === 'command' ? t.value : ' ');
+            k++;
+        }
+        if (!tokens[k]) return null;
+        return { name: name.trim(), nextPos: k + 1 };
+    }
+
+    /** 讀取一個平衡的大括號群組，回傳內容的 token 切片（呼叫端已確認 tokens[pos] 是 lbrace） */
+    function readGroupTokens() {
+        const openAt = here();
+        pos++;
+        const body = [];
+        let depth = 0;
+        while (tokens[pos]) {
+            const t = tokens[pos];
+            if (t.type === 'lbrace') depth++;
+            else if (t.type === 'rbrace') {
+                if (depth === 0) { pos++; return body; }
+                depth--;
+            }
+            body.push(t);
+            pos++;
+        }
+        emit(diag, 'missing_rbrace', openAt);
+        return body;
+    }
+
+    /** \begin{env} 之後：收集到對應 \end{env} 為止的 token 切片（支援同名巢狀）。
+     *  找不到 \end{env} 時發 missing_rbrace（環境沒關＝群組沒關，沿用既有 rule 全集）。 */
+    function readEnvBody(envName, beginAt) {
+        const body = [];
+        let depth = 0;
+        while (tokens[pos]) {
+            const t = tokens[pos];
+            if (t.type === 'command' && (t.value === 'begin' || t.value === 'end')) {
+                const g = peekGroupName(pos + 1);
+                if (g && g.name === envName) {
+                    if (t.value === 'end') {
+                        if (depth === 0) { pos = g.nextPos; return body; }
+                        depth--;
+                    } else {
+                        depth++;
+                    }
+                    while (pos < g.nextPos) body.push(tokens[pos++]);
+                    continue;
+                }
+            }
+            body.push(t);
+            pos++;
+        }
+        emit(diag, 'missing_rbrace', beginAt);
+        return body;
+    }
+
+    /** 矩陣本體 → 線性 Math 元件：列以 \\ 或 \cr 分隔、欄以 & 分隔（都只認大括號深度 0 的）。
+     *  已知限制：巢狀環境當儲存格內容時，內層的 & 也會被當外層分隔——考卷實務上沒出現過。 */
+    function renderMatrixBody(bodyToks, delims) {
+        const rows = [];
+        let row = [];
+        let cell = [];
+        let depth = 0;
+        const flushCell = () => { row.push(cell); cell = []; };
+        const flushRow = () => { flushCell(); rows.push(row); row = []; };
+        for (const t of bodyToks) {
+            if (t.type === 'lbrace') depth++;
+            else if (t.type === 'rbrace') depth = Math.max(0, depth - 1);
+            if (depth === 0) {
+                if ((t.type === 'char' && t.value === '\\') || (t.type === 'command' && t.value === 'cr')) { flushRow(); continue; }
+                if (t.type === 'char' && t.value === '&') { flushCell(); continue; }
+            }
+            cell.push(t);
+        }
+        flushRow();
+
+        const kept = rows.filter(r => r.some(c => c.length > 0));
+        const out = [];
+        if (delims[0]) out.push(mr(delims[0]));
+        kept.forEach((cells, ri) => {
+            if (ri > 0) out.push(mr('; '));
+            cells.forEach((cellToks, ci) => {
+                if (ci > 0) out.push(mr(' '));
+                let a = 0, b = cellToks.length;
+                while (a < b && cellToks[a].type === 'space') a++;      // 儲存格頭尾的空白
+                while (b > a && cellToks[b - 1].type === 'space') b--;  // 不進輸出
+                const p = createParser(cellToks.slice(a, b), false, diag);
+                out.push(...p.parseSequence());
+            });
+        });
+        if (delims[1]) out.push(mr(delims[1]));
+        return out.length ? out : [mr(' ')];
     }
 
     // 解析一個參數（群組或單一原子），回傳 MathComponent 陣列
@@ -305,6 +417,33 @@ function createParser(tokens, stopCJK, diag = null) {
             name === 'mathit' || name === 'operatorname' || name === 'mbox') {
             return parseArg();
         }
+        if (name === 'begin') {
+            // \begin{env}：矩陣類環境以線性形式呈現（MATRIX_ENVS 的說明見檔頭）。
+            // 不認得的環境維持既有的 unknown_command 路徑（peekGroupName 只窺看不消耗，
+            // 群組會照舊被當一般群組解析，輸出與改動前逐位元相同）。
+            const g = peekGroupName(pos);
+            const delims = g ? MATRIX_ENVS[g.name] : undefined;
+            if (delims) {
+                pos = g.nextPos;
+                // array 環境緊接的群組是欄位格式（{ccc}），不是內容
+                if (g.name === 'array' && tokens[pos] && tokens[pos].type === 'lbrace') readGroupTokens();
+                return renderMatrixBody(readEnvBody(g.name, at), delims);
+            }
+            emit(diag, 'unknown_command', at);
+            return mr(name);
+        }
+        if (name === 'end') {
+            // 落單的 \end{…}（缺 \begin 或環境名不成對）：維持未知指令的既有語意
+            emit(diag, 'unknown_command', at);
+            return mr(name);
+        }
+        if ((name === 'matrix' || name === 'pmatrix' || name === 'bmatrix' || name === 'cases')
+            && tokens[pos] && tokens[pos].type === 'lbrace') {
+            // 舊式 plain TeX 寫法 \matrix{…}／\cases{…}——考卷數位化的模型輸出常見
+            //（job #5 實測；分隔符常搭 \left[ \right]，所以 \matrix 本身不帶括號）
+            return renderMatrixBody(readGroupTokens(), MATRIX_ENVS[name]);
+        }
+        if (name === 'cr') return mr('; ');   // 矩陣列分隔落在環境外時的可讀退路
         if (FUNCTIONS.has(name)) return mr(name);
         if (GREEK[name]) return mr(GREEK[name]);
         if (SYMBOLS[name]) return mr(SYMBOLS[name]);
