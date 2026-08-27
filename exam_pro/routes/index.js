@@ -30,6 +30,7 @@ router.delete('/questions/:id', questionController.deleteQuestion);
 router.post('/batch-save-questions', questionController.batchSaveQuestions);
 router.get('/chapters', questionController.getChapters);
 router.get('/chapter-whitelist', questionController.getChapterWhitelist);
+router.get('/chapter-volumes', questionController.getChapterVolumes);
 
 router.post('/generate-paper', examController.generatePaper);
 

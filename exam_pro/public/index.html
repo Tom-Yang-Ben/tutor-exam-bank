@@ -280,12 +280,14 @@
                     <span class="block text-[10px] font-semibold tracking-[.14em] text-slate-400 uppercase">Math · Physics</span>
                 </span>
             </a>
-            <nav class="hidden md:flex items-center gap-1 text-sm font-semibold text-slate-600" aria-label="主要導覽">
-                <a href="#create" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">建立題目</a>
-                <a href="#paper" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">智慧組卷</a>
-                <a href="#students" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">學生</a>
-                <a href="#assistant" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">助教</a>
-                <a href="#library" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">題庫管理</a>
+            <!-- 分頁式導覽（2026-08-27）：每個連結對應一個 app-view，切換由 inline script 的
+                 hash 路由處理；行動版改為可橫向捲動而不是整條藏起來。 -->
+            <nav id="mainNav" class="flex items-center gap-1 text-sm font-semibold text-slate-600 overflow-x-auto whitespace-nowrap" aria-label="主要導覽">
+                <a href="#create" data-view="view-create" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">建立題目</a>
+                <a href="#paper" data-view="view-paper" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">智慧組卷</a>
+                <a href="#library" data-view="view-library" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">題庫管理</a>
+                <a href="#students" data-view="view-students" data-feature="students" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">學生</a>
+                <a href="#assistant" data-view="view-assistant" data-feature="assistant" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">助教</a>
             </nav>
             <span class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
                 <span class="relative flex h-2 w-2"><span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-50"></span><span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span></span>
@@ -295,6 +297,10 @@
     </header>
 
     <main id="top" class="max-w-7xl mx-auto px-4 sm:px-6 pt-6 sm:pt-9 pb-14">
+        <!-- ═══ 分頁式版面（2026-08-27）：五個 .app-view 一次只顯示一個，由 inline script
+             的 hash 路由切換。所有 section 的 id 不變——review/students/variants/nlq/assistant
+             的內容仍由各自的 module 建立（凍結契約），只是掛進不同的視圖容器。 ═══ -->
+        <div id="view-create" class="app-view">
         <section class="hero-panel hero-grid rounded-[2rem] px-6 py-8 sm:px-10 sm:py-11 mb-7 sm:mb-10 text-white">
             <div class="relative z-10 grid lg:grid-cols-[1.35fr_.85fr] gap-8 lg:gap-12 items-center">
                 <div>
@@ -334,9 +340,8 @@
             </div>
         </section>
 
-        <div id="create" class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-7 items-start scroll-mt-24">
-
-            <div class="lg:col-span-7 space-y-6">
+        <!-- 建立題目：快速建立（左）與 AI 批量解析（右）同一頁並排 -->
+        <div id="create" class="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-7 items-start scroll-mt-24">
 
                 <div
                     class="surface-card rounded-[1.65rem] p-5 sm:p-7 transition-all">
@@ -350,7 +355,9 @@
                     </div>
 
                     <form id="questionForm" class="space-y-5">
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <!-- 科目 → 冊 → 單元 三層選單（2026-08-27；資料來源 /api/chapter-volumes，
+                             唯一真相是 config/chapters.js 的 VOLUMES） -->
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div>
                                 <label class="block text-sm font-semibold text-slate-600 mb-1.5">學科</label>
                                 <select id="subject"
@@ -360,7 +367,14 @@
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-sm font-semibold text-slate-600 mb-1.5">精細章節</label>
+                                <label class="block text-sm font-semibold text-slate-600 mb-1.5">冊別</label>
+                                <select id="volume"
+                                    class="field-control block w-full p-3 transition-all">
+                                    <option value="">-- 載入中 --</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-600 mb-1.5">單元（精細章節）</label>
                                 <select id="chapter"
                                     class="field-control block w-full p-3 transition-all"
                                     required>
@@ -458,11 +472,18 @@
                         </button>
                     </div>
                 </div>
-            </div>
+        </div>
 
-            <div id="paper" class="lg:col-span-5 scroll-mt-24">
+        <!-- 複核佇列與「建立題目」同一視圖：AI 解析的後續就是複核。
+             階段 2 的複核分頁錨點（interfaces-stage2.md 第 8 條）：內容全部由 public/js/review.js 建立。 -->
+        <section id="review"></section>
+        </div><!-- /view-create -->
+
+        <!-- 智慧組卷：獨立視圖 -->
+        <div id="view-paper" class="app-view hidden">
+        <div id="paper" class="max-w-3xl mx-auto scroll-mt-24">
                 <div
-                    class="surface-card paper-card p-5 sm:p-7 rounded-[1.65rem] lg:sticky lg:top-24 transition-all">
+                    class="surface-card paper-card p-5 sm:p-7 rounded-[1.65rem] transition-all">
                     <div class="flex items-start gap-3 mb-6 border-b border-slate-100 pb-5">
                         <span class="section-icon bg-emerald-50 text-emerald-700">✦</span>
                         <div>
@@ -494,7 +515,8 @@
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <!-- 科目 → 冊 → 單元（只列有庫存題目的冊與單元） -->
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div>
                                 <label class="block text-sm font-semibold text-slate-600 mb-1.5">學科</label>
                                 <select id="paper_subject"
@@ -504,7 +526,14 @@
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-sm font-semibold text-slate-600 mb-1.5">指定精細章節</label>
+                                <label class="block text-sm font-semibold text-slate-600 mb-1.5">冊別</label>
+                                <select id="paper_volume"
+                                    class="field-control block w-full p-3 transition-all">
+                                    <option value="">-- 載入中 --</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-600 mb-1.5">單元（精細章節）</label>
                                 <select id="paper_chapter"
                                     class="field-control block w-full p-3 transition-all"
                                     required>
@@ -535,27 +564,16 @@
                         </div>
                     </div>
                 </div>
-            </div>
-
         </div>
+        </div><!-- /view-paper -->
 
-        <!-- 題庫管理 -->
-        <!-- 階段 2 的複核分頁錨點（interfaces-stage2.md 第 8 條：index.html 只插這一個 section
-             與底下一行 <script type="module">）。內容全部由 public/js/review.js 建立。 -->
-        <section id="review"></section>
-
-        <!-- 階段 3 的三個空錨點（interfaces-stage3.md 第 7.2 條第 3 列）。
-             內容全部由 public/js/students.js｜variants.js｜nlq.js 建立；
-             對應的 FEATURE_* 關閉時三個 module 一律**整段不渲染**（第 7.2 條：不得只是隱藏），
-             所以這裡看到的空 <section> 就是旗標關閉時畫面上的全部。
+        <!-- 題庫管理視圖：NLQ 搜尋 + 題庫列表 + 變式題。
+             階段 3 的空錨點（interfaces-stage3.md 第 7.2 條第 3 列）：內容全部由
+             public/js/nlq.js｜variants.js 建立；FEATURE_* 關閉時 module 整段不渲染
+             （第 7.2 條：不得只是隱藏），空 <section> 就是旗標關閉時畫面上的全部。
              #nlq 緊貼在 #library 上方＝規劃 §4.3.5「題庫管理搜尋框旁」的落點。 -->
-        <section id="students"></section>
-        <section id="variants"></section>
+        <div id="view-library" class="app-view hidden">
         <section id="nlq"></section>
-
-        <!-- 階段 4 A1 的空錨點：內容全部由 public/js/assistant.js 建立；
-             FEATURE_ASSISTANT 關閉時整段不渲染（與階段 3 的三個分頁同一條規則）。 -->
-        <section id="assistant"></section>
 
         <section id="library" class="manager-shell mt-7 rounded-[1.65rem] p-5 sm:p-7 scroll-mt-24">
             <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6 border-b border-slate-100 pb-5">
@@ -600,6 +618,21 @@
             <div id="mgr_pager" class="flex justify-center items-center gap-4 mt-5"></div>
         </section>
 
+        <!-- 變式題（內容由 public/js/variants.js 建立，規則同上） -->
+        <section id="variants"></section>
+        </div><!-- /view-library -->
+
+        <!-- 學生視圖（弱點面板、批改、管理；內容由 public/js/students.js 建立，規則同上） -->
+        <div id="view-students" class="app-view hidden">
+        <section id="students"></section>
+        </div><!-- /view-students -->
+
+        <!-- 助教視圖（階段 4 A1 的空錨點：內容由 public/js/assistant.js 建立；
+             FEATURE_ASSISTANT 關閉時整段不渲染，規則同階段 3 的分頁） -->
+        <div id="view-assistant" class="app-view hidden">
+        <section id="assistant"></section>
+        </div><!-- /view-assistant -->
+
         <footer class="mt-8 flex flex-col sm:flex-row items-center justify-between gap-2 px-2 text-xs text-slate-400">
             <p>家教專用數學物理題庫系統</p>
             <p>AI 輔助整理 · 智慧組卷 · Word 匯出</p>
@@ -639,39 +672,59 @@
         }
 
         let chapterWhitelist = {};
+        let chapterVolumes = {};   // 科 → [{name, chapters}]（/api/chapter-volumes）
 
         document.addEventListener('DOMContentLoaded', async () => {
-            await Promise.all([fetchChapters(), loadChapterWhitelist(), loadStudents()]);
+            initViewRouter();
+            await Promise.all([fetchChapters(), loadChapterWhitelist(), loadChapterVolumes(), loadStudents()]);
             fillMgrChapters();
             initManager();
             fetchQuestions(1);
         });
 
-        // 載入手動錄入用的章節白名單下拉
+        // 載入章節白名單（扁平表：createQuestionEditor 與橋接的 getChapterWhitelist 仍在用）
         async function loadChapterWhitelist() {
             try {
                 const res = await apiFetch('/api/chapter-whitelist');
-                if (res.ok) {
-                    chapterWhitelist = await res.json();
-                    updateManualChapterDropdown();
-                }
+                if (res.ok) chapterWhitelist = await res.json();
             } catch (e) { console.error("載入章節白名單失敗:", e); }
+        }
+
+        // 載入分冊結構（科 → 冊 → 單元；唯一真相是 config/chapters.js 的 VOLUMES）
+        async function loadChapterVolumes() {
+            try {
+                const res = await apiFetch('/api/chapter-volumes');
+                if (res.ok) {
+                    chapterVolumes = await res.json();
+                    updateManualVolumeDropdown();
+                    updatePaperVolumeDropdown();
+                }
+            } catch (e) { console.error("載入分冊結構失敗:", e); }
+        }
+
+        function volsOf(subject) { return chapterVolumes[subject] || []; }
+
+        // 手動建題：科目 → 冊 → 單元 三層連動
+        function updateManualVolumeDropdown() {
+            const subject = document.getElementById('subject').value;
+            const volSel = document.getElementById('volume');
+            volSel.innerHTML = '';
+            volsOf(subject).forEach(v => volSel.appendChild(el('option', null, { value: v.name, textContent: v.name })));
+            updateManualChapterDropdown();
         }
 
         function updateManualChapterDropdown() {
             const subject = document.getElementById('subject').value;
+            const volName = document.getElementById('volume').value;
             const sel = document.getElementById('chapter');
-            const list = chapterWhitelist[subject] || [];
-            sel.innerHTML = '<option value="">-- 請選擇精細章節 --</option>';
-            list.forEach(ch => {
-                const opt = document.createElement('option');
-                opt.value = ch;
-                opt.innerText = ch;
-                sel.appendChild(opt);
-            });
+            const vol = volsOf(subject).find(v => v.name === volName);
+            const list = vol ? vol.chapters : [];
+            sel.innerHTML = '<option value="">-- 請選擇單元 --</option>';
+            list.forEach(ch => sel.appendChild(el('option', null, { value: ch, textContent: ch })));
         }
 
-        document.getElementById('subject').addEventListener('change', updateManualChapterDropdown);
+        document.getElementById('subject').addEventListener('change', updateManualVolumeDropdown);
+        document.getElementById('volume').addEventListener('change', updateManualChapterDropdown);
 
         // ============ 共用工具 ============
         const SELCLS = 'field-control min-h-0 p-2.5 transition-all text-sm';
@@ -771,8 +824,16 @@
             const subj = document.getElementById('mgr_subject').value;
             const sel = document.getElementById('mgr_chapter');
             sel.innerHTML = '<option value="">全部章節</option>';
-            let chaps = subj ? (chapterWhitelist[subj] || []) : [...(chapterWhitelist['數學'] || []), ...(chapterWhitelist['物理'] || [])];
-            chaps.forEach(c => sel.appendChild(el('option', null, { value: c, textContent: c })));
+            // 依冊分組（optgroup），跨科瀏覽時標籤帶科名
+            const subjects = subj ? [subj] : ['數學', '物理'];
+            for (const s of subjects) {
+                for (const v of volsOf(s)) {
+                    const og = document.createElement('optgroup');
+                    og.label = subjects.length > 1 ? `${s}・${v.name}` : v.name;
+                    v.chapters.forEach(c => og.appendChild(el('option', null, { value: c, textContent: c })));
+                    sel.appendChild(og);
+                }
+            }
         }
 
         function initManager() {
@@ -895,31 +956,61 @@
                 const response = await apiFetch('/api/chapters');
                 if (response.ok) {
                     allChapters = await response.json();
-                    updateChapterDropdown();
+                    updatePaperVolumeDropdown();
                 }
             } catch (error) { console.error("初始化章節失敗:", error); }
         }
 
-        document.getElementById('paper_subject').addEventListener('change', () => { updateChapterDropdown(); });
+        document.getElementById('paper_subject').addEventListener('change', () => { updatePaperVolumeDropdown(); });
+        document.getElementById('paper_volume').addEventListener('change', () => { updateChapterDropdown(); });
 
-        function updateChapterDropdown() {
-            const currentSubject = document.getElementById('paper_subject').value;
-            const chapterSelect = document.getElementById('paper_chapter');
-            chapterSelect.innerHTML = '';
+        function stockedChaptersOf(subject) {
+            return new Set(allChapters.filter(i => i.subject === subject).map(i => i.chapter));
+        }
 
-            const filtered = allChapters.filter(item => item.subject === currentSubject);
-            if (filtered.length === 0) {
-                chapterSelect.innerHTML = '<option value="">(目前此科目無庫存題目)</option>';
+        // 組卷的冊別下拉：只列「該科有庫存題目」的冊；不在白名單的舊章節歸「其他」
+        function updatePaperVolumeDropdown() {
+            const subject = document.getElementById('paper_subject').value;
+            const volSel = document.getElementById('paper_volume');
+            const stocked = stockedChaptersOf(subject);
+            volSel.innerHTML = '';
+
+            const vols = volsOf(subject).filter(v => v.chapters.some(c => stocked.has(c)));
+            const known = new Set(volsOf(subject).flatMap(v => v.chapters));
+            const others = [...stocked].filter(c => !known.has(c));
+
+            if (vols.length === 0 && others.length === 0) {
+                volSel.innerHTML = '<option value="">(目前此科目無庫存題目)</option>';
+                updateChapterDropdown();
                 return;
             }
+            vols.forEach(v => volSel.appendChild(el('option', null, { value: v.name, textContent: v.name })));
+            if (others.length) volSel.appendChild(el('option', null, { value: '__other__', textContent: '其他（白名單外）' }));
+            updateChapterDropdown();
+        }
 
-            chapterSelect.innerHTML = `<option value="">-- 請選擇精細章節 (共 ${filtered.length} 個) --</option>`;
-            filtered.forEach(item => {
-                const option = document.createElement('option');
-                option.value = item.chapter;
-                option.innerText = item.chapter;
-                chapterSelect.appendChild(option);
-            });
+        function updateChapterDropdown() {
+            const subject = document.getElementById('paper_subject').value;
+            const volName = document.getElementById('paper_volume').value;
+            const chapterSelect = document.getElementById('paper_chapter');
+            const stocked = stockedChaptersOf(subject);
+            chapterSelect.innerHTML = '';
+
+            let list;
+            if (volName === '__other__') {
+                const known = new Set(volsOf(subject).flatMap(v => v.chapters));
+                list = [...stocked].filter(c => !known.has(c));
+            } else {
+                const vol = volsOf(subject).find(v => v.name === volName);
+                list = (vol ? vol.chapters : []).filter(c => stocked.has(c));
+            }
+
+            if (!list.length) {
+                chapterSelect.innerHTML = '<option value="">(此冊目前無庫存題目)</option>';
+                return;
+            }
+            chapterSelect.innerHTML = `<option value="">-- 請選擇單元 (共 ${list.length} 個) --</option>`;
+            list.forEach(ch => chapterSelect.appendChild(el('option', null, { value: ch, textContent: ch })));
         }
 
         // 1. PDF 智慧批量分析
@@ -1348,14 +1439,64 @@
             return v === '1' || v === 'true';
         }
 
+        // ============ 分頁式視圖路由（2026-08-27） ============
+        // 每個錨點 id 屬於一個 .app-view；一次只顯示一個視圖，其餘 hidden。
+        // modules（review/students/variants/nlq/assistant）照常在載入時渲染進各自的
+        // section——藏在 hidden 視圖裡渲染沒有副作用，切過去就看得到。
+        const VIEW_FOR_ANCHOR = {
+            top: 'view-create', create: 'view-create', review: 'view-create',
+            paper: 'view-paper',
+            library: 'view-library', nlq: 'view-library', variants: 'view-library',
+            students: 'view-students',
+            assistant: 'view-assistant'
+        };
+        const TOP_ANCHORS = ['top', 'create', 'paper', 'library', 'students', 'assistant'];
+
+        function showView(viewId) {
+            document.querySelectorAll('.app-view').forEach(v => v.classList.toggle('hidden', v.id !== viewId));
+            document.querySelectorAll('#mainNav [data-view]').forEach(a => {
+                const on = a.dataset.view === viewId;
+                a.classList.toggle('bg-indigo-50', on);
+                a.classList.toggle('text-indigo-700', on);
+            });
+        }
+
+        function routeFromHash() {
+            const anchor = (location.hash || '#create').slice(1);
+            showView(VIEW_FOR_ANCHOR[anchor] || 'view-create');
+            if (VIEW_FOR_ANCHOR[anchor] && !TOP_ANCHORS.includes(anchor)) {
+                // 視圖內的子錨點（review／nlq／variants）才需要捲動；頂層分頁回到頁首
+                const node = document.getElementById(anchor);
+                if (node) requestAnimationFrame(() => node.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+            } else {
+                window.scrollTo({ top: 0 });
+            }
+        }
+
+        function initViewRouter() {
+            // 旗標關閉的視圖連 nav 都不顯示——module 整段不渲染，點過去只會是空白
+            document.querySelectorAll('#mainNav [data-feature]').forEach(a => {
+                if (!featureOn(a.dataset.feature)) a.classList.add('hidden');
+            });
+            window.addEventListener('hashchange', routeFromHash);
+            routeFromHash();
+        }
+
         /**
          * 捲到某個區段（interfaces-stage3.md 第 7.1 條的 showSection）。
          * 沒有這個 id 時什麼都不做——module 不該因為錨點被移走就整個炸掉。
+         * 分頁化之後先切到該區段所屬的視圖再捲動：modules 的跨區導覽
+         * （「找相似」→ 學生、「出變式」→ 複核）因此不需要知道視圖的存在。
          * @param {string} id
          */
         function showSection(id) {
             const node = document.getElementById(id);
             if (!node) return;
+            const viewId = VIEW_FOR_ANCHOR[id];
+            if (viewId) {
+                showView(viewId);
+                history.replaceState(null, '', '#' + id);   // 網址跟上，重新整理不會跳回預設視圖
+            }
             node.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 

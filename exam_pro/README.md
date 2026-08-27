@@ -458,6 +458,7 @@ fs.writeFileSync('.tmp_inline.js',b)" && node --check .tmp_inline.js && echo "JS
 | POST / PUT / DELETE | `/api/questions(/:id)` | 新增／更新／刪除（**出過的題改封存** `archived:true`）|
 | POST | `/api/batch-save-questions` | 批次入庫，**部分入庫**回 `{saved_count, rejected:[{idx,reason}]}`；`?strict=1` 走舊行為 |
 | GET | `/api/chapters` ／ `/api/chapter-whitelist` | 實際存在章節／完整白名單 |
+| GET | `/api/chapter-volumes` | 分冊結構（科 → 冊 → 章節；前端三層選單用，唯一真相 `config/chapters.js` 的 `VOLUMES`）|
 | GET | `/api/students` | 學生清單（組卷下拉；裁決 S4-2 恆常掛載）|
 | POST / PATCH / DELETE | `/api/students(/:id)` | 建立（**唯一**的新學生入口，S4-1）／改名／刪除（連作答與考卷）|
 | POST | `/api/students/:id/merge` | 把 A 併入 B（清打錯字生出的分身；衝突題保留目標側批改）|
