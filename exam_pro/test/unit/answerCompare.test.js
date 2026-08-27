@@ -55,6 +55,15 @@ describe('extractOptionCodes — 選項代號集合', () => {
     test('括號型優先於標號型（避免同一題抽出兩套）', () => {
         assert.deepEqual([...extractOptionCodes('(A) 甲　B. 乙')], ['A']);
     });
+
+    test('行首連續括號代號＝答案本體；解說裡逐一點評的其他代號不抽（2026-08-27 樣卷第 10 題）', () => {
+        assert.deepEqual(
+            [...extractOptionCodes('(A)(C)。(A) 速率不變正確；(B) 錯誤，速度方向會變；(D) 錯誤，合力不為零。')].sort(),
+            ['A', 'C']);
+        assert.deepEqual([...extractOptionCodes('(B)、(D) 兩者皆正確；(A) 錯誤。')].sort(), ['B', 'D']);
+        // 不是以代號開頭時維持整段掃描的舊行為
+        assert.deepEqual([...extractOptionCodes('答案為 (B) 與 (D)')].sort(), ['B', 'D']);
+    });
 });
 
 describe('extractFinalAnswer — 從 claimed 抽最終答案（裁決 S2-12 的新規則）', () => {
@@ -334,6 +343,13 @@ describe('answerCompare — 填空／計算：先抽 final_answer 再依 answer_
         // 沒有 $…$、也沒有等號的純文字答案，抽取器會回 null；text 不受影響
         assert.equal(cmp('填空', '互相垂直', '互相垂直', 'text'), 'agree');
         assert.equal(extractFinalAnswer('互相垂直'), null);
+    });
+
+    test('text：兩邊都能數值化且相等 → agree（verify 把數值答案標成 text 時的兜底，2026-08-27 樣卷第 7 題）', () => {
+        assert.equal(cmp('計算', '$25\\text{ m}$', '25 m', 'text'), 'agree');
+        assert.equal(cmp('計算', '$18\\text{ N}$', '18 N', 'text'), 'agree');
+        // 數值不同仍回 uncertain：「text 永遠不回 disagree」的凍結取捨不變
+        assert.equal(cmp('計算', '$25\\text{ m}$', '30 m', 'text'), 'uncertain');
     });
 
     test('answer_form 不在四個值內 → uncertain', () => {
