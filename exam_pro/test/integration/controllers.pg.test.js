@@ -117,6 +117,62 @@ function runSuite() {
             assert.deepEqual(rows.map(r => r.version), files);
         });
 
+        // ── source_type 題源標記（0006 著作權管理）───────────────────
+        test('source_type：建題、列表過濾、組卷題源過濾、改標端到端', async () => {
+            const created = await request(app).post('/api/questions').send({
+                subject: SUBJECT, chapter: CHAPTER, question_type: '填空', difficulty: 3,
+                question_text: '自製 source_type 測試題：求 $1+1$。', answer_text: '2', source_type: 'official'
+            });
+            assert.equal(created.status, 201, JSON.stringify(created.body));
+
+            // seedQuestions 未帶 source_type → 走 DDL 預設 'unknown'
+            await seedQuestions(3);
+            const { rows } = await query('SELECT source_type, COUNT(*)::int AS n FROM questions GROUP BY 1 ORDER BY 1');
+            assert.deepEqual(rows, [{ source_type: 'official', n: 1 }, { source_type: 'unknown', n: 3 }]);
+
+            // 列表過濾
+            const list = await request(app).get('/api/questions?source_type=official');
+            assert.equal(list.body.total, 1);
+            assert.equal(list.body.questions[0].source_type, 'official');
+
+            // 組卷題源過濾：乾淨題源只剩 1 題 → 抽 2 題庫存不足 400、抽 1 題成功且帶 source_type
+            const sid = await createStudent('題源測試生');
+            const cleanScope = ['official', 'school', 'self'];
+            const short = await request(app).post('/api/generate-paper').send({
+                student_id: sid, subject: SUBJECT, chapter: CHAPTER, count: 2, dry_run: true, source_types: cleanScope
+            });
+            assert.equal(short.status, 400, JSON.stringify(short.body));
+            const ok = await request(app).post('/api/generate-paper').send({
+                student_id: sid, subject: SUBJECT, chapter: CHAPTER, count: 1, dry_run: true, source_types: cleanScope
+            });
+            assert.equal(ok.status, 200, JSON.stringify(ok.body));
+            assert.equal(ok.body.questions[0].source_type, 'official');
+
+            // 非法值 400（靜默放行會讓過濾形同虛設）；空陣列＝不限制
+            const bad = await request(app).post('/api/generate-paper').send({
+                student_id: sid, subject: SUBJECT, chapter: CHAPTER, count: 1, dry_run: true, source_types: ['盜版']
+            });
+            assert.equal(bad.status, 400);
+            const noLimit = await request(app).post('/api/generate-paper').send({
+                student_id: sid, subject: SUBJECT, chapter: CHAPTER, count: 4, dry_run: true, source_types: []
+            });
+            assert.equal(noLimit.status, 200, JSON.stringify(noLimit.body));
+
+            // PUT 改標；沒帶 source_type 的 PUT 維持原值
+            const qid = list.body.questions[0].id;
+            const baseBody = {
+                subject: SUBJECT, chapter: CHAPTER, question_type: '填空', difficulty: 3,
+                question_text: '自製 source_type 測試題：求 $1+1$。', answer_text: '2'
+            };
+            const upd = await request(app).put('/api/questions/' + qid).send({ ...baseBody, source_type: 'self' });
+            assert.equal(upd.status, 200, JSON.stringify(upd.body));
+            const relabeled = await query('SELECT source_type FROM questions WHERE id=$1', [qid]);
+            assert.equal(relabeled.rows[0].source_type, 'self');
+            await request(app).put('/api/questions/' + qid).send(baseBody);
+            const kept = await query('SELECT source_type FROM questions WHERE id=$1', [qid]);
+            assert.equal(kept.rows[0].source_type, 'self');
+        });
+
         // ── generate-paper ────────────────────────────────────────
         test('連抽兩次不重疊，且回應帶 paper_id', async () => {
             await seedQuestions(10);

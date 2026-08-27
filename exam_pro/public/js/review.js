@@ -480,6 +480,9 @@ function takeOverUpload(app) {
 
         const formData = new FormData();
         formData.append('pdf', fileInput.files[0]);   // 第 6.1 條：欄位名固定是 pdf
+        // 題源標記（0006 著作權管理）：上傳區的選單值標在 job 上，該卷入庫的所有題沿用
+        const srcSel = document.getElementById('pdf_source_type');
+        if (srcSel && srcSel.value) formData.append('source_type', srcSel.value);
 
         try {
             const res = await request(app, '/api/jobs', { method: 'POST', body: formData });

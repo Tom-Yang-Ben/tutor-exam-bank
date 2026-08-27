@@ -281,10 +281,13 @@ async function createVariantJob(db, sourceId, params, budgetUsd = tokenBudgetUsd
     try {
         await client.query('BEGIN');
         const { rows } = await client.query(
-            `INSERT INTO jobs (kind, source_question_id, pdf_sha256, pdf_path, page_count, state, budget_usd)
-             VALUES ('variant', $1, NULL, NULL, NULL, 'queued', $2)
+            `INSERT INTO jobs (kind, source_question_id, pdf_sha256, pdf_path, page_count, state, budget_usd, source_type)
+             VALUES ('variant', $1, NULL, NULL, NULL, 'queued', $2,
+                     (SELECT source_type FROM questions WHERE id = $1))
              RETURNING id, state`,
             [sourceId, budgetUsd]);
+        // 題源標記（0006）：變式預設**繼承藍本**——改寫是否充分要人判斷，
+        // 確認後可在題庫管理把該變式改標 'self'，不在這裡自動漂白。
         const job = rows[0];
 
         await client.query(

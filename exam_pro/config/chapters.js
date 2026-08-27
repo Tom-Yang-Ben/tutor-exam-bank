@@ -43,6 +43,15 @@ function volumeOf(subject, chapter) {
 const SUBJECTS = Object.keys(CHAPTERS);
 const QUESTION_TYPES = ['單選', '多選', '填空', '計算', '證明'];
 
+// 題目來源標記（著作權管理；migrations/0006 的 CHECK 與此必須一致）。
+// official=官方歷屆（著作權法第 9 條，無著作權）、school=學校考卷、
+// publisher=出版社／題本（有權利疑慮）、self=自行編寫、unknown=未標記（預設）。
+const SOURCE_TYPES = ['official', 'school', 'publisher', 'self', 'unknown'];
+
+function isValidSourceType(value) {
+    return SOURCE_TYPES.includes(value);
+}
+
 function isValidSubject(subject) {
     return SUBJECTS.includes(subject);
 }
@@ -61,4 +70,4 @@ function normalizeDifficulty(value) {
     return n;
 }
 
-module.exports = { CHAPTERS, VOLUMES, volumeOf, SUBJECTS, QUESTION_TYPES, isValidSubject, isValidChapter, isValidQuestionType, normalizeDifficulty };
+module.exports = { CHAPTERS, VOLUMES, volumeOf, SUBJECTS, QUESTION_TYPES, SOURCE_TYPES, isValidSubject, isValidChapter, isValidQuestionType, isValidSourceType, normalizeDifficulty };
