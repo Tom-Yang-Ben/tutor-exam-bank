@@ -43,6 +43,8 @@ const res = await generateJson({
     parts,             // [{text} | {pdfBase64} | {fileUri}]
     schema,            // buildSchema('extract') 的輸出；送進 responseJsonSchema
     maxOutputTokens,   // 選用；不給就是模型的預設上限（避免長考卷被截斷）
+    thinkingBudget,    // 選用；thinkingConfig.thinkingBudget（0=關閉、-1=自動）。thinking 模型的
+                       // 思考 token 計入 maxOutputTokens 額度，兩者要一起調（見下方第 6 點）
     signal,            // AbortSignal（節點逾時），一路傳進 SDK
     // ── record／replay 才需要 ──
     agent,             // 'extract' | 'classify' | …；cassette 的第一段鍵與子目錄名，**必填**
@@ -61,6 +63,12 @@ const res = await generateJson({
 3. `raw` 在 `replay` 模式是 `null`。**agent 不得依賴 `raw`**。
 4. `schemaFallback` 是額外多出來的鍵（介面第 5.1 條的回傳形狀之外），`true` 代表這次走了「不含 enum 的 schema + prompt 列舉」的退路，runner 應該把它記進 `job_events.detail`。
 5. 供應商目前只有 `gemini`。`anthropic` / `openai` 給 A-T17 預留，現在傳進去會直接丟錯（不是靜默改用 gemini）。
+6. **`maxOutputTokens` 的額度包含思考 token**。對 thinking 模型（Pro 系列）只設 `maxOutputTokens`
+   而不設 `thinkingBudget`，難題的思考會把額度吃光，JSON 寫到一半被截斷——症狀是
+   「Unterminated string in JSON」被歸類成 `schema_invalid`，退避重試把整份任務拖慢數倍
+   （2026-08-27 job #4 實測：verify 節點 37 次錯誤、平均 93 秒）。`agents/verify.js` 因此
+   固定成對設定 `maxOutputTokens: 8192` + `thinkingBudget: 1024`。`thinkingBudget` **不進**
+   cassette 鍵（第 3 節的 `cacheKeyParts` 不含它），調整它不會讓既有 cassette 失效。
 
 ### structured output 用 `responseJsonSchema`
 
