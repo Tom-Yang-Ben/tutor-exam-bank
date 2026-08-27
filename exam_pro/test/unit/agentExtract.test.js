@@ -180,6 +180,26 @@ describe('validateElements — 逐元素驗證（第 3.3 條）', () => {
         assert.deepEqual(extract.validateElements({}, chunk), { questions: [], rejected: [] });
         assert.deepEqual(extract.validateElements(null, chunk), { questions: [], rejected: [] });
     });
+
+    test('figure_page 由塊內頁碼換算成絕對頁碼（chunk.fromPage + 塊內頁碼 - 1）', () => {
+        const withFig = { ...GOOD, figure_page: 3, figure_box: [100, 200, 400, 800] };
+        const { questions } = extract.validateElements({ questions: [withFig] }, chunk);
+        assert.equal(questions[0].figure_page, 23);   // fromPage 21 + 3 - 1
+        assert.deepEqual(questions[0].figure_box, [100, 200, 400, 800]);
+    });
+
+    test('塊內頁碼超出本塊範圍＝模型數錯頁，整組丟掉但題目照常通過', () => {
+        const withFig = { ...GOOD, figure_page: 21, figure_box: [100, 200, 400, 800] };  // 21+21-1=41 > toPage 40
+        const { questions, rejected } = extract.validateElements({ questions: [withFig] }, chunk);
+        assert.equal(rejected.length, 0);
+        assert.equal(questions.length, 1);
+        assert.ok(!('figure_page' in questions[0]) && !('figure_box' in questions[0]));
+    });
+
+    test('沒有附圖的題目，兩個鍵整個不存在', () => {
+        const { questions } = extract.validateElements({ questions: [GOOD] }, chunk);
+        assert.ok(!('figure_page' in questions[0]) && !('figure_box' in questions[0]));
+    });
 });
 
 describe('normalizeElement — [附圖描述：…] 一律歸位到 figure_desc', () => {
@@ -204,6 +224,31 @@ describe('normalizeElement — [附圖描述：…] 一律歸位到 figure_desc'
             figure_desc: '原本的'
         });
         assert.equal(el.figure_desc, '原本的\n後補的');
+    });
+});
+
+describe('normalizeElement — 附圖框（figure_page＋figure_box）的防呆', () => {
+    const BOX = [100, 200, 400, 800];
+
+    test('成對且合法時原樣保留', () => {
+        const el = extract.normalizeElement({ ...GOOD, figure_page: 2, figure_box: BOX });
+        assert.equal(el.figure_page, 2);
+        assert.deepEqual(el.figure_box, BOX);
+    });
+
+    test('只有其中一個、或框幾何不合法（ymin≥ymax）時整組拿掉——框壞掉只該少圖不該少題', () => {
+        for (const bad of [
+            { figure_page: 2 },                                  // 缺 box
+            { figure_box: BOX },                                 // 缺 page
+            { figure_page: 0, figure_box: BOX },                 // 頁碼越界
+            { figure_page: 2, figure_box: [400, 200, 100, 800] }, // ymin > ymax
+            { figure_page: 2, figure_box: [100, 800, 400, 200] }, // xmin > xmax
+            { figure_page: 2, figure_box: [100, 200, 400] },      // 長度不對
+            { figure_page: 2, figure_box: [100, 200, 400, 1001] } // 超出 0–1000
+        ]) {
+            const el = extract.normalizeElement({ ...GOOD, ...bad });
+            assert.ok(!('figure_page' in el) && !('figure_box' in el), JSON.stringify(bad));
+        }
     });
 });
 

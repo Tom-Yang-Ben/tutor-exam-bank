@@ -3,7 +3,7 @@
     "agent": "verify",
     "model": "gemini-3.1-pro-preview",
     "template": "verify.v1",
-    "recorded_at": "2026-08-23T12:41:39.500Z",
+    "recorded_at": "2026-08-27T08:01:32.516Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -25,14 +25,14 @@
     "data": {
       "final_answer": "(A)",
       "answer_form": "option",
-      "steps_summary": "根據三角函數的平方關係式（畢氏關係）：對於任意角度 $\\theta$，均滿足 $\\sin^2 \\theta + \\cos^2 \\theta = 1$。將 $\\theta = 40^\\circ$ 代入，即可直接得到 $\\sin^2 40^\\circ + \\cos^2 40^\\circ = 1$。"
+      "steps_summary": "根據三角函數的平方關係（畢氏恆等式），對於任意角度 $\\theta$，皆滿足 $\\sin^2 \\theta + \\cos^2 \\theta = 1$。因此，當 $\\theta = 40^\\circ$ 時，$\\sin^2 40^\\circ + \\cos^2 40^\\circ = 1$，故選 (A)。"
     },
     "usage": {
       "tokenIn": 166,
-      "tokenOut": 106,
-      "tokenThinking": 151,
+      "tokenOut": 110,
+      "tokenThinking": 131,
       "tokenCached": 0
     },
-    "latencyMs": 4641
+    "latencyMs": 4342
   }
 }

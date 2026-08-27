@@ -3,7 +3,7 @@
     "agent": "verify",
     "model": "gemini-3.1-pro-preview",
     "template": "verify.v1",
-    "recorded_at": "2026-08-27T08:06:03.146Z",
+    "recorded_at": "2026-08-27T08:07:21.965Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -18,21 +18,21 @@
       "template": "verify.v1",
       "questionText": "物體由靜止出發，以 $2\\text{ m/s}^2$ 的等加速度直線前進，求 $5$ 秒後的位移。",
       "questionType": "計算",
-      "sampleNo": 1
+      "sampleNo": 2
     }
   },
   "response": {
     "data": {
       "final_answer": "25 m",
       "answer_form": "text",
-      "steps_summary": "根據等加速度運動的位移公式：\n$s = v_0 t + \\frac{1}{2} a t^2$\n\n已知物體由靜止出發，初速度 $v_0 = 0$，加速度 $a = 2\\text{ m/s}^2$，時間 $t = 5\\text{ s}$。\n將數值代入公式中：\n$s = 0 \\times 5 + \\frac{1}{2} \\times 2 \\times 5^2$\n$s = 0 + 1 \\times 25 = 25\\text{ (m)}$\n\n因此，物體在 5 秒後的位移為 25 m。"
+      "steps_summary": "1. 根據題意，物體由靜止出發，因此初速度 v_0 = 0 m/s。\n2. 已知物體作等加速度直線運動，加速度 a = 2 m/s²，時間 t = 5 s。\n3. 代入等加速度運動的位移公式：s = v_0 t + (1/2) a t²。\n4. 計算可得 s = 0 × 5 + (1/2) × 2 × 5² = 25 (m)。\n5. 故 5 秒後的位移為 25 m。"
     },
     "usage": {
       "tokenIn": 145,
-      "tokenOut": 197,
-      "tokenThinking": 995,
+      "tokenOut": 163,
+      "tokenThinking": 481,
       "tokenCached": 0
     },
-    "latencyMs": 51765
+    "latencyMs": 78817
   }
 }

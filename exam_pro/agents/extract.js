@@ -51,7 +51,7 @@ const PROMPT_TEMPLATE = `請細心閱讀這份 PDF，找出裡面「所有的」
 
 ${LATEX_RULES}
 
-【附圖與幾何圖形】請仔細觀察考卷中的所有附圖、幾何圖形或圖表。你無法匯出圖片，所以請把該圖的「解題關鍵視覺資訊」（精確的座標點、邊長、角度、函數曲線趨勢、物體受力方向、電路連接方式等）寫成文字，放進該題的 figure_desc 欄位。**不要**寫進 question_text。沒有附圖的題目就不要輸出 figure_desc。
+【附圖與幾何圖形】請仔細觀察考卷中的所有附圖、幾何圖形或圖表。你無法匯出圖片，所以請把該圖的「解題關鍵視覺資訊」（精確的座標點、邊長、角度、函數曲線趨勢、物體受力方向、電路連接方式等）寫成文字，放進該題的 figure_desc 欄位。**不要**寫進 question_text。同時回報附圖的位置，讓系統把圖裁下來存檔：figure_page 是附圖所在頁碼（從你收到的這份 PDF 的第 1 頁數起），figure_box 是該頁上剛好框住整張圖的 [ymin, xmin, ymax, xmax]（0–1000 正規化座標，頁面左上角為原點），不要框到題目文字。沒有附圖的題目，figure_desc、figure_page、figure_box 三個欄位都不要輸出。
 
 【題目順序】依照題目在紙上出現的先後順序輸出，不要重排、不要合併、不要漏題。同一大題底下的 (1)(2)(3) 若各自有獨立答案，請拆成獨立的題目。`;
 
@@ -109,6 +109,15 @@ function normalizeElement(el) {
         if (trimmed) out.figure_desc = trimmed;
         else delete out.figure_desc;      // 「沒有附圖時整個鍵不存在」（第 3.2 條）
     }
+    // 附圖框：頁碼與 box 必須成對且幾何上合法（ymin<ymax、xmin<xmax），否則整組拿掉。
+    // 這裡拿掉而不是讓 ajv 整題退件：框壞掉只該少一張圖，不該少一道題（docs/figures.md）。
+    const boxOk = Array.isArray(out.figure_box) && out.figure_box.length === 4
+        && out.figure_box.every(n => Number.isInteger(n) && n >= 0 && n <= 1000)
+        && out.figure_box[0] < out.figure_box[2] && out.figure_box[1] < out.figure_box[3];
+    if (!Number.isInteger(out.figure_page) || out.figure_page < 1 || !boxOk) {
+        delete out.figure_page;
+        delete out.figure_box;
+    }
     return out;
 }
 
@@ -161,6 +170,13 @@ function validateElements(data, { chunkNo, fromPage, toPage }) {
             rejected.push({ idx, errors: formatErrors(validate.errors) });
             return;
         }
+        // figure_page 是「塊內頁碼」（模型只看得到切出來的那幾頁），這裡換算成整份 PDF 的
+        // 絕對頁碼再往下傳（裁圖對整份 PDF 做）。換算後超出本塊範圍＝模型數錯頁，整組丟掉。
+        const absFigurePage = Number.isInteger(normalized.figure_page)
+            ? fromPage + normalized.figure_page - 1 : null;
+        const hasFigureBox = absFigurePage !== null && absFigurePage <= toPage
+            && Array.isArray(normalized.figure_box);
+
         questions.push({
             idx,
             subject: normalized.subject,
@@ -171,6 +187,7 @@ function validateElements(data, { chunkNo, fromPage, toPage }) {
             question_text: normalized.question_text,
             answer_text: normalized.answer_text,
             ...(normalized.figure_desc ? { figure_desc: normalized.figure_desc } : {}),
+            ...(hasFigureBox ? { figure_page: absFigurePage, figure_box: normalized.figure_box } : {}),
             chunk_no: chunkNo,
             page_range: [fromPage, toPage]
         });

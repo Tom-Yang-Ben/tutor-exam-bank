@@ -825,8 +825,15 @@
                 head.append(meta, btns);
 
                 const qDiv = el('div', 'text-sm leading-7 text-slate-700'); qDiv.textContent = q.question_text;
+                card.append(head, qDiv);
+                if (q.question_img) {   // 管線裁切或人工附上的題目附圖（docs/figures.md）
+                    const img = el('img', 'mt-2 max-w-full max-h-64 rounded-xl border border-slate-200 bg-white');
+                    img.src = q.question_img; img.alt = '題目附圖'; img.loading = 'lazy';
+                    img.addEventListener('error', () => img.remove());
+                    card.appendChild(img);
+                }
                 const aDiv = el('div', 'mt-3 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-sm text-emerald-800 font-bold'); aDiv.textContent = '答：' + (q.answer_text || '');
-                card.append(head, qDiv, aDiv);
+                card.append(aDiv);
                 list.appendChild(card);
             });
             renderMath(list);

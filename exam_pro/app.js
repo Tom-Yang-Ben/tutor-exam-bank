@@ -92,6 +92,12 @@ app.get('/index.html', serveIndex);
 // FEATURE_PIPELINE 也不會注入。改成後掛，兩個進入點才真的走同一支 serveIndex。
 app.use(express.static(PUBLIC_DIR, { index: false }));
 
+// 附圖靜態目錄（docs/figures.md）：只放管線從考卷 PDF 裁出的 PNG，
+// questions.question_img 存的相對路徑（/figures/<jobId>-<idx>.png）由這裡供圖。
+const FIGURES_DIR = path.join(__dirname, 'data', 'figures');
+if (!fs.existsSync(FIGURES_DIR)) fs.mkdirSync(FIGURES_DIR, { recursive: true });
+app.use('/figures', express.static(FIGURES_DIR));
+
 // 3. API 路由掛載（套用可選的 API Key 認證）
 app.use('/api', apiKeyAuth, routes);
 
