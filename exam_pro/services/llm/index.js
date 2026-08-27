@@ -89,7 +89,7 @@ async function embed({ model, texts, dim, taskType } = {}) {
  *   replay —— 只讀 cassette；miss 一律丟錯（訊息逐字凍結於第 5.2 條），CI 恆為這個模式
  *
  * @param {{model?:string, system?:string, parts:Array<object>, schema?:object,
- *          maxOutputTokens?:number, signal?:AbortSignal,
+ *          maxOutputTokens?:number, thinkingBudget?:number, signal?:AbortSignal,
  *          agent?:string, cacheKeyParts?:object, template?:string}} opts
  *        agent／cacheKeyParts／template 是階段 2 新增的三個選用欄位；
  *        record／replay 模式下 **agent 必填**（它是 cassette 的第一段鍵與子目錄名）。

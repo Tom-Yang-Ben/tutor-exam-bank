@@ -230,12 +230,12 @@ async function callOnce({ ai, model, contents, config, signal, label }) {
 /**
  * 受限 JSON 生成。
  * @param {{model:string, system?:string, parts:Array<{text?:string,pdfBase64?:string,fileUri?:string}>,
- *          schema?:object, maxOutputTokens?:number, signal?:AbortSignal}} opts
+ *          schema?:object, maxOutputTokens?:number, thinkingBudget?:number, signal?:AbortSignal}} opts
  *        model 必須是**裸 ID**（vendor 前綴由 services/llm/index.js 剝掉）
  * @returns {Promise<{data:object, usage:{tokenIn,tokenOut,tokenThinking,tokenCached},
  *                    latencyMs:number, raw:any, schemaFallback:boolean}>}
  */
-async function generateJson({ model, system, parts, schema, maxOutputTokens, signal }) {
+async function generateJson({ model, system, parts, schema, maxOutputTokens, thinkingBudget, signal }) {
     const ai = getClient();
     const startedAt = Date.now();
     const contents = toContents(parts);
@@ -243,6 +243,9 @@ async function generateJson({ model, system, parts, schema, maxOutputTokens, sig
     const baseConfig = { responseMimeType: 'application/json' };
     if (system) baseConfig.systemInstruction = system;
     if (maxOutputTokens) baseConfig.maxOutputTokens = maxOutputTokens;
+    // thinking token 計入 maxOutputTokens 的額度：不設上限時 Pro 系列會把額度想光，
+    // JSON 寫到一半被截斷（0 = 關閉思考、-1 = 交回模型自動；範圍依模型而異）
+    if (Number.isInteger(thinkingBudget)) baseConfig.thinkingConfig = { thinkingBudget };
     if (signal) baseConfig.abortSignal = signal;
 
     let schemaFallback = false;

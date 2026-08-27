@@ -308,7 +308,10 @@ export function reasonSentence(reason, payload) {
         }
         case 'schema_invalid': {
             const errs = (p.save && p.save.errors) || (p.extract && p.extract.errors) || [];
-            return errs.length ? `欄位驗證未通過：${errs.join('；')}` : '欄位驗證未通過。';
+            if (errs.length) return `欄位驗證未通過：${errs.join('；')}`;
+            // 沒有任何 errors 清單＝不是欄位問題：是某個節點的模型輸出 JSON 損壞（多半是被截斷），
+            // 被歸類成 schema_invalid（error 路徑不寫 payload，所以這裡拿不到細節）。
+            return '模型回傳的 JSON 損壞或被截斷（不是題目欄位的問題），重試已用盡。重跑這一題通常就會過。';
         }
         case 'budget_exceeded':
             return '這份 PDF 的成本已達上限，剩下的節點沒有執行。可在任務頁按「提高預算並重跑」。';

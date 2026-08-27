@@ -17,7 +17,12 @@ const { buildSchema } = require('./schemas');
 const { registerTemplate } = require('../services/llm/templates');
 
 const TEMPLATE = 'verify.v1';
-const MAX_OUTPUT_TOKENS = 2048;
+// 兩個數字是一組的，不要單獨調（2026-08-27 job #4 的教訓）：
+// MODEL_VERIFY 是 thinking 模型，思考 token 計入 maxOutputTokens 的額度。
+// 舊值 2048 且不限思考時，難題的思考會把額度吃光，JSON 寫到一半被截斷
+// （「Unterminated string in JSON」→ 誤歸 schema_invalid，退避重試又拖慢整份任務）。
+const MAX_OUTPUT_TOKENS = 8192;
+const THINKING_BUDGET = 1024;
 const MAX_SAMPLES = 2;          // uncertain 時再採樣一次，就這樣（介面第 3.3 條）
 
 const SYSTEM = [
@@ -69,6 +74,7 @@ async function sample(ctx, { questionText, questionType, sampleNo }) {
         parts: [{ text: renderPrompt({ questionText, questionType }) }],
         schema: buildSchema('verify'),
         maxOutputTokens: MAX_OUTPUT_TOKENS,
+        thinkingBudget: THINKING_BUDGET,
         signal: ctx.signal,
         agent: 'verify',
         template: TEMPLATE,
