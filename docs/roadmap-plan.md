@@ -1751,4 +1751,4 @@ agent 管線、RAG 檢索、NLQ、變式、複核佇列、eval 與門檻——�
    以 `XmlComponent` 子類自組標準 OMML（`m:d` 括號 > `m:m` > `m:mr` > `m:e`；
    單邊／自訂括號用 `ImportedXmlComponent` 注入 `m:dPr`，注意 `fromXmlString` 的
    外殼要取 `root[0]`），Word 端矩陣自此是真正的二維排版。
-   `formulaGolden` 的矩陣案例人工定案（開 Word 目視）留待使用者下次驗收一併回報。
+   人工目視定案：**2026-08-27 使用者重啟伺服器後重新下載 Word 卷，矩陣排版目視通過**。
