@@ -206,7 +206,7 @@ exports.listQuestions = async (req, res, next) => {
         const total = countRows[0].total;
 
         const { rows } = await query(
-            `SELECT id, subject, chapter, question_type, difficulty, question_text, answer_text, created_at
+            `SELECT id, subject, chapter, question_type, difficulty, question_text, question_img, answer_text, created_at
              FROM questions ${whereSql} ORDER BY id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
             [...params, limit, offset]
         );

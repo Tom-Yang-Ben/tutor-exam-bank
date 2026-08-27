@@ -340,7 +340,10 @@ export function payloadToQuestion(payload) {
         question_type: ex.question_type || '填空',
         difficulty: ex.difficulty || 3,
         question_text: (p.lint && p.lint.question_text) || ex.question_text || '',
-        answer_text: (p.lint && p.lint.answer_text) || ex.answer_text || ''
+        answer_text: (p.lint && p.lint.answer_text) || ex.answer_text || '',
+        // 管線裁出的附圖路徑（docs/figures.md）；approve 的 body 直接展開這個物件，
+        // 所以入庫時 question_img 會跟著送到 reviewController
+        question_img: ex.figure_img || null
     };
 }
 
@@ -569,6 +572,20 @@ function reviewCard(app, item) {
 
             question = payloadToQuestion(body.payload);
             editorSlot.appendChild(app.createQuestionEditor(question));   // 沿用既有編輯器（第 8 條）
+
+            // 附圖預覽（docs/figures.md）：讓老師順便複核裁切框的準度；bbox 偏了就在這裡看得出來
+            if (question.question_img) {
+                const figWrap = el('div', 'mt-2 rounded-xl border border-slate-200 bg-slate-50 p-2');
+                figWrap.appendChild(el('p', 'text-xs font-bold text-slate-500 mb-1', { textContent: 'AI 裁切的附圖（入庫時會一併存進題目）' }));
+                const img = el('img', 'max-w-full rounded-lg border border-slate-200 bg-white');
+                img.src = question.question_img;
+                img.alt = '考卷附圖';
+                img.addEventListener('error', () => {
+                    figWrap.replaceChildren(el('p', 'text-xs text-rose-500', { textContent: `附圖載入失敗（${question.question_img}）` }));
+                });
+                figWrap.appendChild(img);
+                editorSlot.appendChild(figWrap);
+            }
 
             const retries = body.retries && Object.keys(body.retries).length
                 ? `重試紀錄：${Object.entries(body.retries).map(([k, v]) => `${k}×${v}`).join('、')}`

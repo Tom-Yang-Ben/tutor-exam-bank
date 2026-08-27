@@ -531,6 +531,10 @@ function createRunner(opts = {}) {
         }
 
         const textHash = input?.dedup0?.text_hash ?? null;
+        // 附圖路徑（docs/figures.md）：validateQuestionFields 只認六個欄位，question_img
+        // 不進閘門、與 approve 的 body.question_img 同一種待遇（reviewController 第 6.6 條）。
+        const questionImg = typeof input?.extract?.figure_img === 'string' && input.extract.figure_img
+            ? input.extract.figure_img : null;
         // 階段 3（第 4.7、5.2 條）：三個欄位改由 job.kind 與 payload.classify.source 決定。
         // kind='pdf' 的路徑逐位元不變（origin='pdf'；classify 沒短路時 chapter_src 仍是 'ai'）。
         const origin = ctx?.job?.kind === 'variant' ? 'variant' : 'pdf';
@@ -546,15 +550,15 @@ function createRunner(opts = {}) {
 
             const { rows } = await client.query(
                 `INSERT INTO questions
-                    (subject, chapter, question_type, difficulty, question_text, answer_text,
+                    (subject, chapter, question_type, difficulty, question_text, question_img, answer_text,
                      origin, chapter_src, variant_of, text_hash, search_tsv)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-                         setweight(to_tsvector('simple', array_to_string($11::text[], ' ')), 'A')
-                      || setweight(to_tsvector('simple', array_to_string($12::text[], ' ')), 'A')
-                      || setweight(to_tsvector('simple', array_to_string($13::text[], ' ')), 'B'))
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
+                         setweight(to_tsvector('simple', array_to_string($12::text[], ' ')), 'A')
+                      || setweight(to_tsvector('simple', array_to_string($13::text[], ' ')), 'A')
+                      || setweight(to_tsvector('simple', array_to_string($14::text[], ' ')), 'B'))
                  RETURNING id`,
                 [v.value.subject, v.value.chapter, v.value.question_type, v.value.difficulty,
-                v.value.question_text, v.value.answer_text || '略', origin, chapterSrc, variantOf, textHash,
+                v.value.question_text, questionImg, v.value.answer_text || '略', origin, chapterSrc, variantOf, textHash,
                     chapterTokens, keywordTokens, stemTokens]);
 
             const questionId = rows[0].id;
@@ -855,6 +859,9 @@ function createRunner(opts = {}) {
             const attempt = failRetries + errorRetries + 1;
             let created = 0;
             if (outcome.kind === 'pass' || outcome.kind === 'skipped') {
+                // 裁圖要在 insertJobQuestions 之前：figure_img 才會跟著進 payload.extract。
+                // 也必須在這裡（extract 階段）做——全部 chunk 拆完 PDF 就刪檔了（第 1.3 條）。
+                if (outcome.kind === 'pass') await attachFigureImages(job, outcome.data);
                 created = await insertJobQuestions(job.id, chunk, outcome.data || {});
             }
 
@@ -895,6 +902,24 @@ function createRunner(opts = {}) {
                 continue;
             }
             return { ok: false, error: `拆題連續失敗（chunk ${chunk.no}）：${outcome.message || outcome.errorClass}` };
+        }
+    }
+
+    /**
+     * 附圖裁切（docs/figures.md）：extract 回了 figure_page＋figure_box 的題目，
+     * 在 PDF 還在磁碟上時裁成 PNG，`figure_img` 就地寫回題目物件。
+     * 純程式步驟、零模型成本；任何失敗都只記 warn——圖裁不出來不該讓整塊拆題重來。
+     */
+    async function attachFigureImages(job, data) {
+        const questions = Array.isArray(data?.questions) ? data.questions : [];
+        if (!questions.some(q => Number.isInteger(q?.figure_page) && Array.isArray(q?.figure_box))) return;
+        try {
+            const pdfBytes = fs.readFileSync(resolveJobPath(job.pdf_path));
+            const { cropFigures } = require('../services/figureService');
+            const cropped = await cropFigures({ pdfBytes, jobId: job.id, questions, logger });
+            if (cropped > 0) logger.info({ job_id: job.id, node: 'extract', msg: `已裁出 ${cropped} 張附圖` });
+        } catch (err) {
+            logger.warn({ job_id: job.id, node: 'extract', msg: '附圖裁切失敗（題目照常入列，僅缺圖）', error: err.message });
         }
     }
 

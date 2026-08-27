@@ -26,9 +26,15 @@ const EPSILON = 1e-9;
 
 const BRACKET_OPTION_RE = /[（(［[【]\s*([A-Ha-h])\s*[）)］\]】]/g;
 const LABELLED_OPTION_RE = /(^|[\s，,、；;和或與])([A-Ha-h])[.、．:：]/g;
+// 行首的連續括號代號（「(A)(C)。…」「(B)、(D) …」）——extract 的 schema 要求答案
+// 「以選項代號開頭」，所以開頭那一串就是答案本體
+const LEADING_OPTION_RUN_RE = /^\s*(?:[（(［[【]\s*[A-Ha-h]\s*[）)］\]】]\s*[、，,]?\s*)+/;
 
 /**
- * 從一段文字抽出選項代號集合。三層由強到弱，抽到就停：
+ * 從一段文字抽出選項代號集合。四層由強到弱，抽到就停：
+ *   0. 行首連續括號型 ——「(A)(C)。(A) 正確因為…，(B) 錯誤因為…」只取開頭的 {A,C}。
+ *      整段掃括號會把解說裡逐一點評的 (B)(D) 也抽進來，變成假 disagree
+ *      （2026-08-27 重錄 pipeline cassette 時在樣卷第 10 題實際發生）。
  *   1. 括號型 (A)（Ａ）[A]【A】
  *   2. 標號型 行首／分隔後的「A.」「A、」「A：」
  *   3. 裸字母 —— 只有在「整串除了 A–H 與標點空白之外什麼都沒有」時才算
@@ -42,6 +48,12 @@ function extractOptionCodes(text) {
     const out = new Set();
     if (typeof text !== 'string' || text.trim() === '') return out;
     const s = text.normalize('NFKC');
+
+    const lead = LEADING_OPTION_RUN_RE.exec(s);
+    if (lead) {
+        for (const m of lead[0].matchAll(BRACKET_OPTION_RE)) out.add(m[1].toUpperCase());
+        if (out.size) return out;
+    }
 
     for (const m of s.matchAll(BRACKET_OPTION_RE)) out.add(m[1].toUpperCase());
     if (out.size) return out;
@@ -350,7 +362,16 @@ function compareText(claimedWhole, modelAnswer) {
     const a = strip(claimedWhole);
     const b = strip(modelAnswer);
     if (a === '' || b === '') return 'uncertain';
-    return (a === b || a.includes(b)) ? 'agree' : 'uncertain';
+    if (a === b || a.includes(b)) return 'agree';
+
+    // 兩邊都能數值化就比數值——verify 偶爾把「25 m」這種數值答案標成 answer_form='text'
+    // （2026-08-27 重錄 pipeline cassette 時在樣卷第 7 題實際發生：claimed 是 `$25\text{ m}$`、
+    // 模型回「25 m」，字面不等但數值相同）。只加 agree 這一邊：數值不同仍回 uncertain，
+    // 「text 永遠不回 disagree」的凍結取捨（裁決 S2-26）原封不動。
+    const na = toNumber(claimedWhole);
+    const nb = toNumber(modelAnswer);
+    if (na !== null && nb !== null && nearlyEqual(na, nb)) return 'agree';
+    return 'uncertain';
 }
 
 function compareOption(claimedAnswer, modelAnswer) {

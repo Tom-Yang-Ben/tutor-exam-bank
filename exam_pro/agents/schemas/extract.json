@@ -30,7 +30,9 @@
           "difficulty",
           "question_text",
           "answer_text",
-          "figure_desc"
+          "figure_desc",
+          "figure_page",
+          "figure_box"
         ],
         "properties": {
           "idx": {
@@ -76,6 +78,18 @@
           "figure_desc": {
             "type": "string",
             "description": "這一題附圖／圖表的文字解讀（座標點、邊長、角度、曲線趨勢、受力方向、電路接法…）。沒有附圖時整個欄位不要輸出。"
+          },
+          "figure_page": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "附圖所在的頁碼，從你收到的這份 PDF 的第 1 頁數起。沒有附圖時整個欄位不要輸出。"
+          },
+          "figure_box": {
+            "type": "array",
+            "minItems": 4,
+            "maxItems": 4,
+            "items": { "type": "integer", "minimum": 0, "maximum": 1000 },
+            "description": "附圖在該頁上的 bounding box [ymin, xmin, ymax, xmax]，座標以 0–1000 正規化（頁面左上角為原點）。框要剛好包住整張圖，不要框到題目文字。沒有附圖時整個欄位不要輸出。"
           }
         }
       }
