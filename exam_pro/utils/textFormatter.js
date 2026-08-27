@@ -1,6 +1,8 @@
 const {
     Math: DocxMath, MathRun, MathFraction, MathSuperScript, MathSubScript,
-    MathSubSuperScript, MathRadical, MathSum, MathIntegral, MathLimitLower, TextRun
+    MathSubSuperScript, MathRadical, MathSum, MathIntegral, MathLimitLower, TextRun,
+    MathRoundBrackets, MathSquareBrackets, MathCurlyBrackets,
+    XmlComponent, ImportedXmlComponent
 } = require('docx');
 
 // ───────────────────────── 對照表 ─────────────────────────
@@ -41,15 +43,60 @@ const ACCENTS = {
     widetilde: '̃', check: '̌', acute: '́', grave: '̀'
 };
 
-// 矩陣類環境 → 線性表示的左右括號（2026-08-27，job #5 的矩陣考卷 11 題全卡
-// formula_unparsable 的修正）。docx 9.6.1 沒有原生矩陣元件（m:m），Word 端以
-// 「欄以空白分隔、列以 ; 分隔」的線性形式呈現：內容一字不失、可讀，但不是二維排版
-// ——原生 OMML 矩陣列在 docs/roadmap-plan.md §6.5 擱置區。
-// 網頁端（MathJax）不經過這裡，矩陣照常二維渲染。
+// ───────────────────────── 矩陣（原生 OMML m:m）─────────────────────────
+//
+// 2026-08-27 兩步到位：同日稍早先做線性形式（欄空白、列分號）讓矩陣題不再卡
+// formula_unparsable，使用者當天實測 Word 檔即反映線性形式不可讀——roadmap §6.5
+// 第 3 項的觸發條件成立，改為原生二維排版。docx 9.6.1 沒有現成的矩陣元件，
+// 以下三個是最小的 XmlComponent 子類，產出標準 OMML：
+//   m:m（矩陣）→ m:mr（列）→ m:e（儲存格，內容是任意 Math 元件）
+// Word 要求同一個 m:m 的每一列 m:e 數目相同，renderMatrixBody 會補齊空格。
+
+class MathMatrixCell extends XmlComponent {           // m:e
+    constructor(children) {
+        super('m:e');
+        for (const c of children) this.root.push(c);
+    }
+}
+
+class MathMatrixRow extends XmlComponent {            // m:mr
+    constructor(cells) {
+        super('m:mr');
+        for (const cell of cells) this.root.push(new MathMatrixCell(cell));
+    }
+}
+
+class MathMatrix extends XmlComponent {               // m:m
+    constructor(rows) {
+        super('m:m');
+        for (const r of rows) this.root.push(r);
+    }
+}
+
+/** 自訂括號的 m:d（vmatrix 的 |…|、cases 的單邊 {）；標準括號用 docx 現成元件 */
+function customDelimiter(beg, end, inner) {
+    const d = new (class extends XmlComponent { constructor() { super('m:d'); } })();
+    // fromXmlString 的回傳是「rootKey=undefined 的外殼」，要取 root[0] 才是 m:dPr 本體，
+    // 直接 push 外殼會在 document.xml 產出 <undefined>，Word 判整份檔損毀
+    d.root.push(ImportedXmlComponent.fromXmlString(
+        `<m:dPr><m:begChr m:val="${beg}"/><m:endChr m:val="${end}"/></m:dPr>`
+    ).root[0]);
+    d.root.push(new MathMatrixCell([inner]));
+    return d;
+}
+
+// 環境名 → 把 m:m 包上對應括號。值是工廠函式：docx 的括號元件不能重複使用實例。
 const MATRIX_ENVS = {
-    matrix: ['', ''], smallmatrix: ['', ''], aligned: ['', ''], array: ['', ''],
-    pmatrix: ['(', ')'], bmatrix: ['[', ']'], Bmatrix: ['{', '}'],
-    vmatrix: ['|', '|'], Vmatrix: ['‖', '‖'], cases: ['{', '']
+    matrix: (m) => m,
+    smallmatrix: (m) => m,
+    aligned: (m) => m,
+    array: (m) => m,
+    pmatrix: (m) => new MathRoundBrackets({ children: [m] }),
+    bmatrix: (m) => new MathSquareBrackets({ children: [m] }),
+    Bmatrix: (m) => new MathCurlyBrackets({ children: [m] }),
+    vmatrix: (m) => customDelimiter('|', '|', m),
+    Vmatrix: (m) => customDelimiter('‖', '‖', m),
+    cases: (m) => customDelimiter('{', '', m)
 };
 
 const isCJK = (ch) => /[⺀-鿿　-〿＀-￯㐀-䶿]/.test(ch);
@@ -236,9 +283,10 @@ function createParser(tokens, stopCJK, diag = null) {
         return body;
     }
 
-    /** 矩陣本體 → 線性 Math 元件：列以 \\ 或 \cr 分隔、欄以 & 分隔（都只認大括號深度 0 的）。
+    /** 矩陣本體 → 原生 OMML 矩陣（m:m）：列以 \\ 或 \cr 分隔、欄以 & 分隔（都只認大括號
+     *  深度 0 的），再依環境包括號。回傳單一元件的陣列（parseScripted 可直接接上下標）。
      *  已知限制：巢狀環境當儲存格內容時，內層的 & 也會被當外層分隔——考卷實務上沒出現過。 */
-    function renderMatrixBody(bodyToks, delims) {
+    function renderMatrixBody(bodyToks, wrap) {
         const rows = [];
         let row = [];
         let cell = [];
@@ -257,21 +305,24 @@ function createParser(tokens, stopCJK, diag = null) {
         flushRow();
 
         const kept = rows.filter(r => r.some(c => c.length > 0));
-        const out = [];
-        if (delims[0]) out.push(mr(delims[0]));
-        kept.forEach((cells, ri) => {
-            if (ri > 0) out.push(mr('; '));
-            cells.forEach((cellToks, ci) => {
-                if (ci > 0) out.push(mr(' '));
-                let a = 0, b = cellToks.length;
-                while (a < b && cellToks[a].type === 'space') a++;      // 儲存格頭尾的空白
-                while (b > a && cellToks[b - 1].type === 'space') b--;  // 不進輸出
-                const p = createParser(cellToks.slice(a, b), false, diag);
-                out.push(...p.parseSequence());
-            });
-        });
-        if (delims[1]) out.push(mr(delims[1]));
-        return out.length ? out : [mr(' ')];
+        if (kept.length === 0) return [mr(' ')];
+
+        // Word 要求每一列的 m:e 數目相同：短的列補空儲存格
+        const width = Math.max(...kept.map(r => r.length));
+
+        const parseCell = (cellToks) => {
+            let a = 0, b = cellToks.length;
+            while (a < b && cellToks[a].type === 'space') a++;      // 儲存格頭尾的空白不進輸出
+            while (b > a && cellToks[b - 1].type === 'space') b--;
+            const seq = createParser(cellToks.slice(a, b), false, diag).parseSequence();
+            return seq.length ? seq : [mr(' ')];                    // m:e 不得為空
+        };
+
+        const matrix = new MathMatrix(kept.map((cells) => {
+            const padded = cells.concat(Array.from({ length: width - cells.length }, () => []));
+            return new MathMatrixRow(padded.map(parseCell));
+        }));
+        return [wrap(matrix)];
     }
 
     // 解析一個參數（群組或單一原子），回傳 MathComponent 陣列
@@ -422,12 +473,12 @@ function createParser(tokens, stopCJK, diag = null) {
             // 不認得的環境維持既有的 unknown_command 路徑（peekGroupName 只窺看不消耗，
             // 群組會照舊被當一般群組解析，輸出與改動前逐位元相同）。
             const g = peekGroupName(pos);
-            const delims = g ? MATRIX_ENVS[g.name] : undefined;
-            if (delims) {
+            const wrap = g ? MATRIX_ENVS[g.name] : undefined;
+            if (wrap) {
                 pos = g.nextPos;
                 // array 環境緊接的群組是欄位格式（{ccc}），不是內容
                 if (g.name === 'array' && tokens[pos] && tokens[pos].type === 'lbrace') readGroupTokens();
-                return renderMatrixBody(readEnvBody(g.name, at), delims);
+                return renderMatrixBody(readEnvBody(g.name, at), wrap);
             }
             emit(diag, 'unknown_command', at);
             return mr(name);

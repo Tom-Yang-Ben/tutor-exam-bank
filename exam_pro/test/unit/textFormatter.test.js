@@ -221,39 +221,59 @@ describe('xmlSafeClean — 舊版相容的清理函式', () => {
     });
 });
 
-// ═════════════════════ 6. 矩陣類環境（2026-08-27，job #5 修正） ═════════════════════
-// docx 沒有原生矩陣元件，MATRIX_ENVS 以線性形式（欄空白、列分號）呈現；
-// 契約是「內容一字不失、lint 不再判 error」，不是二維排版（那個在 roadmap §6.5 擱置區）。
+// ═════════════════ 6. 矩陣類環境（2026-08-27 job #5 修正；同日升級原生 m:m） ═════════════════
+// 第一版是線性形式（欄空白、列分號），使用者當天實測 Word 即反映不可讀——roadmap §6.5
+// 第 3 項觸發，改為原生 OMML 矩陣：m:d（括號）> m:e > m:m > m:mr（列）> m:e（儲存格）。
 
-describe('矩陣類環境 — 線性呈現', () => {
-    test('begin{bmatrix} 產生方括號線性形式，內容與列分隔符都在', () => {
+/** 收集 docx 物件樹裡的所有 rootKey */
+function collectKeys(node, out = []) {
+    if (node == null || typeof node !== 'object') return out;
+    if (Array.isArray(node)) { node.forEach(n => collectKeys(n, out)); return out; }
+    if (typeof node.rootKey === 'string') out.push(node.rootKey);
+    if (node.root !== undefined) collectKeys(node.root, out);
+    return out;
+}
+
+describe('矩陣類環境 — 原生 OMML 矩陣', () => {
+    test('begin{bmatrix} 2×2 → m:d 包 m:m，兩列、每列兩格，內容都在', () => {
         const c = parseLatexToMath(String.raw`\begin{bmatrix} 1 & 2 \\ 3 & 4 \end{bmatrix}`);
+        const keys = collectKeys(c);
+        assert.ok(keys.includes('m:d'), '要有括號 m:d');
+        assert.equal(keys.filter(k => k === 'm:m').length, 1);
+        assert.equal(keys.filter(k => k === 'm:mr').length, 2, '兩列');
         const t = flatText(c);
-        assert.ok(t.startsWith('[') && t.endsWith(']'), t);
-        for (const piece of ['1', '2', '3', '4', ';']) assert.ok(t.includes(piece), `缺 ${piece}：${t}`);
+        for (const piece of ['1', '2', '3', '4']) assert.ok(t.includes(piece), `缺 ${piece}：${t}`);
     });
 
-    test('pmatrix 用圓括號、cases 用左大括號、matrix 不帶括號', () => {
-        assert.ok(flatText(parseLatexToMath(String.raw`\begin{pmatrix} a \\ b \end{pmatrix}`)).startsWith('('));
-        assert.ok(flatText(parseLatexToMath(String.raw`\begin{cases} x = 1 \\ y = 2 \end{cases}`)).startsWith('{'));
-        assert.ok(!/^[[({]/.test(flatText(parseLatexToMath(String.raw`\begin{matrix} a & b \end{matrix}`))));
+    test('matrix 環境不帶括號（分隔符由外層 left/right 提供）', () => {
+        const keys = collectKeys(parseLatexToMath(String.raw`\begin{matrix} a & b \end{matrix}`));
+        assert.ok(keys.includes('m:m'));
+        assert.ok(!keys.includes('m:d'), '不該有 m:d');
+    });
+
+    test('cases 是單邊大括號的 m:d（endChr 為空）', () => {
+        const c = parseLatexToMath(String.raw`\begin{cases} x = 1 \\ y = 2 \end{cases}`);
+        const keys = collectKeys(c);
+        assert.ok(keys.includes('m:d') && keys.includes('m:m'));
+        assert.equal(keys.filter(k => k === 'm:mr').length, 2);
     });
 
     test('舊式 plain TeX matrix{…}（含 cr 列分隔）同樣支援——考卷數位化常見', () => {
-        const t = flatText(parseLatexToMath(String.raw`\matrix{1 & 0 \cr 0 & 2}`));
-        assert.ok(t.includes(';') && t.includes('1') && t.includes('2'), t);
+        const keys = collectKeys(parseLatexToMath(String.raw`\matrix{1 & 0 \cr 0 & 2}`));
+        assert.equal(keys.filter(k => k === 'm:mr').length, 2);
     });
 
     test('儲存格內容走完整解析（frac 仍是 m:f 直式分數）', () => {
-        const c = parseLatexToMath(String.raw`\begin{pmatrix} \frac{1}{2} & 0 \\ 0 & 1 \end{pmatrix}`);
-        function collect(node, out = []) {
-            if (node == null || typeof node !== 'object') return out;
-            if (Array.isArray(node)) { node.forEach(n => collect(n, out)); return out; }
-            if (typeof node.rootKey === 'string') out.push(node.rootKey);
-            if (node.root !== undefined) collect(node.root, out);
-            return out;
-        }
-        assert.ok(collect(c).includes('m:f'), JSON.stringify(collect(c)));
+        const keys = collectKeys(parseLatexToMath(String.raw`\begin{pmatrix} \frac{1}{2} & 0 \\ 0 & 1 \end{pmatrix}`));
+        assert.ok(keys.includes('m:f'), JSON.stringify(keys));
+    });
+
+    test('列的儲存格數不一致時補齊（Word 要求每列 m:e 數相同）', () => {
+        const c = parseLatexToMath(String.raw`\begin{matrix} a & b & c \\ d \end{matrix}`);
+        const keys = collectKeys(c);
+        // 兩列各 3 格 = m:m 底下 6 個 m:e（m:d 的 m:e 不在此例）
+        assert.equal(keys.filter(k => k === 'm:mr').length, 2);
+        assert.equal(keys.filter(k => k === 'm:e').length, 6);
     });
 
     test('群組裡的 & 不會被當成欄分隔符', () => {
@@ -265,5 +285,6 @@ describe('矩陣類環境 — 線性呈現', () => {
         const c = parseLatexToMath(String.raw`\begin{bmatrix} \begin{bmatrix} 1 \end{bmatrix} \end{bmatrix}`);
         assert.doesNotThrow(() => JSON.stringify(c));
         assert.ok(flatText(c).includes('1'));
+        assert.equal(collectKeys(c).filter(k => k === 'm:m').length, 2, '內外各一個 m:m');
     });
 });
