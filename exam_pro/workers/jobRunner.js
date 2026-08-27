@@ -540,6 +540,8 @@ function createRunner(opts = {}) {
         const origin = ctx?.job?.kind === 'variant' ? 'variant' : 'pdf';
         const variantOf = ctx?.job?.kind === 'variant' ? (input?.extract?.variant_of_root ?? null) : null;
         const chapterSrc = chapterSrcFor(input);
+        // 題源標記（0006）：上傳時標在 job 上，入庫沿用；變式 job 建立時已複製藍本的標記
+        const sourceType = ctx?.job?.source_type ?? 'unknown';
         const client = await db.pool.connect();
         try {
             await client.query('BEGIN');
@@ -551,15 +553,15 @@ function createRunner(opts = {}) {
             const { rows } = await client.query(
                 `INSERT INTO questions
                     (subject, chapter, question_type, difficulty, question_text, question_img, answer_text,
-                     origin, chapter_src, variant_of, text_hash, search_tsv)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
-                         setweight(to_tsvector('simple', array_to_string($12::text[], ' ')), 'A')
-                      || setweight(to_tsvector('simple', array_to_string($13::text[], ' ')), 'A')
-                      || setweight(to_tsvector('simple', array_to_string($14::text[], ' ')), 'B'))
+                     origin, chapter_src, variant_of, text_hash, source_type, search_tsv)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
+                         setweight(to_tsvector('simple', array_to_string($13::text[], ' ')), 'A')
+                      || setweight(to_tsvector('simple', array_to_string($14::text[], ' ')), 'A')
+                      || setweight(to_tsvector('simple', array_to_string($15::text[], ' ')), 'B'))
                  RETURNING id`,
                 [v.value.subject, v.value.chapter, v.value.question_type, v.value.difficulty,
                 v.value.question_text, questionImg, v.value.answer_text || '略', origin, chapterSrc, variantOf, textHash,
-                    chapterTokens, keywordTokens, stemTokens]);
+                    sourceType, chapterTokens, keywordTokens, stemTokens]);
 
             const questionId = rows[0].id;
             await client.query('UPDATE job_questions SET question_id = $2 WHERE id = $1', [ctx.jq.id, questionId]);
@@ -665,7 +667,7 @@ function createRunner(opts = {}) {
         try {
             const { rows } = await db.query(
                 `SELECT q.id, q.job_id, q.idx, q.state, q.payload, q.retries,
-                        j.kind, j.pdf_sha256,
+                        j.kind, j.pdf_sha256, j.source_type,
                         j.budget_usd::float8 AS budget_usd, j.cost_usd::float8 AS cost_usd
                    FROM job_questions q JOIN jobs j ON j.id = q.job_id
                   WHERE q.id = $1`, [jqId]);
@@ -720,6 +722,7 @@ function createRunner(opts = {}) {
                     // 第 4.5 條：ctx.job 加 kind 與 pdf_sha256（classify 的同 PDF 排除要用），兩個都是附加
                     job: {
                         id: jq.job_id, kind: jq.kind, pdf_sha256: jq.pdf_sha256 ?? null,
+                        source_type: jq.source_type ?? null,
                         budget_usd: Number(jq.budget_usd), cost_usd: Number(jq.cost_usd)
                     },
                     jq: { id: jq.id, idx: jq.idx, payload: jq.payload, retries: jq.retries },

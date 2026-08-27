@@ -454,7 +454,7 @@ fs.writeFileSync('.tmp_inline.js',b)" && node --check .tmp_inline.js && echo "JS
 
 | 方法 | 路徑 | 說明 |
 |------|------|------|
-| GET | `/api/questions` | 題庫列表（`subject/chapter/question_type/q/page/limit` 篩選分頁）|
+| GET | `/api/questions` | 題庫列表（`subject/chapter/question_type/source_type/q/page/limit` 篩選分頁）|
 | POST / PUT / DELETE | `/api/questions(/:id)` | 新增／更新／刪除（**出過的題改封存** `archived:true`）|
 | POST | `/api/batch-save-questions` | 批次入庫，**部分入庫**回 `{saved_count, rejected:[{idx,reason}]}`；`?strict=1` 走舊行為 |
 | GET | `/api/chapters` ／ `/api/chapter-whitelist` | 實際存在章節／完整白名單 |
@@ -462,7 +462,7 @@ fs.writeFileSync('.tmp_inline.js',b)" && node --check .tmp_inline.js && echo "JS
 | GET | `/api/students` | 學生清單（組卷下拉；裁決 S4-2 恆常掛載）|
 | POST / PATCH / DELETE | `/api/students(/:id)` | 建立（**唯一**的新學生入口，S4-1）／改名／刪除（連作答與考卷）|
 | POST | `/api/students/:id/merge` | 把 A 併入 B（清打錯字生出的分身；衝突題保留目標側批改）|
-| POST | `/api/generate-paper` | 組卷。收 `student_id`（或 `student_name`，查無 404 不再自動建）；`dry_run:true` 預覽不寫庫、`exclude_ids` 換題重抽 |
+| POST | `/api/generate-paper` | 組卷。收 `student_id`（或 `student_name`，查無 404 不再自動建）；`dry_run:true` 預覽不寫庫、`exclude_ids` 換題重抽、`source_types` 題源過濾（0006 著作權管理，如僅抽官方／學校／自寫）|
 | POST | `/api/confirm-paper` | 確認出卷：`{student_id, question_ids}` 同一交易建卷＋attempts；預覽過期回 409 |
 | DELETE | `/api/papers/:id` | 刪卷（連 attempts，題目回到候選池；S4-3）|
 | POST | `/api/analyze-pdf` ／ `/api/download-word` | 舊版單呼叫拆題（保留）／產生 Word 考卷 |

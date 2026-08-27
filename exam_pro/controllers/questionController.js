@@ -1,5 +1,5 @@
 const { query, pool } = require('../config/db');
-const { CHAPTERS, isValidSubject, isValidChapter, isValidQuestionType, normalizeDifficulty, QUESTION_TYPES } = require('../config/chapters');
+const { CHAPTERS, isValidSubject, isValidChapter, isValidQuestionType, isValidSourceType, normalizeDifficulty, QUESTION_TYPES } = require('../config/chapters');
 
 // ─────────────────────────────────────────────────────────────
 // 檢索欄位的同步（docs/interfaces-stage1.md 第 12.4 條）
@@ -67,6 +67,8 @@ const { validateQuestionFields } = require('../utils/questionValidation');
 
 exports.createQuestion = async (req, res, next) => {
     const { subject, chapter, question_type, difficulty, question_text, question_img, answer_text, solution_img } = req.body;
+    // 題源標記（0006）：未帶或非法值一律落 'unknown'，不擋錄入——它是管理標記，不是內容閘門
+    const sourceType = isValidSourceType(req.body.source_type) ? req.body.source_type : 'unknown';
     if (!subject || !chapter || !question_text || !answer_text) {
         return res.status(400).json({ message: '學科、章節、題目內容與答案皆為必填欄位！' });
     }
@@ -97,15 +99,15 @@ exports.createQuestion = async (req, res, next) => {
         // 手動錄入 → origin='manual'、chapter_src='human'（規劃 §4.3.1 的來源標記規則）
         const sql = `INSERT INTO questions
                         (subject, chapter, question_type, difficulty, question_text, question_img, answer_text, solution_img,
-                         origin, chapter_src, search_tsv)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'manual', 'human',
-                             setweight(to_tsvector('simple', array_to_string($9::text[],  ' ')), 'A')
-                          || setweight(to_tsvector('simple', array_to_string($10::text[], ' ')), 'A')
-                          || setweight(to_tsvector('simple', array_to_string($11::text[], ' ')), 'B'))
+                         origin, chapter_src, source_type, search_tsv)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'manual', 'human', $9,
+                             setweight(to_tsvector('simple', array_to_string($10::text[], ' ')), 'A')
+                          || setweight(to_tsvector('simple', array_to_string($11::text[], ' ')), 'A')
+                          || setweight(to_tsvector('simple', array_to_string($12::text[], ' ')), 'B'))
                      RETURNING id`;
         const { rows } = await query(sql, [
             row.subject, row.chapter, row.question_type, row.difficulty, row.question_text,
-            question_img || null, answer_text.trim(), solution_img || null,
+            question_img || null, answer_text.trim(), solution_img || null, sourceType,
             chapterTokens, keywordTokens, stemTokens
         ]);
         res.status(201).json({ message: '題目錄入成功！', questionId: rows[0].id });
@@ -128,7 +130,7 @@ exports.batchSaveQuestions = async (req, res, next) => {
     const rejected = [];
     // PG 沒有 mysql2 的 `VALUES ?`（二維陣列）批次語法，改成「每欄一個陣列參數」餵給 unnest，
     // 因此這裡以「欄」為單位收集，而不是以「列」為單位。
-    const cols = { subject: [], chapter: [], question_type: [], difficulty: [], question_text: [], answer_text: [] };
+    const cols = { subject: [], chapter: [], question_type: [], difficulty: [], question_text: [], answer_text: [], source_type: [] };
     questions.forEach((q, idx) => {
         const subject = q.subject;
         const chapter = (q.chapter || '').trim();
@@ -147,6 +149,7 @@ exports.batchSaveQuestions = async (req, res, next) => {
         cols.difficulty.push(diff);
         cols.question_text.push(String(q.question_text).trim());
         cols.answer_text.push(q.answer_text || '略');
+        cols.source_type.push(isValidSourceType(q.source_type) ? q.source_type : 'unknown');
     });
 
     const savedCount = cols.subject.length;
@@ -167,9 +170,9 @@ exports.batchSaveQuestions = async (req, res, next) => {
 
     try {
         // AI 拆題入庫：origin / chapter_src 走 DDL 預設（'pdf' / 'ai'）
-        const sql = `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text)
-                     SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::int[], $5::text[], $6::text[])`;
-        await query(sql, [cols.subject, cols.chapter, cols.question_type, cols.difficulty, cols.question_text, cols.answer_text]);
+        const sql = `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text, source_type)
+                     SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::int[], $5::text[], $6::text[], $7::text[])`;
+        await query(sql, [cols.subject, cols.chapter, cols.question_type, cols.difficulty, cols.question_text, cols.answer_text, cols.source_type]);
         const message = rejected.length === 0
             ? `🎉 成功！已將共 ${savedCount} 題自動錄入資料庫！`
             : `已寫入 ${savedCount} 題；另有 ${rejected.length} 題未通過驗證（已在下方標紅），修正後可再次送出。`;
@@ -191,7 +194,7 @@ exports.getChapters = async (req, res, next) => {
 // 題庫列表（支援篩選與分頁）。已封存（軟刪除）的題目不出現在列表中，與兩個 VIEW 的定義一致。
 exports.listQuestions = async (req, res, next) => {
     try {
-        const { subject, chapter, question_type, q } = req.query;
+        const { subject, chapter, question_type, q, source_type } = req.query;
         const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
         const offset = (page - 1) * limit;
@@ -203,6 +206,7 @@ exports.listQuestions = async (req, res, next) => {
         if (subject) { params.push(subject); where.push(`subject = ${ph()}`); }
         if (chapter) { params.push(chapter); where.push(`chapter = ${ph()}`); }
         if (question_type) { params.push(question_type); where.push(`question_type = ${ph()}`); }
+        if (source_type && isValidSourceType(source_type)) { params.push(source_type); where.push(`source_type = ${ph()}`); }
         // PG 的 LIKE 區分大小寫，改用 ILIKE 才與舊 MySQL（預設 ci collation）的行為一致
         if (q) { params.push('%' + q + '%'); where.push(`(question_text ILIKE ${ph()} OR answer_text ILIKE ${ph()})`); }
         const whereSql = 'WHERE ' + where.join(' AND ');
@@ -212,7 +216,7 @@ exports.listQuestions = async (req, res, next) => {
         const total = countRows[0].total;
 
         const { rows } = await query(
-            `SELECT id, subject, chapter, question_type, difficulty, question_text, question_img, answer_text, created_at
+            `SELECT id, subject, chapter, question_type, difficulty, question_text, question_img, answer_text, source_type, created_at
              FROM questions ${whereSql} ORDER BY id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
             [...params, limit, offset]
         );
@@ -237,16 +241,19 @@ exports.updateQuestion = async (req, res, next) => {
         //   embed_hash   embed_text 的來源欄位有變 ⇒ 設 NULL，讓 backfill 的 --missing-only
         //                一定撿得到（interfaces-stage1.md 12.4）。embedding 刻意留著不清空，
         //                否則向量補上之前這題會直接從 /similar 消失。
+        // 題源標記（0006）：body 有帶合法值才更新，沒帶維持原值（COALESCE(NULL, …)）
+        const sourceType = isValidSourceType(req.body.source_type) ? req.body.source_type : null;
         const { rows } = await client.query(
             `UPDATE questions
                 SET subject=$1, chapter=$2, question_type=$3, difficulty=$4, question_text=$5, answer_text=$6,
+                    source_type = COALESCE($8, source_type),
                     chapter_src = CASE WHEN chapter IS DISTINCT FROM $2 THEN 'human' ELSE chapter_src END,
                     embed_hash  = CASE WHEN (subject, chapter, question_type, difficulty, question_text)
                                        IS DISTINCT FROM ($1, $2, $3, $4::smallint, $5)
                                   THEN NULL ELSE embed_hash END
               WHERE id=$7 AND archived_at IS NULL
           RETURNING id, subject, chapter, question_type, difficulty, question_text, keywords, concept_summary`,
-            [subject, chapter, question_type, difficulty, question_text, answer_text || '略', id]
+            [subject, chapter, question_type, difficulty, question_text, answer_text || '略', id, sourceType]
         );
         if (rows.length === 0) {
             await client.query('ROLLBACK');

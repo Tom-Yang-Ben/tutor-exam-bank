@@ -70,14 +70,16 @@ async function resolveStudent({ student_id, student_name }) {
  * @returns {Promise<{error:{status:number,message:string}}|
  *                   {sortedQuestions:object[], finalSortedIds:number[], paperTitle:string, todayStr:string}>}
  */
-async function selectPaperQuestions({ studentId, studentName, subject, chapter, limitCount, excludeIds = [] }) {
-    // 候選池：同學科同章、未封存、該生沒寫過、且不在排除清單內
+async function selectPaperQuestions({ studentId, studentName, subject, chapter, limitCount, excludeIds = [], sourceTypes = null }) {
+    // 候選池：同學科同章、未封存、該生沒寫過、且不在排除清單內；
+    // sourceTypes（0006 題源過濾）為 null 時不限制——助教工具與既有呼叫端行為不變
     const { rows: candidates } = await query(
         `SELECT q.id, q.variant_of FROM questions q
           WHERE q.subject = $1 AND q.chapter = $2 AND q.archived_at IS NULL
             AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.question_id = q.id AND a.student_id = $3)
-            AND NOT (q.id = ANY($4::int[]))`,
-        [subject, chapter, studentId, excludeIds]
+            AND NOT (q.id = ANY($4::int[]))
+            AND ($5::text[] IS NULL OR q.source_type = ANY($5::text[]))`,
+        [subject, chapter, studentId, excludeIds, sourceTypes]
     );
 
     // 家族互斥：同一 variant_of 家族在同一張卷只取一題（規劃 §4.1）。
@@ -90,7 +92,7 @@ async function selectPaperQuestions({ studentId, studentName, subject, chapter, 
 
     const rawSelectedIds = familyPicked.slice(0, limitCount).map(q => q.id);
     const { rows: fullQuestions } = await query(
-        `SELECT id, question_text, question_type, difficulty, answer_text
+        `SELECT id, question_text, question_type, difficulty, answer_text, source_type
            FROM questions WHERE id = ANY($1::int[])`,
         [rawSelectedIds]
     );
@@ -104,7 +106,7 @@ exports.selectPaperQuestions = selectPaperQuestions;
 exports.resolveStudentInternal = resolveStudent;
 
 exports.generatePaper = async (req, res, next) => {
-    const { student_id, student_name, subject, chapter, count, dry_run, exclude_ids } = req.body;
+    const { student_id, student_name, subject, chapter, count, dry_run, exclude_ids, source_types } = req.body;
 
     const hasStudent = (student_id !== undefined && student_id !== null) || student_name;
     if (!hasStudent || !subject || !chapter || count === undefined || count === null) {
@@ -130,12 +132,22 @@ exports.generatePaper = async (req, res, next) => {
         excludeIds = [...new Set(exclude_ids)];
     }
 
+    // 題源過濾（0006）：選用；空陣列視為不限制，非法值直接 400（打錯字靜默放行會讓過濾形同虛設）
+    let sourceTypes = null;
+    if (source_types !== undefined && source_types !== null) {
+        const { isValidSourceType } = require('../config/chapters');
+        if (!Array.isArray(source_types) || source_types.some(v => !isValidSourceType(v))) {
+            return res.status(400).json({ message: 'source_types 必須是合法題源標記的陣列。' });
+        }
+        if (source_types.length > 0) sourceTypes = [...new Set(source_types)];
+    }
+
     try {
         const { student, error } = await resolveStudent({ student_id, student_name });
         if (error) return res.status(error.status).json({ message: error.message });
 
         const picked = await selectPaperQuestions({
-            studentId: student.id, studentName: student.name, subject, chapter, limitCount, excludeIds
+            studentId: student.id, studentName: student.name, subject, chapter, limitCount, excludeIds, sourceTypes
         });
         if (picked.error) return res.status(picked.error.status).json({ message: picked.error.message });
         const { sortedQuestions, finalSortedIds, paperTitle, todayStr } = picked;

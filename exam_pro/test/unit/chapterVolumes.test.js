@@ -47,3 +47,21 @@ describe('config/chapters — VOLUMES 分冊結構', () => {
         assert.equal(volumeOf('不存在的科', '實數'), null);
     });
 });
+
+describe('config/chapters — SOURCE_TYPES 題源標記（0006）', () => {
+    const { SOURCE_TYPES, isValidSourceType } = require('../../config/chapters');
+
+    test('五個值凍結，與 migrations/0006 的 CHECK 一致', () => {
+        assert.deepEqual(SOURCE_TYPES, ['official', 'school', 'publisher', 'self', 'unknown']);
+        const sql = require('node:fs').readFileSync(
+            require('node:path').resolve(__dirname, '..', '..', 'migrations', '0006_source_type.sql'), 'utf8');
+        for (const v of SOURCE_TYPES) assert.ok(sql.includes(`'${v}'`), `0006 的 CHECK 缺 ${v}`);
+    });
+
+    test('isValidSourceType：白名單內 true、其餘（含大小寫不符與空值）false', () => {
+        for (const v of SOURCE_TYPES) assert.equal(isValidSourceType(v), true, v);
+        for (const bad of ['Official', '官方', '', null, undefined, 123]) {
+            assert.equal(isValidSourceType(bad), false, String(bad));
+        }
+    });
+});

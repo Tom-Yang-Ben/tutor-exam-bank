@@ -196,7 +196,7 @@
             background: #4664e8;
         }
 
-        @media (max-width: 640px) {
+        @media (max-width: 640px) {
             .surface-card, .manager-shell { border-radius: 1.25rem; }
         }
 
@@ -295,7 +295,7 @@
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div>
                                 <label class="block text-sm font-semibold text-slate-600 mb-1.5">題型</label>
                                 <select id="question_type"
@@ -315,6 +315,17 @@
                                     <option value="3" selected>★★★ (中)</option>
                                     <option value="4">★★★★</option>
                                     <option value="5">★★★★★ (難)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-600 mb-1.5">題目來源</label>
+                                <select id="source_type"
+                                    class="field-control block w-full p-3 transition-all">
+                                    <option value="self" selected>自行編寫</option>
+                                    <option value="official">官方歷屆試題</option>
+                                    <option value="school">學校考卷</option>
+                                    <option value="publisher">出版社／題本</option>
+                                    <option value="unknown">未標記</option>
                                 </select>
                             </div>
                         </div>
@@ -359,6 +370,19 @@
                         <p class="text-xs text-slate-500 mb-4">AI 會先產生可編輯預覽，確認後才會寫入題庫。</p>
                         <input type="file" id="pdfFile" accept=".pdf"
                             class="block w-full text-sm text-slate-500 mx-auto file:mr-3 file:py-2.5 file:px-4 file:rounded-xl file:border file:border-indigo-100 file:text-sm file:font-bold file:bg-white file:text-indigo-700 hover:file:bg-indigo-50 file:cursor-pointer" />
+
+                        <!-- 題源標記（0006 著作權管理）：這份考卷入庫的所有題沿用同一個標記 -->
+                        <div class="mt-4 text-left">
+                            <label class="block text-sm font-semibold text-slate-600 mb-1.5">這份考卷的來源</label>
+                            <select id="pdf_source_type"
+                                class="field-control block w-full p-2.5 transition-all text-sm">
+                                <option value="unknown" selected>未標記（之後可在題庫管理補標）</option>
+                                <option value="official">官方歷屆試題（學測／分科／會考／統測）</option>
+                                <option value="school">學校考卷（段考／期中期末）</option>
+                                <option value="publisher">出版社／參考書／補習班題本</option>
+                                <option value="self">自行編寫</option>
+                            </select>
+                        </div>
 
                         <button type="button" id="uploadPdfBtn"
                             class="primary-button mt-5 w-full bg-slate-900 hover:bg-slate-800 text-white font-extrabold py-3 px-4 rounded-xl transition-all cursor-pointer">
@@ -454,11 +478,22 @@
                             </div>
                         </div>
 
-                        <div>
-                            <label class="block text-sm font-semibold text-slate-600 mb-1.5">期望抽題數量 (題)</label>
-                            <input type="number" id="count" value="5" min="1"
-                                class="field-control block w-full p-3 transition-all"
-                                required>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-600 mb-1.5">期望抽題數量 (題)</label>
+                                <input type="number" id="count" value="5" min="1"
+                                    class="field-control block w-full p-3 transition-all"
+                                    required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-600 mb-1.5">題源限制（著作權）</label>
+                                <select id="paper_source_scope"
+                                    class="field-control block w-full p-3 transition-all">
+                                    <option value="all" selected>全部來源</option>
+                                    <option value="clean">僅乾淨題源（官方／學校／自寫）</option>
+                                    <option value="no_publisher">排除出版社（未標記仍可用）</option>
+                                </select>
+                            </div>
                         </div>
 
                         <button type="button" onclick="generatePaper()"
@@ -500,7 +535,7 @@
                 <span id="mgr_count" class="self-start sm:self-auto inline-flex rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600"></span>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[.8fr_1.2fr_.8fr_1.4fr_auto] gap-3 mb-5 p-4 rounded-2xl bg-slate-50 border border-slate-100">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[.8fr_1.2fr_.8fr_.9fr_1.3fr_auto] gap-3 mb-5 p-4 rounded-2xl bg-slate-50 border border-slate-100">
                 <select id="mgr_subject"
                     aria-label="篩選學科" class="field-control block w-full p-2.5 transition-all text-sm">
                     <option value="">全部學科</option>
@@ -519,6 +554,15 @@
                     <option value="填空">填空</option>
                     <option value="計算">計算</option>
                     <option value="證明">證明</option>
+                </select>
+                <select id="mgr_source"
+                    aria-label="篩選題目來源" class="field-control block w-full p-2.5 transition-all text-sm">
+                    <option value="">全部來源</option>
+                    <option value="official">官方歷屆</option>
+                    <option value="school">學校考卷</option>
+                    <option value="publisher">出版社／題本</option>
+                    <option value="self">自行編寫</option>
+                    <option value="unknown">未標記</option>
                 </select>
                 <input id="mgr_search" type="text" placeholder="搜尋題目/答案關鍵字"
                     class="field-control block w-full p-2.5 transition-all text-sm">
@@ -645,6 +689,21 @@
         const PAGEBTN = 'text-sm px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 font-bold hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors';
         const Q_TYPES = ['單選', '多選', '填空', '計算', '證明'];
 
+        // 題源標記（0006 著作權管理）：值與後端 config/chapters.js 的 SOURCE_TYPES 一致
+        const SOURCE_TYPE_LABEL = { official: '官方歷屆', school: '學校考卷', publisher: '出版社', self: '自行編寫', unknown: '未標記' };
+        const SOURCE_TYPE_BADGE = {
+            official: 'bg-emerald-50 text-emerald-700',
+            school: 'bg-sky-50 text-sky-700',
+            publisher: 'bg-amber-50 text-amber-700',
+            self: 'bg-indigo-50 text-indigo-600',
+            unknown: 'bg-slate-100 text-slate-400'
+        };
+        // 組卷「題源限制」→ source_types 陣列（all 不帶＝不限制）
+        const SOURCE_SCOPE_MAP = {
+            clean: ['official', 'school', 'self'],
+            no_publisher: ['official', 'school', 'self', 'unknown']
+        };
+
         function el(tag, cls, props) {
             const e = document.createElement(tag);
             if (cls) e.className = cls;
@@ -752,6 +811,7 @@
             document.getElementById('mgr_subject').addEventListener('change', () => { fillMgrChapters(); fetchQuestions(1); });
             document.getElementById('mgr_chapter').addEventListener('change', () => fetchQuestions(1));
             document.getElementById('mgr_type').addEventListener('change', () => fetchQuestions(1));
+            document.getElementById('mgr_source').addEventListener('change', () => fetchQuestions(1));
             document.getElementById('mgr_search_btn').addEventListener('click', () => fetchQuestions(1));
             document.getElementById('mgr_search').addEventListener('keydown', (e) => { if (e.key === 'Enter') fetchQuestions(1); });
             document.getElementById('edit_close').addEventListener('click', closeEditModal);
@@ -766,6 +826,7 @@
             const s = document.getElementById('mgr_subject').value; if (s) params.set('subject', s);
             const c = document.getElementById('mgr_chapter').value; if (c) params.set('chapter', c);
             const t = document.getElementById('mgr_type').value; if (t) params.set('question_type', t);
+            const st = document.getElementById('mgr_source').value; if (st) params.set('source_type', st);
             const q = document.getElementById('mgr_search').value.trim(); if (q) params.set('q', q);
             params.set('page', page); params.set('limit', 10);
             try {
@@ -788,7 +849,7 @@
                 const card = el('article', 'question-card rounded-2xl p-4 sm:p-5 transition-all');
                 const head = el('div', 'flex flex-col-reverse sm:flex-row sm:justify-between sm:items-start gap-3 mb-3');
                 const meta = el('div', 'flex flex-wrap items-center gap-1.5 text-xs leading-relaxed');
-                meta.innerHTML = `<span class="rounded-md bg-slate-100 px-2 py-1 font-mono font-bold text-slate-500">#${q.id}</span><span class="rounded-md bg-indigo-50 px-2 py-1 font-bold text-indigo-700">${escapeHtml(q.subject)} · ${escapeHtml(q.chapter)}</span><span class="rounded-md bg-slate-50 px-2 py-1 font-semibold text-slate-500">${escapeHtml(q.question_type)}</span><span class="px-1 text-amber-500">${'★'.repeat(q.difficulty)}</span>`;
+                meta.innerHTML = `<span class="rounded-md bg-slate-100 px-2 py-1 font-mono font-bold text-slate-500">#${q.id}</span><span class="rounded-md bg-indigo-50 px-2 py-1 font-bold text-indigo-700">${escapeHtml(q.subject)} · ${escapeHtml(q.chapter)}</span><span class="rounded-md bg-slate-50 px-2 py-1 font-semibold text-slate-500">${escapeHtml(q.question_type)}</span><span class="px-1 text-amber-500">${'★'.repeat(q.difficulty)}</span><span class="rounded-md px-2 py-1 font-semibold ${SOURCE_TYPE_BADGE[q.source_type] || SOURCE_TYPE_BADGE.unknown}">${SOURCE_TYPE_LABEL[q.source_type] || '未標記'}</span>`;
                 const btns = el('div', 'flex gap-2 shrink-0');
                 const editBtn = el('button', 'text-xs px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100 cursor-pointer', { type: 'button', textContent: '✏️ 編輯' });
                 editBtn.addEventListener('click', () => openEditModal(q));
@@ -841,6 +902,20 @@
             const body = document.getElementById('edit_body');
             body.innerHTML = '';
             body.appendChild(createQuestionEditor(editingObj));
+
+            // 題源標記（0006）：不動共用的 createQuestionEditor（複核分頁也在用），
+            // 在 modal 額外掛一列；saveEdit 送整個 editingObj，改這裡就會跟著送出
+            const srcRow = el('div', 'mt-3 flex items-center gap-2');
+            srcRow.appendChild(el('label', 'text-sm font-semibold text-slate-600 shrink-0', { textContent: '題目來源' }));
+            const srcSel = el('select', SELCLS + ' w-full');
+            for (const [value, text] of Object.entries(SOURCE_TYPE_LABEL)) {
+                srcSel.appendChild(el('option', null, { value, textContent: text }));
+            }
+            srcSel.value = editingObj.source_type || 'unknown';
+            srcSel.addEventListener('change', () => { editingObj.source_type = srcSel.value; });
+            srcRow.appendChild(srcSel);
+            body.appendChild(srcRow);
+
             document.getElementById('editModal').classList.remove('hidden');
         }
         function closeEditModal() {
@@ -1002,10 +1077,12 @@
             btn.disabled = true;
 
             try {
+                // 題源標記：整批沿用上傳區選的來源（0006）
+                const srcType = document.getElementById('pdf_source_type').value;
                 const response = await apiFetch('/api/batch-save-questions', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ questions: globalAnalyzedQuestions })
+                    body: JSON.stringify({ questions: globalAnalyzedQuestions.map(q => ({ ...q, source_type: srcType })) })
                 });
                 const resData = await response.json();
                 showToast(resData.message || (response.ok ? '題目已成功寫入資料庫' : '寫入失敗'), response.ok ? 'success' : 'error');
@@ -1032,7 +1109,8 @@
                 question_type: document.getElementById('question_type').value,
                 difficulty: parseInt(document.getElementById('difficulty').value),
                 question_text: document.getElementById('question_text').value,
-                answer_text: document.getElementById('answer_text').value
+                answer_text: document.getElementById('answer_text').value,
+                source_type: document.getElementById('source_type').value
             };
 
             try {
@@ -1129,6 +1207,9 @@
                 dry_run: true,
                 exclude_ids: draftExcluded
             };
+            // 題源限制（0006）：all 不帶 source_types ＝ 不過濾
+            const scope = document.getElementById('paper_source_scope').value;
+            if (SOURCE_SCOPE_MAP[scope]) data.source_types = SOURCE_SCOPE_MAP[scope];
             try {
                 const response = await apiFetch('/api/generate-paper', {
                     method: 'POST',
@@ -1193,7 +1274,8 @@
                 head.className = 'flex items-center justify-between gap-2';
                 const label = document.createElement('p');
                 label.className = 'text-[11px] font-bold text-slate-400';
-                label.textContent = `第 ${index + 1} 題 [${q.question_type}]（難度 ${'★'.repeat(q.difficulty || 0)}）　#${q.id}`;
+                label.textContent = `第 ${index + 1} 題 [${q.question_type}]（難度 ${'★'.repeat(q.difficulty || 0)}）　#${q.id}`
+                    + (q.source_type ? `　來源：${SOURCE_TYPE_LABEL[q.source_type] || q.source_type}` : '');
                 const swap = document.createElement('button');
                 swap.type = 'button';
                 swap.className = 'shrink-0 text-[11px] font-bold px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 cursor-pointer';
