@@ -56,6 +56,18 @@ describe('extractOptionCodes — 選項代號集合', () => {
         assert.deepEqual([...extractOptionCodes('(A) 甲　B. 乙')], ['A']);
     });
 
+    test('Q6 落地（2026-08-27）：「B、D」「B.D.」抽出完整集合，不再只抽到第一個', () => {
+        assert.deepEqual([...extractOptionCodes('B、D')].sort(), ['B', 'D']);
+        assert.deepEqual([...extractOptionCodes('B.D.')].sort(), ['B', 'D']);
+        assert.deepEqual([...extractOptionCodes('A、B、C')].sort(), ['A', 'B', 'C']);
+        // 帶敘述的標號型不受影響（stripped 不是全字母，裸字母層不適用）
+        assert.deepEqual([...extractOptionCodes('A. 互相垂直')], ['A']);
+        // compare 端到端：archive Q6 表格裡的兩個誤報案例
+        const model = { final_answer: 'B、D', answer_form: 'option' };
+        assert.equal(answerCompare({ question_type: '多選', claimed: '(B)(D)。理由略。', model }), 'agree');
+        assert.equal(answerCompare({ question_type: '多選', claimed: '(B)(D)。理由略。', model: { ...model, final_answer: 'B.D.' } }), 'agree');
+    });
+
     test('行首連續括號代號＝答案本體；解說裡逐一點評的其他代號不抽（2026-08-27 樣卷第 10 題）', () => {
         assert.deepEqual(
             [...extractOptionCodes('(A)(C)。(A) 速率不變正確；(B) 錯誤，速度方向會變；(D) 錯誤，合力不為零。')].sort(),

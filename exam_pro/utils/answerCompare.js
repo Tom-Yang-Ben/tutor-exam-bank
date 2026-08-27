@@ -59,13 +59,23 @@ function extractOptionCodes(text) {
     if (out.size) return out;
 
     for (const m of s.matchAll(LABELLED_OPTION_RE)) out.add(m[2].toUpperCase());
-    if (out.size) return out;
 
     // 只剩字母與標點時才敢把裸字母當代號
     const stripped = s.replace(/[\s.,、，；;：:。和或與]|答案|選|項|是|為/g, '');
-    if (stripped.length > 0 && [...stripped].every(ch => OPTION_LETTERS.includes(ch.toUpperCase()))) {
-        for (const ch of stripped) out.add(ch.toUpperCase());
+    const bareApplies = stripped.length > 0
+        && [...stripped].every(ch => OPTION_LETTERS.includes(ch.toUpperCase()));
+
+    // 裁決 Q6（docs/archive/questions2-wsD.md，2026-08-27 落地）：「B、D」「B.D.」會被
+    // 標號型匹配到「B、」就提早定案成 {B}，變成 disagree 誤報。整串去標點後全是 A–H
+    // 字母時，裸字母層讀到的才是完整集合——它是標號層結果的超集就改用它
+    //（超集條件保證只會補漏、不會翻案；「A. 互相垂直」這種帶敘述的不受影響）。
+    if (bareApplies) {
+        const bare = new Set([...stripped].map(ch => ch.toUpperCase()));
+        if ([...out].every(x => bare.has(x))) return bare;
     }
+    if (out.size) return out;
+
+    if (bareApplies) for (const ch of stripped) out.add(ch.toUpperCase());
     return out;
 }
 
