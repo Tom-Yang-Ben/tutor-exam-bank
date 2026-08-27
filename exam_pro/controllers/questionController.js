@@ -54,6 +54,12 @@ exports.getChapterWhitelist = (req, res) => {
     res.json(CHAPTERS);
 };
 
+// 分冊結構（科 → 冊 → 章節；config/chapters.js 的 VOLUMES 是唯一真相）。
+// 前端的「科目 → 冊 → 單元」三層選單用；/chapter-whitelist 的扁平形狀維持不動。
+exports.getChapterVolumes = (req, res) => {
+    res.json(require('../config/chapters').VOLUMES);
+};
+
 // 共用：驗證並正規化題目欄位（手動新增與編輯共用）
 // A-T12 起管線的 save 節點與 POST /api/review/:jqId/approve 也要跑同一道閘門，
 // 因此本函式已搬到 utils/questionValidation.js，這裡只留 require（行為完全不變）。
