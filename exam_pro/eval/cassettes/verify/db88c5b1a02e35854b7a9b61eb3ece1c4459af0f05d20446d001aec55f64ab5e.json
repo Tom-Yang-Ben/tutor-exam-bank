@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-08-27T09:17:25.114Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 84,
+        "sha256": "c6ec539240518b6ade756e8ee748363d91dbd285a1f6d6a0a9f18351761b6144"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "關於等速圓周運動，下列敘述何者正確？（複選） (A) 速率不變 (B) 速度不變 (C) 加速度指向圓心 (D) 合力為零",
+      "questionType": "多選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(A)(C)",
+      "answer_form": "option",
+      "steps_summary": "1. 速率不變：等速圓周運動的速率（純量）保持恆定，故 (A) 正確。\n2. 速度不變：由於運動方向隨時在改變，速度（向量）不斷變化，故 (B) 錯誤。\n3. 加速度指向圓心：等速圓周運動必具有向心加速度，方向始終指向圓心以改變速度方向，故 (C) 正確。\n4. 合力為零：物體需要指向圓心的向心力來維持圓周運動，合力不為零，故 (D) 錯誤。\n綜合以上，正確選項為 (A) 與 (C)。"
+    },
+    "usage": {
+      "tokenIn": 157,
+      "tokenOut": 172,
+      "tokenThinking": 328,
+      "tokenCached": 0
+    },
+    "latencyMs": 63414
+  }
+}
