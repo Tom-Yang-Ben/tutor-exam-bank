@@ -1746,3 +1746,10 @@ agent 管線、RAG 檢索、NLQ、變式、複核佇列、eval 與門檻——�
    主控 LLM 以受限 JSON 調度五個**只讀**工具；工具調用軌跡直接攤在 UI 上。
    設計細節與兩種編排哲學的對照見 `services/assistantService.js` 檔頭與
    `docs/rag-and-agents.md` §2.10。出卷／出變式仍由人按確認——助教沒有寫入權。
+3. **Word 匯出的原生 OMML 矩陣排版**（2026-08-27 擬定，使用者指示列入下一步清單）：
+   現況是 `utils/textFormatter.js` 的 `MATRIX_ENVS` 把矩陣類環境轉成**線性形式**
+   （欄空白、列分號）——內容一字不失、lint 放行、網頁端 MathJax 本就二維渲染，
+   只有 Word 匯出不是二維排版。升級路徑：`docx`（9.6.1）沒有矩陣元件（`m:m`），
+   要嘛手寫 OMML XML 經 `ImportedXmlComponent` 注入、要嘛等上游支援後升版。
+   觸發條件：老師實際拿匯出的 Word 卷給學生、且線性形式被反映不可讀時再做；
+   動工時 `formulaGolden` 需對矩陣案例補人工定案（開 Word 目視）。

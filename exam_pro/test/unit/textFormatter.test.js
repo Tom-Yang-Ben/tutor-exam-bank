@@ -220,3 +220,50 @@ describe('xmlSafeClean — 舊版相容的清理函式', () => {
         assert.equal(xmlSafeClean(String.raw`$\frac{1}{2}$`), String.raw`$\frac{1}{2}$`);
     });
 });
+
+// ═════════════════════ 6. 矩陣類環境（2026-08-27，job #5 修正） ═════════════════════
+// docx 沒有原生矩陣元件，MATRIX_ENVS 以線性形式（欄空白、列分號）呈現；
+// 契約是「內容一字不失、lint 不再判 error」，不是二維排版（那個在 roadmap §6.5 擱置區）。
+
+describe('矩陣類環境 — 線性呈現', () => {
+    test('begin{bmatrix} 產生方括號線性形式，內容與列分隔符都在', () => {
+        const c = parseLatexToMath(String.raw`\begin{bmatrix} 1 & 2 \\ 3 & 4 \end{bmatrix}`);
+        const t = flatText(c);
+        assert.ok(t.startsWith('[') && t.endsWith(']'), t);
+        for (const piece of ['1', '2', '3', '4', ';']) assert.ok(t.includes(piece), `缺 ${piece}：${t}`);
+    });
+
+    test('pmatrix 用圓括號、cases 用左大括號、matrix 不帶括號', () => {
+        assert.ok(flatText(parseLatexToMath(String.raw`\begin{pmatrix} a \\ b \end{pmatrix}`)).startsWith('('));
+        assert.ok(flatText(parseLatexToMath(String.raw`\begin{cases} x = 1 \\ y = 2 \end{cases}`)).startsWith('{'));
+        assert.ok(!/^[[({]/.test(flatText(parseLatexToMath(String.raw`\begin{matrix} a & b \end{matrix}`))));
+    });
+
+    test('舊式 plain TeX matrix{…}（含 cr 列分隔）同樣支援——考卷數位化常見', () => {
+        const t = flatText(parseLatexToMath(String.raw`\matrix{1 & 0 \cr 0 & 2}`));
+        assert.ok(t.includes(';') && t.includes('1') && t.includes('2'), t);
+    });
+
+    test('儲存格內容走完整解析（frac 仍是 m:f 直式分數）', () => {
+        const c = parseLatexToMath(String.raw`\begin{pmatrix} \frac{1}{2} & 0 \\ 0 & 1 \end{pmatrix}`);
+        function collect(node, out = []) {
+            if (node == null || typeof node !== 'object') return out;
+            if (Array.isArray(node)) { node.forEach(n => collect(n, out)); return out; }
+            if (typeof node.rootKey === 'string') out.push(node.rootKey);
+            if (node.root !== undefined) collect(node.root, out);
+            return out;
+        }
+        assert.ok(collect(c).includes('m:f'), JSON.stringify(collect(c)));
+    });
+
+    test('群組裡的 & 不會被當成欄分隔符', () => {
+        const t = flatText(parseLatexToMath(String.raw`\begin{matrix} {a & b} & c \end{matrix}`));
+        assert.ok(t.includes('a & b'), t);
+    });
+
+    test('同名巢狀環境正確配對 end', () => {
+        const c = parseLatexToMath(String.raw`\begin{bmatrix} \begin{bmatrix} 1 \end{bmatrix} \end{bmatrix}`);
+        assert.doesNotThrow(() => JSON.stringify(c));
+        assert.ok(flatText(c).includes('1'));
+    });
+});
