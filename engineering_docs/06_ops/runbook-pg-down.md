@@ -1,7 +1,8 @@
 # Runbook - PostgreSQL 不可用 (PG Down) - 家教專用數理題庫系統
 
-> **版本:** v1.0 | **更新:** 2026-08-25 | **狀態:** 活躍
+> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
+> 🛠 **2026-08-29 修訂**（PR #7 程式碼同步）：migrations 範圍 0001–0005 → 0001–0006（兩處）。修改處以〔修訂 2026-08-29〕行內標記。
 > **語域:** L3（工程）
 > **實例:** 每故障症狀一份（`runbook-<symptom>.md`）。本文件僅處理「PG 容器起不來、連線失敗、備份還原」；MySQL→PG 切換之夜的完整流程與回滾界線歸 `docs/archive/cutover-runbook.md`（切換已於 2026-08-21 完成並跳過回滾窗口，該文件保留為歷史紀錄）。
 
@@ -35,7 +36,7 @@
 1. Docker Desktop 未啟動（開機後未登入、或排程在鎖定畫面下跑）。
 2. `DATABASE_URL` 指錯埠：開發庫 5442（volume）、測試庫 5433（tmpfs）；5432 是本機原生 PG17。
 3. 容器異常退出或 volume 損毀（`docker compose logs` 可辨識）。
-4. migrations 未套用（0001–0005），啟動後查詢到不存在的資料表。
+4. migrations 未套用（0001–0006〔修訂 2026-08-29〕），啟動後查詢到不存在的資料表。
 
 ## 4. Diagnosis（診斷步驟）
 
@@ -62,7 +63,7 @@ node migrate.js status
 
 1. Docker 未起：啟動 Docker Desktop 後 `npm run db:up`（`docker compose up -d --wait`）。
 2. 埠指錯：改回 5442 後重啟 `npm start`；不要動本機 5432 的原生服務。
-3. 容器起得來但表缺：`npm run migrate` 補套用 0001–0005。
+3. 容器起得來但表缺：`npm run migrate` 補套用 0001–0006。〔修訂 2026-08-29〕
 4. volume 損毀＝需還原備份（先停 `npm start`，確認不再寫入）：
 
 ```bat

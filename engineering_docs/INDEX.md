@@ -1,12 +1,13 @@
 # 工程文件索引 (Engineering Docs Index) - 家教專用數理題庫系統
 
-> **版本:** v1.0 | **更新:** 2026-08-25 | **狀態:** 活躍
+> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
-> **定位:** 本資料夾是專案的正式工程文件**實例**；產出所依據的模板庫（`VibeCoding_Workflow_Templates/`，作業格式）**不在本 repo 版控內**，位於本機另一工作區（`Desktop/claude-Godzilla-z/`）。本檔回答「哪份文件在哪裡、回答什麼問題、ID 如何互相追溯」，不重述各文件內容。
+> **定位:** 本資料夾是專案的正式工程文件**實例**；產出所依據的模板庫 `VibeCoding_Workflow_Templates/` 現位於本 repo 根目錄，僅供本機參考（owner 2026-08-29 裁定不納入版控，已列入 `.gitignore`〔修訂 2026-08-29〕）。本檔回答「哪份文件在哪裡、回答什麼問題、ID 如何互相追溯」，不重述各文件內容。
+> 🛠 **2026-08-29 修訂**（PR #3–#7 程式碼同步）：模板庫位置描述更新、「九層分類」更正為六層資料夾分類、ID 骨幹擴充（DEC-010/011、FR-017/018）、engineering_tracker 定位補「相依與平行開發」章節。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 
 ## 1. 目錄結構
 
-資料夾編號沿用模板庫的九層分類（`01_requirements`–`06_ops`）；每資料夾內文件如下。
+資料夾編號沿用模板庫的六層資料夾分類（`01_requirements`–`06_ops`，對應 Word 指南第 15 章；「九層」是模板生態系 artifact-map 的文件分類，非資料夾編號〔修訂 2026-08-29〕）；每資料夾內文件如下。
 
 ### 01_requirements／需求
 
@@ -43,7 +44,7 @@
 | [adr/ADR-006](./03_architecture/adr/ADR-006-cassette-record-replay.md) | LLM cassette record/replay，CI 零金鑰零網路確定性重播 |
 | [adr/ADR-007](./03_architecture/adr/ADR-007-assistant-no-native-function-calling.md) | 助教不用原生 function calling，改受限 JSON 決策迴圈 |
 | [adr/ADR-008](./03_architecture/adr/ADR-008-app-layer-chinese-tokenizer.md) | 應用層中文分詞凍結為全案唯一分詞（utils/tokenize.js） |
-| [engineering_tracker.md](./03_architecture/engineering_tracker.md) | 工程追蹤簿：FR/NFR→模組路徑→ADR→驗證方式 |
+| [engineering_tracker.md](./03_architecture/engineering_tracker.md) | 工程追蹤簿：FR/NFR→模組路徑→ADR→驗證方式；§5 相依與平行開發（活的相依層）〔修訂 2026-08-29〕 |
 
 ### 04_design／技術設計
 
@@ -51,7 +52,7 @@
 | :--- | :--- |
 | [api_spec.md](./04_design/api_spec.md) | API 約定（認證、限流、錯誤格式）與端點總表 |
 | [openapi-exam-pro-v1.yaml](./04_design/openapi-exam-pro-v1.yaml) | API 契約 SSOT（OpenAPI） |
-| [db_design.md](./04_design/db_design.md) | 資料庫設計：資料表、索引、migrations（0001–0005）與 enum |
+| [db_design.md](./04_design/db_design.md) | 資料庫設計：資料表、索引、migrations（0001–0006〔修訂 2026-08-29〕）與 enum |
 | [lld.md](./04_design/lld.md) | 低階設計：jobs／job_questions 狀態機與助教決策迴圈 |
 
 ### 05_qa／測試與驗收
@@ -74,7 +75,7 @@
 
 ## 2. ID 骨幹（追溯鏈）
 
-- 主鏈：**DEC-001～009**（需求決策，brd／requirements_tracker）→ **FR-001～016／NFR-001～006**（prd／srs）→ **TC-\<FR 號\>-\<序\>**（qa_tracker）。
+- 主鏈：**DEC-001～011**（需求決策，brd／requirements_tracker；DEC-010 題源標記、DEC-011 附圖裁切為 2026-08-29 補登錄〔修訂 2026-08-29〕）→ **FR-001～018／NFR-001～006**（prd／srs；FR-017 source_type、FR-018 附圖裁切〔修訂 2026-08-29〕）→ **TC-\<FR 號\>-\<序\>**（qa_tracker）。
 - 衍生：驗收條件 **ACPT-\<FR 號\>-\<序\>**（prd §3）；場景 **SCN-\<序\>**——SCN-001～010 為 UAT 場景（uat_plan），SCN-011～016 為 AI 邊界場景（prd §3.2）。
 - 架構決策 **ADR-001～008** 由 DEC 引出，於 engineering_tracker 與各文件以穩定 ID 指涉；文件間追溯一律用 ID，不用標題文字。
 

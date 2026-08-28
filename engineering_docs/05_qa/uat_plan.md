@@ -1,10 +1,12 @@
 # 使用者驗收測試計畫 (UAT Plan) - 家教專用數理題庫系統
 
-> **版本:** v1.0 | **更新:** 2026-08-25 | **狀態:** 活躍
+> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L3
 > **實例:** 每驗收輪次一份；本份為 **Pilot 輪**，藍本為 `exam_pro/README.md`「交付前驗收清單（陌生人驗收）」A／B／C 三段。
 > 本文件回答「交付前如何以陌生人視角走完整套系統、各情境的可觀察通過準則、最近一次驗收結果」；不含測試案例明細（歸 [`test_plan.md`](./test_plan.md) 與 [`qa_tracker.md`](./qa_tracker.md)）、不含上線切換與回滾程序（歸 `../06_ops/`）。
+
+> 🛠 **2026-08-29 修訂**（PR #3–#7 程式碼同步）：SCN-003 migrations 0001–0005→0001–0006；SCN-005 單元測試現況 1,415→1,445；§4 Gate 證據數字 單元 1,415／整合 259→1,445／260。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 
 ## 目錄
 
@@ -34,14 +36,14 @@
 | :--- | :--- | :--- | :--- |
 | SCN-001 | `git clone` 至全新目錄後 `npm install` | 安裝成功無 `ERR!`（`multer@1.x` deprecated 警告為已知，不影響啟動） | NFR-003 |
 | SCN-002 | 由 `.env.example` 產生 `.env` 並填入金鑰 | `.env.example` 每個欄位皆有對應值；`.env` 不在版控中 | NFR-001 |
-| SCN-003 | `docker compose up -d --wait` 後 `npm run migrate` | `node migrate.js status` 顯示 migrations 皆已套用（0001–0005） | DEC-004、NFR-006 |
+| SCN-003 | `docker compose up -d --wait` 後 `npm run migrate` | `node migrate.js status` 顯示 migrations 皆已套用（0001–0006）〔修訂 2026-08-29〕 | DEC-004、NFR-006 |
 | SCN-004 | `node seed_questions.js --apply` 灌入示範題 | 顯示「新增 30 題」且分佈為 4 章各 7~8 題；任一章 < 5 題自動中止 | FR-007／ACPT-007-1 |
 
 ### 2.2 B 段——自動化把關（先讓機器擋掉低級錯誤）
 
 | ID | 業務情境 | 通過準則（可觀察） | 對應 FR／ACPT |
 | :--- | :--- | :--- | :--- |
-| SCN-005 | `npm test` 單元測試 | 全數通過（2026-08-24 現況 1,415 passed / 0 failed）；不連網、不連庫、零 secrets | NFR-003、NFR-004 |
+| SCN-005 | `npm test` 單元測試 | 全數通過（2026-08-28 現況 1,445 passed / 0 failed，commit f7a9c41）〔修訂 2026-08-29〕；不連網、不連庫、零 secrets | NFR-003、NFR-004 |
 | SCN-006 | 靜態檔完整性（截斷檔自檢） | `public/index.html` 結尾為 `</script></body></html>`；抽出 inline script 經 `node --check` 通過 | FR-007 |
 | SCN-007 | `npm start` 啟動伺服器 | 終端印出啟動成功訊息與 `http://localhost:3000` | NFR-001 |
 
@@ -83,7 +85,7 @@ Pilot 輪（2026-08-01）逐項結果：
 | 驗收中修復 | ① `index.html` 曾截斷於 `downloadWordFile()` 中段，已補回尾段（SCN-006 的由來）② 種子題庫原為 30 章各 1 題、預設抽 5 題必回 400，已改為 4 章各 7~8 題（SCN-004 的由來）③ 抽題洗牌原用 `sort(() => 0.5 - Math.random())`，已改為 Fisher-Yates 並以一萬次分佈測試釘住 |
 
 > **下一輪（PostgreSQL 16 換底＋階段 2–4 旗標功能納入範圍的完整重跑）：尚未執行。**
-> 現況如實記錄：Pilot 輪（2026-08-01）僅覆蓋 MySQL 時代的核心流程（FR-007／008／009），階段 1–4 的新功能（管線、RAG 三落點、學生管理、助教）**未經任何 UAT 輪次**；[requirements_tracker ③Gate](../01_requirements/requirements_tracker.md) 對階段 1–4 的核准證據為 CI（單元 1,415／整合 259／e2e 11）＋五個 eval suite＋階段試用，**不含 UAT 重跑**。Owner 於 2026-08-25 裁示**不執行**下一輪 UAT——Gate 證據基礎即維持上述 CI＋eval＋階段試用；若日後情況改變（例如對外交付前），依 §2 情境重跑並於本節登錄逐項結果。
+> 現況如實記錄：Pilot 輪（2026-08-01）僅覆蓋 MySQL 時代的核心流程（FR-007／008／009），階段 1–4 的新功能（管線、RAG 三落點、學生管理、助教）**未經任何 UAT 輪次**；[requirements_tracker ③Gate](../01_requirements/requirements_tracker.md) 對階段 1–4 的核准證據為 CI（單元 1,445／整合 260／e2e 11〔修訂 2026-08-29〕）＋五個 eval suite＋階段試用，**不含 UAT 重跑**。Owner 於 2026-08-25 裁示**不執行**下一輪 UAT——Gate 證據基礎即維持上述 CI＋eval＋階段試用；若日後情況改變（例如對外交付前），依 §2 情境重跑並於本節登錄逐項結果。
 
 ## 5. 追溯
 

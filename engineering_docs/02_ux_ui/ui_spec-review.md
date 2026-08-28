@@ -1,6 +1,7 @@
 # UI 規格書：複核佇列 (UI Spec – Review) - 家教專用數理題庫系統
 
-> **版本:** v1.0 | **更新:** 2026-08-25 | **狀態:** 活躍
+> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
+> 🛠 **2026-08-29 修訂**（PR #3/#6/#7 程式碼同步）：§3 欄位表新增「附圖預覽」列（管線裁圖經 `payloadToQuestion` 攤平為 `question_img`，review.js:344-347、展開時渲染 :579-591）；§5 狀態表新增「附圖載入失敗」列（:586-588）；§10 補 FR-018。無刪除內容。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 > **Owner:** Ben（楊本顥）
 > **語域:** L2
 > **實例:** 每頁面一份（`ui_spec-<page>.md`）
@@ -48,6 +49,7 @@
 | 原因列 | badge＋句子 | `review_reason`＋`payload` | 短標籤（八種原因對應文案與色調：amber／rose／indigo／slate）＋`reasonSentence` 生成的具體一句（如「驗證模型算出 X，拆題模型抄的是 Y」「與 #128 重複」） |
 | 題幹預覽 | text | `items[].stem_preview` | MathJax 渲染 |
 | 編輯區 | editor | `GET /api/review/:jq_id` 的 `payload` 經 `payloadToQuestion` 攤平（lint 修過的文字、classify 的章節優先） | 沿用主頁 `createQuestionEditor`；附重試紀錄一行（如 `verify×1`） |
+| 附圖預覽〔修訂 2026-08-29〕 | image | `payload.extract.figure_img`，經 `payloadToQuestion` 攤平為 `question_img`（review.js:344-347，`docs/figures.md`，FR-018） | 展開編輯區時有圖才渲染（review.js:579-591）：標題「AI 裁切的附圖（入庫時會一併存進題目）」＋圖片；用途兼複核裁切框（bbox）準度；approve 的 body 直接展開題目物件，`question_img` 隨之入庫 |
 
 八種 `review_reason` 與標籤：chapter_invalid 章節不在白名單／formula_unparsable 公式無法解析／answer_mismatch 答案對不上／duplicate 與既有題目重複／schema_invalid 欄位不合格／budget_exceeded 超出成本上限／provider_error 供應商錯誤／awaiting_approval 等待人工確認。
 
@@ -72,6 +74,7 @@
 | API 未上線 | 404 專屬文案（區分「未合入」與「壞掉」） | 「複核 API 尚未上線（GET /api/review 回 404）。可加上 ?mock=1 用手寫假資料預覽版面。」 |
 | 旗標關閉 | 上傳區維持舊 /analyze-pdf 流程；複核區只留一句說明 | 「FEATURE_PIPELINE 未開啟：上傳區仍走舊的 /analyze-pdf 流程，複核佇列不會有資料。」 |
 | Success | done 時 toast＋自動刷新佇列；failed 時 toast 引導看進度列 | 「拆題完成：已入庫 N 題，待複核 M 題。」「任務失敗，請看任務狀態列的說明。」 |
+| 附圖載入失敗〔修訂 2026-08-29〕 | 附圖區整塊替換為 rose 色錯誤文字（`img` error 事件，review.js:586-588）；不阻擋編輯與 approve/reject | 「附圖載入失敗（{路徑}）」 |
 
 ## 6. 互動規格 (Interaction Spec)
 
@@ -109,7 +112,7 @@
 
 | 項目 | ID |
 | :--- | :--- |
-| 對應需求 | FR-001（jobs 狀態機與輪詢）、FR-006（八種原因、approve/reject）；NFR-002（成本顯示）、NFR-004 |
+| 對應需求 | FR-001（jobs 狀態機與輪詢）、FR-006（八種原因、approve/reject）、FR-018（附圖裁切預覽，PR #3）〔修訂 2026-08-29〕；NFR-002（成本顯示）、NFR-004 |
 | 對應決策 | DEC-005、DEC-008 |
 | 對應 ADR | [ADR-003](../03_architecture/adr/ADR-003-code-orchestrated-agent-pipeline.md)、[ADR-005](../03_architecture/adr/ADR-005-server-side-whitelist-validation.md) |
 | 對應情境 | SCN-011（部分入庫：87 題入庫、3 題附原因進佇列）、SCN-012（重試預算用盡轉 needs_review），見 [prd §3.2](../01_requirements/prd.md) |

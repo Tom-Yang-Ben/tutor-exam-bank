@@ -1,9 +1,11 @@
 # API 設計規範 (API Specification) - 家教專用數理題庫系統
 
-> **版本:** v1.0 | **更新:** 2026-08-25 | **狀態:** 活躍 | **OpenAPI 定義:** [`openapi-exam-pro-v1.yaml`](./openapi-exam-pro-v1.yaml)
+> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍 | **OpenAPI 定義:** [`openapi-exam-pro-v1.yaml`](./openapi-exam-pro-v1.yaml)
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 單例。本文件維護 API 設計約定、認證／CORS／限流政策、錯誤語意、端點總表與狀態碼慣例；單一端點的請求／回應 schema 細節歸 [`openapi-exam-pro-v1.yaml`](./openapi-exam-pro-v1.yaml)，路由掛載的單一真相為 `exam_pro/routes/index.js` 與 `exam_pro/app.js`。
+
+> 🛠 **2026-08-29 修訂**（PR #6/#7 程式碼同步）：§2.1 `GET /api/questions` 篩選參數補 `source_type`；§5.1 端點總表補 `GET /api/chapter-volumes`（三層選單資料源）；`POST /api/generate-paper` 說明補 `source_types` 題源過濾；§7 上游 FR 範圍延伸至 FR-017。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 
 ## 目錄
 
@@ -32,7 +34,7 @@
 
 ### 2.1 分頁與篩選
 
-`GET /api/questions` 與 `GET /api/jobs/:id/questions` 支援 `page`／`limit` 分頁（頁碼式，非游標式）；前者另支援 `subject`／`chapter`／`question_type`／`q`（關鍵字）篩選。`GET /api/review` 僅提供 `reason` 篩選與 `limit` 上限（預設一次最多 50 筆，無頁碼）。其餘列表端點（`/students`、`/students/:id/papers`）回傳全量或依 controller 內建條件，無分頁參數。
+`GET /api/questions` 與 `GET /api/jobs/:id/questions` 支援 `page`／`limit` 分頁（頁碼式，非游標式）；前者另支援 `subject`／`chapter`／`question_type`／`q`（關鍵字）／`source_type`（題源標記單值，FR-017；非法值靜默忽略不套用，`questionController.js`）篩選〔修訂 2026-08-29〕。`GET /api/review` 僅提供 `reason` 篩選與 `limit` 上限（預設一次最多 50 筆，無頁碼）。其餘列表端點（`/students`、`/students/:id/papers`）回傳全量或依 controller 內建條件，無分頁參數。
 
 ### 2.2 旗標控制掛載
 
@@ -101,10 +103,11 @@ app.use((err, req, res, next) => {
 | `POST /api/questions`、`PUT /api/questions/:id`、`DELETE /api/questions/:id` | FR-007 | 題目 CRUD；出過的題刪除改封存 `archived:true` |
 | `POST /api/batch-save-questions` | FR-007 | 批次入庫（白名單硬驗證、部分入庫；`?strict=1` 舊行為） |
 | `GET /api/chapters`、`GET /api/chapter-whitelist` | FR-002 | 實際存在章節／完整白名單 |
+| `GET /api/chapter-volumes` | FR-002、FR-007 | 分冊結構（科目→冊→單元），前端三層章節選單資料源；唯一真相 `config/chapters.js` 的 VOLUMES〔修訂 2026-08-29〕 |
 | `GET /api/students` | FR-014 | 學生清單（裁決 S4-2：組卷下拉恆常需要，不吃旗標） |
 | `POST /api/students`、`PATCH /api/students/:id`、`DELETE /api/students/:id` | FR-014 | 建立（唯一新學生入口，裁決 S4-1）／改名／刪除 |
 | `POST /api/students/:id/merge` | FR-014 | 學生併名（衝突題保留目標側批改） |
-| `POST /api/generate-paper` | FR-008 | 組卷草稿（`dry_run` 預覽、`exclude_ids` 換題；attempts 排除已作答） |
+| `POST /api/generate-paper` | FR-008 | 組卷草稿（`dry_run` 預覽、`exclude_ids` 換題；attempts 排除已作答；`source_types` 題源過濾——空陣列或未帶＝不限制、含非法值 400，FR-017〔修訂 2026-08-29〕） |
 | `POST /api/confirm-paper` | FR-008 | 確認出卷（同一交易建卷＋attempts；預覽過期回 409） |
 | `DELETE /api/papers/:id` | FR-008 | 刪卷連 attempts，題目回候選池（裁決 S4-3） |
 | `POST /api/analyze-pdf` | FR-001 | 舊版單呼叫拆題（保留）；限流 10/min、PDF 上限 15 MB |
@@ -144,7 +147,7 @@ app.use((err, req, res, next) => {
 | 項目 | ID／文件 |
 | :--- | :--- |
 | 上游（需求決策） | DEC-008（AI 成本受控→限流政策）、DEC-009（僅 LLM 呼叫對外→本機部署前提） |
-| 上游（功能需求） | FR-001～FR-016（§5 端點總表逐條對應） |
+| 上游（功能需求） | FR-001～FR-017（§5 端點總表逐條對應；FR-017 題源標記由本輪補入〔修訂 2026-08-29〕） |
 | 上游（非功能需求） | NFR-001（認證／CORS／production 不回細節）、NFR-002（各端點限流）、NFR-006（confirm-paper 同交易） |
 | 契約 SSOT | [`openapi-exam-pro-v1.yaml`](./openapi-exam-pro-v1.yaml)；路由掛載真相 `exam_pro/routes/index.js`、`exam_pro/app.js` |
 | 下游 | `../02_ux_ui/ui_spec-*.md`（各頁資料需求）、`../05_qa/test_plan.md`（整合案例 TC-*）、`../06_ops/runbook-llm-cost-quota.md`（429／成本上限處置） |

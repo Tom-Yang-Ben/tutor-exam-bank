@@ -1,7 +1,8 @@
 # ADR-006: LLM 錄放帶 record/replay (Cassette Record/Replay) - 家教專用數理題庫系統
 
-> **版本:** v1.0 | **更新:** 2026-08-25 | **狀態:** 活躍
+> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥） | **決策狀態:** 已接受
+> 🛠 **2026-08-29 修訂**（PR #3–#7 程式碼同步）：§4 CI 證據 commit 更新（0ff47b4→f8f6574）、整合測試數更新（259→260）。修改處以〔修訂 2026-08-29〕行內標記。
 > **語域:** L3
 > **實例:** 每決策一份（`ADR-NNN-<slug>.md`）
 > **定位:** 本文件回答「CI 如何在零金鑰零網路下確定性重播 LLM 呼叫、鍵如何設計、miss 如何處置」；LLM 層操作細節歸 `docs/llm.md`，門檻政策歸 qa 追蹤簿。
@@ -53,7 +54,7 @@
 
 ## 4. 後果
 
-- **正面**: CI 全綠 @ 0ff47b4 且全程零金鑰零網路；整合 259 項與五個 eval suite 可確定性重播；成本統計（`tokenOut + tokenThinking`）隨 cassette 保存。
+- **正面**: CI 全綠 @ f8f6574 且全程零金鑰零網路；整合 260 項與五個 eval suite 可確定性重播（f7a9c41 實測〔修訂 2026-08-29〕）；成本統計（`tokenOut + tokenThinking`）隨 cassette 保存。
 - **負面**: 換模型或改模板須在本機重錄全部相關 cassette（刻意設計）；`JSON.stringify` 依插入順序序列化，agent 須以固定鍵順序組 `cacheKeyParts`。
 - **影響範圍**: `exam_pro/services/llm/`、`exam_pro/eval/cassettes/`、`exam_pro/scripts/record_cassettes.js`、CI workflow。
 - **重新評估觸發**: 接入第二家供應商（A-T17 預留）或 embedding 模型升級需重灌向量欄位時。

@@ -1,10 +1,12 @@
 # 部署與運維指南 (Deployment & Operations) - 家教專用數理題庫系統
 
-> **版本:** v1.0 | **更新:** 2026-08-25 | **狀態:** 活躍
+> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 單例（整個系統一份）
 > **定位:** 怎麼部署、怎麼啟動、怎麼備份與回滾的單一來源；故障處置歸各 runbook（同目錄），部署拓撲的架構視圖歸 sad §7。
+
+> 🛠 **2026-08-29 修訂**（PR #3–#7 程式碼同步）：§2 CI 測試數 單元 1,415→1,445、整合 259→260；§3.1 與 §4 migrations 範圍 0001–0005→0001–0006（末支 `0006_source_type`）。本檔無 0ff47b4 字樣，無需更正 CI commit。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 
 ---
 
@@ -39,8 +41,8 @@
 
 | 階段 | 步驟 | 觸發 |
 | :--- | :--- | :--- |
-| 單元層 | `npm test`（1,415 項）＋ `npm run check:html`，Node 22.x／24.x 矩陣 | 每次 push 與 PR（GitHub Actions） |
-| 整合層 | 起 `pgvector/pgvector:pg16` service → 整合 259 項＋e2e 11 項＋五個 eval suite（ratchet 門檻） | 同上，`integration` job |
+| 單元層 | `npm test`（1,445 項）＋ `npm run check:html`，Node 22.x／24.x 矩陣〔修訂 2026-08-29〕 | 每次 push 與 PR（GitHub Actions） |
+| 整合層 | 起 `pgvector/pgvector:pg16` service → 整合 260 項＋e2e 11 項＋五個 eval suite（ratchet 門檻）〔修訂 2026-08-29〕 | 同上，`integration` job |
 | 部署 | 無自動部署。本機依 §3 啟動程序手動升級 | 手動 |
 
 CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`EMBED_MODE=fixture`；eval 低於 ratchet 門檻或 main 上 replay miss 即轉紅（NFR-004）。
@@ -52,7 +54,7 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 | # | 指令 | 說明 |
 | :--- | :--- | :--- |
 | 1 | `npm run db:up`（＝`docker compose up -d --wait`；或雙擊 `啟動資料庫.bat`） | 拉起 5442／5433 兩容器並等 healthcheck |
-| 2 | `npm run migrate` | 對 `DATABASE_URL` 套用 `migrations/0001`–`0005`；只前進不 down，重跑為 no-op |
+| 2 | `npm run migrate` | 對 `DATABASE_URL` 套用 `migrations/0001`–`0006`〔修訂 2026-08-29〕；只前進不 down，重跑為 no-op |
 | 3 | `npm start`（開發改 `npm run dev`） | 啟動後開 `http://localhost:3000` |
 
 輔助指令：`node migrate.js status`（逐支套用狀態）、`npm run migrate:test`（測試庫）、`npm run db:down`（停止；加 `-v` 才刪 `pgdata`）、`node seed_questions.js --apply`（空庫灌 30 題示範題）。
@@ -96,7 +98,7 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 | 策略 | 本專案做法 |
 | :--- | :--- |
 | 發布 | 單行程原地重啟（Ctrl+C 停 `npm start` → `git pull`／checkout → 重啟）；無 Blue-Green／Rolling 需求 |
-| DB migration | 只增不改（NFR-006；`0001_init`→`0005_text_hash_unique`），additive 先行，與 expand-contract 的 expand 段等價 |
+| DB migration | 只增不改（NFR-006；`0001_init`→`0006_source_type`〔修訂 2026-08-29〕），additive 先行，與 expand-contract 的 expand 段等價 |
 | 風險控制 | `FEATURE_*` 旗標預設全關，逐一開啟並觀察，取代 canary（階段 2 起的新功能均走旗標掛載） |
 
 ### 4.1 對外部署前置條件

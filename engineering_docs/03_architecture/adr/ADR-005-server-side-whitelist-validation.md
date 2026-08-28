@@ -1,10 +1,12 @@
 # ADR-005: 伺服器端白名單驗證 (Server-Side Whitelist Validation) - 家教專用數理題庫系統
 
-> **版本:** v1.0 | **更新:** 2026-08-25 | **狀態:** 活躍
+> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥） | **決策狀態:** 已接受
 > **語域:** L3
 > **實例:** 每決策一份（`ADR-NNN-<slug>.md`）
 > **定位:** 本文件回答「LLM 輸出為何不能直接入庫、防線如何分層」；管線整體結構歸 [ADR-003](./ADR-003-code-orchestrated-agent-pipeline.md)，系統全貌歸 sad。
+
+> 🛠 **2026-08-29 修訂**（PR #3–#7 程式碼同步）：§2 選項三 單元測試數 1,415→1,445（來源：commit f7a9c41 訊息實測）。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 
 ## 目錄
 
@@ -39,7 +41,7 @@
 
 ### 選項三: 兩層防線＋伺服器端硬驗證（軟約束 + 硬約束）
 - **描述**: prompt／schema 為軟約束（「請求」）；`exam_pro/config/chapters.js` 白名單、`agents/schemas/*.json` 的 ajv 驗證與 `questionController.batchSaveQuestions` 逐題驗證為硬約束（入庫的門）。
-- **優點**: 行為由一般程式碼定義並被 1,415 項單元測試固定；白名單單一真相；`schemaFallback` 情境下閘門不放水。
+- **優點**: 行為由一般程式碼定義並被 1,445 項單元測試固定（commit f7a9c41 訊息實測）〔修訂 2026-08-29〕；白名單單一真相；`schemaFallback` 情境下閘門不放水。
 - **缺點**: 需維護 schema 與驗證碼；白名單變更牽動 cassette 鍵（見 [ADR-006](./ADR-006-cassette-record-replay.md)）。
 - **成本/複雜度**: 中
 

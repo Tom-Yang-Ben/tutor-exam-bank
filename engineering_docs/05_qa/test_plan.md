@@ -1,10 +1,12 @@
 # 測試計畫與測試案例 (Test Plan / Test Cases) - 家教專用數理題庫系統
 
-> **版本:** v1.0 | **更新:** 2026-08-25 | **狀態:** 活躍
+> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 單例（策略一份；案例狀態與執行證據維護在 [`qa_tracker.md`](./qa_tracker.md)）
 > **定位:** 本文件回答「測什麼、分幾層、門檻多少、CI 怎麼守」；不含個別案例的執行紀錄（歸 `qa_tracker.md` ②執行證據），也不含 eval 指標的沿革裁決（歸 `docs/interfaces*.md`）。
+
+> 🛠 **2026-08-29 修訂**（PR #3–#7 程式碼同步）：§1 測試層級數 單元 1,415→1,445、整合 259→260；§1 進入條件 migrations 0001–0005→0001–0006；§4 CI 全綠 commit 0ff47b4→f8f6574；§7 執行證據數字同步。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 
 ## 目錄
 
@@ -22,9 +24,9 @@
 | :--- | :--- |
 | **範圍內** | FR-001～FR-016 全數；NFR-001（認證／CORS／SSRF）、NFR-003（純函式合約與 replay）、NFR-004（eval 門檻）、NFR-005（租約與重試）、NFR-006（同交易一致性） |
 | **範圍外** | 真實 Gemini API 的線上品質（CI 零金鑰零網路，NFR-003）；私有題庫上的檢索表現（`eval/private/` 不進版控，由開發者本機另行記錄）；瀏覽器相容性矩陣（單人使用，僅開發用瀏覽器驗證） |
-| **測試層級** | 三層：單元 **1,415** 項（`test/unit/`，node:test，無 I/O）／整合 **259** 項（`test/integration/`，對 `_test` 後綴 PG）／e2e **11** 項（`test/e2e/`，經 HTTP 走真 runner）；另有五個 eval suite（§2） |
+| **測試層級** | 三層：單元 **1,445** 項（`test/unit/`，node:test，無 I/O）／整合 **260** 項（`test/integration/`，對 `_test` 後綴 PG）／e2e **11** 項（`test/e2e/`，經 HTTP 走真 runner）；另有五個 eval suite（§2）〔修訂 2026-08-29〕 |
 | **環境** | 測試 PG：`pgvector/pgvector:pg16`，本機 5433（tmpfs）、CI service container 5432；庫名必須以 `_test` 結尾，否則 `migrate.js` 與整合測試拒絕執行；`LLM_MODE=replay`、`EMBED_MODE=fixture` |
-| **進入條件** | `npm ci` 成功、`npm run migrate:test` 套用 0001–0005、`eval/cassettes/` 與 fixture 就緒 |
+| **進入條件** | `npm ci` 成功、`npm run migrate:test` 套用 0001–0006、`eval/cassettes/` 與 fixture 就緒〔修訂 2026-08-29〕 |
 | **退出條件** | 三層全綠、五個 suite 均不低於 `eval/thresholds.json` 門檻、main 上零 replay miss |
 
 分層原則：單元層不連資料庫、不呼叫 LLM、不需任何 secrets（CI unit job 刻意不設 `TEST_DATABASE_URL`，防止測試無聲越層）；整合層以 `--test-concurrency=1` 序列執行（各檔共用測試庫並 `TRUNCATE`）；e2e 量「接線有沒有斷」——與 `eval:pipeline` 不重疊，後者量分數且不經 HTTP、不碰 `jobs`／`job_questions`。
@@ -55,7 +57,7 @@
 
 ## 4. CI 流程
 
-來源：[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)，觸發於 push（main）與所有 pull request；現況 CI 全綠 @ 0ff47b4。
+來源：[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)，觸發於 push（main）與所有 pull request；現況 CI 全綠 @ f8f6574（PR #7 merge）〔修訂 2026-08-29〕。
 
 | Job | 矩陣／服務 | 步驟 | 防呆設計 |
 | :--- | :--- | :--- | :--- |
@@ -100,5 +102,5 @@
 | 項目 | ID |
 | :--- | :--- |
 | 上游 | FR-001～FR-016、NFR-001／003／004／005／006；DEC-002、DEC-003、DEC-008；ADR-005、ADR-006 |
-| 案例與證據 | TC-* 維護於 [`qa_tracker.md`](./qa_tracker.md) ①測試設計；執行證據（1,415／259／11、五個 suite、CI badge）於 ②執行證據 |
+| 案例與證據 | TC-* 維護於 [`qa_tracker.md`](./qa_tracker.md) ①測試設計；執行證據（1,445／260／11、五個 suite、CI badge）於 ②執行證據〔修訂 2026-08-29〕 |
 | 下游 | [`../06_ops/runbook-eval-threshold-fail.md`](../06_ops/runbook-eval-threshold-fail.md)、`03_architecture/engineering_tracker.md` 驗證方式欄 |
