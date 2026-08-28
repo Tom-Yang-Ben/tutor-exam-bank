@@ -1,10 +1,12 @@
 # 測試追蹤簿 (QA Tracker) - 家教專用數理題庫系統
 
-> **版本:** v1.0 | **更新:** 2026-08-25 | **狀態:** 活躍
+> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 單例（本檔為發布快照；`qa_tracker.xlsx` 由本檔轉出，人工維護欄位以本檔為準）
 > **定位:** 本文件回答「每條 FR 由哪些測試案例覆蓋、執行證據與 eval 門檻為何」；需求與 Gate 見 [requirements_tracker](../01_requirements/requirements_tracker.md)，模組落點見 [engineering_tracker](../03_architecture/engineering_tracker.md)。
+
+> 🛠 **2026-08-29 修訂**（PR #3–#7 程式碼同步）：§1 新增 TC-009-3（矩陣原生 OMML 二維排版）、TC-017-1（source_type 端到端）、TC-018-1（bbox 附圖裁切）；§2.1 測試數 單元 1,415→1,445、整合 259→260；CI 全綠 commit 0ff47b4→f8f6574（§1 導語與 §2.1 各一處）。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 
 ## 目錄
 
@@ -14,7 +16,7 @@
 
 ## 1. 測試案例骨架
 
-TC 依 FR 分組（`TC-<FR 號>-<序>`）；層級：U=單元、I=整合、E=e2e、EV=eval。全數通過（CI 全綠 @ 0ff47b4）。
+TC 依 FR 分組（`TC-<FR 號>-<序>`）；層級：U=單元、I=整合、E=e2e、EV=eval。全數通過（CI 全綠 @ f8f6574〔修訂 2026-08-29〕）。
 
 | TC | 對應 FR | 驗證重點 | 層級 | 狀態 |
 |---|---|---|---|---|
@@ -33,6 +35,7 @@ TC 依 FR 分組（`TC-<FR 號>-<序>`）；層級：U=單元、I=整合、E=e2e
 | TC-008-4 | FR-008 | 抽題隨機性突變測試（Fisher-Yates；固定種子一萬次卡方 0.5–4.0，改回舊寫法 5 項轉紅） | U | 通過 |
 | TC-009-1 | FR-009 | LaTeX→OOXML tokenizer＋遞迴下降；未知指令降級為純文字 | U | 通過 |
 | TC-009-2 | FR-009 | 組卷→Word 匯出全路徑，docx 原生 Math 物件 | E | 通過 |
+| TC-009-3 | FR-009 | 矩陣類環境原生 OMML 二維排版：bmatrix／pmatrix／matrix／plain TeX `\matrix{}`（含 `\cr`）→ `m:d`＞`m:m`＞`m:mr`（`exam_pro/test/unit/textFormatter.test.js:237-285`）；矩陣類語法不再擋入庫（`exam_pro/test/unit/formulaGate.test.js:192-197`）〔修訂 2026-08-29〕 | U | 通過 |
 | TC-010-1 | FR-010 | hybrid（RRF k=60）檢索品質對 golden 40 筆 | EV | 通過 |
 | TC-011-1 | FR-011 | 檢索優先 ≥0.80、池不足才生成、偏題閘門 ≥0.90 | U＋EV | 通過 |
 | TC-012-1 | FR-012 | 規則解析（章節／難度／學生）、四級回退、解析結果回寫 | U＋EV | 通過 |
@@ -40,6 +43,8 @@ TC 依 FR 分組（`TC-<FR 號>-<序>`）；層級：U=單元、I=整合、E=e2e
 | TC-014-1 | FR-014 | 學生建立／改名／合併／刪除；merge 併名 | I | 通過 |
 | TC-015-1 | FR-015 | 批改讀取與 results 寫回 | I | 通過 |
 | TC-016-1 | FR-016 | 受限 JSON 決策迴圈、args_json 解析驗證、工具唯讀、步數上限截斷 | U＋I | 通過 |
+| TC-017-1 | FR-017 | source_type 端到端：建題→列表篩選→組卷 `source_types` 過濾（非法值 400、空陣列不限制）→改標（`exam_pro/test/integration/controllers.pg.test.js:121-174`）；SOURCE_TYPES 五值凍結且與 migrations/0006 CHECK 一致（`exam_pro/test/unit/chapterVolumes.test.js:51-66`）〔修訂 2026-08-29〕 | U＋I | 通過 |
+| TC-018-1 | FR-018 | bbox 附圖裁切：boxToPixels 座標換算、預設邊距 2.5%、退化框回 null（`exam_pro/test/unit/figureService.test.js:12-40`）；figure_page 絕對頁碼換算、figure_page＋figure_box 防呆、附圖描述歸位 figure_desc（`exam_pro/test/unit/agentExtract.test.js:184-253`）〔修訂 2026-08-29〕 | U | 通過 |
 
 ## 2. 執行證據
 
@@ -47,11 +52,11 @@ TC 依 FR 分組（`TC-<FR 號>-<序>`）；層級：U=單元、I=整合、E=e2e
 
 | 層級 | 數量 | 位置 | 執行條件 |
 |---|---:|---|---|
-| 單元 | 1,415 | exam_pro/test/unit/ | 不連網、不連庫、零 secrets；`npm test` 可完整重現 |
-| 整合 | 259 | exam_pro/test/integration/ | tmpfs 測試庫（5433，`_test` 後綴強制） |
+| 單元 | 1,445 | exam_pro/test/unit/ | 不連網、不連庫、零 secrets；`npm test` 可完整重現〔修訂 2026-08-29〕 |
+| 整合 | 260 | exam_pro/test/integration/ | tmpfs 測試庫（5433，`_test` 後綴強制）〔修訂 2026-08-29〕 |
 | e2e | 11 | exam_pro/test/e2e/ | HTTP 全路徑（上傳→部分入庫；組卷→Word 公式） |
 
-CI（`.github/workflows/ci.yml`）：unit（Node 22/24 矩陣）＋integration（pgvector service→migrations→整合→e2e→五個 eval suite）；全程零金鑰、零網路、零成本（cassette replay；replay miss 於 main 視為錯誤）。CI badge 見 repo 根 `README.md`；全綠 @ 0ff47b4。
+CI（`.github/workflows/ci.yml`）：unit（Node 22/24 矩陣）＋integration（pgvector service→migrations→整合→e2e→五個 eval suite）；全程零金鑰、零網路、零成本（cassette replay；replay miss 於 main 視為錯誤）。CI badge 見 repo 根 `README.md`；全綠 @ f8f6574（PR #7 merge）〔修訂 2026-08-29〕。
 
 ### 2.2 eval 五個 suite（golden＋ratchet：首測 −0.03、只升不降）
 

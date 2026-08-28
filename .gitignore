@@ -51,3 +51,6 @@ exam_pro/backups/
 # app.js 的一小時清理）；拆題完成後 worker 會刪檔並把 jobs.pdf_path 清成 NULL。
 data/
 exam_pro/data/
+
+# ───────── 模板生態系源頭資產（僅本機參考，owner 裁定不納入版控，2026-08-29）─────────
+VibeCoding_Workflow_Templates/

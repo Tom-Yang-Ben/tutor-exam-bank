@@ -47,7 +47,7 @@
 
 | 功能 | 問題（引行號／章節） | 決策 | 數字（eval 輸出，含日期與模型 ID） |
 |---|---|---|---|
-| **LaTeX → Word 公式** | `utils/textFormatter.js:265-266、273-281` 對未知指令與解析失敗**靜默降級成純文字**，症狀只在 Word 打開時看得到（規劃 §3.2） | 手寫 LaTeX→OOXML 解析器 + 表格式單元測試；另有 strict 版本當閘門，降級改成可觀測 | `npm test` 的 `textFormatter` 40 項全綠；`test/e2e/paperWord.e2e.test.js` 斷言匯出的 `.docx` 真的含 `<m:oMath>`／`<m:f>`／`<m:sSup>`／`<m:rad>`（2026-08-23，不需模型） |
+| **LaTeX → Word 公式** | `utils/textFormatter.js:265-266、273-281` 對未知指令與解析失敗**靜默降級成純文字**，症狀只在 Word 打開時看得到（規劃 §3.2） | 手寫 LaTeX→OOXML 解析器 + 表格式單元測試；另有 strict 版本當閘門，降級改成可觀測；矩陣類環境（10 種）自 2026-08-27 起輸出原生 OMML 二維排版（`m:d`>`m:m`>`m:mr`>`m:e`） | `npm test` 的 `textFormatter` 40 項全綠；`test/e2e/paperWord.e2e.test.js` 斷言匯出的 `.docx` 真的含 `<m:oMath>`／`<m:f>`／`<m:sSup>`／`<m:rad>`（2026-08-23，不需模型） |
 | **抽題隨機性** | 舊寫法 `sort(() => 0.5 - Math.random())` 分佈不均，而**隨機性錯了不會噴錯**，只讓某些題長期抽不到 | Fisher-Yates + 固定種子 PRNG 的一萬次卡方分佈測試；並測「檢定本身的鑑別力」 | 5 元素 10,000 次的位置卡方 0.5~4.0（臨界值 18.467）；改回舊寫法會有 5 項轉紅（`test/unit/shuffle.test.js`，2026-08-22） |
 | **hybrid 檢索／`/similar`** | 組卷與找相似只有 `WHERE subject=? AND chapter=?` 加 `LIKE '%q%'`（`examController.js:30`、`questionController.js:108`）；「換個數字的同一題」找不到 | pgvector 768 維 + 應用層 jieba 分詞的全文，RRF 融合；同一段 SQL（`queries/hybrid.js`）服務 API 與 eval | Recall@5：`LIKE` 0.875 → hybrid **1.000**；MRR 純向量 0.988、hybrid 0.824（2026-08-22，`gemini-embedding-001`／768 維，commit `a02f7e4`，`npm run eval -- --suite retrieval`，對 `postgres_test`） |
 | **拆題管線與硬閘門** | `services/aiService.js:4-49` 是一個巨型 prompt、無 schema、`JSON.parse` 完就回；一題壞掉整批 400（`questionController.js:77-79`） | `jobs` 狀態機 + 五個 sub-agent + 六道閘門，逐題推進、逐題重試、部分入庫 | saved_rate **0.90**、gate_pass_rate **1.00**、answer_agree_rate **0.90**（golden 10 題；2026-08-24 replay，拆題 `gemini-3.5-flash`／驗證 `gemini-3.1-pro-preview`，commit `f4a15ca`，`npm run eval:pipeline`；門檻 0.87／0.97／0.87，只升不降） |
@@ -128,18 +128,18 @@ exam_pro/
 ├─ agents/ (+schemas/)                 # 六個 sub-agent（純函式合約）＋輸出 JSON Schema
 ├─ workers/jobRunner.js                # 編排：SKIP LOCKED 認領、租約、重試預算、節流、成本上限
 ├─ pipeline/stateMachine.js            # jobs / job_questions 的合法狀態轉移
-├─ services/                           # llm/(gemini|fake|throttle)、retrieval、nlq、variant、
-│                                      # weakness、assistant、embed、word、ai(舊版對照)
+├─ services/                           # llm/(gemini|fake|throttle)、retrieval、nlq、variant、weakness、
+│                                      # assistant、embed、word、figure(附圖裁切，詳 docs/figures.md)、ai(舊版對照)
 ├─ controllers/                        # question / exam(草稿→確認) / studentAdmin / student /
 │                                      # paper(批改) / review(複核) / job / assistant / word / ai
 ├─ middleware/  queries/hybrid.js      # 認證與限流；hybrid 檢索 SQL（API 與 eval 共用）
 ├─ utils/                              # textFormatter(LaTeX→OOXML)、tokenize(全案唯一分詞)、
 │                                      # embedText、shuffle、pickOnePerFamily、normalizeStem、
 │                                      # answerCompare、variantTextGate、nlqHeuristics、formula*
-├─ public/index.html + public/js/      # 單頁殼 + 五個 ES module 分頁（review/students/nlq/variants/assistant）
-├─ migrations/ + migrate.js            # 只增不改的 SQL（0001~0005）＋執行器
+├─ public/index.html + public/js/      # 單頁殼（5 個 hash 路由視圖）+ 五個 ES module（review/students/nlq/variants/assistant）
+├─ migrations/ + migrate.js            # 只增不改的 SQL（0001~0006）＋執行器
 ├─ eval/                               # run.js（五個 suite）、lib/、golden/、cassettes/、fixtures/、thresholds.json
-├─ test/  unit(1,415) · integration(259) · e2e(11)
+├─ test/  unit(1,445) · integration(260) · e2e(11)
 ├─ scripts/ + *.bat                    # 備份、向量回填、成本報表、公式健檢（Windows 雙擊）
 └─ docker-compose.yml                  # PG16+pgvector：5442 開發（volume）／5433 測試（tmpfs）
 ```
@@ -401,7 +401,7 @@ npm run eval:baseline                                                           
 
 | # | 步驟 | 通過標準 |
 |---|------|----------|
-| 6 | `npm test` | **全數通過（2026-08-24 現況：1,415 passed / 0 failed）**；不連網、不連庫、零 secrets。CI 亦會在 push 後自動跑（badge 見本頁最上方）|
+| 6 | `npm test` | **全數通過（2026-08-28 現況：1,445 passed / 0 failed）**；不連網、不連庫、零 secrets。CI 亦會在 push 後自動跑（badge 見本頁最上方）|
 | 7 | 靜態檔完整性：確認 `public/index.html` 結尾為 `</script></body></html>`，且 `<div>`、`<script>` 開闔數相等 | 檔案未被截斷（詳見下方「截斷檔自檢」）|
 | 8 | `npm start` | 終端印出 `🚀 家教題庫後端系統已成功安全啟動：http://localhost:3000` |
 

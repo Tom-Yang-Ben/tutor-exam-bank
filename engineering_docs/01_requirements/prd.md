@@ -1,10 +1,12 @@
 # 產品需求文件 (PRD) - 家教專用數理題庫系統
 
-> **版本:** v1.0 | **更新:** 2026-08-25 | **狀態:** 活躍
+> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L2（功能需求與允收標準；業務決策細節歸 requirements_tracker）
 > **實例:** 單例
-> **定位:** 本文件回答「系統提供哪些功能（FR-001～016）、各功能以何種可觀察行為驗收（ACPT）、AI 不確定性的邊界場景（SCN）」；需求決策沿革歸 [`requirements_tracker.md`](./requirements_tracker.md)，技術實作與 ADR 歸 `../03_architecture/`。
+> **定位:** 本文件回答「系統提供哪些功能（FR-001～018）、各功能以何種可觀察行為驗收（ACPT）、AI 不確定性的邊界場景（SCN）」；需求決策沿革歸 [`requirements_tracker.md`](./requirements_tracker.md)，技術實作與 ADR 歸 `../03_architecture/`。〔修訂 2026-08-29〕
+
+> 🛠 **2026-08-29 修訂**（PR #3–#7 程式碼同步）：①§3.1 新增 FR-017 題目來源標記 source_type（PR #7，merge f8f6574）與 FR-018 附圖裁切入庫（PR #3，merge bc57c23，權威文件 `docs/figures.md`）及其 ACPT-017-1～3、ACPT-018-1～2；②§5 擱置區「附圖裁切入庫」原記「已定案未動工」為事實錯誤，改註「已完成」（2026-08-27 實作合併，cassette 已重錄 @ 4af4647）——舊記載之「2026-08-25 定案」日期保留為 DEC-011 核准依據；③定位行、§4 功能範圍與 §6 追溯之 FR/ACPT 編號範圍隨之更新。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 
 ---
 
@@ -22,7 +24,7 @@
 | 項目 | 內容 |
 | :--- | :--- |
 | **專案名稱** | 家教專用數理題庫系統（repo：期中專案；系統本體 `exam_pro/`） |
-| **狀態** | 已上線——四階段全數完成，CI 全綠 @ 0ff47b4 |
+| **狀態** | 已上線——四階段全數完成，CI 全綠 @ f8f6574〔修訂 2026-08-29〕 |
 | **關鍵日期** | 2026-08-21 資料層切換上線（PostgreSQL 16 + pgvector）；2026-08-24 階段 4 凍結 |
 | **核心團隊** | 單人開發與維運：Ben（楊本顥） |
 | **使用者** | 一對一數理家教老師（高中數學／物理），單人使用 |
@@ -74,6 +76,11 @@
 | FR-016 | 對話式助教 | ACPT-016-1 | Then 主控以受限 JSON `{action, tool, args_json, reply}` 決策，僅得調用五個只讀工具，工具調用軌跡完整呈現於介面 |
 | | | ACPT-016-2 | Then 助教無寫入權：出卷僅能 dry-run 預覽，實際出卷仍由使用者確認 |
 | | | ACPT-016-3 | Given 達步數上限，Then 迴圈截斷並如實作結（見 SCN-015） |
+| FR-017 | 題目來源標記 source_type（著作權管理）〔修訂 2026-08-29〕 | ACPT-017-1 | Then 每題之 `source_type` 必屬五值白名單（official／school／publisher／self／unknown，DDL CHECK 與 `config/chapters.js` SOURCE_TYPES 一致），未標記落地為 unknown；手動建題、batch-save、管線入庫、複核 approve 全路徑帶標記，上傳 job 標一次全批沿用 |
+| | | ACPT-017-2 | When `generate-paper` 帶 `source_types` 過濾，Then 僅抽指定來源之題；含非法值回 400、空陣列不限制；dry_run 預覽逐題帶來源 |
+| | | ACPT-017-3 | Then 題庫列表可依來源篩選並顯示徽章、單題可改標；變式 job 繼承藍本標記、不自動漂白——改寫是否充分由使用者確認後改標 self |
+| FR-018 | 附圖裁切入庫（權威文件 `docs/figures.md`）〔修訂 2026-08-29〕 | ACPT-018-1 | Given extract 回傳 `figure_page`＋`figure_box`（0–1000 正規化 bbox），Then 於 PDF 刪檔前裁成 PNG 存 `data/figures/<jobId>-<idx>.png`，`question_img` 寫入 `/figures/<jobId>-<idx>.png` 並由靜態路由供圖 |
+| | | ACPT-018-2 | Given bbox 退化（無效框），Then 該題略過裁圖並記 log，其餘照常入庫；檔名確定性，崩潰重跑覆寫同檔不堆積 |
 
 ### 3.2 邊界場景（AI 不確定性的行為界定）
 
@@ -94,7 +101,7 @@
 
 | 項目 | 內容 |
 | :--- | :--- |
-| **功能範圍** | 拆題管線（FR-001～006）／題庫與出卷（FR-007～009）／RAG 三落點與 NLQ（FR-010～013）／產品收斂與助教（FR-014～016） |
+| **功能範圍** | 拆題管線（FR-001～006）／題庫與出卷（FR-007～009）／RAG 三落點與 NLQ（FR-010～013）／產品收斂與助教（FR-014～016）／上線後增量：來源標記與附圖（FR-017～018）〔修訂 2026-08-29〕 |
 | **非功能需求** | 安全 NFR-001／成本 NFR-002／可測試性 NFR-003／品質門檻 NFR-004／可靠性 NFR-005／資料一致性 NFR-006（詳 `../03_architecture/engineering_tracker.md`） |
 | **不做什麼** | 多租戶與帳號系統（單人使用）；助教寫入權（工具一律只讀）；LLM 編排拆題流程（流程已知，編排歸程式碼，ADR-003）。（P-16 參數化模板原列於此，2026-08-25 核准重啟，見 §5） |
 | **假設與依賴** | 假設：題庫規模數百至數千題、單人維運。依賴：Google Gemini API（模型 ID 單一真相 `exam_pro/config/models.js`）、Docker（PG16+pgvector，開發 5442／測試 5433） |
@@ -110,7 +117,7 @@
 | DEC-006（裁決 S3-R29） | 變式偏題閾值 0.92→0.90 下修並重錄 | 已核准 | Ben |
 | P-16 | 參數化模板重啟 | 已核准重啟（2026-08-25 Owner 裁示）；未動工，規劃待啟動 | Ben |
 | 併名資料清理 | 已結案（2026-08-25）：前期測試學生皆為假資料，隨作答與試卷全數刪除（刪除前備份 `exam_pro/backups/tutor_exam_bank_2026-08-25_1801.dump`），併名懸案消滅；題庫 103 題不受影響 | 已結案 | Ben |
-| 附圖裁切入庫 | extract 回傳 bbox＋程式裁圖存 `question_img`；2026-08-25 定案、未動工；動 extract 需重錄 cassette（ADR-006 鍵含模板版本） | 已定案未動工 | Ben |
+| 附圖裁切入庫 | extract 回傳 bbox＋程式裁圖存 `question_img`；2026-08-25 定案，2026-08-27 完整實作合併（PR #3，權威文件 `docs/figures.md`；cassette 已重錄 @ 4af4647），正規化為 FR-018 〔修訂 2026-08-29〕 | 已完成 | Ben |
 
 ---
 
@@ -118,6 +125,6 @@
 
 | 項目 | ID |
 | :--- | :--- |
-| 上游 | DEC-001～DEC-009（[`requirements_tracker.md`](./requirements_tracker.md) ①需求決策） |
-| 本文件產出 | FR-001～FR-016、ACPT-001-1～ACPT-016-3、SCN-011～SCN-016 |
+| 上游 | DEC-001～DEC-011（[`requirements_tracker.md`](./requirements_tracker.md) ①需求決策）〔修訂 2026-08-29〕 |
+| 本文件產出 | FR-001～FR-018、ACPT-001-1～ACPT-018-2、SCN-011～SCN-016〔修訂 2026-08-29〕 |
 | 下游 | [`./srs.md`](./srs.md)（FR 細化為系統規格與 NFR）、`../03_architecture/engineering_tracker.md`（FR/NFR→模組→ADR）、`../02_ux_ui/`（ui_spec-* 以 FR 引用）、[`../05_qa/test_plan.md`](../05_qa/test_plan.md)（測試策略依 FR/ACPT 展開）、`../05_qa/qa_tracker.md`（TC-* 依 FR 分組） |

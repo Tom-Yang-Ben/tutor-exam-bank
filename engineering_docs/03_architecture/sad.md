@@ -1,11 +1,13 @@
 # 軟體架構文件 (SAD) - 家教專用數理題庫系統
 
-> **版本:** v1.0 | **更新:** 2026-08-25 | **狀態:** 活躍
+> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 單例（系統架構契約只有一份）
 >
 > **定位**：系統級架構的單一真實來源——C4 L1–L3、分層、關鍵旅程與部署視圖。回答「系統由哪些 runtime 組成、邊界在哪、為什麼」；架構決策理由歸 [`adr/`](./adr/)（ADR-001～008），API／資料契約歸 `../04_design/`，Code 層細節歸 `../04_design/lld.md`。
+
+> 🛠 **2026-08-29 修訂**（PR #3–#7 程式碼同步）：§1.3 textFormatter 補原生 OMML 二維矩陣、services 清單補 figureService；§5.2 download-word 流程補矩陣支援；§6 schema 演進清單補 0006_source_type；§7 整合測試數 259→260、§8 CI 證據 commit 0ff47b4→f8f6574（來源：commit f7a9c41 訊息實測、PR #7 merge）；§9 附圖裁切入庫由「待啟動」改為已完成（2026-08-27 實作合併，PR #3）。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 
 ## 目錄
 
@@ -58,12 +60,12 @@ jobRunner 與 Express 同一 Node process（一人維運不拆行程，ADR-003�
 | :--- | :--- | :--- |
 | `exam_pro/routes/index.js`、`middleware/` | /api 路由表（旗標控制掛載）、認證與限流 | → controllers |
 | `exam_pro/controllers/` | HTTP 邊界：question／exam／studentAdmin／paper／review／job／assistant／word | → services、queries |
-| `exam_pro/services/` | 用例邏輯：llm(gemini/fake/throttle)、retrieval、nlq、variant、weakness、assistant、embed、word | → queries、utils、agents |
+| `exam_pro/services/` | 用例邏輯：llm(gemini/fake/throttle)、retrieval、nlq、variant、weakness、assistant、embed、word、figure（附圖裁切）〔修訂 2026-08-29〕 | → queries、utils、agents |
 | `exam_pro/agents/`（+`schemas/`） | 六個 sub-agent 純函式（extract/classify/lint/verify/dedup/generateVariant）＋輸出 JSON Schema | 僅收 ctx 注入，不碰 DB／env（NFR-003） |
 | `exam_pro/workers/jobRunner.js` | 編排：SKIP LOCKED 認領、租約、重試預算、RPM 節流、成本上限 | → agents、pipeline |
 | `exam_pro/pipeline/stateMachine.js` | jobs／job_questions 合法狀態轉移的唯一定義 | 被 workers 引用 |
 | `exam_pro/queries/hybrid.js` | hybrid 檢索 SQL（pgvector＋jieba 全文，RRF；API 與 eval 共用） | → config/db |
-| `exam_pro/utils/` | textFormatter(LaTeX→OOXML)、tokenize（全案唯一分詞，ADR-008）、shuffle、pickOnePerFamily、answerCompare 等 | 純函式 |
+| `exam_pro/utils/` | textFormatter(LaTeX→OOXML，含原生 OMML 二維矩陣：m:d>m:m>m:mr>m:e，10 種矩陣環境)〔修訂 2026-08-29〕、tokenize（全案唯一分詞，ADR-008）、shuffle、pickOnePerFamily、answerCompare 等 | 純函式 |
 | `exam_pro/config/` | 單一真相：db、models、pricing、features、chapters | 被全體引用 |
 
 ## 2. 邊界與分層
@@ -140,7 +142,7 @@ sequenceDiagram
 
 1. `POST /api/generate-paper`（dry_run）：`NOT EXISTS` attempts 排除已作答＋`pickOnePerFamily` 家族互斥，回傳預覽（不寫庫，可 `exclude_ids` 換題）。
 2. `POST /api/confirm-paper`（student_id, question_ids）：預覽仍有效則同一交易 INSERT `exam_papers`＋`attempts`（NFR-006）；預覽過期回 409。
-3. `POST /api/download-word`：`textFormatter` 將 LaTeX 轉為 OOXML 原生 Math 物件，回傳 `.docx`。
+3. `POST /api/download-word`：`textFormatter` 將 LaTeX 轉為 OOXML 原生 Math 物件（含 10 種矩陣環境的原生二維排版〔修訂 2026-08-29〕），回傳 `.docx`。
 
 ### 5.3 對話式助教迴圈（FR-016）
 
@@ -150,7 +152,7 @@ sequenceDiagram
 
 關聯骨架：students 1—N attempts（作答紀錄）／exam_papers（出卷）；exam_papers 1—N attempts（同交易寫入）；questions 1—N attempts，並以 `variant_of` 自參照構成變式家族；jobs 1—N job_questions（逐題狀態）與 job_events（成本／延遲／token 帳）；job_questions saved 後入 questions。ER 全圖與欄位定義歸 [`../04_design/db_design.md`](../04_design/db_design.md)。
 
-- schema 演進：`exam_pro/migrations/` 0001_init／0002_vector（768 維，embedding 欄）／0003_jobs（狀態以 DDL CHECK 寫死）／0004_origin_legacy／0005_text_hash_unique；只增不改（NFR-006）。
+- schema 演進：`exam_pro/migrations/` 0001_init／0002_vector（768 維，embedding 欄）／0003_jobs（狀態以 DDL CHECK 寫死）／0004_origin_legacy／0005_text_hash_unique／0006_source_type（questions.source_type NOT NULL DEFAULT 'unknown'＋jobs.source_type，五值 CHECK）〔修訂 2026-08-29〕；只增不改（NFR-006）。
 - 一致性：組卷＋attempts、批改回填皆單一交易全有全無；其餘讀取為即時 SQL 聚合，無最終一致場景。
 - 資料合規：題庫屬私有資產、repo 不含題庫內容（DEC-009）；學生僅存姓名與作答紀錄，本機單人使用，無對外傳輸。
 
@@ -161,7 +163,7 @@ sequenceDiagram
 | 環境 | Deployment 模式 | 資料庫 | 備份／監控 |
 | :--- | :--- | :--- | :--- |
 | 開發（唯一運行環境） | 本機 `npm start`＋`docker compose up` | postgres :5442（volume 持久化） | `exam_pro/scripts/` 備份腳本；`npm run report:jobs` 成本報表 |
-| 測試（本機） | 同機，另指 TEST_DATABASE_URL | postgres_test :5433（tmpfs，`_test` 後綴強制） | 整合 259／e2e 11，`--test-concurrency=1` |
+| 測試（本機） | 同機，另指 TEST_DATABASE_URL | postgres_test :5433（tmpfs，`_test` 後綴強制） | 整合 260〔修訂 2026-08-29〕／e2e 11，`--test-concurrency=1` |
 | CI（GitHub Actions） | workflow 起 pg16 service | 臨時容器 | `LLM_MODE=replay`＋`EMBED_MODE=fixture`，零金鑰零網路 |
 
 - 開發埠取 5442 而非 5432：開發機原生 PostgreSQL 17 服務占用 5432，同埠並存會產生誤導性的驗證失敗（`exam_pro/README.md` 安裝節）。
@@ -174,7 +176,7 @@ sequenceDiagram
 | 日誌／指標 | `job_events` 逐步記成本、延遲、token；eval 報表含完整量測環境（模型 ID、cassette、golden） | 已實作 |
 | 安全 | x-api-key（timing-safe）、CORS 白名單、防 SSRF（isSafeImageUrl）、參數化 SQL、production 不外洩錯誤細節；API_KEY 注入前端，僅適用本機自用（NFR-001） | 已實作，能力邊界已文件化 |
 | 成本 | 模型路由（flash 拆題／pro 驗答）、閘門依成本排序、kNN 短路、單 job $0.50／每日 $5 上限（NFR-002） | 已實作 |
-| 可測試性 | agent 純函式合約（ctx 注入）、cassette、五個 eval suite＋ratchet；replay miss 於 main 視為錯誤（NFR-003／004） | 已實作，CI 全綠 @ 0ff47b4 |
+| 可測試性 | agent 純函式合約（ctx 注入）、cassette、五個 eval suite＋ratchet；replay miss 於 main 視為錯誤（NFR-003／004） | 已實作，CI 全綠 @ f8f6574〔修訂 2026-08-29〕 |
 
 ## 9. 風險與演進
 
@@ -185,7 +187,7 @@ sequenceDiagram
 | 對外部署誤用 API_KEY 當存取控制 | 低（單人自用） | 金鑰隨首頁外洩 | README 明文能力邊界；部署前置反向代理或登入機制 |
 | jobRunner 與 API 同行程互相干擾 | 低 | 高負載時互搶資源 | 併發 2 槽＋節流；agent 合約允許無痛拆行程 |
 
-演進路線：階段 1 資料層（2026-08-21 上線）→ 階段 2 Agent 管線 → 階段 3 RAG 三落點 → 階段 4 產品收斂＋助教，四階段均已完成。待啟動：附圖裁切入庫（extract 回 bbox＋裁圖存 `question_img`，2026-08-25 定案未動工，動 extract 需重錄 cassette）、P-16 參數化模板（2026-08-25 核准重啟，未動工）；擱置區（私有 golden、A-T16/A-T17）隨時可重啟——狀態登錄於 [`../01_requirements/prd.md`](../01_requirements/prd.md) §5。
+演進路線：階段 1 資料層（2026-08-21 上線）→ 階段 2 Agent 管線 → 階段 3 RAG 三落點 → 階段 4 產品收斂＋助教，四階段均已完成。〔修訂 2026-08-29〕附圖裁切入庫已於 2026-08-27 實作合併（PR #3）：`exam_pro/services/figureService.js`（mupdf 2x 渲染＋sharp 裁圖，存 `data/figures/<jobId>-<idx>.png`）、`app.js` 掛載 `/figures` 靜態目錄、`agents/extract.js` 回傳 figure_page/figure_box＋框幾何驗證、`workers/jobRunner.js` attachFigureImages 寫回 `question_img`；cassette 已重錄（4af4647）。待啟動：P-16 參數化模板（2026-08-25 核准重啟，未動工）；擱置區（私有 golden、A-T16/A-T17）隨時可重啟——狀態登錄於 [`../01_requirements/prd.md`](../01_requirements/prd.md) §5。
 
 ## 10. 追溯
 

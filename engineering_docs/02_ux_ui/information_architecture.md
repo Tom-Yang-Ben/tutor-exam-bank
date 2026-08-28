@@ -1,6 +1,7 @@
 # 資訊架構 (Information Architecture) - 家教專用數理題庫系統
 
-> **版本:** v1.0 | **更新:** 2026-08-25 | **狀態:** 活躍
+> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
+> 🛠 **2026-08-29 修訂**（PR #3/#6/#7 程式碼同步）：§1 前言由「捲動導覽」改寫為 5 個 `.app-view` 視圖的 hash 路由切換；§1 表格刪除 Hero 列（#0 `#top`，Hero 已於 commit 995f444 自程式碼移除）；§1 總計行更正為 5 視圖容器＋8 錨點並更新空 section 行號（原「9 個錨點、545／552–554／558 行、#nlq 與 #library 間隔 #assistant」描述已刪除）；§2 品牌名 Tutor Question Lab → Tutor-exam-bank、顯示條件更正（行動版橫向捲動、旗標關閉時 nav 連結 hidden）、刪除 Hero CTA 列；§2 註解改為 VIEW_FOR_ANCHOR 折入視圖的到達機制；§5 資料表「頂欄／Hero」改「頂欄」。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 > **Owner:** Ben（楊本顥）
 > **語域:** L2（橋接）
 > **實例:** 單例（全站一份）
@@ -24,11 +25,10 @@
 
 ## 1. 頁面總覽（單頁殼＋分頁錨點）
 
-全站僅一條頁面路由 `/`，由 `app.js` 的 `serveIndex` 送出 `exam_pro/public/index.html`；「分頁」是同頁內依 DOM 順序排列的錨點區塊，捲動導覽（`scroll-behavior: smooth`＋`scroll-mt-24` 補償 sticky 頂欄）。
+全站僅一條頁面路由 `/`，由 `app.js` 的 `serveIndex` 送出 `exam_pro/public/index.html`；「分頁」是 5 個 `.app-view` 視圖容器，由 inline script 的 hash 路由一次只顯示一個（`VIEW_FOR_ANCHOR` 錨點→視圖映射 index.html:1440-1446、`showView`／`routeFromHash` :1449-1468、`hashchange` 監聽 :1470-1477）。視圖內的子錨點（`#review`／`#nlq`／`#variants`）折入所屬視圖：直接輸入 hash 或 module 呼叫 `showSection`（:1486-1495）時**先切視圖再捲動**，並以 `history.replaceState` 同步網址。〔修訂 2026-08-29〕
 
 | # | 錨點 | 分頁名稱 | 主要職責（單一） | 內容來源 | 對應 FR |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 0 | `#top` | Hero／工作流導引 | 三步工作流說明與入口 CTA | index.html 靜態 | — |
 | 1 | `#create` | 建立題目 | 手動建題＋PDF 上傳拆題 job | index.html inline script | FR-001、FR-007 |
 | 2 | `#paper` | 智慧組卷 | 選學生／章節→草稿→確認→Word 匯出 | index.html inline script | FR-008、FR-009、FR-014（快速建學生） |
 | 3 | `#review` | 人工複核佇列 | needs_review 逐題核可／退回 | `public/js/review.js` | FR-006 |
@@ -38,7 +38,7 @@
 | 7 | `#assistant` | 對話式助教 | 主控 LLM＋只讀工具問答、dry-run 出卷預覽 | `public/js/assistant.js` | FR-016 |
 | 8 | `#library` | 題庫管理 | 題目列表、篩選、檢視、維護 | index.html inline script | FR-007 |
 
-**總計:** 1 條頁面路由、9 個錨點區塊。#3–#7 在殼內僅是空 `<section>`（index.html 545、552–554、558 行），內容全部由對應 ES module 動態建立；`#nlq` 位於 `#library` 之前（其間僅隔 `#assistant`），對應階段 3 規劃「題庫管理搜尋框旁」的落點。各分頁欄位與互動細節見 [`ui_spec-main.md`](./ui_spec-main.md)、[`ui_spec-review.md`](./ui_spec-review.md)、[`ui_spec-students.md`](./ui_spec-students.md)、[`ui_spec-nlq.md`](./ui_spec-nlq.md)、[`ui_spec-variants.md`](./ui_spec-variants.md)、[`ui_spec-assistant.md`](./ui_spec-assistant.md)。
+**總計:** 1 條頁面路由、5 個視圖容器、8 個錨點區塊。〔修訂 2026-08-29〕視圖容器為 `view-create`（index.html:254，含 `#create`＋`#review`）、`view-paper`（:419）、`view-library`（:522，含 `#nlq`＋`#library`＋`#variants`）、`view-students`（:582）、`view-assistant`（:588）。#3–#7 在殼內僅是空 `<section>`（`#review` :415、`#nlq` :523、`#variants` :578、`#students` :583、`#assistant` :589），內容全部由對應 ES module 動態建立（藏在 hidden 視圖裡渲染無副作用，切換即可見）；`#nlq` 緊貼 `#library` 上方（同屬 view-library），對應階段 3 規劃「題庫管理搜尋框旁」的落點。各分頁欄位與互動細節見 [`ui_spec-main.md`](./ui_spec-main.md)、[`ui_spec-review.md`](./ui_spec-review.md)、[`ui_spec-students.md`](./ui_spec-students.md)、[`ui_spec-nlq.md`](./ui_spec-nlq.md)、[`ui_spec-variants.md`](./ui_spec-variants.md)、[`ui_spec-assistant.md`](./ui_spec-assistant.md)。
 
 ---
 
@@ -46,15 +46,14 @@
 
 | 項目 | 連結 | 顯示條件 |
 | :--- | :--- | :--- |
-| 品牌標誌（Tutor Question Lab） | `#top` | 永遠顯示 |
-| 建立題目 | `#create` | 永遠顯示（md 以上斷點；行動裝置隱藏整條導覽） |
+| 品牌標誌（Tutor-exam-bank）〔修訂 2026-08-29〕 | `#top` | 永遠顯示 |
+| 建立題目 | `#create` | 永遠顯示（含行動版：導覽列 `overflow-x-auto` 橫向捲動，不隱藏，index.html:236）〔修訂 2026-08-29〕 |
 | 智慧組卷 | `#paper` | 同上 |
-| 學生 | `#students` | 同上（旗標關閉時錨點仍在，捲至空區塊） |
+| 學生 | `#students` | 同上，但 `data-feature` 旗標關閉時整個 nav 連結加 `hidden`（:1471-1474）〔修訂 2026-08-29〕 |
 | 助教 | `#assistant` | 同上（同前） |
-| 題庫管理 | `#library` | 同上 |
-| Hero CTA「開始建立題目」／「瀏覽現有題庫」 | `#create`／`#library` | 永遠顯示 |
+| 題庫管理 | `#library` | 同上（永遠顯示，不掛旗標） |
 
-- 頂欄為 sticky（`z-40`），各錨點以 `scroll-mt-24` 避免標題被遮擋；`#review`、`#variants`、`#nlq` 不設頂欄導覽項，由流程入口到達（複核佇列由拆題結果進入、變式與查題內嵌於題庫脈絡）。
+- 頂欄為 sticky（`z-40`），視圖內子錨點以 `scroll-mt-24` 避免標題被遮擋；`#review`、`#variants`、`#nlq` 不設頂欄導覽項，由 `VIEW_FOR_ANCHOR` 折入視圖到達（review→view-create、nlq／variants→view-library）：流程入口（複核佇列由拆題結果進入、變式與查題內嵌於題庫脈絡）呼叫 `showSection` 先切到所屬視圖再捲至該錨點。〔修訂 2026-08-29〕
 - 麵包屑：無（單頁、深度 1 層，無需求）。
 - 返回機制：瀏覽器 back 依 hash 歷史回捲；無顯式 back button。
 
@@ -101,7 +100,7 @@
 | 來源 | 目標 | 載體 | 資料內容 | 為何選此載體 |
 | :--- | :--- | :--- | :--- | :--- |
 | 伺服器（serveIndex） | 全部 module | `<meta>` 標籤（7 個注入點） | api-key、六個 FEATURE_* | 零打包器下唯一的伺服器→前端組態通道；module 各自讀取、互不耦合 |
-| 頂欄／Hero | 各分頁 | URL hash（`#paper` 等） | 目標區塊 | 可分享、可書籤、back 自然 |
+| 頂欄導覽〔修訂 2026-08-29〕 | 各分頁 | URL hash（`#paper` 等） | 目標區塊 | 可分享、可書籤、back 自然 |
 | `#nlq` 解析結果 | `#library` 篩選列 | DOM 回寫（filter 控件） | 學科／章節／題型／關鍵字 | 解析結果即篩選狀態，回寫後沿用既有查詢流程（FR-012） |
 | `#paper` 草稿 | 確認出卷 | in-page state（resultBox） | 草稿題目清單 | 草稿為過渡狀態，確認（confirm-paper）才與作答歷史同交易入庫（NFR-006） |
 | `#create` 拆題 job | `#review` | 伺服器狀態（jobs／job_questions） | needs_review 佇列 | 跨分頁共享的真相在 DB，前端不傳遞 |

@@ -1,6 +1,6 @@
 # openapi-exam-pro-v1.yaml — 家教專用數理題庫系統 API 契約
-# 版本: v1.0 | 更新: 2026-08-25 | 狀態: 活躍 | Owner: Ben（楊本顥）
-# 追溯：上游 FR-001～FR-016、NFR-001（x-api-key／限流）、NFR-002（成本節流）
+# 版本: v1.1 | 更新: 2026-08-29 | 狀態: 活躍 | Owner: Ben（楊本顥）  # 修訂 2026-08-29（PR #7 source_type / PR #6 chapter-volumes）
+# 追溯：上游 FR-001～FR-017、NFR-001（x-api-key／限流）、NFR-002（成本節流）  # 修訂 2026-08-29：FR-017 題源標記
 #       下游 ../05_qa/test_plan.md（TC-* 依本檔端點派生）、../05_qa/qa_tracker.md
 # 端點來源：exam_pro/routes/index.js（核心區＋各階段 append-only 區塊）；
 # FEATURE_SIMILAR／VARIANTS／NLQ／STUDENTS／ASSISTANT（exam_pro/config/features.js，預設全關）
@@ -9,12 +9,13 @@
 openapi: 3.1.0
 info:
   title: exam_pro API
-  version: 1.0.0
+  version: 1.1.0 # 修訂 2026-08-29（PR #7 source_type / PR #6 chapter-volumes）
   description: |
-    家教專用數理題庫系統（exam_pro）之 HTTP API 契約。版本 v1.0，更新 2026-08-25，Owner：Ben（楊本顥）。
+    家教專用數理題庫系統（exam_pro）之 HTTP API 契約。版本 v1.1，更新 2026-08-29，Owner：Ben（楊本顥）。
     本檔為端點清單唯一權威（對應 exam_pro/routes/index.js）；設計約定（錯誤格式、分頁、驗證規則）
     見 api_spec.md，文件不重複維護端點清單。全部 /api 路由經 apiKeyAuth（x-api-key，timing-safe）。
-    對應需求：FR-001～FR-016。
+    對應需求：FR-001～FR-017。
+    2026-08-29 修訂（PR #6/#7 程式碼同步）：新增 GET /chapter-volumes；listQuestions／generatePaper／createJob／QuestionCreate 補 source_type（FR-017）。
 servers:
   - url: http://localhost:3000/api
 security:
@@ -37,6 +38,8 @@ paths:
         - { name: chapter, in: query, schema: { type: string } }
         - { name: question_type, in: query, schema: { type: string } }
         - { name: q, in: query, schema: { type: string }, description: 關鍵字 }
+        # 修訂 2026-08-29（PR #7 source_type / PR #6 chapter-volumes）：題源標記篩選（FR-017）；非法值靜默忽略不套用（questionController）
+        - { name: source_type, in: query, schema: { type: string, enum: [official, school, publisher, self, unknown] }, description: 題源標記單值篩選（FR-017）；非法值不套用（靜默忽略） }
         - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1 } }
       responses:
@@ -108,6 +111,25 @@ paths:
       operationId: getChapterWhitelist
       responses:
         "200": { description: 成功 }
+  /chapter-volumes: # 修訂 2026-08-29（PR #7 source_type / PR #6 chapter-volumes）
+    get:
+      tags: [questions]
+      summary: 分冊結構（科目→冊→單元；前端三層章節選單資料源，唯一真相 config/chapters.js 的 VOLUMES）
+      operationId: getChapterVolumes
+      responses:
+        "200":
+          description: 成功；鍵為科目，值為冊清單（依冊序）
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name: { type: string, description: 冊名（如 第一冊、選修物理一） }
+                      chapters: { type: array, items: { type: string }, description: 該冊章節（順序即白名單順序） }
   /generate-paper:
     post:
       tags: [papers]
@@ -128,9 +150,11 @@ paths:
                 count: { type: integer, minimum: 1 }
                 dry_run: { type: boolean, description: 僅預覽不建卷 }
                 exclude_ids: { type: array, items: { type: integer }, description: 另行排除的題目 ID }
+                # 修訂 2026-08-29（PR #7 source_type / PR #6 chapter-volumes）：題源過濾（FR-017）
+                source_types: { type: array, items: { type: string, enum: [official, school, publisher, self, unknown] }, description: 題源過濾（FR-017）；空陣列或未帶＝不限制，伺服器端去重後過濾候選池 }
       responses:
         "200": { description: 成功；回傳草稿題目清單 }
-        "400": { description: 欄位缺漏，或該生可抽題數不足（家族互斥後計算，examController 回 400 非 409） }
+        "400": { description: 欄位缺漏、該生可抽題數不足（家族互斥後計算，examController 回 400 非 409），或 source_types 含非法值 } # 修訂 2026-08-29（PR #7 source_type / PR #6 chapter-volumes）
         "404": { description: student_id／student_name 查無學生——不自動建立，提示先新增（裁決 S4-1） }
         "409": { description: 非 dry_run 寫入時，部分題目已被並發指派給該學生 }
   /confirm-paper:
@@ -441,6 +465,8 @@ paths:
               required: [pdf]
               properties:
                 pdf: { type: string, format: binary, description: PDF 檔，上限 15 MB }
+                # 修訂 2026-08-29（PR #7 source_type / PR #6 chapter-volumes）：整份考卷的題源標記（FR-017）
+                source_type: { type: string, enum: [official, school, publisher, self, unknown], description: 選填；該 job 入庫的所有題沿用此標記（FR-017）。未帶或非法值落 NULL，入庫時以 'unknown' 落地 }
       responses:
         "202":
           description: 已受理
@@ -651,6 +677,8 @@ components:
         question_img: { type: ["string", "null"], description: 圖片 URL；經 isSafeImageUrl 防 SSRF（NFR-001） }
         answer_text: { type: string }
         solution_img: { type: ["string", "null"] }
+        # 修訂 2026-08-29（PR #7 source_type / PR #6 chapter-volumes）：題源標記（FR-017）
+        source_type: { type: string, enum: [official, school, publisher, self, unknown], default: unknown, description: 選填題源標記（FR-017）；建題未帶或非法值伺服器落 'unknown'（DDL DEFAULT 同值）——不擋錄入的管理標記。PUT 更新時未帶或非法值以 COALESCE 保留原值 }
     WeaknessRow:
       type: object
       description: 弱點三表共用列（分組欄依表為 chapter／question_type／difficulty）

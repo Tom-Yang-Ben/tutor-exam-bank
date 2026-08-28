@@ -1,10 +1,12 @@
 # 軟體需求規格書 (SRS) - 家教專用數理題庫系統
 
-> **版本:** v1.0 | **更新:** 2026-08-25 | **狀態:** 活躍
+> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L2（需求；量測與端點細節屬 L3，標主語域）
 > **實例:** 單例（整個系統一份）
-> **定位:** 本文件將 16 條功能需求對應至 API 端點與 FEATURE_* 旗標，並將 NFR-001–006 逐條可驗證化（量測值與門檻）；需求決策沿革歸 [`requirements_tracker.md`](./requirements_tracker.md)，架構取捨歸 [`../03_architecture/adr/`](../03_architecture/adr/)。
+> **定位:** 本文件將 18 條功能需求對應至 API 端點與 FEATURE_* 旗標，並將 NFR-001–006 逐條可驗證化（量測值與門檻）；需求決策沿革歸 [`requirements_tracker.md`](./requirements_tracker.md)，架構取捨歸 [`../03_architecture/adr/`](../03_architecture/adr/)。〔修訂 2026-08-29〕
+
+> 🛠 **2026-08-29 修訂**（PR #3–#7 程式碼同步）：①§1 新增 FR-017 題目來源標記（PR #7）與 FR-018 附圖裁切入庫（PR #3，`docs/figures.md`）；FR-007 端點欄補 GET /api/chapter-volumes；②NFR-003 測試數 1,415／259 更新為 1,445／260（commit f7a9c41 實測）；③NFR-006 原「migrations 0001–0005 共 5 份」更新為 0001–0006 共 6 份（刪除舊計數）；④§3 資料需求補 questions.source_type 與 data/figures/ 附圖列；⑤§6 補 ACPT-017-*／018-* 對照列；⑥§7 追溯之 FR 範圍隨之更新。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 
 ## 目錄
 
@@ -28,7 +30,7 @@
 | FR-004 | 獨立解題驗證（pro 與 flash 互相制衡、答案比對） | 管線節點，無獨立端點 | 同 FR-001 | DEC-005 | Must | ACPT-004-1 |
 | FR-005 | 兩段去重（正規化雜湊→向量餘弦） | 管線節點，無獨立端點 | 同 FR-001 | DEC-005 | Must | ACPT-005-1 |
 | FR-006 | 部分入庫與人工複核佇列（needs_review 八種原因） | GET /api/review、GET /api/review/:jqId、POST /api/review/:jqId/approve、POST /api/review/:jqId/reject | 無（恆掛載） | DEC-005 | Must | ACPT-006-1 |
-| FR-007 | 題庫管理（CRUD、分頁、batch-save 白名單硬驗證） | GET/POST /api/questions、PUT/DELETE /api/questions/:id、POST /api/batch-save-questions、GET /api/chapters、GET /api/chapter-whitelist | 無；listQuestions 走 hybrid 由 FEATURE_HYBRID_SEARCH 控制 | DEC-001 | Must | ACPT-007-1 |
+| FR-007 | 題庫管理（CRUD、分頁、batch-save 白名單硬驗證） | GET/POST /api/questions、PUT/DELETE /api/questions/:id、POST /api/batch-save-questions、GET /api/chapters、GET /api/chapter-whitelist、GET /api/chapter-volumes〔修訂 2026-08-29〕 | 無；listQuestions 走 hybrid 由 FEATURE_HYBRID_SEARCH 控制 | DEC-001 | Must | ACPT-007-1 |
 | FR-008 | 組卷（草稿→確認；NOT EXISTS attempts 排除已作答；pickOnePerFamily 家族互斥） | POST /api/generate-paper、POST /api/confirm-paper、DELETE /api/papers/:id | 無（核心功能，裁決 S4-2 不掛旗標） | DEC-001、DEC-003 | Must | ACPT-008-1 |
 | FR-009 | Word 匯出（LaTeX→OOXML tokenizer＋遞迴下降，docx 原生 Math 物件） | POST /api/download-word | 無 | DEC-002 | Must | ACPT-009-1 |
 | FR-010 | 相似題檢索（hybrid；查詢向量取來源題 embedding，不呼叫 Gemini） | GET /api/questions/:id/similar | FEATURE_SIMILAR | DEC-006 | Should | ACPT-010-1 |
@@ -38,27 +40,30 @@
 | FR-014 | 學生管理（建立／改名／合併／刪除） | GET/POST /api/students、PATCH/DELETE /api/students/:id、POST /api/students/:id/merge | 無（核心區，GET /students 依裁決 S4-2 恆掛載） | DEC-007 | Must | ACPT-014-1 |
 | FR-015 | 批改（試卷檢視與結果回寫） | GET /api/papers/:id、PATCH /api/papers/:id/results | FEATURE_STUDENTS | DEC-007 | Should | ACPT-015-1 |
 | FR-016 | 對話式助教（主控 LLM ReAct 迴圈＋五個只讀工具；出卷僅 dry-run 預覽） | POST /api/assistant | FEATURE_ASSISTANT | DEC-007 | Could | ACPT-016-1 |
+| FR-017 | 題目來源標記 source_type（著作權管理；五值白名單 official／school／publisher／self／unknown，入庫路徑全覆蓋、變式繼承藍本標記）〔修訂 2026-08-29〕 | 無獨立端點，附掛既有端點：POST /api/questions、POST /api/batch-save-questions、PUT /api/questions/:id（改標）、GET /api/questions（source_type 篩選）、POST /api/generate-paper（source_types 過濾，非法值 400）、POST /api/jobs（job 帶 source_type） | 沿用各宿主端點旗標 | DEC-010（PR #7，merge f8f6574） | Must | ACPT-017-1 |
+| FR-018 | 附圖裁切入庫（extract 回 bbox→`services/figureService.js` 裁 PNG→`question_img`；權威文件 `docs/figures.md`） 〔修訂 2026-08-29〕 | 管線節點（`workers/jobRunner.js` attachFigureImages）＋GET /figures 靜態路由（`app.js` 掛載，非 /api、不經 x-api-key） | 同 FR-001 | DEC-011（PR #3，merge bc57c23） | Should | ACPT-018-1 |
 
 註：POST /api/analyze-pdf（單段拆題舊路徑）保留於核心區，與 FR-001 並存；FEATURE_PIPELINE 開啟時前端上傳改走 POST /api/jobs。
 
 ## 2. 非功能需求 (NFR)
 
-量化指標與驗證方法以本表為準；架構層對應見 [`../03_architecture/sad.md`](../03_architecture/sad.md)。量測值出自 `exam_pro/eval/` 與 CI（全綠 @ 0ff47b4）。
+量化指標與驗證方法以本表為準；架構層對應見 [`../03_architecture/sad.md`](../03_architecture/sad.md)。量測值出自 `exam_pro/eval/` 與 CI（全綠 @ f8f6574〔修訂 2026-08-29〕）。
 
 | ID | 類別 | 可驗證化描述 | 量測值／門檻 | 驗證方式 |
 | :--- | :--- | :--- | :--- | :--- |
 | NFR-001 | 安全 | 所有 /api 路由經 x-api-key 驗證（timing-safe 比對）；CORS 僅允許 ALLOWED_ORIGINS 白名單；圖片抓取經 isSafeImageUrl 防 SSRF；NODE_ENV=production 時不回傳錯誤細節 | 未帶或錯誤金鑰一律 401；非白名單來源被拒；私有網段 URL 被拒 | 單元＋整合測試（CI） |
 | NFR-002 | 成本 | 高成本端點限流（獨立計數桶）：/analyze-pdf、POST /api/jobs、variants、assistant 各 10/min，search-nl 30/min，similar 60/min；上傳上限 15 MB（逾限回 413）；逐 token 計費紀錄（config/pricing.js）；單 job 與每日成本上限（`workers/jobRunner.js`：`JOB_COST_BUDGET_USD` 預設 0.5、`DAILY_COST_BUDGET_USD` 預設 5） | 第 11 次請求於 60 秒窗內被拒（429）；15 MB 逾限回 413 | 整合測試（CI） |
-| NFR-003 | 可測試性 | agent 為純函式合約（不碰 DB、不讀 env、ctx 注入）；LLM 呼叫走 cassette record/replay；CI 零金鑰、零網路、零成本 | 單元 1,415／整合 259／e2e 11 全數通過；CI 無 GEMINI_API_KEY | node:test＋cassette 重播（CI） |
+| NFR-003 | 可測試性 | agent 為純函式合約（不碰 DB、不讀 env、ctx 注入）；LLM 呼叫走 cassette record/replay；CI 零金鑰、零網路、零成本 | 單元 1,445／整合 260／e2e 11 全數通過（commit f7a9c41 實測）〔修訂 2026-08-29〕；CI 無 GEMINI_API_KEY | node:test＋cassette 重播（CI） |
 | NFR-004 | 品質門檻 | 五個 eval suite 採 golden＋ratchet（首測 −0.03、只升不降）；低於門檻 CI 轉紅；replay miss 於 main 視為錯誤 | pipeline saved_rate 0.90（門檻 ≥0.87）、gate_pass_rate 1.00；classify accuracy 0.9000／macro-F1 0.9256；檢索 Recall@5 hybrid(RRF) 1.000（LIKE 基線 0.875）；NLQ 規則路徑 coverage 0.84；variant retrieved_coverage 0.8667、偏題閘門 ≥0.90（0.92→0.90，裁決 S3-R29） | eval suite（CI 門檻檢查） |
 | NFR-005 | 可靠性 | job 認領採 FOR UPDATE SKIP LOCKED＋租約，worker 中斷後租約到期由他機續跑（斷點續跑）；各節點逾時、退避重試、重試預算，預算用盡轉 needs_review | 節點逾時 120 秒（`JOB_NODE_TIMEOUT_MS`）；租約 180 秒（`JOB_LEASE_MS`）；fail 重試預算 classify 2／lint 2／verify 1／extract 整包 1；error 獨立計數上限 3，退避 1s→2s→4s 封頂 60s（詳 [lld §4.1](../04_design/lld.md)） | 整合測試（jobRunner；CI） |
-| NFR-006 | 資料一致性 | confirm-paper 之組卷與作答歷史（attempts）寫入同一交易；migrations 只增不改 | migrations 0001_init–0005_text_hash_unique，共 5 份，無修改既有檔 | 整合測試＋migration 檔案稽核 |
+| NFR-006 | 資料一致性 | confirm-paper 之組卷與作答歷史（attempts）寫入同一交易；migrations 只增不改 | migrations 0001_init–0006_source_type，共 6 份，無修改既有檔〔修訂 2026-08-29〕 | 整合測試＋migration 檔案稽核 |
 
 ## 3. 資料需求 (Data Requirements)
 
 | 資料實體 | 來源系統 | 保留政策 | 敏感等級 |
 | :--- | :--- | :--- | :--- |
-| questions（含 768 維 embedding、text_hash 唯一鍵） | 本系統（拆題管線／手動建立） | 本地 PG 長期保留；repo 不含題庫內容（DEC-009） | 私有資產（題庫） |
+| questions（含 768 維 embedding、text_hash 唯一鍵、source_type 五值 CHECK——0006，NOT NULL DEFAULT 'unknown'；jobs.source_type 可 NULL）〔修訂 2026-08-29〕 | 本系統（拆題管線／手動建立） | 本地 PG 長期保留；repo 不含題庫內容（DEC-009） | 私有資產（題庫） |
+| data/figures/（附圖 PNG，檔名 `<jobId>-<idx>.png`；questions.question_img 存相對路徑 `/figures/<jobId>-<idx>.png`）〔修訂 2026-08-29〕 | 本系統（管線裁圖，`services/figureService.js`） | 本地檔案系統保留；GET /figures 靜態供圖 | 中（原始考卷衍生圖） |
 | students／papers／attempts | 本系統 | 本地 PG 長期保留 | 含個資（學生姓名） |
 | jobs／job_questions／job_events | 本系統（管線） | 本地 PG 保留（含逐步成本紀錄） | 低（含上傳檔衍生內容） |
 | uploads/（PDF 暫存） | 使用者上傳 | 暫存目錄 | 中（原始考卷） |
@@ -86,7 +91,7 @@
 
 ## 6. 驗收標準 (Acceptance Criteria)
 
-AC 以 Given/When/Then 落在 [`prd.md`](./prd.md) ACPT 段；此處維護對照表。狀態依 CI 全綠 @ 0ff47b4 標記。
+AC 以 Given/When/Then 落在 [`prd.md`](./prd.md) ACPT 段；此處維護對照表。狀態依 CI 全綠 @ f8f6574 標記〔修訂 2026-08-29〕。
 
 | ACPT ID | 對應 FR | 驗證案例 | 狀態 |
 | :--- | :--- | :--- | :--- |
@@ -94,11 +99,13 @@ AC 以 Given/When/Then 落在 [`prd.md`](./prd.md) ACPT 段；此處維護對照
 | ACPT-007-* – ACPT-009-* | FR-007–009 | TC-007-1–TC-009-2（題庫管理、組卷排除已作答、Word 匯出）；UAT SCN-009、SCN-010 | 已驗證 |
 | ACPT-010-* – ACPT-013-* | FR-010–013 | TC-010-1–TC-013-1（相似題、變式題、NLQ、弱點面板）；邊界場景 SCN-013、SCN-014 | 已驗證 |
 | ACPT-014-* – ACPT-016-* | FR-014–016 | TC-014-1–TC-016-1（學生管理、批改、對話式助教）；邊界場景 SCN-015、SCN-016 | 已驗證 |
+| ACPT-017-* | FR-017 | 單元（SOURCE_TYPES 凍結＋與 0006 CHECK 一致）＋整合（建題→過濾→組卷過濾→改標端到端）〔修訂 2026-08-29〕 | 已驗證（CI 全綠 @ f7a9c41） |
+| ACPT-018-* | FR-018 | 單元＋整合（cassette 已重錄 @ 4af4647，含 extract bbox 節點）〔修訂 2026-08-29〕 | 已驗證（CI）；真實考卷 bbox 準度待驗 |
 
 ## 7. 追溯
 
 | 項目 | ID |
 | :--- | :--- |
-| 上游 | DEC-001–DEC-009（[`requirements_tracker.md`](./requirements_tracker.md)）、[`prd.md`](./prd.md) 之 FR 初稿 |
-| 本文件產出 | FR-001–FR-016、NFR-001–NFR-006、使用案例（§5.1，對應 UAT SCN-009／SCN-010）、ACPT 對照（§6） |
+| 上游 | DEC-001–DEC-011（[`requirements_tracker.md`](./requirements_tracker.md)）、[`prd.md`](./prd.md) 之 FR 初稿〔修訂 2026-08-29〕 |
+| 本文件產出 | FR-001–FR-018、NFR-001–NFR-006、使用案例（§5.1，對應 UAT SCN-009／SCN-010）、ACPT 對照（§6）〔修訂 2026-08-29〕 |
 | 下游 | [`../03_architecture/sad.md`](../03_architecture/sad.md) §4 需求摘要、[`../03_architecture/engineering_tracker.md`](../03_architecture/engineering_tracker.md)、[`../05_qa/test_plan.md`](../05_qa/test_plan.md)、[`../05_qa/qa_tracker.md`](../05_qa/qa_tracker.md) |
