@@ -28,6 +28,7 @@
     <meta name="feature-assistant" content="__FEATURE_ASSISTANT__">
     <title>家教專用數學物理題庫系統</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
     <link
         href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;600;700;800&display=swap"
         rel="stylesheet">
@@ -1446,13 +1447,32 @@
         };
         const TOP_ANCHORS = ['top', 'create', 'paper', 'library', 'students', 'assistant'];
 
+        let activeViewId = null;   // 首次 routeFromHash 前為 null——初始載入不跑動效
+
+        // 動效總開關：gsap 走 CDN，離線載不到就一律硬切；prefers-reduced-motion 同樣硬切。
+        // 裝飾性動畫都必須過這一關，功能不依賴動畫存在。
+        function motionOn() {
+            return typeof gsap !== 'undefined'
+                && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        }
+
         function showView(viewId) {
+            const prevViewId = activeViewId;
+            activeViewId = viewId;
             document.querySelectorAll('.app-view').forEach(v => v.classList.toggle('hidden', v.id !== viewId));
             document.querySelectorAll('#mainNav [data-view]').forEach(a => {
                 const on = a.dataset.view === viewId;
                 a.classList.toggle('bg-indigo-50', on);
                 a.classList.toggle('text-indigo-700', on);
             });
+            // 視圖切換動效：舊視圖即時隱藏（避免兩個 block 同時佔位），新視圖淡入＋上移歸位。
+            // clearProps 讓動畫結束後 inline style 全部歸還給 CSS；overwrite 處理快速連續切換。
+            if (prevViewId && prevViewId !== viewId && motionOn()) {
+                const el = document.getElementById(viewId);
+                if (el) gsap.fromTo(el,
+                    { autoAlpha: 0, y: 28 },
+                    { autoAlpha: 1, y: 0, duration: 0.45, ease: 'power2.out', overwrite: 'auto', clearProps: 'all' });
+            }
         }
 
         function routeFromHash() {

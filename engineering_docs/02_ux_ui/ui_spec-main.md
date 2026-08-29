@@ -33,6 +33,8 @@
 
 分頁式版面（PR #6）：Hero 區塊（工作流三步說明＋CTA）已整段刪除（commit 995f444）；5 個 `.app-view` 視圖容器由 inline script 的 hash 路由一次只顯示一個（`VIEW_FOR_ANCHOR`，index.html:1440-1446；`showView`／`routeFromHash`，:1449-1468）。
 
+視圖切換動效（2026-08-29）：切換時新視圖以 GSAP 淡入＋上移歸位（`autoAlpha` 0→1、`y` 28→0，0.45s `power2.out`），舊視圖即時隱藏；首次載入、同視圖內子錨點不觸發動效。守門條件 `motionOn()`：`prefers-reduced-motion: reduce` 或 GSAP CDN（jsdelivr，釘 3.13.0）載入失敗時退回硬切，功能不依賴動畫；動畫結束 `clearProps` 歸還 inline style，快速連切由 `overwrite: 'auto'` 處理。
+
 ```text
 Topbar（sticky 導覽：品牌 Tutor-exam-bank＋5 個分頁連結（行動版 overflow-x-auto 橫向捲動）＋系統就緒指示）
 view-create（:254） ─ #create：快速建立（左）＋AI 批量解析（右）並排（:256）；#review 空錨點（:415）折入本視圖
