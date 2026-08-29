@@ -331,6 +331,14 @@
                             </div>
                         </div>
 
+                        <!-- 來源註記（0007）：學校＋年份等自由文字，選填 -->
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-600 mb-1.5">來源註記 <span
+                                    class="text-xs font-normal text-slate-400">(選填，例：北一女 2024 段考)</span></label>
+                            <input type="text" id="source_detail" maxlength="100" placeholder="哪間學校、哪一年？官方年度或書名也可"
+                                class="field-control block w-full p-3 transition-all">
+                        </div>
+
                         <div>
                             <label class="block text-sm font-semibold text-slate-600 mb-1.5">題目內容 <span
                                     class="text-xs font-normal text-slate-400">(支援 LaTeX 公式)</span></label>
@@ -383,6 +391,10 @@
                                 <option value="publisher">出版社／參考書／補習班題本</option>
                                 <option value="self">自行編寫</option>
                             </select>
+                            <!-- 來源註記（0007）：整份考卷共用一條，入庫沿用 -->
+                            <input type="text" id="pdf_source_detail" maxlength="100"
+                                placeholder="來源註記（選填，例：北一女 2024 段考）"
+                                class="field-control block w-full p-2.5 transition-all text-sm mt-2">
                         </div>
 
                         <button type="button" id="uploadPdfBtn"
@@ -569,6 +581,27 @@
                     class="field-control block w-full p-2.5 transition-all text-sm">
                 <button type="button" id="mgr_search_btn"
                     class="bg-slate-900 hover:bg-indigo-700 text-white text-sm font-extrabold py-2 px-5 rounded-xl transition-all cursor-pointer">查詢題庫</button>
+            </div>
+
+            <!-- 批次補標題源（0007）：先用上方篩選圈出同一份考卷的題，勾選後一次套用 -->
+            <div id="mgr_batch" class="mt-3 mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-indigo-100 bg-indigo-50/50 px-3 py-2.5 text-sm">
+                <label class="flex items-center gap-1.5 font-semibold text-slate-600 cursor-pointer">
+                    <input type="checkbox" id="mgr_pick_all" class="w-4 h-4 accent-indigo-600 cursor-pointer">本頁全選
+                </label>
+                <span id="mgr_pick_count" class="font-bold text-indigo-700">已選 0 題</span>
+                <select id="mgr_batch_type" aria-label="批次套用的來源標記" class="field-control p-2 text-sm">
+                    <option value="">來源標記（不改）</option>
+                    <option value="school">學校考卷</option>
+                    <option value="official">官方歷屆</option>
+                    <option value="publisher">出版社／題本</option>
+                    <option value="self">自行編寫</option>
+                    <option value="unknown">未標記</option>
+                </select>
+                <input id="mgr_batch_detail" type="text" maxlength="100"
+                    placeholder="來源註記（例：北一女 2024 段考；留空＝不改）"
+                    class="field-control p-2 text-sm flex-1 min-w-[220px]">
+                <button type="button" id="mgr_batch_apply"
+                    class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-extrabold py-2 px-4 rounded-xl transition-all cursor-pointer">套用到選取題目</button>
             </div>
 
             <div id="mgr_list" class="space-y-3"></div>
@@ -819,6 +852,43 @@
             document.getElementById('edit_cancel').addEventListener('click', closeEditModal);
             document.getElementById('editModal').addEventListener('click', (e) => { if (e.target.id === 'editModal') closeEditModal(); });
             document.getElementById('edit_save').addEventListener('click', saveEdit);
+            // 批次補標（0007）：勾選狀態存在 DOM 裡（重新查詢即自然歸零），套用時才收集
+            document.getElementById('mgr_list').addEventListener('change', (e) => {
+                if (e.target.classList.contains('mgr-pick')) updatePickCount();
+            });
+            document.getElementById('mgr_pick_all').addEventListener('change', (e) => {
+                document.querySelectorAll('#mgr_list .mgr-pick').forEach(cb => { cb.checked = e.target.checked; });
+                updatePickCount();
+            });
+            document.getElementById('mgr_batch_apply').addEventListener('click', applyBatchSource);
+        }
+
+        function updatePickCount() {
+            const n = document.querySelectorAll('#mgr_list .mgr-pick:checked').length;
+            document.getElementById('mgr_pick_count').textContent = `已選 ${n} 題`;
+        }
+
+        async function applyBatchSource() {
+            const ids = [...document.querySelectorAll('#mgr_list .mgr-pick:checked')].map(cb => parseInt(cb.dataset.id, 10));
+            if (ids.length === 0) return showToast('請先勾選要補標的題目', 'error');
+            const type = document.getElementById('mgr_batch_type').value;
+            const detail = document.getElementById('mgr_batch_detail').value.trim();
+            if (!type && !detail) return showToast('請至少選擇來源標記或填寫來源註記', 'error');
+            const body = { question_ids: ids };
+            if (type) body.source_type = type;
+            if (detail) body.source_detail = detail;
+            const btn = document.getElementById('mgr_batch_apply');
+            btn.disabled = true;
+            try {
+                const res = await apiFetch('/api/questions/batch-source', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (res.ok) { showToast(data.message || '補標完成', 'success'); await fetchQuestions(mgrPage); }
+                else showToast('補標失敗：' + (data.message || '請稍後再試'), 'error');
+            } catch (e) { showToast('連線失敗，請確認伺服器狀態', 'error'); } finally { btn.disabled = false; }
         }
 
         async function fetchQuestions(page = 1) {
@@ -841,6 +911,9 @@
             const list = document.getElementById('mgr_list');
             list.innerHTML = '';
             document.getElementById('mgr_count').textContent = `共 ${data.total} 題`;
+            // 重新查詢＝勾選歸零（勾選狀態只存在 DOM）
+            document.getElementById('mgr_pick_all').checked = false;
+            updatePickCount();
             if (!data.questions.length) {
                 list.innerHTML = '<div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 py-12 text-center"><span class="mx-auto mb-3 grid h-10 w-10 place-items-center rounded-xl bg-white text-slate-400 shadow-sm">⌕</span><p class="font-bold text-slate-600">沒有符合條件的題目</p><p class="mt-1 text-xs text-slate-400">調整上方篩選條件後再試一次</p></div>';
                 document.getElementById('mgr_pager').innerHTML = '';
@@ -850,7 +923,7 @@
                 const card = el('article', 'question-card rounded-2xl p-4 sm:p-5 transition-all');
                 const head = el('div', 'flex flex-col-reverse sm:flex-row sm:justify-between sm:items-start gap-3 mb-3');
                 const meta = el('div', 'flex flex-wrap items-center gap-1.5 text-xs leading-relaxed');
-                meta.innerHTML = `<span class="rounded-md bg-slate-100 px-2 py-1 font-mono font-bold text-slate-500">#${q.id}</span><span class="rounded-md bg-indigo-50 px-2 py-1 font-bold text-indigo-700">${escapeHtml(q.subject)} · ${escapeHtml(q.chapter)}</span><span class="rounded-md bg-slate-50 px-2 py-1 font-semibold text-slate-500">${escapeHtml(q.question_type)}</span><span class="px-1 text-amber-500">${'★'.repeat(q.difficulty)}</span><span class="rounded-md px-2 py-1 font-semibold ${SOURCE_TYPE_BADGE[q.source_type] || SOURCE_TYPE_BADGE.unknown}">${SOURCE_TYPE_LABEL[q.source_type] || '未標記'}</span>`;
+                meta.innerHTML = `<label class="grid place-items-center px-1 cursor-pointer"><input type="checkbox" class="mgr-pick w-4 h-4 accent-indigo-600 cursor-pointer" data-id="${q.id}" aria-label="選取題目 #${q.id}"></label><span class="rounded-md bg-slate-100 px-2 py-1 font-mono font-bold text-slate-500">#${q.id}</span><span class="rounded-md bg-indigo-50 px-2 py-1 font-bold text-indigo-700">${escapeHtml(q.subject)} · ${escapeHtml(q.chapter)}</span><span class="rounded-md bg-slate-50 px-2 py-1 font-semibold text-slate-500">${escapeHtml(q.question_type)}</span><span class="px-1 text-amber-500">${'★'.repeat(q.difficulty)}</span><span class="rounded-md px-2 py-1 font-semibold ${SOURCE_TYPE_BADGE[q.source_type] || SOURCE_TYPE_BADGE.unknown}">${SOURCE_TYPE_LABEL[q.source_type] || '未標記'}</span>${q.source_detail ? `<span class="rounded-md bg-slate-50 px-2 py-1 text-slate-500">${escapeHtml(q.source_detail)}</span>` : ''}`;
                 const btns = el('div', 'flex gap-2 shrink-0');
                 const editBtn = el('button', 'text-xs px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100 cursor-pointer', { type: 'button', textContent: '✏️ 編輯' });
                 editBtn.addEventListener('click', () => openEditModal(q));
@@ -916,6 +989,17 @@
             srcSel.addEventListener('change', () => { editingObj.source_type = srcSel.value; });
             srcRow.appendChild(srcSel);
             body.appendChild(srcRow);
+
+            // 來源註記（0007）：同樣掛在 modal、不動共用 editor；清空欄位＝清掉註記
+            const detailRow = el('div', 'mt-3 flex items-center gap-2');
+            detailRow.appendChild(el('label', 'text-sm font-semibold text-slate-600 shrink-0', { textContent: '來源註記' }));
+            const detailInput = el('input', SELCLS + ' w-full', {
+                type: 'text', maxLength: 100, placeholder: '例：北一女 2024 段考（選填）',
+                value: editingObj.source_detail || ''
+            });
+            detailInput.addEventListener('input', () => { editingObj.source_detail = detailInput.value; });
+            detailRow.appendChild(detailInput);
+            body.appendChild(detailRow);
 
             document.getElementById('editModal').classList.remove('hidden');
         }
@@ -1078,12 +1162,13 @@
             btn.disabled = true;
 
             try {
-                // 題源標記：整批沿用上傳區選的來源（0006）
+                // 題源標記：整批沿用上傳區選的來源（0006）＋來源註記（0007）
                 const srcType = document.getElementById('pdf_source_type').value;
+                const srcDetail = document.getElementById('pdf_source_detail').value.trim();
                 const response = await apiFetch('/api/batch-save-questions', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ questions: globalAnalyzedQuestions.map(q => ({ ...q, source_type: srcType })) })
+                    body: JSON.stringify({ questions: globalAnalyzedQuestions.map(q => ({ ...q, source_type: srcType, source_detail: srcDetail })) })
                 });
                 const resData = await response.json();
                 showToast(resData.message || (response.ok ? '題目已成功寫入資料庫' : '寫入失敗'), response.ok ? 'success' : 'error');
@@ -1111,7 +1196,8 @@
                 difficulty: parseInt(document.getElementById('difficulty').value),
                 question_text: document.getElementById('question_text').value,
                 answer_text: document.getElementById('answer_text').value,
-                source_type: document.getElementById('source_type').value
+                source_type: document.getElementById('source_type').value,
+                source_detail: document.getElementById('source_detail').value
             };
 
             try {
@@ -1276,7 +1362,8 @@
                 const label = document.createElement('p');
                 label.className = 'text-[11px] font-bold text-slate-400';
                 label.textContent = `第 ${index + 1} 題 [${q.question_type}]（難度 ${'★'.repeat(q.difficulty || 0)}）　#${q.id}`
-                    + (q.source_type ? `　來源：${SOURCE_TYPE_LABEL[q.source_type] || q.source_type}` : '');
+                    + (q.source_type ? `　來源：${SOURCE_TYPE_LABEL[q.source_type] || q.source_type}` : '')
+                    + (q.source_detail ? `（${q.source_detail}）` : '');
                 const swap = document.createElement('button');
                 swap.type = 'button';
                 swap.className = 'shrink-0 text-[11px] font-bold px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 cursor-pointer';

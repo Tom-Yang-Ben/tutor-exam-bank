@@ -147,16 +147,18 @@ exports.createJob = async (req, res, next) => {
         const budget = Number.parseFloat(process.env.JOB_COST_BUDGET_USD);
         const pageCount = countPdfPages(buffer);
         // 題源標記（0006）：這份考卷入庫的所有題沿用同一個標記；非法或未帶存 NULL（入庫時落 'unknown'）
-        const { isValidSourceType } = require('../config/chapters');
+        // 來源註記（0007）：同路徑沿用；超長落 NULL（值來自單一表單欄位、UI 已限長）
+        const { isValidSourceType, normalizeSourceDetail } = require('../config/chapters');
         const sourceType = isValidSourceType(req.body?.source_type) ? req.body.source_type : null;
+        const sourceDetail = normalizeSourceDetail(req.body?.source_detail) ?? null;
 
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
             const { rows } = await client.query(
-                `INSERT INTO jobs (kind, pdf_sha256, page_count, state, budget_usd, source_type)
-                 VALUES ('pdf', $1, $2, 'queued', $3, $4) RETURNING id`,
-                [sha256, pageCount, Number.isFinite(budget) ? budget : 0.5, sourceType]);
+                `INSERT INTO jobs (kind, pdf_sha256, page_count, state, budget_usd, source_type, source_detail)
+                 VALUES ('pdf', $1, $2, 'queued', $3, $4, $5) RETURNING id`,
+                [sha256, pageCount, Number.isFinite(budget) ? budget : 0.5, sourceType, sourceDetail]);
             const jobId = rows[0].id;
 
             // 目錄自建，不需要 .gitkeep（第 1.3 條）；檔名用 job id，天然不會撞名

@@ -143,9 +143,9 @@ exam_pro/
 │                                      # embedText、shuffle、pickOnePerFamily、normalizeStem、
 │                                      # answerCompare、variantTextGate、nlqHeuristics、formula*
 ├─ public/index.html + public/js/      # 單頁殼（5 個 hash 路由視圖）+ 五個 ES module（review/students/nlq/variants/assistant）
-├─ migrations/ + migrate.js            # 只增不改的 SQL（0001~0006）＋執行器
+├─ migrations/ + migrate.js            # 只增不改的 SQL（0001~0007）＋執行器
 ├─ eval/                               # run.js（五個 suite）、lib/、golden/、cassettes/、fixtures/、thresholds.json
-├─ test/  unit(1,445) · integration(260) · e2e(11)
+├─ test/  unit(1,449) · integration(261) · e2e(11)
 ├─ scripts/ + *.bat                    # 備份、向量回填、成本報表、公式健檢（Windows 雙擊）
 └─ docker-compose.yml                  # PG16+pgvector：5442 開發（volume）／5433 測試（tmpfs）
 ```
@@ -407,7 +407,7 @@ npm run eval:baseline                                                           
 
 | # | 步驟 | 通過標準 |
 |---|------|----------|
-| 6 | `npm test` | **全數通過（2026-08-28 現況：1,445 passed / 0 failed）**；不連網、不連庫、零 secrets。CI 亦會在 push 後自動跑（badge 見本頁最上方）|
+| 6 | `npm test` | **全數通過（2026-08-29 現況：1,449 passed / 0 failed）**；不連網、不連庫、零 secrets。CI 亦會在 push 後自動跑（badge 見本頁最上方）|
 | 7 | 靜態檔完整性：確認 `public/index.html` 結尾為 `</script></body></html>`，且 `<div>`、`<script>` 開闔數相等 | 檔案未被截斷（詳見下方「截斷檔自檢」）|
 | 8 | `npm start` | 終端印出 `🚀 家教題庫後端系統已成功安全啟動：http://localhost:3000` |
 
@@ -463,6 +463,7 @@ fs.writeFileSync('.tmp_inline.js',b)" && node --check .tmp_inline.js && echo "JS
 | GET | `/api/questions` | 題庫列表（`subject/chapter/question_type/source_type/q/page/limit` 篩選分頁）|
 | POST / PUT / DELETE | `/api/questions(/:id)` | 新增／更新／刪除（**出過的題改封存** `archived:true`）|
 | POST | `/api/batch-save-questions` | 批次入庫，**部分入庫**回 `{saved_count, rejected:[{idx,reason}]}`；`?strict=1` 走舊行為 |
+| POST | `/api/questions/batch-source` | 批次補標題源：`{question_ids(≤200), source_type?, source_detail?}` 至少一項，兩欄「帶了才改」、封存題不動（0007）|
 | GET | `/api/chapters` ／ `/api/chapter-whitelist` | 實際存在章節／完整白名單 |
 | GET | `/api/chapter-volumes` | 分冊結構（科 → 冊 → 章節；前端三層選單用，唯一真相 `config/chapters.js` 的 `VOLUMES`）|
 | GET | `/api/students` | 學生清單（組卷下拉；裁決 S4-2 恆常掛載）|

@@ -130,7 +130,7 @@ exports.approve = async (req, res, next) => {
         // 同一條複核佇列，但入庫的 origin／variant_of／chapter_src 三欄不同。
         // FOR UPDATE 只鎖 job_questions（jobs 不需要鎖，這裡只讀它的 kind）。
         const { rows } = await client.query(
-            `SELECT q.id, q.job_id, q.state, q.payload, j.kind, j.source_type
+            `SELECT q.id, q.job_id, q.state, q.payload, j.kind, j.source_type, j.source_detail
                FROM job_questions q JOIN jobs j ON j.id = q.job_id
               WHERE q.id = $1 FOR UPDATE OF q`, [id]);
         if (rows.length === 0) {
@@ -201,19 +201,21 @@ exports.approve = async (req, res, next) => {
         const chapterSrc = isVariant ? variantChapterSrc(jq.payload, v.value.chapter) : 'human';
 
         // 題源標記（0006）：沿用該 job 上傳時的標記；舊 job 沒標的落 'unknown'
+        // 來源註記（0007）：同路徑沿用（變式 job 本來就沒有註記）
         const sourceType = jq.source_type ?? 'unknown';
+        const sourceDetail = jq.source_detail ?? null;
         const { rows: inserted } = await client.query(
             `INSERT INTO questions
                 (subject, chapter, question_type, difficulty, question_text, question_img,
-                 answer_text, solution_img, origin, chapter_src, variant_of, text_hash, source_type, search_tsv)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
-                     setweight(to_tsvector('simple', array_to_string($14::text[], ' ')), 'A')
-                  || setweight(to_tsvector('simple', array_to_string($15::text[], ' ')), 'A')
-                  || setweight(to_tsvector('simple', array_to_string($16::text[], ' ')), 'B'))
+                 answer_text, solution_img, origin, chapter_src, variant_of, text_hash, source_type, source_detail, search_tsv)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
+                     setweight(to_tsvector('simple', array_to_string($15::text[], ' ')), 'A')
+                  || setweight(to_tsvector('simple', array_to_string($16::text[], ' ')), 'A')
+                  || setweight(to_tsvector('simple', array_to_string($17::text[], ' ')), 'B'))
              RETURNING id`,
             [v.value.subject, v.value.chapter, v.value.question_type, v.value.difficulty,
             v.value.question_text, body.question_img || null, v.value.answer_text || '略',
-            body.solution_img || null, origin, chapterSrc, variantOf, hash, sourceType,
+            body.solution_img || null, origin, chapterSrc, variantOf, hash, sourceType, sourceDetail,
                 chapterTokens, keywordTokens, stemTokens]);
         const questionId = inserted[0].id;
 
