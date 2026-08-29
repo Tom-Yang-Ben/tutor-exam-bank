@@ -52,6 +52,19 @@ function isValidSourceType(value) {
     return SOURCE_TYPES.includes(value);
 }
 
+// 題目來源註記（migrations/0007）：自由文字，例「北一女 2024 段考」。
+// trim 後空值一律落 NULL；超過 100 字回 undefined（呼叫端應拒絕，而非默默截斷——
+// 截斷會讓使用者以為存進去的跟打的一樣）。
+const SOURCE_DETAIL_MAX = 100;
+
+function normalizeSourceDetail(value) {
+    if (value === undefined || value === null) return null;
+    const trimmed = String(value).trim();
+    if (trimmed === '') return null;
+    if (trimmed.length > SOURCE_DETAIL_MAX) return undefined;
+    return trimmed;
+}
+
 function isValidSubject(subject) {
     return SUBJECTS.includes(subject);
 }
@@ -70,4 +83,4 @@ function normalizeDifficulty(value) {
     return n;
 }
 
-module.exports = { CHAPTERS, VOLUMES, volumeOf, SUBJECTS, QUESTION_TYPES, SOURCE_TYPES, isValidSubject, isValidChapter, isValidQuestionType, isValidSourceType, normalizeDifficulty };
+module.exports = { CHAPTERS, VOLUMES, volumeOf, SUBJECTS, QUESTION_TYPES, SOURCE_TYPES, SOURCE_DETAIL_MAX, isValidSubject, isValidChapter, isValidQuestionType, isValidSourceType, normalizeSourceDetail, normalizeDifficulty };

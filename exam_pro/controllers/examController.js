@@ -92,7 +92,7 @@ async function selectPaperQuestions({ studentId, studentName, subject, chapter, 
 
     const rawSelectedIds = familyPicked.slice(0, limitCount).map(q => q.id);
     const { rows: fullQuestions } = await query(
-        `SELECT id, question_text, question_type, difficulty, answer_text, source_type
+        `SELECT id, question_text, question_type, difficulty, answer_text, source_type, source_detail
            FROM questions WHERE id = ANY($1::int[])`,
         [rawSelectedIds]
     );

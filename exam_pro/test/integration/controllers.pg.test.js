@@ -173,6 +173,62 @@ function runSuite() {
             assert.equal(kept.rows[0].source_type, 'self');
         });
 
+        // ── source_detail 來源註記（0007）─────────────────────────────
+        test('source_detail：建題帶註記、超長 400、PUT 清空、批次補標端到端', async () => {
+            const baseBody = {
+                subject: SUBJECT, chapter: CHAPTER, question_type: '填空', difficulty: 3,
+                question_text: '自製 source_detail 測試題：求 $2+2$。', answer_text: '4'
+            };
+
+            // 建題：帶註記入庫（trim）、空白落 NULL、超長 400
+            const created = await request(app).post('/api/questions')
+                .send({ ...baseBody, source_type: 'school', source_detail: '  北一女 2024 段考  ' });
+            assert.equal(created.status, 201, JSON.stringify(created.body));
+            const qid = created.body.questionId;
+            const stored = await query('SELECT source_detail FROM questions WHERE id=$1', [qid]);
+            assert.equal(stored.rows[0].source_detail, '北一女 2024 段考');
+
+            const tooLong = await request(app).post('/api/questions')
+                .send({ ...baseBody, source_detail: 'a'.repeat(101) });
+            assert.equal(tooLong.status, 400);
+
+            // 列表帶回註記
+            const list = await request(app).get('/api/questions?source_type=school');
+            assert.equal(list.body.questions[0].source_detail, '北一女 2024 段考');
+
+            // PUT：帶空字串＝清成 NULL；沒帶欄位＝維持原值
+            await request(app).put('/api/questions/' + qid).send({ ...baseBody, source_detail: '' });
+            const cleared = await query('SELECT source_detail FROM questions WHERE id=$1', [qid]);
+            assert.equal(cleared.rows[0].source_detail, null);
+            await request(app).put('/api/questions/' + qid).send({ ...baseBody, source_detail: '建中 2023 期末' });
+            await request(app).put('/api/questions/' + qid).send(baseBody);
+            const keptDetail = await query('SELECT source_detail FROM questions WHERE id=$1', [qid]);
+            assert.equal(keptDetail.rows[0].source_detail, '建中 2023 期末');
+
+            // 批次補標：兩題一次套 type＋detail；封存題不動
+            await seedQuestions(2);
+            const { rows: seeded } = await query(
+                'SELECT id FROM questions WHERE id <> $1 ORDER BY id LIMIT 2', [qid]);
+            const ids = seeded.map(r => r.id);
+            await query('UPDATE questions SET archived_at = now() WHERE id = $1', [ids[1]]);
+            const batch = await request(app).post('/api/questions/batch-source')
+                .send({ question_ids: ids, source_type: 'school', source_detail: '成功高中 2022 段考' });
+            assert.equal(batch.status, 200, JSON.stringify(batch.body));
+            assert.equal(batch.body.updated, 1); // 封存的那題不計
+            const tagged = await query('SELECT source_type, source_detail FROM questions WHERE id=$1', [ids[0]]);
+            assert.deepEqual(tagged.rows[0], { source_type: 'school', source_detail: '成功高中 2022 段考' });
+
+            // 批次補標的驗證：空 ids／兩欄皆空／非法 type 都 400
+            for (const bad of [
+                { question_ids: [], source_type: 'school' },
+                { question_ids: ids },
+                { question_ids: ids, source_type: '盜版' }
+            ]) {
+                const r = await request(app).post('/api/questions/batch-source').send(bad);
+                assert.equal(r.status, 400, JSON.stringify(bad));
+            }
+        });
+
         // ── generate-paper ────────────────────────────────────────
         test('連抽兩次不重疊，且回應帶 paper_id', async () => {
             await seedQuestions(10);

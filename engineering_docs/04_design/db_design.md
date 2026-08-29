@@ -4,9 +4,11 @@
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 單例（全系統一個 PostgreSQL 16 + pgvector 資料庫）
-> **定位:** 本文件記錄全部資料表的欄位、約束、索引與 migration 沿革；欄位級真相以 `exam_pro/migrations/0001`–`0006` 為準。〔修訂 2026-08-29〕狀態機轉移邏輯歸 [lld.md](./lld.md)，API 資料模型歸 [api_spec.md](./api_spec.md)。
+> **定位:** 本文件記錄全部資料表的欄位、約束、索引與 migration 沿革；欄位級真相以 `exam_pro/migrations/0001`–`0007` 為準。〔修訂 2026-08-29b〕狀態機轉移邏輯歸 [lld.md](./lld.md)，API 資料模型歸 [api_spec.md](./api_spec.md)。
 
 > 🛠 **2026-08-29 修訂**（PR #6/#7 程式碼同步）：migration 範圍 0001–0005 → 0001–0006；§2.1 `questions` 與 §2.3 `jobs` 各補 `source_type` 欄（0006 追加，著作權管理／組卷過濾，FR-017）；§5 Migration 策略與 §6 追溯的範圍與 ID 同步。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
+
+> 🛠 **2026-08-29 修訂之二**（feat/source-detail，同日使用者核准）：0007_source_detail.sql 為 questions／jobs 追加 `source_detail`（自由文字來源註記，學校＋年份等；FR-017 延伸）；§2.1／§2.3／§5／§6 同步。標記〔修訂 2026-08-29b〕。
 
 ## 目錄
 
@@ -37,7 +39,7 @@ erDiagram
 
 ## 2. 表格定義
 
-### 2.1 `questions`（0001 建立；0002 加檢索欄、0003 加 text_hash、0004 改 origin CHECK、0006 加 source_type〔修訂 2026-08-29〕）
+### 2.1 `questions`（0001 建立；0002 加檢索欄、0003 加 text_hash、0004 改 origin CHECK、0006 加 source_type〔修訂 2026-08-29〕、0007 加 source_detail〔修訂 2026-08-29b〕）
 
 | 欄位 | 型態 | 約束 | 說明 |
 | :--- | :--- | :--- | :--- |
@@ -58,6 +60,7 @@ erDiagram
 | `search_tsv` | TSVECTOR | NULL | 應用層 jieba 分詞後 to_tsvector('simple', ...)（ADR-008） |
 | `text_hash` | CHAR(64) | NULL；0005 起部分唯一 | sha256(normalizeStem(question_text))，L0 去重（FR-005） |
 | `source_type` | TEXT | NOT NULL, DEFAULT 'unknown', CHECK IN ('official','school','publisher','self','unknown') | 0006 追加（FR-017）：題目來源標記（著作權管理），組卷可過濾乾淨題源；值域程式真相 `config/chapters.js` SOURCE_TYPES〔修訂 2026-08-29〕 |
+| `source_detail` | TEXT | 可 NULL, CHECK char_length ≤ 100 | 0007 追加（FR-017 延伸）：自由文字來源註記（例「北一女 2024 段考」）；trim 後空值落 NULL，程式真相 `config/chapters.js` normalizeSourceDetail；不參與 search_tsv／embedding〔修訂 2026-08-29b〕 |
 
 ### 2.2 `students`、`exam_papers`、`attempts`（0001）
 
@@ -73,7 +76,7 @@ erDiagram
 | `attempts.result` / `graded_at` | SMALLINT / TIMESTAMPTZ | CHECK result IN (0,1)；NULL＝未批改 | 批改（FR-015） |
 | `attempts` 複合約束 | — | UNIQUE (student_id, question_id) | 「不重複出題」伺服器端硬閘門（DEC-003／FR-008） |
 
-### 2.3 `jobs`（0003 建立；0006 加 source_type〔修訂 2026-08-29〕）
+### 2.3 `jobs`（0003 建立；0006 加 source_type〔修訂 2026-08-29〕、0007 加 source_detail〔修訂 2026-08-29b〕）
 
 | 欄位 | 型態 | 約束 | 說明 |
 | :--- | :--- | :--- | :--- |
@@ -87,6 +90,7 @@ erDiagram
 | `cost_usd` / `budget_usd` | NUMERIC(10,6) | NOT NULL；budget 建立時複製 JOB_COST_BUDGET_USD | NFR-002 |
 | `locked_until` | TIMESTAMPTZ | NULL | 認領租約 JOB_LEASE_MS（NFR-005） |
 | `source_type` | TEXT | 可 NULL, CHECK IN ('official','school','publisher','self','unknown') | 0006 追加（FR-017）：上傳時標一次，該 job 入庫的題沿用；variant job 建立時複製藍本題標記；NULL（舊 job／未標）入庫時以 'unknown' 落地〔修訂 2026-08-29〕 |
+| `source_detail` | TEXT | 可 NULL, CHECK char_length ≤ 100 | 0007 追加（FR-017 延伸）：上傳時註記一次、入庫沿用；variant job **不**繼承藍本註記（改寫後非原卷之題）〔修訂 2026-08-29b〕 |
 | `jobs_kind_payload` | — | CHECK：pdf→pdf_sha256 NOT NULL；variant→source_question_id NOT NULL | 兩種 kind 的必填互斥保證 |
 
 ### 2.4 `job_questions`、`job_events`（0003）
@@ -132,7 +136,7 @@ erDiagram
 
 | 項目 | 政策 |
 | :--- | :--- |
-| **Migration 策略** | 只增不改（NFR-006）：0001–0006 逐一凍結〔修訂 2026-08-29〕，任何欄位變更一律新開 migration 檔；ENUM 一律以 TEXT+CHECK 實作（改值域走 DROP/ADD CONSTRAINT，如 0004）；0006_source_type.sql（2026-08-28 核准）為 questions／jobs 追加 source_type〔修訂 2026-08-29〕 |
+| **Migration 策略** | 只增不改（NFR-006）：0001–0007 逐一凍結〔修訂 2026-08-29b〕，任何欄位變更一律新開 migration 檔；ENUM 一律以 TEXT+CHECK 實作（改值域走 DROP/ADD CONSTRAINT，如 0004）；0006_source_type.sql（2026-08-28 核准）為 questions／jobs 追加 source_type〔修訂 2026-08-29〕；0007_source_detail.sql（2026-08-29 核准）為兩表追加 source_detail〔修訂 2026-08-29b〕 |
 | **唯一約束沿革（0005）** | 0003 先建非唯一 `idx_questions_text_hash`（舊題回填必有碰撞）→ scripts/backfill_text_hash.js 印碰撞清單 → 2026-08-23 人工確認 #2/#3、#5/#38 為真重複，attempts 併到保留題、#3/#38 封存 → 0005 建部分唯一索引（封存題與 NULL 不受限）（裁決 S2-30） |
 | **刪除策略** | 題目軟刪除（archived_at）；attempts ON DELETE RESTRICT；jobs 子表 CASCADE；job_events 只追加不更新 |
 | **保留期限** | 單人自用系統，無法規要求；PDF 原檔於拆題完成後刪除（pdf_path 清成 NULL），其餘資料無限期保留 |
@@ -142,5 +146,5 @@ erDiagram
 ## 6. 追溯
 
 - 上游：DEC-003、DEC-004、DEC-009；FR-001、FR-002、FR-005、FR-006、FR-007、FR-008、FR-010、FR-011、FR-013、FR-014、FR-015、FR-017〔修訂 2026-08-29〕；NFR-002、NFR-005、NFR-006；ADR-001、ADR-002、ADR-008
-- 實作真相：`exam_pro/migrations/0001_init.sql`–`0006_source_type.sql`〔修訂 2026-08-29〕
+- 實作真相：`exam_pro/migrations/0001_init.sql`–`0007_source_detail.sql`〔修訂 2026-08-29b〕
 - 下游：[api_spec.md](./api_spec.md)（欄位命名對齊）、[lld.md](./lld.md)（jobs/job_questions 狀態機轉移）、[../03_architecture/engineering_tracker.md](../03_architecture/engineering_tracker.md)、[../06_ops/runbook-job-stuck.md](../06_ops/runbook-job-stuck.md)（locked_until 租約）

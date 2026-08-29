@@ -65,3 +65,33 @@ describe('config/chapters — SOURCE_TYPES 題源標記（0006）', () => {
         }
     });
 });
+
+describe('config/chapters — normalizeSourceDetail 來源註記（0007）', () => {
+    const { normalizeSourceDetail, SOURCE_DETAIL_MAX } = require('../../config/chapters');
+
+    test('trim 後有內容 → 回 trim 後字串', () => {
+        assert.equal(normalizeSourceDetail('北一女 2024 段考'), '北一女 2024 段考');
+        assert.equal(normalizeSourceDetail('  北一女 2024 段考  '), '北一女 2024 段考');
+        assert.equal(normalizeSourceDetail(2024), '2024'); // 非字串轉字串後處理
+    });
+
+    test('未帶／null／空白 → 一律 NULL（DB 不存空字串）', () => {
+        for (const empty of [undefined, null, '', '   ', '\t\n']) {
+            assert.equal(normalizeSourceDetail(empty), null, JSON.stringify(empty));
+        }
+    });
+
+    test(`超過 ${100} 字 → undefined（呼叫端應拒絕，不默默截斷）`, () => {
+        assert.equal(SOURCE_DETAIL_MAX, 100);
+        assert.equal(normalizeSourceDetail('a'.repeat(100)), 'a'.repeat(100));
+        assert.equal(normalizeSourceDetail('a'.repeat(101)), undefined);
+        // trim 後恰好貼線也要放行
+        assert.equal(normalizeSourceDetail(' ' + 'a'.repeat(100) + ' '), 'a'.repeat(100));
+    });
+
+    test('上限與 migrations/0007 的 CHECK 一致', () => {
+        const sql = require('node:fs').readFileSync(
+            require('node:path').resolve(__dirname, '..', '..', 'migrations', '0007_source_detail.sql'), 'utf8');
+        assert.ok(sql.includes(`char_length(source_detail) <= ${SOURCE_DETAIL_MAX}`), '0007 的 CHECK 上限與程式側不一致');
+    });
+});

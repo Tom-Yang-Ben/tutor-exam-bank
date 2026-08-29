@@ -1,5 +1,5 @@
 const { query, pool } = require('../config/db');
-const { CHAPTERS, isValidSubject, isValidChapter, isValidQuestionType, isValidSourceType, normalizeDifficulty, QUESTION_TYPES } = require('../config/chapters');
+const { CHAPTERS, isValidSubject, isValidChapter, isValidQuestionType, isValidSourceType, normalizeSourceDetail, normalizeDifficulty, QUESTION_TYPES, SOURCE_DETAIL_MAX } = require('../config/chapters');
 
 // ─────────────────────────────────────────────────────────────
 // 檢索欄位的同步（docs/interfaces-stage1.md 第 12.4 條）
@@ -69,6 +69,11 @@ exports.createQuestion = async (req, res, next) => {
     const { subject, chapter, question_type, difficulty, question_text, question_img, answer_text, solution_img } = req.body;
     // 題源標記（0006）：未帶或非法值一律落 'unknown'，不擋錄入——它是管理標記，不是內容閘門
     const sourceType = isValidSourceType(req.body.source_type) ? req.body.source_type : 'unknown';
+    // 來源註記（0007）：超長是唯一會擋的情況（默默截斷會騙人）
+    const sourceDetail = normalizeSourceDetail(req.body.source_detail);
+    if (sourceDetail === undefined) {
+        return res.status(400).json({ message: `來源註記最多 ${SOURCE_DETAIL_MAX} 字。` });
+    }
     if (!subject || !chapter || !question_text || !answer_text) {
         return res.status(400).json({ message: '學科、章節、題目內容與答案皆為必填欄位！' });
     }
@@ -99,15 +104,15 @@ exports.createQuestion = async (req, res, next) => {
         // 手動錄入 → origin='manual'、chapter_src='human'（規劃 §4.3.1 的來源標記規則）
         const sql = `INSERT INTO questions
                         (subject, chapter, question_type, difficulty, question_text, question_img, answer_text, solution_img,
-                         origin, chapter_src, source_type, search_tsv)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'manual', 'human', $9,
-                             setweight(to_tsvector('simple', array_to_string($10::text[], ' ')), 'A')
-                          || setweight(to_tsvector('simple', array_to_string($11::text[], ' ')), 'A')
-                          || setweight(to_tsvector('simple', array_to_string($12::text[], ' ')), 'B'))
+                         origin, chapter_src, source_type, source_detail, search_tsv)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'manual', 'human', $9, $10,
+                             setweight(to_tsvector('simple', array_to_string($11::text[], ' ')), 'A')
+                          || setweight(to_tsvector('simple', array_to_string($12::text[], ' ')), 'A')
+                          || setweight(to_tsvector('simple', array_to_string($13::text[], ' ')), 'B'))
                      RETURNING id`;
         const { rows } = await query(sql, [
             row.subject, row.chapter, row.question_type, row.difficulty, row.question_text,
-            question_img || null, answer_text.trim(), solution_img || null, sourceType,
+            question_img || null, answer_text.trim(), solution_img || null, sourceType, sourceDetail,
             chapterTokens, keywordTokens, stemTokens
         ]);
         res.status(201).json({ message: '題目錄入成功！', questionId: rows[0].id });
@@ -130,7 +135,7 @@ exports.batchSaveQuestions = async (req, res, next) => {
     const rejected = [];
     // PG 沒有 mysql2 的 `VALUES ?`（二維陣列）批次語法，改成「每欄一個陣列參數」餵給 unnest，
     // 因此這裡以「欄」為單位收集，而不是以「列」為單位。
-    const cols = { subject: [], chapter: [], question_type: [], difficulty: [], question_text: [], answer_text: [], source_type: [] };
+    const cols = { subject: [], chapter: [], question_type: [], difficulty: [], question_text: [], answer_text: [], source_type: [], source_detail: [] };
     questions.forEach((q, idx) => {
         const subject = q.subject;
         const chapter = (q.chapter || '').trim();
@@ -150,6 +155,8 @@ exports.batchSaveQuestions = async (req, res, next) => {
         cols.question_text.push(String(q.question_text).trim());
         cols.answer_text.push(q.answer_text || '略');
         cols.source_type.push(isValidSourceType(q.source_type) ? q.source_type : 'unknown');
+        // 註記超長在此路徑不整題退回（值來自上傳區單一欄位、UI 已限長）；落 NULL 而非截斷
+        cols.source_detail.push(normalizeSourceDetail(q.source_detail) ?? null);
     });
 
     const savedCount = cols.subject.length;
@@ -170,9 +177,9 @@ exports.batchSaveQuestions = async (req, res, next) => {
 
     try {
         // AI 拆題入庫：origin / chapter_src 走 DDL 預設（'pdf' / 'ai'）
-        const sql = `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text, source_type)
-                     SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::int[], $5::text[], $6::text[], $7::text[])`;
-        await query(sql, [cols.subject, cols.chapter, cols.question_type, cols.difficulty, cols.question_text, cols.answer_text, cols.source_type]);
+        const sql = `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text, source_type, source_detail)
+                     SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::int[], $5::text[], $6::text[], $7::text[], $8::text[])`;
+        await query(sql, [cols.subject, cols.chapter, cols.question_type, cols.difficulty, cols.question_text, cols.answer_text, cols.source_type, cols.source_detail]);
         const message = rejected.length === 0
             ? `🎉 成功！已將共 ${savedCount} 題自動錄入資料庫！`
             : `已寫入 ${savedCount} 題；另有 ${rejected.length} 題未通過驗證（已在下方標紅），修正後可再次送出。`;
@@ -216,7 +223,7 @@ exports.listQuestions = async (req, res, next) => {
         const total = countRows[0].total;
 
         const { rows } = await query(
-            `SELECT id, subject, chapter, question_type, difficulty, question_text, question_img, answer_text, source_type, created_at
+            `SELECT id, subject, chapter, question_type, difficulty, question_text, question_img, answer_text, source_type, source_detail, created_at
              FROM questions ${whereSql} ORDER BY id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
             [...params, limit, offset]
         );
@@ -230,6 +237,14 @@ exports.updateQuestion = async (req, res, next) => {
     if (!Number.isInteger(id)) return res.status(400).json({ message: '無效的題目 ID' });
     const v = validateQuestionFields(req.body);
     if (!v.ok) return res.status(400).json({ message: v.error });
+    // 來源註記（0007）：COALESCE 分不出「沒帶」與「清空」，因此帶欄位與否用 $9 布林傳；
+    // 帶了空字串＝清成 NULL（使用者在編輯視窗刪光註記就是要清掉）。
+    // 驗證必須在 pool.connect / BEGIN 之前——交易內 return 會把開著交易的連線還回 pool。
+    const hasDetail = Object.prototype.hasOwnProperty.call(req.body, 'source_detail');
+    const sourceDetail = normalizeSourceDetail(req.body.source_detail);
+    if (hasDetail && sourceDetail === undefined) {
+        return res.status(400).json({ message: `來源註記最多 ${SOURCE_DETAIL_MAX} 字。` });
+    }
     const client = await pool.connect();
     try {
         const { subject, chapter, question_type, difficulty, question_text, answer_text } = v.value;
@@ -247,13 +262,14 @@ exports.updateQuestion = async (req, res, next) => {
             `UPDATE questions
                 SET subject=$1, chapter=$2, question_type=$3, difficulty=$4, question_text=$5, answer_text=$6,
                     source_type = COALESCE($8, source_type),
+                    source_detail = CASE WHEN $9 THEN $10 ELSE source_detail END,
                     chapter_src = CASE WHEN chapter IS DISTINCT FROM $2 THEN 'human' ELSE chapter_src END,
                     embed_hash  = CASE WHEN (subject, chapter, question_type, difficulty, question_text)
                                        IS DISTINCT FROM ($1, $2, $3, $4::smallint, $5)
                                   THEN NULL ELSE embed_hash END
               WHERE id=$7 AND archived_at IS NULL
           RETURNING id, subject, chapter, question_type, difficulty, question_text, keywords, concept_summary`,
-            [subject, chapter, question_type, difficulty, question_text, answer_text || '略', id, sourceType]
+            [subject, chapter, question_type, difficulty, question_text, answer_text || '略', id, sourceType, hasDetail, sourceDetail]
         );
         if (rows.length === 0) {
             await client.query('ROLLBACK');
@@ -314,4 +330,43 @@ exports.deleteQuestion = async (req, res, next) => {
     } finally {
         client.release();
     }
+};
+
+// 批次補標題源（0007）：對一批題目一次套用 source_type 與（或）source_detail。
+// 為既有題庫的人工補標而生——同一份考卷的題先用篩選圈出來，再一次標完。
+//
+// 語意刻意保守：兩個欄位都是「帶了才改」，且 source_detail 空字串在這裡＝不改
+// （批次「清空一批註記」不是補標情境；要清就到單題編輯清）。不動 search_tsv 與
+// embedding——題源欄位不參與檢索文本。
+const BATCH_SOURCE_MAX = 200;
+
+exports.batchSourceTag = async (req, res, next) => {
+    const { question_ids, source_type, source_detail } = req.body;
+    if (!Array.isArray(question_ids) || question_ids.length === 0 || question_ids.length > BATCH_SOURCE_MAX ||
+        question_ids.some(v => !Number.isInteger(v) || v < 1)) {
+        return res.status(400).json({ message: `question_ids 必須是 1~${BATCH_SOURCE_MAX} 個正整數。` });
+    }
+    const hasType = source_type !== undefined && source_type !== null && source_type !== '';
+    if (hasType && !isValidSourceType(source_type)) {
+        return res.status(400).json({ message: '來源標記無效。' });
+    }
+    const detail = normalizeSourceDetail(source_detail);
+    if (detail === undefined) {
+        return res.status(400).json({ message: `來源註記最多 ${SOURCE_DETAIL_MAX} 字。` });
+    }
+    if (!hasType && detail === null) {
+        return res.status(400).json({ message: '至少要提供來源標記或來源註記其中一項。' });
+    }
+    try {
+        const ids = [...new Set(question_ids)];
+        const { rows } = await query(
+            `UPDATE questions
+                SET source_type   = COALESCE($2, source_type),
+                    source_detail = COALESCE($3, source_detail)
+              WHERE id = ANY($1::int[]) AND archived_at IS NULL
+          RETURNING id`,
+            [ids, hasType ? source_type : null, detail]
+        );
+        res.json({ message: `已更新 ${rows.length} 題的題源標記。`, updated: rows.length });
+    } catch (err) { next(err); }
 };

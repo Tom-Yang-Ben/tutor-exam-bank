@@ -483,6 +483,9 @@ function takeOverUpload(app) {
         // 題源標記（0006 著作權管理）：上傳區的選單值標在 job 上，該卷入庫的所有題沿用
         const srcSel = document.getElementById('pdf_source_type');
         if (srcSel && srcSel.value) formData.append('source_type', srcSel.value);
+        // 來源註記（0007）：例「北一女 2024 段考」，同路徑沿用
+        const srcDetail = document.getElementById('pdf_source_detail');
+        if (srcDetail && srcDetail.value.trim()) formData.append('source_detail', srcDetail.value.trim());
 
         try {
             const res = await request(app, '/api/jobs', { method: 'POST', body: formData });

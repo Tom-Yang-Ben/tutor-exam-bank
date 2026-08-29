@@ -7,6 +7,8 @@
 
 > 🛠 **2026-08-29 修訂**（PR #6/#7 程式碼同步）：§2.1 `GET /api/questions` 篩選參數補 `source_type`；§5.1 端點總表補 `GET /api/chapter-volumes`（三層選單資料源）；`POST /api/generate-paper` 說明補 `source_types` 題源過濾；§7 上游 FR 範圍延伸至 FR-017。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 
+> 🛠 **2026-08-29 修訂之二**（feat/source-detail）：questions／jobs 各端點的請求與回應加 `source_detail` 來源註記（自由文字 ≤100 字，FR-017 延伸）；§5.1 補 `POST /api/questions/batch-source` 批次補標端點。標記〔修訂 2026-08-29b〕。
+
 ## 目錄
 
 - [1. 設計約定](#1-設計約定)
@@ -102,6 +104,7 @@ app.use((err, req, res, next) => {
 | `GET /api/questions` | FR-007 | 題庫列表（篩選＋分頁） |
 | `POST /api/questions`、`PUT /api/questions/:id`、`DELETE /api/questions/:id` | FR-007 | 題目 CRUD；出過的題刪除改封存 `archived:true` |
 | `POST /api/batch-save-questions` | FR-007 | 批次入庫（白名單硬驗證、部分入庫；`?strict=1` 舊行為） |
+| `POST /api/questions/batch-source` | FR-017 | 批次補標題源：`{question_ids(≤200), source_type?, source_detail?}` 至少一項；兩欄皆「帶了才改」、封存題不動〔修訂 2026-08-29b〕 |
 | `GET /api/chapters`、`GET /api/chapter-whitelist` | FR-002 | 實際存在章節／完整白名單 |
 | `GET /api/chapter-volumes` | FR-002、FR-007 | 分冊結構（科目→冊→單元），前端三層章節選單資料源；唯一真相 `config/chapters.js` 的 VOLUMES〔修訂 2026-08-29〕 |
 | `GET /api/students` | FR-014 | 學生清單（裁決 S4-2：組卷下拉恆常需要，不吃旗標） |

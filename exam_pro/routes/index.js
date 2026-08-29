@@ -28,6 +28,7 @@ router.post('/questions', questionController.createQuestion);
 router.put('/questions/:id', questionController.updateQuestion);
 router.delete('/questions/:id', questionController.deleteQuestion);
 router.post('/batch-save-questions', questionController.batchSaveQuestions);
+router.post('/questions/batch-source', questionController.batchSourceTag); // 批次補標題源（0007）
 router.get('/chapters', questionController.getChapters);
 router.get('/chapter-whitelist', questionController.getChapterWhitelist);
 router.get('/chapter-volumes', questionController.getChapterVolumes);

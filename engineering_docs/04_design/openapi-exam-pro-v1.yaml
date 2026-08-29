@@ -16,6 +16,7 @@ info:
     見 api_spec.md，文件不重複維護端點清單。全部 /api 路由經 apiKeyAuth（x-api-key，timing-safe）。
     對應需求：FR-001～FR-017。
     2026-08-29 修訂（PR #6/#7 程式碼同步）：新增 GET /chapter-volumes；listQuestions／generatePaper／createJob／QuestionCreate 補 source_type（FR-017）。
+    2026-08-29 修訂之二（feat/source-detail 0007）：QuestionCreate／createJob 補 source_detail 來源註記；新增 POST /questions/batch-source 批次補標（FR-017 延伸）。
 servers:
   - url: http://localhost:3000/api
 security:
@@ -97,6 +98,25 @@ paths:
       responses:
         "200": { description: 成功；回傳逐筆入庫結果 }
         "400": { $ref: "#/components/responses/BadRequest" }
+  /questions/batch-source: # 修訂 2026-08-29b（feat/source-detail 0007）
+    post:
+      tags: [questions]
+      summary: 批次補標題源（FR-017 延伸）：對一批題一次套用 source_type 與（或）source_detail
+      operationId: batchSourceTag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question_ids]
+              properties:
+                question_ids: { type: array, items: { type: integer, minimum: 1 }, maxItems: 200, description: 伺服器端去重；封存題不更新 }
+                source_type: { type: string, enum: [official, school, publisher, self, unknown], description: 帶了才改 }
+                source_detail: { type: string, maxLength: 100, description: 帶了非空才改（批次不提供清空——清空走單題 PUT） }
+      responses:
+        "200": { description: 成功；回 { message, updated }（updated＝實際更新筆數） }
+        "400": { description: question_ids 不合法、兩欄皆未提供、source_type 非法或註記超長 }
   /chapters:
     get:
       tags: [questions]
@@ -467,6 +487,8 @@ paths:
                 pdf: { type: string, format: binary, description: PDF 檔，上限 15 MB }
                 # 修訂 2026-08-29（PR #7 source_type / PR #6 chapter-volumes）：整份考卷的題源標記（FR-017）
                 source_type: { type: string, enum: [official, school, publisher, self, unknown], description: 選填；該 job 入庫的所有題沿用此標記（FR-017）。未帶或非法值落 NULL，入庫時以 'unknown' 落地 }
+                # 修訂 2026-08-29b（feat/source-detail 0007）：整份考卷的來源註記（FR-017 延伸）
+                source_detail: { type: string, maxLength: 100, description: 選填；該 job 入庫的所有題沿用此註記（例「北一女 2024 段考」）；variant job 不繼承藍本註記 }
       responses:
         "202":
           description: 已受理
@@ -679,6 +701,8 @@ components:
         solution_img: { type: ["string", "null"] }
         # 修訂 2026-08-29（PR #7 source_type / PR #6 chapter-volumes）：題源標記（FR-017）
         source_type: { type: string, enum: [official, school, publisher, self, unknown], default: unknown, description: 選填題源標記（FR-017）；建題未帶或非法值伺服器落 'unknown'（DDL DEFAULT 同值）——不擋錄入的管理標記。PUT 更新時未帶或非法值以 COALESCE 保留原值 }
+        # 修訂 2026-08-29b（feat/source-detail 0007）：來源註記（FR-017 延伸）
+        source_detail: { type: ["string", "null"], maxLength: 100, description: 選填來源註記（例「北一女 2024 段考」，FR-017 延伸）；trim 後空值落 NULL、超過 100 字回 400。PUT 更新時帶空字串＝清成 NULL、未帶欄位＝保留原值 }
     WeaknessRow:
       type: object
       description: 弱點三表共用列（分組欄依表為 chapter／question_type／difficulty）
