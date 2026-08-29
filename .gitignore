@@ -31,6 +31,8 @@ Thumbs.db
 .vscode/
 .idea/
 .mcp.json
+# Playwright MCP 瀏覽器自動化的暫存快照與 console 紀錄
+.playwright-mcp/
 
 # 大型報告素材（影片 / 簡報 / PDF，不適合進 git）
 *.mp4
