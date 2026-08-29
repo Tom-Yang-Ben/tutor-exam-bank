@@ -107,13 +107,19 @@ npm run eval:trend                    # 印出與上一次的差值
 
 ### 介面截圖
 
-> 🚧 UI 美化完成後補上，屆時放在 `docs/` 並改為圖片連結。
+> 截圖中的題目為自行編寫的示範內容（題源標記「自行編寫」），與 [`sample_exam.docx`](sample_exam.docx) 相同，不含任何真實考卷題目。
 
-| 檔名 | 應呈現的畫面 |
-|------|--------------|
-| `docs/screenshot-manager.png` | 題庫管理：清單、篩選、分頁與「共 N 題」計數 |
-| `docs/screenshot-generate.png` | 智慧組卷：填入學生／章節／抽題數後的題目預覽與下載按鈕 |
-| `docs/screenshot-word.png` | 匯出的 `.docx` 在 Word 中開啟的實際排版（數學公式） |
+**題庫管理**——學科／章節篩選、「共 N 題」計數、LaTeX 即時渲染與題源標記：
+
+![題庫管理：篩選、計數與題源標記](docs/screenshot-manager.png)
+
+**智慧組卷**——選定學生、章節、抽題數與題源限制（著作權過濾）後生成預覽；預覽階段不寫入資料庫，按「確認出卷」才建卷並記入不重複紀錄：
+
+![智慧組卷：組卷條件與試卷預覽](docs/screenshot-generate.png)
+
+**Word 匯出**——匯出的 `.docx` 在 Word 中開啟的實際排版，標題、作答資訊列與可編輯的原生數學公式：
+
+![Word 匯出：考卷實際排版](docs/screenshot-word.png)
 
 ---
 

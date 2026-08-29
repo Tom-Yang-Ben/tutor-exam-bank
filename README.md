@@ -137,6 +137,7 @@ exam_pro/
 │   └─ e2e/                   #   11 項：HTTP 全路徑（上傳→部分入庫；組卷→Word 公式）
 │
 ├─ scripts/                   # 維運：備份、向量回填、成本報表、公式健檢
+├─ docs/                      # README 介面截圖（題目為自編示範內容，不含真實考卷）
 ├─ seed_questions.js          # 30 題自製種子（4 章 × 7~8 題，含單章密度自檢）
 ├─ docker-compose.yml         # PG16+pgvector：5442 開發（volume）／5433 測試（tmpfs）
 └─ *.bat                      # Windows 雙擊工具（啟動資料庫／備份／公式健檢…）
