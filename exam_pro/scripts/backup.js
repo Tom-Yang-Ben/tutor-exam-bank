@@ -12,7 +12,13 @@
 //
 // 失敗一定要看得見（Docker Desktop 只有登入後才會起來，工作排程器在無人時跑最容易靜默失敗）：
 //   任何一步失敗都會寫 backups/LAST_FAILED.txt 並以非零碼退出，
-//   讓 .bat 停在畫面上不關視窗。成功時把這個檔刪掉。
+//   讓 .bat 停在畫面上不關視窗。成功時把這個檔刪掉——它是「最後一次跑掛了」的旗標，
+//   只反映當下狀態。
+//
+//   但旗標會被下一次成功抹掉，所以歷史另外累積在 backups/backup.log：
+//   每次執行不論成功失敗都 append 一行，永遠不刪。「這兩週漏了哪幾天」只有 log 答得出來。
+//   （2026-08-27 就漏過一次；當時工作排程器回報 LastTaskResult=0、NumberOfMissedRuns=0，
+//     隔天的成功又把旗標刪了，整件事沒有在任何地方留下痕跡。）
 //
 // 新環境變數（列在 PR 描述，由開發者本人合進 .env.example）：
 //   BACKUP_DIR         備份輸出資料夾，預設 exam_pro/backups
@@ -46,6 +52,8 @@ function main() {
     const service = process.env.BACKUP_PG_SERVICE || 'postgres';
     const copyDir = (process.env.BACKUP_COPY_DIR || '').trim();
     const failFile = path.join(outDir, 'LAST_FAILED.txt');
+    const logFile = path.join(outDir, 'backup.log');
+    const log = line => appendLog(logFile, line);
 
     fs.mkdirSync(outDir, { recursive: true });
 
@@ -99,11 +107,15 @@ function main() {
         console.log(`✅ 備份完成：${outFile}（${(size / 1024 / 1024).toFixed(2)} MB）`);
 
         // 5. 複製一份到雲端硬碟資料夾（選填）
+        //    沒設 BACKUP_COPY_DIR 的話備份跟資料庫同在一顆硬碟上，擋得住誤刪，擋不住硬碟壞掉，
+        //    所以 log 要記下這次到底有沒有異地副本。
+        let copied = false;
         if (copyDir) {
             const dst = path.resolve(copyDir);
             try {
                 fs.mkdirSync(dst, { recursive: true });
                 fs.copyFileSync(outFile, path.join(dst, path.basename(outFile)));
+                copied = true;
                 console.log(`   已複製到 ${dst}`);
             } catch (e) {
                 throw new Error(`備份成功但複製到 BACKUP_COPY_DIR 失敗：${e.message}`);
@@ -118,6 +130,8 @@ function main() {
         for (const f of olds) { safeUnlink(path.join(outDir, f)); console.log(`   已清掉舊備份 ${f}`); }
 
         safeUnlink(failFile);
+        // 複製失敗會在上面 throw，所以走到這裡只有「已複製」與「沒設定要複製」兩種。
+        log(`OK    ${path.basename(outFile)} ${(size / 1024 / 1024).toFixed(2)}MB ${copied ? '異地副本已複製' : '僅本機（未設 BACKUP_COPY_DIR）'}`);
         console.log(`   保留最近 ${keep} 份；還原方式見 docs/archive/cutover-runbook.md 的「回滾」段。`);
     } catch (err) {
         const msg = `[${new Date().toISOString()}] 備份失敗：${err.message}\n`;
@@ -125,6 +139,8 @@ function main() {
             fs.mkdirSync(outDir, { recursive: true });
             fs.appendFileSync(failFile, msg, 'utf8');
         } catch (e) { /* 連寫旗標都失敗就只能靠 stderr 了 */ }
+        // 旗標會被下一次成功刪掉，log 不會——漏跑與失敗的歷史只留在這裡。
+        appendLog(path.join(outDir, 'backup.log'), `FAIL  ${err.message.replace(/\s+/g, ' ')}`);
         console.error('❌ ' + err.message);
         console.error(`   已記到 ${failFile}`);
         process.exit(1);
@@ -149,6 +165,24 @@ function parseUrl(url) {
 function stampForFilename(t) {
     const p = n => String(n).padStart(2, '0');
     return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}_${p(t.getHours())}${p(t.getMinutes())}`;
+}
+
+/** log 用的本地時間戳；用 toISOString 會差 8 小時，對照排程時間時很容易看錯。 */
+function stampForLog(t) {
+    const p = n => String(n).padStart(2, '0');
+    return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())} ${p(t.getHours())}:${p(t.getMinutes())}:${p(t.getSeconds())}`;
+}
+
+/**
+ * Append 一行結果到 backups/backup.log。這個檔永遠不輪替、不刪除——一天一行，
+ * 一年也才幾十 KB，而它是唯一能回答「哪幾天沒備到」的東西。
+ * 寫 log 失敗絕不能反過來讓備份失敗，所以整段吞掉例外。
+ */
+function appendLog(file, line) {
+    try {
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.appendFileSync(file, `[${stampForLog(new Date())}] ${line}\n`, 'utf8');
+    } catch (e) { /* 寫不進去就算了，stdout/stderr 還在 */ }
 }
 
 function safeUnlink(f) {
