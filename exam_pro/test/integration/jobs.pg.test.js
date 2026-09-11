@@ -936,6 +936,23 @@ function runSuite() {
                 assert.equal(jq[0].payload.dedup1.verdict, 'variant');
             });
 
+            test('題幹與題庫既有題重複 → 409 帶 duplicate_of，不留半筆、列仍待複核', async () => {
+                const { rows: existing } = await query(
+                    `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text, text_hash)
+                     VALUES ($1, $2, '計算', 3, $3, '答', $4) RETURNING id`,
+                    [SUBJECT, CHAPTER, GOOD_BODY.question_text, textHash(GOOD_BODY.question_text)]);
+                const { jobId, jqId } = await seedNeedsReview('duplicate');
+
+                const res = await request(app).post(`/api/review/${jqId}/approve`).send(GOOD_BODY);
+                assert.equal(res.status, 409, '以前這裡是 500「後端伺服器內部發生未知錯誤」');
+                assert.equal(res.body.duplicate_of, existing[0].id);
+                assert.match(res.body.message, new RegExp(`#${existing[0].id} 重複`));
+
+                assert.equal((await savedQuestions(jobId)).length, 0, '撞重複不得留下半筆資料');
+                const { rows: jq } = await query('SELECT state, review_reason FROM job_questions WHERE id = $1', [jqId]);
+                assert.deepEqual(jq[0], { state: 'needs_review', review_reason: 'duplicate' }, '列要留在佇列讓老師按「不採用」');
+            });
+
             test('merge_into 指向不存在的題目 → 400', async () => {
                 const { jobId, jqId } = await seedNeedsReview('duplicate');
                 const res = await request(app).post(`/api/review/${jqId}/approve`).send({ ...GOOD_BODY, merge_into: 999999 });
