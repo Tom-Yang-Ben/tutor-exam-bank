@@ -762,6 +762,7 @@ function estimateCost({ modelId, tokenIn, tokenOut, tokenThinking, tokenCached }
 | 400 | `{ message: 'merge_into 指向的題目不存在。' }` |
 | 404 | `{ message: '找不到該待複核題目' }` |
 | 409 | `{ message: '該題目已處理完畢，不能重複複核。' }`（`state` 已是 `saved`／`rejected`） |
+| 409 | `{ message: '此題與題庫既有題目 #2 重複，請改按「不採用」；若確實是不同題，請修改題幹後再入庫。', duplicate_of: 2 }`（修正後題幹的 `text_hash` 命中未封存的既有題，即 0005 的 `uq_questions_text_hash_active`；2026-09-12 前這裡漏接，直接落 500） |
 
 - 成功後：`job_questions.state='saved'`、`review_reason=NULL`、回填 `question_id`；`questions.origin='pdf'`、`chapter_src='human'`（人改過的章節）、`text_hash` 一併寫入——全部同一個交易。
 

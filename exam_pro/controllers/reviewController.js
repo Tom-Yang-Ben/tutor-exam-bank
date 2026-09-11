@@ -22,6 +22,17 @@ const REVIEW_REASONS = ['chapter_invalid', 'formula_unparsable', 'answer_mismatc
 
 const NOT_FOUND = '找不到該待複核題目';
 const ALREADY_DONE = '該題目已處理完畢，不能重複複核。';
+/** PG unique_violation（與 studentAdminController 同一個碼） */
+const UNIQUE_VIOLATION = '23505';
+
+/**
+ * 題幹與題庫既有題重複時的 409 訊息（第 6.6 條）。
+ * 這條原本沒有接：`uq_questions_text_hash_active`（0005）撞索引後直接落到全域錯誤中樞，
+ * 老師只看到「後端伺服器內部發生未知錯誤」，不知道該按「不採用」還是改題幹。
+ */
+function duplicateMessage(existingId) {
+    return `此題與題庫既有題目 #${existingId} 重複，請改按「不採用」；若確實是不同題，請修改題幹後再入庫。`;
+}
 
 // WS-C 的兩支閘門零件已合入（S2-17／S2-18、第 4.1／4.4 條），改成直接 require：
 // 早先那兩個 MODULE_NOT_FOUND 退路是「等 WS-C」的鷹架，現在留著只會變成
@@ -191,6 +202,18 @@ exports.approve = async (req, res, next) => {
         //         kind='variant' 走 origin='variant'／variant_of=根節點／chapter_src 依有沒有改章節
         //         （第 4.7 條、裁決 S3-12）。text_hash 一律對修正後的題幹重算（裁決 S2-23）。
         const hash = computeTextHash(v.value.question_text);
+
+        // ── 閘門三：題幹與題庫既有的未封存題重複（0005 的部分唯一索引）──
+        // 先查再插，讓回覆帶得出既有題號；索引本身仍是最後一道硬閘門（下方 catch 接 23505 補漏）。
+        if (hash !== null) {
+            const { rows: dup } = await client.query(
+                'SELECT id FROM questions WHERE text_hash = $1 AND archived_at IS NULL LIMIT 1', [hash]);
+            if (dup.length > 0) {
+                await client.query('ROLLBACK');
+                return res.status(409).json({ message: duplicateMessage(dup[0].id), duplicate_of: dup[0].id });
+            }
+        }
+
         const { buildTsvTokens } = require('../services/embedService');
         const { chapterTokens, keywordTokens, stemTokens } =
             buildTsvTokens({ ...v.value, keywords: null, concept_summary: null });
@@ -234,6 +257,17 @@ exports.approve = async (req, res, next) => {
         scheduleEmbed(questionId);
     } catch (err) {
         await client.query('ROLLBACK').catch(() => { });
+        if (err.code === UNIQUE_VIOLATION && err.constraint === 'uq_questions_text_hash_active') {
+            // 閘門三查過之後、INSERT 之前被別的請求搶先入庫：交易已回滾，用一般連線再撈一次既有題號
+            const { rows: dup } = await query(
+                'SELECT id FROM questions WHERE text_hash = $1 AND archived_at IS NULL LIMIT 1',
+                [computeTextHash(String(body.question_text ?? ''))]).catch(() => ({ rows: [] }));
+            const existingId = dup[0]?.id ?? null;
+            return res.status(409).json({
+                message: existingId === null ? '此題與題庫既有題目重複，請改按「不採用」。' : duplicateMessage(existingId),
+                duplicate_of: existingId
+            });
+        }
         next(err);
     } finally {
         client.release();
