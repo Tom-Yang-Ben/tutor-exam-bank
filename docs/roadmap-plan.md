@@ -1752,3 +1752,16 @@ agent 管線、RAG 檢索、NLQ、變式、複核佇列、eval 與門檻——�
    單邊／自訂括號用 `ImportedXmlComponent` 注入 `m:dPr`，注意 `fromXmlString` 的
    外殼要取 `root[0]`），Word 端矩陣自此是真正的二維排版。
    人工目視定案：**2026-08-27 使用者重啟伺服器後重新下載 Word 卷，矩陣排版目視通過**。
+4. **出版社題著作權閘門**（2026-09-15 擬定，暫緩）。觸發條件：**錄入第一題 `source_type='publisher'` 之前**。
+   背景：同日著作權盤點確認題源全為學校段考（著作權法第 9 條第 1 項第 5 款，試題不受保護），
+   題庫現無 publisher 題（school 158／unknown 41／self 20），僅兩題解答帶詳解性質（159、162）已重寫。
+   三道閘門與落點（合計約 0.75 人日，建議一個 PR）：
+   ① 組卷與助教預覽**預設排除 publisher**——`examController.generatePaper` 未帶 `source_types` 時
+     改為預設排除、`assistantService.preview_paper` 帶同一預設、前端「題源限制」預設值改「排除出版社」、
+     回應回寫實際套用的 `source_scope`；
+   ② 變式生成**拒絕 publisher 藍本**——`variantService.requestVariants` 建 job 前查藍本 `source_type`，
+     命中回 422 附 `reason:'source_protected'`；檢索優先分支不受影響（推薦既有題非改作）；
+     未標記（unknown）藍本不擋，由題源補標作業收斂；
+   ③ 複核頁與題庫列表對 school／publisher 題的解答加「疑似抄錄詳解」提示——純函式
+     `utils/answerHeuristics.js`（長度 > 80 字或含解／因為／所以／步驟等字樣），不動 DDL、不截斷資料。
+   對應決策 DEC-010；實作時同步 FR-017 ACPT 與 `docs/variants.md` 閘門表加「藍本來源」一道。

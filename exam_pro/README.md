@@ -532,7 +532,7 @@ node seed_questions.js --apply  # 實際寫入（交易保護；同題幹已存�
 目前狀態與待辦在 [`docs/HANDOFF.md`](../docs/HANDOFF.md)。
 
 **擱置區**（隨時可重啟）：P-16 高頻章節參數化模板、私有 golden（真題庫）、跑題閾值 0.88 重評、
-fixture 擴 120 題、A-T16 新舊管線前後對照、A-T17 異家（Anthropic）驗證 adapter、**出版社題著作權閘門**（錄入第一題 `publisher` 前啟動：組卷與助教預覽預設排除 publisher、變式生成拒絕 publisher 藍本回 422、複核頁對疑似詳解的解答加提示；三道合計約 0.75 人日，設計已定於 2026-09-15 對話，題庫現無 publisher 題故暫緩）。
+fixture 擴 120 題、A-T16 新舊管線前後對照、A-T17 異家（Anthropic）驗證 adapter。
 
 ---
 
