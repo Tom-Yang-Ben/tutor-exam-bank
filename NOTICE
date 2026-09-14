@@ -43,7 +43,14 @@ Copyright 2026 Ben Yang (楊本顥)
 - multer (MIT)                     - dotenv (BSD-2-Clause)
 - cors (MIT)                       - node-fetch (MIT)
 - pg (MIT)                         - pgvector (MIT)
+- pdf-lib (MIT)                    - ajv (MIT)
 - @node-rs/jieba (MIT；內含 jieba 詞典，MIT)
+- sharp (Apache-2.0；預編譯二進位 @img/sharp-win32-x64 另含 libvips，LGPL-3.0-or-later)
+- mupdf (AGPL-3.0-or-later；Artifex 另提供商業授權。本專案未修改其原始碼、
+  僅於本機單人使用、不以網路提供服務；若日後對外部署或散布，須改採
+  商業授權或替換為其他授權之 PDF 渲染元件)
 - nodemon (MIT, devDependency)     - supertest (MIT, devDependency)
+- pdfkit (MIT, devDependency，僅用於產生測試樣卷)
 
-前端以 CDN 方式載入 Tailwind CSS (MIT) 與 MathJax (Apache-2.0)。
+前端以 CDN 方式載入 Tailwind CSS (MIT)、MathJax (Apache-2.0) 與 GSAP (Standard
+"No Charge" GSAP License)。

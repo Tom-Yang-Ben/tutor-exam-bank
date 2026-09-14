@@ -59,8 +59,10 @@ RAG（Retrieval-Augmented Generation）＝先從**自己的資料**檢索，再�
 逐項的「為什麼」：
 
 1. **pgvector 而不是獨立向量庫**
-   - 題庫是百～千題級，不是百萬級。這個量級 pgvector 暴力掃描（exact search）就夠快，
-     連 ANN 索引（HNSW／IVFFlat）都還不需要。
+   - 題庫是百～千題級，不是百萬級。HNSW 索引雖在 `migrations/0002_vector.sql` 就建在空表上
+     （m=16、ef_construction=64；查詢時 `SET LOCAL hnsw.ef_search = 100`），但這個量級規劃器
+     實際不走它（`pg_stat_user_indexes` 的 `idx_scan` 為 0），等同 exact search；灌 10,000 題
+     壓測同章 hybrid p95 仍為 38 ms（`docs/retrieval.md` §7）。
    - 決定性理由：**關聯條件與向量檢索必須在同一句 SQL**。「排除這個學生做過的題
      （`NOT EXISTS attempts`）、排除同一變式家族（`COALESCE(variant_of,id)`）、鎖定難度、
      只看某章、排除已封存」全是關聯條件。向量庫放外面，就得 over-fetch 回來自己過濾，
@@ -127,7 +129,8 @@ filters_exact 1.000、recall@10 1.000；LLM 路徑（8 句）filters_exact 0.75�
 
 ### 1.6 已知限制與擴展路線
 
-- 千萬向量級要上 pgvector 的 HNSW／IVFFlat 並調參；再上去才考慮專用向量庫。
+- HNSW 已建但現階段未被規劃器選用；題量上去後先用 `EXPLAIN` 確認索引是否生效並調 `ef_search`／`m`，
+  再上去才考慮專用向量庫。
 - RRF 的 MRR 稀釋（見 1.4）；場景改變時的第一個重開點。
 - 應用層分詞：換分詞器＝全文側全部重建；`utils/tokenize.js` 單一真相是護欄不是解藥。
 - embedding 模型升級＝向量全欄重灌＋cassette 全重錄（`scripts/backfill_embeddings.js` 就是為此存在）。
