@@ -7,6 +7,7 @@
 > **定位:** 本文件回答「每條 FR/NFR 落在哪個模組、對應哪個 ADR、以何種方式驗證」；需求決策與 Gate 見 [requirements_tracker](../01_requirements/requirements_tracker.md)，測試執行證據見 [qa_tracker](../05_qa/qa_tracker.md)。
 > 🛠 **2026-08-29 修訂**（PR #3–#7 程式碼同步）：CI 證據 commit 更新（0ff47b4→f8f6574）、測試數更新（單元 1,415→1,445）、migrations 範圍更新（0001–0006）、FR-009 摘要補矩陣 OMML、新增 FR-017（source_type）與 FR-018（附圖裁切）兩列、§4 追溯範圍更新、**新增 §5 相依與平行開發（活的相依層）**。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 > 🛠 **2026-09-15 修訂**（測試數同步）：NFR-003 單元測試數 1,445→1,449（main 126243a 實測，2026-09-15）。修改處以〔修訂 2026-09-15〕行內標記。
+> 🛠 **2026-09-15b 修訂**（feat/pseudonymize-student-names 程式碼同步）：FR-016 補姓名代號化模組路徑。修改處以〔修訂 2026-09-15b〕行內標記。
 
 ## 目錄
 
@@ -37,7 +38,7 @@
 | FR-013 | 學生弱點面板（五條純函式 SQL） | 已實作 | exam_pro/services/weaknessService.js | ADR-001 | 單元＋整合 |
 | FR-014 | 學生管理（建立／改名／合併／刪除） | 已實作 | exam_pro/controllers/studentAdminController.js | — | 整合 |
 | FR-015 | 批改（GET /api/papers/:id、PATCH results） | 已實作 | exam_pro/controllers/paperController.js | — | 整合 |
-| FR-016 | 對話式助教（主控 LLM ReAct 迴圈＋五個只讀工具、出卷僅 dry-run） | 已實作 | exam_pro/services/assistantService.js、exam_pro/public/js/assistant.js | ADR-007 | 單元＋整合（replay） |
+| FR-016 | 對話式助教（主控 LLM ReAct 迴圈＋五個只讀工具、出卷僅 dry-run；學生姓名以代號出境〔修訂 2026-09-15b〕） | 已實作 | exam_pro/services/assistantService.js、exam_pro/utils/pseudonym.js、exam_pro/public/js/assistant.js | ADR-007 | 單元＋整合（replay） |
 | FR-017 | 題目來源標記 source_type（著作權管理：五值白名單、組卷題源過濾、上傳／複核／改標全鏈帶標） | 已實作〔修訂 2026-08-29 補登錄，PR #7〕 | exam_pro/migrations/0006_source_type.sql、exam_pro/config/chapters.js（SOURCE_TYPES）、exam_pro/controllers/questionController.js、exam_pro/controllers/examController.js、exam_pro/controllers/jobController.js、exam_pro/controllers/reviewController.js、exam_pro/public/index.html | ADR-005 | 單元（chapterVolumes 釘住 CHECK）＋整合（controllers.pg.test.js source_type 端到端） |
 | FR-018 | 附圖裁切入庫（extract 回 bbox＋mupdf/sharp 裁圖存 question_img；權威文件 docs/figures.md） | 已實作〔修訂 2026-08-29 補登錄，PR #3；cassette 重錄 @ 4af4647〕 | exam_pro/services/figureService.js、exam_pro/agents/extract.js（figure_page/figure_box＋框幾何驗證）、exam_pro/workers/jobRunner.js（attachFigureImages）、exam_pro/app.js（/figures 靜態掛載） | ADR-003、ADR-006 | 單元（figureService、agentExtract）＋eval pipeline（cassette 重錄後全綠） |
 

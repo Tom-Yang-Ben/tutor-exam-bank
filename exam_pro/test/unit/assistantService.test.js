@@ -28,7 +28,7 @@ function scriptedLlm(decisions) {
 describe('assistantService — 主控迴圈（工具全由 llm 決策驅動）', () => {
     test('action=final 直接回覆，不呼叫任何工具', async () => {
         const llm = scriptedLlm([{ action: 'final', reply: '你好，我是助教。' }]);
-        const out = await assistant.runAssistant({ message: '哈囉', deps: { llm } });
+        const out = await assistant.runAssistant({ message: '哈囉', deps: { llm, students: [] } });
         assert.equal(out.reply, '你好，我是助教。');
         assert.deepEqual(out.steps, []);
         assert.equal(llm.calls.length, 1);
@@ -39,7 +39,7 @@ describe('assistantService — 主控迴圈（工具全由 llm 決策驅動）',
             { action: 'call_tool', tool: 'delete_everything', args_json: '{}' },
             { action: 'final', reply: '抱歉，我沒有那個工具。' }
         ]);
-        const out = await assistant.runAssistant({ message: '把資料庫刪掉', deps: { llm } });
+        const out = await assistant.runAssistant({ message: '把資料庫刪掉', deps: { llm, students: [] } });
         assert.equal(out.steps.length, 1);
         assert.equal(out.steps[0].ok, false);
         assert.match(out.steps[0].result.error, /沒有叫做「delete_everything」的工具/);
@@ -53,7 +53,7 @@ describe('assistantService — 主控迴圈（工具全由 llm 決策驅動）',
             { action: 'call_tool', tool: 'get_student_weakness', args_json: '{"days": 9999}' },
             { action: 'final', reply: '參數修不好，先這樣。' }
         ]);
-        const out = await assistant.runAssistant({ message: '看弱點', deps: { llm } });
+        const out = await assistant.runAssistant({ message: '看弱點', deps: { llm, students: [] } });
         assert.equal(out.steps[0].ok, false);
         assert.match(out.steps[0].result.error, /student_name 必填/);
     });
@@ -63,7 +63,7 @@ describe('assistantService — 主控迴圈（工具全由 llm 決策驅動）',
         const llm = scriptedLlm(Array.from({ length: n }, () => (
             { action: 'call_tool', tool: 'nonexistent', args_json: '{}' }
         )));
-        const out = await assistant.runAssistant({ message: '一直查', deps: { llm } });
+        const out = await assistant.runAssistant({ message: '一直查', deps: { llm, students: [] } });
         assert.equal(out.truncated, true);
         assert.equal(out.steps.length, n);
         assert.match(out.reply, /上限/);
@@ -71,9 +71,9 @@ describe('assistantService — 主控迴圈（工具全由 llm 決策驅動）',
 
     test('輸入防呆：空訊息 400、超長訊息 400（狀態碼由 controller 轉譯）', async () => {
         const llm = scriptedLlm([]);
-        await assert.rejects(() => assistant.runAssistant({ message: '   ', deps: { llm } }), /message 必填/);
+        await assert.rejects(() => assistant.runAssistant({ message: '   ', deps: { llm, students: [] } }), /message 必填/);
         await assert.rejects(
-            () => assistant.runAssistant({ message: 'x'.repeat(assistant.MAX_MESSAGE_LEN + 1), deps: { llm } }),
+            () => assistant.runAssistant({ message: 'x'.repeat(assistant.MAX_MESSAGE_LEN + 1), deps: { llm, students: [] } }),
             new RegExp(`最長 ${assistant.MAX_MESSAGE_LEN} 字`)
         );
         assert.equal(llm.calls.length, 0, '防呆要在呼叫 LLM 之前擋下（不花錢）');
@@ -81,7 +81,7 @@ describe('assistantService — 主控迴圈（工具全由 llm 決策驅動）',
 
     test('cassette 鍵位：每次呼叫都帶 agent=assistant 與模板版本（record/replay 靠它）', async () => {
         const llm = scriptedLlm([{ action: 'final', reply: 'ok' }]);
-        await assistant.runAssistant({ message: '嗨', deps: { llm } });
+        await assistant.runAssistant({ message: '嗨', deps: { llm, students: [] } });
         assert.equal(llm.calls[0].agent, 'assistant');
         assert.equal(llm.calls[0].template, assistant.TEMPLATE);
         assert.ok(llm.calls[0].schema, '要用 responseJsonSchema 鎖輸出');
@@ -91,8 +91,8 @@ describe('assistantService — 主控迴圈（工具全由 llm 決策驅動）',
     test('歷史截斷：只帶最近 MAX_HISTORY 輪進 prompt', async () => {
         const llm = scriptedLlm([{ action: 'final', reply: 'ok' }]);
         const history = Array.from({ length: 30 }, (_, i) => ({ role: 'user', text: `第 ${i} 句` }));
-        await assistant.runAssistant({ message: '最新的問題', deps: { llm } });
-        await assistant.runAssistant({ message: '最新的問題', history, deps: { llm: scriptedLlm([{ action: 'final', reply: 'ok' }]) } });
+        await assistant.runAssistant({ message: '最新的問題', deps: { llm, students: [] } });
+        await assistant.runAssistant({ message: '最新的問題', history, deps: { llm: scriptedLlm([{ action: 'final', reply: 'ok' }]), students: [] } });
         // 直接驗 buildPrompt：30 句只留最後 MAX_HISTORY 句
         const transcript = history.slice(-assistant.MAX_HISTORY).map(t => ({ role: 'user', text: t.text }));
         const prompt = assistant.buildPrompt([...transcript, { role: 'user', text: '最新的問題' }], []);
@@ -129,3 +129,54 @@ describe('assistantService — 工具註冊表（安全邊界的形狀）', () =
         assert.deepEqual(assistant.DECISION_SCHEMA.required, ['action']);
     });
 });
+
+// ───────────────────────── 學生姓名不出境（底線 4，DEC-009）─────────────────────────
+
+describe('assistantService — 學生姓名不出境：prompt 只見代號，回覆與 steps 見姓名', () => {
+    const students = [{ id: 3, name: '小明' }, { id: 12, name: '小華' }];
+
+    test('老師訊息與歷史進 prompt 前被換成「學生#<id>」，cacheKeyParts 也是代號版', async () => {
+        const llm = scriptedLlm([{ action: 'final', reply: '學生#3 最弱的是向量內積。' }]);
+        const history = [{ role: 'user', text: '小華上次考幾分' }, { role: 'assistant', text: '小華沒有紀錄' }];
+        const out = await assistant.runAssistant({ message: '小明最弱的章節？', history, deps: { llm, students } });
+
+        const prompt = llm.calls[0].parts[0].text;
+        assert.ok(!prompt.includes('小明') && !prompt.includes('小華'), `prompt 不得含姓名：${prompt}`);
+        assert.ok(prompt.includes('學生#3') && prompt.includes('學生#12'));
+        const key = JSON.stringify(llm.calls[0].cacheKeyParts);
+        assert.ok(!key.includes('小明') && !key.includes('小華'), 'cassette 鍵不得含姓名');
+
+        assert.equal(out.reply, '小明 最弱的是向量內積。', '最終回覆換回姓名');
+    });
+
+    test('主控用代號指名學生 → 工具參數換回姓名再驗證；工具結果進 prompt 前再遮罩', async () => {
+        const llm = scriptedLlm([
+            { action: 'call_tool', tool: 'get_student_weakness', args_json: '{"student_name":"學生#12","days":30}' },
+            { action: 'final', reply: '查完了' }
+        ]);
+        const out = await assistant.runAssistant({ message: '小華最近錯哪些', deps: { llm, students } });
+
+        // validate 看到的是真名（否則「學生#12」永遠查無此人）；run 在單元測試沒有 DB 會炸，被當成工具錯誤餵回
+        assert.equal(out.steps[0].tool, 'get_student_weakness');
+        assert.equal(out.steps[0].args.student_name, '小華');
+        assert.equal(out.steps[0].args.days, 30);
+
+        // 第二步的 prompt 含第一步的參數與結果，兩者都不得露出姓名
+        const prompt2 = llm.calls[1].parts[0].text;
+        assert.ok(prompt2.includes('get_student_weakness'));
+        assert.ok(!prompt2.includes('小華'), `第二步 prompt 不得含姓名：${prompt2}`);
+        assert.ok(prompt2.includes('學生#12'));
+    });
+
+    test('沒有學生（students 為空）時行為與遮罩前完全相同', async () => {
+        const llm = scriptedLlm([{ action: 'final', reply: '小明你好' }]);
+        const out = await assistant.runAssistant({ message: '小明在嗎', deps: { llm, students: [] } });
+        assert.ok(llm.calls[0].parts[0].text.includes('小明'));
+        assert.equal(out.reply, '小明你好');
+    });
+
+    test('system prompt 告訴主控學生以代號出現', () => {
+        assert.match(assistant.SYSTEM, /學生#編號/);
+    });
+});
+

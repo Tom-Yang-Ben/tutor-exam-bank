@@ -39,7 +39,7 @@ exam_pro/
 ├── workers/      # jobRunner.js：DB-polling worker，唯一改 job_questions.state 與寫 job_events 之處
 ├── config/       # db／models（模型 ID 單一真相）／features／pricing／chapters
 ├── queries/      # hybrid 檢索 SQL
-└── utils/        # tokenize（全案唯一分詞）、questionValidation（save 白名單驗證）
+└── utils/        # tokenize（全案唯一分詞）、questionValidation（save 白名單驗證）、pseudonym（學生姓名↔代號，送 LLM 前遮罩）
 ```
 
 ## 3. 模組依賴圖

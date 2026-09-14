@@ -1,12 +1,13 @@
 # 資料庫設計 (DB Design) - 家教專用數理題庫系統
 
-> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
+> **版本:** v1.2 | **更新:** 2026-09-15 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 單例（全系統一個 PostgreSQL 16 + pgvector 資料庫）
 > **定位:** 本文件記錄全部資料表的欄位、約束、索引與 migration 沿革；欄位級真相以 `exam_pro/migrations/0001`–`0007` 為準。〔修訂 2026-08-29b〕狀態機轉移邏輯歸 [lld.md](./lld.md)，API 資料模型歸 [api_spec.md](./api_spec.md)。
 
 > 🛠 **2026-08-29 修訂**（PR #6/#7 程式碼同步）：migration 範圍 0001–0005 → 0001–0006；§2.1 `questions` 與 §2.3 `jobs` 各補 `source_type` 欄（0006 追加，著作權管理／組卷過濾，FR-017）；§5 Migration 策略與 §6 追溯的範圍與 ID 同步。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
+> 🛠 **2026-09-15b 修訂**（feat/pseudonymize-student-names 程式碼同步）：§3 資料分類 `students.name` 補姓名代號化實作。修改處以〔修訂 2026-09-15b〕行內標記。
 
 > 🛠 **2026-08-29 修訂之二**（feat/source-detail，同日使用者核准）：0007_source_detail.sql 為 questions／jobs 追加 `source_detail`（自由文字來源註記，學校＋年份等；FR-017 延伸）；§2.1／§2.3／§5／§6 同步。標記〔修訂 2026-08-29b〕。
 
@@ -114,7 +115,7 @@ erDiagram
 | 欄位 | 業務語意 | 來源 | 敏感等級 |
 | :--- | :--- | :--- | :--- |
 | `questions.*`（題幹／答案） | 私有題庫資產 | FR-007 | 私有（DEC-009：repo 不含題庫內容，僅留本地） |
-| `students.name` / `note` | 學生姓名與備註 | FR-014 | 個資：留本地資料庫，不對外傳輸（DEC-009） |
+| `students.name` / `note` | 學生姓名與備註 | FR-014 | 個資：留本地資料庫；學生姓名不出境：NLQ 與助教送 LLM／embedding 前以 `exam_pro/utils/pseudonym.js` 換成「學生#<id>」代號，回覆後還原（DEC-009）〔修訂 2026-09-15b〕 |
 | `attempts.result` | 0=錯、1=對、NULL=未批改 | FR-015 | 個資（學習紀錄） |
 | `jobs.cost_usd` / `job_events.*` | LLM 逐 token 計費紀錄 | NFR-002 | 一般 |
 
