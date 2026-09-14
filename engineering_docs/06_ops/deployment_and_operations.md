@@ -117,7 +117,7 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 | :--- | :--- | :--- |
 | AI 成本 | 逐 token 計費紀錄、單 job 與每日成本上限（NFR-002；`JOB_COST_BUDGET_USD` 預設 0.5、`DAILY_COST_BUDGET_USD` 預設 5） | `exam_pro/workers/jobRunner.js`、`config/pricing.js` |
 | job 狀態 | `npm run report:jobs` 成本／狀態報表；卡住處置見 [runbook-job-stuck.md](./runbook-job-stuck.md) | `exam_pro/scripts/report_jobs.js` |
-| 備份失敗 | 任一步失敗寫 `backups/LAST_FAILED.txt` 並非零碼退出，`.bat` 停在畫面不關視窗；成功時刪除該檔 | `exam_pro/scripts/backup.js` |
+| 備份失敗 | 任一步失敗寫 `backups/LAST_FAILED.txt` 並非零碼退出，`.bat` 停在畫面不關視窗；成功時刪除該檔（旗標只反映最後一次）。歷史另存 `backups/backup.log`，每次執行不論成敗都 append 一行且永不刪除，用以辨識漏跑 | `exam_pro/scripts/backup.js` |
 | 品質退化 | 五個 eval suite ratchet 門檻進 CI，低於門檻轉紅；處置見 [runbook-eval-threshold-fail.md](./runbook-eval-threshold-fail.md) | `exam_pro/eval/thresholds.json` |
 
 ## 6. 回滾流程
@@ -129,7 +129,10 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 ### 6.2 備份與還原
 
 - 備份：`npm run db:backup`（＝`node scripts/backup.js`；或雙擊 `備份資料庫.bat`）。本機無 pg_dump，改以容器內 `pg_dump -Fc --no-owner --no-acl` 輸出 `backups/<庫名>_<時戳>.dump`，檔頭驗證 `PGDMP` 魔術字；預設保留 14 份（`BACKUP_KEEP`），可設 `BACKUP_COPY_DIR` 異地複製。
+- 異地副本：`BACKUP_COPY_DIR` 於 2026-08-31 起在開發機 `.env` 設為 OneDrive 同步資料夾。設定前備份與資料庫同處單一實體磁碟，僅能防誤刪，不能防磁碟故障、失竊或勒索軟體。dump 內含題庫與學生答題紀錄，異地位置的選擇屬資料落地決策，由 owner 拍板。
+- 排程：Windows 工作排程器 `題庫每日備份`，每日 02:00 觸發 `cmd.exe /c exam_pro\備份資料庫.bat`（`StartBoundary` 2026-08-21，與 DEC-004 切換同日建立）。必要設定：`StartWhenAvailable=True`（錯過時段開機後補跑）、`DisallowStartIfOnBatteries=False`／`StopIfGoingOnBatteries=False`（開發機為筆電；一次 dump 僅數秒，電源條件不應阻擋）。三項於 2026-08-31 修正，先前為預設值。
 - 排程注意：Docker Desktop 僅使用者登入後啟動，工作排程器於鎖定畫面執行時 `docker info` 會失敗——此失敗有明確訊息，不靜默。
+- 漏跑偵測：工作排程器的 `LastTaskResult`／`NumberOfMissedRuns` 只描述最後一次，不足以證明每日皆有備份（2026-08-27 漏跑時兩者均為 0）。判定依據為 `backups/backup.log` 的逐日 `OK`／`FAIL` 行與 `backups/` 實際檔案，不採用排程器回報值。
 - 還原：`-Fc` 格式以容器內 `pg_restore` 選擇性還原；完整步驟與 PG 容器故障處置見 [runbook-pg-down.md](./runbook-pg-down.md)。
 
 ### 6.3 資料庫切換沿革（cutover）
