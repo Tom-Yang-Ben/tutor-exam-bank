@@ -1,12 +1,13 @@
 # 軟體需求規格書 (SRS) - 家教專用數理題庫系統
 
-> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
+> **版本:** v1.2 | **更新:** 2026-09-15 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L2（需求；量測與端點細節屬 L3，標主語域）
 > **實例:** 單例（整個系統一份）
 > **定位:** 本文件將 18 條功能需求對應至 API 端點與 FEATURE_* 旗標，並將 NFR-001–006 逐條可驗證化（量測值與門檻）；需求決策沿革歸 [`requirements_tracker.md`](./requirements_tracker.md)，架構取捨歸 [`../03_architecture/adr/`](../03_architecture/adr/)。〔修訂 2026-08-29〕
 
 > 🛠 **2026-08-29 修訂**（PR #3–#7 程式碼同步）：①§1 新增 FR-017 題目來源標記（PR #7）與 FR-018 附圖裁切入庫（PR #3，`docs/figures.md`）；FR-007 端點欄補 GET /api/chapter-volumes；②NFR-003 測試數 1,415／259 更新為 1,445／260（commit f7a9c41 實測）；③NFR-006 原「migrations 0001–0005 共 5 份」更新為 0001–0006 共 6 份（刪除舊計數）；④§3 資料需求補 questions.source_type 與 data/figures/ 附圖列；⑤§6 補 ACPT-017-*／018-* 對照列；⑥§7 追溯之 FR 範圍隨之更新。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
+> 🛠 **2026-09-15 修訂**（測試數同步）：NFR-003 測試數 1,445／260／11 更新為 1,449／262／11（main 126243a 實測，2026-09-15）。修改處以〔修訂 2026-09-15〕行內標記。
 
 ## 目錄
 
@@ -53,7 +54,7 @@
 | :--- | :--- | :--- | :--- | :--- |
 | NFR-001 | 安全 | 所有 /api 路由經 x-api-key 驗證（timing-safe 比對）；CORS 僅允許 ALLOWED_ORIGINS 白名單；圖片抓取經 isSafeImageUrl 防 SSRF；NODE_ENV=production 時不回傳錯誤細節 | 未帶或錯誤金鑰一律 401；非白名單來源被拒；私有網段 URL 被拒 | 單元＋整合測試（CI） |
 | NFR-002 | 成本 | 高成本端點限流（獨立計數桶）：/analyze-pdf、POST /api/jobs、variants、assistant 各 10/min，search-nl 30/min，similar 60/min；上傳上限 15 MB（逾限回 413）；逐 token 計費紀錄（config/pricing.js）；單 job 與每日成本上限（`workers/jobRunner.js`：`JOB_COST_BUDGET_USD` 預設 0.5、`DAILY_COST_BUDGET_USD` 預設 5） | 第 11 次請求於 60 秒窗內被拒（429）；15 MB 逾限回 413 | 整合測試（CI） |
-| NFR-003 | 可測試性 | agent 為純函式合約（不碰 DB、不讀 env、ctx 注入）；LLM 呼叫走 cassette record/replay；CI 零金鑰、零網路、零成本 | 單元 1,445／整合 260／e2e 11 全數通過（commit f7a9c41 實測）〔修訂 2026-08-29〕；CI 無 GEMINI_API_KEY | node:test＋cassette 重播（CI） |
+| NFR-003 | 可測試性 | agent 為純函式合約（不碰 DB、不讀 env、ctx 注入）；LLM 呼叫走 cassette record/replay；CI 零金鑰、零網路、零成本 | 單元 1,449／整合 262／e2e 11 全數通過（main 126243a 實測，2026-09-15）〔修訂 2026-09-15〕；CI 無 GEMINI_API_KEY | node:test＋cassette 重播（CI） |
 | NFR-004 | 品質門檻 | 五個 eval suite 採 golden＋ratchet（首測 −0.03、只升不降）；低於門檻 CI 轉紅；replay miss 於 main 視為錯誤 | pipeline saved_rate 0.90（門檻 ≥0.87）、gate_pass_rate 1.00；classify accuracy 0.9000／macro-F1 0.9256；檢索 Recall@5 hybrid(RRF) 1.000（LIKE 基線 0.875）；NLQ 規則路徑 coverage 0.84；variant retrieved_coverage 0.8667、偏題閘門 ≥0.90（0.92→0.90，裁決 S3-R29） | eval suite（CI 門檻檢查） |
 | NFR-005 | 可靠性 | job 認領採 FOR UPDATE SKIP LOCKED＋租約，worker 中斷後租約到期由他機續跑（斷點續跑）；各節點逾時、退避重試、重試預算，預算用盡轉 needs_review | 節點逾時 120 秒（`JOB_NODE_TIMEOUT_MS`）；租約 180 秒（`JOB_LEASE_MS`）；fail 重試預算 classify 2／lint 2／verify 1／extract 整包 1；error 獨立計數上限 3，退避 1s→2s→4s 封頂 60s（詳 [lld §4.1](../04_design/lld.md)） | 整合測試（jobRunner；CI） |
 | NFR-006 | 資料一致性 | confirm-paper 之組卷與作答歷史（attempts）寫入同一交易；migrations 只增不改 | migrations 0001_init–0006_source_type，共 6 份，無修改既有檔〔修訂 2026-08-29〕 | 整合測試＋migration 檔案稽核 |
