@@ -184,8 +184,10 @@ workers/jobRunner.js ──── 每節點：逾時 120s、退避重試 1s/2s/4
 - 不得 `require('../config/db')`——資料存取由 runner 做，agent 只看輸入。
 - 不得讀 `process.env`——門檻經 `ctx.config.thresholds` 注入（`loadStage3Config()` 組裝）。
 - LLM 呼叫只准走注入的 `ctx.llm.generateJson()`／`ctx.embed()`。
-- 輸出是判別聯集：`{kind:'ok'|'fail'|'error', reason, feedback, data}`——`fail` 是
-  「內容不合格」（可重試、feedback 餵回 prompt），`error` 是「基礎設施壞了」（走 provider 退避）。
+- 輸出是判別聯集：`{kind:'pass'|'fail'|'error'|'skipped', reason, feedback, data}`——`fail` 是
+  「內容不合格」（可重試、feedback 餵回 prompt），`error` 是「基礎設施壞了」（走 provider 退避），
+  `skipped` 是「本節點不適用」（與 `pass` 同樣推進狀態機）。權威定義見
+  `docs/interfaces-stage2.md` 第 7 條，本處不另行重述。
 - prompt 模板有版本號（如 `variant.v1`），進 cassette 鍵。
 
 這個合約買到三件事：單元測試不用 mock 資料庫；cassette 回放鍵可重現
