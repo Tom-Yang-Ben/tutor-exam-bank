@@ -24,7 +24,7 @@
 | 🔎 **相似題／自然語言查題** | hybrid 檢索（pgvector＋jieba 全文，RRF 融合）；查題框直接打「牛頓第二定律的計算題，難度 4 以上」——規則為主、LLM 為輔、四級回退，解析結果回寫下拉可檢視 |
 | 🧬 **變式題生成** | 針對錯題產生變式：**檢索優先（不產生生成費用），候選不足才進入生成**；生成經九道閘門（僅改數值偵測／偏題相似度／獨立驗答／去重），首輪一律停在複核佇列待使用者核准 |
 | 📊 **學生弱點面板** | 章節錯誤率、題型／難度分佈、週趨勢、最近錯題；批改支援「僅標記錯題，其餘一鍵標為正確」 |
-| 💬 **對話式助教** | 主控 LLM 調度五個**唯讀**工具（學生弱點／自然語言搜題／相似題／出卷預覽），工具調用軌跡完整呈現於介面；實際出卷仍由使用者確認 |
+| 💬 **對話式助教** | 主控 LLM 調度五個**唯讀**工具（學生弱點／自然語言搜題／相似題／出卷預覽），工具調用軌跡完整呈現於介面；實際出卷仍由使用者確認；學生姓名送模型前換成「學生#<id>」代號，不出境 |
 | 🧾 **成本與品質可觀測** | 逐 token 記帳（官方單價查證）、job／日成本上限；五個 eval suite ＋ ratchet 門檻進 CI |
 | 🔒 **安全設計** | 參數化 SQL、CORS 白名單、防 SSRF、可選 API Key（timing-safe；能力邊界見[安全注意事項](#-安全注意事項)）；全部 FEATURE_* 旗標預設關 |
 
@@ -203,7 +203,7 @@ flowchart TD
 1. **多 Agent 拆題入庫**（`FEATURE_PIPELINE`）：上傳 PDF → `POST /api/jobs` → `workers/jobRunner.js` 驅動六個 agent 逐題推進，硬閘門把關 → 合格題**部分入庫**、疑慮題進複核佇列（`public/js/review.js`）。
 2. **智慧組卷（草稿→確認）+ 匯出**：`generate-paper(dry_run)` 預覽（不寫庫）→ `confirm-paper` 在**同一交易**建 `exam_papers`＋`attempts`（`NOT EXISTS` 保證不重複）→ `wordService` 用 `textFormatter` 輸出 `.docx`。
 3. **RAG 檢索**：相似題／NLQ／變式檢索優先／kNN 分類，全部走 `queries/hybrid.js` 同一段 SQL（pgvector＋jieba 全文，RRF 融合）。
-4. **對話式助教**（`FEATURE_ASSISTANT`）：`POST /api/assistant` → 主控 LLM 以受限 JSON 調度五個只讀工具 → 回覆＋工具軌跡。
+4. **對話式助教**（`FEATURE_ASSISTANT`）：`POST /api/assistant` → 主控 LLM 以受限 JSON 調度五個只讀工具 → 回覆＋工具軌跡。主控與 NLQ 的 LLM 輔路徑看到的學生都是「學生#<id>」代號（`utils/pseudonym.js`），姓名留在伺服器端。
 
 ---
 

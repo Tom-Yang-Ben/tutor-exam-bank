@@ -41,6 +41,7 @@ const {
 const { CHAPTER_ALIASES, subjectOfChapter } = require('../config/chapterAliases');
 const { parseQuery } = require('../utils/nlqHeuristics');
 const { registerTemplate } = require('./llm/templates');
+const { loadPseudonymizer, IDENTITY } = require('../utils/pseudonym');
 
 // ───────────────────────── 常數（第 6 條）─────────────────────────
 
@@ -322,14 +323,17 @@ function timeoutMs() {
  * 回 null 讓呼叫端走 fallback_level 1。
  * @returns {Promise<object|null>}
  */
-async function callLlm({ llm, query, logger }) {
+async function callLlm({ llm, query, logger, pseudonymizer = IDENTITY }) {
     const { buildSchema } = require('../agents/schemas');
+    // 學生姓名不出境（DEC-009）：送 LLM 的是代號版（「小明」→「學生#3」），回來再換回姓名。
+    // 沒有學生清單時 mask 是恆等函式，prompt 與 cacheKeyParts 與加這一層之前逐字相同。
+    const masked = pseudonymizer.mask(query);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs());
     try {
         const prompt = PROMPT_TEMPLATE
             .replace('{{CHAPTER_WHITELIST}}', chapterWhitelistText())
-            .replace('{{QUERY}}', query);
+            .replace('{{QUERY}}', masked);
 
         const res = await llm.generateJson({
             model: modelNlq(),
@@ -340,9 +344,9 @@ async function callLlm({ llm, query, logger }) {
             agent: 'nlq',
             template: TEMPLATE,
             // 第 5.2 條：可重現的最小集合。query 本身就是全部的輸入，沒有別的可變欄位。
-            cacheKeyParts: { template: TEMPLATE, query }
+            cacheKeyParts: { template: TEMPLATE, query: masked }
         });
-        return (res && res.data) || null;
+        return (res && res.data) ? pseudonymizer.unmaskDeep(res.data) : null;
     } catch (err) {
         logger?.warn?.({ node: 'nlq', msg: `LLM 解析失敗，改用規則的結果：${String(err.message).split('\n')[0]}` });
         return null;
@@ -356,7 +360,8 @@ async function callLlm({ llm, query, logger }) {
 /**
  * 解析一句查詢，不碰資料庫。eval 的 suiteNlq.js 也走這一支。
  *
- * @param {{query:string, llm?:object, logger?:object, noCache?:boolean}} opts
+ * @param {{query:string, llm?:object, logger?:object, noCache?:boolean, pseudonymizer?:object}} opts
+ *   pseudonymizer：utils/pseudonym.js 的替換器；未給時為恆等（eval 走這條）
  * @returns {Promise<{filters:object, parse_path:'rules'|'llm'|'llm_failed',
  *                    semantic_text:string, warnings:string[], confident:boolean, cacheHit:boolean}>}
  */
@@ -378,7 +383,7 @@ async function parseOnly(opts = {}) {
     // 第 6.3 條：**只有在 confident === false 且 semantic_text 仍有實詞時才呼叫**
     if (!rules.confident && hasContentWord(semanticText)) {
         const llm = opts.llm || require('./llm');
-        const data = await callLlm({ llm, query, logger: opts.logger });
+        const data = await callLlm({ llm, query, logger: opts.logger, pseudonymizer: opts.pseudonymizer || IDENTITY });
         if (data) {
             const merged = mergeLlm(filters, semanticText, data);
             filters = merged.filters;
@@ -552,7 +557,7 @@ async function decorate(db, ranked) {
  * @returns {Promise<{results:Array<object>, fallbackLevel:number, warnings:string[]}>}
  */
 async function retrieve(db, opts) {
-    const { filters, semanticText, rawQuery, limit, excludeStudentId, llm, logger } = opts;
+    const { filters, semanticText, rawQuery, limit, excludeStudentId, llm, logger, pseudonymizer = IDENTITY } = opts;
 
     const queryText = (semanticText && semanticText.trim()) || rawQuery;
     const subjects = filters.subject ? [filters.subject] : SUBJECTS.slice();
@@ -566,7 +571,7 @@ async function retrieve(db, opts) {
     let queryVector = null;
     try {
         const { vectors } = await (llm || require('./llm')).embed({
-            texts: [queryText],
+            texts: [pseudonymizer.mask(queryText)],   // 姓名不出境：embedding 也是對外呼叫
             taskType: 'RETRIEVAL_QUERY'      // interfaces-stage1.md 第 4 條：查詢向量用這個
         });
         queryVector = Array.isArray(vectors) && vectors[0] ? vectors[0] : null;
@@ -700,7 +705,10 @@ async function searchNl(input, deps = {}) {
     const logger = deps.logger;
     const limit = clamp(Math.trunc(input.limit ?? DEFAULT_LIMIT), 1, MAX_LIMIT);
 
-    const parsed = await parseOnly({ query: input.query, llm, logger });
+    // 學生姓名 ↔ 代號：LLM 輔路徑與 embedding 都是對外呼叫，送出前遮罩（DEC-009）
+    const pseudonymizer = await loadPseudonymizer(db);
+
+    const parsed = await parseOnly({ query: input.query, llm, logger, pseudonymizer });
     const warnings = parsed.warnings.slice();
 
     // 第 6.4 條第 5 點：查 students.name（要 DB，所以不進第 6.7 條的快取）
@@ -717,7 +725,8 @@ async function searchNl(input, deps = {}) {
         limit,
         excludeStudentId,
         llm,
-        logger
+        logger,
+        pseudonymizer
     });
     warnings.push(...retrieved.warnings);
 

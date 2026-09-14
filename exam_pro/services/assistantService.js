@@ -17,6 +17,10 @@
 //      主控 agent 有決定權的只有「查什麼」，沒有「改什麼」。
 //   3. **伺服器端驗證**：工具名先查註冊表、參數逐一驗過才執行；不認識的工具、
 //      壞掉的參數會變成餵回主控的錯誤訊息（讓它自己修正），不會變成例外。
+//   4. **學生姓名不出境**（DEC-009）：主控 LLM 看到的是「學生#<id>」代號——老師的
+//      訊息、對話歷史、工具參數與工具結果在進 prompt 前全部經 utils/pseudonym.js
+//      遮罩；主控回傳的工具參數與最終回覆再換回姓名。API 呼叫端拿到的 steps 與
+//      reply 仍是真實姓名，只有出境的那一段是代號。
 //
 // 為什麼用 responseJsonSchema 的 ReAct 迴圈、而不是供應商原生 function calling：
 //   generateJson 這條路已經有 record/replay cassette、節流、模式閘門與 1,400 個測試
@@ -27,6 +31,7 @@
 // （不連 DB、llm 由 deps 注入）底下載入——所以 db 延遲到**工具執行時**才 require。
 const query = (...args) => require('../config/db').query(...args);
 const weakness = require('./weaknessService');
+const { createPseudonymizer, loadPseudonymizer } = require('../utils/pseudonym');
 
 const TEMPLATE = 'assistant.v1';
 const DEFAULT_MAX_STEPS = 5;
@@ -189,7 +194,8 @@ const SYSTEM = [
     '要嘛給出最終回覆（action="final"，附 reply，繁體中文、精簡、可含條列）。',
     '工具回**空結果**時，空結果本身就是答案——最多換一次措辭重查，還是空就收尾，',
     '誠實告訴老師查無並說明查了什麼條件；不得為同一件事連續重試第三次。',
-    '需要學生 id 或正確姓名時先用 list_students。出卷只能預覽（preview_paper），',
+    '學生一律以「學生#編號」的代號出現（例如「學生#3」）；工具參數與回覆裡照用代號即可，',
+    '系統會自行換回姓名。需要學生代號時先用 list_students。出卷只能預覽（preview_paper），',
     '真的出卷要請老師自己到組卷分頁按「確認出卷」——回覆裡要講清楚這一點。',
     '',
     '可用的工具：',
@@ -197,14 +203,14 @@ const SYSTEM = [
 ].join('\n');
 
 /** 把對話與工具軌跡組成這一步的 prompt（純文字，模型只看得到這些）。 */
-function buildPrompt(transcript, steps) {
+function buildPrompt(transcript, steps, mask = (s) => s) {
     const lines = [];
-    for (const t of transcript) lines.push(`【${t.role === 'user' ? '老師' : '助教'}】${t.text}`);
+    for (const t of transcript) lines.push(`【${t.role === 'user' ? '老師' : '助教'}】${mask(t.text)}`);
     if (steps.length) {
         lines.push('', '── 這一輪已經做過的工具呼叫（由舊到新）──');
         for (const s of steps) {
-            lines.push(`▶ ${s.tool}(${JSON.stringify(s.args)})`);
-            lines.push(`◀ ${JSON.stringify(s.result).slice(0, 4000)}`);
+            lines.push(`▶ ${s.tool}(${mask(JSON.stringify(s.args))})`);
+            lines.push(`◀ ${mask(JSON.stringify(s.result)).slice(0, 4000)}`);
         }
     }
     lines.push('', '請輸出下一步（call_tool 或 final）。');
@@ -218,7 +224,9 @@ function maxSteps(env = process.env) {
 
 /**
  * 跑一輪助教對話。
- * @param {{message:string, history?:Array<{role:'user'|'assistant', text:string}>, deps?:{llm?:object}}} input
+ * @param {{message:string, history?:Array<{role:'user'|'assistant', text:string}>,
+ *          deps?:{llm?:object, students?:Array<{id:number,name:string}>}}} input
+ *   deps.students：注入學生清單（單元測試用）；未注入則從 students 表載入。
  * @returns {Promise<{reply:string, steps:Array<{tool:string,args:object,ok:boolean,result:any}>, truncated?:true}>}
  */
 async function runAssistant({ message, history = [], deps = {} }) {
@@ -238,22 +246,29 @@ async function runAssistant({ message, history = [], deps = {} }) {
         { role: 'user', text }
     ];
 
+    // 姓名 ↔ 代號（底線 4）。沒有學生時 mask／unmask 是恆等函式。
+    const pseudo = Array.isArray(deps.students)
+        ? createPseudonymizer(deps.students)
+        : await loadPseudonymizer({ query });
+    const maskedTranscript = transcript.map(t => ({ role: t.role, text: pseudo.mask(t.text) }));
+
     const steps = [];
     for (let i = 0; i < maxSteps(); i++) {
         const res = await llm.generateJson({
             model,
             system: SYSTEM,
-            parts: [{ text: buildPrompt(transcript, steps) }],
+            parts: [{ text: buildPrompt(transcript, steps, pseudo.mask) }],
             schema: DECISION_SCHEMA,
             maxOutputTokens: 2048,
             agent: 'assistant',
             template: TEMPLATE,
-            cacheKeyParts: { transcript, steps: steps.map(s => ({ tool: s.tool, args: s.args })) }
+            // 鍵用代號版：cassette 裡不留姓名，且與實際送出的內容一致
+            cacheKeyParts: { transcript: maskedTranscript, steps: steps.map(s => ({ tool: s.tool, args: pseudo.maskDeep(s.args) })) }
         });
         const d = res.data || {};
 
         if (d.action !== 'call_tool') {
-            return { reply: String(d.reply || '').trim() || '（助教沒有給出回覆）', steps };
+            return { reply: pseudo.unmask(String(d.reply || '').trim()) || '（助教沒有給出回覆）', steps };
         }
 
         const tool = TOOLS[d.tool];
@@ -261,7 +276,8 @@ async function runAssistant({ message, history = [], deps = {} }) {
         if (d.args_json !== undefined && d.args_json !== null && String(d.args_json).trim() !== '') {
             try {
                 const parsed = JSON.parse(d.args_json);
-                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) args = parsed;
+                // 主控用代號指名學生（「學生#3」）→ 換回姓名再驗證與執行
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) args = pseudo.unmaskDeep(parsed);
                 else { steps.push({ tool: String(d.tool || ''), args: {}, ok: false, result: { error: 'args_json 要是 JSON 物件字串' } }); continue; }
             } catch (e) {
                 steps.push({ tool: String(d.tool || ''), args: {}, ok: false, result: { error: 'args_json 不是合法 JSON：' + e.message } });

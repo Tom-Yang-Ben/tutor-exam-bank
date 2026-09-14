@@ -32,6 +32,10 @@ function fakeDb(plan = {}) {
     const likePlan = plan.like || [];
 
     const run = async (text, values) => {
+        // utils/pseudonym.js 的 loadPseudonymizer：整張學生清單（沒有 WHERE）
+        if (/^SELECT id, name FROM students$/.test(String(text).trim())) {
+            return { rows: (plan.students || []).map(st => ({ id: st.id, name: st.name })) };
+        }
         if (/FROM students WHERE name/.test(text)) {
             calls.students += 1;
             const found = (plan.students || []).find(s => s.name === values[0]);
@@ -464,3 +468,49 @@ describe('isNlqEnabled：FEATURE_NLQ 的布林解讀（interfaces-stage1.md 第 
         }
     });
 });
+
+// ───────────────────────── 學生姓名不出境（DEC-009）─────────────────────────
+
+describe('searchNl — 學生姓名不出境：LLM prompt 與 embedding 文本只見代號', () => {
+    /** 會把 generateJson／embed 收到的參數留下來的假 llm */
+    function recordingLlm(data) {
+        const seen = { generateJson: [], embed: [] };
+        return {
+            seen,
+            async embed(opts) { seen.embed.push(opts); return { vectors: [unitVector()], usage: { tokenIn: 0 } }; },
+            async generateJson(opts) { seen.generateJson.push(opts); return { data, usage: {}, latencyMs: 1, raw: null }; }
+        };
+    }
+
+    test('LLM 輔路徑：句子裡的姓名換成「學生#<id>」送出，回來的 exclude_student_name 換回姓名並查到學生', async () => {
+        const db = fakeDb({ students: [{ id: 7, name: '小華' }], hybrid: [[{ id: 9, score: 1 }]], details: DETAILS });
+        // 沒有任何章節詞 → rules 不 confident → 走 LLM；LLM 以代號回應（真實模型就是這樣看到它的）
+        const llm = recordingLlm({ chapters: ['向量內積'], exclude_student_name: '學生#7', semantic_text: '學生#7 常錯 內積' });
+
+        const body = await nlq.searchNl({ query: '小華常錯的那種內積題', limit: 20 }, { db, llm });
+
+        assert.equal(llm.seen.generateJson.length, 1);
+        const sent = llm.seen.generateJson[0];
+        assert.ok(!sent.parts[0].text.includes('小華'), 'prompt 不得含姓名');
+        assert.ok(sent.parts[0].text.includes('學生#7'));
+        assert.equal(sent.cacheKeyParts.query, '學生#7常錯的那種內積題', 'cassette 鍵用代號版');
+
+        assert.equal(body.parse_path, 'llm');
+        assert.equal(body.filters.exclude_student_name, '小華', 'LLM 回的代號換回姓名');
+        assert.equal(db.calls.students, 1, '換回姓名後才查得到 students.name');
+
+        // embedding 也是對外呼叫：semantic_text 裡的姓名同樣不出境
+        assert.equal(llm.seen.embed.length, 1);
+        assert.ok(!llm.seen.embed[0].texts[0].includes('小華'));
+        assert.ok(llm.seen.embed[0].texts[0].includes('學生#7'));
+    });
+
+    test('沒有學生資料時 prompt 與 cacheKeyParts 逐字不變（eval／cassette 路徑）', async () => {
+        const db = fakeDb({ students: [], hybrid: [[{ id: 9, score: 1 }]], details: DETAILS });
+        const llm = recordingLlm({ chapters: ['向量內積'], semantic_text: '小華 內積' });
+        await nlq.searchNl({ query: '小華常錯的那種內積題', limit: 20 }, { db, llm });
+        assert.equal(llm.seen.generateJson[0].cacheKeyParts.query, '小華常錯的那種內積題');
+        assert.ok(llm.seen.generateJson[0].parts[0].text.includes('小華'));
+    });
+});
+
