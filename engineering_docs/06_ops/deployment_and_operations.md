@@ -7,6 +7,7 @@
 > **定位:** 怎麼部署、怎麼啟動、怎麼備份與回滾的單一來源；故障處置歸各 runbook（同目錄），部署拓撲的架構視圖歸 sad §7。
 
 > 🛠 **2026-08-29 修訂**（PR #3–#7 程式碼同步）：§2 CI 測試數 單元 1,415→1,445、整合 259→260；§3.1 與 §4 migrations 範圍 0001–0005→0001–0006（末支 `0006_source_type`）。本檔無 0ff47b4 字樣，無需更正 CI commit。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
+> 🛠 **2026-09-15d 修訂**（測試數與 CI 步驟同步）：§CI 單元層測試數 1,445→1,476、整合層 260→262，補列 PR #17 新增的 npm audit 門檻（main f2af3c2 實測，2026-09-15 晚間）。修改處以〔修訂 2026-09-15d〕行內標記。
 
 ---
 
@@ -41,8 +42,8 @@
 
 | 階段 | 步驟 | 觸發 |
 | :--- | :--- | :--- |
-| 單元層 | `npm test`（1,445 項）＋ `npm run check:html`，Node 22.x／24.x 矩陣〔修訂 2026-08-29〕 | 每次 push 與 PR（GitHub Actions） |
-| 整合層 | 起 `pgvector/pgvector:pg16` service → 整合 260 項＋e2e 11 項＋五個 eval suite（ratchet 門檻）〔修訂 2026-08-29〕 | 同上，`integration` job |
+| 單元層 | `npm audit --omit=dev --audit-level=high` ＋ `npm test`（1,476 項）＋ `npm run check:html`，Node 22.x／24.x 矩陣〔修訂 2026-09-15d〕 | 每次 push 與 PR（GitHub Actions） |
+| 整合層 | 起 `pgvector/pgvector:pg16` service → 整合 262 項〔修訂 2026-09-15d〕＋e2e 11 項＋五個 eval suite（ratchet 門檻）〔修訂 2026-08-29〕 | 同上，`integration` job |
 | 部署 | 無自動部署。本機依 §3 啟動程序手動升級 | 手動 |
 
 CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`EMBED_MODE=fixture`；eval 低於 ratchet 門檻或 main 上 replay miss 即轉紅（NFR-004）。

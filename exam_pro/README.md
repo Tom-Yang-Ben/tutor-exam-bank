@@ -145,7 +145,7 @@ exam_pro/
 ├─ public/index.html + public/js/      # 單頁殼（5 個 hash 路由視圖）+ 五個 ES module（review/students/nlq/variants/assistant）
 ├─ migrations/ + migrate.js            # 只增不改的 SQL（0001~0007）＋執行器
 ├─ eval/                               # run.js（五個 suite）、lib/、golden/、cassettes/、fixtures/、thresholds.json
-├─ test/  unit(1,449) · integration(262) · e2e(11)
+├─ test/  unit(1,476) · integration(262) · e2e(11)
 ├─ scripts/ + *.bat                    # 備份、向量回填、成本報表、公式健檢（Windows 雙擊）
 └─ docker-compose.yml                  # PG16+pgvector：5442 開發（volume）／5433 測試（tmpfs）；皆只綁 127.0.0.1
 ```
@@ -408,7 +408,7 @@ npm run eval:baseline                                                           
 
 | # | 步驟 | 通過標準 |
 |---|------|----------|
-| 6 | `npm test` | **全數通過（2026-08-29 現況：1,449 passed / 0 failed）**；不連網、不連庫、零 secrets。CI 亦會在 push 後自動跑（badge 見本頁最上方）|
+| 6 | `npm test` | **全數通過（2026-09-15 現況：1,476 passed / 0 failed）**；不連網、不連庫、零 secrets。CI 亦會在 push 後自動跑（badge 見本頁最上方）|
 | 7 | 靜態檔完整性：確認 `public/index.html` 結尾為 `</script></body></html>`，且 `<div>`、`<script>` 開闔數相等 | 檔案未被截斷（詳見下方「截斷檔自檢」）|
 | 8 | `npm start` | 終端印出 `🚀 家教題庫後端系統已成功安全啟動：http://localhost:3000` |
 
