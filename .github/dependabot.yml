@@ -1,0 +1,18 @@
+# 依賴弱點與版本更新自動開 PR（2026-09-15 補；CI 另有 npm audit 門檻）
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /exam_pro
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Taipei
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

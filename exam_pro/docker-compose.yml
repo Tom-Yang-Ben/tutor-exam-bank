@@ -23,12 +23,15 @@ services:
     command: postgres -c maintenance_work_mem=256MB
     environment:
       POSTGRES_USER: exam
-      POSTGRES_PASSWORD: exam
+      # 密碼只在 volume 初始化時生效；改 PG_PASSWORD 必須同步改 .env 的 DATABASE_URL，
+      # 既有 volume 要先 docker compose down -v 重建才會換密碼。
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-exam}
       POSTGRES_DB: tutor_exam_bank
       POSTGRES_INITDB_ARGS: "--encoding=UTF8"
       TZ: Asia/Taipei
     ports:
-      - "5442:5432"
+      # 只綁 127.0.0.1：同一個 Wi-Fi 的其他機器碰不到這顆資料庫（原本 "5442:5432" 等於 0.0.0.0）
+      - "127.0.0.1:5442:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./migrations:/migrations:ro
@@ -46,14 +49,14 @@ services:
     command: postgres -c fsync=off -c full_page_writes=off -c synchronous_commit=off
     environment:
       POSTGRES_USER: exam
-      POSTGRES_PASSWORD: exam
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-exam}
       POSTGRES_DB: tutor_exam_bank_test
       POSTGRES_INITDB_ARGS: "--encoding=UTF8"
       # PGDATA 放在 tmpfs 的子目錄，initdb 才有辦法設定 0700 權限
       PGDATA: /var/lib/postgresql/data/pgdata
       TZ: Asia/Taipei
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     tmpfs:
       - /var/lib/postgresql/data
     volumes:

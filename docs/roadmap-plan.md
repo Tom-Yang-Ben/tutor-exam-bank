@@ -1765,3 +1765,35 @@ agent 管線、RAG 檢索、NLQ、變式、複核佇列、eval 與門檻——�
    ③ 複核頁與題庫列表對 school／publisher 題的解答加「疑似抄錄詳解」提示——純函式
      `utils/answerHeuristics.js`（長度 > 80 字或含解／因為／所以／步驟等字樣），不動 DDL、不截斷資料。
    對應決策 DEC-010；實作時同步 FR-017 ACPT 與 `docs/variants.md` 閘門表加「藍本來源」一道。
+5. **備份檔加密**（2026-09-15 使用者裁定暫不做）。現況：`scripts/backup.js` 的 pg_dump 與雲端副本
+   （`BACKUP_COPY_DIR`）皆為明文，內含 `students.name` 與作答紀錄。暫不做的理由：電腦不離家、
+   雲端帳號單一使用者；風險集中在雲端帳號被盜。觸發條件：電腦開始外帶、或雲端副本改放共用空間。
+   做法：`pg_dump | age -r <公鑰>`（或 `gpg --symmetric`），金鑰抄存於與電腦分離處；估 0.5 人日。
+6. **備份還原演練**（暫緩）。現況：還原步驟在 `engineering_docs/06_ops/runbook-pg-down.md` §5，
+   從未實跑；RTO 未量測；`data/figures/` 附圖目錄未納入備份。2026-08-27 曾發生排程回報成功
+   但實際未執行（commit `d2bcad1` 修正）。做法：對 `exam_pg_test` 還原最新一份 dump、比對題數與
+   向量數、記錄耗時；附圖目錄加進 backup.js；估 1 人日。
+7. **mupdf 的 AGPL 授權邊界**（2026-09-15 使用者確認：本專案只自用，不給其他老師用）。
+   現況：`mupdf` 1.28.0 為 AGPL-3.0-or-later，本專案未修改其原始碼、單機單人、不以網路提供
+   服務，**不觸發**第 13 條的原始碼揭露義務；NOTICE 已載明。隱憂：一旦對外部署或散布，
+   即與 LICENSE（版權所有）衝突。觸發條件：決定給第二個使用者用。做法：換 `pdfjs-dist`
+   （Apache-2.0）渲染頁面、sharp 裁圖不動，重寫 `services/figureService.js` 渲染段並以自製樣卷
+   重驗 bbox，估 1–2 人日；或向 Artifex 購買商業授權。
+8. **對外部署前置條件**（與 7 同一觸發條件）。`API_KEY` 由 `app.js serveIndex()` 注入首頁
+   HTML，任何能開首頁的人即取得；`exam_pro/README.md` 已寫明它不是存取控制。對外前至少：
+   反向代理加 Basic Auth 或 OAuth proxy（半日）、`helmet` 安全標頭（0.25 人日）、`ALLOWED_ORIGINS`
+   與 `NODE_ENV=production`；真登入與角色另估 2–3 人日。
+9. **拆題 prompt 補表格規範＋重錄 pipeline cassette**（2026-09-15 擬定）。表格語法規範已寫在
+   `docs/formulas.md` §2（PR fix/formula-tables），lint 與 Word 轉換已支援 array＋hline＋跨行區塊公式；
+   但 `agents/extract.js` 的 prompt 尚未明說，目前靠模型自發輸出。改 prompt 等於換模板版本，
+   pipeline cassette 要重錄（需金鑰、約半小時），與下一次必須重錄的變更併做。
+10. **舊系統匯入題的殘缺重複版本**（2026-09-15 發現，待 owner 裁定）。2026-05 由 MySQL 匯入的
+   `origin='legacy'` 題中，10 題（10、14、15、16、41、47、50、54、61、64）與 2026-08-29 重新拆題
+   入庫的乾淨版本（170、169、168、222、194、195、196、197、198、199）餘弦 0.969–0.998，是同一題的
+   兩個版本；當時去重沒攔到是因為舊題的向量尚未回填。舊版本為純文字、題 47 帶舊轉換器殘留標記。
+   建議刪除舊版本 10 題（無 attempts、無變式、無試卷引用，已查證），保留乾淨版本；
+   另 12 題（28–39）來源卷未知，待 owner 指認學校後補標。
+11. **「承上題」與去重的斷鏈**（2026-09-15 全庫解答健檢發現）。題庫沒有「題組」概念：承上題與其
+   上一題各自獨立入庫，上一題若被 dedup 判重複而不入庫，承上題就失去脈絡（題 169、198 即是）。
+   做法方向：extract 輸出 `group_id`／`follows_idx`，入庫時把承上題的題幹前綴上題摘要、或以
+   `parent_id` 欄位鏈結並在組卷時整組抽取；估 1–2 人日，牽涉 extract schema（cassette 重錄）與 0008 migration。

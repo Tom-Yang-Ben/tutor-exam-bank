@@ -1,6 +1,6 @@
 # 部署與運維指南 (Deployment & Operations) - 家教專用數理題庫系統
 
-> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
+> **版本:** v1.2 | **更新:** 2026-09-15 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 單例（整個系統一份）
@@ -29,8 +29,8 @@
 | 元件 | 用途 | 技術選型與埠 |
 | :--- | :--- | :--- |
 | 應用伺服器 | Express 5 單行程（`exam_pro/server.js`） | Node.js 24；`http://localhost:3000` |
-| 開發用正式庫 | 題庫資料持久化 | `pgvector/pgvector:pg16` 容器 `exam_pg`，埠 **5442**，named volume `pgdata` |
-| 整合測試庫 | 整合／e2e／eval 專用 | 同映像，容器 `exam_pg_test`，埠 **5433**，tmpfs（停掉即清空） |
+| 開發用正式庫 | 題庫資料持久化 | `pgvector/pgvector:pg16` 容器 `exam_pg`，埠 **127.0.0.1:5442**（只綁本機〔修訂 2026-09-15c〕），named volume `pgdata` |
+| 整合測試庫 | 整合／e2e／eval 專用 | 同映像，容器 `exam_pg_test`，埠 **127.0.0.1:5433**〔修訂 2026-09-15c〕，tmpfs（停掉即清空） |
 | 外部 AI 服務 | 拆題／驗答／embedding | Google Gemini API（模型 ID 單一真相 `exam_pro/config/models.js`） |
 | 前端 | 零打包器單頁 HTML + ES modules | `exam_pro/public/`，由 Express 靜態託管 |
 
@@ -67,6 +67,7 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 | `GEMINI_API_KEY` | Gemini 金鑰（必填；live／record 模式才實際使用） | — |
 | `DATABASE_URL` | 正式庫連線 | `postgres://exam:exam@localhost:5442/tutor_exam_bank` |
 | `TEST_DATABASE_URL` | 測試庫連線；庫名必須以 `_test` 結尾，否則 `migrate.js` 拒絕執行 | `postgres://exam:exam@localhost:5433/tutor_exam_bank_test` |
+| `PG_PASSWORD` | compose 容器密碼（選填，預設 `exam`）；只在 volume 初始化時生效，改動須同步兩條連線字串〔修訂 2026-09-15c〕 | `exam` |
 | `LLM_MODE` | `live`／`record`／`replay`；CI 恆為 `replay` | `replay` |
 | `EMBED_MODEL`／`EMBED_DIM`／`EMBED_RPM`／`EMBED_BATCH`／`EMBED_MODE` | embedding 模型與限速；`EMBED_DIM` 釘死 768 | `gemini-embedding-001`／768／60／32／`fixture` |
 | `FEATURE_*` | 功能旗標（PIPELINE／SIMILAR／NLQ／VARIANTS／STUDENTS／ASSISTANT 等），控制 `routes/index.js` 掛載 | 全關（`config/features.js`） |
