@@ -97,13 +97,14 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 - [ ] `npm test` 與 `npm run check:html` 全綠（本機或 CI badge）
 - [ ] 需資料庫者以 `--env-file=.env --env-file=eval/.env.replay` 跑整合／e2e（只帶 replay 檔會整層 skip 且顯示為綠，裁決 S3-R7）
 - [ ] `node migrate.js status` 確認新 migration 已套用
+- [ ] 含新 migration 的版本：先停服務（或先 `npm run migrate`）再 `git pull`／重啟；`npm run dev` 的 nodemon 會在拉下程式時立即以新程式重啟，舊 schema 會讓新 state 撞 CHECK〔修訂 2026-09-16〕
 - [ ] 交付前依 `exam_pro/README.md`「陌生人驗收」10 步走完，F12 零 error 零 warning
 
 ## 4. 部署策略
 
 | 策略 | 本專案做法 |
 | :--- | :--- |
-| 發布 | 單行程原地重啟（Ctrl+C 停 `npm start` → `git pull`／checkout → 重啟）；無 Blue-Green／Rolling 需求 |
+| 發布 | 單行程原地重啟（Ctrl+C 停 `npm start` → `git pull`／checkout → 重啟）；無 Blue-Green／Rolling 需求。**含新 migration 的版本要先停服務或先 `npm run migrate`，再拉程式／重啟**〔修訂 2026-09-16〕：以 `npm run dev`（nodemon）執行時，`git pull` 一帶入新程式就會自動重啟，舊 schema 下寫入新 state／review_reason 會違反 CHECK（例：0009 之前的 schema 不接受 `source_checked`） |
 | DB migration | 只增不改（NFR-006；`0001_init`→`0009_source_check`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕），additive 先行，與 expand-contract 的 expand 段等價 |
 | 風險控制 | `FEATURE_*` 旗標預設全關，逐一開啟並觀察，取代 canary（階段 2 起的新功能均走旗標掛載） |
 
