@@ -66,6 +66,12 @@ describe('狀態機（interfaces-stage2.md 第 2.3 條的六條規則）', () =>
                 limits: { ...limits, budgetLeft: 0 }
             });
             assert.equal(paid.review_reason, 'budget_exceeded', '要花錢的 verify 行為不變');
+            const freeError = impl({
+                state: 'verified', retries: {}, outcome: { kind: 'error', errorClass: 'timeout' },
+                limits: { ...limits, budgetLeft: 0 }
+            });
+            assert.deepEqual([freeError.state, freeError.review_reason], ['needs_review', 'budget_exceeded'],
+                'dedup1 的 error 不放行：重跑會再叫 embedding');
         }
         assert.deepEqual([...sm.FREE_NODES].sort(), [...require('../../pipeline/stateMachine').FREE_NODES].sort(),
             'shim 的零成本節點清單與真實作一致');

@@ -35,7 +35,7 @@ function resolveJobPath(p) {
 const ADVANCEABLE_STATES = Object.keys(NODE_FOR_STATE);
 
 /**
- * 零成本節點：不呼叫任何模型，因此 DAILY_COST_BUDGET_USD 觸發後仍可繼續跑，
+ * 零成本節點：不呼叫生成模型（dedup1 例外會叫一次 embedding，金額極小），因此 DAILY_COST_BUDGET_USD 觸發後仍可繼續跑，
  * 讓已經在途的 job 至少把免費的那幾格走完，而不是整份卡死到隔天。
  * 〔修訂 2026-09-16〕清單本身移到 pipeline/stateMachine.js（規則 3 也要用），這裡只包成 Set。
  */
@@ -746,7 +746,8 @@ function createRunner(opts = {}) {
             if (budgetLeft <= 0 && !FREE_NODES.has(node)) {
                 // 第 7.3.2 條：呼叫「前」就檢查，錢不夠連叫都不叫。
                 // 狀態機的規則 3 會把它變成 needs_review('budget_exceeded')。
-                // 零成本節點不進這一支：照常跑，fail／error 的原因由狀態機保留（規則 3 的 FREE_NODES 例外）。
+                // 零成本節點不進這一支：照常跑一次，fail 的原因由狀態機保留（規則 3 的 FREE_NODES 例外）；
+                // error 仍被規則 3 收成 budget_exceeded、不退避重跑（dedup1 重跑會再叫一次 embedding）。
                 outcome = { kind: 'fail', reason: 'budget_exceeded' };
                 logger.warn({ msg: '預算用盡，跳過呼叫', job_id: jq.job_id, jq_id: jq.id, node, budget_left: budgetLeft });
             } else {

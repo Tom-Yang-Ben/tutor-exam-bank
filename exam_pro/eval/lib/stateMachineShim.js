@@ -40,7 +40,7 @@ const NEXT_STATE = {
 
 const TERMINAL_STATES = ['saved', 'needs_review', 'rejected'];
 
-// 〔修訂 2026-09-16〕零成本節點：規則 3（預算用盡）不改寫它們的 fail／error 原因
+// 〔修訂 2026-09-16〕零成本節點：規則 3（預算用盡）不改寫它們 fail 的原因；error 仍改寫（dedup1 重跑會叫 embedding）
 const FREE_NODES = ['dedup0', 'source_check', 'dedup1', 'save'];
 
 // 第 2.2 條
@@ -88,8 +88,9 @@ function shimTransition({ state, retries, outcome, limits }) {
     const node = NODE_FOR_STATE[state];
     const budgetLeft = lim.budgetLeft === undefined ? Infinity : lim.budgetLeft;
 
-    // 規則 3：預算用盡且不是 pass／skipped，且不是零成本節點（〔修訂 2026-09-16〕）
-    if (budgetLeft <= 0 && kind !== 'pass' && kind !== 'skipped' && !FREE_NODES.includes(node)) {
+    // 規則 3：預算用盡且不是 pass／skipped，且不是零成本節點的 fail（〔修訂 2026-09-16〕）
+    if (budgetLeft <= 0 && kind !== 'pass' && kind !== 'skipped'
+        && !(kind === 'fail' && FREE_NODES.includes(node))) {
         return { state: 'needs_review', retries: { ...r }, review_reason: 'budget_exceeded' };
     }
     // 規則 4

@@ -41,9 +41,11 @@ const NEXT_STATE = Object.freeze({
 });
 
 /**
- * 零成本節點：不呼叫任何模型，重跑與失敗都不花 LLM 的錢。〔修訂 2026-09-16〕由 workers/jobRunner.js 移到這裡，
- * 兩處共用同一份清單：規則 3 靠它決定「預算用盡」要不要蓋掉原本的失敗原因；runner 靠它決定
- * 預算用盡／當日止血時還能不能跑這一格。
+ * 零成本節點：判定本身不呼叫生成模型（dedup0 比雜湊、source_check 比文字層、save 寫庫）。
+ * 例外是 dedup1：runner 給它的 question_id 一律是 null，因此每次都會以 ctx.llm.embed 算一次
+ * embedding，由 meteredLlm 計入 job 成本——金額小，但不是零。
+ * 〔修訂 2026-09-16〕由 workers/jobRunner.js 移到這裡，兩處共用同一份清單：規則 3 靠它決定
+ * 「預算用盡」要不要蓋掉 fail 的原本原因；runner 靠它決定預算用盡／當日止血時還能不能跑這一格。
  */
 const FREE_NODES = Object.freeze(['dedup0', 'source_check', 'dedup1', 'save']);
 
@@ -126,10 +128,12 @@ function transition({ state, retries, outcome, limits } = {}) {
 
     // 規則 3：預算已用盡。pass／skipped 照常前進——那次呼叫的錢已經花掉了，
     // 把成果丟掉只是白花；其餘一律直接進複核，不再重試（重試就是再花一次錢）。
-    // 〔修訂 2026-09-16〕零成本節點（FREE_NODES）不適用：重試不花錢，改寫成 budget_exceeded
-    // 反而蓋掉真正的原因（transcription_mismatch、duplicate），還讓它進了 retry 清單。
-    // 這些節點的 fail／error 交給規則 5／6 照常處理。
-    if (budgetLeft <= 0 && kind !== 'pass' && kind !== 'skipped' && !FREE_NODES.includes(node)) {
+    // 〔修訂 2026-09-16〕零成本節點（FREE_NODES）的 **fail** 不適用：那是判定結果，改寫成
+    // budget_exceeded 反而蓋掉真正的原因（transcription_mismatch、duplicate），還讓它進了 retry 清單；
+    // 這些 fail 交給規則 5 照常處理。**error 仍適用**：error 會觸發退避重跑，而 dedup1 重跑
+    // 會再叫一次 embedding（計入成本），預算用盡後不該再花。
+    if (budgetLeft <= 0 && kind !== 'pass' && kind !== 'skipped'
+        && !(kind === 'fail' && FREE_NODES.includes(node))) {
         return toReview(prev, 'budget_exceeded');
     }
 

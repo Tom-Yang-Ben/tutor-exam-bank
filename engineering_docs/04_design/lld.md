@@ -141,7 +141,7 @@ stateDiagram-v2
 | 規則 | 條件 | 結果 |
 | :--- | :--- | :--- |
 | 1–2 | 終態／未知狀態、未知 `outcome.kind` | throw（視為程式錯誤，不予吞沒） |
-| 3 | `budgetLeft ≤ 0` 且非 pass/skipped，且節點不屬零成本節點 | `needs_review('budget_exceeded')`；pass/skipped 照常前進（成本已發生，保留既有成果）；零成本節點（`FREE_NODES`：dedup0／source_check／dedup1／save）的 fail／error 改走規則 5／6，保留原本原因（如 `transcription_mismatch`、`duplicate`）〔修訂 2026-09-16〕 |
+| 3 | `budgetLeft ≤ 0` 且非 pass/skipped，且不是零成本節點的 fail | `needs_review('budget_exceeded')`；pass/skipped 照常前進（成本已發生，保留既有成果）；零成本節點（`FREE_NODES`：dedup0／source_check／dedup1／save）的 fail 改走規則 5，保留原本原因（如 `transcription_mismatch`、`duplicate`）；其 error 仍收成 `budget_exceeded`、不退避重跑（dedup1 重跑會再叫一次 embedding，計入成本）〔修訂 2026-09-16〕 |
 | 4 | pass／skipped | 前進一格（`NEXT_STATE`） |
 | 5 | fail 且該節點重試未用盡（classify 2／lint 2／verify 1／其餘 0；變式 job 的 lint 由 `VARIANT_LINT_RETRIES` 覆寫） | 原地重跑，`retries[node]+1`，feedback 由 runner 寫回 payload |
 | 5' | fail 且重試用盡 | `needs_review(REVIEW_REASON_FOR_FAIL)`；未知 reason 落到 `awaiting_approval`（全函式，不違反 DDL CHECK 約束） |

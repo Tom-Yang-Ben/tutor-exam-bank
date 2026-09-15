@@ -259,20 +259,29 @@ describe('狀態機 — 預算用盡時零成本節點保留原本的失敗原�
         });
     }
 
-    test('零成本節點的 error 在預算用盡時照常走退避計數，用盡後保留 errorClass 的對照', () => {
-        const limits = { ...LIMITS, budgetLeft: 0 };
-        const retry = transition({
-            state: 'deduped', retries: {}, outcome: { kind: 'error', errorClass: 'timeout' }, limits
-        });
-        assert.deepEqual(retry, { state: 'deduped', retries: { 'save:error': 1 }, review_reason: null });
+    // code review（PR #31）：dedup1 重跑會再叫一次 embedding（runner 給 question_id:null），
+    // error 若照常退避重跑，預算用盡後最多再花 maxErrorRetries 次。所以例外只放行 fail。
+    test('零成本節點的 error 在預算用盡時仍 budget_exceeded、不退避重跑（dedup1 重跑會叫 embedding）', () => {
+        for (const budgetLeft of [0, -0.01]) {
+            const limits = { ...LIMITS, budgetLeft };
+            for (const node of FREE_NODES) {
+                for (const errorClass of ['timeout', 'rate_limited', 'provider_error']) {
+                    const r = transition({
+                        state: STATE_FOR_NODE[node], retries: {}, outcome: { kind: 'error', errorClass }, limits
+                    });
+                    assert.deepEqual(r, { state: 'needs_review', retries: {}, review_reason: 'budget_exceeded' },
+                        `${node} ${errorClass} budgetLeft=${budgetLeft}`);
+                }
+            }
+        }
+    });
 
-        const exhausted = transition({
-            state: 'verified', retries: { 'dedup1:error': MAX_ERROR_RETRIES },
-            outcome: { kind: 'error', errorClass: 'rate_limited' }, limits
+    test('預算還有時零成本節點的 error 照常退避（例外只影響預算用盡的情形）', () => {
+        const r = transition({
+            state: 'verified', retries: {}, outcome: { kind: 'error', errorClass: 'timeout' },
+            limits: { ...LIMITS, budgetLeft: 0.01 }
         });
-        assert.deepEqual(exhausted, {
-            state: 'needs_review', retries: { 'dedup1:error': MAX_ERROR_RETRIES }, review_reason: 'provider_error'
-        });
+        assert.deepEqual(r, { state: 'verified', retries: { 'dedup1:error': 1 }, review_reason: null });
     });
 
     test('零成本節點自己回 budget_exceeded 時仍是 budget_exceeded（規則 5／6 不變）', () => {
