@@ -70,7 +70,8 @@ describe('wordService — resolveFigurePath（防 path traversal）', () => {
             '/figures/../.env',
             '/figures/../../etc/passwd.png',
             '/figures/sub/1-1.png',
-            '/figures/..\\1-1.png'
+            // 反斜線只在 Windows 是路徑分隔符；POSIX 上 `..\1-1.png` 是目錄內的普通檔名（嚴格白名單另行擋下）
+            ...(process.platform === 'win32' ? ['/figures/..\\1-1.png'] : [])
         ]) {
             assert.equal(resolveFigurePath(bad, dir, loose), null, `目錄檢查應拒絕：${bad}`);
         }
