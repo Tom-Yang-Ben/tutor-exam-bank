@@ -302,9 +302,9 @@ describe('variants.js 的純函式（P-13）', () => {
         assert.notEqual(ok.label, bad.label);
     });
 
-    test('chipFor：九個合法 state 都有 chip，沒有一個是空字串', async () => {
+    test('chipFor：十個合法 state 都有 chip，沒有一個是空字串', async () => {
         const { chipFor } = await load('variants.js');
-        const STATES = ['extracted', 'hashed', 'classified', 'linted', 'verified',
+        const STATES = ['extracted', 'hashed', 'classified', 'linted', 'source_checked', 'verified',
             'deduped', 'saved', 'needs_review', 'rejected'];
         for (const state of STATES) {
             const c = chipFor({ state, review_reason: null });
@@ -314,10 +314,10 @@ describe('variants.js 的純函式（P-13）', () => {
         }
     });
 
-    test('chipFor：六個中間狀態只講「生成中／檢查中」，不洩漏節點名', async () => {
+    test('chipFor：七個中間狀態只講「生成中／檢查中」，不洩漏節點名', async () => {
         const { chipFor } = await load('variants.js');
         assert.equal(chipFor({ state: 'extracted' }).label, '生成中');
-        for (const s of ['hashed', 'classified', 'linted', 'verified', 'deduped']) {
+        for (const s of ['hashed', 'classified', 'linted', 'source_checked', 'verified', 'deduped']) {
             assert.equal(chipFor({ state: s }).label, '檢查中', s);
         }
     });
@@ -330,10 +330,10 @@ describe('variants.js 的純函式（P-13）', () => {
         assert.equal(chipFor(null).label, '未知');
     });
 
-    test('八個 review_reason 都有標籤（與 review.js 的 REASON_LABEL 同一組字）', async () => {
+    test('九個 review_reason 都有標籤（與 review.js 的 REASON_LABEL 同一組字）', async () => {
         const { REASON_LABEL } = await load('variants.js');
         const REASONS = ['chapter_invalid', 'formula_unparsable', 'answer_mismatch', 'duplicate',
-            'schema_invalid', 'budget_exceeded', 'provider_error', 'awaiting_approval'];
+            'schema_invalid', 'budget_exceeded', 'provider_error', 'awaiting_approval', 'transcription_mismatch'];
         assert.deepEqual(Object.keys(REASON_LABEL).sort(), [...REASONS].sort());
     });
 

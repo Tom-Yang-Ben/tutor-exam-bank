@@ -18,14 +18,8 @@ const FIGURES_DIR = path.resolve(__dirname, '..', 'data', 'figures');
 const RENDER_SCALE = 2;        // 2x ≈ 144 DPI，夠複核與 Word 匯出用
 const MARGIN_RATIO = 0.025;    // 框四周各加 2.5% 邊距（相對於框自身的寬高）
 
-let mupdfPromise = null;
-/** mupdf 的 npm 套件是 ESM；CJS 這邊只能動態 import，且只載一次 */
-function loadMupdf() {
-    if (!mupdfPromise) {
-        mupdfPromise = import('mupdf').then(ns => ns.default ?? ns);
-    }
-    return mupdfPromise;
-}
+// mupdf 的 npm 套件是 ESM；CJS 這邊只能動態 import，且只載一次（與原卷文字層共用 services/mupdf.js）
+const { loadMupdf } = require('./mupdf');
 
 /**
  * 0–1000 正規化框 → 整頁點陣圖上的像素矩形（sharp.extract 的形狀）。

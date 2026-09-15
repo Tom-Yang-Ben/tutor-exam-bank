@@ -34,6 +34,7 @@ const AGENT_FILES = {
     extract: 'agents/extract.js',
     classify: 'agents/classify.js',
     lint: 'agents/lint.js',
+    source_check: 'agents/source_check.js',   // 〔修訂 2026-09-15f〕原卷文字層比對（docs/source-check.md）
     verify: 'agents/verify.js',
     dedup: 'agents/dedup.js'
 };
@@ -227,6 +228,7 @@ async function runPipeline(opts) {
     if (!agents.extract) agentSources.extract = 'oracle-stub';
     if (!agents.classify) agentSources.classify = 'gate-only-stub';
     if (!agents.lint) agentSources.lint = 'stub';
+    if (!agents.source_check) agentSources.source_check = 'stub';
     if (!agents.verify) agentSources.verify = 'stub';
     if (!agents.dedup) agentSources.dedup = 'stub';
 
@@ -313,7 +315,9 @@ async function runPipeline(opts) {
                     verify: require('../../config/models').MODEL_VERIFY   // 單一真相：config/models.js（裁決 S2-29）
                 },
                 limits: sm.tables().DEFAULT_LIMITS,
-                thresholds
+                thresholds,
+                // 與 runner 同一條解讀規則（SOURCE_CHECK_MODE，預設 enforce、非法值退回 enforce）
+                sourceCheck: { mode: require('../../workers/jobRunner').loadSourceCheckConfig().sourceCheckMode }
             },
             signal: undefined
         };
@@ -348,6 +352,22 @@ async function runPipeline(opts) {
         };
     }
 
+    // ── 原卷文字層（與 runner 的 runExtractChunk 相同：extract 通過後、逐題推進前抽片段）──
+    // 失敗只會讓每題的 source_text.status='error'，source_check 因此 skipped，不影響其他節點。
+    if (Array.isArray(extractOutcome.data.questions) && extractOutcome.data.questions.length > 0) {
+        const pr = Array.isArray(extractOutcome.data.page_range)
+            ? extractOutcome.data.page_range : [1, thresholds.pdfChunkPages];
+        let pdfBytes = null;
+        try { pdfBytes = fs.readFileSync(path.resolve(opts.pdfPath)); } catch (err) {
+            warnings.push(`讀不到 ${opts.pdfPath}，本輪不做原卷文字層比對：${err.message}`);
+        }
+        if (pdfBytes) {
+            await require('../../services/sourceTextService').attachSourceText({
+                pdfBytes, questions: extractOutcome.data.questions, fromPage: pr[0], toPage: pr[1], logger
+            });
+        }
+    }
+
     // ── 逐題推進 ──
     const jq = (extractOutcome.data.questions || []).map((q, i) => ({
         id: i + 1,
@@ -363,10 +383,10 @@ async function runPipeline(opts) {
     const limits = { ...sm.tables().DEFAULT_LIMITS };
 
     for (const row of jq) {
-        // 上限：每題最多 Σ maxRetries + Σ maxErrorRetries + 6 步（第 2.4 條的「會停」性質）。
-        // 這裡多留一倍當保險絲——真的跑到就是狀態機壞了，不是資料問題。
+        // 上限：每題最多 Σ maxRetries + Σ maxErrorRetries + 7 步（第 2.4 條的「會停」性質；
+        // 〔修訂 2026-09-15f〕加 source_check 後是七個節點）。多留一倍當保險絲——真的跑到就是狀態機壞了。
         let guard = 0;
-        const guardMax = 2 * (6 + 5 + 3 * 6);
+        const guardMax = 2 * (7 + 5 + 3 * 7);
 
         while (!TERMINAL.includes(row.state)) {
             if (++guard > guardMax) {
@@ -402,6 +422,15 @@ async function runPipeline(opts) {
                                 });
                             }
                             return stubLint({ question_text: ex.question_text, answer_text: ex.answer_text });
+                        case 'source_check': {
+                            const input = {
+                                question_text: (row.payload.lint && row.payload.lint.question_text) || ex.question_text,
+                                source_text: ex.source_text || null,
+                                has_figure: Boolean(ex.figure_desc || ex.figure_img || ex.figure_box)
+                            };
+                            if (agents.source_check) return agents.source_check.run(makeCtx(row), input);
+                            return { kind: 'skipped', data: { reason: 'agents/source_check.js 不存在' } };
+                        }
                         case 'verify':
                             if (agents.verify) {
                                 return agents.verify.run(makeCtx(row), {

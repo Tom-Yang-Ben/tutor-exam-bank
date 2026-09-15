@@ -45,7 +45,7 @@
 
 | ID | 業務情境 | 通過準則（可觀察） | 對應 FR／ACPT |
 | :--- | :--- | :--- | :--- |
-| SCN-005 | `npm test` 單元測試 | 全數通過（2026-09-15 現況 1,507 passed / 0 failed，feat/follow-up-links 實測）〔修訂 2026-09-15f〕；不連網、不連庫、零 secrets | NFR-003、NFR-004 |
+| SCN-005 | `npm test` 單元測試 | 全數通過（2026-09-15 現況 1,567 passed / 0 failed，兩分支合併＋審查修正後實測）〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕；不連網、不連庫、零 secrets | NFR-003、NFR-004 |
 | SCN-006 | 靜態檔完整性（截斷檔自檢） | `public/index.html` 結尾為 `</script></body></html>`；抽出 inline script 經 `node --check` 通過 | FR-007 |
 | SCN-007 | `npm start` 啟動伺服器 | 終端印出啟動成功訊息與 `http://localhost:3000` | NFR-001 |
 

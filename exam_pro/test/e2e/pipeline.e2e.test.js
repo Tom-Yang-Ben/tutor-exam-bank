@@ -62,7 +62,7 @@ function runSuite() {
 
     const JOBS_DIR = path.join(APP_DIR, 'data', 'jobs');
     const TERMINAL = ['saved', 'needs_review', 'rejected'];
-    const RUNNING = ['extracted', 'hashed', 'classified', 'linted', 'verified', 'deduped'];
+    const RUNNING = ['extracted', 'hashed', 'classified', 'linted', 'source_checked', 'verified', 'deduped'];
 
     /** 真 agents、真 services/llm（replay）、真狀態機；只把睡眠與 log 換掉。 */
     function makeRunner() {
@@ -193,27 +193,35 @@ function runSuite() {
             for (const state of Object.keys(byState)) {
                 assert.ok(TERMINAL.includes(state), `還有列停在非終態 ${state}`);
             }
-            // needs_review 的每一列都必須帶原因（第 2 條的八個值之一），否則複核分頁只能顯示空白。
+            // needs_review 的每一列都必須帶原因（第 2 條的九個值之一），否則複核分頁只能顯示空白。
             const REASONS = ['chapter_invalid', 'formula_unparsable', 'answer_mismatch', 'duplicate',
-                'schema_invalid', 'budget_exceeded', 'provider_error', 'awaiting_approval'];
+                'schema_invalid', 'budget_exceeded', 'provider_error', 'awaiting_approval', 'transcription_mismatch'];
             for (const r of rows) {
                 if (r.state !== 'needs_review') continue;
                 assert.ok(REASONS.includes(r.review_reason),
-                    `needs_review 的 review_reason「${r.review_reason}」不在八個合法值內`);
+                    `needs_review 的 review_reason「${r.review_reason}」不在九個合法值內`);
             }
+            // 公開樣卷的原卷比對校準為 0 誤報（docs/source-check.md）：真的有一題被判不符就是比對器退步了
+            const mismatched = rows.filter(r => r.review_reason === 'transcription_mismatch');
+            assert.deepEqual(mismatched, [], '樣卷不該有任何 transcription_mismatch');
             assert.ok((byState.saved || 0) > 0, '沒有任何一題入庫');
         });
 
-        test('payload 的六個鍵：每一題至少有 extract，走到終點的有 save（第 3.2 條）', async () => {
+        test('payload 的七個鍵：每一題至少有 extract，走到終點的有 save（第 3.2 條）', async () => {
             const { rows } = await query(
                 `SELECT id, state, payload FROM job_questions WHERE job_id = $1 ORDER BY idx`, [jobId]);
             for (const r of rows) {
                 assert.ok(r.payload && typeof r.payload === 'object', `jq #${r.id} 的 payload 不是物件`);
                 assert.ok(r.payload.extract, `jq #${r.id} 沒有 payload.extract`);
                 for (const key of Object.keys(r.payload)) {
-                    assert.ok(['extract', 'dedup0', 'classify', 'lint', 'verify', 'dedup1', 'save', 'variant'].includes(key),
+                    assert.ok(['extract', 'dedup0', 'classify', 'lint', 'source_check', 'verify', 'dedup1', 'save', 'variant'].includes(key),
                         `jq #${r.id} 的 payload 多了非凍結的鍵「${key}」`);
                 }
+                // 〔修訂 2026-09-15f〕extract 階段在 PDF 刪檔前抽好原卷片段（樣卷是向量字型，有文字層）
+                const st = r.payload.extract.source_text;
+                assert.ok(st && st.v === 1, `jq #${r.id} 沒有 payload.extract.source_text`);
+                assert.ok(['located', 'not_found', 'low_anchor'].includes(st.status), `jq #${r.id} 的 source_text.status=${st.status}`);
+                if (st.status === 'located') assert.ok(st.segment.length > 0 && st.segment.length <= 1500);
             }
         });
 

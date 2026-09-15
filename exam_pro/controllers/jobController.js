@@ -29,7 +29,7 @@ const RETRYABLE_REASONS = ['provider_error', 'budget_exceeded'];
 /** node → 該節點對應的 state（NODE_FOR_STATE 的反查表），retry 要把列退回前一個狀態時用。 */
 const STATE_FOR_NODE = Object.fromEntries(Object.entries(NODE_FOR_STATE).map(([s, n]) => [n, s]));
 /** 管線順序（retry 的狀態反推靠它，不靠 JSON 的鍵順序）。 */
-const NODE_ORDER = ['dedup0', 'classify', 'lint', 'verify', 'dedup1', 'save'];
+const NODE_ORDER = ['dedup0', 'classify', 'lint', 'source_check', 'verify', 'dedup1', 'save'];
 
 // ─────────────────────────── 純函式 ───────────────────────────
 

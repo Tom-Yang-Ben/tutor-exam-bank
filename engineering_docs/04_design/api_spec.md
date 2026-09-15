@@ -1,6 +1,6 @@
 # API 設計規範 (API Specification) - 家教專用數理題庫系統
 
-> **版本:** v1.2 | **更新:** 2026-09-15 | **狀態:** 活躍 | **OpenAPI 定義:** [`openapi-exam-pro-v1.yaml`](./openapi-exam-pro-v1.yaml)
+> **版本:** v1.3 | **更新:** 2026-09-15 | **狀態:** 活躍 | **OpenAPI 定義:** [`openapi-exam-pro-v1.yaml`](./openapi-exam-pro-v1.yaml)
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 單例。本文件維護 API 設計約定、認證／CORS／限流政策、錯誤語意、端點總表與狀態碼慣例；單一端點的請求／回應 schema 細節歸 [`openapi-exam-pro-v1.yaml`](./openapi-exam-pro-v1.yaml)，路由掛載的單一真相為 `exam_pro/routes/index.js` 與 `exam_pro/app.js`。
@@ -8,6 +8,8 @@
 > 🛠 **2026-08-29 修訂**（PR #6/#7 程式碼同步）：§2.1 `GET /api/questions` 篩選參數補 `source_type`；§5.1 端點總表補 `GET /api/chapter-volumes`（三層選單資料源）；`POST /api/generate-paper` 說明補 `source_types` 題源過濾；§7 上游 FR 範圍延伸至 FR-017。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 
 > 🛠 **2026-08-29 修訂之二**（feat/source-detail）：questions／jobs 各端點的請求與回應加 `source_detail` 來源註記（自由文字 ≤100 字，FR-017 延伸）；§5.1 補 `POST /api/questions/batch-source` 批次補標端點。標記〔修訂 2026-08-29b〕。
+
+> 🛠 **2026-09-15f 修訂**（feat/source-check，FR-020）：無新端點；`GET /api/review` 的 `reason` 值域加 `transcription_mismatch`（九個值）、`GET /api/review/:jqId` 的 payload 可含 `extract.source_text` 與 `source_check`、approve 事件 detail 加 `source_recheck`／`stem_edited`（§2.1、§5.1）。修改處以〔修訂 2026-09-15f〕行內標記。
 
 ## 目錄
 
@@ -36,7 +38,7 @@
 
 ### 2.1 分頁與篩選
 
-`GET /api/questions` 與 `GET /api/jobs/:id/questions` 支援 `page`／`limit` 分頁（頁碼式，非游標式）；前者另支援 `subject`／`chapter`／`question_type`／`q`（關鍵字）／`source_type`（題源標記單值，FR-017；非法值靜默忽略不套用，`questionController.js`）篩選〔修訂 2026-08-29〕。`GET /api/review` 僅提供 `reason` 篩選與 `limit` 上限（預設一次最多 50 筆，無頁碼）。其餘列表端點（`/students`、`/students/:id/papers`）回傳全量或依 controller 內建條件，無分頁參數。
+`GET /api/questions` 與 `GET /api/jobs/:id/questions` 支援 `page`／`limit` 分頁（頁碼式，非游標式）；前者另支援 `subject`／`chapter`／`question_type`／`q`（關鍵字）／`source_type`（題源標記單值，FR-017；非法值靜默忽略不套用，`questionController.js`）篩選〔修訂 2026-08-29〕。`GET /api/review` 僅提供 `reason` 篩選（九個 `review_reason` 值之一，非法值 400；〔修訂 2026-09-15f〕加 `transcription_mismatch`）與 `limit` 上限（預設一次最多 50 筆，無頁碼）。其餘列表端點（`/students`、`/students/:id/papers`）回傳全量或依 controller 內建條件，無分頁參數。
 
 ### 2.2 旗標控制掛載
 
@@ -117,7 +119,7 @@ app.use((err, req, res, next) => {
 | `POST /api/download-word` | FR-009 | Word 匯出（LaTeX→OOXML，docx 原生 Math 物件） |
 | `POST /api/jobs`（15 MB、超限 413；限流 10/min，與 `/analyze-pdf` 共用同一桶；檔案內容缺 `%PDF-` 檔頭回 400〔修訂 2026-09-15c〕） | FR-001 | 建立拆題 job（恆掛載；FEATURE_PIPELINE 僅控制前端上傳入口） |
 | `GET /api/jobs/:id`、`GET /api/jobs/:id/questions`、`POST /api/jobs/:id/retry` | FR-001 | job 狀態／逐題清單／斷點續跑（恆掛載） |
-| `GET /api/review`、`GET /api/review/:jqId`、`POST /api/review/:jqId/approve`、`POST /api/review/:jqId/reject` | FR-006 | 人工複核佇列四支（恆掛載） |
+| `GET /api/review`、`GET /api/review/:jqId`、`POST /api/review/:jqId/approve`、`POST /api/review/:jqId/reject` | FR-006 | 人工複核佇列四支（恆掛載）；〔修訂 2026-09-15f〕FR-020 的「題幹與原卷不符」沿用同四支，approve 不重跑原卷比對、只在事件記 `source_recheck`／`stem_edited`（`docs/interfaces-stage2.md` 第 6.6 條） |
 
 ### 5.2 旗標區
 

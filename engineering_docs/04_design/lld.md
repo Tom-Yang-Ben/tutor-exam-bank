@@ -1,6 +1,7 @@
 # 低階設計與程式碼地圖 (LLD / Code Map) - 家教專用數理題庫系統
 
 > **版本:** v1.1 | **更新:** 2026-09-15 | **狀態:** 活躍
+> 🛠 **2026-09-15f 修訂**（feat/source-check，FR-020、ADR-009）：§2 agents 補 source_check；§4.1 零成本節點補 source_check、extract 階段補抽原卷文字層；§5.2 可推進狀態六個→七個、狀態圖插入 linted→source_checked→verified。§2–§4 其餘 AS-BUILT 內容未重掃。修改處以〔修訂 2026-09-15f〕行內標記。
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 單檔；§5 狀態機每個 Aggregate 一節
@@ -36,7 +37,7 @@ exam_pro/
 ├── routes/       # API 全表（index.js：核心區＋各階段 append-only 區塊，旗標控制掛載）
 ├── controllers/  # HTTP 層：驗參、交易、回應（jobController、reviewController、examController…）
 ├── services/     # 業務服務：llm/（adapter＋throttle＋cassette）、assistantService、variantService、followUpLinker（承上題綁定寫入端 linkJob，冪等）〔修訂 2026-09-15e〕…
-├── agents/       # 管線節點純函式：extract/classify/lint/verify/dedup/generate（不碰 DB、ctx 注入）
+├── agents/       # 管線節點純函式：extract/classify/lint/source_check〔修訂 2026-09-15f〕/verify/dedup/generate（不碰 DB、ctx 注入）
 ├── pipeline/     # stateMachine.js：job_questions 推進規則（純函式）
 ├── workers/      # jobRunner.js：DB-polling worker，唯一改 job_questions.state 與寫 job_events 之處
 ├── config/       # db／models（模型 ID 單一真相）／features／pricing／chapters
@@ -75,9 +76,10 @@ flowchart TD
 | 節點逾時 | `Promise.race` ＋ AbortController，逾時歸類 `error:timeout` | `JOB_NODE_TIMEOUT_MS=120000` |
 | RPM 節流 | 不在 runner：所有 `ctx.llm` 呼叫經 `exam_pro/services/llm/throttle.js` 的每供應商雙桶（RPM 滑動 60 秒視窗＋併發槽） | `<VENDOR>_RPM=60` |
 | 單 job 成本上限 | 呼叫前檢查 `budget_usd − cost_usd`，餘額不足即不發出呼叫；轉為 `needs_review('budget_exceeded')` | `JOB_COST_BUDGET_USD=0.5` |
-| 每日成本上限 | tick 起手查 `job_events` 當日 `SUM(cost_usd)`；超過即只認領零成本節點（dedup0／dedup1／save）對應的狀態、不開新 job | `DAILY_COST_BUDGET_USD=5` |
+| 每日成本上限 | tick 起手查 `job_events` 當日 `SUM(cost_usd)`；超過即只認領零成本節點（dedup0／source_check〔修訂 2026-09-15f〕／dedup1／save）對應的狀態、不開新 job | `DAILY_COST_BUDGET_USD=5` |
 | 重跑冪等 | `job_questions` UNIQUE `(job_id, idx)` ＋ `ON CONFLICT DO NOTHING`：extract／generate 重跑不重複建列 | — |
 | 承上題綁定（FR-019）〔修訂 2026-09-15e〕 | 非新節點、不經 `transition()`：job_question 寫成終態的 UPDATE 之後、`maybeFinishJob` 之前呼叫 `services/followUpLinker.js` 的 `linkJob(db, job_id, {src:'pipeline'})`，對整個 job 重算（子題先入庫時等前題到終態再補綁）；失敗只 warn、不影響狀態推進。變式政策停等分支不掛；`kind='variant'` 的 job 在 linkJob 內 no-op。approve／reject 在同交易以 SAVEPOINT 包住呼叫（`src:'review'`） | 前題解析遞迴深度 5、成環檢查深度 20 |
+| extract 階段的零成本附加步驟〔修訂 2026-09-15f〕 | 每塊拆題 pass 後、建列前依序：附圖裁切（attachFigureImages）→ 原卷文字層片段（attachSourceText，`services/sourceTextService.js`，只存每題片段 ≤1500 字）；兩者皆 try/catch，失敗只少圖或少比對，不影響建列；全部 chunk 拆完才刪 PDF | `SOURCE_CHECK_MODE`（只影響 source_check 節點，片段照抽） |
 
 ### 4.2 助教 ReAct 迴圈（exam_pro/services/assistantService.js，ADR-007）
 
@@ -116,7 +118,7 @@ stateDiagram-v2
 
 ### 5.2 job_questions（逐題管線）
 
-六個可推進狀態各對應一個節點（`NODE_FOR_STATE`）；三個終態 runner 不認領，`transition()` 收到即丟錯。
+七個可推進狀態〔修訂 2026-09-15f〕各對應一個節點（`NODE_FOR_STATE`）；三個終態 runner 不認領，`transition()` 收到即丟錯。
 
 ```mermaid
 stateDiagram-v2
@@ -124,11 +126,12 @@ stateDiagram-v2
     extracted --> hashed: dedup0
     hashed --> classified: classify
     classified --> linted: lint
-    linted --> verified: verify
+    linted --> source_checked: source_check（原卷文字層比對，零成本）
+    source_checked --> verified: verify
     verified --> deduped: dedup1
     deduped --> saved: save（同交易入庫＋回填 question_id）
     extracted --> needs_review: fail/error 重試用盡或預算用盡
-    note right of needs_review: 六個可推進狀態皆可依同一規則進入
+    note right of needs_review: 七個可推進狀態皆可依同一規則進入；source_check 不重試，不符即 transcription_mismatch
     needs_review --> saved: review approve（人工）
     needs_review --> rejected: review reject（人工）
     saved --> [*]

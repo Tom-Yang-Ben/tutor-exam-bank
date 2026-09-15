@@ -211,7 +211,7 @@ function runSuite() {
             while (runner.inFlight > 0) await new Promise(r => setTimeout(r, 10));
             const { rows } = await query(
                 `SELECT COUNT(*)::int AS n FROM job_questions
-                  WHERE state IN ('extracted','hashed','classified','linted','verified','deduped')`);
+                  WHERE state IN ('extracted','hashed','classified','linted','source_checked','verified','deduped')`);
             const { rows: jobs } = await query(`SELECT COUNT(*)::int AS n FROM jobs WHERE state IN ('queued','extracting')`);
             if (rows[0].n === 0 && jobs[0].n === 0) return i + 1;
         }
@@ -256,13 +256,13 @@ function runSuite() {
                 const { rows: job } = await query('SELECT state FROM jobs WHERE id = $1', [jobId]);
                 assert.equal(job[0].state, 'done', '所有列都到終態時 job 要變 done');
 
-                // 六個節點 × 三題 = 18 列事件，且 outcome 全是 pass
+                // 七個節點 × 三題 = 21 列事件，且 outcome 全是 pass（〔修訂 2026-09-15f〕加 source_check）
                 const { rows: ev } = await query(
                     `SELECT node, outcome, COUNT(*)::int AS n FROM job_events WHERE job_id = $1
                      GROUP BY node, outcome ORDER BY node`, [jobId]);
                 assert.deepEqual(ev.map(e => [e.node, e.outcome, e.n]).sort(), [
                     ['classify', 'pass', 3], ['dedup0', 'pass', 3], ['dedup1', 'pass', 3],
-                    ['lint', 'pass', 3], ['save', 'pass', 3], ['verify', 'pass', 3]
+                    ['lint', 'pass', 3], ['save', 'pass', 3], ['source_check', 'pass', 3], ['verify', 'pass', 3]
                 ].sort());
 
                 // 入庫的欄位：origin/chapter_src/text_hash 照第 3.3 條
@@ -394,6 +394,146 @@ function runSuite() {
                 assert.equal(rows[0].state, 'needs_review');
                 assert.equal(rows[0].review_reason, 'schema_invalid');
                 assert.equal((await savedQuestions(jobId)).length, 0);
+            });
+        });
+
+        // ─────────────────── 〔修訂 2026-09-15f〕原卷文字層比對（docs/source-check.md）───────────────────
+
+        describe('runner — source_check 節點與 0009', () => {
+            /** 自編的原卷片段（extract 階段定位成功後存進 payload.extract.source_text 的樣子） */
+            const SEGMENT = '1. 自製測試題：設平面向量的長度與方向皆已知，且向量 a 的分量為 1 與 2（x-y 平面），求其長度。';
+            const STEM = '自製測試題：設平面向量的長度與方向皆已知，且向量 $\\vec{a}$ 的分量為 $-1$ 與 $2$（$x-y$ 平面），求其長度。';
+            const located = { v: 1, status: 'located', pages: [1, 1], locate_score: 1, segment: SEGMENT };
+
+            test('source_check 回 fail(transcription_mismatch) → needs_review，verify 不跑，job_events 有 source_check 列', async () => {
+                const { jobId, jqIds } = await seedJob([
+                    extractPayload(1, {
+                        question_text: STEM, source_text: located,
+                        __fake: { source_check: { kind: 'fail', reason: 'transcription_mismatch', feedback: '負號比原卷多 1 個' } }
+                    }),
+                    extractPayload(2)
+                ]);
+                await drain(makeRunner());
+
+                const { rows } = await query(
+                    'SELECT state, review_reason, retries FROM job_questions WHERE job_id = $1 ORDER BY idx', [jobId]);
+                assert.deepEqual(rows.map(r => r.state), ['needs_review', 'saved']);
+                assert.equal(rows[0].review_reason, 'transcription_mismatch');
+                assert.deepEqual(rows[0].retries, {}, 'source_check 不重試');
+
+                const { rows: ev } = await query(
+                    `SELECT node, outcome, error_class, detail FROM job_events WHERE jq_id = $1 ORDER BY id`, [jqIds[0]]);
+                assert.deepEqual(ev.map(e => e.node), ['dedup0', 'classify', 'lint', 'source_check'], 'verify 之後的節點都不該跑');
+                const sc = ev[ev.length - 1];
+                assert.equal(sc.outcome, 'fail');
+                assert.equal(sc.error_class, 'transcription_mismatch', '0009 放行了這個 error_class');
+                assert.equal(sc.detail.feedback, '負號比原卷多 1 個');
+                assert.equal(sc.detail.review_reason, 'transcription_mismatch');
+            });
+
+            test('source_check 是零成本節點：當日預算止血時仍可推進', async () => {
+                const { jobId, jqIds } = await seedJob([extractPayload(1)]);
+                await query(`UPDATE job_questions SET state = 'linted' WHERE id = $1`, [jqIds[0]]);
+                await query(
+                    `INSERT INTO job_events (job_id, node, attempt, latency_ms, outcome, cost_usd)
+                     VALUES ($1, 'classify', 1, 10, 'pass', 99)`, [jobId]);
+                const runner = makeRunner({ dailyCostBudgetUsd: 1 });
+                await runner.tick();
+                while (runner.inFlight > 0) await new Promise(r => setTimeout(r, 10));
+                const { rows } = await query('SELECT state FROM job_questions WHERE id = $1', [jqIds[0]]);
+                assert.equal(rows[0].state, 'source_checked', '走完 source_check，停在要花錢的 verify 之前');
+            });
+
+            test('GET /api/review?reason=transcription_mismatch 查得到；approve 入庫且事件記 source_recheck／stem_edited', async () => {
+                const { jobId, jqIds } = await seedJob([extractPayload(1, { question_text: STEM, source_text: located })]);
+                await query(
+                    `UPDATE job_questions SET state = 'needs_review', review_reason = 'transcription_mismatch' WHERE id = $1`,
+                    [jqIds[0]]);
+
+                const list = await request(app).get('/api/review?reason=transcription_mismatch');
+                assert.equal(list.status, 200);
+                assert.deepEqual(list.body.items.map(i => i.jq_id), [jqIds[0]]);
+
+                const corrected = STEM.replace('$-1$', '$1$');
+                const res = await request(app).post(`/api/review/${jqIds[0]}/approve`).send({
+                    subject: SUBJECT, chapter: CHAPTER, question_type: '計算', difficulty: 3,
+                    question_text: corrected, answer_text: '$\\sqrt{5}$'
+                });
+                assert.equal(res.status, 200, JSON.stringify(res.body));
+
+                const { rows: jq } = await query('SELECT state, review_reason FROM job_questions WHERE id = $1', [jqIds[0]]);
+                assert.deepEqual(jq[0], { state: 'saved', review_reason: null });
+                assert.equal((await savedQuestions(jobId, 'question_text'))[0].question_text, corrected);
+
+                const { rows: ev } = await query(
+                    `SELECT detail FROM job_events WHERE jq_id = $1 AND node = 'approve'`, [jqIds[0]]);
+                assert.equal(ev[0].detail.source_recheck, 'match', '修正後的題幹對上原卷片段');
+                assert.equal(ev[0].detail.stem_edited, true);
+            });
+
+            test('approve 不重跑閘門：題幹仍與原卷不符也照樣入庫，只把 mismatch 記進事件', async () => {
+                const { jqIds } = await seedJob([extractPayload(1, { question_text: STEM, source_text: located })]);
+                await query(
+                    `UPDATE job_questions SET state = 'needs_review', review_reason = 'transcription_mismatch' WHERE id = $1`,
+                    [jqIds[0]]);
+                const res = await request(app).post(`/api/review/${jqIds[0]}/approve`).send({
+                    subject: SUBJECT, chapter: CHAPTER, question_type: '計算', difficulty: 3,
+                    question_text: STEM.replace('$2$', '$-2$'), answer_text: '$\\sqrt{5}$'
+                });
+                assert.equal(res.status, 200, JSON.stringify(res.body));
+                const { rows: ev } = await query(
+                    `SELECT detail FROM job_events WHERE jq_id = $1 AND node = 'approve'`, [jqIds[0]]);
+                assert.equal(ev[0].detail.source_recheck, 'mismatch');
+                assert.equal(ev[0].detail.stem_edited, true);
+            });
+
+            test('沒有原卷片段的題（變式、掃描檔）approve 時 source_recheck 為 null', async () => {
+                const { jqIds } = await seedJob([extractPayload(1)]);
+                await query(`UPDATE job_questions SET state = 'needs_review', review_reason = 'answer_mismatch' WHERE id = $1`, [jqIds[0]]);
+                const body = {
+                    subject: SUBJECT, chapter: CHAPTER, question_type: '計算', difficulty: 3,
+                    question_text: extractPayload(1).question_text, answer_text: '$\\sqrt{2}$'
+                };
+                const res = await request(app).post(`/api/review/${jqIds[0]}/approve`).send(body);
+                assert.equal(res.status, 200, JSON.stringify(res.body));
+                const { rows: ev } = await query(`SELECT detail FROM job_events WHERE jq_id = $1 AND node = 'approve'`, [jqIds[0]]);
+                assert.equal(ev[0].detail.source_recheck, null);
+                assert.equal(ev[0].detail.stem_edited, false);
+            });
+
+            test('0009：新值寫得進去，亂值撞 CHECK', async () => {
+                const { jobId, jqIds } = await seedJob([extractPayload(1)]);
+                await query(`UPDATE job_questions SET state = 'source_checked' WHERE id = $1`, [jqIds[0]]);
+                await query(`UPDATE job_questions SET state = 'needs_review', review_reason = 'transcription_mismatch' WHERE id = $1`, [jqIds[0]]);
+                await query(
+                    `INSERT INTO job_events (job_id, jq_id, node, attempt, latency_ms, outcome, error_class)
+                     VALUES ($1, $2, 'source_check', 1, 0, 'fail', 'transcription_mismatch')`, [jobId, jqIds[0]]);
+
+                for (const [sql, params] of [
+                    [`UPDATE job_questions SET state = 'source_checking' WHERE id = $1`, [jqIds[0]]],
+                    [`UPDATE job_questions SET review_reason = 'stem_mismatch' WHERE id = $1`, [jqIds[0]]],
+                    [`INSERT INTO job_events (job_id, node, attempt, latency_ms, outcome, error_class)
+                      VALUES ($1, 'source_check', 1, 0, 'fail', 'transcription_error')`, [jobId]]
+                ]) {
+                    await assert.rejects(query(sql, params), (err) => err.code === '23514', sql);
+                }
+            });
+
+            test('extract 階段抽文字層失敗（檔案不是真的 PDF）只記 status=error，題目照常入列並走完', async () => {
+                const sha = require('node:crypto').randomBytes(32).toString('hex');
+                const { rows } = await query(
+                    `INSERT INTO jobs (kind, pdf_sha256, state, budget_usd, page_count)
+                     VALUES ('pdf', $1, 'queued', 0.5, 1) RETURNING id`, [sha]);
+                const jobId = rows[0].id;
+                fs.writeFileSync(path.join(JOBS_DIR, `${jobId}.pdf`), JSON.stringify({ questions: [extractPayload(1)] }), 'utf8');
+                await query('UPDATE jobs SET pdf_path = $2 WHERE id = $1', [jobId, `data/jobs/${jobId}.pdf`]);
+
+                await drain(makeRunner());
+                const { rows: jq } = await query('SELECT state, payload FROM job_questions WHERE job_id = $1', [jobId]);
+                assert.equal(jq.length, 1);
+                assert.equal(jq[0].state, 'saved');
+                assert.equal(jq[0].payload.extract.source_text.status, 'error');
+                assert.equal(jq[0].payload.extract.source_text.v, 1);
             });
         });
 
@@ -1010,10 +1150,10 @@ function runSuite() {
                     `UPDATE job_questions SET state='needs_review', review_reason='provider_error',
                             retries='{"classify:error":3}'::jsonb,
                             payload = payload || '{"dedup0":{},"classify":{}}'::jsonb WHERE id=$1`, [jqIds[0]]);
-                // 第 2 題卡在 verify → 應退回 linted
+                // 第 2 題卡在 verify → 應退回 source_checked（〔修訂 2026-09-15f〕verify 前面多了 source_check）
                 await query(
                     `UPDATE job_questions SET state='needs_review', review_reason='budget_exceeded',
-                            payload = payload || '{"dedup0":{},"classify":{},"lint":{},"verify":{}}'::jsonb WHERE id=$1`, [jqIds[1]]);
+                            payload = payload || '{"dedup0":{},"classify":{},"lint":{},"source_check":{},"verify":{}}'::jsonb WHERE id=$1`, [jqIds[1]]);
                 // 第 3 題是章節錯，不該被 retry 動到
                 await query(
                     `UPDATE job_questions SET state='needs_review', review_reason='chapter_invalid' WHERE id=$1`, [jqIds[2]]);
@@ -1028,7 +1168,7 @@ function runSuite() {
                 assert.equal(rows[0].state, 'hashed');
                 assert.equal(rows[0].review_reason, null);
                 assert.deepEqual(rows[0].retries, {}, '該節點的兩個計數要清掉，讓它從頭來過');
-                assert.equal(rows[1].state, 'linted');
+                assert.equal(rows[1].state, 'source_checked');
                 assert.equal(rows[2].state, 'needs_review', 'chapter_invalid 不在可重跑清單內');
 
                 const { rows: job } = await query('SELECT state, budget_usd::float8 AS b FROM jobs WHERE id = $1', [jobId]);

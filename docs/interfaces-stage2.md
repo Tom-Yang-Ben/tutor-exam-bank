@@ -11,6 +11,8 @@
 - 只有開發者本人可以改本檔；改動後必須通知四條 WS「第 N 條已更新為 …，請 rebase 後對齊」。
 - 「凍結」＝**簽名與形狀**凍結（參數名、回傳鍵名、SQL 欄名、HTTP 狀態碼與訊息字串、enum 的字串值）。內部實作怎麼寫是各 WS 的自由。
 
+> 🛠 **2026-09-15f 修訂**（feat/source-check，`docs/roadmap-plan.md` §6.5 待辦 12；ADR-009、FR-020、DEC-013）：新增零成本節點 `source_check`（`linted → source_check → source_checked → verify`），以原卷文字層比對拆題題幹；`job_questions.state` 十個值、`review_reason` 九個值（加 `transcription_mismatch`）、`job_events.error_class` 十個值（`migrations/0009_source_check.sql`）；payload 新鍵 `extract.source_text` 與 `source_check`；環境變數 `SOURCE_CHECK_MODE`；新增裁決 S2-31。演算法與校準見 `docs/source-check.md`。修改處以〔修訂 2026-09-15f〕行內標記。
+
 ---
 
 ## 0. A-T0 Spike 結論（2026-08-21 實測）
@@ -125,10 +127,10 @@ thoughtsTokenCount, serviceTier
 | `id` | `BIGINT IDENTITY PK` | |
 | `job_id` | `BIGINT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE` | |
 | `idx` | `INT NOT NULL` | `chunk_no * 1000 + 題序`；`UNIQUE (job_id, idx)` |
-| `state` | `TEXT NOT NULL DEFAULT 'extracted'` | CHECK 寫死九個值（第 2 條） |
-| `payload` | `JSONB NOT NULL DEFAULT '{}'` | 六個鍵，欄位見第 3 條 |
+| `state` | `TEXT NOT NULL DEFAULT 'extracted'` | CHECK 寫死十個值（第 2 條；0009 加 `source_checked`〔修訂 2026-09-15f〕） |
+| `payload` | `JSONB NOT NULL DEFAULT '{}'` | 七個鍵（加 `source_check`〔修訂 2026-09-15f〕），欄位見第 3 條 |
 | `retries` | `JSONB NOT NULL DEFAULT '{}'` | `{classify:1, 'classify:error':0, …}` |
-| `review_reason` | `TEXT` | CHECK 寫死八個值（第 2 條） |
+| `review_reason` | `TEXT` | CHECK 寫死九個值（第 2 條；0009 加 `transcription_mismatch`〔修訂 2026-09-15f〕） |
 | `question_id` | `INT REFERENCES questions(id)` | 入庫後回填 |
 | `locked_until` | `TIMESTAMPTZ` | |
 | `created_at` / `updated_at` | `TIMESTAMPTZ NOT NULL DEFAULT now()` | |
@@ -151,7 +153,7 @@ thoughtsTokenCount, serviceTier
 | `cost_estimated` | `BOOLEAN NOT NULL DEFAULT true` | `pricing.js` 查不到該模型時寫 `false`（第 5.5 條） |
 | `latency_ms` | `INT NOT NULL` | |
 | `outcome` | `TEXT NOT NULL` | `CHECK IN ('pass','fail','error','skipped')` |
-| `error_class` | `TEXT` | CHECK 寫死九個值（第 2 條） |
+| `error_class` | `TEXT` | CHECK 寫死十個值（第 2 條；0009 加 `transcription_mismatch`〔修訂 2026-09-15f〕） |
 | `detail` | `JSONB` | 建議存 `usageMetadata` 原文、`issues`、`feedback` 摘要 |
 | `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT now()` | |
 
@@ -185,29 +187,31 @@ thoughtsTokenCount, serviceTier
 ```js
 // 推進序列（每個非終態恰好對應一個節點）
 const NODE_FOR_STATE = {
-    extracted:  'dedup0',
-    hashed:     'classify',
-    classified: 'lint',
-    linted:     'verify',
-    verified:   'dedup1',
-    deduped:    'save'
+    extracted:      'dedup0',
+    hashed:         'classify',
+    classified:     'lint',
+    linted:         'source_check',   // 〔修訂 2026-09-15f〕原卷文字層比對
+    source_checked: 'verify',
+    verified:       'dedup1',
+    deduped:        'save'
 };
 
 // pass / skipped 時前進到的下一個狀態
 const NEXT_STATE = {
-    extracted:  'hashed',
-    hashed:     'classified',
-    classified: 'linted',
-    linted:     'verified',
-    verified:   'deduped',
-    deduped:    'saved'
+    extracted:      'hashed',
+    hashed:         'classified',
+    classified:     'linted',
+    linted:         'source_checked',
+    source_checked: 'verified',
+    verified:       'deduped',
+    deduped:        'saved'
 };
 
 const TERMINAL_STATES = ['saved', 'needs_review', 'rejected'];
 ```
 
-`job_questions.state` 的九個合法值（DDL 的 CHECK 與這裡一致）：
-`extracted`／`hashed`／`classified`／`linted`／`verified`／`deduped`／`saved`／`needs_review`／`rejected`。
+`job_questions.state` 的十個合法值（DDL 的 CHECK 與這裡一致；`source_checked` 由 0009 加入〔修訂 2026-09-15f〕）：
+`extracted`／`hashed`／`classified`／`linted`／`source_checked`／`verified`／`deduped`／`saved`／`needs_review`／`rejected`。
 
 `jobs.state` 的五個值：`queued`（剛建立）→ `extracting`（worker 認領、正在拆題）→ `processing`（`job_questions` 已建立，逐題推進）→ `done`（**所有** `job_questions` 都在終態）／`failed`（extract 用盡重試，或 job 層例外；此時 `jobs.error` 必填）。
 
@@ -259,7 +263,8 @@ transition({ state, retries, outcome, limits }) → { state, retries, review_rea
 // fail 的 reason → review_reason（全函式，查不到一律落到 awaiting_approval）
 function REVIEW_REASON_FOR_FAIL(reason) {
     const known = ['chapter_invalid','formula_unparsable','answer_mismatch',
-                   'duplicate','schema_invalid','budget_exceeded','provider_error'];
+                   'duplicate','schema_invalid','budget_exceeded','provider_error',
+                   'transcription_mismatch'];   // 〔修訂 2026-09-15f〕
     return known.includes(reason) ? reason : 'awaiting_approval';
 }
 
@@ -274,7 +279,7 @@ function REVIEW_REASON_FOR_ERROR(errorClass) {
 
 ### 2.4 兩個必測的性質（WS-A 的 A-T2）
 
-- **會停**：任何 `outcome` 序列從 `extracted` 出發，最多 `Σ maxRetries + Σ maxErrorRetries + 6` 步一定落到終態。
+- **會停**：任何 `outcome` 序列從 `extracted` 出發，最多 `Σ maxRetries + Σ maxErrorRetries + 可推進狀態數` 步一定落到終態（七個可推進狀態時為 5 + 21 + 7 = 33〔修訂 2026-09-15f〕）。
 - **不迴圈**：`state` 只會「前進」或「留在原地並讓某個 retries 計數 +1」，不存在回到更早狀態的轉移。
 
 ---
@@ -317,6 +322,7 @@ type Ctx = {
 - **agent 不得自己 `require('../config/db')`、不得自己讀 `process.env`**：全部經 `ctx`。這是單元測試能離線跑的唯一原因。
 - agent 不寫 `job_events`、不改 `job_questions.state`——那是 runner 的事。
 - **`ctx.config.features = { similar: boolean, pipeline: boolean }`**（裁決 S2-8）：由 runner 從 `config/features.js` 組出來；agent 要知道旗標只能從這裡讀（dedup1 的 `skipped` 條件、classify 的 A 層 few-shot 都靠它）。
+- **`ctx.config.sourceCheck = { mode: 'off'|'shadow'|'enforce' }`**〔修訂 2026-09-15f〕：由 runner 的 `loadSourceCheckConfig()` 讀 `SOURCE_CHECK_MODE` 組出（非法值與未設定一律 `enforce`）；只有 `source_check` 節點讀它。
 - **節點名與檔名的對應**（裁決 S2-6）：`dedup0`／`dedup1` 兩個節點由 `agents/dedup.js` 一支服務（匯出 `{ run, runDedup0, runDedup1 }`），另有三行的轉接檔 `agents/dedup0.js`／`agents/dedup1.js`；runner 的解析順序是 ①`agents/<node>.js` → ②`AGENT_MODULE_FOR_NODE[node]`（`dedup0|dedup1 → dedup`）。層級**只能靠凍結的 input 鍵**判斷（`dedup0` 拿 `{question_text}`、`dedup1` 拿 `{question_id, embed_text, subject, chapter}`），不得看 `ctx.jq.state` 或 payload。
 - **`save` 節點不在 `agents/` 裡**（裁決 S2-7）：由 `workers/jobRunner.js` 的 `saveNode` 實作（要開交易、寫 `job_events`、回填 `question_id`，本來就不符合 agent 合約）；`job_events.node` 仍寫 `'save'`。
 - **`idx` 由 agent 算**（裁決 S2-10）：`payload.extract.idx = chunk_no * 1000 + 元素在陣列中的位置 + 1`，不用模型給的題號（會跳號、重號而撞 `UNIQUE (job_id, idx)`）；`outcome.data.rejected[].idx` 同一套算法。
@@ -339,6 +345,14 @@ type Ctx = {
     "figure_desc": "…",              // 沒有附圖時整個鍵不存在
     "chunk_no": 1,
     "page_range": [1, 20],
+    "source_text": {                 // 〔修訂 2026-09-15f〕extract 階段、PDF 刪檔前由 runner 寫入（services/sourceTextService.js）
+      "v": 1,
+      "status": "located",           // 'located'|'no_text_layer'|'not_found'|'low_anchor'|'error'
+      "pages": [1, 20],              // 抽文字層的頁範圍（整份的絕對頁碼）
+      "locate_score": 1,             // 中文字 5-gram 覆蓋率；low_anchor／no_text_layer／error 為 null
+      "segment": "…",                // 只有 located 才有；定位到的原卷片段，≤ 1500 字（不存整頁）
+      "shared": true                 // 選用：片段與前一題重疊（題組前導語、承上題）
+    },
     "chunk_elements": 12             // 〔修訂 2026-09-15f〕runner 追加（非模型輸出）：該塊模型回傳的元素總數，含被 schema 驗證丟掉的；FR-019 判斷塊尾是否被丟。舊資料沒有此鍵
   },
   "dedup0": {
@@ -361,6 +375,15 @@ type Ctx = {
     "issues": [{ "sev":"warn", "rule":"bare_script", "at":12, "msg":"…" }],  // 修完後仍存在的
     "rewritten": false,              // 是否動用了第三層 LLM 重寫
     "feedback": "…"
+  },
+  "source_check": {                  // 〔修訂 2026-09-15f〕skipped 時只有 {skipped:true, reason, mode}
+    "verdict": "match",              // 'match'|'mismatch'
+    "mode": "enforce",               // 'shadow' 時 mismatch 也 pass，另帶 "shadow": true
+    "rules": [],                     // 命中的規則：'extra_minus'|'missing_lower'|'extra_digits'
+    "signals": { "extraMinus": 0, "missLower": 0, "missDigits": 0, "extraDigits": 0 },
+    "detail": { "minus_extracted": 2, "minus_source": 2, "missing_lower": {}, "missing_digits": {}, "extra_digits": {} },
+    "coverage": 1, "locate_score": 1,
+    "message": "…"                   // 只有 mismatch 才有：給複核頁的一句話（繁體中文）
   },
   "verify": {
     "skipped": false,                // 證明題為 true，其餘欄位不存在
@@ -387,6 +410,7 @@ type Ctx = {
 | `dedup0` | `{ question_text }` | `normalizeStem` → `sha256`；命中 `questions.text_hash` 或同 job 內較小 `idx` 的列 → `fail('duplicate')`。**在任何 LLM 呼叫之前** | `duplicate` | 無 |
 | `classify` | `{ subject, chapter, chapter_confidence, question_text }` | 第一層：`isValidChapter(subject, chapter)` 且 `chapter_confidence >= CLASSIFY_MIN_CONF` → `pass`（`source:'gate'`，**不呼叫 LLM**）；**`chapter_confidence` 缺值或 `0` 一律視為閘門不過，不得當成 1.0**（裁決 S2-13）。第二層 few-shot 三層取材（裁決 S2-8）：A 向量最近鄰（`ctx.config.features.similar` 且有 `ctx.db`：以 `ctx.llm.embed` 把題幹轉向量查 `questions`）→ B 各章取例（有 `ctx.db`）→ C `config/chapterExamples.js` 自製例句（永遠執行）；取材失敗一律降級不算失敗。LLM 輸出必須再過 `isValidChapter`。**eval 的 `--suite classify` 固定餵 `{subject, chapter: decoy 或 '', chapter_confidence: 0, question_text}` 且 `ctx.db = null`**，保證量到的是第二層；錄製 cassette 時同樣 `ctx.db = null`（`fewShotIds` 才可重現） | `chapter_invalid`，`feedback` 格式凍結為 `「${回傳值}」不在白名單內，最接近的是「${候選1}」「${候選2}」` | `MODEL_EXTRACT` |
 | `lint` | `{ question_text, answer_text, feedback? }` | ① `formulaFix` ② `formulaLint` ③ 仍有 `sev:'error'` 才 LLM 重寫。閘門＝**沒有 `sev:'error'` 的 issue**（`warn` 放行） | `formula_unparsable` | ③ 才用 `MODEL_EXTRACT` |
+| `source_check`〔修訂 2026-09-15f〕 | `{ question_text, source_text, has_figure }`；`question_text = payload.lint.question_text ?? payload.extract.question_text`（**不**併 `figure_desc`），`source_text = payload.extract.source_text` | `mode='off'` → `skipped('disabled')`；沒有片段或 `status≠'located'`、題幹中文字 < 12、片段對不上題幹 → `skipped(原因)`；否則 `utils/sourceCheck.js` 的 `compareSegment`：負號比原卷多（原卷片段有負號字形時才比）或（漏原卷的小寫字母 ≥1 且漏數字 ≤1；附圖題不比字母）→ `mismatch`。`enforce` → `fail`；`shadow` → `pass` 且 `data.verdict='mismatch'`、`shadow:true`。**不重試**（`maxRetries` 未列＝0），零成本節點（`FREE_NODES`）；內部例外回 `skipped('internal_error')` | `transcription_mismatch`，`feedback` 例：「拆題題幹與原卷文字層不一致：負號比原卷多 1 個（拆題 3、原卷 2）。請對照原卷確認題幹與選項。」 | 無 |
 | `verify` | `{ question_text, question_type }`（`figure_desc` 已併入題幹）**＋ `claimed_answer` 只放在 input，不得進 prompt** | `question_type === '證明'` → `skipped`。其餘：`answerCompare` 回 `agree` → `pass`；`uncertain` → 再採樣一次，仍 `uncertain` → `fail`；`disagree` → `fail` | `answer_mismatch` | `MODEL_VERIFY` |
 | `dedup1` | `{ question_id:null, embed_text, subject, chapter }` | 餘弦 ≥ `DEDUP_DUP_THRESHOLD` → `fail('duplicate')`；≥ `DEDUP_VARIANT_THRESHOLD` → `pass`（`verdict:'variant'`，照常入庫）；來源題無向量或 `FEATURE_SIMILAR=false` → `skipped` | `duplicate` | 無 |
 | `save` | 整個 `payload` | `validateQuestionFields` 最後一道；同一交易 `INSERT questions`（`origin='pdf'`、`chapter_src='ai'`、`text_hash`）+ 回填 `job_questions.question_id` | `schema_invalid` | — |
@@ -728,7 +752,7 @@ function estimateCost({ modelId, tokenIn, tokenOut, tokenThinking, tokenCached }
 ```
 
 - 跨 job 的 `state='needs_review'` 佇列；`ORDER BY id ASC`（先進先審）。
-- `reason` 選填，給了就必須在第 2 條的八個值內；`limit` 預設 50、最大 200。
+- `reason` 選填，給了就必須在第 2 條的九個值內（〔修訂 2026-09-15f〕加 `transcription_mismatch`）；`limit` 預設 50、最大 200。
 - 400：`{ message: 'reason 不在合法的複核原因清單內。' }`
 
 ### 6.5 `GET /api/review/:jqId`
@@ -770,6 +794,7 @@ function estimateCost({ modelId, tokenIn, tokenOut, tokenThinking, tokenCached }
 | 409 | `{ message: '此題與題庫既有題目 #2 重複，請改按「不採用」；若確實是不同題，請修改題幹後再入庫。', duplicate_of: 2 }`（修正後題幹的 `text_hash` 命中未封存的既有題，即 0005 的 `uq_questions_text_hash_active`；2026-09-12 前這裡漏接，直接落 500） |
 
 - 成功後：`job_questions.state='saved'`、`review_reason=NULL`、回填 `question_id`；`questions.origin='pdf'`、`chapter_src='human'`（人改過的章節）、`text_hash` 一併寫入——全部同一個交易。
+- 〔修訂 2026-09-15f〕approve **不重跑**原卷比對閘門（裁決 S2-31）；`job_events`（`node='approve'`）的 `detail` 另記 `source_recheck`（以修正後題幹重跑 `compareSegment` 的 `'match'|'mismatch'|'skipped'`；沒有定位片段時為 `null`）與 `stem_edited`（送出的題幹與 `lint ?? extract` 題幹 trim 後是否不同）。`merge_into` 路徑不記這兩鍵。
 
 **reject**：200 `{ message: '已標記為不採用。', jq_id: 551 }`；404／409 同上。`state='rejected'`，`review_reason` 保留原值。
 
@@ -800,7 +825,7 @@ function estimateCost({ modelId, tokenIn, tokenOut, tokenThinking, tokenCached }
 ```sql
 BEGIN;
 SELECT id FROM job_questions
- WHERE state IN ('extracted','hashed','classified','linted','verified','deduped')
+ WHERE state IN ('extracted','hashed','classified','linted','source_checked','verified','deduped')  -- 〔修訂 2026-09-15f〕
    AND (locked_until IS NULL OR locked_until < now())
  ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED;
 UPDATE job_questions SET locked_until = now() + ($1 || ' milliseconds')::interval WHERE id = $2;
@@ -825,7 +850,7 @@ COMMIT;
 
 ### 7.4 `job_events` 的 `node` 合法值（清單凍結，但不進 DB CHECK）
 
-`extract`／`dedup0`／`classify`／`lint`／`verify`／`dedup1`／`save`／`approve`／`reject`／`retry`／`claim`。
+`extract`／`dedup0`／`classify`／`lint`／`source_check`〔修訂 2026-09-15f〕／`verify`／`dedup1`／`save`／`approve`／`reject`／`retry`／`claim`。
 人工動作（`approve`／`reject`／`retry`）也寫一列，`model=NULL`、`outcome='pass'`、`latency_ms` 記 API 處理時間——這樣 `report:jobs` 才看得到「人花了多久、改了幾題」。
 
 ### 7.5 日誌
@@ -872,6 +897,7 @@ Windows 提醒：PowerShell 5.1 的 `>` 會寫成 UTF-16LE，要用 `npm start |
 | `DEDUP_DUP_THRESHOLD` | `0.97` | 餘弦 ≥ 此值 → `duplicate` | WS-C |
 | `DEDUP_VARIANT_THRESHOLD` | `0.90` | 餘弦 ≥ 此值 → `variant`（照常入庫） | WS-C |
 | `FEATURE_PIPELINE` | `false` | 前端上傳區是否改走 `POST /api/jobs` | WS-D |
+| `SOURCE_CHECK_MODE`〔修訂 2026-09-15f〕 | `enforce` | 原卷文字層比對：`off`（不比）／`shadow`（只記錄不攔）／`enforce`（不符進 `needs_review('transcription_mismatch')`）；未設定、空字串或非法值一律 `enforce` | WS-A（runner 組 `ctx.config.sourceCheck`） |
 
 - 布林值的解讀沿用 `interfaces-stage1.md` 第 9 條：字串 `1` 或 `true`（不分大小寫）為真，其餘皆為假；`FEATURE_*` 一律經 `config/features.js`。
 - 階段 1 的變數全部**不變**（`DATABASE_URL`、`EMBED_*`、`FEATURE_SIMILAR`…）。
@@ -925,6 +951,7 @@ Windows 提醒：PowerShell 5.1 的 `>` 會寫成 UTF-16LE，要用 `npm start |
 - `0001_init.sql`、`0002_vector.sql`、`0004_origin_legacy.sql` 已凍結；**`0003_jobs.sql` 一併凍結**（已套用到測試庫與開發庫）。
 - 階段 2 之後任何欄位／索引／約束變更一律新開檔案，**從 `0005_` 起**（`0004` 已被階段 1 的裁決 13 用掉）。
 - `migrate.js` 沒有 `down`：寫錯的 migration 用「再寫一支把它改回來」修正。
+- 〔修訂 2026-09-15f〕`0009_source_check.sql` 以 DROP／ADD 重建 `job_questions_state_check`、`job_questions_review_reason_check`、`job_events_error_class_check` 三條約束（名稱已以 `pg_constraint` 查證），各加一個值。`0008` 為承上題綁定分支的 `0008_follow_up.sql`（只加 questions 欄位，不動這三條約束）〔修訂 2026-09-15e〕；`migrate.js` 依檔名排序、以 `schema_migrations` 逐支判斷，編號有缺口時照常套用，先套過 0009 的環境之後補上的 `0008` 也會被套用。**之後任何 migration 若再改這三條約束，必須以含 0009 新值的完整值域重建。**
 - `text_hash` 改成 UNIQUE 是**另一支 migration**，前提是 `scripts/backfill_text_hash.js` 的碰撞清單經人工逐組確認（目前開發庫有 2 組待確認：#2/#3、#5/#38）。
 - WS 發現缺欄位時，**不是**改 `0003`，而是寫進 `docs/questions2-ws<X>.md` 由開發者本人裁決後新開一支。
 - 〔修訂 2026-09-15e〕`0008_follow_up.sql`（2026-09-15 核准，DEC-012／FR-019）：`questions.follows_question_id`（自我參照 FK，不寫 ON DELETE＝NO ACTION）、`follows_src`（'pipeline'／'review'／'backfill'／'human'）、具名 CHECK `questions_follows_self_check`／`questions_follows_src_pair_check`、部分索引 `idx_questions_follows`。**runner 與狀態機不因此多一個節點**：綁定在 job_question 寫成終態後重算（見 `workers/jobRunner.js` 的 `linkFollowUps`），`pipeline/stateMachine.js` 與 0003 的 state／review_reason CHECK 均未改動；`job_events.node` 也不新增值。
@@ -977,5 +1004,6 @@ Windows 提醒：PowerShell 5.1 的 `>` 會寫成 UTF-16LE，要用 `npm start |
 **S2-29（2026-08-23）：專案開通付費後 `MODEL_VERIFY=gemini:gemini-3.1-pro-preview`**（S0-5 的「開通付費後改 Pro」條件成立；免費層每模型每日 20 次的限制同時解除）。`.env.example` 已改；`report:jobs` 的「同家同級驗證」標示改為「同家異級」。`GEMINI_RPM` 本機放寬到 30，`.env.example` 仍保留 5 當保守預設。
 **S2-30（2026-08-23）：golden 全部定案、門檻初值寫入、`text_hash` 唯一化**——開發者本人確認 classify 90／answer 50／dedup 30／formula 150 與樣卷答案卷全部正確（`needs_human_confirm` 全清），`npm run eval -- --suite classify|pipeline --write-baseline` 寫入 `thresholds.json`（第一次量測 −0.03、只升不降）；fixture #47（直線運動）、#54（電場與電位）維持原標註；開發庫 `text_hash` 碰撞 #2/#3、#5/#38 確認為真重複 → attempts 併入保留題、#3／#38 封存，`migrations/0005_text_hash_unique.sql` 建部分唯一索引（未封存且非 NULL）。
 **S2-28：`pipelineDriver` 有任一 replay miss 即 `ok:false`**（部分 cassette 不是可信量測；對齊 S2-14），`reason` 指出第一個 miss。由開發者直接落地。
+**S2-31（2026-09-15，〔修訂 2026-09-15f〕）：拆題結果對照原卷文字層**（ADR-009、FR-020、`docs/source-check.md`）——新節點 `source_check` 插在 lint 與 verify 之間（比對 lint 修正後的題幹，且在付費的 verify 之前攔下）；決定性比對、不呼叫 LLM、不動 extract 的模板／schema／`cacheKeyParts`（cassette 不失效）；原卷片段在 extract 階段 PDF 刪檔前抽取，只存片段；`SOURCE_CHECK_MODE` 預設 `enforce`；`transcription_mismatch` 不重試、不在 `POST /api/jobs/:id/retry` 的可重跑清單內（重跑結果相同）；人工 approve 不重跑閘門，只在事件記 `source_recheck`／`stem_edited`；eval 的 `pipelineDriver` 在 extract 通過後同樣附上片段。校準：公開樣卷 10 題 0 誤報；真實原卷現行入庫題可比對 63 題 TP 3、FP 0。
 
 ---

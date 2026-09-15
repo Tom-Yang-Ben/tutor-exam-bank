@@ -149,7 +149,7 @@ function runSuite() {
             while (runner.inFlight > 0) await new Promise(r => setTimeout(r, 10));
             const { rows } = await query(
                 `SELECT COUNT(*)::int AS n FROM job_questions
-                  WHERE state IN ('extracted','hashed','classified','linted','verified','deduped')`);
+                  WHERE state IN ('extracted','hashed','classified','linted','source_checked','verified','deduped')`);
             if (rows[0].n === 0) return;
         }
         throw new Error('drain：超過上限仍有未推進的列');

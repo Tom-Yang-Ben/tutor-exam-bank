@@ -38,7 +38,7 @@ const ADVANCEABLE_STATES = Object.keys(NODE_FOR_STATE);
  * 零成本節點：不呼叫任何模型，因此 DAILY_COST_BUDGET_USD 觸發後仍可繼續跑，
  * 讓已經在途的 job 至少把免費的那幾格走完，而不是整份卡死到隔天。
  */
-const FREE_NODES = new Set(['dedup0', 'dedup1', 'save']);
+const FREE_NODES = new Set(['dedup0', 'source_check', 'dedup1', 'save']);
 
 /**
  * node → agent 檔名（裁決 S2-6，第 3.1 條）。
@@ -56,9 +56,13 @@ const AGENT_MODULE_FOR_NODE = {
 // 它走 loadAgent 的第一順位 `agents/generate.js`（一支轉接到 generateVariant.js 的三行檔），
 // 與 dedup0／dedup1 同一個做法。這樣本表維持階段 2 的六個鍵，WS-A 的既有斷言不受影響。
 
-/** job_events.error_class 的九個合法值（DDL CHECK）；不在其中的一律不寫進該欄。 */
+/** job_events.error_class 的十個合法值（DDL CHECK；0009 加 transcription_mismatch）；不在其中的一律不寫進該欄。 */
 const ERROR_CLASSES = new Set(['schema_invalid', 'chapter_invalid', 'formula_unparsable',
-    'answer_mismatch', 'duplicate', 'provider_error', 'rate_limited', 'timeout', 'budget_exceeded']);
+    'answer_mismatch', 'duplicate', 'provider_error', 'rate_limited', 'timeout', 'budget_exceeded',
+    'transcription_mismatch']);
+
+/** SOURCE_CHECK_MODE 的三個合法值（docs/source-check.md）；非法值一律退回 enforce。 */
+const SOURCE_CHECK_MODES = ['off', 'shadow', 'enforce'];
 
 const RENEW_INTERVAL_MS = 30_000;   // 第 7.1 條：呼叫進行中每 30 秒續租
 const BACKOFF_BASE_MS = 1_000;      // 第 2.3 條：1s → 2s → 4s…
@@ -138,6 +142,21 @@ function loadStage3Config(env = process.env) {
         // false（首輪預設）＝ 全部閘門過了仍停在 needs_review('awaiting_approval') 等人核准
         variantAutoApprove: bool('VARIANT_AUTO_APPROVE', false)
     };
+}
+
+/**
+ * 原卷文字層比對的模式（docs/source-check.md、ADR-009）。
+ *
+ * 與 loadStage3Config 同一個理由另開一支：`loadConfig()` 的回傳形狀被單元測試 deepEqual 釘住。
+ * 預設 **enforce**（owner 要的是真的攔下抄錯的題）；空字串、大小寫不同以外的非法值一律退回 enforce——
+ * 打錯字不該讓閘門悄悄關掉。
+ *
+ * @param {object} [env] 預設 process.env
+ * @returns {{sourceCheckMode:'off'|'shadow'|'enforce'}}
+ */
+function loadSourceCheckConfig(env = process.env) {
+    const raw = String(env.SOURCE_CHECK_MODE ?? '').trim().toLowerCase();
+    return { sourceCheckMode: SOURCE_CHECK_MODES.includes(raw) ? raw : 'enforce' };
 }
 
 /**
@@ -294,7 +313,7 @@ function createRunner(opts = {}) {
     const db = opts.db || require('../config/db');
     const llm = opts.llm || require('../services/llm');
     const agentsDir = opts.agentsDir || path.resolve(__dirname, '..', 'agents');
-    const config = { ...loadConfig(), ...loadStage3Config(), ...(opts.config || {}) };
+    const config = { ...loadConfig(), ...loadStage3Config(), ...loadSourceCheckConfig(), ...(opts.config || {}) };
     const logger = opts.logger || makeLogger();
     const sleep = opts.sleep || ((ms) => new Promise(r => setTimeout(r, ms)));
     const estimateCost = opts.estimateCost || estimateCostFromPricing;
@@ -477,7 +496,9 @@ function createRunner(opts = {}) {
                 },
                 // 裁決 S2-8（第 3.1 條）：agent 不得自己讀 process.env，旗標只能從這裡拿。
                 // 鍵名是小寫短名 similar／pipeline，值即時由 config/features.js 讀取。
-                features: readFeatures()
+                features: readFeatures(),
+                // 〔修訂 2026-09-15f〕source_check 節點的模式（SOURCE_CHECK_MODE，預設 enforce）
+                sourceCheck: { mode: config.sourceCheckMode }
             }
         };
         delete ctx.models; delete ctx.limits;
@@ -616,6 +637,14 @@ function createRunner(opts = {}) {
                     question_text: p.lint?.question_text ?? ex.question_text,
                     answer_text: p.lint?.answer_text ?? ex.answer_text,
                     ...(p.lint?.feedback ? { feedback: p.lint.feedback } : {})
+                };
+            case 'source_check':
+                // 〔修訂 2026-09-15f〕比對用 lint 修正後的題幹（lint 的 LLM 重寫若改壞數字也抓得到）；
+                // 不併 figure_desc——那是模型寫的描述，原卷上沒有這段文字。
+                return {
+                    question_text: p.lint?.question_text ?? ex.question_text,
+                    source_text: ex.source_text ?? null,
+                    has_figure: Boolean(ex.figure_desc || ex.figure_img || ex.figure_box)
                 };
             case 'verify': {
                 const fields = buildSaveFields(p);
@@ -883,6 +912,8 @@ function createRunner(opts = {}) {
                 // 裁圖要在 insertJobQuestions 之前：figure_img 才會跟著進 payload.extract。
                 // 也必須在這裡（extract 階段）做——全部 chunk 拆完 PDF 就刪檔了（第 1.3 條）。
                 if (outcome.kind === 'pass') await attachFigureImages(job, outcome.data);
+                // 原卷文字層片段（docs/source-check.md）：同一個理由必須在這裡抽——PDF 之後就刪了
+                if (outcome.kind === 'pass') await attachSourceText(job, chunk, outcome.data);
                 created = await insertJobQuestions(job.id, chunk, outcome.data || {});
             }
 
@@ -941,6 +972,29 @@ function createRunner(opts = {}) {
             if (cropped > 0) logger.info({ job_id: job.id, node: 'extract', msg: `已裁出 ${cropped} 張附圖` });
         } catch (err) {
             logger.warn({ job_id: job.id, node: 'extract', msg: '附圖裁切失敗（題目照常入列，僅缺圖）', error: err.message });
+        }
+    }
+
+    /**
+     * 原卷文字層（docs/source-check.md）：替這一塊的每一題寫上 `source_text`（只存定位到的片段）。
+     * 純程式步驟、零模型成本；任何失敗都只記 warn、該塊題目的 status 記 'error'，題目照常入列。
+     */
+    async function attachSourceText(job, chunk, data) {
+        const questions = Array.isArray(data?.questions) ? data.questions : [];
+        if (questions.length === 0) return;
+        const pageRange = Array.isArray(data?.page_range) ? data.page_range : [chunk.fromPage, chunk.toPage];
+        try {
+            const pdfBytes = fs.readFileSync(resolveJobPath(job.pdf_path));
+            const service = require('../services/sourceTextService');
+            const r = await service.attachSourceText({
+                pdfBytes, questions, fromPage: pageRange[0], toPage: pageRange[1], logger, jobId: job.id
+            });
+            logger.info({ job_id: job.id, node: 'extract', msg: `原卷文字層定位 ${r.located}/${r.total} 題`, chunk: chunk.no });
+        } catch (err) {
+            logger.warn({ job_id: job.id, node: 'extract', msg: '原卷文字層抽取失敗（題目照常入列，僅不做原卷比對）', error: err.message });
+            for (const q of questions) {
+                q.source_text = { v: 1, status: 'error', pages: pageRange, locate_score: null };
+            }
         }
     }
 
@@ -1264,9 +1318,9 @@ function startInlineRunner(opts) {
 module.exports = {
     createRunner, startInlineRunner,
     // 純函式，供單元測試與 report_jobs 共用
-    loadConfig, loadStage3Config, planChunks, backoffMs, attemptNo, buildSaveFields, chapterSrcFor, normalizeErrorClass, makeLogger, resolveJobPath,
+    loadConfig, loadStage3Config, loadSourceCheckConfig, planChunks, backoffMs, attemptNo, buildSaveFields, chapterSrcFor, normalizeErrorClass, makeLogger, resolveJobPath,
     readFeatures, schemaFallbackOf,
-    ADVANCEABLE_STATES, FREE_NODES, AGENT_MODULE_FOR_NODE, ERROR_CLASSES,
+    ADVANCEABLE_STATES, FREE_NODES, AGENT_MODULE_FOR_NODE, ERROR_CLASSES, SOURCE_CHECK_MODES,
     RENEW_INTERVAL_MS, BACKOFF_BASE_MS, BACKOFF_MAX_MS, EXTRACT_MAX_RETRIES
 };
 

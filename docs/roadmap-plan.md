@@ -1800,8 +1800,16 @@ agent 管線、RAG 檢索、NLQ、變式、複核佇列、eval 與門檻——�
    上一題各自獨立入庫，上一題若被 dedup 判重複而不入庫，承上題就失去脈絡（題 169、198 即是）。
    做法方向：extract 輸出 `group_id`／`follows_idx`，入庫時把承上題的題幹前綴上題摘要、或以
    `parent_id` 欄位鏈結並在組卷時整組抽取；估 1–2 人日，牽涉 extract schema（cassette 重錄）與 0008 migration。
-12. **拆題結果對照原卷文字層**（2026-09-15 原卷核對發現）。健檢當時 219 題中 7 題的題幹或選項在拆題時抄錯
-   （常數正負號、選項分母漏字母、g/4 抄成 g/2、向量分量漏負號），比答案抄錯的 5 題還多；verify agent
-   只比答案不比題幹，抄錯的題幹會讓正確答案看起來像錯的。做法：對有文字層的 PDF（mupdf
-   `toStructuredText`），入庫前把每題的數字、分數、正負號序列與原卷同題段落比對，不一致進
-   `needs_review`（新 review_reason 需動 0003 的 CHECK）；掃描檔無文字層者跳過。估 1–2 人日。
+12. ~~拆題結果對照原卷文字層~~ → **已執行（2026-09-15，feat/source-check；ADR-009、FR-020、DEC-013 待簽核）**〔修訂 2026-09-15f〕。
+   原規劃：健檢當時 219 題中 7 題的題幹或選項在拆題時抄錯（常數正負號、選項分母漏字母、g/4 抄成 g/2、
+   向量分量漏負號），比答案抄錯的 5 題還多；verify agent 只比答案不比題幹。
+   實作：extract 階段在 PDF 刪檔前以 mupdf 抽該塊文字層、定位每題原卷片段（只存片段 ≤1500 字）；
+   lint 之後新增零成本節點 `source_check` 做決定性比對（負號數量、漏字母），不一致進
+   `needs_review('transcription_mismatch')`，`migrations/0009_source_check.sql` 重建三條 CHECK（0003 未改）；
+   `SOURCE_CHECK_MODE` 預設 enforce、可切 shadow／off；人工 approve 不重跑閘門。
+   校準（真實原卷資料不進 repo，只記數字）：現行入庫題 117 列可比對 63（53.8%），TP 3、FP 0、FN 2（皆為跳過：
+   中文字太少 1、掃描檔 1）；跳過 no_text_layer 20.5%、low_anchor 14.5%、not_found 9.4%、locate_mismatch 1.7%；
+   含重拆題 168 列另抓到 1 筆已知錯誤、無誤報；原型設定（tailMax 160、無 PUA 對映）FP 2，
+   加入同分對齊決勝、tailMax 600、Symbol 字型 PUA 對映（負號字形 0→93、11→59）後 FP 0。公開樣卷 10 題：
+   可比對 5、跳過 5、誤報 0（CI 單元層斷言）。單元 1,534／整合 269／e2e 11 與五個 eval suite 全數通過。
+   演算法、規則與限制見 `docs/source-check.md`；已知限制：約三分之一到一半題目不可比對，抓不到選項整排前移。

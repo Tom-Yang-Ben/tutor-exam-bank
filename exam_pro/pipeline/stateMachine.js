@@ -21,7 +21,10 @@ const NODE_FOR_STATE = Object.freeze({
     extracted: 'dedup0',
     hashed: 'classify',
     classified: 'lint',
-    linted: 'verify',
+    // 〔修訂 2026-09-15f〕原卷文字層比對（docs/source-check.md、ADR-009）插在 lint 與 verify 之間：
+    // 比對用 lint 修正後的題幹，且要在花錢的 verify 之前攔下抄錯的題。
+    linted: 'source_check',
+    source_checked: 'verify',
     verified: 'dedup1',
     deduped: 'save'
 });
@@ -31,7 +34,8 @@ const NEXT_STATE = Object.freeze({
     extracted: 'hashed',
     hashed: 'classified',
     classified: 'linted',
-    linted: 'verified',
+    linted: 'source_checked',
+    source_checked: 'verified',
     verified: 'deduped',
     deduped: 'saved'
 });
@@ -56,11 +60,11 @@ const OUTCOME_KINDS = Object.freeze(['pass', 'skipped', 'fail', 'error']);
  * fail 的 reason → review_reason。查不到一律落到 awaiting_approval，
  * 保證本函式是全函式（新節點回了新 reason 也不會讓 DDL 的 CHECK 炸掉）。
  * @param {string} reason
- * @returns {string} DDL 允許的八個 review_reason 之一
+ * @returns {string} DDL 允許的九個 review_reason 之一（0009 加 transcription_mismatch）
  */
 function REVIEW_REASON_FOR_FAIL(reason) {
     const known = ['chapter_invalid', 'formula_unparsable', 'answer_mismatch',
-        'duplicate', 'schema_invalid', 'budget_exceeded', 'provider_error'];
+        'duplicate', 'schema_invalid', 'budget_exceeded', 'provider_error', 'transcription_mismatch'];
     return known.includes(reason) ? reason : 'awaiting_approval';
 }
 

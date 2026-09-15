@@ -1,6 +1,7 @@
 # Runbook - Job 卡住 (Job Stuck) - 家教專用數理題庫系統
 
-> **版本:** v1.0 | **更新:** 2026-08-25 | **狀態:** 活躍
+> **版本:** v1.1 | **更新:** 2026-09-15 | **狀態:** 活躍
+> 🛠 **2026-09-15f 修訂**（feat/source-check，FR-020）：可推進狀態六個→七個（加 `source_checked`）；零成本節點清單補 `source_check`；診斷 SQL 同步；補「題幹與原卷不符」不是卡住、誤報多時的緩解。修改處以〔修訂 2026-09-15f〕行內標記。
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 每故障症狀一份（`runbook-<symptom>.md`）。本文件僅處理「拆題／變式 job 停滯不前」；LLM 配額與成本問題見 [runbook-llm-cost-quota.md](./runbook-llm-cost-quota.md)，資料庫連線問題見 [runbook-pg-down.md](./runbook-pg-down.md)。
@@ -19,7 +20,7 @@
 ## 1. Symptoms（症狀）
 
 - `jobs.state` 長時間停在 `queued`／`extracting`／`processing`，前端進度不動。
-- `job_questions` 有列停在六個可推進狀態（extracted→…→deduped）超過租約時間（`JOB_LEASE_MS` 預設 180 秒）仍無新 `job_events`。
+- `job_questions` 有列停在七個可推進狀態（extracted→…→linted→source_checked→verified→deduped〔修訂 2026-09-15f〕）超過租約時間（`JOB_LEASE_MS` 預設 180 秒）仍無新 `job_events`。
 
 ## 2. Impact（影響）
 
@@ -31,8 +32,8 @@
 ## 3. Possible Causes（可能原因）
 
 1. worker 行程中斷（nodemon 重啟、崩潰）——租約 `locked_until` 未到期前該列不會被重新認領。
-2. 當日成本達 `DAILY_COST_BUDGET_USD`（預設 5）——runner 只放行零成本節點（dedup0／dedup1／save），付費節點停止認領。
-3. 單 job 預算用盡——狀態機轉 `needs_review('budget_exceeded')`，實為終態非卡住。
+2. 當日成本達 `DAILY_COST_BUDGET_USD`（預設 5）——runner 只放行零成本節點（dedup0／source_check〔修訂 2026-09-15f〕／dedup1／save），付費節點停止認領；列會停在 `hashed` 或 `source_checked`（下一格是付費的 classify／verify）。
+3. 單 job 預算用盡——狀態機轉 `needs_review('budget_exceeded')`，實為終態非卡住。同理，`needs_review('transcription_mismatch')` 是原卷比對判定題幹與原卷不符的終態，不是卡住，也不在 `POST /api/jobs/:id/retry` 的可重跑清單內（重跑結果相同）〔修訂 2026-09-15f〕。
 4. `JOB_RUNNER` 未設為 `inline`（預設 inline；設成其他值則 server 不啟動 runner）。
 5. LLM 供應商逾時／429 進入退避重試（1s→2s→4s，封頂 60s）。
 
@@ -48,7 +49,7 @@ npm run report:jobs
 -- 2. 找出租約中與租約已過期的列（過期者下個 tick 會被重新認領，屬正常）
 SELECT id, job_id, state, review_reason, locked_until, updated_at
   FROM job_questions
- WHERE state IN ('extracted','hashed','classified','linted','verified','deduped')
+ WHERE state IN ('extracted','hashed','classified','linted','source_checked','verified','deduped')  -- 〔修訂 2026-09-15f〕
  ORDER BY updated_at;
 
 -- 3. 看最近事件：卡住的列最後一次跑了什麼、錯在哪一類
@@ -65,6 +66,7 @@ SELECT COALESCE(SUM(cost_usd),0) FROM job_events WHERE created_at >= date_trunc(
 2. 租約殘留且確認無 worker 在跑：`UPDATE job_questions SET locked_until = NULL WHERE id = <id>;`（jobs 表同理）。
 3. `budget_exceeded` 進 needs_review：至人工複核佇列（首頁 `#review` 分頁，`exam_pro/public/js/review.js` 掛載）approve／reject，或提高 `JOB_COST_BUDGET_USD` 後重送。
 4. 當日觸頂：等隔日視窗重置，或確認費用合理後調高 `.env` 的 `DAILY_COST_BUDGET_USD` 並重啟。
+5. 〔修訂 2026-09-15f〕某份新考卷大量題目進 `transcription_mismatch` 且對照原卷後確認多為誤報（例如特殊字型讓文字層缺字或多出符號）：先對該批題目逐題 approve／reject；之後可暫設 `.env` 的 `SOURCE_CHECK_MODE=shadow` 並重啟，讓比對只記錄不攔，並依 `docs/source-check.md` 第 4 節以 `eval/tools/calibrate_source_check.js` 重新校準後再改回 `enforce`。
 
 ## 6. Recovery（恢復確認）
 

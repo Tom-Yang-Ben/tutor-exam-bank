@@ -1,16 +1,18 @@
 # 軟體架構文件 (SAD) - 家教專用數理題庫系統
 
-> **版本:** v1.2 | **更新:** 2026-09-15 | **狀態:** 活躍
+> **版本:** v1.3 | **更新:** 2026-09-15 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 單例（系統架構契約只有一份）
 >
-> **定位**：系統級架構的單一真實來源——C4 L1–L3、分層、關鍵旅程與部署視圖。回答「系統由哪些 runtime 組成、邊界在哪、為什麼」；架構決策理由歸 [`adr/`](./adr/)（ADR-001～008），API／資料契約歸 `../04_design/`，Code 層細節歸 `../04_design/lld.md`。
+> **定位**：系統級架構的單一真實來源——C4 L1–L3、分層、關鍵旅程與部署視圖。回答「系統由哪些 runtime 組成、邊界在哪、為什麼」；架構決策理由歸 [`adr/`](./adr/)（ADR-001～009〔修訂 2026-09-15f〕），API／資料契約歸 `../04_design/`，Code 層細節歸 `../04_design/lld.md`。
 
 > 🛠 **2026-09-15b 修訂**（feat/pseudonymize-student-names 程式碼同步）：§資料合規補學生姓名代號化。修改處以〔修訂 2026-09-15b〕行內標記。
 
 > 🛠 **2026-08-29 修訂**（PR #3–#7 程式碼同步）：§1.3 textFormatter 補原生 OMML 二維矩陣、services 清單補 figureService；§5.2 download-word 流程補矩陣支援；§6 schema 演進清單補 0006_source_type；§7 整合測試數 259→260、§8 CI 證據 commit 0ff47b4→f8f6574（來源：commit f7a9c41 訊息實測、PR #7 merge）；§9 附圖裁切入庫由「待啟動」改為已完成（2026-08-27 實作合併，PR #3）。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 > 🛠 **2026-09-15d 修訂**（測試數同步）：部署視圖測試列 整合 260→262（main f2af3c2 實測，2026-09-15 晚間）。修改處以〔修訂 2026-09-15d〕行內標記。
+> 🛠 **2026-09-15f 修訂**（feat/source-check，FR-020、ADR-009）：§1.3 services 補 sourceText／mupdf、agents 補 source_check；§2 逐題狀態加 source_checked、review_reason 八種→九種；§5.1 管線資料流插入原卷文字層比對節點；§6 schema 演進補 0007、0009；§7 整合測試 262→269；§10 追溯補 DEC-013／FR-020／ADR-009。修改處以〔修訂 2026-09-15f〕行內標記。
+> 🛠 **2026-09-15 合併同步**（feat/follow-up-links 併入 feat/source-check）：部署視圖測試列整合數更新為 297（合併後實跑）；§5 schema 演進補 0008_follow_up。上列兩分支修訂列所載之各分支實測數與範圍為當時紀錄，保留不改。合併重算處以〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕雙標記。
 
 ## 目錄
 
@@ -63,8 +65,8 @@ jobRunner 與 Express 同一 Node process（一人維運不拆行程，ADR-003�
 | :--- | :--- | :--- |
 | `exam_pro/routes/index.js`、`middleware/` | /api 路由表（旗標控制掛載）、認證與限流 | → controllers |
 | `exam_pro/controllers/` | HTTP 邊界：question／exam／studentAdmin／paper／review／job／assistant／word | → services、queries |
-| `exam_pro/services/` | 用例邏輯：llm(gemini/fake/throttle)、retrieval、nlq、variant、weakness、assistant、embed、word、figure（附圖裁切）〔修訂 2026-08-29〕 | → queries、utils、agents |
-| `exam_pro/agents/`（+`schemas/`） | 六個 sub-agent 純函式（extract/classify/lint/verify/dedup/generateVariant）＋輸出 JSON Schema | 僅收 ctx 注入，不碰 DB／env（NFR-003） |
+| `exam_pro/services/` | 用例邏輯：llm(gemini/fake/throttle)、retrieval、nlq、variant、weakness、assistant、embed、word、figure（附圖裁切）〔修訂 2026-08-29〕、sourceText（extract 階段抽原卷文字層片段）與 mupdf（共用 WASM 載入器）〔修訂 2026-09-15f〕 | → queries、utils、agents |
+| `exam_pro/agents/`（+`schemas/`） | 七個 sub-agent 純函式（extract/classify/lint/source_check〔修訂 2026-09-15f〕/verify/dedup/generateVariant）＋輸出 JSON Schema | 僅收 ctx 注入，不碰 DB／env（NFR-003） |
 | `exam_pro/workers/jobRunner.js` | 編排：SKIP LOCKED 認領、租約、重試預算、RPM 節流、成本上限 | → agents、pipeline |
 | `exam_pro/pipeline/stateMachine.js` | jobs／job_questions 合法狀態轉移的唯一定義 | 被 workers 引用 |
 | `exam_pro/queries/hybrid.js` | hybrid 檢索 SQL（pgvector＋jieba 全文，RRF；API 與 eval 共用） | → config/db |
@@ -76,8 +78,8 @@ jobRunner 與 Express 同一 Node process（一人維運不拆行程，ADR-003�
 | 術語 | 定義 |
 | :--- | :--- |
 | job | 一次 PDF 拆題任務；`jobs` 表一列，狀態機 queued→extracting→processing→done/failed |
-| job_question | job 內單題，逐題狀態 extracted→hashed→classified→linted→verified→deduped→saved／needs_review／rejected |
-| 部分入庫 | 合格題入 `questions`，有疑慮題帶八種 `review_reason` 之一進複核佇列（FR-006） |
+| job_question | job 內單題，逐題狀態 extracted→hashed→classified→linted→source_checked〔修訂 2026-09-15f〕→verified→deduped→saved／needs_review／rejected |
+| 部分入庫 | 合格題入 `questions`，有疑慮題帶九種 `review_reason` 之一進複核佇列（FR-006；第九種 `transcription_mismatch` 為題幹與原卷不符，FR-020〔修訂 2026-09-15f〕） |
 | 變式家族 | `COALESCE(variant_of, id)` 同值題群；組卷每家族至多一題（FR-008） |
 | hybrid 檢索 | 向量側＋全文側以 RRF(k=60) 融合的同一段 SQL，服務相似題／NLQ／變式檢索優先／kNN 分類四落點 |
 
@@ -130,12 +132,16 @@ sequenceDiagram
     API->>PG: INSERT jobs(state=queued)
     R->>PG: SELECT … FOR UPDATE SKIP LOCKED＋租約認領
     Note over R,PG: queued→extracting→processing
-    R->>G: extract（flash）→ classify → lint → verify（pro）
+    R->>G: extract（flash）
+    Note over R: PDF 刪檔前抽原卷文字層片段（mupdf，零成本）〔修訂 2026-09-15f〕
+    R->>G: classify → lint
+    Note over R: source_check：題幹對照原卷片段（決定性、零成本，ADR-009）〔修訂 2026-09-15f〕
+    R->>G: verify（pro）
     Note over R: 每兩節點間伺服器端硬閘門（ajv＋白名單）
     alt 逐題全數過閘門
         R->>PG: job_questions → saved（部分入庫）
     else 閘門不過且重試預算用盡
-        R->>PG: needs_review（八種 review_reason 之一）
+        R->>PG: needs_review（九種 review_reason 之一〔修訂 2026-09-15f〕）
     end
     R->>PG: UPDATE jobs(state=done)
     T->>API: GET /api/jobs/:id（輪詢）／複核佇列 approve/reject
@@ -155,7 +161,7 @@ sequenceDiagram
 
 關聯骨架：students 1—N attempts（作答紀錄）／exam_papers（出卷）；exam_papers 1—N attempts（同交易寫入）；questions 1—N attempts，並以 `variant_of` 自參照構成變式家族；jobs 1—N job_questions（逐題狀態）與 job_events（成本／延遲／token 帳）；job_questions saved 後入 questions。ER 全圖與欄位定義歸 [`../04_design/db_design.md`](../04_design/db_design.md)。
 
-- schema 演進：`exam_pro/migrations/` 0001_init／0002_vector（768 維，embedding 欄）／0003_jobs（狀態以 DDL CHECK 寫死）／0004_origin_legacy／0005_text_hash_unique／0006_source_type（questions.source_type NOT NULL DEFAULT 'unknown'＋jobs.source_type，五值 CHECK）〔修訂 2026-08-29〕；只增不改（NFR-006）。
+- schema 演進：`exam_pro/migrations/` 0001_init／0002_vector（768 維，embedding 欄）／0003_jobs（狀態以 DDL CHECK 寫死）／0004_origin_legacy／0005_text_hash_unique／0006_source_type（questions.source_type NOT NULL DEFAULT 'unknown'＋jobs.source_type，五值 CHECK）〔修訂 2026-08-29〕／0007_source_detail／0008_follow_up（questions.follows_question_id 自我參照 FK＋follows_src，承上題綁定）〔修訂 2026-09-15e〕／0009_source_check（job_questions.state、review_reason 與 job_events.error_class 三條 CHECK 各加一值）〔修訂 2026-09-15f〕；只增不改（NFR-006）。
 - 一致性：組卷＋attempts、批改回填皆單一交易全有全無；其餘讀取為即時 SQL 聚合，無最終一致場景。
 - 資料合規：題庫屬私有資產、repo 不含題庫內容（DEC-009）；學生僅存姓名與作答紀錄，本機單人使用。學生姓名不出境：NLQ 與助教送 LLM／embedding 前以 `exam_pro/utils/pseudonym.js` 換成「學生#<id>」代號，回覆後還原〔修訂 2026-09-15b〕。
 
@@ -166,7 +172,7 @@ sequenceDiagram
 | 環境 | Deployment 模式 | 資料庫 | 備份／監控 |
 | :--- | :--- | :--- | :--- |
 | 開發（唯一運行環境） | 本機 `npm start`＋`docker compose up` | postgres :5442（volume 持久化） | `exam_pro/scripts/` 備份腳本；`npm run report:jobs` 成本報表 |
-| 測試（本機） | 同機，另指 TEST_DATABASE_URL | postgres_test :5433（tmpfs，`_test` 後綴強制） | 整合 290〔修訂 2026-09-15f〕／e2e 11，`--test-concurrency=1` |
+| 測試（本機） | 同機，另指 TEST_DATABASE_URL | postgres_test :5433（tmpfs，`_test` 後綴強制） | 整合 297〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕／e2e 11，`--test-concurrency=1` |
 | CI（GitHub Actions） | workflow 起 pg16 service | 臨時容器 | `LLM_MODE=replay`＋`EMBED_MODE=fixture`，零金鑰零網路 |
 
 - 開發埠取 5442 而非 5432：開發機原生 PostgreSQL 17 服務占用 5432，同埠並存會產生誤導性的驗證失敗（`exam_pro/README.md` 安裝節）。
@@ -196,8 +202,8 @@ sequenceDiagram
 
 | 項目 | ID／連結 |
 | :--- | :--- |
-| 上游 | DEC-001～009、FR-001～016、NFR-001～006（[`../01_requirements/requirements_tracker.md`](../01_requirements/requirements_tracker.md)） |
-| 決策 | ADR-001～008（[`adr/`](./adr/)） |
+| 上游 | DEC-001～009、DEC-013〔修訂 2026-09-15f〕、FR-001～016、FR-020〔修訂 2026-09-15f〕、NFR-001～006（[`../01_requirements/requirements_tracker.md`](../01_requirements/requirements_tracker.md)） |
+| 決策 | ADR-001～009（[`adr/`](./adr/)；ADR-009 原卷文字層比對〔修訂 2026-09-15f〕） |
 | 下游 | `../04_design/lld.md`（Code 層）、`../04_design/api_spec.md`／`db_design.md`（契約）、[`engineering_tracker.md`](./engineering_tracker.md)、`../06_ops/`（runbook 四份） |
 
 本文件是架構契約：模組未在此出現即視為不存在；他文件提及而本文未載者，屬本文件之缺陷。

@@ -49,6 +49,7 @@ export const STATE_CHIP = {
     hashed: { label: '檢查中', tone: 'indigo' },
     classified: { label: '檢查中', tone: 'indigo' },
     linted: { label: '檢查中', tone: 'indigo' },
+    source_checked: { label: '檢查中', tone: 'indigo' },   // 〔修訂 2026-09-15f〕原卷比對之後
     verified: { label: '檢查中', tone: 'indigo' },
     deduped: { label: '檢查中', tone: 'indigo' },
     saved: { label: '已入庫', tone: 'emerald' },
@@ -56,12 +57,14 @@ export const STATE_CHIP = {
     rejected: { label: '失敗', tone: 'rose' }
 };
 
-// 第 2 條的八個 review_reason → 一句話。與 review.js 的 REASON_LABEL 同一組字，
+// 第 2 條的九個 review_reason → 一句話。與 review.js 的 REASON_LABEL 同一組字，
 // 這裡只需要標籤（詳細的那一句由複核分頁負責，不在這裡重講一次）。
+// 變式題沒有原卷，source_check 一律 skipped，實務上不會出現 transcription_mismatch；列出來是讓兩份表一致。
 export const REASON_LABEL = {
     chapter_invalid: '章節不在白名單',
     formula_unparsable: '公式無法解析',
     answer_mismatch: '答案對不上',
+    transcription_mismatch: '題幹與原卷不符',
     duplicate: '與既有題目重複',
     schema_invalid: '欄位不合格',
     budget_exceeded: '超出成本上限',

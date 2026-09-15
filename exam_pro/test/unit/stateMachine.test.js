@@ -6,7 +6,8 @@
 //   2. **對照表窮舉**：DDL CHECK 的八個 review_reason 與九個 error_class 全部走一遍，
 //      再加「沒見過的字串」證明 transition() 是全函式。
 //   3. **性質測試**：對整個可達狀態空間做 DFS，證明
-//        (a) 任何 outcome 序列都在 Σ maxRetries + Σ maxErrorRetries + 6 = 29 步內達終態；
+//        (a) 任何 outcome 序列都在 Σ maxRetries + Σ maxErrorRetries + 7 = 33 步內達終態；
+//            （〔修訂 2026-09-15f〕加 source_check 節點：可推進狀態 6 → 7，上界 29 → 33）
 //        (b) 不存在迴圈——state 只會前進，留在原地時必定有某個 retries 計數 +1。
 //
 // 本檔不連 DB、不連 Gemini、不讀 process.env：狀態機是純函式，這是它存在的理由。
@@ -19,46 +20,56 @@ const {
     OUTCOME_KINDS, REVIEW_REASON_FOR_FAIL, REVIEW_REASON_FOR_ERROR
 } = require('../../pipeline/stateMachine');
 
-// 六個可推進狀態的推進順序（= NEXT_STATE 串起來的鏈）
-const ORDER = ['extracted', 'hashed', 'classified', 'linted', 'verified', 'deduped'];
+// 七個可推進狀態的推進順序（= NEXT_STATE 串起來的鏈）
+const ORDER = ['extracted', 'hashed', 'classified', 'linted', 'source_checked', 'verified', 'deduped'];
 
 // 手寫一份「狀態 → 該節點重試上限」的對照，刻意不從 DEFAULT_LIMITS 反推：
 // 這份表就是介面第 2.2 條的內容，抄錯了測試就該紅。
 const MAX_RETRIES_BY_STATE = {
-    extracted: 0,   // dedup0：純雜湊，不重試
-    hashed: 2,      // classify
-    classified: 2,  // lint
-    linted: 1,      // verify
-    verified: 0,    // dedup1：純向量比對
-    deduped: 0      // save：入庫失敗直接進複核
+    extracted: 0,       // dedup0：純雜湊，不重試
+    hashed: 2,          // classify
+    classified: 2,      // lint
+    linted: 0,          // source_check：決定性比對，重跑結果一樣，不重試
+    source_checked: 1,  // verify
+    verified: 0,        // dedup1：純向量比對
+    deduped: 0          // save：入庫失敗直接進複核
 };
 const MAX_ERROR_RETRIES = 3;
 
 const LIMITS = { maxRetries: DEFAULT_LIMITS.maxRetries, maxErrorRetries: MAX_ERROR_RETRIES, budgetLeft: 1 };
 
 describe('狀態機 — 表與常數本身', () => {
-    test('NODE_FOR_STATE 與 NEXT_STATE 的鍵完全一致，且都是六個可推進狀態', () => {
+    test('NODE_FOR_STATE 與 NEXT_STATE 的鍵完全一致，且都是七個可推進狀態', () => {
         assert.deepEqual(Object.keys(NODE_FOR_STATE), ORDER);
         assert.deepEqual(Object.keys(NEXT_STATE), ORDER);
     });
 
-    test('六個節點名逐字凍結', () => {
+    test('七個節點名逐字凍結（source_check 在 lint 與 verify 之間）', () => {
         assert.deepEqual({ ...NODE_FOR_STATE }, {
             extracted: 'dedup0', hashed: 'classify', classified: 'lint',
-            linted: 'verify', verified: 'dedup1', deduped: 'save'
+            linted: 'source_check', source_checked: 'verify', verified: 'dedup1', deduped: 'save'
         });
     });
 
-    test('從 extracted 一路 pass 六步就到 saved，中間不重複造訪', () => {
+    test('從 extracted 一路 pass 七步就到 saved，中間不重複造訪', () => {
         const seen = [];
         let state = 'extracted';
-        for (let i = 0; i < 6; i++) {
+        for (let i = 0; i < 7; i++) {
             seen.push(state);
             state = transition({ state, retries: {}, outcome: { kind: 'pass', data: {} }, limits: LIMITS }).state;
         }
         assert.deepEqual(seen, ORDER);
         assert.equal(state, 'saved');
-        assert.equal(new Set(seen).size, 6);
+        assert.equal(new Set(seen).size, 7);
+    });
+
+    test('source_check 的 fail（transcription_mismatch）不重試，直接進複核', () => {
+        const r = transition({
+            state: 'linted', retries: {},
+            outcome: { kind: 'fail', reason: 'transcription_mismatch', feedback: '負號比原卷多 1 個' },
+            limits: DEFAULT_LIMITS
+        });
+        assert.deepEqual(r, { state: 'needs_review', retries: {}, review_reason: 'transcription_mismatch' });
     });
 
     test('三個終態的字串與順序凍結', () => {
@@ -157,7 +168,7 @@ describe('狀態機 — pass / skipped 逐格窮舉', () => {
             state: 'linted', retries: {}, outcome: { kind: 'skipped' },
             limits: { ...LIMITS, budgetLeft: -0.5 }
         });
-        assert.equal(r.state, 'verified');
+        assert.equal(r.state, 'source_checked');
         assert.equal(r.review_reason, null);
     });
 });
@@ -256,12 +267,13 @@ describe('狀態機 — error 的退避計數逐格窮舉', () => {
 });
 
 describe('狀態機 — review_reason 對照表是全函式', () => {
-    // DDL（0003_jobs.sql）允許的八個值，逐字對照
+    // DDL（0003_jobs.sql ＋ 0009_source_check.sql）允許的九個值，逐字對照
     const DDL_REVIEW_REASONS = ['chapter_invalid', 'formula_unparsable', 'answer_mismatch',
-        'duplicate', 'budget_exceeded', 'provider_error', 'schema_invalid', 'awaiting_approval'];
+        'duplicate', 'budget_exceeded', 'provider_error', 'schema_invalid', 'awaiting_approval',
+        'transcription_mismatch'];
 
     for (const reason of ['chapter_invalid', 'formula_unparsable', 'answer_mismatch',
-        'duplicate', 'schema_invalid', 'budget_exceeded', 'provider_error']) {
+        'duplicate', 'schema_invalid', 'budget_exceeded', 'provider_error', 'transcription_mismatch']) {
         test(`REVIEW_REASON_FOR_FAIL('${reason}') 原樣回傳`, () => {
             assert.equal(REVIEW_REASON_FOR_FAIL(reason), reason);
         });
@@ -273,8 +285,9 @@ describe('狀態機 — review_reason 對照表是全函式', () => {
         });
     }
 
-    // job_events.error_class 的九個值（DDL CHECK）全部要對應得到合法的 review_reason
+    // job_events.error_class 的十個值（DDL CHECK）全部要對應得到合法的 review_reason
     const ERROR_CLASS_TO_REVIEW = {
+        transcription_mismatch: 'transcription_mismatch',
         schema_invalid: 'schema_invalid',
         chapter_invalid: 'chapter_invalid',
         formula_unparsable: 'formula_unparsable',
@@ -296,7 +309,7 @@ describe('狀態機 — review_reason 對照表是全函式', () => {
         assert.equal(REVIEW_REASON_FOR_ERROR('quota_of_the_moon'), 'awaiting_approval');
     });
 
-    test('任何 reason／errorClass 走完 transition() 都落在 DDL 的八個值內', () => {
+    test('任何 reason／errorClass 走完 transition() 都落在 DDL 的九個值內', () => {
         const inputs = [...DDL_REVIEW_REASONS, ...Object.keys(ERROR_CLASS_TO_REVIEW), 'x', '', '中文原因'];
         for (const s of inputs) {
             for (const state of ORDER) {
@@ -400,9 +413,9 @@ const OUTCOME_VARIANTS = [
     { kind: 'error', errorClass: 'budget_exceeded' }
 ];
 
-const SUM_MAX_RETRIES = Object.values(MAX_RETRIES_BY_STATE).reduce((a, b) => a + b, 0);   // 0+2+2+1+0+0 = 5
-const SUM_MAX_ERROR_RETRIES = ORDER.length * MAX_ERROR_RETRIES;                          // 6 × 3 = 18
-const STEP_BOUND = SUM_MAX_RETRIES + SUM_MAX_ERROR_RETRIES + ORDER.length;               // = 29
+const SUM_MAX_RETRIES = Object.values(MAX_RETRIES_BY_STATE).reduce((a, b) => a + b, 0);   // 0+2+2+0+1+0+0 = 5
+const SUM_MAX_ERROR_RETRIES = ORDER.length * MAX_ERROR_RETRIES;                          // 7 × 3 = 21
+const STEP_BOUND = SUM_MAX_RETRIES + SUM_MAX_ERROR_RETRIES + ORDER.length;               // = 33
 
 /** 把 (state, retries) 壓成一個可比較的鍵；retries 的鍵排序後才穩定。用於路徑上的迴圈偵測。 */
 function stateKey(state, retries) {
@@ -424,7 +437,7 @@ function memoKey(state, retries) {
 const sumRetries = (r) => Object.values(r).reduce((a, b) => a + b, 0);
 
 describe('狀態機 — 性質：會停、不迴圈', () => {
-    test(`任何 outcome 序列都在 ${STEP_BOUND} 步（Σ maxRetries ${SUM_MAX_RETRIES} + Σ maxErrorRetries ${SUM_MAX_ERROR_RETRIES} + 6）內達終態`, () => {
+    test(`任何 outcome 序列都在 ${STEP_BOUND} 步（Σ maxRetries ${SUM_MAX_RETRIES} + Σ maxErrorRetries ${SUM_MAX_ERROR_RETRIES} + ${ORDER.length}）內達終態`, () => {
         // 對「所有可能的 outcome 序列」做 DFS，memo 存「從這個組態出發最多還要幾步」。
         const memo = new Map();
         const path = new Set();
@@ -468,7 +481,7 @@ describe('狀態機 — 性質：會停、不迴圈', () => {
         assert.ok(visited >= 20, `可達組態只有 ${visited} 個，DFS 沒有真的展開`);
     });
 
-    test('最壞路徑可以被具體構造出來：每格用滿 fail + error 額度再 pass，剛好 29 步', () => {
+    test(`最壞路徑可以被具體構造出來：每格用滿 fail + error 額度再 pass，剛好 ${STEP_BOUND} 步`, () => {
         let state = 'extracted';
         let retries = {};
         let steps = 0;

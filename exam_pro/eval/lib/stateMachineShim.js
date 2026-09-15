@@ -17,11 +17,13 @@ const path = require('path');
 const REAL_PATH = path.resolve(__dirname, '..', '..', 'pipeline', 'stateMachine.js');
 
 // 第 2.1 條：推進序列（每個非終態恰好對應一個節點）
+// 〔修訂 2026-09-15f〕lint 與 verify 之間插入 source_check（docs/source-check.md）
 const NODE_FOR_STATE = {
     extracted: 'dedup0',
     hashed: 'classify',
     classified: 'lint',
-    linted: 'verify',
+    linted: 'source_check',
+    source_checked: 'verify',
     verified: 'dedup1',
     deduped: 'save'
 };
@@ -30,7 +32,8 @@ const NEXT_STATE = {
     extracted: 'hashed',
     hashed: 'classified',
     classified: 'linted',
-    linted: 'verified',
+    linted: 'source_checked',
+    source_checked: 'verified',
     verified: 'deduped',
     deduped: 'saved'
 };
@@ -46,7 +49,7 @@ const DEFAULT_LIMITS = {
 
 const KNOWN_FAIL_REASONS = [
     'chapter_invalid', 'formula_unparsable', 'answer_mismatch',
-    'duplicate', 'schema_invalid', 'budget_exceeded', 'provider_error'
+    'duplicate', 'schema_invalid', 'budget_exceeded', 'provider_error', 'transcription_mismatch'
 ];
 
 /** 第 2.3 條的 REVIEW_REASON_FOR_FAIL（全函式，查不到一律落到 awaiting_approval） */

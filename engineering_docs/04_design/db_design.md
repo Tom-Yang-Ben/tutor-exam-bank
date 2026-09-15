@@ -4,13 +4,15 @@
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 單例（全系統一個 PostgreSQL 16 + pgvector 資料庫）
-> **定位:** 本文件記錄全部資料表的欄位、約束、索引與 migration 沿革；欄位級真相以 `exam_pro/migrations/0001`–`0008` 為準。〔修訂 2026-09-15e〕狀態機轉移邏輯歸 [lld.md](./lld.md)，API 資料模型歸 [api_spec.md](./api_spec.md)。
+> **定位:** 本文件記錄全部資料表的欄位、約束、索引與 migration 沿革；欄位級真相以 `exam_pro/migrations/0001`–`0009`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕為準。〔修訂 2026-08-29b〕狀態機轉移邏輯歸 [lld.md](./lld.md)，API 資料模型歸 [api_spec.md](./api_spec.md)。
 
 > 🛠 **2026-08-29 修訂**（PR #6/#7 程式碼同步）：migration 範圍 0001–0005 → 0001–0006；§2.1 `questions` 與 §2.3 `jobs` 各補 `source_type` 欄（0006 追加，著作權管理／組卷過濾，FR-017）；§5 Migration 策略與 §6 追溯的範圍與 ID 同步。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 > 🛠 **2026-09-15b 修訂**（feat/pseudonymize-student-names 程式碼同步）：§3 資料分類 `students.name` 補姓名代號化實作。修改處以〔修訂 2026-09-15b〕行內標記。
 > 🛠 **2026-09-15e 修訂**（feat/follow-up-links 程式碼同步）：0008_follow_up.sql 為 questions 追加 `follows_question_id`（自我參照 FK，NO ACTION）與 `follows_src`，承上題綁定（DEC-012／FR-019）；§1 ERD、§2.1、§4 索引、§5／§6 同步。修改處以〔修訂 2026-09-15e〕行內標記。
 
 > 🛠 **2026-08-29 修訂之二**（feat/source-detail，同日使用者核准）：0007_source_detail.sql 為 questions／jobs 追加 `source_detail`（自由文字來源註記，學校＋年份等；FR-017 延伸）；§2.1／§2.3／§5／§6 同步。標記〔修訂 2026-08-29b〕。
+> 🛠 **2026-09-15f 修訂**（feat/source-check，FR-020、ADR-009）：0009_source_check.sql 重建三條 CHECK——`job_questions.state` 加 `source_checked`、`review_reason` 加 `transcription_mismatch`、`job_events.error_class` 加 `transcription_mismatch`；payload 加 `extract.source_text`（原卷片段 ≤1500 字）與 `source_check` 鍵；§2.4／§5／§6 同步。0008 預留給承上題綁定分支。修改處以〔修訂 2026-09-15f〕行內標記。
+> 🛠 **2026-09-15 合併同步**（feat/follow-up-links 併入 feat/source-check）：定位行、§5 Migration 策略、§6 追溯之 migration 範圍合為 0001–0009 共 9 份，0008 已存在、不再記為預留。上列兩分支修訂列所載之各分支實測數與範圍為當時紀錄，保留不改。合併重算處以〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕雙標記。
 
 ## 目錄
 
@@ -98,20 +100,20 @@ erDiagram
 | `source_detail` | TEXT | 可 NULL, CHECK char_length ≤ 100 | 0007 追加（FR-017 延伸）：上傳時註記一次、入庫沿用；variant job **不**繼承藍本註記（改寫後非原卷之題）〔修訂 2026-08-29b〕 |
 | `jobs_kind_payload` | — | CHECK：pdf→pdf_sha256 NOT NULL；variant→source_question_id NOT NULL | 兩種 kind 的必填互斥保證 |
 
-### 2.4 `job_questions`、`job_events`（0003）
+### 2.4 `job_questions`、`job_events`（0003；0009 重建三條 CHECK〔修訂 2026-09-15f〕）
 
 | 表.欄位 | 型態 | 約束 | 說明 |
 | :--- | :--- | :--- | :--- |
 | `job_questions.job_id` | BIGINT | NOT NULL, FK → jobs ON DELETE CASCADE | |
 | `job_questions.idx` | INT | NOT NULL；UNIQUE (job_id, idx) | chunk_no × 1000 ＋ 題序 |
-| `job_questions.state` | TEXT | NOT NULL, DEFAULT 'extracted', CHECK IN ('extracted','hashed','classified','linted','verified','deduped','saved','needs_review','rejected') | 逐題九狀態 |
-| `job_questions.review_reason` | TEXT | CHECK IN ('chapter_invalid','formula_unparsable','answer_mismatch','duplicate','budget_exceeded','provider_error','schema_invalid','awaiting_approval') | needs_review 八種原因（FR-006） |
-| `job_questions.payload` / `retries` | JSONB | NOT NULL DEFAULT '{}' | payload 六鍵由各節點各自寫（interfaces-stage2 第 3 條） |
+| `job_questions.state` | TEXT | NOT NULL, DEFAULT 'extracted', CHECK IN ('extracted','hashed','classified','linted','source_checked','verified','deduped','saved','needs_review','rejected') | 逐題十狀態（`source_checked` 由 0009 加入，FR-020）〔修訂 2026-09-15f〕 |
+| `job_questions.review_reason` | TEXT | CHECK IN ('chapter_invalid','formula_unparsable','answer_mismatch','duplicate','budget_exceeded','provider_error','schema_invalid','awaiting_approval','transcription_mismatch') | needs_review 九種原因（FR-006；`transcription_mismatch` 由 0009 加入，FR-020）〔修訂 2026-09-15f〕 |
+| `job_questions.payload` / `retries` | JSONB | NOT NULL DEFAULT '{}' | payload 七鍵由各節點各自寫（interfaces-stage2 第 3 條）；`extract.source_text` 為 extract 階段抽的原卷片段（≤1500 字、不存整頁）〔修訂 2026-09-15f〕 |
 | `job_questions.question_id` | INT | FK → questions（不設 ON DELETE） | 入庫後回填；題目刪不掉時走封存 |
 | `job_events.job_id` / `jq_id` | BIGINT | FK ON DELETE CASCADE；jq_id 可 NULL | 整份拆題層級事件 jq_id 為 NULL |
 | `job_events.node` | TEXT | NOT NULL，**刻意不加 CHECK** | 新增節點不應需要 migration；合法值清單在 interfaces-stage2 第 7 條 |
 | `job_events.outcome` | TEXT | NOT NULL, CHECK IN ('pass','fail','error','skipped') | |
-| `job_events.error_class` | TEXT | CHECK IN ('schema_invalid','chapter_invalid','formula_unparsable','answer_mismatch','duplicate','provider_error','rate_limited','timeout','budget_exceeded') | 四條 workstream 共同語彙 |
+| `job_events.error_class` | TEXT | CHECK IN ('schema_invalid','chapter_invalid','formula_unparsable','answer_mismatch','duplicate','provider_error','rate_limited','timeout','budget_exceeded','transcription_mismatch') | 四條 workstream 共同語彙（0009 加 `transcription_mismatch`〔修訂 2026-09-15f〕） |
 | `job_events` 其餘 | token_in/out/thinking/cached INT、cost_usd NUMERIC(10,6)、cost_estimated BOOLEAN、latency_ms INT NOT NULL、detail JSONB | — | 只追加不更新；成本稽核唯一事實來源（NFR-002） |
 
 ## 3. 資料字典 (Data Dictionary)
@@ -142,7 +144,7 @@ erDiagram
 
 | 項目 | 政策 |
 | :--- | :--- |
-| **Migration 策略** | 只增不改（NFR-006）：0001–0008 逐一凍結〔修訂 2026-09-15e〕，任何欄位變更一律新開 migration 檔；ENUM 一律以 TEXT+CHECK 實作（改值域走 DROP/ADD CONSTRAINT，如 0004）；0006_source_type.sql（2026-08-28 核准）為 questions／jobs 追加 source_type〔修訂 2026-08-29〕；0007_source_detail.sql（2026-08-29 核准）為兩表追加 source_detail〔修訂 2026-08-29b〕；0008_follow_up.sql（2026-09-15 核准）為 questions 追加 follows_question_id／follows_src 與兩條具名 CHECK、部分索引〔修訂 2026-09-15e〕 |
+| **Migration 策略** | 只增不改（NFR-006）：0001–0009 逐一凍結〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕，任何欄位變更一律新開 migration 檔；ENUM 一律以 TEXT+CHECK 實作（改值域走 DROP/ADD CONSTRAINT，如 0004）；0006_source_type.sql（2026-08-28 核准）為 questions／jobs 追加 source_type〔修訂 2026-08-29〕；0007_source_detail.sql（2026-08-29 核准）為兩表追加 source_detail〔修訂 2026-08-29b〕；0008_follow_up.sql（2026-09-15 核准）為 questions 追加 follows_question_id／follows_src 與兩條具名 CHECK、部分索引〔修訂 2026-09-15e〕；0009_source_check.sql 以 DROP／ADD 重建 job_questions.state、review_reason 與 job_events.error_class 三條 CHECK（約束名以 pg_constraint 查證；0008 與 0009 由兩條分支平行開發、編號開工前預先分配，migrate.js 依檔名排序逐支判斷，先套過 0009 的環境補上 0008 亦照常套用；之後再改這三條約束須以含 0009 新值的完整值域重建）〔修訂 2026-09-15f〕 |
 | **唯一約束沿革（0005）** | 0003 先建非唯一 `idx_questions_text_hash`（舊題回填必有碰撞）→ scripts/backfill_text_hash.js 印碰撞清單 → 2026-08-23 人工確認 #2/#3、#5/#38 為真重複，attempts 併到保留題、#3/#38 封存 → 0005 建部分唯一索引（封存題與 NULL 不受限）（裁決 S2-30） |
 | **刪除策略** | 題目軟刪除（archived_at）；attempts ON DELETE RESTRICT；jobs 子表 CASCADE；job_events 只追加不更新 |
 | **保留期限** | 單人自用系統，無法規要求；PDF 原檔於拆題完成後刪除（pdf_path 清成 NULL），其餘資料無限期保留 |
@@ -151,6 +153,6 @@ erDiagram
 
 ## 6. 追溯
 
-- 上游：DEC-003、DEC-004、DEC-009、DEC-012〔修訂 2026-09-15e〕；FR-001、FR-002、FR-005、FR-006、FR-007、FR-008、FR-010、FR-011、FR-013、FR-014、FR-015、FR-017〔修訂 2026-08-29〕、FR-019〔修訂 2026-09-15e〕；NFR-002、NFR-005、NFR-006；ADR-001、ADR-002、ADR-008
-- 實作真相：`exam_pro/migrations/0001_init.sql`–`0008_follow_up.sql`〔修訂 2026-09-15e〕
+- 上游：DEC-003、DEC-004、DEC-009、DEC-012〔修訂 2026-09-15e〕、DEC-013〔修訂 2026-09-15f〕；FR-001、FR-002、FR-005、FR-006、FR-007、FR-008、FR-010、FR-011、FR-013、FR-014、FR-015、FR-017〔修訂 2026-08-29〕、FR-019〔修訂 2026-09-15e〕、FR-020〔修訂 2026-09-15f〕；NFR-002、NFR-005、NFR-006；ADR-001、ADR-002、ADR-008、ADR-009〔修訂 2026-09-15f〕
+- 實作真相：`exam_pro/migrations/0001_init.sql`–`0009_source_check.sql`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕
 - 下游：[api_spec.md](./api_spec.md)（欄位命名對齊）、[lld.md](./lld.md)（jobs/job_questions 狀態機轉移）、[../03_architecture/engineering_tracker.md](../03_architecture/engineering_tracker.md)、[../06_ops/runbook-job-stuck.md](../06_ops/runbook-job-stuck.md)（locked_until 租約）
