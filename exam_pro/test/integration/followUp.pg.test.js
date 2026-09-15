@@ -499,6 +499,146 @@ function runSuite() {
             });
         });
 
+        describe('刪除／封存保護與整組處理（PR3）', () => {
+            /** 建 pred ← child ← grandchild 三層鏈（follows_src='human'） */
+            async function seedChain(tag) {
+                const pred = await insertQuestion(`自製整組測試前題 ${tag}：設 $x=4$，求 $2x$。`, { origin: 'legacy' });
+                const child = await insertQuestion(`承上題，自製整組測試子題 ${tag}：再求 $3x$。`, { origin: 'legacy' });
+                const grand = await insertQuestion(`承上題，自製整組測試孫題 ${tag}：再求 $4x$。`, { origin: 'legacy' });
+                await query(`UPDATE questions SET follows_question_id = $1, follows_src = 'human' WHERE id = $2`, [pred, child]);
+                await query(`UPDATE questions SET follows_question_id = $1, follows_src = 'human' WHERE id = $2`, [child, grand]);
+                return { pred, child, grand };
+            }
+
+            /** 替某題寫一筆作答紀錄（attempts ON DELETE RESTRICT） */
+            async function addAttempt(questionId) {
+                const { rows: s } = await query(`INSERT INTO students (name) VALUES ($1) RETURNING id`,
+                    [`整組測試學生-${questionId}`]);
+                await query('INSERT INTO attempts (student_id, question_id) VALUES ($1, $2)', [s[0].id, questionId]);
+            }
+
+            async function seedVariantJob(sourceId, state = 'done') {
+                const { rows } = await query(
+                    `INSERT INTO jobs (kind, source_question_id, state, budget_usd)
+                     VALUES ('variant', $1, $2, 0.3) RETURNING id`, [sourceId, state]);
+                return Number(rows[0].id);
+            }
+
+            async function stateOf(ids) {
+                const { rows } = await query(
+                    'SELECT id, archived_at IS NOT NULL AS archived FROM questions WHERE id = ANY($1::int[]) ORDER BY id', [ids]);
+                return rows;
+            }
+
+            test('變式題藍本（jobs.source_question_id）→ 409 附 job_ids，不再落 500', async () => {
+                const id = await insertQuestion('自製變式藍本測試題：設 $x=2$，求 $5x$。', { origin: 'legacy' });
+                const jobA = await seedVariantJob(id, 'done');
+                const jobB = await seedVariantJob(id, 'failed');
+
+                const res = await request(app).delete(`/api/questions/${id}`);
+                assert.equal(res.status, 409, '修前這裡是 500（jobs_source_question_id_fkey 未處理）');
+                assert.deepEqual(res.body, { message: '此題是變式題藍本，請改用封存。', job_ids: [jobA, jobB] });
+                assert.equal((await stateOf([id])).length, 1, '交易已回滾');
+            });
+
+            test('?group=1：三層鏈都沒有引用 → 單一交易整組硬刪', async () => {
+                const { pred, child, grand } = await seedChain('A');
+                const res = await request(app).delete(`/api/questions/${pred}?group=1`);
+                assert.equal(res.status, 200);
+                assert.deepEqual(res.body, {
+                    message: `已刪除整組 3 題（#${pred}、#${child}、#${grand}）。`,
+                    id: pred, ids: [pred, child, grand], archived: false
+                });
+                assert.equal((await stateOf([pred, child, grand])).length, 0);
+            });
+
+            test('?group=1：組內孫題有作答紀錄 → 整組改封存，一題都不硬刪', async () => {
+                const { pred, child, grand } = await seedChain('B');
+                await addAttempt(grand);
+                const res = await request(app).delete(`/api/questions/${pred}?group=1`);
+                assert.equal(res.status, 200);
+                assert.equal(res.body.archived, true);
+                assert.deepEqual(res.body.ids, [pred, child, grand]);
+                assert.match(res.body.message, /整組 3 題改為封存/);
+                assert.deepEqual((await stateOf([pred, child, grand])).map(r => r.archived), [true, true, true]);
+            });
+
+            test('?group=1：組內有匯入任務或變式藍本引用 → 整組改封存', async () => {
+                const { pred, child, grand } = await seedChain('C');
+                await seedVariantJob(child);
+                const res = await request(app).delete(`/api/questions/${pred}?group=1`);
+                assert.equal(res.status, 200);
+                assert.equal(res.body.archived, true);
+                assert.deepEqual((await stateOf([pred, child, grand])).map(r => r.archived), [true, true, true]);
+
+                // 匯入任務產生的單題（job_questions 參照）也能經 group 封存，不必另開封存端點
+                const { jqIds } = await seedJob([plainQ(7)]);
+                await drain(makeRunner());
+                const { question_id } = await jqRow(jqIds[0]);
+                const solo = await request(app).delete(`/api/questions/${question_id}?group=1`);
+                assert.equal(solo.status, 200);
+                assert.deepEqual(solo.body.ids, [question_id]);
+                assert.equal(solo.body.archived, true);
+            });
+
+            test('未帶 group：前題有作答紀錄且承上題仍在庫 → 409 列出承上題，不封存', async () => {
+                const { pred, child, grand } = await seedChain('D');
+                await addAttempt(pred);
+                const res = await request(app).delete(`/api/questions/${pred}`);
+                assert.equal(res.status, 409);
+                assert.deepEqual(res.body, {
+                    message: `此題是承上題 #${child} 的前題，請先刪除或解除綁定該承上題。`,
+                    children: [child]
+                });
+                assert.deepEqual((await stateOf([pred, child, grand])).map(r => r.archived), [false, false, false]);
+
+                // 承上題已封存（不在庫）時，單封前題照舊
+                await query('UPDATE questions SET archived_at = now() WHERE id = ANY($1::int[])', [[child, grand]]);
+                const ok = await request(app).delete(`/api/questions/${pred}`);
+                assert.equal(ok.status, 200);
+                assert.equal(ok.body.archived, true);
+            });
+
+            test('?group=1 從中間題開始：只處理它與它之後的承上題，前題不動', async () => {
+                const { pred, child, grand } = await seedChain('E');
+                const res = await request(app).delete(`/api/questions/${child}?group=1`);
+                assert.equal(res.status, 200);
+                assert.deepEqual(res.body.ids, [child, grand]);
+                assert.deepEqual((await stateOf([pred, child, grand])).map(r => r.id), [pred]);
+            });
+
+            test('?group=1：已封存的承上題也一併處理（否則 FK 會擋硬刪）；找不到 → 404', async () => {
+                const { pred, child, grand } = await seedChain('F');
+                await query('UPDATE questions SET archived_at = now() WHERE id = $1', [grand]);
+                const res = await request(app).delete(`/api/questions/${pred}?group=1`);
+                assert.equal(res.status, 200);
+                assert.deepEqual(res.body.ids, [pred, child, grand]);
+                assert.equal(res.body.archived, false);
+                assert.equal((await stateOf([pred, child, grand])).length, 0);
+
+                const missing = await request(app).delete(`/api/questions/${pred}?group=1`);
+                assert.equal(missing.status, 404);
+                assert.deepEqual(missing.body, { message: '找不到該題目' });
+            });
+
+            test('GET /api/questions 回 follows_question_id 與 has_follow_ups（已封存的承上題不算）', async () => {
+                const { pred, child, grand } = await seedChain('G');
+                const res = await request(app).get('/api/questions');
+                assert.equal(res.status, 200);
+                const byId = new Map(res.body.questions.map(q => [q.id, q]));
+                assert.equal(byId.get(pred).follows_question_id, null);
+                assert.equal(byId.get(pred).has_follow_ups, true);
+                assert.equal(byId.get(child).follows_question_id, pred);
+                assert.equal(byId.get(child).has_follow_ups, true);
+                assert.equal(byId.get(grand).follows_question_id, child);
+                assert.equal(byId.get(grand).has_follow_ups, false);
+
+                await query('UPDATE questions SET archived_at = now() WHERE id = $1', [grand]);
+                const after = await request(app).get('/api/questions');
+                assert.equal(after.body.questions.find(q => q.id === child).has_follow_ups, false);
+            });
+        });
+
         describe('補測（L2／L3）', () => {
             test('同 job 撞題時跳過補強：命中本 job 自己入庫的承上題，不以重複列的位置補綁', async () => {
                 // 1001 前題卡在複核（規則 A 對 1002 回 pending）；1004 與 1002 同題（同 job 命中）。

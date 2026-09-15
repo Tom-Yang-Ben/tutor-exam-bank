@@ -1,5 +1,6 @@
 const { query, pool } = require('../config/db');
 const { CHAPTERS, isValidSubject, isValidChapter, isValidQuestionType, isValidSourceType, normalizeSourceDetail, normalizeDifficulty, QUESTION_TYPES, SOURCE_DETAIL_MAX } = require('../config/chapters');
+const { parseBool } = require('../config/features');
 
 // ─────────────────────────────────────────────────────────────
 // 檢索欄位的同步（docs/interfaces-stage1.md 第 12.4 條）
@@ -223,7 +224,10 @@ exports.listQuestions = async (req, res, next) => {
         const total = countRows[0].total;
 
         const { rows } = await query(
-            `SELECT id, subject, chapter, question_type, difficulty, question_text, question_img, answer_text, source_type, source_detail, created_at
+            `SELECT id, subject, chapter, question_type, difficulty, question_text, question_img, answer_text, source_type, source_detail, created_at,
+                    follows_question_id,
+                    EXISTS (SELECT 1 FROM questions c
+                             WHERE c.follows_question_id = questions.id AND c.archived_at IS NULL) AS has_follow_ups
              FROM questions ${whereSql} ORDER BY id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
             [...params, limit, offset]
         );
@@ -299,9 +303,16 @@ exports.updateQuestion = async (req, res, next) => {
 //   沒有紀錄        → 照舊硬刪
 // 兩步之間先 SELECT … FOR UPDATE 鎖住該列：attempts 的外鍵插入會取 FOR KEY SHARE，與
 // FOR UPDATE 互斥，因此不會出現「檢查時沒紀錄、硬刪前剛好被組卷寫進一筆」的競態。
+//
+// 承上題保護（FR-019 PR3）：
+//   - 帶 ?group=1 → deleteQuestionGroup：此題與其後所有承上題（多層鏈）整組處理，單一交易。
+//   - 未帶 group 而此題仍有**在庫**（未封存）的承上題：硬刪由 FK 擋下、封存由本函式預先擋下，
+//     兩者都回同一個 409（列出承上題）。封存也擋，是因為單封前題會讓承上題在題庫與組卷裡
+//     失去前情——與硬刪要防的是同一件事；要一起收掉就改帶 ?group=1。
 exports.deleteQuestion = async (req, res, next) => {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ message: '無效的題目 ID' });
+    if (parseBool(req.query.group)) return deleteQuestionGroup(id, res, next);
 
     const client = await pool.connect();
     try {
@@ -316,6 +327,13 @@ exports.deleteQuestion = async (req, res, next) => {
 
         const { rows: used } = await client.query('SELECT 1 FROM attempts WHERE question_id = $1 LIMIT 1', [id]);
         if (used.length > 0) {
+            // 前題的 FOR UPDATE 已與「新綁一個承上題」（FK 檢查取 FOR KEY SHARE）互斥，這裡讀到的清單不會過期
+            const { rows: kids } = await client.query(
+                'SELECT id FROM questions WHERE follows_question_id = $1 AND archived_at IS NULL ORDER BY id', [id]);
+            if (kids.length > 0) {
+                await client.query('ROLLBACK');
+                return res.status(409).json(followUpConflictBody(kids.map(r => r.id)));
+            }
             await client.query('UPDATE questions SET archived_at = now() WHERE id = $1', [id]);
             await client.query('COMMIT');
             return res.json({ message: '該題已有學生作答紀錄，改為封存（不再出現在題庫與組卷候選中）。', id, archived: true });
@@ -332,16 +350,23 @@ exports.deleteQuestion = async (req, res, next) => {
             try {
                 const { rows: kids } = await pool.query(
                     'SELECT id FROM questions WHERE follows_question_id = $1 ORDER BY id', [id]);
-                const children = kids.map(r => r.id);
-                return res.status(409).json({
-                    message: `此題是承上題 ${children.map(c => `#${c}`).join('、')} 的前題，請先刪除或解除綁定該承上題。`,
-                    children
-                });
+                return res.status(409).json(followUpConflictBody(kids.map(r => r.id)));
             } catch (e) { return next(e); }
         }
         if (err.code === FOREIGN_KEY_VIOLATION && err.constraint === 'job_questions_question_id_fkey') {
             // 管線／複核入庫的題被 job_questions.question_id 參照（0003 不設 ON DELETE）
             return res.status(409).json({ message: '此題由匯入任務產生，無法直接刪除，請改用封存。' });
+        }
+        if (err.code === FOREIGN_KEY_VIOLATION && err.constraint === 'jobs_source_question_id_fkey') {
+            // 變式 job 的藍本（jobs.source_question_id，0003 不設 ON DELETE；2026-09-16 前此情境直接落 500）
+            try {
+                const { rows: jobs } = await pool.query(
+                    'SELECT id FROM jobs WHERE source_question_id = $1 ORDER BY id', [id]);
+                return res.status(409).json({
+                    message: '此題是變式題藍本，請改用封存。',
+                    job_ids: jobs.map(r => Number(r.id))
+                });
+            } catch (e) { return next(e); }
         }
         next(err);
     } finally {
@@ -351,6 +376,85 @@ exports.deleteQuestion = async (req, res, next) => {
 
 /** PG foreign_key_violation */
 const FOREIGN_KEY_VIOLATION = '23503';
+
+/** 整組沿 follows_question_id 往後走的深度上限（linker 已擋成環，這裡只是保險） */
+const GROUP_MAX_DEPTH = 20;
+
+/** 刪除／封存被承接的前題時的 409 回應（訊息與 PR #28 逐字相同） */
+function followUpConflictBody(children) {
+    return {
+        message: `此題是承上題 ${children.map(c => `#${c}`).join('、')} 的前題，請先刪除或解除綁定該承上題。`,
+        children
+    };
+}
+
+/**
+ * DELETE /api/questions/:id?group=1：此題與其後所有承上題整組處理（單一交易）。
+ *
+ * - 組員＝此題（必須在庫）＋沿 follows_question_id 反查的所有後代，**含已封存的後代**：
+ *   已封存的承上題仍以 FK 指著前題，不一起刪就硬刪不掉。只往後走、不往前走——
+ *   從中間題開始時，它的前題本來就不缺前情，不必動。
+ * - 組內任一題有 attempts、job_questions 或 jobs.source_question_id 引用 → 整組改封存
+ *   （沿用「有作答紀錄改封存」的語意；已封存的組員維持原封存時間）。
+ * - 否則一句 DELETE 刪整組（0008 的 FK 是 NO ACTION，同一句內前題與子題一起刪不會被擋）。
+ *
+ * 鎖：先鎖此題，再鎖全部組員。在「查組員」與「鎖組員」之間若有新的承上題綁到較深的組員，
+ * 硬刪會撞 FK——那時回 409 請使用者重試，不會刪出孤兒。
+ */
+async function deleteQuestionGroup(id, res, next) {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const { rows } = await client.query(
+            'SELECT id FROM questions WHERE id = $1 AND archived_at IS NULL FOR UPDATE', [id]);
+        if (rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: '找不到該題目' });
+        }
+
+        const { rows: members } = await client.query(
+            `WITH RECURSIVE grp(id, depth) AS (
+                 SELECT $1::int, 0
+                 UNION
+                 SELECT q.id, g.depth + 1
+                   FROM questions q JOIN grp g ON q.follows_question_id = g.id
+                  WHERE g.depth < $2
+             )
+             SELECT id, MIN(depth) AS depth FROM grp GROUP BY id ORDER BY MIN(depth), id`,
+            [id, GROUP_MAX_DEPTH]);
+        const ids = members.map(r => r.id);
+        await client.query('SELECT id FROM questions WHERE id = ANY($1::int[]) FOR UPDATE', [ids]);
+
+        const { rows: refs } = await client.query(
+            `SELECT EXISTS (SELECT 1 FROM attempts      WHERE question_id        = ANY($1::int[]))
+                 OR EXISTS (SELECT 1 FROM job_questions WHERE question_id        = ANY($1::int[]))
+                 OR EXISTS (SELECT 1 FROM jobs          WHERE source_question_id = ANY($1::int[])) AS referenced`,
+            [ids]);
+        const list = ids.map(v => `#${v}`).join('、');
+
+        if (refs[0].referenced) {
+            await client.query(
+                'UPDATE questions SET archived_at = now() WHERE id = ANY($1::int[]) AND archived_at IS NULL', [ids]);
+            await client.query('COMMIT');
+            return res.json({
+                message: `組內有題目已有作答紀錄或被匯入／變式任務引用，整組 ${ids.length} 題改為封存（${list}）。`,
+                id, ids, archived: true
+            });
+        }
+
+        await client.query('DELETE FROM questions WHERE id = ANY($1::int[])', [ids]);
+        await client.query('COMMIT');
+        res.json({ message: `已刪除整組 ${ids.length} 題（${list}）。`, id, ids, archived: false });
+    } catch (err) {
+        try { await client.query('ROLLBACK'); } catch (e) { /* 回滾失敗不覆蓋原始錯誤 */ }
+        if (err.code === FOREIGN_KEY_VIOLATION) {
+            return res.status(409).json({ message: '整組處理期間題目關聯有變動，請重新整理後再試。' });
+        }
+        next(err);
+    } finally {
+        client.release();
+    }
+}
 
 // 批次補標題源（0007）：對一批題目一次套用 source_type 與（或）source_detail。
 // 為既有題庫的人工補標而生——同一份考卷的題先用篩選圈出來，再一次標完。
