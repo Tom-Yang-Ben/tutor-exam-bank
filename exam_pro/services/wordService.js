@@ -28,11 +28,12 @@ const DOCX_TYPE_BY_SHARP_FORMAT = { png: 'png', jpeg: 'jpg', gif: 'gif', bmp: 'b
  *
  * @param {string} questionImg
  * @param {string} [figuresDir]
+ * @param {RegExp} [urlPattern]  僅供測試注入較寬鬆的白名單，確認第二道「仍在目錄內」檢查獨立有效
  * @returns {string|null}
  */
-function resolveFigurePath(questionImg, figuresDir = FIGURES_DIR) {
+function resolveFigurePath(questionImg, figuresDir = FIGURES_DIR, urlPattern = FIGURE_URL_RE) {
     if (typeof questionImg !== 'string') return null;
-    const m = FIGURE_URL_RE.exec(questionImg.trim());
+    const m = urlPattern.exec(questionImg.trim());
     if (!m) return null;
     const root = path.resolve(figuresDir);
     const full = path.resolve(root, m[1]);

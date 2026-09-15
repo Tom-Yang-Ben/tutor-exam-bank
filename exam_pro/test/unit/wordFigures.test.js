@@ -63,6 +63,19 @@ describe('wordService — resolveFigurePath（防 path traversal）', () => {
             assert.equal(resolveFigurePath(bad, dir), null, `應拒絕：${bad}`);
         }
     });
+
+    test('白名單放寬時，第二道「resolve 後仍在附圖目錄內」檢查仍擋住跳目錄', () => {
+        const loose = /^\/figures\/(.+)$/; // 故意放寬：允許 / \ 與 ..
+        for (const bad of [
+            '/figures/../.env',
+            '/figures/../../etc/passwd.png',
+            '/figures/sub/1-1.png',
+            '/figures/..\\1-1.png'
+        ]) {
+            assert.equal(resolveFigurePath(bad, dir, loose), null, `目錄檢查應拒絕：${bad}`);
+        }
+        assert.equal(resolveFigurePath('/figures/1-1.png', dir, loose), path.join(dir, '1-1.png'));
+    });
 });
 
 describe('wordService — fitFigureSize（等比例縮放）', () => {
