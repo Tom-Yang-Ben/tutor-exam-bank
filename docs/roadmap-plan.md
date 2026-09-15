@@ -1783,3 +1783,13 @@ agent 管線、RAG 檢索、NLQ、變式、複核佇列、eval 與門檻——�
    HTML，任何能開首頁的人即取得；`exam_pro/README.md` 已寫明它不是存取控制。對外前至少：
    反向代理加 Basic Auth 或 OAuth proxy（半日）、`helmet` 安全標頭（0.25 人日）、`ALLOWED_ORIGINS`
    與 `NODE_ENV=production`；真登入與角色另估 2–3 人日。
+9. **拆題 prompt 補表格規範＋重錄 pipeline cassette**（2026-09-15 擬定）。表格語法規範已寫在
+   `docs/formulas.md` §2（PR fix/formula-tables），lint 與 Word 轉換已支援 array＋hline＋跨行區塊公式；
+   但 `agents/extract.js` 的 prompt 尚未明說，目前靠模型自發輸出。改 prompt 等於換模板版本，
+   pipeline cassette 要重錄（需金鑰、約半小時），與下一次必須重錄的變更併做。
+10. **舊系統匯入題的殘缺重複版本**（2026-09-15 發現，待 owner 裁定）。2026-05 由 MySQL 匯入的
+   `origin='legacy'` 題中，10 題（10、14、15、16、41、47、50、54、61、64）與 2026-08-29 重新拆題
+   入庫的乾淨版本（170、169、168、222、194、195、196、197、198、199）餘弦 0.969–0.998，是同一題的
+   兩個版本；當時去重沒攔到是因為舊題的向量尚未回填。舊版本為純文字、題 47 帶舊轉換器殘留標記。
+   建議刪除舊版本 10 題（無 attempts、無變式、無試卷引用，已查證），保留乾淨版本；
+   另 12 題（28–39）來源卷未知，待 owner 指認學校後補標。
