@@ -7,6 +7,8 @@
 //   400 → { message:'無效的題目 ID' } 與四個參數的訊息字串（逐字凍結）
 //   404 → { message:'找不到該題目' }（:id 不存在**或已封存**，與 /similar 同一條線）
 //   409 → { message:'該題尚未建立向量，請執行 npm run embed:backfill' }（與 /similar 逐字相同）
+//   409 → { message:'承上題缺少前題脈絡，請改用前題出變式。', reason:'follow_up_blueprint',
+//           follows_question_id }（藍本本身是承上題；FR-019 PR3，先於向量檢查）
 //   FEATURE_VARIANTS 未開啟時路由不掛載（落到 404）
 //
 // 「先檢索、再生成」是這一支的全部重點（規劃 §4.3.2）：庫裡本來就有夠用的相似題時，
@@ -30,7 +32,8 @@ const MSG = {
     invalidId: '無效的題目 ID',
     notFound: '找不到該題目',
     noVector: '該題尚未建立向量，請執行 npm run embed:backfill',
-    rateLimit: '變式題請求過於頻繁，請稍候再試（每分鐘最多 10 次）。'
+    rateLimit: '變式題請求過於頻繁，請稍候再試（每分鐘最多 10 次）。',
+    followUpBlueprint: '承上題缺少前題脈絡，請改用前題出變式。'
 };
 
 // ───────────────────────── 設定（service 層可以讀 env，agent 不行）─────────────────────────
@@ -203,7 +206,7 @@ function toResultRow(row) {
 async function loadSource(db, sourceId) {
     const { rows } = await db.query(
         `SELECT id, subject, chapter, question_type, difficulty, question_text, answer_text,
-                variant_of, embedding
+                variant_of, follows_question_id, embedding
            FROM questions
           WHERE id = $1 AND archived_at IS NULL`,
         [sourceId]);
@@ -381,6 +384,18 @@ async function requestVariants(sourceId, body, opts = {}) {
     const db = resolveDb(opts.db);
     const source = await loadSource(db, sourceId);
     if (!source) return { status: 404, body: { message: MSG.notFound } };
+    // FR-019 PR3：承上題不能當藍本——題幹只有「承上題，再求…」，沒有前題的條件，
+    // 檢索到的相似題與生成的變式都不成立。擋在檢索之前（兩條分支都沒意義），前題本身照常可用。
+    if (source.follows_question_id !== null && source.follows_question_id !== undefined) {
+        return {
+            status: 409,
+            body: {
+                message: MSG.followUpBlueprint,
+                reason: 'follow_up_blueprint',
+                follows_question_id: source.follows_question_id
+            }
+        };
+    }
     if (!source.embedding) return { status: 409, body: { message: MSG.noVector } };
 
     // ── 先檢索（零 LLM 費用）──
