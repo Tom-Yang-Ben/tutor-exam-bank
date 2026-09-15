@@ -12,7 +12,7 @@
 > 🛠 **2026-09-15e 修訂**（feat/follow-up-links）：①§1 新增 FR-019 承上題綁定（DEC-012）；②NFR-003 單元測試數 1,476→1,499（本分支實測）；③NFR-006 migrations 範圍更新為 0001–0008 共 8 份（原記 0006 共 6 份已過時）；④§3 資料需求補 questions.follows_question_id／follows_src；⑤§6 補 ACPT-019-* 對照列；⑥§7 追溯範圍更新。修改處以〔修訂 2026-09-15e〕行內標記。
 > 🛠 **2026-09-15f 修訂**（feat/follow-up-links 審查修正）：NFR-003 測試數更新為 1,507／290／11（本分支實跑）；§6 ACPT-019-* 狀態改為已驗證。修改處以〔修訂 2026-09-15f〕行內標記。
 > 🛠 **2026-09-15f 修訂**（feat/source-check，DEC-013、ADR-009）：§1 新增 FR-020 拆題結果對照原卷文字層、FR-006 複核原因八種→九種；NFR-003 測試數 1,476／262／11→1,534／269／11（feat/source-check 實測）；NFR-006 migrations 範圍補 0007、0009；§3 管線資料補原卷片段；§6 補 ACPT-020-* 對照；§7 追溯同步。修改處以〔修訂 2026-09-15f〕行內標記。
-> 🛠 **2026-09-15 合併同步**（feat/follow-up-links 併入 feat/source-check）：定位行功能需求數 19→20；NFR-003 測試數更新為單元 1,565／整合 297／e2e 11（合併後實跑）；NFR-006 migrations 範圍合為 0001–0009 共 9 份；§7 追溯之 DEC／FR 範圍合併。上列兩分支修訂列所載之各分支實測數與範圍為當時紀錄，保留不改。合併重算處以〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕雙標記。
+> 🛠 **2026-09-15 合併同步**（feat/follow-up-links 併入 feat/source-check）：定位行功能需求數 19→20；NFR-003 測試數更新為單元 1,565（其後原卷比對審查修正補 2 項單元測試，現況 1,567）／整合 297／e2e 11（合併後實跑）；NFR-006 migrations 範圍合為 0001–0009 共 9 份；§7 追溯之 DEC／FR 範圍合併。上列兩分支修訂列所載之各分支實測數與範圍為當時紀錄，保留不改。合併重算處以〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕雙標記。
 
 ## 目錄
 
@@ -61,7 +61,7 @@
 | :--- | :--- | :--- | :--- | :--- |
 | NFR-001 | 安全 | 所有 /api 路由經 x-api-key 驗證（timing-safe 比對）；CORS 僅允許 ALLOWED_ORIGINS 白名單；圖片抓取經 isSafeImageUrl 防 SSRF；NODE_ENV=production 時不回傳錯誤細節 | 未帶或錯誤金鑰一律 401；非白名單來源被拒；私有網段 URL 被拒 | 單元＋整合測試（CI） |
 | NFR-002 | 成本 | 高成本端點限流（獨立計數桶）：/analyze-pdf、POST /api/jobs、variants、assistant 各 10/min，search-nl 30/min，similar 60/min；上傳上限 15 MB（逾限回 413）；逐 token 計費紀錄（config/pricing.js）；單 job 與每日成本上限（`workers/jobRunner.js`：`JOB_COST_BUDGET_USD` 預設 0.5、`DAILY_COST_BUDGET_USD` 預設 5） | 第 11 次請求於 60 秒窗內被拒（429）；15 MB 逾限回 413 | 整合測試（CI） |
-| NFR-003 | 可測試性 | agent 為純函式合約（不碰 DB、不讀 env、ctx 注入）；LLM 呼叫走 cassette record/replay；CI 零金鑰、零網路、零成本 | 單元 1,565／整合 297／e2e 11 全數通過（feat/follow-up-links 併入 feat/source-check 後實測，2026-09-15）〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕；CI 無 GEMINI_API_KEY | node:test＋cassette 重播（CI） |
+| NFR-003 | 可測試性 | agent 為純函式合約（不碰 DB、不讀 env、ctx 注入）；LLM 呼叫走 cassette record/replay；CI 零金鑰、零網路、零成本 | 單元 1,567／整合 297／e2e 11 全數通過（feat/follow-up-links 併入 feat/source-check 後實測，2026-09-15）〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕；CI 無 GEMINI_API_KEY | node:test＋cassette 重播（CI） |
 | NFR-004 | 品質門檻 | 五個 eval suite 採 golden＋ratchet（首測 −0.03、只升不降）；低於門檻 CI 轉紅；replay miss 於 main 視為錯誤 | pipeline saved_rate 0.90（門檻 ≥0.87）、gate_pass_rate 1.00；classify accuracy 0.9000／macro-F1 0.9256；檢索 Recall@5 hybrid(RRF) 1.000（LIKE 基線 0.875）；NLQ 規則路徑 coverage 0.84；variant retrieved_coverage 0.8667、偏題閘門 ≥0.90（0.92→0.90，裁決 S3-R29） | eval suite（CI 門檻檢查） |
 | NFR-005 | 可靠性 | job 認領採 FOR UPDATE SKIP LOCKED＋租約，worker 中斷後租約到期由他機續跑（斷點續跑）；各節點逾時、退避重試、重試預算，預算用盡轉 needs_review | 節點逾時 120 秒（`JOB_NODE_TIMEOUT_MS`）；租約 180 秒（`JOB_LEASE_MS`）；fail 重試預算 classify 2／lint 2／verify 1／extract 整包 1；error 獨立計數上限 3，退避 1s→2s→4s 封頂 60s（詳 [lld §4.1](../04_design/lld.md)） | 整合測試（jobRunner；CI） |
 | NFR-006 | 資料一致性 | confirm-paper 之組卷與作答歷史（attempts）寫入同一交易；migrations 只增不改 | migrations 0001_init–0009_source_check，共 9 份，無修改既有檔〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕 | 整合測試＋migration 檔案稽核 |

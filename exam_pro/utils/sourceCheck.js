@@ -188,11 +188,13 @@ function locateOne(questionText, raw, page, cursor, o) {
     const endRaw = page.pos[lastCjk] + 1;
     let from = startRaw;
     const back = raw.slice(Math.max(0, startRaw - 14), startRaw);
-    const numbered = back.match(/(\d{1,2}\s*[.、．][^一-鿿]*)$/);
-    if (numbered) from = startRaw - numbered[0].length;
+    // 題號前面必須是行首或非數字、題號點後面不能接數字（1.5 這類小數不是題號），
+    // 題號到題幹之間也不能再有數字——否則上一題結尾的「1.5 cm」會被吞進本題片段
+    const numbered = back.match(/(?:^|[^\d.])(\d{1,2}\s*[.、．](?!\d)[^一-鿿\d]*)$/);
+    if (numbered) from = startRaw - numbered[1].length;
     const tail = raw.slice(endRaw, endRaw + o.tailMax);
     const stops = [
-        tail.search(/\n\s*[（(]?\s*\d{1,2}\s*[.、．]\s*\S/),
+        tail.search(/\n\s*[（(]?\s*\d{1,2}\s*[.、．](?!\d)\s*\S/),   // 行首小數（矩陣一格一行）不是下一題
         tail.search(/題組/),
         tail.search(/答案卷|答案欄/)
     ].filter((x) => x >= 0);

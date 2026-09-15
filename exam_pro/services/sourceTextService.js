@@ -32,10 +32,16 @@ async function readPagesText(pdfBytes, fromPage, toPage) {
         let text = '';
         for (let i = from; i <= to; i++) {
             const page = doc.loadPage(i - 1);
-            const st = page.toStructuredText('preserve-whitespace');
-            text += st.asText() + '\n';
-            st.destroy();
-            page.destroy();
+            try {
+                const st = page.toStructuredText('preserve-whitespace');
+                try {
+                    text += st.asText() + '\n';
+                } finally {
+                    st.destroy();
+                }
+            } finally {
+                page.destroy();
+            }
         }
         return { text, pages: [from, to] };
     } finally {

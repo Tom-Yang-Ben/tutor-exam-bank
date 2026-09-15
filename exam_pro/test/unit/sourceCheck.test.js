@@ -161,6 +161,22 @@ describe('定位', () => {
         assert.ok(!r6.segment.includes('z'), `第 6 題的片段帶進了第 5 題的字母：${r6.segment}`);
     });
 
+    test('上一題以小數結尾（1.5 cm）時，本題片段不把它當題號吞進來、也不誤標 shared', () => {
+        const page = [
+            '8. 一條繩子的長度為多少，請以公分表示並寫出算式過程。',
+            '(A) 1.5 cm',
+            '9. 一物體沿水平面等速移動，求其在十秒內移動的距離。',
+            PAGE
+        ].join('\n');
+        const [r8, r9] = locateSegments([
+            { question_text: '一條繩子的長度為多少，請以公分表示並寫出算式過程。\n(A) $1.5$ cm' },
+            { question_text: '一物體沿水平面等速移動，求其在十秒內移動的距離。' }
+        ], page);
+        assert.ok(r8.segment.includes('1.5 cm'), r8.segment);
+        assert.ok(!r9.segment.includes('cm'), `第 9 題片段帶進了第 8 題的結尾：${r9.segment}`);
+        assert.equal(r9.shared, undefined);
+    });
+
     test('片段長度上限 segmentMax', () => {
         const [r] = locateSegments([{ question_text: Q1 }], PAGE, { segmentMax: 20 });
         assert.equal(r.segment.length, 20);
@@ -190,6 +206,23 @@ describe('比對', () => {
         assert.equal(r.verdict, 'mismatch');
         assert.deepEqual(r.rules, ['missing_lower']);
         assert.match(describeMismatch(r), /原卷有、拆題漏掉的字母：m/);
+    });
+
+    test('矩陣一格一行、有一格是行首小數（0.5）→ 不當成下一題題號截斷，抄對仍 match', () => {
+        const page = [
+            '7. 求下列矩陣的行列式值並選出正確答案',
+            '-1',
+            '0.5',
+            '-2',
+            '3',
+            '(A) 2 (B) -2 (C) 4 (D) 1',
+            PAGE
+        ].join('\n');
+        const q = '求下列矩陣的行列式值並選出正確答案 $\\begin{bmatrix} -1 & 0.5 \\\\ -2 & 3 \\end{bmatrix}$\n(A) $2$ (B) $-2$ (C) $4$ (D) $1$';
+        const segment = locatedSegment(q, page);
+        assert.ok(segment.includes('(D) 1'), segment);
+        const r = compareSegment({ questionText: q, segment });
+        assert.equal(r.verdict, 'match', JSON.stringify(r.signals));
     });
 
     test('原卷段落沒有任何負號字形時，負號規則不觸發（有些 PDF 的算式負號不在文字層）', () => {

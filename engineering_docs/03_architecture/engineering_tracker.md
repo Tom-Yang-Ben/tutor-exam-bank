@@ -12,7 +12,7 @@
 > 🛠 **2026-09-15e 修訂**（feat/follow-up-links）：新增 FR-019 承上題綁定一列（首個 PR：綁定、複核重算、回填；整組抽題與刪除保護待後續 PR）；NFR-003 單元測試數 1,476→1,499（本分支實測）；NFR-006 migrations 範圍 0001–0008；§4 追溯與 §5.1 熱點表同步。修改處以〔修訂 2026-09-15e〕行內標記。
 > 🛠 **2026-09-15f 修訂**（feat/follow-up-links 審查修正）：NFR-003 單元 1,499→1,507；FR-019 列補 questionController 與實跑證據。修改處以〔修訂 2026-09-15f〕行內標記。
 > 🛠 **2026-09-15f 修訂**（feat/source-check）：新增 FR-020 列（原卷文字層比對）與 ADR-009 索引；FR-006 複核原因八種→九種；NFR-003 單元測試數 1,476→1,534（feat/source-check 實測）；NFR-006 migrations 範圍補 0007、0009；§4 追溯與 §5.1 熱點同步。修改處以〔修訂 2026-09-15f〕行內標記。
-> 🛠 **2026-09-15 合併同步**（feat/follow-up-links 併入 feat/source-check）：NFR-003 單元測試數更新為 1,565（合併後實跑）；NFR-006 migrations 範圍合為 0001–0009；§4 追溯與 §5.1 熱點表合併兩分支新增。上列兩分支修訂列所載之各分支實測數與範圍為當時紀錄，保留不改。合併重算處以〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕雙標記。
+> 🛠 **2026-09-15 合併同步**（feat/follow-up-links 併入 feat/source-check）：NFR-003 單元測試數更新為 1,565（其後原卷比對審查修正補 2 項單元測試，現況 1,567）（合併後實跑）；NFR-006 migrations 範圍合為 0001–0009；§4 追溯與 §5.1 熱點表合併兩分支新增。上列兩分支修訂列所載之各分支實測數與範圍為當時紀錄，保留不改。合併重算處以〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕雙標記。
 
 ## 目錄
 
@@ -55,7 +55,7 @@
 |---|---|---|---|---|---|
 | NFR-001 | 安全：x-api-key（timing-safe）、CORS 白名單、防 SSRF、正式環境不回傳錯誤細節 | 已實作 | exam_pro/middleware/、exam_pro/app.js、exam_pro/services/wordService.js（isSafeImageUrl） | ADR-005 | 單元 |
 | NFR-002 | 成本：限流、RPM 節流、逐 token 計費、單 job／每日成本上限 | 已實作 | exam_pro/middleware/rateLimit.js、exam_pro/services/llm/throttle.js、exam_pro/config/pricing.js | ADR-003 | 單元＋job_events 成本紀錄 |
-| NFR-003 | 可測試性：agent 純函式合約、cassette record/replay、CI 零金鑰零網路 | 已實作 | exam_pro/agents/、exam_pro/services/llm/、exam_pro/eval/cassettes/ | ADR-006 | 單元 1,565 項不連網不連庫（feat/follow-up-links 併入 feat/source-check 後實測，2026-09-15〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕）；CI replay |
+| NFR-003 | 可測試性：agent 純函式合約、cassette record/replay、CI 零金鑰零網路 | 已實作 | exam_pro/agents/、exam_pro/services/llm/、exam_pro/eval/cassettes/ | ADR-006 | 單元 1,567 項不連網不連庫（feat/follow-up-links 併入 feat/source-check 後實測，2026-09-15〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕）；CI replay |
 | NFR-004 | 品質門檻：eval golden＋ratchet（首測 −0.03、只升不降），低於門檻 CI 轉紅 | 已實作 | exam_pro/eval/run.js、exam_pro/eval/thresholds.json、exam_pro/eval/lib/ | ADR-006 | 五個 eval suite（[qa_tracker §2](../05_qa/qa_tracker.md)） |
 | NFR-005 | 可靠性：SKIP LOCKED＋租約認領、斷點續跑、逾時退避重試、重試預算 | 已實作 | exam_pro/workers/jobRunner.js、exam_pro/pipeline/stateMachine.js | ADR-003 | 整合＋e2e |
 | NFR-006 | 資料一致性：組卷與作答歷史同交易；migrations 只增不改（0001–0009〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕） | 已實作 | exam_pro/controllers/examController.js、exam_pro/migrations/、exam_pro/migrate.js | ADR-001 | 整合 |

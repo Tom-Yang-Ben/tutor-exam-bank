@@ -146,7 +146,7 @@ exam_pro/
 ├─ public/index.html + public/js/      # 單頁殼（5 個 hash 路由視圖）+ 五個 ES module（review/students/nlq/variants/assistant）
 ├─ migrations/ + migrate.js            # 只增不改的 SQL（0001~0009）＋執行器
 ├─ eval/                               # run.js（五個 suite）、lib/、golden/、cassettes/、fixtures/、thresholds.json
-├─ test/  unit(1,565) · integration(297) · e2e(11)
+├─ test/  unit(1,567) · integration(297) · e2e(11)
 ├─ scripts/ + *.bat                    # 備份、向量回填、成本報表、公式健檢（Windows 雙擊）
 └─ docker-compose.yml                  # PG16+pgvector：5442 開發（volume）／5433 測試（tmpfs）；皆只綁 127.0.0.1
 ```
@@ -256,6 +256,7 @@ docker compose down           # 停止（加 -v 才會刪掉 pgdata）
 
 - 映像固定為 `pgvector/pgvector:pg16`（官方 pgvector，內含 PG contrib 的 `pg_trgm`），本機、CI、正式環境同一顆。
 - `migrate.js` 只前進、不做 down；每一支 SQL 與它的 `schema_migrations` 紀錄在同一交易內，重跑是 no-op。
+- **套用 0008 之後補綁舊題的承上題關係**（FR-019）：先 `npm run follow:backfill -- --dry-run --report eval/local/follow_ups.json` 看報告（整批跑完即 ROLLBACK、不寫入），確認無誤再 `npm run follow:backfill`。可重複跑，已綁好的與人工綁定（`follows_src='human'`）不會被覆寫；沒有拆題紀錄可推前題的舊題只列在報告裡，不猜。加 `--test` 改打測試庫。
 - **中文路徑的 bind mount 已實測可用**（Docker Desktop 29.6.2 / WSL2，專案路徑含「期中專案」），`docker-compose.yml` 因此把 `./migrations` 唯讀掛進容器。萬一在別台機器上掛載失敗，退路是不經 `migrate.js` 直接餵檔：
   ```bash
   docker compose exec -T postgres psql -U exam -d tutor_exam_bank < migrations/0001_init.sql
@@ -410,7 +411,7 @@ npm run eval:baseline                                                           
 
 | # | 步驟 | 通過標準 |
 |---|------|----------|
-| 6 | `npm test` | **全數通過（2026-09-15 現況：1,565 passed / 0 failed）**；不連網、不連庫、零 secrets。CI 亦會在 push 後自動跑（badge 見本頁最上方）|
+| 6 | `npm test` | **全數通過（2026-09-15 現況：1,567 passed / 0 failed）**；不連網、不連庫、零 secrets。CI 亦會在 push 後自動跑（badge 見本頁最上方）|
 | 7 | 靜態檔完整性：確認 `public/index.html` 結尾為 `</script></body></html>`，且 `<div>`、`<script>` 開闔數相等 | 檔案未被截斷（詳見下方「截斷檔自檢」）|
 | 8 | `npm start` | 終端印出 `🚀 家教題庫後端系統已成功安全啟動：http://localhost:3000` |
 
