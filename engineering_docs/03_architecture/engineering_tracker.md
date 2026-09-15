@@ -8,6 +8,7 @@
 > 🛠 **2026-08-29 修訂**（PR #3–#7 程式碼同步）：CI 證據 commit 更新（0ff47b4→f8f6574）、測試數更新（單元 1,415→1,445）、migrations 範圍更新（0001–0006）、FR-009 摘要補矩陣 OMML、新增 FR-017（source_type）與 FR-018（附圖裁切）兩列、§4 追溯範圍更新、**新增 §5 相依與平行開發（活的相依層）**。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 > 🛠 **2026-09-15 修訂**（測試數同步）：NFR-003 單元測試數 1,445→1,449（main 126243a 實測，2026-09-15）。修改處以〔修訂 2026-09-15〕行內標記。
 > 🛠 **2026-09-15b 修訂**（feat/pseudonymize-student-names 程式碼同步）：FR-016 補姓名代號化模組路徑。修改處以〔修訂 2026-09-15b〕行內標記。
+> 🛠 **2026-09-15d 修訂**（測試數同步）：NFR-003 單元測試數 1,449→1,476（main f2af3c2 實測，2026-09-15 晚間）。修改處以〔修訂 2026-09-15d〕行內標記。
 
 ## 目錄
 
@@ -48,7 +49,7 @@
 |---|---|---|---|---|---|
 | NFR-001 | 安全：x-api-key（timing-safe）、CORS 白名單、防 SSRF、正式環境不回傳錯誤細節 | 已實作 | exam_pro/middleware/、exam_pro/app.js、exam_pro/services/wordService.js（isSafeImageUrl） | ADR-005 | 單元 |
 | NFR-002 | 成本：限流、RPM 節流、逐 token 計費、單 job／每日成本上限 | 已實作 | exam_pro/middleware/rateLimit.js、exam_pro/services/llm/throttle.js、exam_pro/config/pricing.js | ADR-003 | 單元＋job_events 成本紀錄 |
-| NFR-003 | 可測試性：agent 純函式合約、cassette record/replay、CI 零金鑰零網路 | 已實作 | exam_pro/agents/、exam_pro/services/llm/、exam_pro/eval/cassettes/ | ADR-006 | 單元 1,449 項不連網不連庫（main 126243a 實測，2026-09-15〔修訂 2026-09-15〕）；CI replay |
+| NFR-003 | 可測試性：agent 純函式合約、cassette record/replay、CI 零金鑰零網路 | 已實作 | exam_pro/agents/、exam_pro/services/llm/、exam_pro/eval/cassettes/ | ADR-006 | 單元 1,476 項不連網不連庫（main f2af3c2 實測，2026-09-15 晚間〔修訂 2026-09-15d〕）；CI replay |
 | NFR-004 | 品質門檻：eval golden＋ratchet（首測 −0.03、只升不降），低於門檻 CI 轉紅 | 已實作 | exam_pro/eval/run.js、exam_pro/eval/thresholds.json、exam_pro/eval/lib/ | ADR-006 | 五個 eval suite（[qa_tracker §2](../05_qa/qa_tracker.md)） |
 | NFR-005 | 可靠性：SKIP LOCKED＋租約認領、斷點續跑、逾時退避重試、重試預算 | 已實作 | exam_pro/workers/jobRunner.js、exam_pro/pipeline/stateMachine.js | ADR-003 | 整合＋e2e |
 | NFR-006 | 資料一致性：組卷與作答歷史同交易；migrations 只增不改（0001–0006〔修訂 2026-08-29〕） | 已實作 | exam_pro/controllers/examController.js、exam_pro/migrations/、exam_pro/migrate.js | ADR-001 | 整合 |
