@@ -200,13 +200,16 @@ describe('政策停等（第 4.7 條）', () => {
         assert.ok(!runner.ADVANCEABLE_STATES.includes('needs_review'));
     });
 
-    test('awaiting_approval 在 review_reason 的八個合法值內（DDL CHECK 不必動）', () => {
+    test('awaiting_approval 在 review_reason 的合法值內（政策停等沒有為自己新增值）', () => {
         const original = process.env.DATABASE_URL;
         process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://x:x@127.0.0.1:1/x_test';
         const { REVIEW_REASONS } = require('../../controllers/reviewController');
         if (original === undefined) delete process.env.DATABASE_URL;
         assert.ok(REVIEW_REASONS.includes('awaiting_approval'));
-        assert.equal(REVIEW_REASONS.length, 8, '第 4.7 條：review_reason 的合法值不新增');
+        // 第 4.7 條只承諾「政策停等不新增值」；〔修訂 2026-09-15f〕0009 為原卷比對加了第九個
+        // transcription_mismatch（docs/source-check.md），與停等無關。
+        assert.equal(REVIEW_REASONS.length, 9);
+        assert.equal(REVIEW_REASONS[8], 'transcription_mismatch');
     });
 
     test('停等寫的 error_class 是 NULL（不在九個合法值內的字串會撞 CHECK）', () => {

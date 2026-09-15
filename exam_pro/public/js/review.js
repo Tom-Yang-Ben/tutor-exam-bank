@@ -32,12 +32,13 @@
 const POLL_MS = 3000;              // 第 8 條：每 3 秒輪詢一次
 const REVIEW_LIMIT = 50;           // GET /api/review 的 limit 預設
 
-// 第 2 條凍結的八個 review_reason，加上給人看的一句話。
+// 第 2 條凍結的九個 review_reason（〔修訂 2026-09-15f〕0009 加 transcription_mismatch），加上給人看的一句話。
 // 「原因列」要具體到 30 秒內能決定（規劃 §3.9 的風險表），所以每一種都自己帶一句模板。
 const REASON_LABEL = {
     chapter_invalid: '章節不在白名單',
     formula_unparsable: '公式無法解析',
     answer_mismatch: '答案對不上',
+    transcription_mismatch: '題幹與原卷不符',
     duplicate: '與既有題目重複',
     schema_invalid: '欄位不合格',
     budget_exceeded: '超出成本上限',
@@ -49,6 +50,7 @@ const REASON_TONE = {
     chapter_invalid: 'amber',
     formula_unparsable: 'amber',
     answer_mismatch: 'rose',
+    transcription_mismatch: 'rose',
     duplicate: 'indigo',
     schema_invalid: 'rose',
     budget_exceeded: 'slate',
@@ -279,6 +281,18 @@ export function reasonSentence(reason, payload) {
             }
             return '驗證模型與拆題模型的答案不一致。';
         }
+        case 'transcription_mismatch': {
+            // docs/source-check.md：source_check 節點把原卷文字層與拆題題幹比出來的差異
+            const sc = p.source_check || {};
+            if (sc.message) return sc.message;
+            const parts = [];
+            if (sc.signals && sc.signals.extraMinus >= 1) parts.push(`負號比原卷多 ${sc.signals.extraMinus} 個`);
+            const missing = sc.detail && sc.detail.missing_lower ? Object.keys(sc.detail.missing_lower) : [];
+            if (missing.length) parts.push(`原卷有、拆題漏掉的字母：${missing.join('、')}`);
+            return parts.length
+                ? `拆題題幹與原卷文字層不一致：${parts.join('；')}。請對照原卷確認題幹與選項。`
+                : '拆題題幹與原卷文字層不一致，請對照原卷確認題幹與選項。';
+        }
         case 'formula_unparsable': {
             const issues = (p.lint && p.lint.issues) || [];
             const errors = issues.filter(i => i.sev === 'error');
@@ -322,6 +336,18 @@ export function reasonSentence(reason, payload) {
         default:
             return `複核原因：${reason}`;
     }
+}
+
+/**
+ * 複核卡片可展開的「原卷文字層片段」（docs/source-check.md）。
+ * 只有 extract 階段定位成功的片段才給看；掃描檔、找不到、變式題一律回 null（不顯示這一塊）。
+ * @param {object} payload
+ * @returns {{segment:string, pages:Array<number>|null}|null}
+ */
+export function sourceSegmentOf(payload) {
+    const st = payload && payload.extract && payload.extract.source_text;
+    if (!st || st.status !== 'located' || typeof st.segment !== 'string' || !st.segment) return null;
+    return { segment: st.segment, pages: Array.isArray(st.pages) ? st.pages : null };
 }
 
 /**
@@ -591,6 +617,25 @@ function reviewCard(app, item) {
                 });
                 figWrap.appendChild(img);
                 editorSlot.appendChild(figWrap);
+            }
+
+            // 原卷文字層片段（docs/source-check.md）：題幹與原卷不符時老師要對照；其餘原因也可展開參考。
+            // 片段是 PDF 抽出的純文字，一律經 escapeHtml 再塞進 DOM。
+            const source = sourceSegmentOf(body.payload);
+            if (source) {
+                const details = el('details', 'mt-2 rounded-xl border border-slate-200 bg-slate-50 p-2');
+                if (body.review_reason === 'transcription_mismatch') details.open = true;
+                const pages = source.pages ? `（第 ${source.pages[0]}–${source.pages[1]} 頁）` : '';
+                details.appendChild(el('summary', 'cursor-pointer text-xs font-bold text-slate-500', {
+                    textContent: `原卷文字層片段${pages}`
+                }));
+                const pre = el('pre', 'mt-1 max-h-64 overflow-auto whitespace-pre-wrap text-xs leading-5 text-slate-700');
+                pre.innerHTML = app.escapeHtml(source.segment);
+                details.appendChild(pre);
+                details.appendChild(el('p', 'mt-1 text-[11px] text-slate-400', {
+                    textContent: 'PDF 文字層的排版與公式常被打散（分數、上下標拆成多行），請以原卷畫面為準。'
+                }));
+                editorSlot.appendChild(details);
             }
 
             const retries = body.retries && Object.keys(body.retries).length

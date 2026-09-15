@@ -121,7 +121,7 @@ describe('狀態機（interfaces-stage2.md 第 2.3 條的六條規則）', () =>
             let state = 'extracted';
             let retries = {};
             let steps = 0;
-            const budget = 6 + (2 + 2 + 1) + 3 * 6;   // Σ maxRetries + Σ maxErrorRetries + 6
+            const budget = 7 + (2 + 2 + 1) + 3 * 7;   // Σ maxRetries + Σ maxErrorRetries + 7（〔修訂 2026-09-15f〕加 source_check）
             while (!TERMINAL.includes(state)) {
                 const outcome = (steps % 2 === 0)
                     ? { kind: seedKind, reason: 'chapter_invalid', errorClass: 'rate_limited' }
@@ -136,9 +136,9 @@ describe('狀態機（interfaces-stage2.md 第 2.3 條的六條規則）', () =>
     });
 
     test('性質：state 只會前進或留在原地，不會回到更早的狀態', () => {
-        const ORDER = ['extracted', 'hashed', 'classified', 'linted', 'verified', 'deduped', 'saved'];
+        const ORDER = ['extracted', 'hashed', 'classified', 'linted', 'source_checked', 'verified', 'deduped', 'saved'];
         const rank = s => ORDER.indexOf(s);
-        for (const state of ORDER.slice(0, 6)) {
+        for (const state of ORDER.slice(0, 7)) {
             for (const outcome of [
                 { kind: 'pass' }, { kind: 'skipped' },
                 { kind: 'fail', reason: 'chapter_invalid' },

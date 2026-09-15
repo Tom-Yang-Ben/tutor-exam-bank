@@ -16,9 +16,10 @@ const { query, pool } = require('../config/db');
 const { validateQuestionFields } = require('../utils/questionValidation');
 const jobCtl = require('./jobController');
 
-/** DDL（0003_jobs.sql）CHECK 的八個 review_reason，順序 = 介面第 2 條。 */
+/** DDL CHECK 的九個 review_reason，順序 = 介面第 2 條（0009 追加 transcription_mismatch）。 */
 const REVIEW_REASONS = ['chapter_invalid', 'formula_unparsable', 'answer_mismatch',
-    'duplicate', 'budget_exceeded', 'provider_error', 'schema_invalid', 'awaiting_approval'];
+    'duplicate', 'budget_exceeded', 'provider_error', 'schema_invalid', 'awaiting_approval',
+    'transcription_mismatch'];
 
 const NOT_FOUND = '找不到該待複核題目';
 const ALREADY_DONE = '該題目已處理完畢，不能重複複核。';
@@ -77,6 +78,34 @@ function variantChapterSrc(payload, submitted) {
     const machine = payload?.classify?.chapter ?? payload?.extract?.chapter ?? null;
     if (machine === null || submitted !== machine) return 'human';
     return payload?.classify?.source === 'knn' ? 'knn' : 'ai';
+}
+
+/**
+ * approve 時對原卷文字層的**記錄用**重算（docs/source-check.md 第 5 節、ADR-009）。
+ *
+ * 人工核准**不重跑閘門**：老師看著原卷改過題幹，是比文字層更可靠的來源；文字層本身也可能缺負號。
+ * 這裡只用修正後的題幹重跑一次純函式，把結果記進 approve 事件的 detail，
+ * 事後才量得出「進複核的抄錯題，老師改完之後是否就對上了」。
+ *
+ * @param {object} payload       job_questions.payload
+ * @param {string} questionText  老師送出的題幹（已過 validateQuestionFields）
+ * @returns {{source_recheck:'match'|'mismatch'|'skipped'|null, stem_edited:boolean}}
+ *          沒有原卷片段（變式題、掃描檔、未定位）時 source_recheck 為 null
+ */
+function sourceRecheck(payload, questionText) {
+    const ex = payload?.extract || {};
+    const machineText = payload?.lint?.question_text ?? ex.question_text ?? '';
+    const stemEdited = String(questionText ?? '').trim() !== String(machineText).trim();
+    const st = ex.source_text;
+    if (!st || st.status !== 'located' || typeof st.segment !== 'string') {
+        return { source_recheck: null, stem_edited: stemEdited };
+    }
+    const { compareSegment } = require('../utils/sourceCheck');
+    const r = compareSegment({
+        questionText, segment: st.segment,
+        hasFigure: Boolean(ex.figure_desc || ex.figure_img || ex.figure_box)
+    });
+    return { source_recheck: r.verdict, stem_edited: stemEdited };
 }
 
 // ─────────────────────── 6.4 GET /api/review ───────────────────────
@@ -248,7 +277,10 @@ exports.approve = async (req, res, next) => {
             [id, questionId]);
         await jobCtl.writeHumanEvent(client, {
             jobId: jq.job_id, jqId: id, node: 'approve', startedAt,
-            detail: { question_id: questionId, accept_plain_text: acceptPlainText }
+            detail: {
+                question_id: questionId, accept_plain_text: acceptPlainText,
+                ...sourceRecheck(jq.payload, v.value.question_text)
+            }
         });
         await jobCtl.maybeFinishJob(client, jq.job_id);
         await client.query('COMMIT');
@@ -327,3 +359,4 @@ function scheduleEmbed(questionId) {
 module.exports.REVIEW_REASONS = REVIEW_REASONS;
 // 純函式，給單元測試釘住第 4.7 條的規則（WS-B 只加這個匯出，既有匯出不動）
 module.exports.variantChapterSrc = variantChapterSrc;
+module.exports.sourceRecheck = sourceRecheck;

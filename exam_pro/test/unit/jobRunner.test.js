@@ -12,9 +12,9 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-    loadConfig, planChunks, backoffMs, attemptNo, buildSaveFields, normalizeErrorClass, makeLogger,
+    loadConfig, loadSourceCheckConfig, planChunks, backoffMs, attemptNo, buildSaveFields, normalizeErrorClass, makeLogger,
     readFeatures, schemaFallbackOf,
-    ADVANCEABLE_STATES, FREE_NODES, AGENT_MODULE_FOR_NODE, ERROR_CLASSES,
+    ADVANCEABLE_STATES, FREE_NODES, AGENT_MODULE_FOR_NODE, ERROR_CLASSES, SOURCE_CHECK_MODES,
     RENEW_INTERVAL_MS, BACKOFF_BASE_MS, BACKOFF_MAX_MS, EXTRACT_MAX_RETRIES
 } = require('../../workers/jobRunner');
 
@@ -26,13 +26,13 @@ describe('jobRunner — 模組載入', () => {
         assert.equal(process.env.DATABASE_URL, undefined);
     });
 
-    test('六個可推進狀態與第 2 條一致', () => {
+    test('七個可推進狀態與第 2 條一致', () => {
         assert.deepEqual(ADVANCEABLE_STATES,
-            ['extracted', 'hashed', 'classified', 'linted', 'verified', 'deduped']);
+            ['extracted', 'hashed', 'classified', 'linted', 'source_checked', 'verified', 'deduped']);
     });
 
-    test('零成本節點就是三個純程式節點', () => {
-        assert.deepEqual([...FREE_NODES].sort(), ['dedup0', 'dedup1', 'save']);
+    test('零成本節點就是四個純程式節點（〔修訂 2026-09-15f〕加 source_check）', () => {
+        assert.deepEqual([...FREE_NODES].sort(), ['dedup0', 'dedup1', 'save', 'source_check']);
     });
 
     test('node → agent 檔名：dedup0／dedup1 共用 agents/dedup.js', () => {
@@ -42,11 +42,34 @@ describe('jobRunner — 模組載入', () => {
         });
     });
 
-    test('error_class 就是 DDL CHECK 的九個值', () => {
+    test('error_class 就是 DDL CHECK 的十個值（0009 加 transcription_mismatch）', () => {
         assert.deepEqual([...ERROR_CLASSES].sort(), [
             'answer_mismatch', 'budget_exceeded', 'chapter_invalid', 'duplicate', 'formula_unparsable',
-            'provider_error', 'rate_limited', 'schema_invalid', 'timeout'
+            'provider_error', 'rate_limited', 'schema_invalid', 'timeout', 'transcription_mismatch'
         ]);
+    });
+});
+
+describe('jobRunner — loadSourceCheckConfig（SOURCE_CHECK_MODE）', () => {
+    test('未設定時預設 enforce', () => {
+        assert.deepEqual(loadSourceCheckConfig({}), { sourceCheckMode: 'enforce' });
+    });
+
+    test('三個合法值原樣採用，大小寫與前後空白不影響', () => {
+        assert.equal(loadSourceCheckConfig({ SOURCE_CHECK_MODE: 'off' }).sourceCheckMode, 'off');
+        assert.equal(loadSourceCheckConfig({ SOURCE_CHECK_MODE: ' Shadow ' }).sourceCheckMode, 'shadow');
+        assert.equal(loadSourceCheckConfig({ SOURCE_CHECK_MODE: 'ENFORCE' }).sourceCheckMode, 'enforce');
+    });
+
+    test('非法值與空字串退回 enforce（打錯字不該讓閘門悄悄關掉）', () => {
+        for (const v of ['', 'false', '0', 'disabled', 'shadowed']) {
+            assert.equal(loadSourceCheckConfig({ SOURCE_CHECK_MODE: v }).sourceCheckMode, 'enforce', `值「${v}」`);
+        }
+        assert.deepEqual([...SOURCE_CHECK_MODES], ['off', 'shadow', 'enforce']);
+    });
+
+    test('loadConfig 的回傳形狀不受影響（模式不在其中）', () => {
+        assert.equal('sourceCheckMode' in loadConfig({ SOURCE_CHECK_MODE: 'off' }), false);
     });
 });
 

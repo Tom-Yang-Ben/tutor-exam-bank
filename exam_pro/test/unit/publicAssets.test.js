@@ -151,10 +151,30 @@ describe('public/js/review.js 的純函式', () => {
         assert.equal(reasonSentence('chapter_invalid', { classify: { feedback } }), feedback);
     });
 
-    test('八個 review_reason 都有句子，且沒有一個是空字串', async () => {
+    test('reasonSentence(transcription_mismatch)：優先用 source_check 的 message，沒有時由訊號組句', async () => {
+        const { reasonSentence } = await load();
+        const message = '拆題題幹與原卷文字層不一致：負號比原卷多 1 個（拆題 3、原卷 2）。請對照原卷確認題幹與選項。';
+        assert.equal(reasonSentence('transcription_mismatch', { source_check: { message } }), message);
+        const built = reasonSentence('transcription_mismatch', {
+            source_check: { signals: { extraMinus: 1 }, detail: { missing_lower: { m: 1 } } }
+        });
+        assert.ok(built.includes('負號比原卷多 1 個') && built.includes('m'), built);
+        assert.ok(reasonSentence('transcription_mismatch', {}).includes('原卷'));
+    });
+
+    test('sourceSegmentOf：只有定位成功的片段才給看，其餘回 null', async () => {
+        const { sourceSegmentOf } = await load();
+        const st = { v: 1, status: 'located', pages: [1, 2], locate_score: 1, segment: '1. 自製題 <b>x</b>' };
+        assert.deepEqual(sourceSegmentOf({ extract: { source_text: st } }), { segment: st.segment, pages: [1, 2] });
+        assert.equal(sourceSegmentOf({ extract: { source_text: { status: 'no_text_layer' } } }), null);
+        assert.equal(sourceSegmentOf({}), null);
+        assert.equal(sourceSegmentOf(null), null);
+    });
+
+    test('九個 review_reason 都有句子，且沒有一個是空字串', async () => {
         const { reasonSentence } = await load();
         const REASONS = ['chapter_invalid', 'formula_unparsable', 'answer_mismatch', 'duplicate',
-            'schema_invalid', 'budget_exceeded', 'provider_error', 'awaiting_approval'];
+            'schema_invalid', 'budget_exceeded', 'provider_error', 'awaiting_approval', 'transcription_mismatch'];
         for (const r of REASONS) {
             const s = reasonSentence(r, {});
             assert.equal(typeof s, 'string');
