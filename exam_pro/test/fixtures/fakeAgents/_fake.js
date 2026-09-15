@@ -31,7 +31,13 @@ function makeAgent(node, defaultPass) {
 
             if (active) {
                 if (spec.kind === 'fail') {
-                    return { kind: 'fail', reason: spec.reason || 'schema_invalid', feedback: spec.feedback || `假 agent：${node} 第 ${seen + 1} 次判定不通過` };
+                    // spec.data（選用）：模擬真 agent 在 fail 時帶的判定資料，例如 dedup0 的 hit、
+                    // dedup1 的 top（test/integration/followUp.pg.test.js 用）。沒給就與原本逐位元相同。
+                    return {
+                        kind: 'fail', reason: spec.reason || 'schema_invalid',
+                        feedback: spec.feedback || `假 agent：${node} 第 ${seen + 1} 次判定不通過`,
+                        ...(spec.data ? { data: spec.data } : {})
+                    };
                 }
                 if (spec.kind === 'error') {
                     return { kind: 'error', errorClass: spec.errorClass || 'provider_error', message: `假 agent：${node} 第 ${seen + 1} 次供應商錯誤` };

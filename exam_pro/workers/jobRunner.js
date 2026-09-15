@@ -776,10 +776,26 @@ function createRunner(opts = {}) {
                 await sleep(backoffMs((jq.retries?.[`${node}:error`] ?? 0)));
             }
 
-            if (TERMINAL_STATES.includes(next.state)) await maybeFinishJob(jq.job_id);
+            if (TERMINAL_STATES.includes(next.state)) {
+                // 承上題綁定（DEC-012／FR-019）：任何一列到終態就對整個 job 重算一次。
+                // 不是新節點、不經 transition()——綁定是衍生資料，失敗只 warn，不影響狀態推進
+                // （與 scheduleEmbed 同一個原則；下一列到終態或回填腳本會再算一次）。
+                // 變式政策停等分支（上方 awaiting_approval）刻意不掛：變式 job 沒有「上一題」。
+                await linkFollowUps(jq.job_id);
+                await maybeFinishJob(jq.job_id);
+            }
         } finally {
             stopRenew();
             await db.query('UPDATE job_questions SET locked_until = NULL WHERE id = $1', [jqId]).catch(() => { });
+        }
+    }
+
+    /** 承上題綁定：失敗只記 log（見 services/followUpLinker.js）。 */
+    async function linkFollowUps(jobId) {
+        try {
+            await require('../services/followUpLinker').linkJob(db, jobId, { src: 'pipeline' });
+        } catch (err) {
+            logger.warn({ msg: '承上題綁定失敗（不影響狀態推進）', job_id: jobId, error: String(err && err.message).split('\n')[0] });
         }
     }
 
