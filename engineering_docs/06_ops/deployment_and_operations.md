@@ -9,6 +9,8 @@
 
 > 🛠 **2026-08-29 修訂**（PR #3–#7 程式碼同步）：§2 CI 測試數 單元 1,415→1,445、整合 259→260；§3.1 與 §4 migrations 範圍 0001–0005→0001–0006（末支 `0006_source_type`）。本檔無 0ff47b4 字樣，無需更正 CI commit。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 > 🛠 **2026-09-15d 修訂**（測試數與 CI 步驟同步）：§CI 單元層測試數 1,445→1,476、整合層 260→262，補列 PR #17 新增的 npm audit 門檻（main f2af3c2 實測，2026-09-15 晚間）。修改處以〔修訂 2026-09-15d〕行內標記。
+> 🛠 **2026-09-15f 修訂**（feat/follow-up-links 測試數同步）：§CI 單元層 1,476→1,507、整合層 262→290（本分支實跑）。修改處以〔修訂 2026-09-15f〕行內標記。
+> 🛠 **2026-09-15 合併同步**（feat/follow-up-links 併入 feat/source-check）：§CI 單元層 1,565、整合層 297（合併後實跑）；§3.1 與 §4 migrations 範圍合為 0001–0009。上列兩分支修訂列所載之各分支實測數與範圍為當時紀錄，保留不改。合併重算處以〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕雙標記。
 
 ---
 
@@ -43,8 +45,8 @@
 
 | 階段 | 步驟 | 觸發 |
 | :--- | :--- | :--- |
-| 單元層 | `npm audit --omit=dev --audit-level=high` ＋ `npm test`（1,534 項）＋ `npm run check:html`，Node 22.x／24.x 矩陣〔修訂 2026-09-15f〕 | 每次 push 與 PR（GitHub Actions） |
-| 整合層 | 起 `pgvector/pgvector:pg16` service → 整合 269 項〔修訂 2026-09-15f〕＋e2e 11 項＋五個 eval suite（ratchet 門檻）〔修訂 2026-08-29〕 | 同上，`integration` job |
+| 單元層 | `npm audit --omit=dev --audit-level=high` ＋ `npm test`（1,565 項）＋ `npm run check:html`，Node 22.x／24.x 矩陣〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕 | 每次 push 與 PR（GitHub Actions） |
+| 整合層 | 起 `pgvector/pgvector:pg16` service → 整合 297 項〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕＋e2e 11 項＋五個 eval suite（ratchet 門檻）〔修訂 2026-08-29〕 | 同上，`integration` job |
 | 部署 | 無自動部署。本機依 §3 啟動程序手動升級 | 手動 |
 
 CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`EMBED_MODE=fixture`；eval 低於 ratchet 門檻或 main 上 replay miss 即轉紅（NFR-004）。
@@ -56,7 +58,7 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 | # | 指令 | 說明 |
 | :--- | :--- | :--- |
 | 1 | `npm run db:up`（＝`docker compose up -d --wait`；或雙擊 `啟動資料庫.bat`） | 拉起 5442／5433 兩容器並等 healthcheck |
-| 2 | `npm run migrate` | 對 `DATABASE_URL` 套用 `migrations/0001`–`0007`、`0009`〔修訂 2026-09-15f〕；只前進不 down，重跑為 no-op（依檔名排序逐支判斷，編號缺口不影響套用） |
+| 2 | `npm run migrate` | 對 `DATABASE_URL` 套用 `migrations/0001`–`0009`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕；只前進不 down，重跑為 no-op（依檔名排序逐支判斷，編號缺口不影響套用） |
 | 3 | `npm start`（開發改 `npm run dev`） | 啟動後開 `http://localhost:3000` |
 
 輔助指令：`node migrate.js status`（逐支套用狀態）、`npm run migrate:test`（測試庫）、`npm run db:down`（停止；加 `-v` 才刪 `pgdata`）、`node seed_questions.js --apply`（空庫灌 30 題示範題）。
@@ -102,7 +104,7 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 | 策略 | 本專案做法 |
 | :--- | :--- |
 | 發布 | 單行程原地重啟（Ctrl+C 停 `npm start` → `git pull`／checkout → 重啟）；無 Blue-Green／Rolling 需求 |
-| DB migration | 只增不改（NFR-006；`0001_init`→`0007_source_detail`、`0009_source_check`〔修訂 2026-09-15f〕），additive 先行，與 expand-contract 的 expand 段等價 |
+| DB migration | 只增不改（NFR-006；`0001_init`→`0009_source_check`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕），additive 先行，與 expand-contract 的 expand 段等價 |
 | 風險控制 | `FEATURE_*` 旗標預設全關，逐一開啟並觀察，取代 canary（階段 2 起的新功能均走旗標掛載） |
 
 ### 4.1 對外部署前置條件

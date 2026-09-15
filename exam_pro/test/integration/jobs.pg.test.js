@@ -1063,7 +1063,8 @@ function runSuite() {
                 const res = await request(app).post(`/api/review/${jqId}/approve`)
                     .send({ ...GOOD_BODY, merge_into: existing[0].id });
                 assert.equal(res.status, 200);
-                assert.deepEqual(res.body, { question_id: existing[0].id, merged: true });
+                // FR-019 起多一個 follows_question_id 鍵（既有兩鍵不變；這一題不是承上題，故為 null）
+                assert.deepEqual(res.body, { question_id: existing[0].id, merged: true, follows_question_id: null });
 
                 const { rows: q } = await query(
                     'SELECT COUNT(*)::int AS n FROM questions WHERE id = $1', [existing[0].id]);

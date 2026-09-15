@@ -104,7 +104,7 @@ app.use((err, req, res, next) => {
 | 方法／路徑 | FR | 說明 |
 | :--- | :--- | :--- |
 | `GET /api/questions` | FR-007 | 題庫列表（篩選＋分頁） |
-| `POST /api/questions`、`PUT /api/questions/:id`、`DELETE /api/questions/:id` | FR-007 | 題目 CRUD；出過的題刪除改封存 `archived:true` |
+| `POST /api/questions`、`PUT /api/questions/:id`、`DELETE /api/questions/:id` | FR-007 | 題目 CRUD；出過的題刪除改封存 `archived:true`；刪除承上題的前題回 409 帶 `children`、刪除匯入任務產生的題回 409 請改封存（FR-019）〔修訂 2026-09-15f〕 |
 | `POST /api/batch-save-questions` | FR-007 | 批次入庫（白名單硬驗證、部分入庫；`?strict=1` 舊行為） |
 | `POST /api/questions/batch-source` | FR-017 | 批次補標題源：`{question_ids(≤200), source_type?, source_detail?}` 至少一項；兩欄皆「帶了才改」、封存題不動〔修訂 2026-08-29b〕 |
 | `GET /api/chapters`、`GET /api/chapter-whitelist` | FR-002 | 實際存在章節／完整白名單 |
