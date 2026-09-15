@@ -24,6 +24,7 @@
 
 | # | 閘門 | 在哪裡 | 用什麼判 | 不過時 |
 |---|---|---|---|---|
+| 0 | **藍本不是承上題**〔2026-09-16，FR-019 PR3〕 | `services/variantService.js` `requestVariants`（建 job 前、檢索前） | `questions.follows_question_id IS NOT NULL` | 請求直接回 `409 { reason: 'follow_up_blueprint' }`，不檢索、不建 job——承上題題幹缺前題條件；改用前題出變式 |
 | 1 | JSON schema | `agents/generateVariant.js`（ajv） | `agents/schemas/variant.json` | `fail('schema_invalid')` |
 | 2 | 章節白名單 | 同上 | `isValidChapter` | 退回藍本章節，記 `chapter_overridden` |
 | 3 | **只改字** | `utils/variantTextGate.js` | Levenshtein／數字遮罩（**不用 embedding**） | `fail('text_gate')` |

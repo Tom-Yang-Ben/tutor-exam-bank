@@ -10,6 +10,7 @@
 > 🛠 **2026-08-29 修訂之二**（feat/source-detail）：questions／jobs 各端點的請求與回應加 `source_detail` 來源註記（自由文字 ≤100 字，FR-017 延伸）；§5.1 補 `POST /api/questions/batch-source` 批次補標端點。標記〔修訂 2026-08-29b〕。
 
 > 🛠 **2026-09-15f 修訂**（feat/source-check，FR-020）：無新端點；`GET /api/review` 的 `reason` 值域加 `transcription_mismatch`（九個值）、`GET /api/review/:jqId` 的 payload 可含 `extract.source_text` 與 `source_check`、approve 事件 detail 加 `source_recheck`／`stem_edited`（§2.1、§5.1）。修改處以〔修訂 2026-09-15f〕行內標記。
+> 🛠 **2026-09-16 修訂**（feat/follow-up-protect-badge，FR-019 PR3）：§5.1 `GET /api/questions` 回應補承上題兩欄、`DELETE /api/questions/:id` 補 `?group=1` 與 409 情境。修改處以〔修訂 2026-09-16〕行內標記。
 
 ## 目錄
 
@@ -103,8 +104,8 @@ app.use((err, req, res, next) => {
 
 | 方法／路徑 | FR | 說明 |
 | :--- | :--- | :--- |
-| `GET /api/questions` | FR-007 | 題庫列表（篩選＋分頁） |
-| `POST /api/questions`、`PUT /api/questions/:id`、`DELETE /api/questions/:id` | FR-007 | 題目 CRUD；出過的題刪除改封存 `archived:true`；刪除承上題的前題回 409 帶 `children`、刪除匯入任務產生的題回 409 請改封存（FR-019）〔修訂 2026-09-15f〕 |
+| `GET /api/questions` | FR-007 | 題庫列表（篩選＋分頁）；每題另回 `follows_question_id`（前題 id，非承上題為 `null`）與 `has_follow_ups`（有在庫承上題）（FR-019）〔修訂 2026-09-16〕 |
+| `POST /api/questions`、`PUT /api/questions/:id`、`DELETE /api/questions/:id` | FR-007 | 題目 CRUD；出過的題刪除改封存 `archived:true`；刪除承上題的前題回 409 帶 `children`、刪除匯入任務產生的題回 409 請改封存（FR-019）〔修訂 2026-09-15f〕；刪除變式藍本回 409 帶 `job_ids`、封存仍有在庫承上題的前題回 409 帶 `children`；`?group=1` 整組（此題＋全部後代承上題）單一交易處理，組內有作答或任務引用則整組封存（FR-019 PR3，細節見 `docs/interfaces-stage1.md` §12.1）〔修訂 2026-09-16〕 |
 | `POST /api/batch-save-questions` | FR-007 | 批次入庫（白名單硬驗證、部分入庫；`?strict=1` 舊行為） |
 | `POST /api/questions/batch-source` | FR-017 | 批次補標題源：`{question_ids(≤200), source_type?, source_detail?}` 至少一項；兩欄皆「帶了才改」、封存題不動〔修訂 2026-08-29b〕 |
 | `GET /api/chapters`、`GET /api/chapter-whitelist` | FR-002 | 實際存在章節／完整白名單 |

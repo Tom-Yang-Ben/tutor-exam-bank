@@ -74,10 +74,14 @@ paths:
       tags: [questions]
       summary: 刪除（封存）題目
       operationId: deleteQuestion
+      # 修訂 2026-09-16（feat/follow-up-protect-badge，FR-019 PR3）：group 參數、409 三種情境
+      parameters:
+        - { name: group, in: query, schema: { type: string, enum: ["1", "true"] }, description: 整組處理此題與其全部後代承上題（單一交易）；組內任一題有作答紀錄或 job_questions／jobs 引用則整組封存，否則整組硬刪。其他值等同未帶 }
       responses:
-        "200": { description: 已刪除 }
+        "200": { description: "已刪除或封存；單題回 {message, id, archived?}，group 回 {message, id, ids, archived}" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "未帶 group：此題仍有承上題（{message, children}，含有作答紀錄欲封存而承上題在庫）、由匯入任務產生（請改用封存）、或是變式題藍本（{message, job_ids}）；帶 group：處理期間關聯變動" }
   /batch-save-questions:
     post:
       tags: [questions]
@@ -448,7 +452,7 @@ paths:
         "202": { description: "已排生成 job；回傳 {mode: generating, job_id, state, existing}" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: 來源題無 embedding }
+        "409": { description: "來源題無 embedding；或來源題本身是承上題（{message, reason: follow_up_blueprint, follows_question_id}，修訂 2026-09-16 FR-019 PR3）" }
         "429": { $ref: "#/components/responses/RateLimited" }
   /questions/search-nl:
     post:
@@ -724,7 +728,16 @@ components:
         total: { type: integer }
         page: { type: integer }
         limit: { type: integer }
-        items: { type: array, items: { type: object } }
+        totalPages: { type: integer }
+        # 修訂 2026-09-16：鍵名依 questionController.listQuestions 實作為 questions（原記 items 與實作不符）；補承上題兩欄（FR-019）
+        questions:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              follows_question_id: { type: ["integer", "null"], description: 承上題的前題 id；非承上題為 null（FR-019） }
+              has_follow_ups: { type: boolean, description: 是否有在庫（未封存）的承上題接續此題（FR-019） }
     Error:
       type: object
       required: [message]

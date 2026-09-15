@@ -178,6 +178,26 @@ function runSuite() {
             assert.equal(res.body.message, '該題尚未建立向量，請執行 npm run embed:backfill');
         });
 
+        test('409：藍本是承上題 → reason=follow_up_blueprint，不建 job；前題本身照常 202（FR-019 PR3）', async () => {
+            const pred = await insertQuestion({ theta: 0 });
+            const child = await insertQuestion({ theta: 0.01, text: '承上題，自製測試子題：再求 $|2\\vec{a}|$。' });
+            await query(`UPDATE questions SET follows_question_id = $1, follows_src = 'human' WHERE id = $2`, [pred, child]);
+
+            const res = await request(freshApp()).post(`/api/questions/${child}/variants`).send({ force_generate: true });
+            assert.equal(res.status, 409);
+            assert.deepEqual(res.body, {
+                message: '承上題缺少前題脈絡，請改用前題出變式。',
+                reason: 'follow_up_blueprint',
+                follows_question_id: pred
+            });
+            const { rows } = await query('SELECT COUNT(*)::int AS n FROM jobs WHERE source_question_id = $1', [child]);
+            assert.equal(rows[0].n, 0, '承上題不得建出變式 job');
+
+            const ok = await request(freshApp()).post(`/api/questions/${pred}/variants`).send({ force_generate: true });
+            assert.equal(ok.status, 202);
+            assert.equal(ok.body.mode, 'generating');
+        });
+
         test('400：四個參數的訊息字串逐字凍結', async () => {
             const id = await insertQuestion();
             const app = freshApp();
