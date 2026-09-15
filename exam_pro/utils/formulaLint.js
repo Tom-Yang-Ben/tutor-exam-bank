@@ -27,7 +27,7 @@
 //
 // 純函式：無 I/O、無隨機、無時間、不讀 process.env。
 
-const { parseLatexStrict } = require('./textFormatter');
+const { parseLatexStrict, foldDisplayMath } = require('./textFormatter');
 
 // audit_formulas.js:12-13 的兩份對照表，原樣搬過來
 const UNICODE_MATH = /[×÷≤≥≠±√∞∑∫∏∂∇αβγδεζηθλμνξπρστφχψωΓΔΘΛΞΠΣΦΨΩ°·∈∉⊂⊆∪∩→←⇒⇔]/;
@@ -65,7 +65,7 @@ function mathSpans(text) {
     const spans = [];
     const delimRe = /\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)/g;
     let lineBase = 0;
-    for (const line of String(text).split('\n')) {
+    for (const line of foldDisplayMath(String(text)).split('\n')) {
         delimRe.lastIndex = 0;
         let m;
         while ((m = delimRe.exec(line)) !== null) {
@@ -78,11 +78,12 @@ function mathSpans(text) {
 
 const inSpans = (spans, at) => spans.some(([s, e]) => at >= s && at < e);
 
-/** 找出第一個「多出來」的大括號位置；配得起來時回 -1 */
+/** 找出第一個「多出來」的大括號位置；配得起來時回 -1。反斜線逸出的 \{ \} 是字面括號，不計。 */
 function firstUnbalancedBrace(s) {
     let depth = 0;
     let firstOpen = -1;
     for (let i = 0; i < s.length; i++) {
+        if (s[i] === '\\') { i++; continue; }
         if (s[i] === '{') { if (depth === 0) firstOpen = i; depth++; }
         else if (s[i] === '}') { depth--; if (depth < 0) return i; }
     }
@@ -108,7 +109,8 @@ function formulaLint(text) {
         // 空字串由呼叫端另外判斷（audit_formulas.js:17 同樣的取捨）
         return { ok: true, issues: [] };
     }
-    const s = text;
+    // 跨行的 $$…$$ 先摺成一行（長度與位置不變），與 buildParagraphComponents 同一種看法
+    const s = foldDisplayMath(text);
 
     // ── 1. $ 不成對（audit 規則 1）──
     const dollarIdx = [];
@@ -119,8 +121,9 @@ function formulaLint(text) {
     }
 
     // ── 2. 大括號不對稱（audit 規則 2）──
-    const open = (s.match(/\{/g) || []).length;
-    const close = (s.match(/\}/g) || []).length;
+    // \{ \} 是字面括號（\left\{ 方程組），不算群組
+    const open = (s.match(/(?<!\\)\{/g) || []).length;
+    const close = (s.match(/(?<!\\)\}/g) || []).length;
     if (open !== close) {
         push('error', 'brace_unbalanced', firstUnbalancedBrace(s),
             `大括號不對稱（{ 有 ${open} 個、} 有 ${close} 個）`);

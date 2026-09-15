@@ -2961,13 +2961,13 @@
     {
       "id": "F134",
       "latex": "$\\mathbb{R}$ 表示實數",
-      "expect": "degrade",
+      "expect": "ok",
       "ooxml": [
         "m:oMath"
       ],
       "group": "rule:parse_events",
       "source": "utils/textFormatter.js parseLatexStrict（介面第 4.3 條）",
-      "note": "unknown_command：\\mathbb 未支援",
+      "note": "2026-09-15 起 \\mathbb 已支援（單一拉丁字母映射 U+211D 等雙線字），由 degrade 改 ok",
       "needs_human_confirm": false,
       "_auto": {
         "events": [

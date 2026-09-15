@@ -150,7 +150,7 @@ exam_pro/
 | [`roadmap-plan.md`](./docs/roadmap-plan.md) | 六章總規劃：排程、資料層、Agent 管線、產品面、橫切、階段 4 產品收斂（作法／理由／替代方案／驗收；§6 含 S4-1～S4-4 與對話式助教） |
 | [`interfaces-stage1.md`](./docs/interfaces-stage1.md) ／ [`-stage2`](./docs/interfaces-stage2.md) ／ [`-stage3`](./docs/interfaces-stage3.md) | 三份**凍結介面**與全部裁決（階段 1 裁決 1–27、S2-1～30、S3-1～R29）——平行開發的契約 |
 | [`rag-and-agents.md`](./docs/rag-and-agents.md) | RAG 與多 Agent 技術決策全紀錄（本 README 技術選型章的完整版） |
-| [`variants.md`](./docs/variants.md) ／ [`retrieval.md`](./docs/retrieval.md) ／ [`llm.md`](./docs/llm.md) | 變式題九道閘門與閾值校準／檢索設計／LLM 層 |
+| [`variants.md`](./docs/variants.md) ／ [`retrieval.md`](./docs/retrieval.md) ／ [`llm.md`](./docs/llm.md) ／ [`formulas.md`](./docs/formulas.md) | 變式題九道閘門與閾值校準／檢索設計／LLM 層 |
 | [`HANDOFF.md`](./docs/HANDOFF.md) | 交接檔：角色、狀態、標準流程、踩過的坑 |
 | [`archive/`](./docs/archive) | 已結案的歷史紀錄：`cutover-runbook.md`（MySQL→PG 切換之夜，2026-08-21 已執行）、`stage*-parallel-prompts.md` ／ `questions*-ws*.md`（四條平行 workstream 的分工提示詞與提問裁決）——**多人（多 agent）協作制度的完整紀錄**，索引見該資料夾 README |
 
