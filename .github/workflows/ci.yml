@@ -150,7 +150,7 @@ jobs:
 
       - name: 上傳 eval 報表
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: eval-reports
           path: exam_pro/eval/reports/
