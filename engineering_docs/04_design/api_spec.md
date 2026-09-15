@@ -11,6 +11,8 @@
 
 > 🛠 **2026-09-15f 修訂**（feat/source-check，FR-020）：無新端點；`GET /api/review` 的 `reason` 值域加 `transcription_mismatch`（九個值）、`GET /api/review/:jqId` 的 payload 可含 `extract.source_text` 與 `source_check`、approve 事件 detail 加 `source_recheck`／`stem_edited`（§2.1、§5.1）。修改處以〔修訂 2026-09-15f〕行內標記。
 
+> 🛠 **2026-09-15g 修訂**（feat/follow-up-paper-group，FR-019 PR2）：無新端點；§5.1 `POST /api/generate-paper` 補承上題整組抽取、少出題時的 `shortfall`／`note` 與逐題 `follows_question_id`，`POST /api/confirm-paper` 補組內相鄰排序。修改處以〔修訂 2026-09-15g〕行內標記。
+
 ## 目錄
 
 - [1. 設計約定](#1-設計約定)
@@ -112,8 +114,8 @@ app.use((err, req, res, next) => {
 | `GET /api/students` | FR-014 | 學生清單（裁決 S4-2：組卷下拉恆常需要，不吃旗標） |
 | `POST /api/students`、`PATCH /api/students/:id`、`DELETE /api/students/:id` | FR-014 | 建立（唯一新學生入口，裁決 S4-1）／改名／刪除 |
 | `POST /api/students/:id/merge` | FR-014 | 學生併名（衝突題保留目標側批改） |
-| `POST /api/generate-paper` | FR-008 | 組卷草稿（`dry_run` 預覽、`exclude_ids` 換題；attempts 排除已作答；`source_types` 題源過濾——空陣列或未帶＝不限制、含非法值 400，FR-017〔修訂 2026-08-29〕） |
-| `POST /api/confirm-paper` | FR-008 | 確認出卷（同一交易建卷＋attempts；預覽過期回 409） |
+| `POST /api/generate-paper` | FR-008 | 組卷草稿（`dry_run` 預覽、`exclude_ids` 換題；attempts 排除已作答；`source_types` 題源過濾——空陣列或未帶＝不限制、含非法值 400，FR-017〔修訂 2026-08-29〕；承上題以組為單位整組抽、相鄰排列，組內任一題不可用整組不抽，湊不滿題數時預設 200 少出題並加 `shortfall`／`note`，`questions[]` 逐題加 `follows_question_id`，FR-019，契約見 `docs/interfaces-stage1.md` 第 7.1 條〔修訂 2026-09-15g〕） |
+| `POST /api/confirm-paper` | FR-008 | 確認出卷（同一交易建卷＋attempts；預覽過期回 409；承上組依承接順序相鄰排序〔修訂 2026-09-15g〕） |
 | `DELETE /api/papers/:id` | FR-008 | 刪卷連 attempts，題目回候選池（裁決 S4-3） |
 | `POST /api/analyze-pdf` | FR-001 | 舊版單呼叫拆題（保留）；限流 10/min、PDF 上限 15 MB |
 | `POST /api/download-word` | FR-009 | Word 匯出（LaTeX→OOXML，docx 原生 Math 物件） |

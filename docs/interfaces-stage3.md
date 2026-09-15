@@ -231,6 +231,7 @@ module.exports = { pickOnePerFamily };
 - 「庫存不足」的 400 檢查移到**家族互斥之後**，`${n}` 代入**家族數**（實際抽得到的題數）。訊息格式與 `interfaces-stage1.md` 第 7 條完全相同，一個字都不改：
   `新題目庫存不足！該章節 [${trimmedName}] 沒寫過的題目僅剩 ${n} 題。`
 - `POST /api/generate-paper` 的 200 回應**完全不變**（`interfaces-stage1.md` 第 7 條，已含 `paper_id`），既有整合測試是契約。
+- 〔修訂 2026-09-15g〕承上題整組抽取（FR-019 PR2）後，順序為：**撈候選 → 撈候選題所在承上組 → 組內有題不在候選池者整組剔除 → 以組為單位 `pickOnePerFamily`（鍵取組首題）→ 組內家族撞號剔除 → 檢查數量 → 依洗牌順序整組裝箱至 N 題 → 以組為單位依題型權重排序**。「庫存不足」的 `${n}` 改為家族互斥與整組剔除後的可用題數；沒有綁定時與上列凍結順序結果相同。細節見 `interfaces-stage1.md` 第 7.1 條。
 - `utils/shuffle.js` 與 `test/unit/shuffle.test.js` 的 11 項**不得改動**。
 
 ---
