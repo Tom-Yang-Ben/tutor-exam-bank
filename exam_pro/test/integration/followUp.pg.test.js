@@ -8,6 +8,7 @@
 const { test, describe, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const fs = require('node:fs');
 
 const TEST_DATABASE_URL = (process.env.TEST_DATABASE_URL || '').trim();
 const APP_DIR = path.resolve(__dirname, '..', '..');
@@ -48,10 +49,14 @@ function runSuite() {
         async embed() { return { vectors: [], usage: { tokenIn: 0 } }; }
     };
 
-    function makeRunner() {
+    const linker = require(path.join(APP_DIR, 'services', 'followUpLinker'));
+    const fakeExtract = require(path.join(APP_DIR, 'test', 'fixtures', 'fakeAgents', 'extract.js'));
+    const JOBS_DIR = path.join(APP_DIR, 'data', 'jobs');
+
+    function makeRunner(logger = { info() { }, warn() { }, error() { } }) {
         return createRunner({
             db: { pool, query }, llm: fakeLlm, agentsDir: FAKE_AGENTS_DIR,
-            logger: { info() { }, warn() { }, error() { } },
+            logger,
             sleep: async () => { },
             estimateCost: () => ({ cost_usd: 0, cost_estimated: false }),
             config: { nodeTimeoutMs: 2000, leaseMs: 60000, concurrency: 2 }
@@ -393,6 +398,177 @@ function runSuite() {
                 await seedJob([plainQ(1, dbHit(legacyPred)), followQ(2, dbHit(legacyChild))]);
                 await drain(makeRunner());
                 assert.deepEqual(await follows(legacyChild), { follows_question_id: elsewhere, follows_src: 'backfill' });
+            });
+        });
+
+        describe('跨塊前題被 extract 丟掉（M1）', () => {
+            /** seedJob 後補上 chunk_elements（模擬 runner 寫入的形狀） */
+            async function setChunkElements(jobId, chunkNo, n) {
+                await query(
+                    `UPDATE job_questions SET payload = jsonb_set(payload, '{extract,chunk_elements}', to_jsonb($3::int))
+                      WHERE job_id = $1 AND idx / 1000 = $2`, [jobId, chunkNo, n]);
+            }
+
+            test('上一塊塊尾被丟 → 子題不綁、回報 extract_gap；複核 API 也顯示 extract_gap', async () => {
+                const { jobId, jqIds } = await seedJob([plainQ(1), plainQ(2), { ...followQ(1001), idx: 2001, chunk_no: 2 }]);
+                await setChunkElements(jobId, 1, 3);          // 第 1 塊模型回了 3 題，1003 被丟
+                await setChunkElements(jobId, 2, 1);
+                await drain(makeRunner());
+
+                const child = await jqRow(jqIds[2]);
+                assert.equal(child.state, 'saved');
+                assert.deepEqual(await follows(child.question_id), { follows_question_id: null, follows_src: null },
+                    '不得綁到上一塊倒數第二題 1002');
+                assert.deepEqual(await linkJob({ query }, jobId, { src: 'pipeline' }),
+                    { bound: [], unresolved: [{ jq_id: jqIds[2], reason: 'extract_gap' }] });
+
+                const detail = await request(app).get(`/api/review/${jqIds[2]}`);
+                assert.equal(detail.body.follow_up.unresolved_reason, 'extract_gap');
+                assert.equal(detail.body.follow_up.predecessor, null);
+            });
+
+            test('舊資料沒有 chunk_elements：上一塊 extract 事件 rejected > 0 → extract_gap；= 0 → 照常綁', async () => {
+                const { jobId, jqIds } = await seedJob([plainQ(1), plainQ(2), { ...followQ(1001), idx: 2001, chunk_no: 2 }]);
+                const { rows: ev } = await query(
+                    `INSERT INTO job_events (job_id, node, attempt, latency_ms, outcome, detail)
+                     VALUES ($1, 'extract', 1, 1, 'pass', '{"chunk":1,"created":2,"rejected":1}'::jsonb) RETURNING id`, [jobId]);
+                await drain(makeRunner());
+
+                const child = await jqRow(jqIds[2]);
+                assert.equal((await follows(child.question_id)).follows_question_id, null);
+                assert.deepEqual((await linkJob({ query }, jobId, { src: 'pipeline' })).unresolved,
+                    [{ jq_id: jqIds[2], reason: 'extract_gap' }]);
+
+                await query(`UPDATE job_events SET detail = '{"chunk":1,"created":2,"rejected":0}'::jsonb WHERE id = $1`, [ev[0].id]);
+                const r = await linkJob({ query }, jobId, { src: 'pipeline' });
+                const pred = await jqRow(jqIds[1]);
+                assert.deepEqual(r, { bound: [{ question_id: child.question_id, follows_question_id: pred.question_id }], unresolved: [] });
+            });
+
+            test('runner 拆題時替每題寫 chunk_elements（含被丟的元素）', async () => {
+                fs.mkdirSync(JOBS_DIR, { recursive: true });
+                fakeExtract.resetCounts();
+                const sha = require('node:crypto').randomBytes(32).toString('hex');
+                const { rows } = await query(
+                    `INSERT INTO jobs (kind, pdf_sha256, state, budget_usd, page_count)
+                     VALUES ('pdf', $1, 'queued', 0.5, 40) RETURNING id`, [sha]);
+                const jobId = Number(rows[0].id);
+                const plan = {
+                    chunks: { 1: [plainQ(1), plainQ(2)], 2: [{ ...followQ(1001), idx: 2001, chunk_no: 2 }] },
+                    rejected: [{ chunk: 1, idx: 1003, errors: ['假：schema 驗證失敗'] }]
+                };
+                fs.writeFileSync(path.join(JOBS_DIR, `${jobId}.pdf`), JSON.stringify(plan), 'utf8');
+                await query('UPDATE jobs SET pdf_path = $2 WHERE id = $1', [jobId, path.posix.join('data', 'jobs', `${jobId}.pdf`)]);
+
+                await drain(makeRunner());
+
+                const { rows: jq } = await query(
+                    `SELECT idx, (payload->'extract'->>'chunk_elements')::int AS n, question_id FROM job_questions WHERE job_id = $1 ORDER BY idx`, [jobId]);
+                assert.deepEqual(jq.map(r => [r.idx, r.n]), [[1001, 3], [1002, 3], [2001, 1]]);
+                assert.equal((await follows(jq[2].question_id)).follows_question_id, null, '塊尾被丟 → 子題不綁');
+            });
+        });
+
+        describe('刪除前題（M2）', () => {
+            test('刪被承上的題 → 409 帶 children；先刪承上題再刪前題 → 成功', async () => {
+                const pred = await insertQuestion('自製刪除測試前題：設 $x=9$，求 $2x$。', { origin: 'legacy' });
+                const child = await insertQuestion('承上題，自製刪除測試子題：再求 $3x$。', { origin: 'legacy' });
+                await query(`UPDATE questions SET follows_question_id = $1, follows_src = 'human' WHERE id = $2`, [pred, child]);
+
+                const blocked = await request(app).delete(`/api/questions/${pred}`);
+                assert.equal(blocked.status, 409, '以前這裡是 500');
+                assert.deepEqual(blocked.body.children, [child]);
+                assert.equal(blocked.body.message, `此題是承上題 #${child} 的前題，請先刪除或解除綁定該承上題。`);
+                assert.equal((await query('SELECT COUNT(*)::int AS n FROM questions WHERE id = $1', [pred])).rows[0].n, 1, '交易已回滾');
+
+                assert.equal((await request(app).delete(`/api/questions/${child}`)).status, 200);
+                const ok = await request(app).delete(`/api/questions/${pred}`);
+                assert.equal(ok.status, 200);
+                assert.deepEqual(ok.body, { message: '題目已刪除！', id: pred });
+            });
+
+            test('匯入任務產生的題（job_questions 參照）→ 409 請改用封存', async () => {
+                const { jqIds } = await seedJob([plainQ(1)]);
+                await drain(makeRunner());
+                const { question_id } = await jqRow(jqIds[0]);
+
+                const res = await request(app).delete(`/api/questions/${question_id}`);
+                assert.equal(res.status, 409, '以前這裡是 500');
+                assert.deepEqual(res.body, { message: '此題由匯入任務產生，無法直接刪除，請改用封存。' });
+                assert.equal((await query('SELECT COUNT(*)::int AS n FROM questions WHERE id = $1', [question_id])).rows[0].n, 1);
+            });
+        });
+
+        describe('補測（L2／L3）', () => {
+            test('同 job 撞題時跳過補強：命中本 job 自己入庫的承上題，不以重複列的位置補綁', async () => {
+                // 1001 前題卡在複核（規則 A 對 1002 回 pending）；1004 與 1002 同題（同 job 命中）。
+                // 若補強規則沒排除本 job 自己入庫的題，1002 會被以 1004 的位置補綁到 1003。
+                const { jqIds } = await seedJob([plainQ(1, STUCK), followQ(2), plainQ(3), plainQ(4)]);
+                await query(
+                    `UPDATE job_questions SET payload = jsonb_set(payload, '{extract,__fake}', $2::jsonb) WHERE id = $1`,
+                    [jqIds[3], JSON.stringify({ dedup0: { kind: 'fail', reason: 'duplicate', data: { text_hash: 'd'.repeat(64), normalized_len: 10, hit: { scope: 'job', jq_id: jqIds[1] } } } })]);
+                await drain(makeRunner());
+
+                const child = await jqRow(jqIds[1]);
+                assert.equal(child.state, 'saved');
+                assert.equal((await jqRow(jqIds[3])).review_reason, 'duplicate');
+                assert.deepEqual(await follows(child.question_id), { follows_question_id: null, follows_src: null });
+            });
+
+            test('approve 時 linkJob 在 SAVEPOINT 內丟錯 → approve 仍 200、state=saved', async () => {
+                const { jqIds } = await seedJob([plainQ(1, STUCK), followQ(2)]);
+                await drain(makeRunner());
+
+                const original = linker.linkJob;
+                const originalWarn = console.warn;
+                const warned = [];
+                linker.linkJob = async () => { throw new Error('測試注入：綁定失敗'); };
+                console.warn = (msg) => warned.push(String(msg));
+                let res;
+                try {
+                    res = await request(app).post(`/api/review/${jqIds[0]}/approve`).send(GOOD_BODY);
+                } finally {
+                    linker.linkJob = original;
+                    console.warn = originalWarn;
+                }
+                assert.equal(res.status, 200);
+                assert.equal(typeof res.body.question_id, 'number');
+                assert.equal(res.body.follows_question_id, null);
+                const pred = await jqRow(jqIds[0]);
+                assert.equal(pred.state, 'saved');
+                assert.equal(pred.question_id, res.body.question_id);
+                assert.ok(warned.some(w => /承上題綁定失敗/.test(w)), '失敗要留 log');
+                const child = await jqRow(jqIds[1]);
+                assert.equal((await follows(child.question_id)).follows_question_id, null, '綁定那一段已回滾');
+            });
+
+            test('runner 的 linkFollowUps 丟錯只 warn，狀態照常推進、job 收成 done', async () => {
+                const { jobId, jqIds } = await seedJob([plainQ(1), followQ(2)]);
+                const warns = [];
+                const original = linker.linkJob;
+                linker.linkJob = async () => { throw new Error('測試注入：runner 綁定失敗'); };
+                try {
+                    await drain(makeRunner({ info() { }, warn(o) { warns.push(o); }, error() { } }));
+                } finally {
+                    linker.linkJob = original;
+                }
+                for (const id of jqIds) assert.equal((await jqRow(id)).state, 'saved');
+                const { rows: job } = await query('SELECT state FROM jobs WHERE id = $1', [jobId]);
+                assert.equal(job[0].state, 'done');
+                assert.ok(warns.some(w => w.msg === '承上題綁定失敗（不影響狀態推進）' && w.job_id === jobId));
+            });
+
+            test('變式 job 的複核資訊 → unresolved_reason=variant_job（變式題不做綁定）', async () => {
+                const source = await insertQuestion('自製變式藍本：設 $x=1$，求 $2x$。');
+                const { rows } = await query(
+                    `INSERT INTO jobs (kind, source_question_id, state, budget_usd) VALUES ('variant', $1, 'processing', 0.5) RETURNING id`, [source]);
+                const { rows: jq } = await query(
+                    `INSERT INTO job_questions (job_id, idx, state, review_reason, payload)
+                     VALUES ($1, 1, 'needs_review', 'awaiting_approval', $2::jsonb) RETURNING id`,
+                    [rows[0].id, JSON.stringify({ extract: { ...followQ(1), idx: 1, chunk_no: 0 } })]);
+                const res = await request(app).get(`/api/review/${jq[0].id}`);
+                assert.equal(res.status, 200);
+                assert.deepEqual(res.body.follow_up, { is_follow_up: true, predecessor: null, unresolved_reason: 'variant_job' });
             });
         });
 

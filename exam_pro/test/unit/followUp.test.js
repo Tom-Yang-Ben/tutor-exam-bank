@@ -4,7 +4,7 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-    isFollowUp, findPredecessorRow, resolveQuestionId, MAX_RESOLVE_DEPTH
+    isFollowUp, findPredecessorRow, resolveQuestionId, buildChunkInfo, MAX_RESOLVE_DEPTH
 } = require('../../utils/followUp');
 
 describe('isFollowUp', () => {
@@ -60,6 +60,54 @@ describe('findPredecessorRow', () => {
     test('rows 不是陣列時不丟錯', () => {
         assert.deepEqual(findPredecessorRow(null, { idx: 1001 }), { unresolved: 'first_in_job' });
         assert.deepEqual(findPredecessorRow(undefined, { idx: 1002 }), { unresolved: 'extract_gap' });
+    });
+});
+
+describe('findPredecessorRow — 塊尾被 extract 丟掉（M1：不猜）', () => {
+    const withElements = (idx, n) => ({ id: idx, idx, payload: { extract: { chunk_elements: n } } });
+
+    test('上一塊塊尾被丟（存活最大位置 < chunk_elements）→ extract_gap，不綁到上一塊倒數第二題', () => {
+        const rows = [withElements(1001, 3), withElements(1002, 3), withElements(2001, 1)];
+        const info = buildChunkInfo(rows);
+        assert.deepEqual(findPredecessorRow(rows, { idx: 2001 }, info), { unresolved: 'extract_gap' });
+    });
+    test('上一塊元素全數存活 → 取上一塊最後一題', () => {
+        const rows = [withElements(1001, 2), withElements(1002, 2), withElements(2001, 1)];
+        assert.equal(findPredecessorRow(rows, { idx: 2001 }, buildChunkInfo(rows)).row.id, 1002);
+    });
+    test('上一塊整塊被丟（沒有存活列、chunk_elements 由事件補不到）且有 rejected → extract_gap', () => {
+        const rows = [withElements(1001, 1), withElements(3001, 1)];
+        const info = buildChunkInfo(rows, [{ chunk: '2', rejected: '2' }]);
+        assert.deepEqual(findPredecessorRow(rows, { idx: 3001 }, info), { unresolved: 'extract_gap' });
+    });
+    test('上一塊是空塊（chunk_elements 未知、rejected = 0）→ 往更前一塊找', () => {
+        const rows = [withElements(1001, 1), withElements(3001, 1)];
+        const info = buildChunkInfo(rows, [{ chunk: '2', rejected: '0' }]);
+        assert.equal(findPredecessorRow(rows, { idx: 3001 }, info).row.id, 1001);
+    });
+    test('整份第一題但位置 > 1（位置 1 的元素被丟）→ extract_gap；位置 = 1 才是 first_in_job', () => {
+        const rows = [withElements(1002, 2), withElements(1003, 2)];
+        assert.deepEqual(findPredecessorRow(rows, { idx: 1002 }, buildChunkInfo(rows)), { unresolved: 'extract_gap' });
+        const first = [withElements(1001, 1)];
+        assert.deepEqual(findPredecessorRow(first, { idx: 1001 }, buildChunkInfo(first)), { unresolved: 'first_in_job' });
+    });
+    test('舊資料（無 chunk_elements）fallback：上一塊 extract 事件 rejected > 0 → extract_gap', () => {
+        const rows = [{ id: 1, idx: 1001 }, { id: 2, idx: 1002 }, { id: 3, idx: 2001 }];
+        const info = buildChunkInfo(rows, [{ chunk: '1', rejected: '1' }, { chunk: '2', rejected: '0' }]);
+        assert.deepEqual(findPredecessorRow(rows, { idx: 2001 }, info), { unresolved: 'extract_gap' });
+    });
+    test('舊資料 fallback：rejected = 0 或查無事件 → 照原邏輯取上一塊最後一題', () => {
+        const rows = [{ id: 1, idx: 1001 }, { id: 2, idx: 1002 }, { id: 3, idx: 2001 }];
+        assert.equal(findPredecessorRow(rows, { idx: 2001 }, buildChunkInfo(rows, [{ chunk: 1, rejected: 0 }])).row.id, 2);
+        assert.equal(findPredecessorRow(rows, { idx: 2001 }).row.id, 2);
+    });
+    test('buildChunkInfo：chunk_elements 取自列、rejected 以後出現的事件為準', () => {
+        const info = buildChunkInfo(
+            [withElements(1001, 4), { idx: 2001, payload: {} }],
+            [{ chunk: '2', rejected: '3' }, { chunk: '2', rejected: '1' }, { chunk: 'x', rejected: '1' }]);
+        assert.deepEqual(info.get(1), { elements: 4, rejected: null });
+        assert.deepEqual(info.get(2), { elements: null, rejected: 1 });
+        assert.equal(info.size, 2);
     });
 });
 

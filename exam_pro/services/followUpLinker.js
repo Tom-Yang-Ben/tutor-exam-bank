@@ -17,9 +17,13 @@
 //      對它命中的既有題 Y 做同樣判斷；只有 Y 是承上題且 follows_question_id IS NULL 才綁。
 //      舊題（legacy）就是靠這條透過重拆紀錄回填前題。
 //
+// 寫入一律 compare-and-set（WHERE follows_question_id IS NOT DISTINCT FROM <讀到的舊值>）：
+// runner 兩個槽、複核請求可能同時對同一 job 重算，讀到舊值之後別人已改過就不寫（0 列不是錯誤），
+// 下一次重算會以新現值為準。
+//
 // executor 只需要 query(text, values)：pool、{pool, query} 或交易中的 client 都可以。
 // ─────────────────────────────────────────────────────────────
-const { isFollowUp, findPredecessorRow, resolveQuestionId } = require('../utils/followUp');
+const { isFollowUp, findPredecessorRow, resolveQuestionId, buildChunkInfo } = require('../utils/followUp');
 
 const FOLLOW_SRCS = ['pipeline', 'review', 'backfill', 'human'];
 
@@ -54,6 +58,27 @@ async function loadQuestions(executor, ids) {
     return new Map(rows.map(r => [r.id, r]));
 }
 
+/** 撈一個 job 的全部 job_questions（id／idx 轉 number） */
+async function loadJobRows(executor, jobId) {
+    const { rows } = await executor.query(
+        `SELECT id, idx, state, payload, question_id FROM job_questions WHERE job_id = $1 ORDER BY idx`,
+        [jobId]);
+    return rows.map(r => ({ ...r, id: Number(r.id), idx: Number(r.idx) }));
+}
+
+/**
+ * 每塊的元素總數／被丟筆數（buildChunkInfo）。舊資料沒有 payload.extract.chunk_elements 時，
+ * 退回讀該塊 extract 事件 detail.rejected（pass／skipped 的最後一筆為準）。
+ */
+async function loadChunkInfo(executor, jobId, rows) {
+    const { rows: events } = await executor.query(
+        `SELECT detail->>'chunk' AS chunk, detail->>'rejected' AS rejected
+           FROM job_events
+          WHERE job_id = $1 AND node = 'extract' AND outcome IN ('pass', 'skipped')
+          ORDER BY id`, [jobId]);
+    return buildChunkInfo(rows, events);
+}
+
 /** 這一列是否「本 job 自己入庫的新題」（而不是 merge_into 指到既有題） */
 function isOwnSaved(row) {
     return row.state === 'saved' && Number.isInteger(row.question_id)
@@ -65,8 +90,8 @@ function isOwnSaved(row) {
  * 算出一列的前題（解析到題庫題號）。
  * @returns {{question_id:number}|{unresolved:string}}
  */
-function expectedPredecessor(rows, byJqId, row) {
-    const pred = findPredecessorRow(rows, row);
+function expectedPredecessor(rows, byJqId, row, chunkInfo) {
+    const pred = findPredecessorRow(rows, row, chunkInfo);
     if (pred.unresolved) return { unresolved: pred.unresolved };
     return resolveQuestionId(pred.row, byJqId);
 }
@@ -85,11 +110,9 @@ async function linkJob(executor, jobId, { src } = {}) {
     const { rows: job } = await executor.query('SELECT kind FROM jobs WHERE id = $1', [jobId]);
     if (job.length === 0 || job[0].kind !== 'pdf') return result;     // 變式 job 沒有「上一題」
 
-    const { rows: raw } = await executor.query(
-        `SELECT id, idx, state, payload, question_id FROM job_questions WHERE job_id = $1 ORDER BY idx`,
-        [jobId]);
-    const rows = raw.map(r => ({ ...r, id: Number(r.id), idx: Number(r.idx) }));
+    const rows = await loadJobRows(executor, jobId);
     const byJqId = new Map(rows.map(r => [r.id, r]));
+    const chunkInfo = await loadChunkInfo(executor, jobId, rows);
 
     // 每列「落在題庫哪一題」：自己入庫的題（規則 A）或命中的既有題 Y（規則 B）
     const plans = [];
@@ -113,7 +136,7 @@ async function linkJob(executor, jobId, { src } = {}) {
         if (fillOnly && child.follows_question_id !== null) continue;       // 規則 B：只補空
         if (child.follows_src === 'human') continue;                         // 人工指定一律不覆寫
 
-        const expected = expectedPredecessor(rows, byJqId, row);
+        const expected = expectedPredecessor(rows, byJqId, row, chunkInfo);
         if (expected.unresolved) { result.unresolved.push({ jq_id: row.id, reason: expected.unresolved }); continue; }
         const targetId = expected.question_id;
         if (targetId === childId) { result.unresolved.push({ jq_id: row.id, reason: 'self_reference' }); continue; }
@@ -124,13 +147,16 @@ async function linkJob(executor, jobId, { src } = {}) {
         if (target.subject !== child.subject) { result.unresolved.push({ jq_id: row.id, reason: 'subject_mismatch' }); continue; }
         if (await wouldCycle(executor, childId, targetId)) { result.unresolved.push({ jq_id: row.id, reason: 'cycle' }); continue; }
 
+        // compare-and-set：讀到的舊值在寫入前被別人改掉就不寫（0 列不視為錯誤）
         const { rowCount } = await executor.query(
             fillOnly
                 ? `UPDATE questions SET follows_question_id = $1, follows_src = $2
-                    WHERE id = $3 AND follows_question_id IS NULL`
+                    WHERE id = $3 AND follows_question_id IS NULL
+                      AND follows_question_id IS NOT DISTINCT FROM $4::int`
                 : `UPDATE questions SET follows_question_id = $1, follows_src = $2
-                    WHERE id = $3 AND follows_src IS DISTINCT FROM 'human'`,
-            [targetId, src, childId]);
+                    WHERE id = $3 AND follows_src IS DISTINCT FROM 'human'
+                      AND follows_question_id IS NOT DISTINCT FROM $4::int`,
+            [targetId, src, childId, child.follows_question_id]);
         if (rowCount > 0) {
             child.follows_question_id = targetId;   // 同一輪後面的列（同一個 Y）看到新值，不重複寫
             child.follows_src = src;
@@ -144,13 +170,15 @@ async function linkJob(executor, jobId, { src } = {}) {
  * 在交易內呼叫 linkJob，失敗只回滾這一段（SAVEPOINT），不拖垮外層的複核交易。
  * 綁定是衍生資料，下一次任何終態或回填都會重算，不值得為它讓老師的核准失敗。
  *
+ * 經 module.exports.linkJob 呼叫（而不是區域綁定），整合測試才能替換它來驗證「綁定丟錯時複核照常成功」。
+ *
  * @param {{query:Function}} client 已 BEGIN 的連線
  * @returns {Promise<object|null>} linkJob 的結果；失敗回 null
  */
 async function linkJobInTransaction(client, jobId, opts, log = console) {
     await client.query('SAVEPOINT follow_up_link');
     try {
-        const r = await linkJob(client, jobId, opts);
+        const r = await module.exports.linkJob(client, jobId, opts);
         await client.query('RELEASE SAVEPOINT follow_up_link');
         return r;
     } catch (err) {
@@ -163,6 +191,7 @@ async function linkJobInTransaction(client, jobId, opts, log = console) {
 /**
  * GET /api/review/:jqId 的 follow_up 區塊：這一列是不是承上題、前題是哪一列、為何還綁不上。
  * 題幹取 lint 修正後、否則 extract 原文（與 stemPreview 同一優先序）。
+ * 變式 job 不做承上題綁定（沒有「上一題」），一律回 unresolved_reason='variant_job'。
  *
  * @param {{query:Function}} executor
  * @param {{jq_id:number, job_id:number, idx:number, payload:object}} item
@@ -171,16 +200,14 @@ async function describeFollowUp(executor, item) {
     const p = item.payload || {};
     const text = (p.lint && p.lint.question_text) ?? (p.extract && p.extract.question_text) ?? '';
     const out = { is_follow_up: isFollowUp(text), predecessor: null, unresolved_reason: null };
-    if (!out.is_follow_up) return out;
 
-    const { rows: raw } = await executor.query(
-        `SELECT q.id, q.idx, q.state, q.payload, q.question_id
-           FROM job_questions q JOIN jobs j ON j.id = q.job_id
-          WHERE q.job_id = $1 AND j.kind = 'pdf' ORDER BY q.idx`, [item.job_id]);
-    const rows = raw.map(r => ({ ...r, id: Number(r.id), idx: Number(r.idx) }));
-    if (rows.length === 0) return out;
+    const { rows: job } = await executor.query('SELECT kind FROM jobs WHERE id = $1', [item.job_id]);
+    if (job.length > 0 && job[0].kind !== 'pdf') { out.unresolved_reason = 'variant_job'; return out; }
+    if (!out.is_follow_up || job.length === 0) return out;
 
-    const pred = findPredecessorRow(rows, { idx: Number(item.idx) });
+    const rows = await loadJobRows(executor, item.job_id);
+    const chunkInfo = await loadChunkInfo(executor, item.job_id, rows);
+    const pred = findPredecessorRow(rows, { idx: Number(item.idx) }, chunkInfo);
     if (pred.unresolved) { out.unresolved_reason = pred.unresolved; return out; }
 
     const pp = pred.row.payload || {};

@@ -31,31 +31,82 @@ function isFollowUp(text) {
 }
 
 /**
- * 找本題在同一 job 中的前題列。
+ * 每塊的「模型回傳元素總數」與「被 schema 驗證丟掉的筆數」，給 findPredecessorRow 判斷塊尾有沒有被丟的題。
  *
- * - 本題不是塊內第一題 → 前題必須是 idx - 1；不存在代表中間有元素被 schema 驗證丟掉 → extract_gap。
- * - 本題是某塊第一題 → 取 idx 比本題小的最大那列（上一塊最後一題）；沒有 → first_in_job。
+ * - `elements`：runner 在 insertJobQuestions 時替每題追加的 `payload.extract.chunk_elements`
+ *   （該塊 questions + rejected 的總數；比照 figure_img 由 runner 追加，不動 extract 模板／schema／cassette）。
+ * - `rejected`：舊資料沒有 chunk_elements 時的退路——該塊 extract 事件（pass／skipped 的最後一筆）
+ *   `job_events.detail.rejected` 的筆數。
+ *
+ * @param {Array<{idx:number, payload?:object}>} rows
+ * @param {Array<{chunk:number|string, rejected:number|string}>} [extractEvents] 依 id 遞增
+ * @returns {Map<number, {elements:number|null, rejected:number|null}>}
+ */
+function buildChunkInfo(rows, extractEvents) {
+    const info = new Map();
+    const slot = (c) => {
+        if (!info.has(c)) info.set(c, { elements: null, rejected: null });
+        return info.get(c);
+    };
+    for (const r of Array.isArray(rows) ? rows : []) {
+        const n = Number(r.payload && r.payload.extract && r.payload.extract.chunk_elements);
+        if (Number.isInteger(n) && n >= 0) slot(Math.floor(Number(r.idx) / IDX_CHUNK)).elements = n;
+    }
+    for (const e of Array.isArray(extractEvents) ? extractEvents : []) {
+        const c = Number(e.chunk);
+        const n = Number(e.rejected);
+        if (Number.isInteger(c) && Number.isInteger(n) && n >= 0) slot(c).rejected = n;   // 後面的事件蓋掉前面的
+    }
+    return info;
+}
+
+/**
+ * 找本題在同一 job 中的前題列。**不猜**：前題可能被 extract 丟掉時一律回 extract_gap。
+ *
+ * - 本題不是塊內第一個位置 → 前題必須是 idx - 1；不存在代表前一個元素被丟掉 → extract_gap
+ *   （含「整份第一題但位置 > 1」：位置 1 的元素被丟了）。
+ * - 本題位置 = 1 → 往前逐塊找：
+ *     · 該塊有 chunk_elements：存活的最大位置 < chunk_elements → 塊尾被丟 → extract_gap；
+ *       相等 → 取該塊最後一題；chunk_elements = 0（空塊）→ 再往前一塊。
+ *     · 沒有 chunk_elements（舊資料）：extract 事件的 rejected > 0 → extract_gap（分不出丟的是不是塊尾）；
+ *       = 0 或查無事件 → 有題就取最後一題，沒題就再往前一塊。
+ *   走到第一塊之前都沒有 → first_in_job。
  *
  * @param {Array<{idx:number}>} rows 同一 job 的全部 job_questions 列（順序不拘）
  * @param {{idx:number}} jq 本題
+ * @param {Map<number, {elements:number|null, rejected:number|null}>} [chunkInfo] buildChunkInfo 的結果
  * @returns {{row:object}|{unresolved:'extract_gap'|'first_in_job'}}
  */
-function findPredecessorRow(rows, jq) {
+function findPredecessorRow(rows, jq, chunkInfo) {
     const idx = Number(jq.idx);
     const position = idx % IDX_CHUNK;
+    const chunk = Math.floor(idx / IDX_CHUNK);
     const list = Array.isArray(rows) ? rows : [];
+    const info = chunkInfo instanceof Map ? chunkInfo : new Map();
 
     if (position > 1) {
         const prev = list.find(r => Number(r.idx) === idx - 1);
         return prev ? { row: prev } : { unresolved: 'extract_gap' };
     }
 
-    let best = null;
-    for (const r of list) {
-        const n = Number(r.idx);
-        if (n < idx && (best === null || n > Number(best.idx))) best = r;
+    for (let c = chunk - 1; c >= 1; c--) {
+        let last = null;
+        for (const r of list) {
+            const n = Number(r.idx);
+            if (Math.floor(n / IDX_CHUNK) === c && (last === null || n > Number(last.idx))) last = r;
+        }
+        const maxPos = last ? Number(last.idx) % IDX_CHUNK : 0;
+        const ci = info.get(c) || {};
+
+        if (Number.isInteger(ci.elements)) {
+            if (maxPos < ci.elements) return { unresolved: 'extract_gap' };
+            if (last) return { row: last };
+            continue;
+        }
+        if (Number.isInteger(ci.rejected) && ci.rejected > 0) return { unresolved: 'extract_gap' };
+        if (last) return { row: last };
     }
-    return best ? { row: best } : { unresolved: 'first_in_job' };
+    return { unresolved: 'first_in_job' };
 }
 
 /**
@@ -105,6 +156,6 @@ function resolveQuestionId(row, byJqId, depth = 0) {
 }
 
 module.exports = {
-    isFollowUp, findPredecessorRow, resolveQuestionId,
+    isFollowUp, findPredecessorRow, resolveQuestionId, buildChunkInfo,
     FOLLOW_UP_RE, IDX_CHUNK, MAX_RESOLVE_DEPTH
 };

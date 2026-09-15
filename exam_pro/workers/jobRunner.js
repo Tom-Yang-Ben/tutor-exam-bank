@@ -950,6 +950,10 @@ function createRunner(opts = {}) {
      */
     async function insertJobQuestions(jobId, chunk, data) {
         const list = Array.isArray(data.questions) ? data.questions : [];
+        // FR-019：該塊模型回傳的元素總數（含被 schema 驗證丟掉的）。承上題找前題時用它判斷
+        // 「上一塊的塊尾有沒有題被丟」，避免跨塊靜默綁錯。比照 figure_img 由 runner 追加，
+        // 不動 extract 模板／schema／cassette。
+        const chunkElements = list.length + (Array.isArray(data.rejected) ? data.rejected.length : 0);
         let created = 0;
         for (let i = 0; i < list.length; i++) {
             const q = list[i];
@@ -958,7 +962,8 @@ function createRunner(opts = {}) {
                 extract: {
                     ...q, idx,
                     chunk_no: q?.chunk_no ?? chunk.no,
-                    page_range: q?.page_range ?? [chunk.fromPage, chunk.toPage]
+                    page_range: q?.page_range ?? [chunk.fromPage, chunk.toPage],
+                    chunk_elements: chunkElements
                 }
             };
             const { rowCount } = await db.query(
