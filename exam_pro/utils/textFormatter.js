@@ -28,8 +28,25 @@ const SYMBOLS = {
     parallel: '∥', circ: '∘', prime: '′', neg: '¬', wedge: '∧', vee: '∨',
     oplus: '⊕', otimes: '⊗', langle: '⟨', rangle: '⟩', lfloor: '⌊', rfloor: '⌋',
     lceil: '⌈', rceil: '⌉', prod: '∏', oint: '∮', sqrt: '√', because: '∵',
-    therefore: '∴', degree: '°', backslash: '\\', percent: '%'
+    therefore: '∴', degree: '°', backslash: '\\', percent: '%',
+    // 2026-09-15 補：題庫實際出現過而未登錄的四個（\ell 舊題、\triangle 三角形題）
+    ell: 'ℓ', hbar: 'ℏ', triangle: '△', square: '□'
 };
+
+// \mathbb{R} 之類的黑板粗體：單一拉丁字母映射到 Unicode 雙線字，其餘照字面輸出
+const BLACKBOARD = {
+    A: '𝔸', B: '𝔹', C: 'ℂ', D: '𝔻', E: '𝔼', F: '𝔽', G: '𝔾', H: 'ℍ', I: '𝕀', J: '𝕁', K: '𝕂', L: '𝕃', M: '𝕄',
+    N: 'ℕ', O: '𝕆', P: 'ℙ', Q: 'ℚ', R: 'ℝ', S: '𝕊', T: '𝕋', U: '𝕌', V: '𝕍', W: '𝕎', X: '𝕏', Y: '𝕐', Z: 'ℤ'
+};
+
+/**
+ * 把跨行的區塊公式（$$…$$、\[…\]）內的換行換成空白，長度不變、位置不變。
+ * buildParagraphComponents 與 formulaLint 都是逐行掃描；表格類 \begin{array} 幾乎必然跨行，
+ * 不先摺起來就會在第一行被判成「環境沒關」、後面幾行被當純文字印出。
+ */
+function foldDisplayMath(s) {
+    return String(s).replace(/\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]/g, (block) => block.replace(/\n/g, ' '));
+}
 
 const FUNCTIONS = new Set([
     'sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'arcsin', 'arccos', 'arctan',
@@ -294,6 +311,7 @@ function createParser(tokens, stopCJK, diag = null) {
         const flushCell = () => { row.push(cell); cell = []; };
         const flushRow = () => { flushCell(); rows.push(row); row = []; };
         for (const t of bodyToks) {
+            if (t.type === 'command' && t.value === 'hline') continue;   // 表格橫線：OMML 矩陣無對應物，略過
             if (t.type === 'lbrace') depth++;
             else if (t.type === 'rbrace') depth = Math.max(0, depth - 1);
             if (depth === 0) {
@@ -304,7 +322,7 @@ function createParser(tokens, stopCJK, diag = null) {
         }
         flushRow();
 
-        const kept = rows.filter(r => r.some(c => c.length > 0));
+        const kept = rows.filter(r => r.some(c => c.some(t => t.type !== 'space')));   // 只剩空白（或只剩被略過的 hline）的列不算
         if (kept.length === 0) return [mr(' ')];
 
         // Word 要求每一列的 m:e 數目相同：短的列補空儲存格
@@ -468,6 +486,13 @@ function createParser(tokens, stopCJK, diag = null) {
             name === 'mathit' || name === 'operatorname' || name === 'mbox') {
             return parseArg();
         }
+        if (name === 'mathbb' || name === 'mathcal' || name === 'mathfrak' || name === 'boldsymbol') {
+            // 黑板粗體只對單一拉丁字母有 Unicode 對應（ℝ、ℕ…）；其餘（含 \mathcal 等）照字面輸出
+            const text = readRawGroupText();
+            const mapped = name === 'mathbb' ? text.split('').map((ch) => BLACKBOARD[ch] || ch).join('') : text;
+            return mr(mapped || ' ');
+        }
+        if (name === 'hline') return mr(' ');   // 表格橫線落在矩陣環境外：不破版、不算未知指令
         if (name === 'begin') {
             // \begin{env}：矩陣類環境以線性形式呈現（MATRIX_ENVS 的說明見檔頭）。
             // 不認得的環境維持既有的 unknown_command 路徑（peekGroupName 只窺看不消耗，
@@ -569,7 +594,7 @@ function renderMixedInto(out, text, opts, diag = null, base = 0) {
 // diag 為 A-T4 新增的選用診斷收集器（parseLatexStrict 用），不傳時行為與動工前完全相同。
 function buildParagraphComponents(textStr, textOptions = {}, diag = null) {
     if (!textStr) return [];
-    let s = stripUnsafe(textStr).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    let s = foldDisplayMath(stripUnsafe(textStr).replace(/\r\n/g, '\n').replace(/\r/g, '\n'));
     const lines = s.split('\n');
     const comps = [];
 
@@ -657,6 +682,6 @@ const STRICT_EVENT_KINDS = Object.freeze([
 
 module.exports = {
     buildParagraphComponents, xmlSafeClean, parseLatexToMath,
-    parseLatexStrict, STRICT_EVENT_KINDS,
-    GREEK, SYMBOLS, FUNCTIONS, ACCENTS
+    parseLatexStrict, STRICT_EVENT_KINDS, foldDisplayMath,
+    GREEK, SYMBOLS, FUNCTIONS, ACCENTS, BLACKBOARD
 };
