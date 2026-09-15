@@ -1,8 +1,17 @@
 const { pool, query } = require('../config/db');
-const { pickOnePerFamily } = require('../utils/pickOnePerFamily');
+const { pickPaperUnits, sortForPaperGrouped } = require('../utils/paperGroups');
 
 const MAX_QUESTIONS = 50; // 單次抽題上限，避免一次撈整章
 const MAX_EXCLUDE = 200;  // 換一題／重抽的排除清單上限（roadmap-plan.md §6.2.2）
+
+/**
+ * 承上題整組抽取湊不到剛好 N 題時的政策（FR-019 PR2；**待 owner 決定**，單點切換）：
+ *   'note'  （預設）少出題，200 回應附 shortfall＋note 說明實際題數與原因
+ *   'error' 回 400，請老師調整題數
+ * 例：要 5 題，抽到 4 題後剩下的組都是 2 題一組。
+ * 「真的庫存不足」（可用題數 < N）不受此政策影響，照舊回 400。
+ */
+const FOLLOW_UP_SHORTFALL_POLICY = 'note';
 
 // ─────────────────────────────────────────────────────────────
 // 智慧組卷（D-D4 重寫；階段 4 W1-1/W1-2 改契約，docs/roadmap-plan.md §6.2.2）
@@ -22,16 +31,12 @@ const MAX_EXCLUDE = 200;  // 換一題／重抽的排除清單上限（roadmap-p
 //            後者整筆交易回滾並回 409，而不是悄悄少記一題。
 // ─────────────────────────────────────────────────────────────
 
-/** 考卷內的排序：題型權重 → 難度（generate 與 confirm 共用，兩邊順序才一致）。 */
-function sortForPaper(questions) {
-    const typeWeights = { '單選': 1, '多選': 2, '填空': 3, '計算': 4, '證明': 5 };
-    return [...questions].sort((a, b) => {
-        const wA = typeWeights[a.question_type] || 99;
-        const wB = typeWeights[b.question_type] || 99;
-        if (wA !== wB) return wA - wB;
-        return (a.difficulty || 3) - (b.difficulty || 3);
-    });
-}
+/**
+ * 考卷內的排序：題型權重 → 難度（generate 與 confirm 共用，兩邊順序才一致）。
+ * 承上題組（FR-019）以組為單位、依組首題排序，組內依承接順序相鄰；
+ * 題目須帶 follows_question_id。沒有綁定時與舊版逐題排序結果相同。
+ */
+const sortForPaper = sortForPaperGrouped;
 
 /** 標題與 assigned_at 都用**本地時區**（toISOString 是 UTC，台灣早上 8 點前會差一天）。 */
 function localDates() {
@@ -65,16 +70,24 @@ async function resolveStudent({ student_id, student_name }) {
 
 /**
  * 選題（**只讀不寫**）：generate-paper 與助教工具 preview_paper 共用。
- * 候選池、家族互斥、庫存不足訊息、排序、標題——與寫入路徑用同一段程式碼，
+ * 候選池、承上題整組、家族互斥、庫存不足訊息、排序、標題——與寫入路徑用同一段程式碼，
  * 預覽看到什麼、確認就寫什麼。
+ *
+ * 承上題（FR-019 PR2，utils/paperGroups.js）：選題單位是「前題＋所有承上題」一組，
+ * 抽到就整組相鄰出現、整組算多題。**組內任一題不在候選池（已作答、exclude_ids、
+ * 已封存、source_types 不符、科目或章節不同）時整組不抽**，避免孤兒承上題。
+ *
+ * @param {'note'|'error'} [shortfallPolicy] 湊不滿 N 題時的政策，預設 FOLLOW_UP_SHORTFALL_POLICY
  * @returns {Promise<{error:{status:number,message:string}}|
- *                   {sortedQuestions:object[], finalSortedIds:number[], paperTitle:string, todayStr:string}>}
+ *                   {sortedQuestions:object[], finalSortedIds:number[], paperTitle:string, todayStr:string,
+ *                    shortfall:{requested:number,actual:number,reason:'follow_up_group'}|null, note:string|null}>}
  */
-async function selectPaperQuestions({ studentId, studentName, subject, chapter, limitCount, excludeIds = [], sourceTypes = null }) {
+async function selectPaperQuestions({ studentId, studentName, subject, chapter, limitCount, excludeIds = [], sourceTypes = null,
+    shortfallPolicy = FOLLOW_UP_SHORTFALL_POLICY }) {
     // 候選池：同學科同章、未封存、該生沒寫過、且不在排除清單內；
     // sourceTypes（0006 題源過濾）為 null 時不限制——助教工具與既有呼叫端行為不變
     const { rows: candidates } = await query(
-        `SELECT q.id, q.variant_of FROM questions q
+        `SELECT q.id, q.variant_of, q.follows_question_id FROM questions q
           WHERE q.subject = $1 AND q.chapter = $2 AND q.archived_at IS NULL
             AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.question_id = q.id AND a.student_id = $3)
             AND NOT (q.id = ANY($4::int[]))
@@ -82,27 +95,62 @@ async function selectPaperQuestions({ studentId, studentName, subject, chapter, 
         [subject, chapter, studentId, excludeIds, sourceTypes]
     );
 
-    // 家族互斥：同一 variant_of 家族在同一張卷只取一題（規劃 §4.1）。
-    // pickOnePerFamily 內部已做「每組洗牌取代表 → 對代表 Fisher-Yates」。
-    // 「庫存不足」檢查在家族互斥**之後**（裁決 S3-6），${n} 代入家族數。
-    const familyPicked = pickOnePerFamily(candidates);
-    if (familyPicked.length < limitCount) {
-        return { error: { status: 400, message: `新題目庫存不足！該章節 [${studentName}] 沒寫過的題目僅剩 ${familyPicked.length} 題。` } };
+    // 候選題所在承上組的完整成員（含不在候選池的題，用來判斷整組是否可用）。
+    // 無向走訪 follows_question_id：往下找承上題、往上找前題；UNION 去重，資料有環也會停。
+    // 只回有綁定關係的列——沒有綁定的候選題已在 candidates 裡。
+    let related = [];
+    if (candidates.length > 0) {
+        ({ rows: related } = await query(
+            `WITH RECURSIVE grp(id) AS (
+                 SELECT unnest($1::int[])
+                 UNION
+                 SELECT CASE WHEN q.id = g.id THEN q.follows_question_id ELSE q.id END
+                   FROM questions q JOIN grp g
+                     ON q.follows_question_id = g.id
+                     OR (q.id = g.id AND q.follows_question_id IS NOT NULL)
+             )
+             SELECT q.id, q.follows_question_id FROM questions q JOIN grp g ON g.id = q.id
+              WHERE q.follows_question_id IS NOT NULL
+                 OR EXISTS (SELECT 1 FROM questions c WHERE c.follows_question_id = q.id)`,
+            [candidates.map(c => c.id)]
+        ));
     }
 
-    const rawSelectedIds = familyPicked.slice(0, limitCount).map(q => q.id);
+    // 家族互斥：同一 variant_of 家族在同一張卷只取一題（規劃 §4.1）。
+    // pickPaperUnits 內部走 pickOnePerFamily（每組洗牌取代表 → 對代表 Fisher-Yates），單位是承上組。
+    // 「庫存不足」檢查在家族互斥**之後**（裁決 S3-6），${n} 代入家族互斥後可用的題數（無綁定時＝家族數）。
+    const picked = pickPaperUnits({ candidates, related, limitCount });
+    if (picked.availableCount < limitCount) {
+        return { error: { status: 400, message: `新題目庫存不足！該章節 [${studentName}] 沒寫過的題目僅剩 ${picked.availableCount} 題。` } };
+    }
+
+    // 庫存夠、但承上題組塞不進剩下的名額 → 依政策少出題並附註，或回 400
+    let shortfall = null;
+    let note = null;
+    if (picked.actual < limitCount) {
+        if (picked.actual === 0) {
+            return { error: { status: 400, message: `承上題須與前題整組出題，可用的題組每組至少 ${picked.minUnitSize} 題，無法湊出 ${limitCount} 題，請調高題數。` } };
+        }
+        if (shortfallPolicy === 'error') {
+            return { error: { status: 400, message: `承上題須與前題整組出題，無法剛好湊滿 ${limitCount} 題（最多可出 ${picked.actual} 題），請調整題數。` } };
+        }
+        shortfall = { requested: limitCount, actual: picked.actual, reason: 'follow_up_group' };
+        note = `承上題須與前題整組出題，無法剛好湊滿 ${limitCount} 題，本卷實際 ${picked.actual} 題。`;
+    }
+
     const { rows: fullQuestions } = await query(
-        `SELECT id, question_text, question_type, difficulty, answer_text, source_type, source_detail
+        `SELECT id, question_text, question_type, difficulty, answer_text, source_type, source_detail, follows_question_id
            FROM questions WHERE id = ANY($1::int[])`,
-        [rawSelectedIds]
+        [picked.ids]
     );
     const sortedQuestions = sortForPaper(fullQuestions);
     const finalSortedIds = sortedQuestions.map(q => q.id);
     const { titleDate, todayStr } = localDates();
-    return { sortedQuestions, finalSortedIds, paperTitle: `${studentName}-${chapter}特訓卷(${titleDate})`, todayStr };
+    return { sortedQuestions, finalSortedIds, paperTitle: `${studentName}-${chapter}特訓卷(${titleDate})`, todayStr, shortfall, note };
 }
 // 給助教工具（services/assistantService.js）內部共用，不是路由
 exports.selectPaperQuestions = selectPaperQuestions;
+exports.FOLLOW_UP_SHORTFALL_POLICY = FOLLOW_UP_SHORTFALL_POLICY;
 exports.resolveStudentInternal = resolveStudent;
 
 exports.generatePaper = async (req, res, next) => {
@@ -151,6 +199,8 @@ exports.generatePaper = async (req, res, next) => {
         });
         if (picked.error) return res.status(picked.error.status).json({ message: picked.error.message });
         const { sortedQuestions, finalSortedIds, paperTitle, todayStr } = picked;
+        // 少出題附註（FR-019 PR2）：只在真的少出時才帶 shortfall／note 兩鍵，其餘回應形狀不變
+        const shortfallKeys = picked.shortfall ? { shortfall: picked.shortfall, note: picked.note } : {};
 
         // ── dry_run：到此為止，一個位元組都沒寫（W1-2 的「草稿」）──
         if (dry_run) {
@@ -160,7 +210,8 @@ exports.generatePaper = async (req, res, next) => {
                 student_id: student.id,
                 paper_title_preview: paperTitle,
                 question_ids: finalSortedIds,
-                questions: sortedQuestions
+                questions: sortedQuestions,
+                ...shortfallKeys
             });
         }
 
@@ -176,7 +227,8 @@ exports.generatePaper = async (req, res, next) => {
             paper_id: outcome.paperId,
             paper_title: paperTitle,
             question_ids: finalSortedIds,
-            questions: sortedQuestions
+            questions: sortedQuestions,
+            ...shortfallKeys
         });
     } catch (err) {
         next(err);
@@ -241,7 +293,7 @@ exports.confirmPaper = async (req, res, next) => {
         if (!student) return res.status(404).json({ message: '找不到該學生' });
 
         const { rows: fullQuestions } = await query(
-            `SELECT id, chapter, question_text, question_type, difficulty, answer_text
+            `SELECT id, chapter, question_text, question_type, difficulty, answer_text, follows_question_id
                FROM questions WHERE id = ANY($1::int[]) AND archived_at IS NULL`,
             [question_ids]
         );
@@ -249,6 +301,8 @@ exports.confirmPaper = async (req, res, next) => {
             return res.status(400).json({ message: '部分題目已不存在或已封存，請重新預覽。' });
         }
 
+        // 承上題組依承接順序相鄰（與預覽同一個排序函式）。這裡不重驗組是否完整：
+        // 題目就是預覽整組抽出的那批；呼叫端自行拼湊 question_ids 時照給的題出卷。
         const sortedQuestions = sortForPaper(fullQuestions);
         const finalSortedIds = sortedQuestions.map(q => q.id);
         const { titleDate, todayStr } = localDates();
