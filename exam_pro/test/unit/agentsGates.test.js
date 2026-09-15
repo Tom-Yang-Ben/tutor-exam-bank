@@ -119,13 +119,17 @@ describe('agents/lint — ③ 仍有 error 才呼叫 LLM 重寫', () => {
         await lintAgent.run(ctx, broken);
         const opts = calls.gen[0];
         assert.equal(opts.agent, 'lint');
-        assert.equal(opts.template, 'lint.v1');
+        assert.equal(opts.template, 'lint.v2');
         assert.equal(opts.model, DEFAULT_CONFIG.models.extract, 'lint 的第三層用 MODEL_EXTRACT');
-        assert.equal(opts.cacheKeyParts.template, 'lint.v1');
+        assert.equal(opts.cacheKeyParts.template, 'lint.v2');
         assert.ok(Array.isArray(opts.cacheKeyParts.issues));
         assert.deepEqual(opts.cacheKeyParts.issues, [...opts.cacheKeyParts.issues].sort(), 'issues 必須排序過才可重現');
         assert.ok(opts.schema && opts.schema.type === 'object');
         assert.ok(Object.isFrozen(opts.schema), 'schema 應該是深凍結的');
+        // v2（2026-09-15）：規則 3 不得再叫模型改寫 \mathbb（PR #18 已支援），且要列出 array 表格
+        assert.ok(lintAgent.PROMPT_TEMPLATE.includes('\\begin{array}'), 'lint 規則要列出 array 表格');
+        assert.ok(lintAgent.PROMPT_TEMPLATE.includes('\\mathbb{R} 也支援'), 'lint 規則要說明 \\mathbb 已支援');
+        assert.ok(!/\\mathbb[^。]*仍不支援/.test(lintAgent.PROMPT_TEMPLATE), 'lint 規則不得在同一句說 \\mathbb 不支援');
     });
 
     test('prompt 帶上偵測到的 issues 與上一輪的 feedback', async () => {

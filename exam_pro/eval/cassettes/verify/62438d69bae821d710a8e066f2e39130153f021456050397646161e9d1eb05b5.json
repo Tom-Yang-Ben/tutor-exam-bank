@@ -3,7 +3,7 @@
     "agent": "verify",
     "model": "gemini-3.1-pro-preview",
     "template": "verify.v1",
-    "recorded_at": "2026-08-27T09:13:51.920Z",
+    "recorded_at": "2026-09-15T12:05:01.853Z",
     "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
   },
   "request": {
@@ -25,14 +25,14 @@
     "data": {
       "final_answer": "25 m",
       "answer_form": "number",
-      "steps_summary": "已知初速 v_0 = 0，加速度 a = 2 m/s²，時間 t = 5 s。根據等加速度直線運動的位移公式 x = v_0 t + (1/2)at²，將數值代入可得 x = 0 + (1/2) × 2 × 5² = 25。故物體 5 秒後的位移為 25 m。"
+      "steps_summary": "根據等加速度直線運動的位移公式：$S = v_0 t + \\frac{1}{2} a t^2$。已知物體由靜止出發，故初速 $v_0 = 0\\text{ m/s}$；加速度 $a = 2\\text{ m/s}^2$，時間 $t = 5\\text{ s}$。將數值代入公式，可得位移 $S = 0 \\times 5 + \\frac{1}{2} \\times 2 \\times 5^2 = 25\\text{ (m)}$。因此，$5$ 秒後的位移為 $25\\text{ m}$。"
     },
     "usage": {
       "tokenIn": 145,
-      "tokenOut": 115,
-      "tokenThinking": 317,
+      "tokenOut": 186,
+      "tokenThinking": 539,
       "tokenCached": 0
     },
-    "latencyMs": 32128
+    "latencyMs": 7063
   }
 }

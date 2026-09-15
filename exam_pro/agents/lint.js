@@ -19,7 +19,7 @@ const { formulaLint } = require('../utils/formulaLint');
 const { buildSchema } = require('./schemas');
 const { registerTemplate } = require('../services/llm/templates');
 
-const TEMPLATE = 'lint.v1';
+const TEMPLATE = 'lint.v2';   // v2（2026-09-15）：規則 3 補 array 表格、\mathbb 已支援（PR #18）
 // 兩個數字成對設定，不要單獨調（同 agents/verify.js 的教訓；2026-08-27 job #5 的
 // lint 節點也出現 4 次「Unterminated string in JSON」）：MODEL_EXTRACT 是 thinking
 // 模型，思考 token 計入 maxOutputTokens 額度，不設 thinkingBudget 時長題的重寫
@@ -57,7 +57,7 @@ const PROMPT_TEMPLATE = [
     '要求：',
     '1. 行內公式一律用 $…$ 包起來，展示公式用 $$…$$。',
     '2. 分數用 \\frac{分子}{分母}，根號用 \\sqrt{…}，上下標用 ^{…} 與 _{…}，大括號必須成對。',
-    '3. 矩陣與方程組可用 \\begin{bmatrix}…\\end{bmatrix}、\\begin{pmatrix}…\\end{pmatrix}、\\begin{cases}…\\end{cases} 或 \\matrix{…}（列以 \\\\ 分隔、欄以 & 分隔），這些本系統支援、不要改寫掉；\\mathbb、\\overrightarrow 這類指令仍不支援，請改寫（如 \\overrightarrow 改 \\vec）。',
+    '3. 矩陣、方程組與表格可用 \\begin{bmatrix}…\\end{bmatrix}、\\begin{pmatrix}…\\end{pmatrix}、\\begin{cases}…\\end{cases}、\\matrix{…} 或 \\begin{array}{|c|c|}…\\end{array}（表格可含 \\hline，整個表格放在同一對 $$…$$ 裡、可以跨行；列以 \\\\ 分隔、欄以 & 分隔），這些本系統支援、不要改寫掉；\\mathbb{R} 也支援。\\overrightarrow 仍不支援，請改寫為 \\vec。',
     '4. 中文敘述、數字、單位、選項內容保持原樣。',
 ].join('\n');
 
