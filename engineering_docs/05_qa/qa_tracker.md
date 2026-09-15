@@ -12,6 +12,7 @@
 > 🛠 **2026-09-15f 修訂**（feat/follow-up-links 審查修正）：TC-019-* 狀態改為實跑結果並補跨塊塊尾被丟、刪除前題 409、綁定失敗不影響複核／管線、變式題不綁等案例；TC-019-5 新增；§2.1 單元 1,499→1,507、整合 262→290、e2e 11（本分支實跑）。修改處以〔修訂 2026-09-15f〕行內標記。
 > 🛠 **2026-09-15f 修訂**（feat/source-check）：§1 新增 TC-020-1～3（原卷文字層比對）、TC-006-1 原因八種→九種；②執行證據 單元 1,476→1,534、整合 262→269（feat/source-check 實測）；§3 上游補 FR-020。修改處以〔修訂 2026-09-15f〕行內標記。
 > 🛠 **2026-09-15 合併同步**（feat/follow-up-links 併入 feat/source-check）：②執行證據 單元 1,565（其後原卷比對審查修正補 2 項單元測試，現況 1,567）／整合 297／e2e 11（合併後實跑）；§3 上游補 FR-019。上列兩分支修訂列所載之各分支實測數與範圍為當時紀錄，保留不改。合併重算處以〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕雙標記。
+> 🛠 **2026-09-16 修訂**（feat/follow-up-protect-badge，FR-019 PR3）：§1 新增 TC-019-6～7。②執行證據之全域測試數未改（由主線合併時統一更新）。修改處以〔修訂 2026-09-16〕行內標記。
 
 ## 目錄
 
@@ -55,6 +56,8 @@ TC 依 FR 分組（`TC-<FR 號>-<序>`）；層級：U=單元、I=整合、E=e2e
 | TC-019-3 | FR-019 | 人工複核重算：前題待複核→approve 補綁 src=review、重複暫綁→approve 成新題改綁、merge_into 綁目標、reject 非重複前題不綁、GET /api/review/:jqId 的 follow_up 區塊（含 extract_gap、variant_job）；human 不覆寫、成環擋下、補強規則只補空、同 job 撞題跳過補強、approve 時綁定在 SAVEPOINT 內丟錯仍 200（同檔）〔修訂 2026-09-15f〕 | I | 通過（本分支實跑）〔修訂 2026-09-15f〕 |
 | TC-019-4 | FR-019 | 0008 結構（兩欄、具名 CHECK、部分索引、FK NO ACTION 允許整組同句刪除）（`exam_pro/test/integration/schema.test.js`）；回填腳本 dry-run 不寫入且重跑報告相同、正式跑冪等、孤兒清單（`followUp.pg.test.js`）〔修訂 2026-09-15e〕；另於正式庫複本實跑：dry-run 將綁 7 題、回滾後 0 筆，正式跑 7 題、再跑 0 題〔修訂 2026-09-15f〕 | I | 通過（本分支實跑）〔修訂 2026-09-15f〕 |
 | TC-019-5 | FR-019 | DELETE /api/questions/:id：刪承上題的前題 → 409 帶 `children`、先刪承上題再刪前題成功；匯入任務產生的題 → 409 請改用封存（原為 500）（`followUp.pg.test.js`「刪除前題（M2）」）〔修訂 2026-09-15f〕 | I | 通過（本分支實跑） |
+| TC-019-6 | FR-019 | DELETE 保護與整組處理：變式藍本 → 409 帶 `job_ids`（原為 500，修前實跑重現）；`?group=1` 三層鏈無引用整組硬刪、孫題有作答整組封存、組內有變式／匯入任務引用整組封存、從中間題開始只處理後代、已封存後代一併處理、找不到 404；未帶 group 時前題有作答且承上題在庫 → 409 不封存；GET /api/questions 回 `follows_question_id`／`has_follow_ups`（`followUp.pg.test.js`「刪除／封存保護與整組處理（PR3）」）〔修訂 2026-09-16〕 | I | 通過（feat/follow-up-protect-badge 實跑） |
+| TC-019-7 | FR-019 | 承上題不得當變式藍本：`requestVariants` 回 409 `reason:'follow_up_blueprint'`、先於向量檢查、不檢索不建 job，前題照常 202（`variantService.test.js`、`variants.pg.test.js`）〔修訂 2026-09-16〕 | U＋I | 通過（feat/follow-up-protect-badge 實跑） |
 | TC-020-1 | FR-020 | 比對器純函式：正規化（`\frac` 負號、`\pm` 不算、array 欄位格式、sin/cos 保留、NFKC、PUA 對映、題號與配分移除）、依序定位（選項歸屬、題幹相同的兩題、共用詞組不從上一題起算、題組重疊標 shared、low_anchor／not_found／no_text_layer）、比對（多負號、漏字母、無負號字形不觸發、附圖題不比字母、等價改寫 match、定位錯段 skipped）、agent 合約（off／shadow／enforce、內部例外不 throw）（`exam_pro/test/unit/sourceCheck.test.js`）；公開樣卷＋extract.v2 cassette 10 題 0 誤報、漏一個字母即 mismatch（`exam_pro/test/unit/sourceCheckSample.test.js`）〔修訂 2026-09-15f〕 | U | 通過 |
 | TC-020-2 | FR-020 | 管線接線：source_check 回 transcription_mismatch → needs_review、verify 不跑、job_events 有 source_check 列；零成本節點在當日止血時仍推進；GET /api/review?reason=transcription_mismatch；approve 入庫且事件記 source_recheck／stem_edited、不重跑閘門；0009 新值可寫入、亂值撞 CHECK；抽文字層失敗只記 status=error（`exam_pro/test/integration/jobs.pg.test.js`「runner — source_check 節點與 0009」）〔修訂 2026-09-15f〕 | I | 通過 |
 | TC-020-3 | FR-020 | 樣卷端到端：每題 payload.extract.source_text 落地、無任何 transcription_mismatch（`exam_pro/test/e2e/pipeline.e2e.test.js`）；eval pipeline 的 source_check 5 pass／5 skipped、saved_rate 門檻不掉〔修訂 2026-09-15f〕 | E＋EV | 通過 |
