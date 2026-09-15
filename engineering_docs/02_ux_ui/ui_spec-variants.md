@@ -1,6 +1,7 @@
 # UI 規格書 (UI Spec) - 相似題與變式題 - 家教專用數理題庫系統
 
-> **版本:** v1.0 | **更新:** 2026-08-25 | **狀態:** 活躍
+> **版本:** v1.1 | **更新:** 2026-09-15 | **狀態:** 活躍
+> 🛠 **2026-09-15f 修訂**（feat/source-check，FR-020）：逐題狀態 chip 值域 state 九值→十值（加 `source_checked`，顯示「檢查中」）、review_reason 八值→九值（加「題幹與原卷不符」）；中間狀態六個→七個。變式題沒有原卷，source_check 一律跳過，實務上不會出現 `transcription_mismatch`。修改處以〔修訂 2026-09-15f〕行內標記。
 > **Owner:** Ben（楊本顥）
 > **語域:** L2
 > **實例:** 每頁面一份（本篇對應 `<section id="variants">`，實作 `exam_pro/public/js/variants.js`）
@@ -44,7 +45,7 @@
 | 難度調整 | select | 送出為 body `difficulty_delta` | −1／0／+1；預設 0 |
 | 藍本題摘要 | 卡片 | 事件 `detail`（question_id、chapter、question_text） | 面板頂端固定顯示 |
 | 題目卡 | 卡片（相似題與變式題共用） | `results[]` 或 `items[]` | `#id`（或 `jq #jq_id`）／學科／章節／題型／★難度／score；題幹經 `renderMath` |
-| 逐題狀態 chip | 徽章 | `job_questions.state` 九值＋`review_reason` 八值 | 六個中間狀態合併為「生成中／檢查中」；saved＝已入庫（emerald）、needs_review＝待核准／待複核（amber／rose）、rejected＝失敗（rose） |
+| 逐題狀態 chip | 徽章 | `job_questions.state` 十值＋`review_reason` 九值〔修訂 2026-09-15f〕 | 七個中間狀態（含 `source_checked`）合併為「生成中／檢查中」；saved＝已入庫（emerald）、needs_review＝待核准／待複核（amber／rose）、rejected＝失敗（rose） |
 | 任務狀態條 | 文字條 | `GET /api/jobs/:id`（state、counts、elapsed_ms、cost_usd、budget_usd） | `jobSummary()` 彙整；成本以 `formatCost()` 顯示為 `$0.0000` 格式（0 亦顯示金額，null 顯「—」） |
 
 ## 4. 使用者操作 (Actions)
@@ -71,7 +72,7 @@
 | Loading | slot 文字 | 「查詢中…」／「請求中…」 |
 | 相似題 Empty | 白底置中提示 | 「庫裡沒有夠像的題目。可以改用『出變式』讓系統生成（會花錢）。」 |
 | 生成終態（全入庫） | emerald 狀態條 | 「任務 #id 已完成：入庫 X 題…實際花費 $…（預算 $…）。」＋「全部題目都已入庫，可以直接組卷了。」 |
-| 生成終態（有停等） | amber 狀態條 | 待核准（awaiting_approval＝六閘門全過、政策停等）與待複核（其餘七種 reason）分開計數，附前往複核按鈕 |
+| 生成終態（有停等） | amber 狀態條 | 待核准（awaiting_approval＝閘門全過、政策停等）與待複核（其餘八種 reason〔修訂 2026-09-15f〕）分開計數，附前往複核按鈕 |
 | 輪詢逾時 | amber 狀態條 | 「已經等了 60 秒還沒跑完，先不等了。任務 #id 仍在背景執行…」（逾時不等於失敗） |
 | Error（404） | amber 提示 | 「找不到這一題，或 FEATURE_SIMILAR／FEATURE_VARIANTS 未開啟（路由不掛載時同樣回 404）。」 |
 | 旗標關閉 | 整段不渲染（非隱藏） | console info 提示 `FEATURE_VARIANTS` 未開啟 |
@@ -102,7 +103,7 @@
 | :--- | :--- |
 | 設計稿 | 無獨立設計稿；實作即 SSOT（`exam_pro/public/js/variants.js`） |
 | Mock 預覽 | `?mock=1`：相似題一組、出變式 202 後依三個快照走完 queued→processing→done（含 awaiting_approval 與 duplicate 兩種結局） |
-| 已知限制 | 待核准不在本頁核准，一律導向複核分頁；中間六狀態不逐一顯示節點名（詳情屬 job 頁） |
+| 已知限制 | 待核准不在本頁核准，一律導向複核分頁；中間七狀態〔修訂 2026-09-15f〕不逐一顯示節點名（詳情屬 job 頁） |
 
 ## 10. 追溯
 

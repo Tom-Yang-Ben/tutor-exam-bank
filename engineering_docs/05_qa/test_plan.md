@@ -1,6 +1,6 @@
 # 測試計畫與測試案例 (Test Plan / Test Cases) - 家教專用數理題庫系統
 
-> **版本:** v1.2 | **更新:** 2026-09-15 | **狀態:** 活躍
+> **版本:** v1.3 | **更新:** 2026-09-15 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 單例（策略一份；案例狀態與執行證據維護在 [`qa_tracker.md`](./qa_tracker.md)）
@@ -8,6 +8,7 @@
 
 > 🛠 **2026-08-29 修訂**（PR #3–#7 程式碼同步）：§1 測試層級數 單元 1,415→1,445、整合 259→260；§1 進入條件 migrations 0001–0005→0001–0006；§4 CI 全綠 commit 0ff47b4→f8f6574；§7 執行證據數字同步。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 > 🛠 **2026-09-15d 修訂**（測試數同步）：執行證據 1,445／260／11→1,476／262／11；§1 測試層級 單元 1,445→1,476、整合 260→262（main f2af3c2 實測，2026-09-15 晚間）。修改處以〔修訂 2026-09-15d〕行內標記。
+> 🛠 **2026-09-15f 修訂**（feat/source-check）：§1 範圍補 FR-017／018／020、測試層級 1,476／262／11→1,534／269／11、進入條件 migrations 補 0007、0009；§5.2 新增 TC-020-1 代表案例（公開樣卷 0 誤報）；§7 同步。修改處以〔修訂 2026-09-15f〕行內標記。
 
 ## 目錄
 
@@ -23,11 +24,11 @@
 
 | 項目 | 內容 |
 | :--- | :--- |
-| **範圍內** | FR-001～FR-016 全數；NFR-001（認證／CORS／SSRF）、NFR-003（純函式合約與 replay）、NFR-004（eval 門檻）、NFR-005（租約與重試）、NFR-006（同交易一致性） |
+| **範圍內** | FR-001～FR-018、FR-020〔修訂 2026-09-15f〕全數；NFR-001（認證／CORS／SSRF）、NFR-003（純函式合約與 replay）、NFR-004（eval 門檻）、NFR-005（租約與重試）、NFR-006（同交易一致性） |
 | **範圍外** | 真實 Gemini API 的線上品質（CI 零金鑰零網路，NFR-003）；私有題庫上的檢索表現（`eval/private/` 不進版控，由開發者本機另行記錄）；瀏覽器相容性矩陣（單人使用，僅開發用瀏覽器驗證） |
-| **測試層級** | 三層：單元 **1,476** 項（`test/unit/`，node:test，無 I/O）／整合 **262** 項〔修訂 2026-09-15d〕（`test/integration/`，對 `_test` 後綴 PG）／e2e **11** 項（`test/e2e/`，經 HTTP 走真 runner）；另有五個 eval suite（§2）〔修訂 2026-08-29〕 |
+| **測試層級** | 三層：單元 **1,534** 項（`test/unit/`，node:test，無 I/O）／整合 **269** 項〔修訂 2026-09-15f〕（`test/integration/`，對 `_test` 後綴 PG）／e2e **11** 項（`test/e2e/`，經 HTTP 走真 runner）；另有五個 eval suite（§2）〔修訂 2026-08-29〕 |
 | **環境** | 測試 PG：`pgvector/pgvector:pg16`，本機 5433（tmpfs）、CI service container 5432；庫名必須以 `_test` 結尾，否則 `migrate.js` 與整合測試拒絕執行；`LLM_MODE=replay`、`EMBED_MODE=fixture` |
-| **進入條件** | `npm ci` 成功、`npm run migrate:test` 套用 0001–0006、`eval/cassettes/` 與 fixture 就緒〔修訂 2026-08-29〕 |
+| **進入條件** | `npm ci` 成功、`npm run migrate:test` 套用 0001–0007、0009〔修訂 2026-09-15f〕、`eval/cassettes/` 與 fixture 就緒〔修訂 2026-08-29〕 |
 | **退出條件** | 三層全綠、五個 suite 均不低於 `eval/thresholds.json` 門檻、main 上零 replay miss |
 
 分層原則：單元層不連資料庫、不呼叫 LLM、不需任何 secrets（CI unit job 刻意不設 `TEST_DATABASE_URL`，防止測試無聲越層）；整合層以 `--test-concurrency=1` 序列執行（各檔共用測試庫並 `TRUNCATE`）；e2e 量「接線有沒有斷」——與 `eval:pipeline` 不重疊，後者量分數且不經 HTTP、不碰 `jobs`／`job_questions`。
@@ -88,6 +89,7 @@
 | TC-012-1 | 自然語言查題規則路徑 | eval:nlq | rules 欄 filters_exact ≥ 0.97、recall10 ≥ 0.97 | FR-012 |
 | TC-015-1 | 批改結果回填 | 整合 | `PATCH /api/papers/:id/results` 單一交易全有全無，三態含 `null` | FR-015、NFR-006 |
 | TC-016-1 | 助教出卷僅 dry-run | 整合 | `POST /api/assistant` 出卷工具只回預覽、不寫入 | FR-016 |
+| TC-020-1 | 公開樣卷的原卷文字層比對不誤報；漏一個字母即判不符 | 單元（`exam_pro/test/unit/sourceCheckSample.test.js`，mupdf 讀 `eval/fixtures/sample_exam.pdf`＋extract.v2 cassette） | 10 題中可比對 5、跳過 5、mismatch 0；改動一題後 `missing_lower` 命中。真實原卷的校準不進 CI（`eval/tools/calibrate_source_check.js`，結果只寫 `eval/local/`） | FR-020〔修訂 2026-09-15f〕 |
 
 ## 6. 缺陷回報格式
 
@@ -102,6 +104,6 @@
 
 | 項目 | ID |
 | :--- | :--- |
-| 上游 | FR-001～FR-016、NFR-001／003／004／005／006；DEC-002、DEC-003、DEC-008；ADR-005、ADR-006 |
-| 案例與證據 | TC-* 維護於 [`qa_tracker.md`](./qa_tracker.md) ①測試設計；執行證據（1,476／262／11〔修訂 2026-09-15d〕、五個 suite、CI badge）於 ②執行證據〔修訂 2026-08-29〕 |
+| 上游 | FR-001～FR-018、FR-020〔修訂 2026-09-15f〕、NFR-001／003／004／005／006；DEC-002、DEC-003、DEC-008、DEC-013；ADR-005、ADR-006、ADR-009 |
+| 案例與證據 | TC-* 維護於 [`qa_tracker.md`](./qa_tracker.md) ①測試設計；執行證據（1,534／269／11〔修訂 2026-09-15f〕、五個 suite、CI badge）於 ②執行證據〔修訂 2026-08-29〕 |
 | 下游 | [`../06_ops/runbook-eval-threshold-fail.md`](../06_ops/runbook-eval-threshold-fail.md)、`03_architecture/engineering_tracker.md` 驗證方式欄 |

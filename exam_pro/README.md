@@ -3,7 +3,7 @@
 [![CI](https://github.com/Tom-Yang-Ben/tutor-exam-bank/actions/workflows/ci.yml/badge.svg)](https://github.com/Tom-Yang-Ben/tutor-exam-bank/actions/workflows/ci.yml)
 
 以 **Node.js 24 + Express 5 + PostgreSQL 16（pgvector）+ Google Gemini** 建置的家教題庫系統。
-上傳考卷 PDF 後由**多 Agent 管線**拆題入庫（六個 sub-agent、硬閘門、部分入庫、人工複核）；
+上傳考卷 PDF 後由**多 Agent 管線**拆題入庫（七個 sub-agent、硬閘門、原卷文字層比對、部分入庫、人工複核）；
 組卷依作答紀錄排除學生已練習的題目（先預覽、確認後寫入），並匯出含 Word 原生方程式的考卷；
 在此基礎上另建 **RAG**（相似題／變式題／自然語言查題／檢索式分類）與**對話式助教**（主控 agent＋唯讀工具）。
 
@@ -17,7 +17,7 @@
 
 | 功能 | 說明 |
 |------|------|
-| 📄 **多 Agent 拆題管線** | 上傳 PDF → `jobs` 狀態機驅動六個 sub-agent（拆題→分類→公式修復→**異模型獨立驗答**→兩段去重），節點間硬閘門，**部分入庫**：合格的題照樣進庫，有疑慮的帶著機器寫的具體原因進複核佇列 |
+| 📄 **多 Agent 拆題管線** | 上傳 PDF → `jobs` 狀態機驅動七個 sub-agent（拆題→分類→公式修復→**題幹對照原卷文字層**→**異模型獨立驗答**→兩段去重），節點間硬閘門，**部分入庫**：合格的題照樣進庫，有疑慮的帶著機器寫的具體原因進複核佇列 |
 | ✍️ **題庫管理** | 題目新增／編輯／刪除／搜尋／分頁，後端以「章節白名單」嚴格驗證；出過的題刪除時自動改封存 |
 | 🧠 **智慧組卷（草稿→確認）** | 下拉選擇學生 → 預覽（**不寫入資料庫**，可更換單題或整卷重抽）→ 確認後才建卷並記入不重複紀錄；Fisher-Yates 均勻隨機（一萬次分佈測試把關）＋變式家族互斥；另提供刪卷機制，將題目歸還候選池 |
 | 📥 **匯出 Word** | 依題型與難度排序產生 `.docx`；自製 LaTeX → OOXML 轉換，產出為可用 Word 方程式編輯器開啟修改的**原生方程式** |
@@ -53,8 +53,9 @@
 | **拆題管線與硬閘門** | `services/aiService.js:4-49` 是一個巨型 prompt、無 schema、`JSON.parse` 完就回；一題壞掉整批 400（`questionController.js:77-79`） | `jobs` 狀態機 + 五個 sub-agent + 六道閘門，逐題推進、逐題重試、部分入庫 | saved_rate **0.90**、gate_pass_rate **1.00**、answer_agree_rate **0.90**（golden 10 題；2026-08-24 replay，拆題 `gemini-3.5-flash`／驗證 `gemini-3.1-pro-preview`，commit `f4a15ca`，`npm run eval:pipeline`；門檻 0.87／0.97／0.87，只升不降） |
 | **章節分類** | 章節白名單在 prompt 裡手抄一份（`aiService.js:14-27`），與 `config/chapters.js:4-31` 是兩份真相 | 零成本閘門先擋，過不了才呼叫第二層 LLM；`responseSchema` 直接鎖 enum，伺服器再驗一次 | accuracy **0.9000**、macro-F1 **0.9256**（golden 90 筆＝60 fixture + 30 drift；2026-08-24 replay，`gemini-3.5-flash`，commit `f4a15ca`，`npm run eval:classify`；門檻已建立於 `eval/thresholds.json`，只升不降） |
 | **答案驗證** | 拆題模型會把答案抄錯，而錯得像模像樣——沒有第二個來源就查不出來 | 另一個模型獨立重算，`utils/answerCompare.js` 比對；不一致就進複核，不自動覆蓋 | answer_agree_rate **0.90**：golden 10 題中 1 題 `answer_mismatch`（驗證模型算出的答案與拆題模型不一致）進複核——正是這道閘門要抓的東西（2026-08-24，驗證 `gemini-3.1-pro-preview`，commit `f4a15ca`，`npm run eval:pipeline`） |
+| **題幹對照原卷** | 拆題模型會把題幹或選項抄錯（常數多一個負號、選項分母漏一個字母），而驗答只比答案——抄錯的題幹會讓正確答案看起來像錯；2026-09-15 以八份原卷核對，現行管線入庫題有 4 題抄錯 | extract 階段在 PDF 刪檔前以 mupdf 抽該塊文字層、定位每題原卷片段；lint 之後的零成本節點 `source_check` 做**決定性**比對（負號數量、字母與數字），不呼叫 LLM；不符即 `needs_review('transcription_mismatch')`，複核卡片可展開原卷片段（`docs/source-check.md`、ADR-009） | 公開樣卷 10 題：可比對 5、**0 誤報**（`test/unit/sourceCheckSample.test.js` 在 CI 單元層斷言）；真實原卷（本機校準，資料不進 repo）現行入庫題可比對 63 題 **TP 3、FP 0**，約 46% 題目因掃描檔、中文字太少或定位不到而跳過（2026-09-15，`eval/tools/calibrate_source_check.js`） |
 | **去重** | 「去重只看 ID」：同一題換個數字、換個排版就當成新題 | 兩段式：`dedup0` 比正規化題幹的雜湊（零成本），`dedup1` 比向量餘弦 | pipeline eval 的 needs_review 原因分佈：10 題只有 1 題（`answer_mismatch`），**0 題 dedup 類**——golden fixture 沒有重複題，dedup0（雜湊）／dedup1（餘弦 ≥ 0.97）的行為由單元與整合測試逐條釘住（2026-08-24，commit `f4a15ca`） |
-| **人工複核佇列** | 舊流程的「人工複核」是**全人工、無差別**：老師逐題看 30 題，系統不說哪一題有疑慮（`public/index.html:885-919`） | 只把有疑慮的題送進佇列，每題附**機器產生的具體原因**（「驗證模型算出 (B)，拆題模型說 (C)」） | 八種 `review_reason` 各有一句具體說明，`test/unit/publicAssets.test.js` 逐一釘住（2026-08-22，不需模型） |
+| **人工複核佇列** | 舊流程的「人工複核」是**全人工、無差別**：老師逐題看 30 題，系統不說哪一題有疑慮（`public/index.html:885-919`） | 只把有疑慮的題送進佇列，每題附**機器產生的具體原因**（「驗證模型算出 (B)，拆題模型說 (C)」） | 九種 `review_reason` 各有一句具體說明，`test/unit/publicAssets.test.js` 逐一釘住（2026-08-22 起，2026-09-15 加「題幹與原卷不符」；不需模型） |
 | **學生弱點面板** | 作答歷史塞在 `schema.sql:15` 的 `history_json` 裡、以姓名為 key；只記「出過」不記對錯，`GROUP BY chapter` 的錯誤率做不出來（規劃 §4.2） | `students`／`attempts` 正規化 + 即時 SQL 聚合（CTE 外包一層）；`graded < WEAKNESS_MIN_N` 標「樣本不足」 | 正確性由 `test/integration/students.pg.test.js` 保證（1,000 筆 fixture 逐欄比對 + `EXPLAIN` 含 `idx_attempts_student_date`）；**面板本身沒有 eval 分數，這一列的「數字」就是那支 db-test** |
 | **批改回填** | `routes/index.js` 十支路由沒有任何一支能把「第 3 題答錯」寫回去（規劃 §4.2） | `PATCH /api/papers/:id/results` 單一交易、全有全無；三態（對／錯／未批），`null` 是真的要送出去的值 | 無 eval 指標（不是漏填）；正確性由整合測試與 `test/e2e/paperWord.e2e.test.js` 的 attempts 斷言保證 |
 | **組卷家族互斥** | 變式題入庫後是一般題，同一家族可能被抽進同一張卷 | `utils/pickOnePerFamily.js`：每個 `COALESCE(variant_of, id)` 家族只留一題，抽題語意從「每題等機率」改成「**每家族等機率**」 | `test/unit/pickOnePerFamily.test.js`：契約 + 固定種子卡方分佈測試（比照 `shuffle.test.js` 的做法；家族內等機率、家族間互斥都有斷言；不需模型，2026-08-24） |
@@ -131,7 +132,7 @@ npm run eval:trend                    # 印出與上一次的差值
 exam_pro/
 ├─ server.js / app.js / routes/        # 進入點、Express 設定、路由表（旗標控制掛載）
 ├─ config/                             # 單一真相：db、models、pricing、features、chapters(+aliases/examples)
-├─ agents/ (+schemas/)                 # 六個 sub-agent（純函式合約）＋輸出 JSON Schema
+├─ agents/ (+schemas/)                 # 七個 sub-agent（純函式合約，含零成本的 source_check）＋輸出 JSON Schema
 ├─ workers/jobRunner.js                # 編排：SKIP LOCKED 認領、租約、重試預算、節流、成本上限
 ├─ pipeline/stateMachine.js            # jobs / job_questions 的合法狀態轉移
 ├─ services/                           # llm/(gemini|fake|throttle)、retrieval、nlq、variant、weakness、
@@ -143,9 +144,9 @@ exam_pro/
 │                                      # embedText、shuffle、pickOnePerFamily、normalizeStem、
 │                                      # answerCompare、variantTextGate、nlqHeuristics、formula*
 ├─ public/index.html + public/js/      # 單頁殼（5 個 hash 路由視圖）+ 五個 ES module（review/students/nlq/variants/assistant）
-├─ migrations/ + migrate.js            # 只增不改的 SQL（0001~0007）＋執行器
+├─ migrations/ + migrate.js            # 只增不改的 SQL（0001~0007、0009）＋執行器
 ├─ eval/                               # run.js（五個 suite）、lib/、golden/、cassettes/、fixtures/、thresholds.json
-├─ test/  unit(1,476) · integration(262) · e2e(11)
+├─ test/  unit(1,534) · integration(269) · e2e(11)
 ├─ scripts/ + *.bat                    # 備份、向量回填、成本報表、公式健檢（Windows 雙擊）
 └─ docker-compose.yml                  # PG16+pgvector：5442 開發（volume）／5433 測試（tmpfs）；皆只綁 127.0.0.1
 ```
@@ -200,7 +201,7 @@ flowchart TD
 
 **四條主要資料流**
 
-1. **多 Agent 拆題入庫**（`FEATURE_PIPELINE`）：上傳 PDF → `POST /api/jobs` → `workers/jobRunner.js` 驅動六個 agent 逐題推進，硬閘門把關 → 合格題**部分入庫**、疑慮題進複核佇列（`public/js/review.js`）。
+1. **多 Agent 拆題入庫**（`FEATURE_PIPELINE`）：上傳 PDF → `POST /api/jobs` → `workers/jobRunner.js` 驅動七個 agent 逐題推進（含題幹對照原卷文字層），硬閘門把關 → 合格題**部分入庫**、疑慮題進複核佇列（`public/js/review.js`）。
 2. **智慧組卷（草稿→確認）+ 匯出**：`generate-paper(dry_run)` 預覽（不寫庫）→ `confirm-paper` 在**同一交易**建 `exam_papers`＋`attempts`（`NOT EXISTS` 保證不重複）→ `wordService` 用 `textFormatter` 輸出 `.docx`。
 3. **RAG 檢索**：相似題／NLQ／變式檢索優先／kNN 分類，全部走 `queries/hybrid.js` 同一段 SQL（pgvector＋jieba 全文，RRF 融合）。
 4. **對話式助教**（`FEATURE_ASSISTANT`）：`POST /api/assistant` → 主控 LLM 以受限 JSON 調度五個只讀工具 → 回覆＋工具軌跡。主控與 NLQ 的 LLM 輔路徑看到的學生都是「學生#<id>」代號（`utils/pseudonym.js`），姓名留在伺服器端。
@@ -239,6 +240,7 @@ cp .env.example .env
 | `ALLOWED_ORIGINS` | 允許的前端來源（逗號分隔）| `http://localhost:3000` |
 | `IMAGE_HOST_ALLOWLIST` | Word 匯圖時允許的圖片網域（逗號分隔，選填）| 空 |
 | `NODE_ENV` | `production` 時錯誤不外洩細節 | `development` |
+| `SOURCE_CHECK_MODE` | 拆題結果對照原卷文字層：`off` 不比對／`shadow` 只記錄不攔／`enforce` 題幹與原卷不符即進複核；非法值一律 `enforce`（`docs/source-check.md`）| `enforce` |
 
 ### 4. 啟動資料庫並套用 migrations
 
@@ -408,7 +410,7 @@ npm run eval:baseline                                                           
 
 | # | 步驟 | 通過標準 |
 |---|------|----------|
-| 6 | `npm test` | **全數通過（2026-09-15 現況：1,476 passed / 0 failed）**；不連網、不連庫、零 secrets。CI 亦會在 push 後自動跑（badge 見本頁最上方）|
+| 6 | `npm test` | **全數通過（2026-09-15 現況：1,534 passed / 0 failed）**；不連網、不連庫、零 secrets。CI 亦會在 push 後自動跑（badge 見本頁最上方）|
 | 7 | 靜態檔完整性：確認 `public/index.html` 結尾為 `</script></body></html>`，且 `<div>`、`<script>` 開闔數相等 | 檔案未被截斷（詳見下方「截斷檔自檢」）|
 | 8 | `npm start` | 終端印出 `🚀 家教題庫後端系統已成功安全啟動：http://localhost:3000` |
 

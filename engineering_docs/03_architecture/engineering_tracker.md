@@ -1,6 +1,6 @@
 # 工程追蹤簿 (Engineering Tracker) - 家教專用數理題庫系統
 
-> **版本:** v1.2 | **更新:** 2026-09-15 | **狀態:** 活躍
+> **版本:** v1.3 | **更新:** 2026-09-15 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 單例（本檔為發布快照；`engineering_tracker.xlsx` 由本檔轉出，人工維護欄位以本檔為準）
@@ -9,6 +9,7 @@
 > 🛠 **2026-09-15 修訂**（測試數同步）：NFR-003 單元測試數 1,445→1,449（main 126243a 實測，2026-09-15）。修改處以〔修訂 2026-09-15〕行內標記。
 > 🛠 **2026-09-15b 修訂**（feat/pseudonymize-student-names 程式碼同步）：FR-016 補姓名代號化模組路徑。修改處以〔修訂 2026-09-15b〕行內標記。
 > 🛠 **2026-09-15d 修訂**（測試數同步）：NFR-003 單元測試數 1,449→1,476（main f2af3c2 實測，2026-09-15 晚間）。修改處以〔修訂 2026-09-15d〕行內標記。
+> 🛠 **2026-09-15f 修訂**（feat/source-check）：新增 FR-020 列（原卷文字層比對）與 ADR-009 索引；FR-006 複核原因八種→九種；NFR-003 單元測試數 1,476→1,534（feat/source-check 實測）；NFR-006 migrations 範圍補 0007、0009；§4 追溯與 §5.1 熱點同步。修改處以〔修訂 2026-09-15f〕行內標記。
 
 ## 目錄
 
@@ -29,7 +30,7 @@
 | FR-003 | 公式修復 lint（LaTeX 白名單語法收斂） | 已實作 | exam_pro/agents/lint.js、exam_pro/utils/formulaLint.js、exam_pro/utils/formulaFix.js | ADR-005 | 單元 |
 | FR-004 | 獨立解題驗證（pro 與 flash 互相制衡、答案比對） | 已實作 | exam_pro/agents/verify.js、exam_pro/utils/answerCompare.js | ADR-003 | 單元＋eval pipeline（answer_agree_rate 0.90） |
 | FR-005 | 兩段去重（正規化雜湊→向量餘弦） | 已實作 | exam_pro/agents/dedup.js、exam_pro/utils/normalizeStem.js | ADR-003、ADR-001 | 單元＋整合 |
-| FR-006 | 部分入庫與人工複核佇列（needs_review 八種原因） | 已實作 | exam_pro/controllers/reviewController.js、exam_pro/public/js/review.js | ADR-005、ADR-003 | 整合＋e2e |
+| FR-006 | 部分入庫與人工複核佇列（needs_review 九種原因〔修訂 2026-09-15f〕） | 已實作 | exam_pro/controllers/reviewController.js、exam_pro/public/js/review.js | ADR-005、ADR-003 | 整合＋e2e |
 | FR-007 | 題庫管理（CRUD、分頁、batch-save 白名單硬驗證） | 已實作 | exam_pro/controllers/questionController.js、exam_pro/utils/questionValidation.js | ADR-005 | 單元＋整合 |
 | FR-008 | 組卷（草稿→確認；NOT EXISTS attempts 排除；家族互斥） | 已實作 | exam_pro/controllers/examController.js、exam_pro/utils/pickOnePerFamily.js、exam_pro/utils/shuffle.js | ADR-001 | 單元＋整合＋e2e（組卷→Word 公式） |
 | FR-009 | Word 匯出（自製 LaTeX→OOXML，docx 原生 Math 物件；含原生 OMML 二維矩陣，10 種矩陣環境〔修訂 2026-08-29〕） | 已實作 | exam_pro/utils/textFormatter.js、exam_pro/services/wordService.js | ADR-004 | 單元＋e2e |
@@ -42,6 +43,7 @@
 | FR-016 | 對話式助教（主控 LLM ReAct 迴圈＋五個只讀工具、出卷僅 dry-run；學生姓名以代號出境〔修訂 2026-09-15b〕） | 已實作 | exam_pro/services/assistantService.js、exam_pro/utils/pseudonym.js、exam_pro/public/js/assistant.js | ADR-007 | 單元＋整合（replay） |
 | FR-017 | 題目來源標記 source_type（著作權管理：五值白名單、組卷題源過濾、上傳／複核／改標全鏈帶標） | 已實作〔修訂 2026-08-29 補登錄，PR #7〕 | exam_pro/migrations/0006_source_type.sql、exam_pro/config/chapters.js（SOURCE_TYPES）、exam_pro/controllers/questionController.js、exam_pro/controllers/examController.js、exam_pro/controllers/jobController.js、exam_pro/controllers/reviewController.js、exam_pro/public/index.html | ADR-005 | 單元（chapterVolumes 釘住 CHECK）＋整合（controllers.pg.test.js source_type 端到端） |
 | FR-018 | 附圖裁切入庫（extract 回 bbox＋mupdf/sharp 裁圖存 question_img；權威文件 docs/figures.md） | 已實作〔修訂 2026-08-29 補登錄，PR #3；cassette 重錄 @ 4af4647〕 | exam_pro/services/figureService.js、exam_pro/agents/extract.js（figure_page/figure_box＋框幾何驗證）、exam_pro/workers/jobRunner.js（attachFigureImages）、exam_pro/app.js（/figures 靜態掛載） | ADR-003、ADR-006 | 單元（figureService、agentExtract）＋eval pipeline（cassette 重錄後全綠） |
+| FR-020 | 拆題結果對照原卷文字層（extract 階段抽片段、source_check 決定性比對、預設 enforce；權威文件 docs/source-check.md） | 已實作〔修訂 2026-09-15f，feat/source-check〕 | exam_pro/utils/sourceCheck.js、exam_pro/services/sourceTextService.js、exam_pro/services/mupdf.js、exam_pro/agents/source_check.js、exam_pro/workers/jobRunner.js（attachSourceText、loadSourceCheckConfig）、exam_pro/pipeline/stateMachine.js、exam_pro/controllers/reviewController.js（approve 記 source_recheck）、exam_pro/migrations/0009_source_check.sql、exam_pro/public/js/review.js、exam_pro/eval/tools/calibrate_source_check.js | ADR-009、ADR-003 | 單元（sourceCheck、sourceCheckSample：公開樣卷 0 誤報）＋整合（jobs.pg.test.js source_check 區塊）＋e2e＋eval pipeline；真實原卷校準（本機，數字見 docs/source-check.md） |
 
 ## 2. 非功能需求 NFR
 
@@ -49,10 +51,10 @@
 |---|---|---|---|---|---|
 | NFR-001 | 安全：x-api-key（timing-safe）、CORS 白名單、防 SSRF、正式環境不回傳錯誤細節 | 已實作 | exam_pro/middleware/、exam_pro/app.js、exam_pro/services/wordService.js（isSafeImageUrl） | ADR-005 | 單元 |
 | NFR-002 | 成本：限流、RPM 節流、逐 token 計費、單 job／每日成本上限 | 已實作 | exam_pro/middleware/rateLimit.js、exam_pro/services/llm/throttle.js、exam_pro/config/pricing.js | ADR-003 | 單元＋job_events 成本紀錄 |
-| NFR-003 | 可測試性：agent 純函式合約、cassette record/replay、CI 零金鑰零網路 | 已實作 | exam_pro/agents/、exam_pro/services/llm/、exam_pro/eval/cassettes/ | ADR-006 | 單元 1,476 項不連網不連庫（main f2af3c2 實測，2026-09-15 晚間〔修訂 2026-09-15d〕）；CI replay |
+| NFR-003 | 可測試性：agent 純函式合約、cassette record/replay、CI 零金鑰零網路 | 已實作 | exam_pro/agents/、exam_pro/services/llm/、exam_pro/eval/cassettes/ | ADR-006 | 單元 1,534 項不連網不連庫（feat/source-check 實測，2026-09-15〔修訂 2026-09-15f〕）；CI replay |
 | NFR-004 | 品質門檻：eval golden＋ratchet（首測 −0.03、只升不降），低於門檻 CI 轉紅 | 已實作 | exam_pro/eval/run.js、exam_pro/eval/thresholds.json、exam_pro/eval/lib/ | ADR-006 | 五個 eval suite（[qa_tracker §2](../05_qa/qa_tracker.md)） |
 | NFR-005 | 可靠性：SKIP LOCKED＋租約認領、斷點續跑、逾時退避重試、重試預算 | 已實作 | exam_pro/workers/jobRunner.js、exam_pro/pipeline/stateMachine.js | ADR-003 | 整合＋e2e |
-| NFR-006 | 資料一致性：組卷與作答歷史同交易；migrations 只增不改（0001–0006〔修訂 2026-08-29〕） | 已實作 | exam_pro/controllers/examController.js、exam_pro/migrations/、exam_pro/migrate.js | ADR-001 | 整合 |
+| NFR-006 | 資料一致性：組卷與作答歷史同交易；migrations 只增不改（0001–0007、0009〔修訂 2026-09-15f〕） | 已實作 | exam_pro/controllers/examController.js、exam_pro/migrations/、exam_pro/migrate.js | ADR-001 | 整合 |
 
 ## 3. ADR 索引
 
@@ -68,11 +70,12 @@
 | ADR-006-cassette-record-replay | 鍵含模型 ID＋模板版本＋輸入雜湊；CI 確定性重播 |
 | ADR-007-assistant-no-native-function-calling | responseJsonSchema 決策迴圈；args_json 字串傳參；空結果亦為答案 |
 | ADR-008-app-layer-chinese-tokenizer | utils/tokenize.js 凍結為全案唯一分詞；換分詞器須整批重建索引 |
+| ADR-009-deterministic-source-text-check | 抄錯型態是字元層級（正負號、漏字母）；決定性比對零成本、cassette 不失效、樣卷 0 誤報可在 CI 釘住；LLM 複驗與抄錯同源、非確定；預設 enforce〔修訂 2026-09-15f〕 |
 
 ## 4. 追溯
 
-- 上游：DEC-001～011（[requirements_tracker](../01_requirements/requirements_tracker.md) §1；DEC-010／011 為 2026-08-29 補登錄〔修訂 2026-08-29〕）；凍結介面與裁決（`docs/interfaces*.md`）。
-- 下游：FR-001～018 → TC-＊與五個 eval suite（[qa_tracker](../05_qa/qa_tracker.md)）〔修訂 2026-08-29〕；FR-010～012、FR-016 → 各 ui_spec（[../02_ux_ui/](../02_ux_ui/)）；NFR-005、DEC-004 → runbook（[../06_ops/](../06_ops/)）。
+- 上游：DEC-001～011（[requirements_tracker](../01_requirements/requirements_tracker.md) §1；DEC-010／011 為 2026-08-29 補登錄〔修訂 2026-08-29〕）、DEC-013〔修訂 2026-09-15f〕；凍結介面與裁決（`docs/interfaces*.md`；原卷比對為裁決 S2-31）。
+- 下游：FR-001～018、FR-020〔修訂 2026-09-15f〕 → TC-＊與五個 eval suite（[qa_tracker](../05_qa/qa_tracker.md)）〔修訂 2026-08-29〕；FR-010～012、FR-016 → 各 ui_spec（[../02_ux_ui/](../02_ux_ui/)）；NFR-005、DEC-004 → runbook（[../06_ops/](../06_ops/)）。
 
 ## 5. 相依與平行開發〔修訂 2026-08-29 新增〕
 
@@ -84,12 +87,12 @@
 |---|---|---|---|
 | `queries/hybrid.js`＋`services/retrievalService.js` | FR-010 | FR-002（kNN）、FR-011、FR-012 | 檢索四落點共用同一條 SQL；最大單點衝突源 |
 | `utils/tokenize.js`（ADR-008 凍結） | — | FR-002、FR-010～012 | 換分詞器須整批重建索引；寫入端與查詢端必須同詞表 |
-| `workers/jobRunner.js`＋`pipeline/stateMachine.js` | FR-001 | FR-002～006、FR-011（variant 同管線）、FR-018 | 節點順序／預算／租約改動跨 FR |
+| `workers/jobRunner.js`＋`pipeline/stateMachine.js` | FR-001 | FR-002～006、FR-011（variant 同管線）、FR-018、FR-020（source_check 節點與 extract 階段抽片段〔修訂 2026-09-15f〕） | 節點順序／預算／租約改動跨 FR；狀態或原因清單變長會連動 stateMachine／jobRunner／variantPipeline／stage3Ui／publicAssets／e2e 等測試 |
 | `services/llm/`＋`config/models.js`＋cassette | — | 所有走 LLM 的 FR（001/002/004/011/012/016/018） | 改 prompt 或模型必須重錄 cassette（ADR-006），重錄是全域動作 |
 | `attempts` 資料表 | FR-008（建列） | FR-013（讀）、FR-014（搬移／刪除）、FR-015（寫 result）、FR-010/011（NOT EXISTS 排除） | 所有權規則已凍結（roadmap §1.5） |
 | `routes/index.js` | — | 全部 | append-only 分區塊設計，衝突落相鄰行、兩邊都留即可 |
 | `public/index.html`＋`window.ExamApp` | — | FR-006/010/011/012/013/016/017 前端 | 各功能為獨立 ES module，只在殼插錨點；殼本身（視圖／nav）是單檔熱點 |
-| `migrations/` | — | 任何動 schema 的 FR | 只增不改；**編號需開工前預先分配**，否則平行分支撞號 |
+| `migrations/` | — | 任何動 schema 的 FR | 只增不改；**編號需開工前預先分配**，否則平行分支撞號（2026-09-15 分配：0008 承上題綁定、0009 原卷比對 FR-020〔修訂 2026-09-15f〕；兩支若都重建同一條 CHECK，合併時須改成含雙方新值的完整值域） |
 | `config/chapters.js` | FR-002 | FR-007、FR-017（SOURCE_TYPES）、前端三層選單 | VOLUMES／SOURCE_TYPES 是值域唯一真相 |
 | `eval/thresholds.json`＋五個 suite | — | 全部 | ratchet 只升不降＝全域共享 gate，分支不得各自調門檻 |
 

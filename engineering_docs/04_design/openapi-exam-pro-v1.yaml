@@ -1,5 +1,5 @@
 # openapi-exam-pro-v1.yaml — 家教專用數理題庫系統 API 契約
-# 版本: v1.1 | 更新: 2026-08-29 | 狀態: 活躍 | Owner: Ben（楊本顥）  # 修訂 2026-08-29（PR #7 source_type / PR #6 chapter-volumes）
+# 版本: v1.2 | 更新: 2026-09-15 | 狀態: 活躍 | Owner: Ben（楊本顥）  # 修訂 2026-09-15f（feat/source-check：review reason 值域加 transcription_mismatch，FR-020）
 # 追溯：上游 FR-001～FR-017、NFR-001（x-api-key／限流）、NFR-002（成本節流）  # 修訂 2026-08-29：FR-017 題源標記
 #       下游 ../05_qa/test_plan.md（TC-* 依本檔端點派生）、../05_qa/qa_tracker.md
 # 端點來源：exam_pro/routes/index.js（核心區＋各階段 append-only 區塊）；
@@ -9,7 +9,7 @@
 openapi: 3.1.0
 info:
   title: exam_pro API
-  version: 1.1.0 # 修訂 2026-08-29（PR #7 source_type / PR #6 chapter-volumes）
+  version: 1.2.0 # 修訂 2026-09-15f（feat/source-check）
   description: |
     家教專用數理題庫系統（exam_pro）之 HTTP API 契約。版本 v1.1，更新 2026-08-29，Owner：Ben（楊本顥）。
     本檔為端點清單唯一權威（對應 exam_pro/routes/index.js）；設計約定（錯誤格式、分頁、驗證規則）
@@ -17,6 +17,7 @@ info:
     對應需求：FR-001～FR-017。
     2026-08-29 修訂（PR #6/#7 程式碼同步）：新增 GET /chapter-volumes；listQuestions／generatePaper／createJob／QuestionCreate 補 source_type（FR-017）。
     2026-08-29 修訂之二（feat/source-detail 0007）：QuestionCreate／createJob 補 source_detail 來源註記；新增 POST /questions/batch-source 批次補標（FR-017 延伸）。
+    2026-09-15f 修訂（feat/source-check 0009，FR-020）：GET /review 的 reason 值域加 transcription_mismatch（九個值）；job_questions.state 值域加 source_checked；GET /review/{jqId} 的 payload 可含 extract.source_text 與 source_check。端點形狀不變。
 servers:
   - url: http://localhost:3000/api
 security:
@@ -591,7 +592,12 @@ paths:
       summary: 人工複核佇列（needs_review 八種原因）
       operationId: listReview
       parameters:
-        - { name: reason, in: query, schema: { type: string }, description: 依 review_reason 過濾；非法值回 400 }
+        - name: reason # 修訂 2026-09-15f：值域加 transcription_mismatch（0009）
+          in: query
+          schema:
+            type: string
+            enum: [chapter_invalid, formula_unparsable, answer_mismatch, duplicate, budget_exceeded, provider_error, schema_invalid, awaiting_approval, transcription_mismatch]
+          description: 依 review_reason 過濾；非法值回 400
         - { name: limit, in: query, schema: { type: integer, minimum: 1 } }
       responses:
         "200": { description: 成功 }
