@@ -16,6 +16,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const { query, pool } = require('../config/db');
+const { isPdfBuffer } = require('../utils/pdfSniff');
 const { NODE_FOR_STATE } = require('../pipeline/stateMachine');
 
 const APP_DIR = path.resolve(__dirname, '..');
@@ -133,6 +134,8 @@ exports.createJob = async (req, res, next) => {
         if (!isPdf) return res.status(400).json({ message: '只接受 PDF 檔案！' });
 
         const buffer = fs.readFileSync(tmpPath);
+        // mimetype 與副檔名都是客戶端宣告的；檔頭 %PDF- 才是檔案自己說的（utils/pdfSniff.js）
+        if (!isPdfBuffer(buffer)) return res.status(400).json({ message: '檔案內容不是 PDF（缺少 %PDF- 檔頭）。' });
         const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
         const force = req.query.force === '1';
 

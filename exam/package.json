@@ -4,7 +4,7 @@
   "description": "家教專用數學物理題庫系統 - 早期原型（ARCHIVED，請改用 exam_pro）",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node -e \"console.error('ARCHIVED：原型已封存，express.static(__dirname) 會公開整個目錄（含 .env）。請改用 ../exam_pro（npm start）。'); process.exit(1)\""
   },
   "keywords": [],
   "author": "Ben Yang (楊本顥)",

@@ -26,7 +26,7 @@
 | 📊 **學生弱點面板** | 章節錯誤率、題型／難度分佈、週趨勢、最近錯題；批改支援「僅標記錯題，其餘一鍵標為正確」 |
 | 💬 **對話式助教** | 主控 LLM 調度五個**唯讀**工具（學生弱點／自然語言搜題／相似題／出卷預覽），工具調用軌跡完整呈現於介面；實際出卷仍由使用者確認；學生姓名送模型前換成「學生#<id>」代號，不出境 |
 | 🧾 **成本與品質可觀測** | 逐 token 記帳（官方單價查證）、job／日成本上限；五個 eval suite ＋ ratchet 門檻進 CI |
-| 🔒 **安全設計** | 參數化 SQL、CORS 白名單、防 SSRF、可選 API Key（timing-safe；能力邊界見[安全注意事項](#-安全注意事項)）；全部 FEATURE_* 旗標預設關 |
+| 🔒 **安全設計** | 參數化 SQL、CORS 白名單、防 SSRF、上傳檔以 `%PDF-` 檔頭驗證（不信任副檔名與 mimetype）、可選 API Key（timing-safe；能力邊界見[安全注意事項](#-安全注意事項)）；全部 FEATURE_* 旗標預設關；資料庫埠只綁 127.0.0.1；CI 以 `npm audit --omit=dev --audit-level=high` 擋已知弱點、Dependabot 週更 |
 
 ---
 
@@ -147,7 +147,7 @@ exam_pro/
 ├─ eval/                               # run.js（五個 suite）、lib/、golden/、cassettes/、fixtures/、thresholds.json
 ├─ test/  unit(1,449) · integration(262) · e2e(11)
 ├─ scripts/ + *.bat                    # 備份、向量回填、成本報表、公式健檢（Windows 雙擊）
-└─ docker-compose.yml                  # PG16+pgvector：5442 開發（volume）／5433 測試（tmpfs）
+└─ docker-compose.yml                  # PG16+pgvector：5442 開發（volume）／5433 測試（tmpfs）；皆只綁 127.0.0.1
 ```
 
 ---
@@ -231,6 +231,7 @@ cp .env.example .env
 | `GEMINI_API_KEY` | Google Gemini 金鑰（**必填**）| — |
 | `DATABASE_URL` | PostgreSQL 連線（階段 1 起的正式資料庫）| `postgres://exam:exam@localhost:5442/tutor_exam_bank` |
 | `TEST_DATABASE_URL` | 整合測試專用的 PostgreSQL；**資料庫名必須以 `_test` 結尾**，否則 `migrate.js` 拒絕執行 | `postgres://exam:exam@localhost:5433/tutor_exam_bank_test` |
+| `PG_PASSWORD` | docker-compose 容器密碼（選填，預設 `exam`）。只在 volume 初始化時生效；改了要同步改上面兩條連線字串，既有 volume 需 `docker compose down -v` 重建 | `exam` |
 | `EMBED_MODEL` / `EMBED_DIM` / `EMBED_RPM` / `EMBED_BATCH` / `EMBED_MODE` | embedding 模型與限速；`EMBED_DIM` 在 I0 釘死為 **768** | gemini-embedding-001 / 768 / 60 / 32 / fixture |
 | `LLM_MODE` | `live` / `record` / `replay`；CI 恆為 `replay` | `replay` |
 | `FEATURE_SIMILAR` / `FEATURE_HYBRID_SEARCH` | 新功能旗標，預設全關 | `false` |

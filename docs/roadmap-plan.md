@@ -1765,3 +1765,21 @@ agent 管線、RAG 檢索、NLQ、變式、複核佇列、eval 與門檻——�
    ③ 複核頁與題庫列表對 school／publisher 題的解答加「疑似抄錄詳解」提示——純函式
      `utils/answerHeuristics.js`（長度 > 80 字或含解／因為／所以／步驟等字樣），不動 DDL、不截斷資料。
    對應決策 DEC-010；實作時同步 FR-017 ACPT 與 `docs/variants.md` 閘門表加「藍本來源」一道。
+5. **備份檔加密**（2026-09-15 使用者裁定暫不做）。現況：`scripts/backup.js` 的 pg_dump 與雲端副本
+   （`BACKUP_COPY_DIR`）皆為明文，內含 `students.name` 與作答紀錄。暫不做的理由：電腦不離家、
+   雲端帳號單一使用者；風險集中在雲端帳號被盜。觸發條件：電腦開始外帶、或雲端副本改放共用空間。
+   做法：`pg_dump | age -r <公鑰>`（或 `gpg --symmetric`），金鑰抄存於與電腦分離處；估 0.5 人日。
+6. **備份還原演練**（暫緩）。現況：還原步驟在 `engineering_docs/06_ops/runbook-pg-down.md` §5，
+   從未實跑；RTO 未量測；`data/figures/` 附圖目錄未納入備份。2026-08-27 曾發生排程回報成功
+   但實際未執行（commit `d2bcad1` 修正）。做法：對 `exam_pg_test` 還原最新一份 dump、比對題數與
+   向量數、記錄耗時；附圖目錄加進 backup.js；估 1 人日。
+7. **mupdf 的 AGPL 授權邊界**（2026-09-15 使用者確認：本專案只自用，不給其他老師用）。
+   現況：`mupdf` 1.28.0 為 AGPL-3.0-or-later，本專案未修改其原始碼、單機單人、不以網路提供
+   服務，**不觸發**第 13 條的原始碼揭露義務；NOTICE 已載明。隱憂：一旦對外部署或散布，
+   即與 LICENSE（版權所有）衝突。觸發條件：決定給第二個使用者用。做法：換 `pdfjs-dist`
+   （Apache-2.0）渲染頁面、sharp 裁圖不動，重寫 `services/figureService.js` 渲染段並以自製樣卷
+   重驗 bbox，估 1–2 人日；或向 Artifex 購買商業授權。
+8. **對外部署前置條件**（與 7 同一觸發條件）。`API_KEY` 由 `app.js serveIndex()` 注入首頁
+   HTML，任何能開首頁的人即取得；`exam_pro/README.md` 已寫明它不是存取控制。對外前至少：
+   反向代理加 Basic Auth 或 OAuth proxy（半日）、`helmet` 安全標頭（0.25 人日）、`ALLOWED_ORIGINS`
+   與 `NODE_ENV=production`；真登入與角色另估 2–3 人日。

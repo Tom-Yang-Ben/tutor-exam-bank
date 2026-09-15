@@ -1,6 +1,6 @@
 # API 設計規範 (API Specification) - 家教專用數理題庫系統
 
-> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍 | **OpenAPI 定義:** [`openapi-exam-pro-v1.yaml`](./openapi-exam-pro-v1.yaml)
+> **版本:** v1.2 | **更新:** 2026-09-15 | **狀態:** 活躍 | **OpenAPI 定義:** [`openapi-exam-pro-v1.yaml`](./openapi-exam-pro-v1.yaml)
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 單例。本文件維護 API 設計約定、認證／CORS／限流政策、錯誤語意、端點總表與狀態碼慣例；單一端點的請求／回應 schema 細節歸 [`openapi-exam-pro-v1.yaml`](./openapi-exam-pro-v1.yaml)，路由掛載的單一真相為 `exam_pro/routes/index.js` 與 `exam_pro/app.js`。
@@ -115,7 +115,7 @@ app.use((err, req, res, next) => {
 | `DELETE /api/papers/:id` | FR-008 | 刪卷連 attempts，題目回候選池（裁決 S4-3） |
 | `POST /api/analyze-pdf` | FR-001 | 舊版單呼叫拆題（保留）；限流 10/min、PDF 上限 15 MB |
 | `POST /api/download-word` | FR-009 | Word 匯出（LaTeX→OOXML，docx 原生 Math 物件） |
-| `POST /api/jobs`（15 MB、超限 413；限流 10/min，與 `/analyze-pdf` 共用同一桶） | FR-001 | 建立拆題 job（恆掛載；FEATURE_PIPELINE 僅控制前端上傳入口） |
+| `POST /api/jobs`（15 MB、超限 413；限流 10/min，與 `/analyze-pdf` 共用同一桶；檔案內容缺 `%PDF-` 檔頭回 400〔修訂 2026-09-15c〕） | FR-001 | 建立拆題 job（恆掛載；FEATURE_PIPELINE 僅控制前端上傳入口） |
 | `GET /api/jobs/:id`、`GET /api/jobs/:id/questions`、`POST /api/jobs/:id/retry` | FR-001 | job 狀態／逐題清單／斷點續跑（恆掛載） |
 | `GET /api/review`、`GET /api/review/:jqId`、`POST /api/review/:jqId/approve`、`POST /api/review/:jqId/reject` | FR-006 | 人工複核佇列四支（恆掛載） |
 
