@@ -1,6 +1,6 @@
 # 測試追蹤簿 (QA Tracker) - 家教專用數理題庫系統
 
-> **版本:** v1.2 | **更新:** 2026-09-15 | **狀態:** 活躍
+> **版本:** v1.3 | **更新:** 2026-09-15 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 單例（本檔為發布快照；`qa_tracker.xlsx` 由本檔轉出，人工維護欄位以本檔為準）
@@ -8,6 +8,7 @@
 
 > 🛠 **2026-08-29 修訂**（PR #3–#7 程式碼同步）：§1 新增 TC-009-3（矩陣原生 OMML 二維排版）、TC-017-1（source_type 端到端）、TC-018-1（bbox 附圖裁切）；§2.1 測試數 單元 1,415→1,445、整合 259→260；CI 全綠 commit 0ff47b4→f8f6574（§1 導語與 §2.1 各一處）。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 > 🛠 **2026-09-15d 修訂**（測試數同步）：②執行證據 單元 1,445→1,476、整合同步至 262（main f2af3c2 實測，2026-09-15 晚間）。修改處以〔修訂 2026-09-15d〕行內標記。
+> 🛠 **2026-09-15e 修訂**（feat/follow-up-links）：§1 新增 TC-019-1～TC-019-4（承上題綁定）；§2.1 單元 1,476→1,499（本分支實測）；整合數待本分支新增案例於測試庫實跑後更新。修改處以〔修訂 2026-09-15e〕行內標記。
 
 ## 目錄
 
@@ -46,6 +47,10 @@ TC 依 FR 分組（`TC-<FR 號>-<序>`）；層級：U=單元、I=整合、E=e2e
 | TC-016-1 | FR-016 | 受限 JSON 決策迴圈、args_json 解析驗證、工具唯讀、步數上限截斷 | U＋I | 通過 |
 | TC-017-1 | FR-017 | source_type 端到端：建題→列表篩選→組卷 `source_types` 過濾（非法值 400、空陣列不限制）→改標（`exam_pro/test/integration/controllers.pg.test.js:121-174`）；SOURCE_TYPES 五值凍結且與 migrations/0006 CHECK 一致（`exam_pro/test/unit/chapterVolumes.test.js:51-66`）〔修訂 2026-08-29〕 | U＋I | 通過 |
 | TC-018-1 | FR-018 | bbox 附圖裁切：boxToPixels 座標換算、預設邊距 2.5%、退化框回 null（`exam_pro/test/unit/figureService.test.js:12-40`）；figure_page 絕對頁碼換算、figure_page＋figure_box 防呆、附圖描述歸位 figure_desc（`exam_pro/test/unit/agentExtract.test.js:184-253`）〔修訂 2026-08-29〕 | U | 通過 |
+| TC-019-1 | FR-019 | 承上題偵測與前題解析純函式：isFollowUp（開頭／中間／承上一題／簡體為真，「承第 3 題」為假）、findPredecessorRow（同塊連號、同塊空號 extract_gap、跨塊取上一塊最後一題、first_in_job）、resolveQuestionId（saved、dedup0 庫內／同 job 遞迴、dedup1 top[0]、pending、rejected、深度上限）（`exam_pro/test/unit/followUp.test.js`）〔修訂 2026-09-15e〕 | U | 通過（本分支 23 項實跑） |
+| TC-019-2 | FR-019 | runner 終態後重算：前題正常入庫、子題先入庫補綁、前題撞庫內題／同 job 題／語意重複皆解析到實際題號、學科不同不綁、變式 job no-op（`exam_pro/test/integration/followUp.pg.test.js`）〔修訂 2026-09-15e〕 | I | 待測試庫實跑 |
+| TC-019-3 | FR-019 | 人工複核重算：前題待複核→approve 補綁 src=review、重複暫綁→approve 成新題改綁、merge_into 綁目標、reject 非重複前題不綁、GET /api/review/:jqId 的 follow_up 區塊；human 不覆寫、成環擋下、補強規則只補空（同檔）〔修訂 2026-09-15e〕 | I | 待測試庫實跑 |
+| TC-019-4 | FR-019 | 0008 結構（兩欄、具名 CHECK、部分索引、FK NO ACTION 允許整組同句刪除）（`exam_pro/test/integration/schema.test.js`）；回填腳本 dry-run 不寫入且重跑報告相同、正式跑冪等、孤兒清單（`followUp.pg.test.js`）〔修訂 2026-09-15e〕 | I | 待測試庫實跑 |
 
 ## 2. 執行證據
 
@@ -53,7 +58,7 @@ TC 依 FR 分組（`TC-<FR 號>-<序>`）；層級：U=單元、I=整合、E=e2e
 
 | 層級 | 數量 | 位置 | 執行條件 |
 |---|---:|---|---|
-| 單元 | 1,476 | exam_pro/test/unit/ | 不連網、不連庫、零 secrets；`npm test` 可完整重現〔修訂 2026-09-15d〕 |
+| 單元 | 1,499 | exam_pro/test/unit/ | 不連網、不連庫、零 secrets；`npm test` 可完整重現〔修訂 2026-09-15e〕 |
 | 整合 | 262 | exam_pro/test/integration/ | tmpfs 測試庫（5433，`_test` 後綴強制）〔修訂 2026-09-15d〕 |
 | e2e | 11 | exam_pro/test/e2e/ | HTTP 全路徑（上傳→部分入庫；組卷→Word 公式） |
 

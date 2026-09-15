@@ -1,12 +1,13 @@
 # 需求追蹤簿 (Requirements Tracker) - 家教專用數理題庫系統
 
-> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
+> **版本:** v1.2 | **更新:** 2026-09-15 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L2（橋接）
 > **實例:** 單例（本檔為發布快照；`requirements_tracker.xlsx` 由本檔轉出，人工維護欄位以本檔為準）
 > **定位:** 本文件回答「有哪些需求決策、由誰核准、各階段 Gate 是否放行」；工程實作狀態見 [engineering_tracker](../03_architecture/engineering_tracker.md)，測試證據見 [qa_tracker](../05_qa/qa_tracker.md)。
 
 > 🛠 **2026-08-29 修訂**（PR #3–#7 程式碼同步）：①§1 補登錄兩列種子——DEC-010 題目來源標記（對應 FR-017，PR #7 merge f8f6574；核准紀錄引 `exam_pro/migrations/0006_source_type.sql` 檔頭「2026-08-28 使用者核准」註記）、DEC-011 附圖裁切入庫（對應 FR-018，PR #3 merge bc57c23；2026-08-25 Owner 定案紀錄見 prd §5 舊記載）；②§2 決策沿革補 2026-08-29 文件同步修訂一列；③§4 追溯之 DEC／FR 編號範圍隨之更新。無刪除內容；§3 Gate 簽核未動。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
+> 🛠 **2026-09-15e 修訂**（feat/follow-up-links）：§1 新增 DEC-012 承上題綁定（對應 FR-019）；§2 決策沿革加一列；§4 追溯之 DEC／FR 編號範圍更新。修改處以〔修訂 2026-09-15e〕行內標記。
 
 ## 目錄
 
@@ -36,6 +37,7 @@
 | DEC-009 | 題庫屬私有資產，資料與驗證邏輯留本地，repo 不含題庫內容；學生姓名不隨 LLM 呼叫出境〔修訂 2026-09-15b〕 | P0 | 橫切 | 僅 LLM 呼叫對外；示範題自製（seed_questions.js 30 題）；姓名代號化見 utils/pseudonym.js | 已核准 | Ben | 2026-08-25／2026-09-15 |
 | DEC-010 | 試題著作權依來源而異（官方歷屆與自寫題乾淨、出版社題本有權利疑慮），組卷要能只抽乾淨題源 | P1 | 上線後增量（PR #7） | 全流程帶五值來源標記（FR-017）；組卷可過濾題源、非法值擋下；變式繼承藍本標記不自動漂白 | 已核准（2026-08-28 使用者核准，紀錄見 `exam_pro/migrations/0006_source_type.sql` 檔頭；2026-08-29 補登錄，實作 merge f8f6574） | Ben | 2026-08-29〔修訂 2026-08-29〕 |
 | DEC-011 | 考卷附圖（幾何圖、函數圖形）要隨題入庫，組卷與檢視不能漏圖 | P1 | 上線後增量（PR #3） | extract 回 bbox＋程式裁圖存 question_img，題庫與試卷可供圖（FR-018，權威文件 `docs/figures.md`） | 已核准（2026-08-25 Owner 裁示，見 prd §5 舊記載；2026-08-29 補登錄，實作 merge bc57c23） | Ben | 2026-08-29〔修訂 2026-08-29〕 |
+| DEC-012 | 「在辨識時，有『承上題』這句話的題目，都要將上一題與有承上題的那一題綁在一起。」（Owner 原話）〔修訂 2026-09-15e〕 | P1 | 上線後增量（feat/follow-up-links，分 PR 交付） | 承上題入庫即綁定上一題所落的題目（上一題被判重複時綁到被命中的既有題）；舊題可回填；組卷整組抽題與刪除保護於後續 PR（FR-019） | 已核准（2026-09-15 Owner 需求原話，核准紀錄見 `exam_pro/migrations/0008_follow_up.sql` 檔頭；本欄由實作分支依轉達內容登錄，待 Owner 覆核） | Ben | 2026-09-15〔修訂 2026-09-15e〕 |
 
 ## 2. 決策沿革
 
@@ -57,6 +59,7 @@
 | 2026-08-29 | DEC-010、DEC-011 | 文件同步修訂：補登錄 DEC-010／011 與對應 FR-017／018（prd、srs 同步至 v1.1）〔修訂 2026-08-29〕 | 實作先於登錄——PR #3（2026-08-27 merge bc57c23，附圖）與 PR #7（merge f8f6574，source_type）已合併，CI 全綠；本輪依實作證據與既有核准紀錄補齊需求側登錄 |
 | 2026-08-29 | DEC-010（FR-017 延伸） | source_type 之外追加自由文字來源註記 source_detail（單欄，含批次補標介面）〔修訂 2026-08-29b〕 | Owner 同日於對話中裁定：題目多來自學校考卷，需記學校＋年份；資料形態選單一註記欄（棄兩欄結構化——年份精確篩選無需求）、補標方式選批次＋單題編輯；migration 0007、分支 feat/source-detail |
 | 2026-09-15 | DEC-009 | 補「學生姓名不隨 LLM 呼叫出境」：NLQ 輔路徑與助教工具軌跡送 Gemini 前以「學生#<id>」代號取代姓名，回覆後還原〔修訂 2026-09-15b〕 | 2026-09-15 面試準備查核發現 NLQ `callLlm()` 送整句原文、助教 `list_students` 回姓名，與 DEC-009「資料留本地」不符；Owner 裁定以代號化補齊而非改決策。實作 utils/pseudonym.js，沒有學生清單時為恆等函式，cassette 與 eval 不受影響 |
+| 2026-09-15 | DEC-012（FR-019） | 新增承上題綁定：題幹含「承上題」者綁到同份考卷上一題所落的題目〔修訂 2026-09-15e〕 | 2026-09-15 全庫解答健檢發現題庫無題組概念，上一題被去重判重複不入庫時承上題失去前情（`docs/roadmap-plan.md` 待辦 11）。取捨：①伺服器端以 regex 決定性偵測，不改 extract prompt（改 prompt 使 cassette 全數失效）；②邊模型——子題記 `follows_question_id` 指向前題，不開題組表；③自我參照 FK 採 NO ACTION（語句結束才檢查），RESTRICT 會使整組同句刪除與測試清表失敗。首個 PR 交付綁定、複核重算與回填；整組抽題、刪除保護、變式限制、前端徽章排後續 PR |
 
 ## 3. Gate 簽核
 
@@ -75,5 +78,5 @@ Gate 判定原則：
 ## 4. 追溯
 
 - 上游：使用者痛點與成功標準（`README.md` 問題背景章）、四階段裁決紀錄（`docs/interfaces*.md`：階段 1 裁決 1–27、S2-1～30、S3-1～R29）。
-- 下游：DEC-001～011 → FR-001～018／NFR-001～006（[engineering_tracker](../03_architecture/engineering_tracker.md)）〔修訂 2026-08-29〕；Gate 證據 → TC 與 eval（[qa_tracker](../05_qa/qa_tracker.md)）；重大取捨 → ADR-001～008（[adr/](../03_architecture/adr/)）。
+- 下游：DEC-001～012 → FR-001～019／NFR-001～006（[engineering_tracker](../03_architecture/engineering_tracker.md)）〔修訂 2026-09-15e〕；Gate 證據 → TC 與 eval（[qa_tracker](../05_qa/qa_tracker.md)）；重大取捨 → ADR-001～008（[adr/](../03_architecture/adr/)）。
 - 快照：**md 為唯一權威（2026-08-25 Owner 定案）**——`requirements_tracker.xlsx` 僅於需要時由本檔單向轉出作發布副本，不回寫、不做雙向同步；原「round-trip 驗證後改雙向」的暫行條款隨之免除。

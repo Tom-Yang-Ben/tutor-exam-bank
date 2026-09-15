@@ -1,6 +1,6 @@
 # 工程追蹤簿 (Engineering Tracker) - 家教專用數理題庫系統
 
-> **版本:** v1.2 | **更新:** 2026-09-15 | **狀態:** 活躍
+> **版本:** v1.3 | **更新:** 2026-09-15 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 單例（本檔為發布快照；`engineering_tracker.xlsx` 由本檔轉出，人工維護欄位以本檔為準）
@@ -9,6 +9,7 @@
 > 🛠 **2026-09-15 修訂**（測試數同步）：NFR-003 單元測試數 1,445→1,449（main 126243a 實測，2026-09-15）。修改處以〔修訂 2026-09-15〕行內標記。
 > 🛠 **2026-09-15b 修訂**（feat/pseudonymize-student-names 程式碼同步）：FR-016 補姓名代號化模組路徑。修改處以〔修訂 2026-09-15b〕行內標記。
 > 🛠 **2026-09-15d 修訂**（測試數同步）：NFR-003 單元測試數 1,449→1,476（main f2af3c2 實測，2026-09-15 晚間）。修改處以〔修訂 2026-09-15d〕行內標記。
+> 🛠 **2026-09-15e 修訂**（feat/follow-up-links）：新增 FR-019 承上題綁定一列（首個 PR：綁定、複核重算、回填；整組抽題與刪除保護待後續 PR）；NFR-003 單元測試數 1,476→1,499（本分支實測）；NFR-006 migrations 範圍 0001–0008；§4 追溯與 §5.1 熱點表同步。修改處以〔修訂 2026-09-15e〕行內標記。
 
 ## 目錄
 
@@ -42,6 +43,7 @@
 | FR-016 | 對話式助教（主控 LLM ReAct 迴圈＋五個只讀工具、出卷僅 dry-run；學生姓名以代號出境〔修訂 2026-09-15b〕） | 已實作 | exam_pro/services/assistantService.js、exam_pro/utils/pseudonym.js、exam_pro/public/js/assistant.js | ADR-007 | 單元＋整合（replay） |
 | FR-017 | 題目來源標記 source_type（著作權管理：五值白名單、組卷題源過濾、上傳／複核／改標全鏈帶標） | 已實作〔修訂 2026-08-29 補登錄，PR #7〕 | exam_pro/migrations/0006_source_type.sql、exam_pro/config/chapters.js（SOURCE_TYPES）、exam_pro/controllers/questionController.js、exam_pro/controllers/examController.js、exam_pro/controllers/jobController.js、exam_pro/controllers/reviewController.js、exam_pro/public/index.html | ADR-005 | 單元（chapterVolumes 釘住 CHECK）＋整合（controllers.pg.test.js source_type 端到端） |
 | FR-018 | 附圖裁切入庫（extract 回 bbox＋mupdf/sharp 裁圖存 question_img；權威文件 docs/figures.md） | 已實作〔修訂 2026-08-29 補登錄，PR #3；cassette 重錄 @ 4af4647〕 | exam_pro/services/figureService.js、exam_pro/agents/extract.js（figure_page/figure_box＋框幾何驗證）、exam_pro/workers/jobRunner.js（attachFigureImages）、exam_pro/app.js（/figures 靜態掛載） | ADR-003、ADR-006 | 單元（figureService、agentExtract）＋eval pipeline（cassette 重錄後全綠） |
+| FR-019 | 承上題綁定（伺服器端 regex 偵測、`questions.follows_question_id` 邊模型；runner 終態後與人工複核後重算、舊題回填）〔修訂 2026-09-15e〕 | 部分實作（PR1：綁定＋複核重算＋回填；整組抽題待 PR2、刪除保護待 PR3） | exam_pro/migrations/0008_follow_up.sql、exam_pro/utils/followUp.js、exam_pro/services/followUpLinker.js、exam_pro/workers/jobRunner.js（終態後 linkFollowUps）、exam_pro/controllers/reviewController.js、exam_pro/scripts/backfill_follow_ups.js | ADR-003 | 單元（followUp.test.js）＋整合（followUp.pg.test.js、schema.test.js）＋eval pipeline（本分支實跑通過） |
 
 ## 2. 非功能需求 NFR
 
@@ -49,10 +51,10 @@
 |---|---|---|---|---|---|
 | NFR-001 | 安全：x-api-key（timing-safe）、CORS 白名單、防 SSRF、正式環境不回傳錯誤細節 | 已實作 | exam_pro/middleware/、exam_pro/app.js、exam_pro/services/wordService.js（isSafeImageUrl） | ADR-005 | 單元 |
 | NFR-002 | 成本：限流、RPM 節流、逐 token 計費、單 job／每日成本上限 | 已實作 | exam_pro/middleware/rateLimit.js、exam_pro/services/llm/throttle.js、exam_pro/config/pricing.js | ADR-003 | 單元＋job_events 成本紀錄 |
-| NFR-003 | 可測試性：agent 純函式合約、cassette record/replay、CI 零金鑰零網路 | 已實作 | exam_pro/agents/、exam_pro/services/llm/、exam_pro/eval/cassettes/ | ADR-006 | 單元 1,476 項不連網不連庫（main f2af3c2 實測，2026-09-15 晚間〔修訂 2026-09-15d〕）；CI replay |
+| NFR-003 | 可測試性：agent 純函式合約、cassette record/replay、CI 零金鑰零網路 | 已實作 | exam_pro/agents/、exam_pro/services/llm/、exam_pro/eval/cassettes/ | ADR-006 | 單元 1,499 項不連網不連庫（feat/follow-up-links 實測，2026-09-15〔修訂 2026-09-15e〕）；CI replay |
 | NFR-004 | 品質門檻：eval golden＋ratchet（首測 −0.03、只升不降），低於門檻 CI 轉紅 | 已實作 | exam_pro/eval/run.js、exam_pro/eval/thresholds.json、exam_pro/eval/lib/ | ADR-006 | 五個 eval suite（[qa_tracker §2](../05_qa/qa_tracker.md)） |
 | NFR-005 | 可靠性：SKIP LOCKED＋租約認領、斷點續跑、逾時退避重試、重試預算 | 已實作 | exam_pro/workers/jobRunner.js、exam_pro/pipeline/stateMachine.js | ADR-003 | 整合＋e2e |
-| NFR-006 | 資料一致性：組卷與作答歷史同交易；migrations 只增不改（0001–0006〔修訂 2026-08-29〕） | 已實作 | exam_pro/controllers/examController.js、exam_pro/migrations/、exam_pro/migrate.js | ADR-001 | 整合 |
+| NFR-006 | 資料一致性：組卷與作答歷史同交易；migrations 只增不改（0001–0008〔修訂 2026-09-15e〕） | 已實作 | exam_pro/controllers/examController.js、exam_pro/migrations/、exam_pro/migrate.js | ADR-001 | 整合 |
 
 ## 3. ADR 索引
 
@@ -71,8 +73,8 @@
 
 ## 4. 追溯
 
-- 上游：DEC-001～011（[requirements_tracker](../01_requirements/requirements_tracker.md) §1；DEC-010／011 為 2026-08-29 補登錄〔修訂 2026-08-29〕）；凍結介面與裁決（`docs/interfaces*.md`）。
-- 下游：FR-001～018 → TC-＊與五個 eval suite（[qa_tracker](../05_qa/qa_tracker.md)）〔修訂 2026-08-29〕；FR-010～012、FR-016 → 各 ui_spec（[../02_ux_ui/](../02_ux_ui/)）；NFR-005、DEC-004 → runbook（[../06_ops/](../06_ops/)）。
+- 上游：DEC-001～012（[requirements_tracker](../01_requirements/requirements_tracker.md) §1；DEC-010／011 為 2026-08-29 補登錄〔修訂 2026-08-29〕；DEC-012 為 2026-09-15 新增〔修訂 2026-09-15e〕）；凍結介面與裁決（`docs/interfaces*.md`）。
+- 下游：FR-001～019 → TC-＊與五個 eval suite（[qa_tracker](../05_qa/qa_tracker.md)）〔修訂 2026-09-15e〕；FR-010～012、FR-016 → 各 ui_spec（[../02_ux_ui/](../02_ux_ui/)）；NFR-005、DEC-004 → runbook（[../06_ops/](../06_ops/)）。
 
 ## 5. 相依與平行開發〔修訂 2026-08-29 新增〕
 
@@ -84,7 +86,7 @@
 |---|---|---|---|
 | `queries/hybrid.js`＋`services/retrievalService.js` | FR-010 | FR-002（kNN）、FR-011、FR-012 | 檢索四落點共用同一條 SQL；最大單點衝突源 |
 | `utils/tokenize.js`（ADR-008 凍結） | — | FR-002、FR-010～012 | 換分詞器須整批重建索引；寫入端與查詢端必須同詞表 |
-| `workers/jobRunner.js`＋`pipeline/stateMachine.js` | FR-001 | FR-002～006、FR-011（variant 同管線）、FR-018 | 節點順序／預算／租約改動跨 FR |
+| `workers/jobRunner.js`＋`pipeline/stateMachine.js` | FR-001 | FR-002～006、FR-011（variant 同管線）、FR-018、FR-019（終態後重算綁定）〔修訂 2026-09-15e〕 | 節點順序／預算／租約改動跨 FR |
 | `services/llm/`＋`config/models.js`＋cassette | — | 所有走 LLM 的 FR（001/002/004/011/012/016/018） | 改 prompt 或模型必須重錄 cassette（ADR-006），重錄是全域動作 |
 | `attempts` 資料表 | FR-008（建列） | FR-013（讀）、FR-014（搬移／刪除）、FR-015（寫 result）、FR-010/011（NOT EXISTS 排除） | 所有權規則已凍結（roadmap §1.5） |
 | `routes/index.js` | — | 全部 | append-only 分區塊設計，衝突落相鄰行、兩邊都留即可 |

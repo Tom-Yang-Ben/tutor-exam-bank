@@ -1,13 +1,14 @@
 # 資料庫設計 (DB Design) - 家教專用數理題庫系統
 
-> **版本:** v1.2 | **更新:** 2026-09-15 | **狀態:** 活躍
+> **版本:** v1.3 | **更新:** 2026-09-15 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 單例（全系統一個 PostgreSQL 16 + pgvector 資料庫）
-> **定位:** 本文件記錄全部資料表的欄位、約束、索引與 migration 沿革；欄位級真相以 `exam_pro/migrations/0001`–`0007` 為準。〔修訂 2026-08-29b〕狀態機轉移邏輯歸 [lld.md](./lld.md)，API 資料模型歸 [api_spec.md](./api_spec.md)。
+> **定位:** 本文件記錄全部資料表的欄位、約束、索引與 migration 沿革；欄位級真相以 `exam_pro/migrations/0001`–`0008` 為準。〔修訂 2026-09-15e〕狀態機轉移邏輯歸 [lld.md](./lld.md)，API 資料模型歸 [api_spec.md](./api_spec.md)。
 
 > 🛠 **2026-08-29 修訂**（PR #6/#7 程式碼同步）：migration 範圍 0001–0005 → 0001–0006；§2.1 `questions` 與 §2.3 `jobs` 各補 `source_type` 欄（0006 追加，著作權管理／組卷過濾，FR-017）；§5 Migration 策略與 §6 追溯的範圍與 ID 同步。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 > 🛠 **2026-09-15b 修訂**（feat/pseudonymize-student-names 程式碼同步）：§3 資料分類 `students.name` 補姓名代號化實作。修改處以〔修訂 2026-09-15b〕行內標記。
+> 🛠 **2026-09-15e 修訂**（feat/follow-up-links 程式碼同步）：0008_follow_up.sql 為 questions 追加 `follows_question_id`（自我參照 FK，NO ACTION）與 `follows_src`，承上題綁定（DEC-012／FR-019）；§1 ERD、§2.1、§4 索引、§5／§6 同步。修改處以〔修訂 2026-09-15e〕行內標記。
 
 > 🛠 **2026-08-29 修訂之二**（feat/source-detail，同日使用者核准）：0007_source_detail.sql 為 questions／jobs 追加 `source_detail`（自由文字來源註記，學校＋年份等；FR-017 延伸）；§2.1／§2.3／§5／§6 同步。標記〔修訂 2026-08-29b〕。
 
@@ -29,6 +30,7 @@ erDiagram
     QUESTIONS ||--o{ ATTEMPTS : "question_id (RESTRICT)"
     EXAM_PAPERS ||--o{ ATTEMPTS : "paper_id"
     QUESTIONS ||--o{ QUESTIONS : "variant_of (SET NULL)"
+    QUESTIONS |o--o{ QUESTIONS : "follows_question_id (NO ACTION)"
     QUESTIONS ||--o{ JOBS : "source_question_id"
     JOBS ||--o{ JOB_QUESTIONS : "job_id (CASCADE)"
     JOBS ||--o{ JOB_EVENTS : "job_id (CASCADE)"
@@ -40,7 +42,7 @@ erDiagram
 
 ## 2. 表格定義
 
-### 2.1 `questions`（0001 建立；0002 加檢索欄、0003 加 text_hash、0004 改 origin CHECK、0006 加 source_type〔修訂 2026-08-29〕、0007 加 source_detail〔修訂 2026-08-29b〕）
+### 2.1 `questions`（0001 建立；0002 加檢索欄、0003 加 text_hash、0004 改 origin CHECK、0006 加 source_type〔修訂 2026-08-29〕、0007 加 source_detail〔修訂 2026-08-29b〕、0008 加 follows_question_id／follows_src〔修訂 2026-09-15e〕）
 
 | 欄位 | 型態 | 約束 | 說明 |
 | :--- | :--- | :--- | :--- |
@@ -62,6 +64,8 @@ erDiagram
 | `text_hash` | CHAR(64) | NULL；0005 起部分唯一 | sha256(normalizeStem(question_text))，L0 去重（FR-005） |
 | `source_type` | TEXT | NOT NULL, DEFAULT 'unknown', CHECK IN ('official','school','publisher','self','unknown') | 0006 追加（FR-017）：題目來源標記（著作權管理），組卷可過濾乾淨題源；值域程式真相 `config/chapters.js` SOURCE_TYPES〔修訂 2026-08-29〕 |
 | `source_detail` | TEXT | 可 NULL, CHECK char_length ≤ 100 | 0007 追加（FR-017 延伸）：自由文字來源註記（例「北一女 2024 段考」）；trim 後空值落 NULL，程式真相 `config/chapters.js` normalizeSourceDetail；不參與 search_tsv／embedding〔修訂 2026-08-29b〕 |
+| `follows_question_id` | INT | 可 NULL, FK → questions(id)（**不寫 ON DELETE**＝NO ACTION）；CHECK `questions_follows_self_check`（不得指向自己） | 0008 追加（FR-019）：承上題指向前題。NO ACTION 於語句結束時檢查，允許同一句刪整組、擋「刪前題留子題」；RESTRICT 逐列立即檢查會讓整組刪除與測試清表失敗。「缺前題」不另存欄位，由 `utils/followUp.js` isFollowUp(question_text) 且本欄為 NULL 即時算〔修訂 2026-09-15e〕 |
+| `follows_src` | TEXT | 可 NULL, CHECK IN ('pipeline','review','backfill','human')；CHECK `questions_follows_src_pair_check`（與 follows_question_id 同為 NULL 或同非 NULL） | 0008 追加（FR-019）：綁定來源——runner 終態後重算／人工複核後重算／回填腳本／人工指定；自動流程一律不覆寫 'human'（寫入端 `services/followUpLinker.js`）〔修訂 2026-09-15e〕 |
 
 ### 2.2 `students`、`exam_papers`、`attempts`（0001）
 
@@ -127,6 +131,7 @@ erDiagram
 | `idx_questions_embedding` | HNSW (vector_cosine_ops, m=16, ef_construction=64) | 向量相似檢索；建在空表上（萬題內逐筆維護成本可忽略） | FR-010、ADR-001 |
 | `idx_questions_tsv` / `idx_questions_text_trgm` | GIN (search_tsv)；GIN (question_text gin_trgm_ops) | hybrid(RRF) 全文半邊、模糊比對 | ADR-002 |
 | `uq_questions_text_hash_active`（0005） | UNIQUE (text_hash) WHERE text_hash IS NOT NULL AND archived_at IS NULL | save／approve／createQuestion 的最後一道去重硬閘門 | FR-005、NFR-006 |
+| `idx_questions_follows`（0008，partial）〔修訂 2026-09-15e〕 | (follows_question_id) WHERE follows_question_id IS NOT NULL | 反查「誰承接這一題」：FK NO ACTION 檢查、後續整組抽題與刪除保護；只索引有綁定的少數列 | FR-019 |
 | `idx_jobs_state` / `idx_jq_state` | (state, locked_until) | worker 認領：FOR UPDATE SKIP LOCKED＋租約 | NFR-005 |
 | `idx_jobs_pdf_sha256`（partial） | (pdf_sha256) WHERE NOT NULL | POST /api/jobs 冪等查詢 | FR-001 |
 | `idx_jq_review`（partial） | (review_reason, id) WHERE state='needs_review' | GET /api/review 跨 job 待複核佇列 | FR-006 |
@@ -137,7 +142,7 @@ erDiagram
 
 | 項目 | 政策 |
 | :--- | :--- |
-| **Migration 策略** | 只增不改（NFR-006）：0001–0007 逐一凍結〔修訂 2026-08-29b〕，任何欄位變更一律新開 migration 檔；ENUM 一律以 TEXT+CHECK 實作（改值域走 DROP/ADD CONSTRAINT，如 0004）；0006_source_type.sql（2026-08-28 核准）為 questions／jobs 追加 source_type〔修訂 2026-08-29〕；0007_source_detail.sql（2026-08-29 核准）為兩表追加 source_detail〔修訂 2026-08-29b〕 |
+| **Migration 策略** | 只增不改（NFR-006）：0001–0008 逐一凍結〔修訂 2026-09-15e〕，任何欄位變更一律新開 migration 檔；ENUM 一律以 TEXT+CHECK 實作（改值域走 DROP/ADD CONSTRAINT，如 0004）；0006_source_type.sql（2026-08-28 核准）為 questions／jobs 追加 source_type〔修訂 2026-08-29〕；0007_source_detail.sql（2026-08-29 核准）為兩表追加 source_detail〔修訂 2026-08-29b〕；0008_follow_up.sql（2026-09-15 核准）為 questions 追加 follows_question_id／follows_src 與兩條具名 CHECK、部分索引〔修訂 2026-09-15e〕 |
 | **唯一約束沿革（0005）** | 0003 先建非唯一 `idx_questions_text_hash`（舊題回填必有碰撞）→ scripts/backfill_text_hash.js 印碰撞清單 → 2026-08-23 人工確認 #2/#3、#5/#38 為真重複，attempts 併到保留題、#3/#38 封存 → 0005 建部分唯一索引（封存題與 NULL 不受限）（裁決 S2-30） |
 | **刪除策略** | 題目軟刪除（archived_at）；attempts ON DELETE RESTRICT；jobs 子表 CASCADE；job_events 只追加不更新 |
 | **保留期限** | 單人自用系統，無法規要求；PDF 原檔於拆題完成後刪除（pdf_path 清成 NULL），其餘資料無限期保留 |
@@ -146,6 +151,6 @@ erDiagram
 
 ## 6. 追溯
 
-- 上游：DEC-003、DEC-004、DEC-009；FR-001、FR-002、FR-005、FR-006、FR-007、FR-008、FR-010、FR-011、FR-013、FR-014、FR-015、FR-017〔修訂 2026-08-29〕；NFR-002、NFR-005、NFR-006；ADR-001、ADR-002、ADR-008
-- 實作真相：`exam_pro/migrations/0001_init.sql`–`0007_source_detail.sql`〔修訂 2026-08-29b〕
+- 上游：DEC-003、DEC-004、DEC-009、DEC-012〔修訂 2026-09-15e〕；FR-001、FR-002、FR-005、FR-006、FR-007、FR-008、FR-010、FR-011、FR-013、FR-014、FR-015、FR-017〔修訂 2026-08-29〕、FR-019〔修訂 2026-09-15e〕；NFR-002、NFR-005、NFR-006；ADR-001、ADR-002、ADR-008
+- 實作真相：`exam_pro/migrations/0001_init.sql`–`0008_follow_up.sql`〔修訂 2026-09-15e〕
 - 下游：[api_spec.md](./api_spec.md)（欄位命名對齊）、[lld.md](./lld.md)（jobs/job_questions 狀態機轉移）、[../03_architecture/engineering_tracker.md](../03_architecture/engineering_tracker.md)、[../06_ops/runbook-job-stuck.md](../06_ops/runbook-job-stuck.md)（locked_until 租約）
