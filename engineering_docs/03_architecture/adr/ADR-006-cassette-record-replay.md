@@ -55,7 +55,7 @@
 
 ## 4. 後果
 
-- **正面**: CI 全綠 @ f8f6574 且全程零金鑰零網路；整合 262 項與五個 eval suite 可確定性重播（main 126243a 實測，2026-09-15〔修訂 2026-09-15〕）；成本統計（`tokenOut + tokenThinking`）隨 cassette 保存。
+- **正面**: CI 全綠 @ f8f6574 且全程零金鑰零網路；整合 290 項與五個 eval suite 可確定性重播（feat/follow-up-links 實跑，2026-09-15〔修訂 2026-09-15f〕）；成本統計（`tokenOut + tokenThinking`）隨 cassette 保存。
 - **負面**: 換模型或改模板須在本機重錄全部相關 cassette（刻意設計）；`JSON.stringify` 依插入順序序列化，agent 須以固定鍵順序組 `cacheKeyParts`。
 - **影響範圍**: `exam_pro/services/llm/`、`exam_pro/eval/cassettes/`、`exam_pro/scripts/record_cassettes.js`、CI workflow。
 - **重新評估觸發**: 接入第二家供應商（A-T17 預留）或 embedding 模型升級需重灌向量欄位時。
