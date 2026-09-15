@@ -431,6 +431,8 @@ rebase 時若兩條 WS 都動了本檔，衝突只會落在相鄰行，**兩邊�
 | 有 `attempts` 紀錄 | 200 | `{ message: '該題已有學生作答紀錄，改為封存（不再出現在題庫與組卷候選中）。', id, archived: true }` |
 | 沒有紀錄 | 200 | `{ message: '題目已刪除！', id }`（不帶 `archived`） |
 | 找不到或已封存 | 404 | `{ message: '找不到該題目' }` |
+| 此題是承上題的前題（0008 `questions_follows_question_id_fkey`）〔修訂 2026-09-15f〕 | 409 | `{ message: '此題是承上題 #… 的前題，請先刪除或解除綁定該承上題。', children: [<承上題 id>…] }`；交易回滾後回應，題目不變 |
+| 此題由匯入任務產生（`job_questions_question_id_fkey`）〔修訂 2026-09-15f〕 | 409 | `{ message: '此題由匯入任務產生，無法直接刪除，請改用封存。' }`（2026-09-15 前此情境直接落 500） |
 
 ### 12.2 `config/features.js`（擁有者：WS-A）
 

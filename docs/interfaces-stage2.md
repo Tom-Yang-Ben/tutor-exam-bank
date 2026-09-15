@@ -338,7 +338,8 @@ type Ctx = {
     "answer_text": "…",
     "figure_desc": "…",              // 沒有附圖時整個鍵不存在
     "chunk_no": 1,
-    "page_range": [1, 20]
+    "page_range": [1, 20],
+    "chunk_elements": 12             // 〔修訂 2026-09-15f〕runner 追加（非模型輸出）：該塊模型回傳的元素總數，含被 schema 驗證丟掉的；FR-019 判斷塊尾是否被丟。舊資料沒有此鍵
   },
   "dedup0": {
     "text_hash": "<sha256 hex>",
@@ -738,12 +739,12 @@ function estimateCost({ modelId, tokenIn, tokenOut, tokenThinking, tokenCached }
   "payload": { "…第 3.2 條的完整內容…" },
   "question_id": null, "created_at": "…", "updated_at": "…",
   "follow_up": { "is_follow_up": true,
-                 "predecessor": { "jq_id": 550, "idx": 1000, "state": "needs_review", "question_id": null, "stem_preview": "…" },   // 示意形狀；idx 以實際前題為準
+                 "predecessor": { "jq_id": 548, "idx": 1003, "state": "needs_review", "question_id": null, "stem_preview": "…" },   // 形狀示意：前題為同 job 較小 idx 的那一列
                  "unresolved_reason": "predecessor_pending" } }
 ```
 
 - 404：`{ message: '找不到該待複核題目' }`
-- 〔修訂 2026-09-15e〕`follow_up`（FR-019，只加鍵）：`is_follow_up` 依修正後題幹（`payload.lint.question_text` 否則 `payload.extract.question_text`）判斷；非承上題時 `predecessor`／`unresolved_reason` 皆為 `null`。`unresolved_reason` 可能值：`extract_gap`、`first_in_job`、`predecessor_pending`、`predecessor_rejected`、`predecessor_missing`、`resolve_depth_exceeded`；前題可解析時為 `null`。
+- 〔修訂 2026-09-15e〕`follow_up`（FR-019，只加鍵）：`is_follow_up` 依修正後題幹（`payload.lint.question_text` 否則 `payload.extract.question_text`）判斷；非承上題時 `predecessor`／`unresolved_reason` 皆為 `null`。`unresolved_reason` 可能值：`extract_gap`（前一個元素被 extract 丟掉，含上一塊塊尾——依 `payload.extract.chunk_elements`，舊資料退回讀 extract 事件的 `detail.rejected`〔修訂 2026-09-15f〕）、`first_in_job`、`predecessor_pending`、`predecessor_rejected`、`predecessor_missing`、`resolve_depth_exceeded`；前題可解析時為 `null`。〔修訂 2026-09-15f〕`kind='variant'` 的 job 一律回 `predecessor: null, unresolved_reason: 'variant_job'`——**變式題不做承上題綁定**（沒有「上一題」）。
 
 ### 6.6 `POST /api/review/:jqId/approve` / `POST /api/review/:jqId/reject`
 
