@@ -156,6 +156,72 @@ describe('migrations 套用結果', { skip: SKIP }, () => {
         }
     });
 
+    test('0008：follows_question_id／follows_src 兩欄、具名約束、部分索引、FK 為 NO ACTION', async () => {
+        const { rows: versions } = await client.query(`SELECT 1 FROM schema_migrations WHERE version = '0008_follow_up.sql'`);
+        assert.equal(versions.length, 1, '0008_follow_up.sql 未套用');
+
+        const { rows: cols } = await client.query(
+            `SELECT column_name, data_type, is_nullable FROM information_schema.columns
+              WHERE table_name = 'questions' AND column_name IN ('follows_question_id', 'follows_src')
+              ORDER BY column_name`);
+        assert.deepEqual(cols, [
+            { column_name: 'follows_question_id', data_type: 'integer', is_nullable: 'YES' },
+            { column_name: 'follows_src', data_type: 'text', is_nullable: 'YES' }
+        ]);
+
+        const { rows: cons } = await client.query(
+            `SELECT conname FROM pg_constraint WHERE conrelid = 'questions'::regclass
+               AND conname IN ('questions_follows_self_check', 'questions_follows_src_pair_check')
+             ORDER BY conname`);
+        assert.deepEqual(cons.map(c => c.conname), ['questions_follows_self_check', 'questions_follows_src_pair_check']);
+
+        // 自我參照 FK：'a' = NO ACTION（句尾檢查，整組同句刪除與測試清表才不會失敗）
+        const { rows: fk } = await client.query(
+            `SELECT c.confdeltype FROM pg_constraint c
+               JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+              WHERE c.conrelid = 'questions'::regclass AND c.contype = 'f' AND a.attname = 'follows_question_id'`);
+        assert.equal(fk.length, 1);
+        assert.equal(fk[0].confdeltype, 'a', 'confdeltype 應為 a（NO ACTION）');
+
+        const { rows: idx } = await client.query(
+            `SELECT indexdef FROM pg_indexes WHERE tablename = 'questions' AND indexname = 'idx_questions_follows'`);
+        assert.equal(idx.length, 1, '缺少索引 idx_questions_follows');
+        assert.match(idx[0].indexdef, /WHERE \(follows_question_id IS NOT NULL\)/);
+
+        await client.query('BEGIN');
+        try {
+            const { rows: q } = await client.query(
+                `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text)
+                 VALUES ('數學', '向量內積', '計算', 3, 'schema 承上題約束前題', '略'),
+                        ('數學', '向量內積', '計算', 3, 'schema 承上題約束子題', '略') RETURNING id`);
+            const [a, b] = q.map(r => r.id);
+
+            await client.query('SAVEPOINT s');
+            await assert.rejects(
+                client.query(`UPDATE questions SET follows_question_id = id, follows_src = 'human' WHERE id = $1`, [a]),
+                /questions_follows_self_check/);
+            await client.query('ROLLBACK TO SAVEPOINT s');
+            await assert.rejects(
+                client.query('UPDATE questions SET follows_question_id = $1 WHERE id = $2', [a, b]),
+                /questions_follows_src_pair_check/);
+            await client.query('ROLLBACK TO SAVEPOINT s');
+            await assert.rejects(
+                client.query(`UPDATE questions SET follows_question_id = $1, follows_src = 'ai' WHERE id = $2`, [a, b]),
+                /violates check constraint/);
+            await client.query('ROLLBACK TO SAVEPOINT s');
+
+            await client.query(`UPDATE questions SET follows_question_id = $1, follows_src = 'human' WHERE id = $2`, [a, b]);
+            await client.query('SAVEPOINT s2');
+            await assert.rejects(client.query('DELETE FROM questions WHERE id = $1', [a]), /foreign key/i,
+                '只刪前題、留下子題要被擋');
+            await client.query('ROLLBACK TO SAVEPOINT s2');
+            const del = await client.query('DELETE FROM questions WHERE id = ANY($1::int[])', [[a, b]]);
+            assert.equal(del.rowCount, 2, 'NO ACTION：同一句刪整組要成功');
+        } finally {
+            await client.query('ROLLBACK');
+        }
+    });
+
     test('pgvector 的距離運算子可用（<=> 餘弦距離）', async () => {
         const { rows } = await client.query(`SELECT ('[1,0,0]'::vector <=> '[1,0,0]'::vector) AS d`);
         assert.ok(Math.abs(Number(rows[0].d)) < 1e-9);

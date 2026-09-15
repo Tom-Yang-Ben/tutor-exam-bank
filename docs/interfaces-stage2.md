@@ -338,7 +338,8 @@ type Ctx = {
     "answer_text": "…",
     "figure_desc": "…",              // 沒有附圖時整個鍵不存在
     "chunk_no": 1,
-    "page_range": [1, 20]
+    "page_range": [1, 20],
+    "chunk_elements": 12             // 〔修訂 2026-09-15f〕runner 追加（非模型輸出）：該塊模型回傳的元素總數，含被 schema 驗證丟掉的；FR-019 判斷塊尾是否被丟。舊資料沒有此鍵
   },
   "dedup0": {
     "text_hash": "<sha256 hex>",
@@ -736,10 +737,14 @@ function estimateCost({ modelId, tokenIn, tokenOut, tokenThinking, tokenCached }
 { "jq_id": 551, "job_id": 41, "idx": 1001, "state": "needs_review",
   "review_reason": "answer_mismatch", "retries": { "verify": 1 },
   "payload": { "…第 3.2 條的完整內容…" },
-  "question_id": null, "created_at": "…", "updated_at": "…" }
+  "question_id": null, "created_at": "…", "updated_at": "…",
+  "follow_up": { "is_follow_up": true,
+                 "predecessor": { "jq_id": 548, "idx": 1003, "state": "needs_review", "question_id": null, "stem_preview": "…" },   // 形狀示意：前題為同 job 較小 idx 的那一列
+                 "unresolved_reason": "predecessor_pending" } }
 ```
 
 - 404：`{ message: '找不到該待複核題目' }`
+- 〔修訂 2026-09-15e〕`follow_up`（FR-019，只加鍵）：`is_follow_up` 依修正後題幹（`payload.lint.question_text` 否則 `payload.extract.question_text`）判斷；非承上題時 `predecessor`／`unresolved_reason` 皆為 `null`。`unresolved_reason` 可能值：`extract_gap`（前一個元素被 extract 丟掉，含上一塊塊尾——依 `payload.extract.chunk_elements`，舊資料退回讀 extract 事件的 `detail.rejected`〔修訂 2026-09-15f〕）、`first_in_job`、`predecessor_pending`、`predecessor_rejected`、`predecessor_missing`、`resolve_depth_exceeded`；前題可解析時為 `null`。〔修訂 2026-09-15f〕`kind='variant'` 的 job 一律回 `predecessor: null, unresolved_reason: 'variant_job'`——**變式題不做承上題綁定**（沒有「上一題」）。
 
 ### 6.6 `POST /api/review/:jqId/approve` / `POST /api/review/:jqId/reject`
 
@@ -756,7 +761,7 @@ function estimateCost({ modelId, tokenIn, tokenOut, tokenThinking, tokenCached }
 
 | 狀態 | 回應 |
 |---|---|
-| 200 | `{ question_id: 131 }`；`merge_into` 路徑回 `{ question_id: <merge_into>, merged: true }` |
+| 200 | `{ question_id: 131, follows_question_id: null }`；`merge_into` 路徑回 `{ question_id: <merge_into>, merged: true, follows_question_id: null }`（〔修訂 2026-09-15e〕`follows_question_id` 為 FR-019 新增鍵：綁定重算後該題的前題，非承上題為 `null`） |
 | 400 | `{ message: '欄位驗證失敗', errors: [ … ] }`（`errors` 原樣來自 `validateQuestionFields`） |
 | 400 | `{ message: '公式仍有無法解析的問題，請修正後再送出，或勾選「接受純文字降級」。', errors: [ {sev,rule,at,msg} … ] }` |
 | 400 | `{ message: 'merge_into 指向的題目不存在。' }` |
@@ -767,6 +772,8 @@ function estimateCost({ modelId, tokenIn, tokenOut, tokenThinking, tokenCached }
 - 成功後：`job_questions.state='saved'`、`review_reason=NULL`、回填 `question_id`；`questions.origin='pdf'`、`chapter_src='human'`（人改過的章節）、`text_hash` 一併寫入——全部同一個交易。
 
 **reject**：200 `{ message: '已標記為不採用。', jq_id: 551 }`；404／409 同上。`state='rejected'`，`review_reason` 保留原值。
+
+〔修訂 2026-09-15e〕**承上題綁定重算（FR-019）**：approve 的兩條入庫路徑（新題、`merge_into`）與 reject，都在 COMMIT 前以同一個 client 呼叫 `services/followUpLinker.js` 的 `linkJob(client, job_id, {src:'review'})`，外包 `SAVEPOINT`——綁定失敗只回滾這一段並記 log，複核結果照常提交。reject 也要重算：被「不採用」的重複題仍指向命中的既有題，補強規則（只補空）要有機會跑。
 
 ### 6.7 `POST /api/jobs/:id/retry`
 
@@ -920,6 +927,7 @@ Windows 提醒：PowerShell 5.1 的 `>` 會寫成 UTF-16LE，要用 `npm start |
 - `migrate.js` 沒有 `down`：寫錯的 migration 用「再寫一支把它改回來」修正。
 - `text_hash` 改成 UNIQUE 是**另一支 migration**，前提是 `scripts/backfill_text_hash.js` 的碰撞清單經人工逐組確認（目前開發庫有 2 組待確認：#2/#3、#5/#38）。
 - WS 發現缺欄位時，**不是**改 `0003`，而是寫進 `docs/questions2-ws<X>.md` 由開發者本人裁決後新開一支。
+- 〔修訂 2026-09-15e〕`0008_follow_up.sql`（2026-09-15 核准，DEC-012／FR-019）：`questions.follows_question_id`（自我參照 FK，不寫 ON DELETE＝NO ACTION）、`follows_src`（'pipeline'／'review'／'backfill'／'human'）、具名 CHECK `questions_follows_self_check`／`questions_follows_src_pair_check`、部分索引 `idx_questions_follows`。**runner 與狀態機不因此多一個節點**：綁定在 job_question 寫成終態後重算（見 `workers/jobRunner.js` 的 `linkFollowUps`），`pipeline/stateMachine.js` 與 0003 的 state／review_reason CHECK 均未改動；`job_events.node` 也不新增值。
 
 ---
 

@@ -776,10 +776,26 @@ function createRunner(opts = {}) {
                 await sleep(backoffMs((jq.retries?.[`${node}:error`] ?? 0)));
             }
 
-            if (TERMINAL_STATES.includes(next.state)) await maybeFinishJob(jq.job_id);
+            if (TERMINAL_STATES.includes(next.state)) {
+                // 承上題綁定（DEC-012／FR-019）：任何一列到終態就對整個 job 重算一次。
+                // 不是新節點、不經 transition()——綁定是衍生資料，失敗只 warn，不影響狀態推進
+                // （與 scheduleEmbed 同一個原則；下一列到終態或回填腳本會再算一次）。
+                // 變式政策停等分支（上方 awaiting_approval）刻意不掛：變式 job 沒有「上一題」。
+                await linkFollowUps(jq.job_id);
+                await maybeFinishJob(jq.job_id);
+            }
         } finally {
             stopRenew();
             await db.query('UPDATE job_questions SET locked_until = NULL WHERE id = $1', [jqId]).catch(() => { });
+        }
+    }
+
+    /** 承上題綁定：失敗只記 log（見 services/followUpLinker.js）。 */
+    async function linkFollowUps(jobId) {
+        try {
+            await require('../services/followUpLinker').linkJob(db, jobId, { src: 'pipeline' });
+        } catch (err) {
+            logger.warn({ msg: '承上題綁定失敗（不影響狀態推進）', job_id: jobId, error: String(err && err.message).split('\n')[0] });
         }
     }
 
@@ -934,6 +950,10 @@ function createRunner(opts = {}) {
      */
     async function insertJobQuestions(jobId, chunk, data) {
         const list = Array.isArray(data.questions) ? data.questions : [];
+        // FR-019：該塊模型回傳的元素總數（含被 schema 驗證丟掉的）。承上題找前題時用它判斷
+        // 「上一塊的塊尾有沒有題被丟」，避免跨塊靜默綁錯。比照 figure_img 由 runner 追加，
+        // 不動 extract 模板／schema／cassette。
+        const chunkElements = list.length + (Array.isArray(data.rejected) ? data.rejected.length : 0);
         let created = 0;
         for (let i = 0; i < list.length; i++) {
             const q = list[i];
@@ -942,7 +962,8 @@ function createRunner(opts = {}) {
                 extract: {
                     ...q, idx,
                     chunk_no: q?.chunk_no ?? chunk.no,
-                    page_range: q?.page_range ?? [chunk.fromPage, chunk.toPage]
+                    page_range: q?.page_range ?? [chunk.fromPage, chunk.toPage],
+                    chunk_elements: chunkElements
                 }
             };
             const { rowCount } = await db.query(

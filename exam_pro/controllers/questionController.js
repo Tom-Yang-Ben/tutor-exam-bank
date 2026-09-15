@@ -326,11 +326,31 @@ exports.deleteQuestion = async (req, res, next) => {
         res.json({ message: '題目已刪除！', id });
     } catch (err) {
         try { await client.query('ROLLBACK'); } catch (e) { /* 回滾失敗不覆蓋原始錯誤 */ }
+        // 23503 foreign_key_violation：交易已回滾，再以一般連線查資料、回 409（以前直接落到 500）
+        if (err.code === FOREIGN_KEY_VIOLATION && err.constraint === 'questions_follows_question_id_fkey') {
+            // FR-019：此題是承上題的前題（0008 的 FK 為 NO ACTION，於 DELETE 語句結束時擋下）
+            try {
+                const { rows: kids } = await pool.query(
+                    'SELECT id FROM questions WHERE follows_question_id = $1 ORDER BY id', [id]);
+                const children = kids.map(r => r.id);
+                return res.status(409).json({
+                    message: `此題是承上題 ${children.map(c => `#${c}`).join('、')} 的前題，請先刪除或解除綁定該承上題。`,
+                    children
+                });
+            } catch (e) { return next(e); }
+        }
+        if (err.code === FOREIGN_KEY_VIOLATION && err.constraint === 'job_questions_question_id_fkey') {
+            // 管線／複核入庫的題被 job_questions.question_id 參照（0003 不設 ON DELETE）
+            return res.status(409).json({ message: '此題由匯入任務產生，無法直接刪除，請改用封存。' });
+        }
         next(err);
     } finally {
         client.release();
     }
 };
+
+/** PG foreign_key_violation */
+const FOREIGN_KEY_VIOLATION = '23503';
 
 // 批次補標題源（0007）：對一批題目一次套用 source_type 與（或）source_detail。
 // 為既有題庫的人工補標而生——同一份考卷的題先用篩選圈出來，再一次標完。

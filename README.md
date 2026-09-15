@@ -132,7 +132,7 @@ exam_pro/
 │   └─ thresholds.json        #   門檻（首測 −0.03、只升不降）
 │
 ├─ test/
-│   ├─ unit/                  #   1,476 項：不連網、不連庫、零 secrets
+│   ├─ unit/                  #   1,507 項：不連網、不連庫、零 secrets
 │   ├─ integration/           #   262 項：對 tmpfs 測試庫（_test 後綴強制）
 │   └─ e2e/                   #   11 項：HTTP 全路徑（上傳→部分入庫；組卷→Word 公式）
 │
@@ -258,7 +258,7 @@ workers/jobRunner.js
 
 ### 設計理由
 
-1. **prompt 不構成保證，伺服器端驗證才是**：每道閘門均為一般程式碼，其行為由 1,476 項單元測試固定。
+1. **prompt 不構成保證，伺服器端驗證才是**：每道閘門均為一般程式碼，其行為由 1,507 項單元測試固定。
 2. **將不確定性限制在單一步驟內**：流程（節點順序、重試、預算、逾時）為確定性狀態機——可重跑、可觀測（`job_events` 逐步記錄，含成本），租約到期後由其他 worker 接手續跑。
 3. **協作的形式是相互驗證，而非模型間的自由對話**：verify 節點以不同模型獨立重解題目並比對答案——單一模型抄錯答案時，錯誤內容往往格式正確、無從自行察覺；kNN 投票僅採計人工確認的標籤——若允許自動產生的標籤參與投票，錯誤分類將經由迴圈自我強化。
 4. **成本控制內建於架構**：閘門依成本由低至高排序（文字比對 → embedding → LLM）；檢索命中即不進入生成；kNN 信心足夠時跳過 LLM 呼叫；模型路由（拆題用 flash、驗答用 pro）；並輔以單一 job 與每日成本上限、逐 token 計費紀錄。
@@ -378,13 +378,13 @@ Gemini 已回傳 JSON，為何不直接入庫？
 - **AI**：Google Gemini（`@google/genai`）——拆題／分類／變式 `gemini-3.5-flash`、獨立驗答 `gemini-3.1-pro-preview`、embedding `gemini-embedding-001`（768 維）；模型 ID 單一真相在 [`exam_pro/config/models.js`](./exam_pro/config/models.js)
 - **文件**：`docx`（自製 LaTeX → OOXML 數學公式轉換）
 - **前端**：單頁 HTML + Tailwind（CDN）+ MathJax + 五個 ES module 分頁（零打包器）
-- **測試／量測**：`node:test`（單元 1,476／整合 262／e2e 11）＋五個 eval suite（golden＋ratchet 門檻）＋ LLM record/replay cassette——CI 全程零金鑰、零網路、零成本
+- **測試／量測**：`node:test`（單元 1,507／整合 290／e2e 11）＋五個 eval suite（golden＋ratchet 門檻）＋ LLM record/replay cassette——CI 全程零金鑰、零網路、零成本
 
 ---
 
 ## 🧪 品質保證的三層（怎麼測一個 LLM 系統）
 
-1. **合約層單元測試**：agent 為純函式（依賴全數注入），1,476 項測試不連網、不連庫、不需任何金鑰，clone 後執行 `npm test` 即可完整重現。
+1. **合約層單元測試**：agent 為純函式（依賴全數注入），1,507 項測試不連網、不連庫、不需任何金鑰，clone 後執行 `npm test` 即可完整重現。
 2. **cassette record/replay**：真實呼叫錄製為 cassette（鍵含模型 ID、模板版本與輸入雜湊），CI 以 replay 模式確定性地重播完整管線；replay miss 於 main 分支視為錯誤——cassette 缺漏不得以綠燈掩蓋。
 3. **eval golden + ratchet**：五個 suite 對人工定案的 golden 量指標，門檻＝首測 −0.03、只升不降；任何改動讓指標掉到門檻下，CI 轉紅。
 

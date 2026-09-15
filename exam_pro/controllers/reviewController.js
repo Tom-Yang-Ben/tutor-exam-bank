@@ -15,6 +15,13 @@
 const { query, pool } = require('../config/db');
 const { validateQuestionFields } = require('../utils/questionValidation');
 const jobCtl = require('./jobController');
+const followUp = require('../services/followUpLinker');
+
+/** approve 回應的 follows_question_id：入庫（或 merge 目標）題目在綁定重算後的前題 */
+async function followsOf(client, questionId) {
+    const { rows } = await client.query('SELECT follows_question_id FROM questions WHERE id = $1', [questionId]);
+    return rows.length ? rows[0].follows_question_id : null;
+}
 
 /** DDL（0003_jobs.sql）CHECK 的八個 review_reason，順序 = 介面第 2 條。 */
 const REVIEW_REASONS = ['chapter_invalid', 'formula_unparsable', 'answer_mismatch',
@@ -119,7 +126,9 @@ exports.getReviewItem = async (req, res, next) => {
                     question_id, created_at, updated_at
                FROM job_questions WHERE id = $1`, [id]);
         if (rows.length === 0) return res.status(404).json({ message: NOT_FOUND });
-        res.json(rows[0]);
+        // FR-019：多一個 follow_up 區塊（只加鍵，既有欄位不動）
+        const follow_up = await followUp.describeFollowUp({ query }, rows[0]);
+        res.json({ ...rows[0], follow_up });
     } catch (err) { next(err); }
 };
 
@@ -194,8 +203,11 @@ exports.approve = async (req, res, next) => {
                 detail: { merged: true, merge_into: mergeInto }
             });
             await jobCtl.maybeFinishJob(client, jq.job_id);
+            // FR-019：這一列落到既有題後重算整個 job 的承上題綁定（同一交易，失敗只回滾這一段）
+            await followUp.linkJobInTransaction(client, jq.job_id, { src: 'review' });
+            const mergedFollows = await followsOf(client, mergeInto);
             await client.query('COMMIT');
-            return res.json({ question_id: mergeInto, merged: true });
+            return res.json({ question_id: mergeInto, merged: true, follows_question_id: mergedFollows });
         }
 
         // ── 入庫：kind='pdf' 走 origin='pdf'／chapter_src='human'（既有行為，第 6.6 條是契約）；
@@ -251,9 +263,12 @@ exports.approve = async (req, res, next) => {
             detail: { question_id: questionId, accept_plain_text: acceptPlainText }
         });
         await jobCtl.maybeFinishJob(client, jq.job_id);
+        // FR-019：新題入庫後重算整個 job 的承上題綁定（前題被核准 → 子題補綁或改綁到這一題）
+        await followUp.linkJobInTransaction(client, jq.job_id, { src: 'review' });
+        const follows = await followsOf(client, questionId);
         await client.query('COMMIT');
 
-        res.json({ question_id: questionId });
+        res.json({ question_id: questionId, follows_question_id: follows });
         scheduleEmbed(questionId);
     } catch (err) {
         await client.query('ROLLBACK').catch(() => { });
@@ -301,6 +316,8 @@ exports.reject = async (req, res, next) => {
             [id]);
         await jobCtl.writeHumanEvent(client, { jobId: rows[0].job_id, jqId: id, node: 'reject', startedAt, detail: {} });
         await jobCtl.maybeFinishJob(client, rows[0].job_id);
+        // FR-019：不採用的重複題仍指向命中的既有題，補強規則要有機會跑（只補空不覆寫）
+        await followUp.linkJobInTransaction(client, rows[0].job_id, { src: 'review' });
         await client.query('COMMIT');
 
         res.json({ message: '已標記為不採用。', jq_id: id });

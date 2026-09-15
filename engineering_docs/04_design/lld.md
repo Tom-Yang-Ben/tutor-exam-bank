@@ -1,9 +1,11 @@
 # 低階設計與程式碼地圖 (LLD / Code Map) - 家教專用數理題庫系統
 
-> **版本:** v1.0 | **更新:** 2026-08-25 | **狀態:** 活躍
+> **版本:** v1.1 | **更新:** 2026-09-15 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 單檔；§5 狀態機每個 Aggregate 一節
+>
+> 🛠 **2026-09-15e 修訂**（feat/follow-up-links）：§2 模組結構補 `utils/followUp.js`、`services/followUpLinker.js`、`scripts/backfill_follow_ups.js`；§4.1 補「承上題綁定」掛點；§6 上游補 FR-019。修改處以〔修訂 2026-09-15e〕行內標記。
 >
 > **定位**：C4 Code 層——模組結構、兩個 Aggregate（jobs、job_questions）的狀態機、jobRunner 認領演算法、助教 ReAct 迴圈。回答「模組如何組成、狀態如何合法轉移」。
 > 系統級架構歸 [`../03_architecture/sad.md`](../03_architecture/sad.md)；API 契約歸 [`api_spec.md`](./api_spec.md)；資料 schema 歸 [`db_design.md`](./db_design.md)。狀態轉移合法性以 `exam_pro/pipeline/stateMachine.js` 為單一權威。
@@ -33,13 +35,14 @@
 exam_pro/
 ├── routes/       # API 全表（index.js：核心區＋各階段 append-only 區塊，旗標控制掛載）
 ├── controllers/  # HTTP 層：驗參、交易、回應（jobController、reviewController、examController…）
-├── services/     # 業務服務：llm/（adapter＋throttle＋cassette）、assistantService、variantService…
+├── services/     # 業務服務：llm/（adapter＋throttle＋cassette）、assistantService、variantService、followUpLinker（承上題綁定寫入端 linkJob，冪等）〔修訂 2026-09-15e〕…
 ├── agents/       # 管線節點純函式：extract/classify/lint/verify/dedup/generate（不碰 DB、ctx 注入）
 ├── pipeline/     # stateMachine.js：job_questions 推進規則（純函式）
 ├── workers/      # jobRunner.js：DB-polling worker，唯一改 job_questions.state 與寫 job_events 之處
 ├── config/       # db／models（模型 ID 單一真相）／features／pricing／chapters
 ├── queries/      # hybrid 檢索 SQL
-└── utils/        # tokenize（全案唯一分詞）、questionValidation（save 白名單驗證）、pseudonym（學生姓名↔代號，送 LLM 前遮罩）
+├── scripts/      # 維運腳本：backfill_text_hash、backfill_embeddings、backfill_follow_ups（承上題回填，--dry-run／--test／--report）〔修訂 2026-09-15e〕…
+└── utils/        # tokenize（全案唯一分詞）、questionValidation（save 白名單驗證）、pseudonym（學生姓名↔代號，送 LLM 前遮罩）、followUp（承上題偵測與前題解析純函式）〔修訂 2026-09-15e〕
 ```
 
 ## 3. 模組依賴圖
@@ -74,6 +77,7 @@ flowchart TD
 | 單 job 成本上限 | 呼叫前檢查 `budget_usd − cost_usd`，餘額不足即不發出呼叫；轉為 `needs_review('budget_exceeded')` | `JOB_COST_BUDGET_USD=0.5` |
 | 每日成本上限 | tick 起手查 `job_events` 當日 `SUM(cost_usd)`；超過即只認領零成本節點（dedup0／dedup1／save）對應的狀態、不開新 job | `DAILY_COST_BUDGET_USD=5` |
 | 重跑冪等 | `job_questions` UNIQUE `(job_id, idx)` ＋ `ON CONFLICT DO NOTHING`：extract／generate 重跑不重複建列 | — |
+| 承上題綁定（FR-019）〔修訂 2026-09-15e〕 | 非新節點、不經 `transition()`：job_question 寫成終態的 UPDATE 之後、`maybeFinishJob` 之前呼叫 `services/followUpLinker.js` 的 `linkJob(db, job_id, {src:'pipeline'})`，對整個 job 重算（子題先入庫時等前題到終態再補綁）；失敗只 warn、不影響狀態推進。變式政策停等分支不掛；`kind='variant'` 的 job 在 linkJob 內 no-op。approve／reject 在同交易以 SAVEPOINT 包住呼叫（`src:'review'`） | 前題解析遞迴深度 5、成環檢查深度 20 |
 
 ### 4.2 助教 ReAct 迴圈（exam_pro/services/assistantService.js，ADR-007）
 
@@ -145,5 +149,5 @@ stateDiagram-v2
 
 | 項目 | ID／連結 |
 | :--- | :--- |
-| 上游 | FR-001、FR-006、FR-011、FR-016；NFR-002、NFR-003、NFR-005、NFR-006；DEC-005、DEC-007、DEC-008；[`../03_architecture/adr/ADR-003-code-orchestrated-agent-pipeline.md`](../03_architecture/adr/ADR-003-code-orchestrated-agent-pipeline.md)、[`../03_architecture/adr/ADR-007-assistant-no-native-function-calling.md`](../03_architecture/adr/ADR-007-assistant-no-native-function-calling.md) |
+| 上游 | FR-001、FR-006、FR-011、FR-016、FR-019〔修訂 2026-09-15e〕；NFR-002、NFR-003、NFR-005、NFR-006；DEC-005、DEC-007、DEC-008；[`../03_architecture/adr/ADR-003-code-orchestrated-agent-pipeline.md`](../03_architecture/adr/ADR-003-code-orchestrated-agent-pipeline.md)、[`../03_architecture/adr/ADR-007-assistant-no-native-function-calling.md`](../03_architecture/adr/ADR-007-assistant-no-native-function-calling.md) |
 | 下游 | [`db_design.md`](./db_design.md)（jobs.state／job_questions.state／review_reason／error_class 的 enum 引用）、[`api_spec.md`](./api_spec.md)（FR-001／FR-016 端點行為）、[`../05_qa/qa_tracker.md`](../05_qa/qa_tracker.md)（TC-001-*、TC-016-*） |
