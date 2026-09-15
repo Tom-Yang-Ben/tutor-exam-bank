@@ -13,7 +13,7 @@
 > 🛠 **2026-09-15f 修訂**（feat/follow-up-links 審查修正）：NFR-003 測試數更新為 1,507／290／11（本分支實跑）；§6 ACPT-019-* 狀態改為已驗證。修改處以〔修訂 2026-09-15f〕行內標記。
 > 🛠 **2026-09-15f 修訂**（feat/source-check，DEC-013、ADR-009）：§1 新增 FR-020 拆題結果對照原卷文字層、FR-006 複核原因八種→九種；NFR-003 測試數 1,476／262／11→1,534／269／11（feat/source-check 實測）；NFR-006 migrations 範圍補 0007、0009；§3 管線資料補原卷片段；§6 補 ACPT-020-* 對照；§7 追溯同步。修改處以〔修訂 2026-09-15f〕行內標記。
 > 🛠 **2026-09-15 合併同步**（feat/follow-up-links 併入 feat/source-check）：定位行功能需求數 19→20；NFR-003 測試數更新為單元 1,565（其後原卷比對審查修正補 2 項單元測試，現況 1,567）／整合 297／e2e 11（合併後實跑）；NFR-006 migrations 範圍合為 0001–0009 共 9 份；§7 追溯之 DEC／FR 範圍合併。上列兩分支修訂列所載之各分支實測數與範圍為當時紀錄，保留不改。合併重算處以〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕雙標記。
-> 🛠 **2026-09-15g 修訂**（feat/follow-up-paper-group，FR-019 PR2）：§1 FR-019 列補組卷整組抽取的模組與端點行為；§6 ACPT-019-5、019-7 改為已驗證（TC-019-6）。NFR-003 全域測試數由主線合併時統一更新，本分支不動。修改處以〔修訂 2026-09-15g〕行內標記。
+> 🛠 **2026-09-15g 修訂**（feat/follow-up-paper-group，FR-019 PR2）：§1 FR-019 列補組卷整組抽取的模組與端點行為；§6 ACPT-019-5、019-7 改為已驗證（TC-019-8）。NFR-003 全域測試數由主線合併時統一更新，本分支不動。修改處以〔修訂 2026-09-15g〕行內標記。
 
 ## 目錄
 
@@ -110,7 +110,7 @@ AC 以 Given/When/Then 落在 [`prd.md`](./prd.md) ACPT 段；此處維護對照
 | ACPT-014-* – ACPT-016-* | FR-014–016 | TC-014-1–TC-016-1（學生管理、批改、對話式助教）；邊界場景 SCN-015、SCN-016 | 已驗證 |
 | ACPT-017-* | FR-017 | 單元（SOURCE_TYPES 凍結＋與 0006 CHECK 一致）＋整合（建題→過濾→組卷過濾→改標端到端）〔修訂 2026-08-29〕 | 已驗證（CI 全綠 @ f7a9c41） |
 | ACPT-018-* | FR-018 | 單元＋整合（cassette 已重錄 @ 4af4647，含 extract bbox 節點）〔修訂 2026-08-29〕 | 已驗證（CI）；真實考卷 bbox 準度待驗 |
-| ACPT-019-* | FR-019 | TC-019-1～TC-019-4：單元（isFollowUp／findPredecessorRow／resolveQuestionId）＋整合（followUp.pg.test.js：runner 綁定、複核重算、保護與補強、回填腳本；schema.test.js 0008 斷言）〔修訂 2026-09-15e〕 | ACPT-019-1～4 已驗證（本分支實跑單元 1,507／整合 290／e2e 11；複核畫面前端顯示待 PR3）〔修訂 2026-09-15f〕；ACPT-019-5、019-7 已驗證（TC-019-6：paperGroups.test.js＋paperGroups.pg.test.js，feat/follow-up-paper-group 實跑單元 1,583／整合 305／e2e 11）〔修訂 2026-09-15g〕；ACPT-019-6 待 PR3（硬刪已回 409） |
+| ACPT-019-* | FR-019 | TC-019-1～TC-019-4：單元（isFollowUp／findPredecessorRow／resolveQuestionId）＋整合（followUp.pg.test.js：runner 綁定、複核重算、保護與補強、回填腳本；schema.test.js 0008 斷言）〔修訂 2026-09-15e〕 | ACPT-019-1～4 已驗證（本分支實跑單元 1,507／整合 290／e2e 11；複核畫面前端顯示待 PR3）〔修訂 2026-09-15f〕；ACPT-019-5、019-7 已驗證（TC-019-8：paperGroups.test.js＋paperGroups.pg.test.js，feat/follow-up-paper-group 實跑單元 1,583／整合 305／e2e 11）〔修訂 2026-09-15g〕；ACPT-019-6 待 PR3（硬刪已回 409） |
 | ACPT-020-* | FR-020 | TC-020-1～3：單元（正規化／定位／比對／agent 合約、公開樣卷 0 誤報）＋整合（transcription_mismatch 進複核、approve 事件、0009 CHECK）＋e2e（樣卷 source_text 落地、無誤判）＋eval pipeline〔修訂 2026-09-15f〕 | 已驗證（feat/source-check 本機全綠）；真實原卷校準見 `docs/source-check.md` 第 4 節 |
 
 ## 7. 追溯
