@@ -103,7 +103,7 @@ key = sha256( agent + '\n' + modelId + '\n' + promptTemplateHash + '\n' + schema
 ```js
 const { registerTemplate, getTemplate } = require('../services/llm/templates');
 
-const TEMPLATE = 'extract.v1';
+const TEMPLATE = 'extract.v2';   // 2026-09-15 起（v1→v2 新增【表格】規範）
 const PROMPT_TEMPLATE = `請細心閱讀這份 PDF …{{CHAPTER_WHITELIST}}…`;   // 可變欄位挖空後的字串
 registerTemplate(TEMPLATE, PROMPT_TEMPLATE);      // 模組載入時就註冊
 getTemplate(TEMPLATE);                            // 取回原文；沒註冊過回 null

@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-15T12:04:05.764Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 93,
+        "sha256": "78b5374465b0e22e4be560c5d2412578c2fc224c1e0f517dda7742160c60d25c"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "$\text{log}_2 8 + \text{log}_2 4$ 之值為何？\n(A) $5$ (B) $6$ (C) $7$ (D) $12$",
+      "questionType": "單選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(A)",
+      "answer_form": "option",
+      "steps_summary": "根據對數的定義，求出 $\\log_2 8$ 和 $\\log_2 4$ 的值。因為 $2^3 = 8$，所以 $\\log_2 8 = 3$；因為 $2^2 = 4$，所以 $\\log_2 4 = 2$。將兩者相加得到 $3 + 2 = 5$。故選 (A)。"
+    },
+    "usage": {
+      "tokenIn": 160,
+      "tokenOut": 116,
+      "tokenThinking": 189,
+      "tokenCached": 0
+    },
+    "latencyMs": 4792
+  }
+}

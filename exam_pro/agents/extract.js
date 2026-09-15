@@ -28,7 +28,7 @@ const { buildSchema } = require('./schemas');
 const { chapterWhitelistText, questionTypeText, LATEX_RULES } = require('./promptParts');
 const { registerTemplate } = require('../services/llm/templates');
 
-const TEMPLATE = 'extract.v1';
+const TEMPLATE = 'extract.v2';   // v2（2026-09-15）：加【表格】規範，見 docs/formulas.md §2
 
 // 預設值與 .env.example 一致；agent 不讀 process.env（第 3.1 條），
 // 這些只是 ctx.config.thresholds 沒帶到時的保底。
@@ -50,6 +50,8 @@ const PROMPT_TEMPLATE = `請細心閱讀這份 PDF，找出裡面「所有的」
 【chapter_confidence 欄位】是你對該章節的把握程度（0~1）。這個數字會決定要不要再花一次錢請另一個模型重判，請誠實給分——不確定就給低分。
 
 ${LATEX_RULES}
+
+【表格】考卷裡的資料表（例如各星球的質量與半徑、統計次數表）屬於題目文字，放在 question_text，不要寫成 figure_desc。一律寫成 LaTeX 的 array 環境，整個表格放在同一對 $$…$$ 裡，可以跨行：例如 $$\\begin{array}{|c|c|c|} \\hline & \\text{甲} & \\text{乙} \\\\ \\hline \\text{質量} & m & 4m \\\\ \\hline \\end{array}$$。列以 \\\\ 分隔、欄以 & 分隔，框線用欄位格式 {|c|c|} 與 \\hline，中文儲存格用 \\text{…} 包住。不要用 Markdown 表格、tabular 或空白對齊。
 
 【附圖與幾何圖形】請仔細觀察考卷中的所有附圖、幾何圖形或圖表。你無法匯出圖片，所以請把該圖的「解題關鍵視覺資訊」（精確的座標點、邊長、角度、函數曲線趨勢、物體受力方向、電路連接方式等）寫成文字，放進該題的 figure_desc 欄位。**不要**寫進 question_text。同時回報附圖的位置，讓系統把圖裁下來存檔：figure_page 是附圖所在頁碼（從你收到的這份 PDF 的第 1 頁數起），figure_box 是該頁上剛好框住整張圖的 [ymin, xmin, ymax, xmax]（0–1000 正規化座標，頁面左上角為原點），不要框到題目文字。沒有附圖的題目，figure_desc、figure_page、figure_box 三個欄位都不要輸出。
 

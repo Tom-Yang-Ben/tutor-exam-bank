@@ -1783,10 +1783,13 @@ agent 管線、RAG 檢索、NLQ、變式、複核佇列、eval 與門檻——�
    HTML，任何能開首頁的人即取得；`exam_pro/README.md` 已寫明它不是存取控制。對外前至少：
    反向代理加 Basic Auth 或 OAuth proxy（半日）、`helmet` 安全標頭（0.25 人日）、`ALLOWED_ORIGINS`
    與 `NODE_ENV=production`；真登入與角色另估 2–3 人日。
-9. **拆題 prompt 補表格規範＋重錄 pipeline cassette**（2026-09-15 擬定）。表格語法規範已寫在
-   `docs/formulas.md` §2（PR fix/formula-tables），lint 與 Word 轉換已支援 array＋hline＋跨行區塊公式；
-   但 `agents/extract.js` 的 prompt 尚未明說，目前靠模型自發輸出。改 prompt 等於換模板版本，
-   pipeline cassette 要重錄（需金鑰、約半小時），與下一次必須重錄的變更併做。
+9. ~~拆題 prompt 補表格規範＋重錄 pipeline cassette~~ → **已執行（2026-09-15，owner 指示）**。
+   `agents/extract.js` 模板升為 `extract.v2`，新增【表格】段（資料表屬題目文字、一律寫成 array 環境放在
+   同一對 $$ 內）；`agents/lint.js` 升為 `lint.v2`，規則 3 補列 array 表格並拿掉「\mathbb 不支援」的過時敘述
+   （PR #18 後解析器已支援）。表格規則只加在 extract 自己的模板，未動共用 `LATEX_RULES`，變式 cassette 不受影響。
+   以公開樣卷重錄 pipeline（102 秒）：新增 extract 1、lint 1（首度觸發）、verify 2，覆寫 verify 9，
+   刪除作廢的 extract.v1 cassette 2 份；replay 後 pipeline saved_rate／gate_pass_rate／answer_agree_rate 皆 1，
+   五個 eval suite 門檻全過，單元 1,476／整合 262／e2e 11 全數通過。規範全文見 `docs/formulas.md` §2、§6。
 10. ~~舊系統匯入題的殘缺重複版本~~ → **已執行（2026-09-15，owner 裁定）**。2026-05 由 MySQL 匯入的
    `origin='legacy'` 題中，10 題（10、14、15、16、41、47、50、54、61、64）與 2026-08-29 重新拆題入庫的
    乾淨版本餘弦 0.969–0.998（當時舊題向量尚未回填，去重沒攔到）；刪除舊版 10 題，保留乾淨版本。

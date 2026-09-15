@@ -86,6 +86,14 @@ $$\begin{array}{|c|c|c|c|c|c|}
 
 ## 6. 拆題 prompt 與表格
 
-`agents/extract.js` 的 prompt 目前**沒有**明說表格要怎麼寫；模型自己就會輸出 `\begin{array}` 加 `\hline`（台東卷兩題即是）。
-要在 prompt 加規範時注意：prompt 模板進 cassette 鍵，改了模板版本（`extract.v1` → `v2`）就要重錄 pipeline cassette（需金鑰、約半小時），
-CI 才會綠。這一步列在 roadmap 擱置區，等下一次需要重錄時一併做。
+2026-09-15 起兩個 LLM 節點的模板都已明寫表格規範（roadmap §6.5 待辦 9）：
+
+| 節點 | 模板 | 內容 |
+|---|---|---|
+| 拆題 | `agents/extract.js` → `extract.v2` | 新增【表格】段：資料表屬題目文字，放 `question_text`、不寫成 `figure_desc`；一律寫成 `$$\begin{array}{|c|c|} \hline … \end{array}$$`，可跨行，中文儲存格用 `\text{…}`；不要用 Markdown 表格、`tabular` 或空白對齊 |
+| 公式修復 | `agents/lint.js` → `lint.v2` | 規則 3 補列 `\begin{array}` 表格（可含 `\hline`、整個放在同一對 `$$…$$`），並註明 `\mathbb{R}` 已支援；只剩 `\overrightarrow` 需改寫為 `\vec`。v1 仍叫模型把 `\mathbb` 改掉，與 §3 白名單矛盾 |
+
+兩個注意點：
+
+1. **表格規則只加在 extract 自己的模板**，沒有動 `agents/promptParts.js` 的共用 `LATEX_RULES`。`agents/generateVariant.js` 也引用那一段，動了會讓 60 份變式 cassette 全部失效。
+2. **模板原文進 cassette 鍵**（`services/llm/templates.js` 以 `sha256(模板原文)` 計算），改一個字舊 cassette 就不再命中。這次改版後以公開樣卷 `eval/fixtures/sample_exam.pdf` 重錄了 pipeline cassette。改版前 `lint` 在樣卷上從未觸發 LLM、沒有 cassette；v2 拆出來的題目文字改變後，有題目未通過公式硬閘門而觸發 `lint` 重寫，因此這次也首度錄下 `lint` 的 cassette。教訓：extract 模板一改，下游 classify／lint／verify 的輸入跟著變，cassette 失效範圍不只 extract 本身。

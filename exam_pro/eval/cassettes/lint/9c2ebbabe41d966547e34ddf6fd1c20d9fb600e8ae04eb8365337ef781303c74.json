@@ -1,0 +1,41 @@
+{
+  "meta": {
+    "agent": "lint",
+    "model": "gemini-3.5-flash",
+    "template": "lint.v2",
+    "recorded_at": "2026-09-15T12:04:13.544Z",
+    "fixtureHash": "eb2dfe3b54606b160a5f95feeb18c0f1a69cb0163b6ea31288295f8a496c3be8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 765,
+        "sha256": "f84c3594d5b64c5e7c8057e437260f3ee63330a3a83e8218518f5f1ea13650dd"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "lint.v2",
+      "questionText": "設平面向量 $\\vec{a} = (2, k)$ 與 $\\vec{b} = (3, 6)$ 互相垂直，求 $k$。",
+      "answerText": "$k = -1$。因為兩向量互相垂直，其內積為 $0$，即 $\\vec{a} \\cdot \\vec{b} = 2 \\times 3 + k \\times 6 = 0 \\implies 6 + 6k = 0 \\implies k = -1$。",
+      "issues": [
+        "unknown_command",
+        "unknown_command"
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "question_text": "設平面向量 $\\vec{a} = (2, k)$ 與 $\\vec{b} = (3, 6)$ 互相垂直，求 $k$。",
+      "answer_text": "$k = -1$。因為兩向量互相垂直，其內積為 $0$，即 $\\vec{a} \\cdot \\vec{b} = 2 \\times 3 + k \\times 6 = 0 \\Rightarrow 6 + 6k = 0 \\Rightarrow k = -1$。",
+      "notes": "將答案中不支援的 \\implies 修正為 \\Rightarrow。"
+    },
+    "usage": {
+      "tokenIn": 521,
+      "tokenOut": 145,
+      "tokenThinking": 315,
+      "tokenCached": 0
+    },
+    "latencyMs": 2658
+  }
+}
