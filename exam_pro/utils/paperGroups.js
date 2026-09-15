@@ -15,7 +15,8 @@
 //   3. 抽到就整組納入、組內依承接順序相鄰排列；計入題數時整組算多題。
 //   4. 家族互斥（pickOnePerFamily）照舊：組的家族鍵取組首題；另外組內任一題的
 //      家族若已被先選的組／題占用，這一組跳過——同一變式家族在一張卷仍至多一題。
-//   5. 湊不到剛好 N 題（剩的名額塞不下下一組）時怎麼辦由呼叫端的政策決定，
+//   5. 裝箱依洗牌順序、以子集和保證「有組合能剛好湊滿 N 題就一定湊滿」（packUnits）；
+//      真的沒有任何組合湊得到 N 題時，取 ≤ N 的最大可達題數。此時怎麼辦由呼叫端的政策決定，
 //      這裡只回報 actual／availableCount。
 //
 // 純函式：無 I/O、無時間、不讀 process.env；隨機性全經注入的 shuffleFn。
@@ -157,13 +158,50 @@ function pickPaperUnits({ candidates, related = [], limitCount, shuffleFn = shuf
     const availableCount = available.reduce((n, u) => n + u.ids.length, 0);
     const minUnitSize = available.length ? Math.min(...available.map(u => u.ids.length)) : null;
 
-    // 依洗牌後順序裝箱：塞得下就整組收、塞不下就看下一組；剛好滿就停
-    const ids = [];
-    for (const u of available) {
-        if (ids.length === limitCount) break;
-        if (ids.length + u.ids.length <= limitCount) ids.push(...u.ids);
-    }
+    const chosen = packUnits(available.map(u => u.ids.length), limitCount);
+    const ids = chosen.flatMap(i => available[i].ids);
     return { ids, actual: ids.length, availableCount, minUnitSize, droppedGroups };
+}
+
+/**
+ * 整組裝箱（子集和）：從各組題數 sizes 挑一組子集，總和為「≤ limit 中可達的最大值」，
+ * 同樣可達時依 sizes 的順序（＝洗牌後順序）優先收前面的組。
+ *
+ * 為什麼不用貪婪（塞得下就收）：組大小 [3,2,2]、要 4 題時貪婪先收 3 就卡住，
+ * 其實 2＋2 剛好 4——會誤報「無法剛好湊滿」（'error' 政策下則是隨機 400）。
+ * 貪婪能湊滿的情況，本函式挑出的組與貪婪完全相同（每一步「收得下且之後仍湊得到」
+ * 由貪婪自己的後續選擇證明），所以沒有綁定（每組 1 題）時結果與舊版一致。
+ *
+ * 複雜度 O(sizes.length × limit)；limit 為組卷題數，很小。
+ *
+ * @param {number[]} sizes 各組題數（洗牌後順序）
+ * @param {number} limit   要求題數
+ * @returns {number[]} 選中的組在 sizes 裡的索引（遞增）
+ */
+function packUnits(sizes, limit) {
+    const n = sizes.length;
+    if (!(limit > 0) || n === 0) return [];
+    // reach[i][s]：只用第 i 組（含）之後的組，能否剛好湊出 s 題
+    const reach = Array.from({ length: n + 1 }, () => new Array(limit + 1).fill(false));
+    reach[n][0] = true;
+    for (let i = n - 1; i >= 0; i--) {
+        const size = sizes[i];
+        for (let s = 0; s <= limit; s++) {
+            reach[i][s] = reach[i + 1][s] || (size <= s && reach[i + 1][s - size]);
+        }
+    }
+    let target = limit;
+    while (target > 0 && !reach[0][target]) target--;
+
+    const chosen = [];
+    let remaining = target;
+    for (let i = 0; i < n && remaining > 0; i++) {
+        if (sizes[i] <= remaining && reach[i + 1][remaining - sizes[i]]) {
+            chosen.push(i);
+            remaining -= sizes[i];
+        }
+    }
+    return chosen;
 }
 
 /**
@@ -185,4 +223,4 @@ function sortForPaperGrouped(questions) {
     return units.flat();
 }
 
-module.exports = { groupFollowUps, pickPaperUnits, sortForPaperGrouped, TYPE_WEIGHTS };
+module.exports = { groupFollowUps, pickPaperUnits, packUnits, sortForPaperGrouped, TYPE_WEIGHTS };

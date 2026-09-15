@@ -5,7 +5,7 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { groupFollowUps, pickPaperUnits, sortForPaperGrouped } = require('../../utils/paperGroups');
+const { groupFollowUps, pickPaperUnits, packUnits, sortForPaperGrouped } = require('../../utils/paperGroups');
 const { pickOnePerFamily } = require('../../utils/pickOnePerFamily');
 
 const identity = (xs) => [...xs];
@@ -103,6 +103,59 @@ describe('pickPaperUnits — 整組抽取', () => {
 
         const out2 = pickPaperUnits({ candidates: [...candidates, row(9)], related: candidates, limitCount: 3, shuffleFn: identity });
         assert.deepEqual(out2.ids, [1, 2, 9], '塞不下 [3,4] 時要繼續往後找單題補滿');
+    });
+
+    test('有組合能剛好湊滿時一定湊滿，不因洗牌順序先收到大組而少出（組大小 [3,2,2]、要 4 題）', () => {
+        const candidates = [row(1), row(2, 1), row(3, 2), row(10), row(11, 10), row(20), row(21, 20)];
+        const out = pickPaperUnits({ candidates, related: candidates, limitCount: 4, shuffleFn: identity });
+        assert.equal(out.actual, 4);
+        assert.deepEqual(out.ids, [10, 11, 20, 21]);
+
+        // 真洗牌多次：永不少出
+        for (let seed = 1; seed <= 300; seed++) {
+            const r = pickPaperUnits({ candidates, related: candidates, limitCount: 4, shuffleFn: seededShuffle(seed) });
+            assert.equal(r.actual, 4, `seed ${seed}`);
+        }
+    });
+
+    test('湊不滿時取最接近 N 的組合，同樣多時依洗牌順序優先（大小 [2,3,3]、要 5 → 5；[4,4]、要 7 → 4）', () => {
+        const candidates = [row(1), row(2, 1), row(10), row(11, 10), row(12, 11), row(20), row(21, 20), row(22, 21)];
+        const out = pickPaperUnits({ candidates, related: candidates, limitCount: 5, shuffleFn: identity });
+        assert.deepEqual(out.ids, [1, 2, 10, 11, 12], '先收的組能湊滿就收先收的');
+
+        const big = [row(1), row(2, 1), row(3, 2), row(4, 3), row(5), row(6, 5), row(7, 6), row(8, 7)];
+        const out2 = pickPaperUnits({ candidates: big, related: big, limitCount: 7, shuffleFn: identity });
+        assert.deepEqual(out2.ids, [1, 2, 3, 4]);
+        assert.equal(out2.actual, 4);
+
+        // 大小 [3,2]、要 4：貪婪只收 3，但最大可達仍是 3（2 更少）→ 取 3
+        const c3 = [row(1), row(2, 1), row(3, 2), row(10), row(11, 10)];
+        const out3 = pickPaperUnits({ candidates: c3, related: c3, limitCount: 4, shuffleFn: identity });
+        assert.deepEqual(out3.ids, [1, 2, 3]);
+    });
+
+    test('packUnits：貪婪能湊滿時選法與貪婪相同；總和恆為 ≤ limit 的最大可達值（隨機 2000 例對照暴力解）', () => {
+        let a = 7;
+        const rand = (k) => { a = (Math.imul(a, 1103515245) + 12345) >>> 0; return (a >>> 8) % k; };
+        for (let t = 0; t < 2000; t++) {
+            const sizes = Array.from({ length: 1 + rand(7) }, () => 1 + rand(4));
+            const limit = rand(12);
+            const chosen = packUnits(sizes, limit);
+            const sum = chosen.reduce((s, i) => s + sizes[i], 0);
+
+            let best = 0;
+            for (let mask = 0; mask < (1 << sizes.length); mask++) {
+                let s = 0;
+                for (let i = 0; i < sizes.length; i++) if (mask & (1 << i)) s += sizes[i];
+                if (s <= limit && s > best) best = s;
+            }
+            assert.equal(sum, best, `sizes ${sizes} limit ${limit}`);
+
+            const greedy = [];
+            let g = 0;
+            sizes.forEach((sz, i) => { if (g < limit && g + sz <= limit) { greedy.push(i); g += sz; } });
+            if (g === limit) assert.deepEqual(chosen, greedy, `sizes ${sizes} limit ${limit}`);
+        }
     });
 
     test('名額比最小的組還小：actual = 0', () => {
