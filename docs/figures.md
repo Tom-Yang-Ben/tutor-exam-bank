@@ -21,8 +21,23 @@ Gemini 原生支援 bounding box 輸出（`[ymin, xmin, ymax, xmax]`，0–1000 
 - **bbox 對 PDF 輸入「大致準」**：第一版靠複核畫面兜底；若偏太多，升級路徑是「帶圖頁面單獨渲染成 PNG 再做一次定位呼叫」（尚未實作，也未必需要）。
 - **舊題不自動補圖**：要補得對原 PDF 重跑管線，或人工在 `questions.question_img` 填圖片 URL。
 - `data/figures/` **不進版控**、不設清理排程：檔名 `<jobId>-<idx>.png` 是確定性的，崩潰重跑會覆寫同檔不堆積；刪 job 不會刪圖（questions 可能還引用著）。
-- Word 匯出（`services/wordService.js`）只抓 **http(s) 公開 URL** 的圖（SSRF 白名單），`/figures/...` 相對路徑會被跳過——匯出的 Word 目前**不含**管線裁的圖，題幹裡的 `[附圖描述：…]` 文字是備援。要進 Word 需另外把本機路徑讀檔嵌入（尚未實作）。
 - 舊的 `/analyze-pdf` 相容流程（`services/aiService.js`）不裁圖：它沒有 job 生命週期可掛。
+
+## Word 匯出（2026-09-16 實作）
+
+`services/wordService.js` 的 `generateExamPaperDocx` 對 `question_img` 分兩條路：
+
+| `question_img` 形狀 | 做法 |
+| :--- | :--- |
+| `/figures/<檔名>`（管線裁圖） | 直接讀 `data/figures/` 內的本機檔，以 docx `ImageRun` 嵌在題幹段落之後、置中 |
+| `http(s)://…` | 沿用既有 SSRF 白名單＋下載（不變，固定 300×200） |
+
+- **路徑安全**：`resolveFigurePath` 兩道檢查——檔名白名單 `^/figures/[A-Za-z0-9_-]+\.(png|jpe?g)$`（不含 `/`、`\`、`..`、URL 編碼），再確認 `path.resolve` 後的上層目錄就是附圖目錄。不合法的路徑**不讀檔**。
+- **尺寸**：`sharp` 讀原圖像素；裁圖是 144 DPI（`RENDER_SCALE`＝2），換回 96 DPI 即原卷上的實際大小（×2/3），超過 A4 預設版面可用寬 600 px 或高 800 px 才等比例縮小；不放大、不變形。
+- **失敗不擋整份**：檔案不存在、不是圖、格式不支援、路徑不合法——該題題幹後放一行「（附圖遺失）」，伺服器 `console.warn`（帶 `question_id`，只記檔名不記完整路徑），其餘題照常匯出。
+- 題幹裡的 `[附圖描述：…]` 文字照舊保留（verify／檢索仍需要，Word 內與圖並存）。
+
+仍未做（本次範圍外）：舊題不自動補圖（見上）、`/analyze-pdf` 舊流程不裁圖。
 
 ## Cassette
 

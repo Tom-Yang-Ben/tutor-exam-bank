@@ -151,7 +151,7 @@ sequenceDiagram
 
 1. `POST /api/generate-paper`（dry_run）：`NOT EXISTS` attempts 排除已作答＋`pickOnePerFamily` 家族互斥，回傳預覽（不寫庫，可 `exclude_ids` 換題）。
 2. `POST /api/confirm-paper`（student_id, question_ids）：預覽仍有效則同一交易 INSERT `exam_papers`＋`attempts`（NFR-006）；預覽過期回 409。
-3. `POST /api/download-word`：`textFormatter` 將 LaTeX 轉為 OOXML 原生 Math 物件（含 10 種矩陣環境的原生二維排版〔修訂 2026-08-29〕），回傳 `.docx`。
+3. `POST /api/download-word`：`textFormatter` 將 LaTeX 轉為 OOXML 原生 Math 物件（含 10 種矩陣環境的原生二維排版〔修訂 2026-08-29〕），`question_img` 為 `/figures/<檔名>` 的題由 `wordService` 讀 `data/figures/` 本機檔嵌入（路徑限制在附圖目錄內；讀不到放「（附圖遺失）」不中斷，FR-018，`docs/figures.md`）〔修訂 2026-09-16〕，回傳 `.docx`。
 
 ### 5.3 對話式助教迴圈（FR-016）
 
