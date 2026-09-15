@@ -979,9 +979,10 @@
                 let data = await res.json();
                 // 409：前題仍有承上題（children），或題目被匯入／變式任務引用 → 提供整組處理（?group=1）
                 if (res.status === 409 && (Array.isArray(data.children) || Array.isArray(data.job_ids) || /請改用封存/.test(data.message || ''))) {
+                    // ?group=1 會沿鏈處理所有後代（不只 children 列出的直接承上題），對話框要講清楚範圍
                     const scope = Array.isArray(data.children) && data.children.length
-                        ? `連同承上題 ${data.children.map(c => '#' + c).join('、')} 整組處理`
-                        : '改為封存';
+                        ? `連同承上題 ${data.children.map(c => '#' + c).join('、')} 及其後所有承上題整組處理`
+                        : (q.has_follow_ups ? '連同其後所有承上題整組處理' : '改為封存');
                     if (!confirm(`${data.message}\n\n要${scope}嗎？\n（組內任一題有作答紀錄或任務引用時整組封存，否則整組刪除）`)) return;
                     res = await apiFetch('/api/questions/' + q.id + '?group=1', { method: 'DELETE' });
                     data = await res.json();

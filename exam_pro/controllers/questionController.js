@@ -306,8 +306,8 @@ exports.updateQuestion = async (req, res, next) => {
 //
 // 承上題保護（FR-019 PR3）：
 //   - 帶 ?group=1 → deleteQuestionGroup：此題與其後所有承上題（多層鏈）整組處理，單一交易。
-//   - 未帶 group 而此題仍有**在庫**（未封存）的承上題：硬刪由 FK 擋下、封存由本函式預先擋下，
-//     兩者都回同一個 409（列出承上題）。封存也擋，是因為單封前題會讓承上題在題庫與組卷裡
+//   - 未帶 group 而此題仍有**在庫**（未封存）的承上題：鎖列後先查、硬刪與封存都預先擋下，
+//     回同一個 409（列出承上題）；只剩已封存的承上題時才由 FK 擋硬刪（同形狀 409）。封存也擋，是因為單封前題會讓承上題在題庫與組卷裡
 //     失去前情——與硬刪要防的是同一件事；要一起收掉就改帶 ?group=1。
 exports.deleteQuestion = async (req, res, next) => {
     const id = parseInt(req.params.id, 10);
@@ -325,15 +325,18 @@ exports.deleteQuestion = async (req, res, next) => {
             return res.status(404).json({ message: '找不到該題目' });
         }
 
+        // 在庫承上題先查、硬刪與封存都擋：不能只靠 FK 錯誤判斷——匯入任務產生的前題同時被
+        // job_questions 參照，PG 依觸發器建立順序先檢查 0003 的 FK，會回「請改用封存」而漏掉 children。
+        // 前題的 FOR UPDATE 已與「新綁一個承上題」（FK 檢查取 FOR KEY SHARE）互斥，這裡讀到的清單不會過期。
+        const { rows: kids } = await client.query(
+            'SELECT id FROM questions WHERE follows_question_id = $1 AND archived_at IS NULL ORDER BY id', [id]);
+        if (kids.length > 0) {
+            await client.query('ROLLBACK');
+            return res.status(409).json(followUpConflictBody(kids.map(r => r.id)));
+        }
+
         const { rows: used } = await client.query('SELECT 1 FROM attempts WHERE question_id = $1 LIMIT 1', [id]);
         if (used.length > 0) {
-            // 前題的 FOR UPDATE 已與「新綁一個承上題」（FK 檢查取 FOR KEY SHARE）互斥，這裡讀到的清單不會過期
-            const { rows: kids } = await client.query(
-                'SELECT id FROM questions WHERE follows_question_id = $1 AND archived_at IS NULL ORDER BY id', [id]);
-            if (kids.length > 0) {
-                await client.query('ROLLBACK');
-                return res.status(409).json(followUpConflictBody(kids.map(r => r.id)));
-            }
             await client.query('UPDATE questions SET archived_at = now() WHERE id = $1', [id]);
             await client.query('COMMIT');
             return res.json({ message: '該題已有學生作答紀錄，改為封存（不再出現在題庫與組卷候選中）。', id, archived: true });
@@ -398,8 +401,8 @@ function followUpConflictBody(children) {
  *   （沿用「有作答紀錄改封存」的語意；已封存的組員維持原封存時間）。
  * - 否則一句 DELETE 刪整組（0008 的 FK 是 NO ACTION，同一句內前題與子題一起刪不會被擋）。
  *
- * 鎖：先鎖此題，再鎖全部組員。在「查組員」與「鎖組員」之間若有新的承上題綁到較深的組員，
- * 硬刪會撞 FK——那時回 409 請使用者重試，不會刪出孤兒。
+ * 鎖：逐層「先鎖、再查下一層」，查到的組員不會漏掉並行新綁的承上題（見函式內註解）。
+ * 仍撞 FK 的極端情況（例如深度超過上限）回 409 請使用者重試，不會刪出孤兒。
  */
 async function deleteQuestionGroup(id, res, next) {
     const client = await pool.connect();
@@ -412,18 +415,19 @@ async function deleteQuestionGroup(id, res, next) {
             return res.status(404).json({ message: '找不到該題目' });
         }
 
-        const { rows: members } = await client.query(
-            `WITH RECURSIVE grp(id, depth) AS (
-                 SELECT $1::int, 0
-                 UNION
-                 SELECT q.id, g.depth + 1
-                   FROM questions q JOIN grp g ON q.follows_question_id = g.id
-                  WHERE g.depth < $2
-             )
-             SELECT id, MIN(depth) AS depth FROM grp GROUP BY id ORDER BY MIN(depth), id`,
-            [id, GROUP_MAX_DEPTH]);
-        const ids = members.map(r => r.id);
-        await client.query('SELECT id FROM questions WHERE id = ANY($1::int[]) FOR UPDATE', [ids]);
+        // 逐層走：每一層的題在 FOR UPDATE 鎖住之後才查它的承上題。新綁承上題的 FK 檢查要取前題的
+        // FOR KEY SHARE，與 FOR UPDATE 互斥——所以某層鎖上之前已提交的綁定一定查得到，鎖上之後的
+        // 綁定要等本交易結束。若先一次查完整棵樹再鎖，中間綁到較深組員的題會漏掉，封存分支又
+        // 不會撞 FK，便留下缺前題的在庫承上題。
+        const ids = [id];
+        const seen = new Set(ids);
+        let frontier = [id];
+        for (let depth = 0; frontier.length > 0 && depth < GROUP_MAX_DEPTH; depth++) {
+            const { rows: next } = await client.query(
+                'SELECT id FROM questions WHERE follows_question_id = ANY($1::int[]) ORDER BY id FOR UPDATE', [frontier]);
+            frontier = next.map(r => r.id).filter(v => !seen.has(v));
+            for (const v of frontier) { seen.add(v); ids.push(v); }
+        }
 
         const { rows: refs } = await client.query(
             `SELECT EXISTS (SELECT 1 FROM attempts      WHERE question_id        = ANY($1::int[]))

@@ -621,6 +621,66 @@ function runSuite() {
                 assert.deepEqual(missing.body, { message: '找不到該題目' });
             });
 
+            test('未帶 group：匯入任務產生的前題仍有在庫承上題 → 409 列出承上題（不受 FK 檢查順序影響）', async () => {
+                // review 發現：job_questions 的 FK（0003）先於 follows 的 FK（0008）檢查，
+                // 修前這裡回的是「請改用封存」且沒有 children，前端會把「整組封存」說成「封存此題」
+                const { jqIds } = await seedJob([plainQ(3)]);
+                await drain(makeRunner());
+                const { question_id: pred } = await jqRow(jqIds[0]);
+                const child = await insertQuestion('承上題，自製匯入前題的子題：再求 $3x$。', { origin: 'legacy' });
+                const grand = await insertQuestion('承上題，自製匯入前題的孫題：再求 $4x$。', { origin: 'legacy' });
+                await query(`UPDATE questions SET follows_question_id = $1, follows_src = 'human' WHERE id = $2`, [pred, child]);
+                await query(`UPDATE questions SET follows_question_id = $1, follows_src = 'human' WHERE id = $2`, [child, grand]);
+
+                const res = await request(app).delete(`/api/questions/${pred}`);
+                assert.equal(res.status, 409);
+                assert.deepEqual(res.body, {
+                    message: `此題是承上題 #${child} 的前題，請先刪除或解除綁定該承上題。`,
+                    children: [child]
+                });
+                assert.deepEqual((await stateOf([pred, child, grand])).map(r => r.archived), [false, false, false]);
+
+                // 承上題都已封存時，照舊落到 job_questions 的「請改用封存」
+                await query('UPDATE questions SET archived_at = now() WHERE id = ANY($1::int[])', [[child, grand]]);
+                const archivedKids = await request(app).delete(`/api/questions/${pred}`);
+                assert.equal(archivedKids.status, 409);
+                assert.deepEqual(archivedKids.body, { message: '此題由匯入任務產生，無法直接刪除，請改用封存。' });
+            });
+
+            test('?group=1：鎖組員期間有新承上題綁到較深組員 → 一併納入，不留下缺前題的在庫承上題', async () => {
+                const { pred, child, grand } = await seedChain('R');
+                await addAttempt(pred);                 // 走封存分支（該分支不會撞 FK）
+                const late = await insertQuestion('承上題，自製競態測試新子題：再求 $5x$。', { origin: 'legacy' });
+
+                // 另一個交易把 late 綁到 grand 但先不提交：它持有 grand 的 FOR KEY SHARE
+                const other = await pool.connect();
+                try {
+                    await other.query('BEGIN');
+                    await other.query(`UPDATE questions SET follows_question_id = $1, follows_src = 'human' WHERE id = $2`, [grand, late]);
+
+                    const pending = request(app).delete(`/api/questions/${pred}?group=1`).then(r => r);
+                    // 等整組處理卡在鎖上（修前：已讀完組員 [pred, child, grand]、正在鎖 grand）
+                    const deadline = Date.now() + 5000;
+                    for (; ;) {
+                        const { rows } = await query(
+                            `SELECT count(*)::int AS n FROM pg_stat_activity
+                              WHERE datname = current_database() AND wait_event_type = 'Lock'`);
+                        if (rows[0].n > 0) break;
+                        if (Date.now() >= deadline) throw new Error('整組處理沒有等在鎖上');
+                        await new Promise(r => setTimeout(r, 20));
+                    }
+                    await other.query('COMMIT');
+
+                    const res = await pending;
+                    assert.equal(res.status, 200);
+                    assert.equal(res.body.archived, true);
+                    assert.deepEqual(res.body.ids, [pred, child, grand, late]);
+                    assert.deepEqual((await stateOf([pred, child, grand, late])).map(r => r.archived), [true, true, true, true]);
+                } finally {
+                    other.release();
+                }
+            });
+
             test('GET /api/questions 回 follows_question_id 與 has_follow_ups（已封存的承上題不算）', async () => {
                 const { pred, child, grand } = await seedChain('G');
                 const res = await request(app).get('/api/questions');
