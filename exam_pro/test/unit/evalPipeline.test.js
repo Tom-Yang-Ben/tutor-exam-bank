@@ -49,6 +49,28 @@ describe('狀態機（interfaces-stage2.md 第 2.3 條的六條規則）', () =>
         assert.equal(r.review_reason, 'budget_exceeded');
     });
 
+    test('規則 3 的例外：零成本節點預算用盡時保留原本的失敗原因（真實作與 shim 兩份都要）', () => {
+        const cases = [
+            ['extracted', { kind: 'fail', reason: 'duplicate' }, 'duplicate'],
+            ['linted', { kind: 'fail', reason: 'transcription_mismatch' }, 'transcription_mismatch'],
+            ['verified', { kind: 'fail', reason: 'duplicate' }, 'duplicate']
+        ];
+        for (const impl of [sm.transition, sm.shimTransition]) {
+            for (const [state, outcome, expected] of cases) {
+                const r = impl({ state, retries: {}, outcome, limits: { ...limits, budgetLeft: 0 } });
+                assert.equal(r.state, 'needs_review', state);
+                assert.equal(r.review_reason, expected, state);
+            }
+            const paid = impl({
+                state: 'source_checked', retries: {}, outcome: { kind: 'fail', reason: 'answer_mismatch' },
+                limits: { ...limits, budgetLeft: 0 }
+            });
+            assert.equal(paid.review_reason, 'budget_exceeded', '要花錢的 verify 行為不變');
+        }
+        assert.deepEqual([...sm.FREE_NODES].sort(), [...require('../../pipeline/stateMachine').FREE_NODES].sort(),
+            'shim 的零成本節點清單與真實作一致');
+    });
+
     test('規則 3 的例外：預算用盡但 pass／skipped 照常前進（那筆錢已經花了）', () => {
         for (const kind of ['pass', 'skipped']) {
             const r = sm.transition({ state: 'hashed', retries: {}, outcome: { kind }, limits: { ...limits, budgetLeft: -1 } });

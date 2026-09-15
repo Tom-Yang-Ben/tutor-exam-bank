@@ -21,7 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const { transition, NODE_FOR_STATE, DEFAULT_LIMITS, TERMINAL_STATES } = require('../pipeline/stateMachine');
+const { transition, NODE_FOR_STATE, DEFAULT_LIMITS, TERMINAL_STATES, FREE_NODES: SM_FREE_NODES } = require('../pipeline/stateMachine');
 
 /** exam_pro/ 的絕對路徑：jobs.pdf_path 存的是相對路徑，一律對這裡 resolve，不看 process.cwd()。 */
 const APP_DIR = path.resolve(__dirname, '..');
@@ -37,8 +37,9 @@ const ADVANCEABLE_STATES = Object.keys(NODE_FOR_STATE);
 /**
  * 零成本節點：不呼叫任何模型，因此 DAILY_COST_BUDGET_USD 觸發後仍可繼續跑，
  * 讓已經在途的 job 至少把免費的那幾格走完，而不是整份卡死到隔天。
+ * 〔修訂 2026-09-16〕清單本身移到 pipeline/stateMachine.js（規則 3 也要用），這裡只包成 Set。
  */
-const FREE_NODES = new Set(['dedup0', 'source_check', 'dedup1', 'save']);
+const FREE_NODES = new Set(SM_FREE_NODES);
 
 /**
  * node → agent 檔名（裁決 S2-6，第 3.1 條）。
@@ -745,6 +746,7 @@ function createRunner(opts = {}) {
             if (budgetLeft <= 0 && !FREE_NODES.has(node)) {
                 // 第 7.3.2 條：呼叫「前」就檢查，錢不夠連叫都不叫。
                 // 狀態機的規則 3 會把它變成 needs_review('budget_exceeded')。
+                // 零成本節點不進這一支：照常跑，fail／error 的原因由狀態機保留（規則 3 的 FREE_NODES 例外）。
                 outcome = { kind: 'fail', reason: 'budget_exceeded' };
                 logger.warn({ msg: '預算用盡，跳過呼叫', job_id: jq.job_id, jq_id: jq.id, node, budget_left: budgetLeft });
             } else {

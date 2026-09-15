@@ -40,6 +40,9 @@ const NEXT_STATE = {
 
 const TERMINAL_STATES = ['saved', 'needs_review', 'rejected'];
 
+// 〔修訂 2026-09-16〕零成本節點：規則 3（預算用盡）不改寫它們的 fail／error 原因
+const FREE_NODES = ['dedup0', 'source_check', 'dedup1', 'save'];
+
 // 第 2.2 條
 const DEFAULT_LIMITS = {
     maxRetries: { classify: 2, lint: 2, verify: 1 },
@@ -85,8 +88,8 @@ function shimTransition({ state, retries, outcome, limits }) {
     const node = NODE_FOR_STATE[state];
     const budgetLeft = lim.budgetLeft === undefined ? Infinity : lim.budgetLeft;
 
-    // 規則 3：預算用盡且不是 pass／skipped
-    if (budgetLeft <= 0 && kind !== 'pass' && kind !== 'skipped') {
+    // 規則 3：預算用盡且不是 pass／skipped，且不是零成本節點（〔修訂 2026-09-16〕）
+    if (budgetLeft <= 0 && kind !== 'pass' && kind !== 'skipped' && !FREE_NODES.includes(node)) {
         return { state: 'needs_review', retries: { ...r }, review_reason: 'budget_exceeded' };
     }
     // 規則 4
@@ -162,5 +165,5 @@ function tables() {
 module.exports = {
     transition, source, isShim, tables,
     shimTransition, REVIEW_REASON_FOR_FAIL, REVIEW_REASON_FOR_ERROR,
-    NODE_FOR_STATE, NEXT_STATE, TERMINAL_STATES, DEFAULT_LIMITS, REAL_PATH
+    NODE_FOR_STATE, NEXT_STATE, TERMINAL_STATES, FREE_NODES, DEFAULT_LIMITS, REAL_PATH
 };

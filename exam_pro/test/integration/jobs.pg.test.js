@@ -444,6 +444,52 @@ function runSuite() {
                 assert.equal(rows[0].state, 'source_checked', '走完 source_check，停在要花錢的 verify 之前');
             });
 
+            // 〔修訂 2026-09-16〕job 預算用盡時，零成本節點的失敗原因不再被改寫成 budget_exceeded
+            test('job 預算用盡：source_check／dedup0／dedup1 的 fail 保留原本原因、不進 retry 清單；verify 仍是 budget_exceeded', async () => {
+                const { jobId, jqIds } = await seedJob([
+                    extractPayload(1, { __fake: { dedup0: { kind: 'fail', reason: 'duplicate' } } }),
+                    extractPayload(2, {
+                        __fake: { source_check: { kind: 'fail', reason: 'transcription_mismatch', feedback: '負號比原卷多 1 個' } }
+                    }),
+                    extractPayload(3, { __fake: { dedup1: { kind: 'fail', reason: 'duplicate' } } }),
+                    extractPayload(4)
+                ], { budget: 0.05 });
+                await query(`UPDATE job_questions SET state = 'linted' WHERE id = $1`, [jqIds[1]]);
+                await query(`UPDATE job_questions SET state = 'verified' WHERE id = $1`, [jqIds[2]]);
+                await query(`UPDATE job_questions SET state = 'source_checked' WHERE id = $1`, [jqIds[3]]);
+                await query('UPDATE jobs SET cost_usd = budget_usd WHERE id = $1', [jobId]);
+
+                fakeLlm.calls = 0;
+                await drain(makeRunner());
+
+                const { rows } = await query(
+                    'SELECT id, state, review_reason FROM job_questions WHERE job_id = $1 ORDER BY idx', [jobId]);
+                assert.deepEqual(rows.map(r => [r.state, r.review_reason]), [
+                    ['needs_review', 'duplicate'],
+                    ['needs_review', 'transcription_mismatch'],
+                    ['needs_review', 'duplicate'],
+                    ['needs_review', 'budget_exceeded']
+                ]);
+                assert.equal(fakeLlm.calls, 0, '預算用盡後一次 LLM 都不該叫');
+
+                const { rows: ev } = await query(
+                    `SELECT jq_id, node, error_class, detail FROM job_events WHERE job_id = $1 ORDER BY id`, [jobId]);
+                const sc = ev.find(e => e.jq_id === jqIds[1] && e.node === 'source_check');
+                assert.equal(sc.error_class, 'transcription_mismatch');
+                assert.equal(sc.detail.review_reason, 'transcription_mismatch');
+                assert.ok(ev.some(e => e.jq_id === jqIds[3] && e.node === 'verify' && e.error_class === 'budget_exceeded'));
+
+                // retry 只退回 provider_error／budget_exceeded：只有 verify 那一列會被退回
+                const res = await request(freshApp()).post(`/api/jobs/${jobId}/retry`).send({});
+                assert.equal(res.status, 202, JSON.stringify(res.body));
+                assert.equal(res.body.requeued, 1);
+                const { rows: after } = await query(
+                    'SELECT state, review_reason FROM job_questions WHERE job_id = $1 ORDER BY idx', [jobId]);
+                assert.deepEqual(after.slice(0, 3).map(r => r.review_reason),
+                    ['duplicate', 'transcription_mismatch', 'duplicate'], '零成本節點的判定不在可重跑清單內');
+                assert.equal(after[3].state, 'source_checked', 'budget_exceeded 的列退回 verify 之前');
+            });
+
             test('GET /api/review?reason=transcription_mismatch 查得到；approve 入庫且事件記 source_recheck／stem_edited', async () => {
                 const { jobId, jqIds } = await seedJob([extractPayload(1, { question_text: STEM, source_text: located })]);
                 await query(
