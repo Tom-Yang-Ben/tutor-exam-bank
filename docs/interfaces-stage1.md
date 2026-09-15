@@ -313,6 +313,35 @@ module.exports = { buildHybridQuery };
 - 抽題仍用 `utils/shuffle.js`（Fisher-Yates），**不得改動它與 `test/shuffle.test.js` 的 11 項測試**。
 - 候選池條件：`subject`、`chapter`、`archived_at IS NULL`、`NOT EXISTS (SELECT 1 FROM attempts a WHERE a.question_id = q.id AND a.student_id = $n)`。
 
+### 7.1 承上題整組抽取（FR-019 PR2，ACPT-019-5／019-7）〔修訂 2026-09-15g〕
+
+適用 `POST /api/generate-paper`（含 `dry_run`）、`POST /api/confirm-paper` 的排序，以及助教工具 `preview_paper`（三者共用 `examController.selectPaperQuestions`／同一排序函式；純函式在 `utils/paperGroups.js`）。
+
+- **選題單位是「組」**：前題＋所有以 `questions.follows_question_id` 承接它的題（可多層、可分岔），以無向連通分量界定；沒有綁定的題自成一組。抽到組內任一題＝整組納入，計入題數時整組算多題。
+- **組內任一題不在候選池，整組不抽**：已作答（該生 attempts）、在 `exclude_ids`（前端「換這題」）、已封存、`source_types` 不符、科目或章節與本次組卷不同，都算不可用。目的是不出現缺前題的承上題，也不出現缺後續的前題。副作用：前題寫過而承上題沒寫過時，該承上題之後不會再被抽到。
+- **相鄰排列**：考卷排序以組為單位，依組首題的題型權重 → 難度排；組內依承接順序（組首 → 承上題深度優先，同一前題的多個承上題依 id 由小到大）緊接排列，不被題型權重拆開。`confirm-paper` 用同一排序，不重驗組是否完整（題目即預覽整組抽出的那批）。
+- **家族互斥照舊**：組的家族鍵取組首題的 `COALESCE(variant_of, id)`；組內其他題的家族若已被先選的組／題占用，該組跳過。同一變式家族在一張卷仍至多一題。
+- **沒有任何綁定時**，抽題結果與排序與本條原規格完全相同（`test/unit/paperGroups.test.js` 以固定種子釘住）。
+
+**整組裝箱**：依洗牌順序挑組，並以子集和保證「只要有組合能剛好湊滿 N 題就一定湊滿」（例如組大小 3、2、2 要 4 題，會出 2＋2，不會因先抽到 3 題組而少出）；同樣湊得滿時優先收洗牌順序在前的組。沒有任何組合湊得到 N 題時，取不超過 N 的最大可達題數（`utils/paperGroups.js` 的 `packUnits`）。
+
+**題數湊不滿時**（庫存夠，但**沒有任何組合**能剛好湊到 N 題，例如要 3 題、只有兩組各 2 題）：
+
+| 政策 `FOLLOW_UP_SHORTFALL_POLICY`（`controllers/examController.js`，**待 owner 決定**） | 行為 |
+|---|---|
+| `'note'`（現行預設） | 200，少出題；回應**額外**帶 `shortfall` 與 `note` 兩鍵（僅在少出時出現，湊滿時頂層鍵與本條原規格相同） |
+| `'error'` | 400 `承上題須與前題整組出題，無法剛好湊滿 ${N} 題（最多可出 ${actual} 題），請調整題數。` |
+
+```jsonc
+// 'note' 政策下少出題時多出的兩鍵（dry_run 與真出卷相同；preview_paper 帶 shortfall，並把 note 接在原本的預覽說明後）
+"shortfall": { "requested": 3, "actual": 2, "reason": "follow_up_group" },
+"note": "承上題須與前題整組出題，無法剛好湊滿 3 題，本卷實際 2 題。"
+```
+
+- 可用題數（家族互斥、整組排除後）< N 仍回原本的 400 `新題目庫存不足！…僅剩 ${n} 題。`，`${n}` 為可用題數，不受政策影響。
+- 一題都湊不出來（N 小於每一組的題數，且沒有單題可用）一律 400：`承上題須與前題整組出題，可用的題組每組至少 ${k} 題，無法湊出 ${N} 題，請調高題數。`
+- `questions[]` 每題多帶 `follows_question_id`（`generate-paper` 與 `confirm-paper`；`preview_paper` 亦同），前端據此標「承上 #id」、把承上組成員的按鈕改為「換這組」、並顯示 `note`。
+
 ---
 
 ## 8. `config/db.js`（擁有者：WS-A）

@@ -8,6 +8,8 @@
 >
 > 🛠 **2026-09-15e 修訂**（feat/follow-up-links）：§2 模組結構補 `utils/followUp.js`、`services/followUpLinker.js`、`scripts/backfill_follow_ups.js`；§4.1 補「承上題綁定」掛點；§6 上游補 FR-019。修改處以〔修訂 2026-09-15e〕行內標記。
 >
+> 🛠 **2026-09-15g 修訂**（feat/follow-up-paper-group，FR-019 PR2）：§2 模組結構 utils 補 `paperGroups`（組卷承上題整組抽取）。修改處以〔修訂 2026-09-15g〕行內標記。
+>
 > **定位**：C4 Code 層——模組結構、兩個 Aggregate（jobs、job_questions）的狀態機、jobRunner 認領演算法、助教 ReAct 迴圈。回答「模組如何組成、狀態如何合法轉移」。
 > 系統級架構歸 [`../03_architecture/sad.md`](../03_architecture/sad.md)；API 契約歸 [`api_spec.md`](./api_spec.md)；資料 schema 歸 [`db_design.md`](./db_design.md)。狀態轉移合法性以 `exam_pro/pipeline/stateMachine.js` 為單一權威。
 
@@ -43,7 +45,7 @@ exam_pro/
 ├── config/       # db／models（模型 ID 單一真相）／features／pricing／chapters
 ├── queries/      # hybrid 檢索 SQL
 ├── scripts/      # 維運腳本：backfill_text_hash、backfill_embeddings、backfill_follow_ups（承上題回填，--dry-run／--test／--report）〔修訂 2026-09-15e〕…
-└── utils/        # tokenize（全案唯一分詞）、questionValidation（save 白名單驗證）、pseudonym（學生姓名↔代號，送 LLM 前遮罩）、followUp（承上題偵測與前題解析純函式）〔修訂 2026-09-15e〕
+└── utils/        # tokenize（全案唯一分詞）、questionValidation（save 白名單驗證）、pseudonym（學生姓名↔代號，送 LLM 前遮罩）、followUp（承上題偵測與前題解析純函式）〔修訂 2026-09-15e〕、paperGroups（組卷的承上題分組、整組抽取與組為單位排序純函式，接 pickOnePerFamily）〔修訂 2026-09-15g〕
 ```
 
 ## 3. 模組依賴圖

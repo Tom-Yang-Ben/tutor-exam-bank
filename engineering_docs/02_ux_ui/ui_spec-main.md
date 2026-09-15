@@ -2,6 +2,7 @@
 
 > **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
 > 🛠 **2026-08-29 修訂**（PR #3/#6/#7 程式碼同步）：§2 版面配置整節重寫為 5 個 `.app-view` 視圖＋hash 路由（原「Topbar＋Hero」「右欄 #paper lg:sticky」ASCII 圖已刪除——Hero 區塊於 commit 995f444 自程式碼移除）；§1 入口／出口改為視圖切換語意（「先切視圖再捲動」）；§3 章節欄位改科目→冊→單元三層選單並新增 #volume／#paper_volume 列；§3 新增 source_type 三欄位（#source_type／#pdf_source_type／#paper_source_scope）與題庫卡片來源徽章；§4 編輯 Modal 補題目來源改標；§8 刪除「導覽列 md 以下隱藏」與「組卷卡 lg:sticky」，改橫向捲動與獨立視圖；§10 補 FR-017。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
+> 🛠 **2026-09-15g 修訂**（feat/follow-up-paper-group，FR-019 PR2）：§3 組卷預覽列補「承上 #id」標示、「換這組」按鈕與少出題附註。修改處以〔修訂 2026-09-15g〕行內標記。
 > **Owner:** Ben（楊本顥）
 > **語域:** L2
 > **實例:** 每頁面一份（`ui_spec-<page>.md`）
@@ -60,7 +61,7 @@ view-assistant（:588） ─ #assistant 空錨點（:589）
 | 題目內容／標準答案 | textarea／input | `question_text`／`answer_text` | 支援 `$…$` LaTeX，MathJax 即時渲染 |
 | 學生（#student_select） | select | `GET /api/students` → `items[]` | 顯示 `姓名（N 張卷）`；姓名另存 `dataset.name`（裁決 S4-1：學生用選的不用打的） |
 | 題庫卡片 | card | `GET /api/questions?page&limit=10`（來源篩選 #mgr_source :558-566 帶 `source_type` 參數 :829） | `#id`＋學科·章節＋題型＋★難度＋**來源徽章**（`SOURCE_TYPE_LABEL`／`SOURCE_TYPE_BADGE` 對照 :693-700，渲染 :852）＋題幹＋答案；每頁 10 筆〔修訂 2026-08-29〕 |
-| 組卷預覽（#resultBox） | panel | `POST /api/generate-paper`（`dry_run:true`） | 每題含題號、題型、★難度、`#id`、題幹、參考答案、「換這題」 |
+| 組卷預覽（#resultBox） | panel | `POST /api/generate-paper`（`dry_run:true`） | 每題含題號、題型、★難度、`#id`、題幹、參考答案、「換這題」；承上題標「承上 #前題 id」，承上組成員的按鈕改為「換這組」（排除任一題＝整組換掉）；回應帶 `note`（承上組湊不滿題數而少出題）時於預覽說明下方以紅字「⚠ …」顯示，確認出卷後的結果區同樣列出〔修訂 2026-09-15g〕 |
 
 ## 4. 使用者操作 (Actions)
 
