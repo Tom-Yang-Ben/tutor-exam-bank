@@ -178,8 +178,9 @@ paths:
                 # 修訂 2026-08-29（PR #7 source_type / PR #6 chapter-volumes）：題源過濾（FR-017）
                 source_types: { type: array, items: { type: string, enum: [official, school, publisher, self, unknown] }, description: 題源過濾（FR-017）；空陣列或未帶＝不限制，伺服器端去重後過濾候選池 }
       responses:
-        "200": { description: 成功；回傳草稿題目清單 }
-        "400": { description: 欄位缺漏、該生可抽題數不足（家族互斥後計算，examController 回 400 非 409），或 source_types 含非法值 } # 修訂 2026-08-29（PR #7 source_type / PR #6 chapter-volumes）
+        # 修訂 2026-09-15g（feat/follow-up-paper-group，FR-019 PR2）：承上題整組抽取，契約見 docs/interfaces-stage1.md 第 7.1 條
+        "200": { description: "成功；回傳草稿題目清單。承上題以組為單位整組抽、相鄰排列，questions[] 逐題帶 follows_question_id；題數因整組而湊不滿時（FOLLOW_UP_SHORTFALL_POLICY='note'，預設）少出題並額外帶 shortfall {requested, actual, reason:'follow_up_group'} 與 note（僅少出時出現）" }
+        "400": { description: "欄位缺漏、該生可抽題數不足（家族互斥與承上組整組剔除後計算，examController 回 400 非 409）、source_types 含非法值；承上組一題都湊不出來，或政策為 'error' 時湊不滿題數" } # 修訂 2026-08-29（PR #7 source_type / PR #6 chapter-volumes）；修訂 2026-09-15g
         "404": { description: student_id／student_name 查無學生——不自動建立，提示先新增（裁決 S4-1） }
         "409": { description: 非 dry_run 寫入時，部分題目已被並發指派給該學生 }
   /confirm-paper:

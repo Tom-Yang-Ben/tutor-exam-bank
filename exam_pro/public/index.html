@@ -1378,6 +1378,19 @@
             note.textContent = '尚未寫入——換題、重抽都不會扣掉題庫池；按「確認出卷」才會建卷並記入不重複紀錄。';
             resultIds.appendChild(note);
 
+            // 承上題整組抽取湊不滿題數時（FR-019 PR2），後端附 note／shortfall，老師要看得到實際題數
+            if (result.note) {
+                const shortNote = document.createElement('p');
+                shortNote.className = 'text-[11px] font-bold text-rose-600 mb-3';
+                shortNote.textContent = `⚠ ${result.note}`;
+                resultIds.appendChild(shortNote);
+            }
+            // 承上組成員：換其中任一題＝整組換掉（後端整組排除），按鈕字樣跟著改
+            const inGroup = new Set();
+            result.questions.forEach(q => {
+                if (q.follows_question_id) { inGroup.add(q.id); inGroup.add(q.follows_question_id); }
+            });
+
             result.questions.forEach((q, index) => {
                 const row = document.createElement('div');
                 row.className = 'mb-3 rounded-lg border border-slate-100 p-3';
@@ -1386,12 +1399,13 @@
                 const label = document.createElement('p');
                 label.className = 'text-[11px] font-bold text-slate-400';
                 label.textContent = `第 ${index + 1} 題 [${q.question_type}]（難度 ${'★'.repeat(q.difficulty || 0)}）　#${q.id}`
+                    + (q.follows_question_id ? `　承上 #${q.follows_question_id}` : '')
                     + (q.source_type ? `　來源：${SOURCE_TYPE_LABEL[q.source_type] || q.source_type}` : '')
                     + (q.source_detail ? `（${q.source_detail}）` : '');
                 const swap = document.createElement('button');
                 swap.type = 'button';
                 swap.className = 'shrink-0 text-[11px] font-bold px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 cursor-pointer';
-                swap.textContent = '換這題';
+                swap.textContent = inGroup.has(q.id) ? '換這組' : '換這題';
                 swap.addEventListener('click', () => rerollQuestion(q.id));
                 head.append(label, swap);
                 const stem = document.createElement('p');
@@ -1434,7 +1448,7 @@
                     if (response.status === 409) { const p = await requestPreview(); if (p) renderPreview(p); }
                     return;
                 }
-                renderConfirmedPaper(result, draftPreview.__student.name);
+                renderConfirmedPaper(result, draftPreview.__student.name, draftPreview.note);
                 draftPreview = null;
                 draftExcluded = [];
                 await loadStudents(document.getElementById('student_select').value);   // 卷數 +1
@@ -1443,7 +1457,7 @@
         }
 
         /** 確認成功後的畫面（＝階段 3 之前 generate-paper 成功的畫面，原樣保留）。 */
-        function renderConfirmedPaper(result, studentName) {
+        function renderConfirmedPaper(result, studentName, shortfallNote) {
             // paper_id 是 interfaces.md 第 7 條**既有**的回應欄位，這裡只是把它一起留在快取裡，
             // 讓「立即批改」跳得到那一張卷（interfaces-stage3.md 第 7.1、7.2 條第 5 列）。
             // downloadWord 只解構 paper_title／student_name／question_ids，多這個鍵不影響匯出。
@@ -1486,9 +1500,11 @@
             // paper_title 含使用者輸入的姓名，必須走 textContent 才不會被當成 HTML 執行
             resultTitle.querySelector('span').textContent = `✨ ${result.paper_title}`;
 
-            let infoText = `本次抽出的題目 ID 清單：${JSON.stringify(result.question_ids)}\n(已寫入不重複紀錄)\n\n📝 【 線上考卷題目預覽 】：\n`;
+            let infoText = `本次抽出的題目 ID 清單：${JSON.stringify(result.question_ids)}\n(已寫入不重複紀錄)\n`
+                + (shortfallNote ? `⚠ ${shortfallNote}\n` : '')
+                + `\n📝 【 線上考卷題目預覽 】：\n`;
             result.questions.forEach((q, index) => {
-                infoText += `\n第 ${index + 1} 題 [${q.question_type}] (難度: ${'★'.repeat(q.difficulty)})\n👉 題目：${q.question_text}\n💡 參考答案：${q.answer_text}\n--------------------------------------`;
+                infoText += `\n第 ${index + 1} 題 [${q.question_type}] (難度: ${'★'.repeat(q.difficulty)})${q.follows_question_id ? `（承上 #${q.follows_question_id}）` : ''}\n👉 題目：${q.question_text}\n💡 參考答案：${q.answer_text}\n--------------------------------------`;
             });
             resultIds.textContent = infoText; // 🎯 安全防護
 

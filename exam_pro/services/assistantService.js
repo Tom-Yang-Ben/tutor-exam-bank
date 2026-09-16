@@ -151,11 +151,15 @@ const TOOLS = {
                 subject: args.subject, chapter: args.chapter.trim(), limitCount: args.count
             });
             if (picked.error) return { error: picked.error.message };
+            // 與組卷同一個選題函式：承上題整組抽、相鄰排列；少出題時同樣附註（FR-019 PR2）
             return {
-                note: '僅預覽、尚未寫入。真的要出卷請老師在「智慧自動組卷」選同樣條件並按「確認出卷」。',
+                note: '僅預覽、尚未寫入。真的要出卷請老師在「智慧自動組卷」選同樣條件並按「確認出卷」。'
+                    + (picked.note ? picked.note : ''),
                 paper_title_preview: picked.paperTitle,
+                ...(picked.shortfall ? { shortfall: picked.shortfall } : {}),
                 questions: picked.sortedQuestions.map(q => ({
                     id: q.id, question_type: q.question_type, difficulty: q.difficulty,
+                    follows_question_id: q.follows_question_id ?? null,
                     question_text: String(q.question_text || '').slice(0, 80)
                 }))
             };
