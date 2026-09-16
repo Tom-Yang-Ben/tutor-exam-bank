@@ -1,8 +1,81 @@
 const { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel, PageBreak, ImageRun } = require('docx');
 const fetch = require('node-fetch'); // node-fetch v2 為 CommonJS，於模組載入時引入一次即可
+const fs = require('fs');
+const path = require('path');
 const { buildParagraphComponents } = require('../utils/textFormatter');
+const { FIGURES_DIR, RENDER_SCALE } = require('./figureService');
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 圖片大小上限 5MB
+
+// ── 本機附圖（docs/figures.md「Word 匯出」段）──
+//
+// 管線裁的圖存在 data/figures/，questions.question_img 只記相對路徑 /figures/<檔名>。
+// 這種路徑不走下面的 http 下載（SSRF 白名單本來就擋），改成直接讀本機檔嵌入。
+//
+// 版面：docx 預設 A4 直式、左右邊界各 1440 twips → 可用寬 9026 twips ≈ 6.27 吋 ≈ 601 px（96 DPI）。
+// 裁圖以 RENDER_SCALE 倍（72×2＝144 DPI）渲染，換回 96 DPI 就是「原卷上的實際大小」；
+// 超過可用寬高才等比例縮小，不放大、不變形。
+const FIGURE_URL_RE = /^\/figures\/([A-Za-z0-9_-]+\.(?:png|jpe?g))$/i;
+const FIGURE_MAX_WIDTH_PX = 600;
+const FIGURE_MAX_HEIGHT_PX = 800;
+const FIGURE_SOURCE_DPI = 72 * RENDER_SCALE;
+const FIGURE_MISSING_TEXT = '（附圖遺失）';
+const DOCX_TYPE_BY_SHARP_FORMAT = { png: 'png', jpeg: 'jpg', gif: 'gif', bmp: 'bmp' };
+
+/**
+ * `/figures/<檔名>` → 附圖目錄內的絕對路徑；不是本機附圖路徑或企圖跳出目錄時回 null。
+ * 兩道檢查：檔名白名單（不含 / \ .. 與 URL 編碼），再確認 resolve 後仍在目錄內。
+ *
+ * @param {string} questionImg
+ * @param {string} [figuresDir]
+ * @param {RegExp} [urlPattern]  僅供測試注入較寬鬆的白名單，確認第二道「仍在目錄內」檢查獨立有效
+ * @returns {string|null}
+ */
+function resolveFigurePath(questionImg, figuresDir = FIGURES_DIR, urlPattern = FIGURE_URL_RE) {
+    if (typeof questionImg !== 'string') return null;
+    const m = urlPattern.exec(questionImg.trim());
+    if (!m) return null;
+    const root = path.resolve(figuresDir);
+    const full = path.resolve(root, m[1]);
+    if (path.dirname(full) !== root) return null;
+    return full;
+}
+
+/**
+ * 依原圖像素與來源 DPI 算出 Word 內的顯示尺寸（px，96 DPI），等比例夾在可用寬高內。
+ *
+ * @param {number} width   原圖寬（px）
+ * @param {number} height  原圖高（px）
+ * @param {{sourceDpi?:number, maxWidth?:number, maxHeight?:number}} [opts]
+ * @returns {{width:number, height:number}}
+ */
+function fitFigureSize(width, height, { sourceDpi = FIGURE_SOURCE_DPI, maxWidth = FIGURE_MAX_WIDTH_PX, maxHeight = FIGURE_MAX_HEIGHT_PX } = {}) {
+    const natural = 96 / sourceDpi;
+    const scale = Math.min(natural, maxWidth / width, maxHeight / height);
+    return {
+        width: Math.max(1, Math.round(width * scale)),
+        height: Math.max(1, Math.round(height * scale))
+    };
+}
+
+/**
+ * 讀本機附圖並做成置中的圖片段落；任何失敗（檔案不存在、不是圖、格式不支援）回 null，
+ * 由呼叫端放「（附圖遺失）」——少一張圖不能讓整份考卷匯出失敗。
+ */
+async function buildLocalFigureParagraph(filePath, { questionId, logger }) {
+    try {
+        const data = await fs.promises.readFile(filePath);
+        const sharp = require('sharp');
+        const meta = await sharp(data).metadata();
+        const type = DOCX_TYPE_BY_SHARP_FORMAT[meta.format];
+        if (!type || !meta.width || !meta.height) throw new Error(`不支援的圖檔格式：${meta.format}`);
+        const size = fitFigureSize(meta.width, meta.height);
+        return new Paragraph({ children: [new ImageRun({ data, type, transformation: size })], alignment: AlignmentType.CENTER });
+    } catch (err) {
+        logger.warn?.({ msg: 'Word 匯出：附圖讀取失敗，以文字標示遺失', question_id: questionId, file: path.basename(filePath), error: err.message });
+        return null;
+    }
+}
 
 // docx v9 的 ImageRun 必須指定 type，否則圖片會以 word/media/<hash>.undefined 落地，
 // 而 [Content_Types].xml 沒有對應的副檔名宣告，Word 會判定整份 .docx 損毀。
@@ -41,7 +114,14 @@ function isSafeImageUrl(rawUrl) {
     return true;
 }
 
-exports.generateExamPaperDocx = async (paperTitle, studentName, sortedQuestions) => {
+/**
+ * @param {string} paperTitle
+ * @param {string} studentName
+ * @param {Array<object>} sortedQuestions
+ * @param {{figuresDir?:string, logger?:object}} [options]  測試可注入附圖目錄與 logger
+ */
+exports.generateExamPaperDocx = async (paperTitle, studentName, sortedQuestions, options = {}) => {
+    const { figuresDir = FIGURES_DIR, logger = console } = options;
     const childrenElements = [];
 
     childrenElements.push(new Paragraph({ text: paperTitle, heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER }));
@@ -59,7 +139,17 @@ exports.generateExamPaperDocx = async (paperTitle, studentName, sortedQuestions)
 
         childrenElements.push(new Paragraph({ children: paragraphComponents }));
 
-        if (q.question_img && isSafeImageUrl(q.question_img)) {
+        if (typeof q.question_img === 'string' && q.question_img.trim().startsWith('/figures/')) {
+            const filePath = resolveFigurePath(q.question_img, figuresDir);
+            const figure = filePath
+                ? await buildLocalFigureParagraph(filePath, { questionId: q.id, logger })
+                : null;
+            if (!filePath) {
+                logger.warn?.({ msg: 'Word 匯出：附圖路徑不合法（不在附圖目錄內），不讀檔', question_id: q.id });
+            }
+            childrenElements.push(figure || new Paragraph({ text: FIGURE_MISSING_TEXT, alignment: AlignmentType.CENTER }));
+            childrenElements.push(new Paragraph({ text: "" }));
+        } else if (q.question_img && isSafeImageUrl(q.question_img)) {
             try {
                 const imgResponse = await fetch(q.question_img, { timeout: 8000, size: MAX_IMAGE_BYTES });
                 const contentType = (imgResponse.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
@@ -94,3 +184,9 @@ exports.generateExamPaperDocx = async (paperTitle, studentName, sortedQuestions)
     const doc = new Document({ sections: [{ children: childrenElements }] });
     return await Packer.toBuffer(doc);
 };
+
+// 純函式與常數匯出給單元測試（test/unit/wordFigures.test.js）
+exports.resolveFigurePath = resolveFigurePath;
+exports.fitFigureSize = fitFigureSize;
+exports.FIGURE_MISSING_TEXT = FIGURE_MISSING_TEXT;
+exports.FIGURE_MAX_WIDTH_PX = FIGURE_MAX_WIDTH_PX;

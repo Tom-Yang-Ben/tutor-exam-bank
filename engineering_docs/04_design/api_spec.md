@@ -117,7 +117,7 @@ app.use((err, req, res, next) => {
 | `POST /api/confirm-paper` | FR-008 | 確認出卷（同一交易建卷＋attempts；預覽過期回 409） |
 | `DELETE /api/papers/:id` | FR-008 | 刪卷連 attempts，題目回候選池（裁決 S4-3） |
 | `POST /api/analyze-pdf` | FR-001 | 舊版單呼叫拆題（保留）；限流 10/min、PDF 上限 15 MB |
-| `POST /api/download-word` | FR-009 | Word 匯出（LaTeX→OOXML，docx 原生 Math 物件） |
+| `POST /api/download-word` | FR-009、FR-018 | Word 匯出（LaTeX→OOXML，docx 原生 Math 物件）；`question_img` 為 `/figures/<檔名>` 的題嵌入本機裁圖，讀不到時該題放「（附圖遺失）」、整份仍回 200（`docs/figures.md`）〔修訂 2026-09-16〕 |
 | `POST /api/jobs`（15 MB、超限 413；限流 10/min，與 `/analyze-pdf` 共用同一桶；檔案內容缺 `%PDF-` 檔頭回 400〔修訂 2026-09-15c〕） | FR-001 | 建立拆題 job（恆掛載；FEATURE_PIPELINE 僅控制前端上傳入口） |
 | `GET /api/jobs/:id`、`GET /api/jobs/:id/questions`、`POST /api/jobs/:id/retry` | FR-001 | job 狀態／逐題清單／斷點續跑（恆掛載） |
 | `GET /api/review`、`GET /api/review/:jqId`、`POST /api/review/:jqId/approve`、`POST /api/review/:jqId/reject` | FR-006 | 人工複核佇列四支（恆掛載）；〔修訂 2026-09-15f〕FR-020 的「題幹與原卷不符」沿用同四支，approve 不重跑原卷比對、只在事件記 `source_recheck`／`stem_edited`（`docs/interfaces-stage2.md` 第 6.6 條） |

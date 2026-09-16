@@ -26,7 +26,7 @@
 
 | 項目 | 內容 |
 | :--- | :--- |
-| **受影響功能** | 所有付費 LLM 節點（extract／classify／lint／verify／generate）與 embedding；零成本節點（dedup0／dedup1／save）照常推進 |
+| **受影響功能** | 所有付費 LLM 節點（extract／classify／lint／verify／generate）與 embedding；零成本節點（dedup0／source_check／dedup1／save）照常推進；單 job 預算用盡時其判定原因（`duplicate`、`transcription_mismatch`）照常保留，不改寫成 `budget_exceeded`〔修訂 2026-09-16〕 |
 | **嚴重程度判定** | 429 屬暫時性、退避可自癒；費用異常暴增（單日遠超 5 USD 預設上限仍在增加）＝立即停 worker 查因 |
 
 ## 3. Possible Causes（可能原因）

@@ -85,7 +85,7 @@
 | TC-008-1 | 同學生二次組卷 | 整合 | NOT EXISTS attempts 排除已作答題，零重複 | FR-008、DEC-003 |
 | TC-008-3 | 家族互斥抽題 | 單元（`exam_pro/test/unit/pickOnePerFamily.test.js`） | 每 `COALESCE(variant_of, id)` 家族至多一題、家族間等機率 | FR-008 |
 | TC-008-4 | 抽題隨機性突變測試 | 單元（`exam_pro/test/unit/shuffle.test.js`） | 固定種子一萬次卡方 0.5~4.0；改回舊寫法 5 項轉紅 | FR-008 |
-| TC-009-2 | 組卷 → download-word → 解開 `.docx` | e2e（`exam_pro/test/e2e/paperWord.e2e.test.js`） | 公式為 `<m:oMath>`／`<m:f>`／`<m:sSup>`／`<m:rad>` 原生物件，非純文字 | FR-009、DEC-002 |
+| TC-009-2 | 組卷 → download-word → 解開 `.docx` | e2e（`exam_pro/test/e2e/paperWord.e2e.test.js`） | 公式為 `<m:oMath>`／`<m:f>`／`<m:sSup>`／`<m:rad>` 原生物件，非純文字；附圖題（`question_img`＝`/figures/…`）的圖嵌入 `word/media`＋`<w:drawing>`〔修訂 2026-09-16〕 | FR-009、FR-018、DEC-002 |
 | TC-010-1 | 相似題 hybrid 檢索品質 | eval retrieval | 三欄不低於 §2 門檻；hybrid R@5 ≥ LIKE | FR-010 |
 | TC-011-1 | 變式題檢索優先與偏題閘門 | eval:variant | retrieved_coverage ≥ 0.8367、gate_pass_rate ≥ 0.22 | FR-011 |
 | TC-012-1 | 自然語言查題規則路徑 | eval:nlq | rules 欄 filters_exact ≥ 0.97、recall10 ≥ 0.97 | FR-012 |
