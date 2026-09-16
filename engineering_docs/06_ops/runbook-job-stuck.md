@@ -33,7 +33,7 @@
 
 1. worker 行程中斷（nodemon 重啟、崩潰）——租約 `locked_until` 未到期前該列不會被重新認領。
 2. 當日成本達 `DAILY_COST_BUDGET_USD`（預設 5）——runner 只放行零成本節點（dedup0／source_check〔修訂 2026-09-15f〕／dedup1／save），付費節點停止認領；列會停在 `hashed` 或 `source_checked`（下一格是付費的 classify／verify）。
-3. 單 job 預算用盡——狀態機轉 `needs_review('budget_exceeded')`，實為終態非卡住。同理，`needs_review('transcription_mismatch')` 是原卷比對判定題幹與原卷不符的終態，不是卡住，也不在 `POST /api/jobs/:id/retry` 的可重跑清單內（重跑結果相同）〔修訂 2026-09-15f〕。
+3. 單 job 預算用盡——狀態機轉 `needs_review('budget_exceeded')`，實為終態非卡住。同理，`needs_review('transcription_mismatch')` 是原卷比對判定題幹與原卷不符的終態，不是卡住，也不在 `POST /api/jobs/:id/retry` 的可重跑清單內（重跑結果相同）〔修訂 2026-09-15f〕。單 job 預算用盡時，零成本節點（dedup0／source_check／dedup1）判定的 `transcription_mismatch`、`duplicate` 同樣保留原因、不會被改寫成 `budget_exceeded`；在此修正之前的版本會改寫，若複核佇列中有 `budget_exceeded` 列的 `job_events` 最後一筆是 `source_check`／`dedup0`／`dedup1`，退回重跑後才會得到真正原因〔修訂 2026-09-16〕。
 4. `JOB_RUNNER` 未設為 `inline`（預設 inline；設成其他值則 server 不啟動 runner）。
 5. LLM 供應商逾時／429 進入退避重試（1s→2s→4s，封頂 60s）。
 

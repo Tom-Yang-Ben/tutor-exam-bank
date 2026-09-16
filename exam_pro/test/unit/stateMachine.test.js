@@ -17,7 +17,7 @@ const assert = require('node:assert/strict');
 
 const {
     transition, NODE_FOR_STATE, NEXT_STATE, TERMINAL_STATES, DEFAULT_LIMITS,
-    OUTCOME_KINDS, REVIEW_REASON_FOR_FAIL, REVIEW_REASON_FOR_ERROR
+    OUTCOME_KINDS, REVIEW_REASON_FOR_FAIL, REVIEW_REASON_FOR_ERROR, FREE_NODES
 } = require('../../pipeline/stateMachine');
 
 // 七個可推進狀態的推進順序（= NEXT_STATE 串起來的鏈）
@@ -224,6 +224,84 @@ describe('狀態機 — fail 的重試上限逐格窮舉', () => {
             limits: { ...LIMITS, budgetLeft: -1e-9 }
         });
         assert.equal(r.review_reason, 'budget_exceeded');
+    });
+});
+
+// 〔修訂 2026-09-16〕零成本節點不受規則 3 改寫：重跑不花錢，原本的失敗原因才是真正要人處理的事。
+// 修正前 source_check 回 transcription_mismatch、dedup 回 duplicate 會被改寫成 budget_exceeded，
+// 進了 POST /api/jobs/:id/retry 的可重跑清單，退回重跑後才得到正確原因。
+describe('狀態機 — 預算用盡時零成本節點保留原本的失敗原因', () => {
+    const STATE_FOR_NODE = Object.fromEntries(Object.entries(NODE_FOR_STATE).map(([s, n]) => [n, s]));
+
+    test('FREE_NODES 逐字凍結：四個不呼叫模型的節點', () => {
+        assert.deepEqual([...FREE_NODES].sort(), ['dedup0', 'dedup1', 'save', 'source_check']);
+        assert.ok(Object.isFrozen(FREE_NODES));
+    });
+
+    test('source_check fail(transcription_mismatch)＋budgetLeft 0 → transcription_mismatch', () => {
+        const r = transition({
+            state: 'linted', retries: {},
+            outcome: { kind: 'fail', reason: 'transcription_mismatch', feedback: '負號比原卷多 1 個' },
+            limits: { ...LIMITS, budgetLeft: 0 }
+        });
+        assert.deepEqual(r, { state: 'needs_review', retries: {}, review_reason: 'transcription_mismatch' });
+    });
+
+    for (const [node, reason] of [['dedup0', 'duplicate'], ['dedup1', 'duplicate'], ['save', 'schema_invalid']]) {
+        test(`${node} fail(${reason})＋budgetLeft 為 0 或負數 → ${reason}，不改寫成 budget_exceeded`, () => {
+            for (const budgetLeft of [0, -0.01]) {
+                const r = transition({
+                    state: STATE_FOR_NODE[node], retries: { classify: 1 },
+                    outcome: { kind: 'fail', reason }, limits: { ...LIMITS, budgetLeft }
+                });
+                assert.deepEqual(r, { state: 'needs_review', retries: { classify: 1 }, review_reason: reason });
+            }
+        });
+    }
+
+    // code review（PR #31）：dedup1 重跑會再叫一次 embedding（runner 給 question_id:null），
+    // error 若照常退避重跑，預算用盡後最多再花 maxErrorRetries 次。所以例外只放行 fail。
+    test('零成本節點的 error 在預算用盡時仍 budget_exceeded、不退避重跑（dedup1 重跑會叫 embedding）', () => {
+        for (const budgetLeft of [0, -0.01]) {
+            const limits = { ...LIMITS, budgetLeft };
+            for (const node of FREE_NODES) {
+                for (const errorClass of ['timeout', 'rate_limited', 'provider_error']) {
+                    const r = transition({
+                        state: STATE_FOR_NODE[node], retries: {}, outcome: { kind: 'error', errorClass }, limits
+                    });
+                    assert.deepEqual(r, { state: 'needs_review', retries: {}, review_reason: 'budget_exceeded' },
+                        `${node} ${errorClass} budgetLeft=${budgetLeft}`);
+                }
+            }
+        }
+    });
+
+    test('預算還有時零成本節點的 error 照常退避（例外只影響預算用盡的情形）', () => {
+        const r = transition({
+            state: 'verified', retries: {}, outcome: { kind: 'error', errorClass: 'timeout' },
+            limits: { ...LIMITS, budgetLeft: 0.01 }
+        });
+        assert.deepEqual(r, { state: 'verified', retries: { 'dedup1:error': 1 }, review_reason: null });
+    });
+
+    test('零成本節點自己回 budget_exceeded 時仍是 budget_exceeded（規則 5／6 不變）', () => {
+        const limits = { ...LIMITS, budgetLeft: 0 };
+        assert.equal(transition({
+            state: 'linted', retries: {}, outcome: { kind: 'fail', reason: 'budget_exceeded' }, limits
+        }).review_reason, 'budget_exceeded');
+        assert.equal(transition({
+            state: 'extracted', retries: {}, outcome: { kind: 'error', errorClass: 'budget_exceeded' }, limits
+        }).review_reason, 'budget_exceeded');
+    });
+
+    test('要花錢的節點行為不變：classify／lint／verify 的 fail 與 error 一律 budget_exceeded', () => {
+        for (const state of ['hashed', 'classified', 'source_checked']) {
+            assert.ok(!FREE_NODES.includes(NODE_FOR_STATE[state]), state);
+            for (const outcome of [{ kind: 'fail', reason: 'answer_mismatch' }, { kind: 'error', errorClass: 'timeout' }]) {
+                const r = transition({ state, retries: {}, outcome, limits: { ...LIMITS, budgetLeft: 0 } });
+                assert.deepEqual(r, { state: 'needs_review', retries: {}, review_reason: 'budget_exceeded' }, `${state} ${outcome.kind}`);
+            }
+        }
     });
 });
 

@@ -12,7 +12,8 @@
 //     enforce → mismatch 回 fail('transcription_mismatch')，不重試，直接進 needs_review
 //   其餘     → 沒有片段、未定位、題目中文字太少、段落對不上 → skipped(原因)
 //
-// 零成本節點（jobRunner 的 FREE_NODES）：當日預算止血時仍可跑。
+// 零成本節點（pipeline/stateMachine.js 的 FREE_NODES）：當日預算止血時仍可跑；
+// job 預算用盡時回 fail 也保留 transcription_mismatch，不被改寫成 budget_exceeded。
 
 const { compareSegment, describeMismatch } = require('../utils/sourceCheck');
 

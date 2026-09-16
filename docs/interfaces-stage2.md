@@ -245,6 +245,7 @@ transition({ state, retries, outcome, limits }) → { state, retries, review_rea
 2. `outcome.kind` 不是四種之一 → 丟 `Error('transition：未知的 outcome.kind <kind>')`。
 3. **預算已用盡**（`limits.budgetLeft <= 0`）且 `outcome.kind` 不是 `pass`／`skipped` → `{ state:'needs_review', retries, review_reason:'budget_exceeded' }`。
    （`pass`／`skipped` 照常前進：那次呼叫的錢已經花掉了，把成果丟掉只是浪費。）
+   〔修訂 2026-09-16〕**零成本節點例外**：`NODE_FOR_STATE[state]` 屬於 `FREE_NODES`（`dedup0`／`source_check`／`dedup1`／`save`，定義於 `pipeline/stateMachine.js` 並由 runner 共用）且 `kind === 'fail'` 時本條不適用，交給第 5 條，保留原本的 `reason`（例如 `transcription_mismatch`、`duplicate`）：那是判定結果，改寫成 `budget_exceeded` 只會蓋掉真正的原因、並讓該列進入 `POST /api/jobs/:id/retry` 的可重跑清單。**`kind === 'error'` 仍適用本條**（`budget_exceeded`、不退避重跑）：runner 給 `dedup1` 的 `question_id` 一律是 `null`，重跑會再呼叫一次 `ctx.llm.embed`，並計入 job 成本。
 4. `kind === 'pass'` 或 `'skipped'` → `{ state: NEXT_STATE[state], retries, review_reason:null }`。
 5. `kind === 'fail'`：
    - `outcome.reason === 'budget_exceeded'` → 直接 `needs_review('budget_exceeded')`，**不重試**。
