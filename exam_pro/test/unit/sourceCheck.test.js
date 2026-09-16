@@ -269,6 +269,64 @@ describe('比對', () => {
     });
 });
 
+// 〔修訂 2026-09-16〕docs/source-check.md 第 5 節「跨 20 頁切塊邊界」限制的現況行為。
+// extract 以 JOB_PDF_CHUNK_PAGES（預設 20）頁切塊，attachSourceText 只讀該塊的頁；
+// 題目若跨到下一塊，這一塊的文字層在題目中途就結束。以下斷言釘住**目前**的結果，
+// 不代表這是期望行為——真實原卷上尚未實測過跨界題，改善前改動這些斷言要同步改文件。
+describe('已知限制：題目跨切塊邊界、文字層在題目中途結束', () => {
+    const HEAD = [
+        '一、單選題（每題 5 分）',
+        '說明：本卷共二十題，每題選出一個最適當的選項，答錯不倒扣，請以黑色原子筆作答並寫在指定的位置上。',
+        '2. 某班學生共有四十人，其中喜歡數學的人數比喜歡物理的人數多八人，求喜歡物理的人數。',
+        '(A) 12 (B) 16 (C) 20 (D) 24',
+        '3. 已知兩向量的長度與夾角，求兩向量內積之值（以 m 表示）。',
+        '(A) 1/m (B) 2/m (C) 3/m (D) 4/m',
+        '4. 一物體由靜止開始沿光滑斜面下滑，斜面長度為十公尺，傾斜角為 30°，求物體到達底端時的速率。'
+    ].join('\n');
+    const Q1_STEM = '5. 設函數圖形通過兩點，且斜率為負數，求此直線在 y 軸上的截距。';
+    const Q3_STEM = '5. 已知兩向量的長度與夾角，求兩向量內積之值（以 m 表示）。';
+
+    /** 把 tail 接在前面幾題之後，當成「這一塊最後一頁」的文字層，回傳最後一題的定位結果 */
+    function locateLast(questionText, tail) {
+        const pageText = `${HEAD}\n${tail}`;
+        assert.ok(hasTextLayer(pageText), '自編文字層要夠長，才不會被當成掃描檔');
+        const r = locateSegments([{ question_text: Q2 }, { question_text: Q3 }, { question_text: Q4 }, { question_text: questionText }], pageText);
+        return r[3];
+    }
+
+    test('選項跨界、被截掉的部分原卷有負號 → 片段只剩部分負號，判 extra_minus（誤報）', () => {
+        const r = locateLast(Q1, `${Q1_STEM}\n(A) -3 (B)`);
+        assert.equal(r.status, 'located');
+        assert.ok(r.segment.endsWith('(A) -3 (B)'), `片段停在文字層末端：${r.segment}`);
+        const cmp = compareSegment({ questionText: Q1, segment: r.segment });
+        assert.equal(cmp.verdict, 'mismatch');
+        assert.deepEqual(cmp.rules, ['extra_minus']);
+        assert.deepEqual({ a: cmp.detail.minus_extracted, p: cmp.detail.minus_source }, { a: 2, p: 1 });
+    });
+
+    test('截在題幹之後、片段完全沒有負號字形 → 負號規則不觸發，判 match', () => {
+        const r = locateLast(Q1, Q1_STEM);
+        assert.equal(r.status, 'located');
+        const cmp = compareSegment({ questionText: Q1, segment: r.segment });
+        assert.equal(cmp.verdict, 'match');
+        assert.equal(cmp.detail.minus_source, 0);
+    });
+
+    test('截掉的選項只有字母與數字 → 「漏字母」只看原卷有的字，截斷不會造成誤報，判 match', () => {
+        const r = locateLast(Q3, `${Q3_STEM}\n(A) 1/m (B) 2/`);
+        assert.equal(r.status, 'located');
+        const cmp = compareSegment({ questionText: Q3, segment: r.segment });
+        assert.equal(cmp.verdict, 'match');
+        assert.ok(cmp.signals.extraDigits >= 1, 'extraDigitsRule 預設關閉，拆題多出的數字不判定');
+    });
+
+    test('題幹本身跨界 → 覆蓋率不足，not_found（跳過，不表態）', () => {
+        const r = locateLast(Q1, '5. 設函數圖形通過兩點，且斜率為');
+        assert.equal(r.status, 'not_found');
+        assert.ok(r.locate_score < DEFAULTS.minCoverage);
+    });
+});
+
 describe('agents/source_check.js 合約', () => {
     const located = (q) => ({ v: 1, status: 'located', pages: [1, 1], locate_score: 1, segment: locatedSegment(q) });
     const ctxOf = (mode, extra = {}) => ({

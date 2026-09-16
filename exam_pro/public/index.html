@@ -923,7 +923,7 @@
                 const card = el('article', 'question-card rounded-2xl p-4 sm:p-5 transition-all');
                 const head = el('div', 'flex flex-col-reverse sm:flex-row sm:justify-between sm:items-start gap-3 mb-3');
                 const meta = el('div', 'flex flex-wrap items-center gap-1.5 text-xs leading-relaxed');
-                meta.innerHTML = `<label class="grid place-items-center px-1 cursor-pointer"><input type="checkbox" class="mgr-pick w-4 h-4 accent-indigo-600 cursor-pointer" data-id="${q.id}" aria-label="選取題目 #${q.id}"></label><span class="rounded-md bg-slate-100 px-2 py-1 font-mono font-bold text-slate-500">#${q.id}</span><span class="rounded-md bg-indigo-50 px-2 py-1 font-bold text-indigo-700">${escapeHtml(q.subject)} · ${escapeHtml(q.chapter)}</span><span class="rounded-md bg-slate-50 px-2 py-1 font-semibold text-slate-500">${escapeHtml(q.question_type)}</span><span class="px-1 text-amber-500">${'★'.repeat(q.difficulty)}</span><span class="rounded-md px-2 py-1 font-semibold ${SOURCE_TYPE_BADGE[q.source_type] || SOURCE_TYPE_BADGE.unknown}">${SOURCE_TYPE_LABEL[q.source_type] || '未標記'}</span>${q.source_detail ? `<span class="rounded-md bg-slate-50 px-2 py-1 text-slate-500">${escapeHtml(q.source_detail)}</span>` : ''}`;
+                meta.innerHTML = `<label class="grid place-items-center px-1 cursor-pointer"><input type="checkbox" class="mgr-pick w-4 h-4 accent-indigo-600 cursor-pointer" data-id="${q.id}" aria-label="選取題目 #${q.id}"></label><span class="rounded-md bg-slate-100 px-2 py-1 font-mono font-bold text-slate-500">#${q.id}</span>${followUpBadges(q)}<span class="rounded-md bg-indigo-50 px-2 py-1 font-bold text-indigo-700">${escapeHtml(q.subject)} · ${escapeHtml(q.chapter)}</span><span class="rounded-md bg-slate-50 px-2 py-1 font-semibold text-slate-500">${escapeHtml(q.question_type)}</span><span class="px-1 text-amber-500">${'★'.repeat(q.difficulty)}</span><span class="rounded-md px-2 py-1 font-semibold ${SOURCE_TYPE_BADGE[q.source_type] || SOURCE_TYPE_BADGE.unknown}">${SOURCE_TYPE_LABEL[q.source_type] || '未標記'}</span>${q.source_detail ? `<span class="rounded-md bg-slate-50 px-2 py-1 text-slate-500">${escapeHtml(q.source_detail)}</span>` : ''}`;
                 const btns = el('div', 'flex gap-2 shrink-0');
                 const editBtn = el('button', 'text-xs px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100 cursor-pointer', { type: 'button', textContent: '✏️ 編輯' });
                 editBtn.addEventListener('click', () => openEditModal(q));
@@ -958,12 +958,36 @@
             }
         }
 
+        // 承上題徽章（FR-019）：GET /api/questions 回 follows_question_id（前題 id）與 has_follow_ups（有在庫的承上題）
+        function followUpBadges(q) {
+            let html = '';
+            const pred = Number(q.follows_question_id);
+            if (Number.isInteger(pred) && pred > 0) {
+                html += `<span class="rounded-md bg-violet-50 px-2 py-1 font-bold text-violet-700" title="承上題：題幹接續前題 #${pred}">承上 #${pred}</span>`;
+            }
+            if (q.has_follow_ups) {
+                html += '<span class="rounded-md border border-violet-200 px-2 py-1 font-semibold text-violet-600" title="有承上題接續此題；刪除時需整組處理">有承上題</span>';
+            }
+            return html;
+        }
+
         async function deleteQuestion(q) {
-            if (!confirm(`確定刪除題目 #${q.id}？\n此動作無法復原。`)) return;
+            const hint = q.has_follow_ups ? '\n此題有承上題接續，單獨刪除會被擋下，屆時可選擇整組處理。' : '';
+            if (!confirm(`確定刪除題目 #${q.id}？\n此動作無法復原。${hint}`)) return;
             try {
-                const res = await apiFetch('/api/questions/' + q.id, { method: 'DELETE' });
-                const data = await res.json();
-                if (res.ok) { showToast('題目已刪除', 'success'); await fetchQuestions(mgrPage); await fetchChapters(); }
+                let res = await apiFetch('/api/questions/' + q.id, { method: 'DELETE' });
+                let data = await res.json();
+                // 409：前題仍有承上題（children），或題目被匯入／變式任務引用 → 提供整組處理（?group=1）
+                if (res.status === 409 && (Array.isArray(data.children) || Array.isArray(data.job_ids) || /請改用封存/.test(data.message || ''))) {
+                    // ?group=1 會沿鏈處理所有後代（不只 children 列出的直接承上題），對話框要講清楚範圍
+                    const scope = Array.isArray(data.children) && data.children.length
+                        ? `連同承上題 ${data.children.map(c => '#' + c).join('、')} 及其後所有承上題整組處理`
+                        : (q.has_follow_ups ? '連同其後所有承上題整組處理' : '改為封存');
+                    if (!confirm(`${data.message}\n\n要${scope}嗎？\n（組內任一題有作答紀錄或任務引用時整組封存，否則整組刪除）`)) return;
+                    res = await apiFetch('/api/questions/' + q.id + '?group=1', { method: 'DELETE' });
+                    data = await res.json();
+                }
+                if (res.ok) { showToast(data.message || '題目已刪除', 'success'); await fetchQuestions(mgrPage); await fetchChapters(); }
                 else showToast('刪除失敗：' + (data.message || '請稍後再試'), 'error');
             } catch (e) { showToast('連線失敗，請確認伺服器狀態', 'error'); }
         }

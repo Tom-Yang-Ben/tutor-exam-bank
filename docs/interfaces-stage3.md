@@ -268,6 +268,7 @@ module.exports = { pickOnePerFamily };
 |---|---|
 | 400 | `{ message: '無效的題目 ID' }` |
 | 404 | `{ message: '找不到該題目' }`（`:id` 不存在**或已封存**，與 `/similar` 同一條線） |
+| 409 | `{ message: '承上題缺少前題脈絡，請改用前題出變式。', reason: 'follow_up_blueprint', follows_question_id }`（藍本本身是承上題，`follows_question_id IS NOT NULL`；檢查先於向量檢查，retrieved 與 generating 兩條分支都不走、不建 job；前題本身可以出變式）〔修訂 2026-09-16，FR-019 PR3〕 |
 | 409 | `{ message: '該題尚未建立向量，請執行 npm run embed:backfill' }`（藍本 `embedding IS NULL`；**與 `/similar` 逐字相同**） |
 | 429 | 由限流器產生，字串如上表 |
 

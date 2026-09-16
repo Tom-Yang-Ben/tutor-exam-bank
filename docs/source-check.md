@@ -140,6 +140,7 @@ node eval/tools/calibrate_source_check.js --pdf-dir "<原卷資料夾>" --includ
 - 原卷片段本身沒有負號字形時，負號規則不觸發；附圖題不跑字母規則。
 - 規則是針對 2026-09-15 發現的錯誤型態校準的；新型態的考卷（不同字型、雙欄排版）上線初期建議先以 `shadow` 觀察，再依第 4.1 節重新校準。
 - 題組前導語被放進每個小題時，片段會重疊（`shared`）；目前照常比對，`extraDigitsRule` 因此預設關閉。
+- **跨 20 頁切塊邊界的題目片段可能被截斷（真實原卷未實測）**〔修訂 2026-09-16〕：extract 以 `JOB_PDF_CHUNK_PAGES`（預設 20）頁切塊，`attachSourceText` 只讀該塊的頁，題目跨到下一塊時片段停在該塊文字層末端。現況行為以自編文字層釘在 `test/unit/sourceCheck.test.js`「已知限制：題目跨切塊邊界」：題幹本身跨界 → `not_found`（跳過）；截在題幹之後、片段無負號字形 → `match`；截掉的選項只含字母與數字 → `match`；**截掉的選項含負號、片段仍留部分負號 → `extra_minus` 誤報**，enforce 下會進 `needs_review('transcription_mismatch')`，需人工核對後 approve。
 
 ## 6. 相關檔案與測試
 

@@ -42,7 +42,9 @@ function runSuite() {
     const request = require('supertest');
     const app = require(path.join(APP_DIR, 'app'));
     const { query, pool } = require(path.join(APP_DIR, 'config', 'db'));
-    const { documentXml } = require('./lib/docx');
+    const { documentXml, listEntries } = require('./lib/docx');
+    const fs = require('node:fs');
+    const sharp = require('sharp');
 
     const SUBJECT = '數學';
     const CHAPTER = '向量內積';
@@ -80,8 +82,18 @@ function runSuite() {
             question_type: '證明', difficulty: 4,
             question_text: `[${MARK}] 試證：對任意平面向量恆有 $|\\vec{a}\\cdot\\vec{b}| \\leq |\\vec{a}||\\vec{b}|$。`,
             answer_text: '設夾角為 $\\theta$，由 $|\\cos\\theta| \\leq 1$ 即得。'
+        },
+        {
+            // 附圖題（docs/figures.md「Word 匯出」段）：question_img 是管線裁圖的本機相對路徑，
+            // 圖檔在 before() 用 sharp 現做一張純色 PNG 放進 data/figures/，after() 刪掉。
+            question_type: '填空', difficulty: 1,
+            question_text: `[${MARK}] 如附圖，求向量 $\\vec{u}$ 的長度。`,
+            answer_text: '$5$',
+            question_img: `/figures/e2e-word-${process.pid}.png`
         }
     ];
+    const { FIGURES_DIR } = require(path.join(APP_DIR, 'services', 'figureService'));
+    const FIGURE_FILE = path.join(FIGURES_DIR, `e2e-word-${process.pid}.png`);
 
     describe('E-X15 ② 組卷 → download-word（PostgreSQL）', () => {
         let questionIds = [];          // 這次組卷會用到的題（可能含既有的）
@@ -91,6 +103,9 @@ function runSuite() {
             // 只清掉這支測試自己造的東西：questions 是所有整合測試共用的表，
             // 全表 TRUNCATE 等於把別人的資料也一起殺掉（jobs.pg.test.js 的同一條線）。
             await cleanStudents();
+            fs.mkdirSync(FIGURES_DIR, { recursive: true });
+            await sharp({ create: { width: 240, height: 120, channels: 3, background: { r: 30, g: 120, b: 200 } } })
+                .png().toFile(FIGURE_FILE);
             // 上一輪被中斷時可能留下同記號的題目；先清掉，這一輪才會真的重新插入
             // （斷言的是 answer_text 的解析結果，借用既有列會讓斷言對到別人的答案）。
             await query(
@@ -102,11 +117,11 @@ function runSuite() {
             insertedIds = [];
             for (const q of QUESTIONS) {
                 const { rows } = await query(
-                    `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text, origin)
-                     VALUES ($1, $2, $3, $4, $5, $6, 'manual')
+                    `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text, question_img, origin)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual')
                      ON CONFLICT DO NOTHING
                      RETURNING id`,
-                    [SUBJECT, CHAPTER, q.question_type, q.difficulty, q.question_text, q.answer_text]
+                    [SUBJECT, CHAPTER, q.question_type, q.difficulty, q.question_text, q.answer_text, q.question_img || null]
                 );
                 if (rows.length) { questionIds.push(rows[0].id); insertedIds.push(rows[0].id); continue; }
                 // uq_questions_text_hash_active 命中（測試庫裡本來就有同一題，例如 seed 題）：
@@ -148,6 +163,7 @@ function runSuite() {
             // 時我們是「借來用」，不是擁有者，刪掉會讓下一支測試莫名其妙地少了資料。
             // attempts 在 cleanStudents() 已經先刪，所以 ON DELETE RESTRICT 不會擋。
             await query('DELETE FROM questions WHERE id = ANY($1::int[])', [insertedIds]);
+            fs.rmSync(FIGURE_FILE, { force: true });
             await pool.end();
         });
 
@@ -218,6 +234,14 @@ function runSuite() {
             // 題號與標題的中文必須留在一般的 w:t 裡。
             assert.ok(xml.includes('<w:t'), '整份文件沒有任何一般文字節點');
             assert.ok(xml.includes(`${STUDENT}-2`) || xml.includes('特訓卷'), '文件裡找不到卷名或學生姓名');
+
+            // 附圖題：/figures/ 本機裁圖必須真的嵌進 Word（docs/figures.md「Word 匯出」段）。
+            // 舊行為是 SSRF 白名單把相對路徑整個跳過，HTTP 200、檔案正常、只是安靜地少圖。
+            const media = listEntries(res.body).filter(n => n.startsWith('word/media/') && !n.endsWith('/'));
+            assert.equal(media.length, 1, `word/media 應剛好一張附圖，實際：${media.join('、')}`);
+            assert.ok(media[0].endsWith('.png'), media[0]);
+            assert.ok(xml.includes('<w:drawing>'), 'document.xml 沒有 <w:drawing>：附圖沒嵌進 Word');
+            assert.ok(!xml.includes('（附圖遺失）'), '附圖檔存在卻被標成遺失');
         });
 
         test('question_ids 給空陣列回 400（凍結訊息）', async () => {

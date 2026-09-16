@@ -462,6 +462,19 @@ rebase 時若兩條 WS 都動了本檔，衝突只會落在相鄰行，**兩邊�
 | 找不到或已封存 | 404 | `{ message: '找不到該題目' }` |
 | 此題是承上題的前題（0008 `questions_follows_question_id_fkey`）〔修訂 2026-09-15f〕 | 409 | `{ message: '此題是承上題 #… 的前題，請先刪除或解除綁定該承上題。', children: [<承上題 id>…] }`；交易回滾後回應，題目不變 |
 | 此題由匯入任務產生（`job_questions_question_id_fkey`）〔修訂 2026-09-15f〕 | 409 | `{ message: '此題由匯入任務產生，無法直接刪除，請改用封存。' }`（2026-09-15 前此情境直接落 500） |
+| 此題是變式 job 的藍本（`jobs_source_question_id_fkey`）〔修訂 2026-09-16〕 | 409 | `{ message: '此題是變式題藍本，請改用封存。', job_ids: [<jobs.id>…] }`（2026-09-16 前此情境直接落 500） |
+| 有 `attempts` 紀錄、且仍有**在庫**（未封存）承上題〔修訂 2026-09-16〕 | 409 | 與前題 409 同形狀 `{ message, children }`，`children` 只列在庫的承上題；不封存。承上題皆已封存時照舊封存前題 |
+
+〔修訂 2026-09-16 review〕判定順序：鎖列後**先查在庫承上題**（有就回 `children` 409，不論是否有作答或任務引用），再依 `attempts` 決定封存或硬刪，最後才由 FK 錯誤對應 409。在庫承上題不再依賴 FK 錯誤判斷——匯入任務產生的前題同時被 `job_questions` 參照，PG 依觸發器建立順序先檢查 0003 的 FK，原本會回「請改用封存」而漏掉 `children`。只剩已封存的承上題時，仍依實際先觸發的 FK 回對應 409。
+
+〔修訂 2026-09-16〕**整組處理 `DELETE /api/questions/:id?group=1`**（FR-019 PR3；`group` 以 `config/features.js` 的 `parseBool` 解析，`1`／`true` 為真，其他值等同未帶）。單一交易：
+
+- 組員＝此題（必須在庫，否則 404）＋沿 `follows_question_id` 反查的全部後代（多層鏈，深度上限 20），**含已封存的後代**（它們仍以 FK 指著前題）；不往前題方向走。
+- 組內任一題有 `attempts`、`job_questions.question_id` 或 `jobs.source_question_id` 引用 → 整組封存（已封存者維持原封存時間），回 `200 { message: '組內有題目已有作答紀錄或被匯入／變式任務引用，整組 N 題改為封存（#…）。', id, ids, archived: true }`。
+- 否則一句 `DELETE … WHERE id = ANY(ids)` 整組硬刪，回 `200 { message: '已刪除整組 N 題（#…）。', id, ids, archived: false }`。`ids` 依鏈深度、再依 id 排序。
+- 組員逐層收集：每層先 `FOR UPDATE` 鎖住、再查下一層（〔修訂 2026-09-16 review〕原為一次查完整棵樹再鎖，期間綁到較深組員的新承上題會漏掉，封存分支因不撞 FK 而留下缺前題的在庫承上題）。新綁承上題的 FK 檢查取前題 `FOR KEY SHARE`，與已鎖組員互斥，因此不會漏。
+- 仍撞 FK 的極端情況（如鏈深超過上限）→ `409 { message: '整組處理期間題目關聯有變動，請重新整理後再試。' }`，交易回滾。
+- 未帶 `group` 時上表各列行為不變。題目只被 `job_questions`／`jobs` 引用的單題，也以 `?group=1` 取得封存（本系統沒有獨立封存端點）。
 
 ### 12.2 `config/features.js`（擁有者：WS-A）
 

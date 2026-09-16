@@ -10,6 +10,7 @@
 > 🛠 **2026-08-29 修訂之二**（feat/source-detail）：questions／jobs 各端點的請求與回應加 `source_detail` 來源註記（自由文字 ≤100 字，FR-017 延伸）；§5.1 補 `POST /api/questions/batch-source` 批次補標端點。標記〔修訂 2026-08-29b〕。
 
 > 🛠 **2026-09-15f 修訂**（feat/source-check，FR-020）：無新端點；`GET /api/review` 的 `reason` 值域加 `transcription_mismatch`（九個值）、`GET /api/review/:jqId` 的 payload 可含 `extract.source_text` 與 `source_check`、approve 事件 detail 加 `source_recheck`／`stem_edited`（§2.1、§5.1）。修改處以〔修訂 2026-09-15f〕行內標記。
+> 🛠 **2026-09-16 修訂**（feat/follow-up-protect-badge，FR-019 PR3）：§5.1 `GET /api/questions` 回應補承上題兩欄、`DELETE /api/questions/:id` 補 `?group=1` 與 409 情境。修改處以〔修訂 2026-09-16〕行內標記。
 
 > 🛠 **2026-09-15g 修訂**（feat/follow-up-paper-group，FR-019 PR2）：無新端點；§5.1 `POST /api/generate-paper` 補承上題整組抽取、少出題時的 `shortfall`／`note` 與逐題 `follows_question_id`，`POST /api/confirm-paper` 補組內相鄰排序。修改處以〔修訂 2026-09-15g〕行內標記。
 
@@ -105,8 +106,8 @@ app.use((err, req, res, next) => {
 
 | 方法／路徑 | FR | 說明 |
 | :--- | :--- | :--- |
-| `GET /api/questions` | FR-007 | 題庫列表（篩選＋分頁） |
-| `POST /api/questions`、`PUT /api/questions/:id`、`DELETE /api/questions/:id` | FR-007 | 題目 CRUD；出過的題刪除改封存 `archived:true`；刪除承上題的前題回 409 帶 `children`、刪除匯入任務產生的題回 409 請改封存（FR-019）〔修訂 2026-09-15f〕 |
+| `GET /api/questions` | FR-007 | 題庫列表（篩選＋分頁）；每題另回 `follows_question_id`（前題 id，非承上題為 `null`）與 `has_follow_ups`（有在庫承上題）（FR-019）〔修訂 2026-09-16〕 |
+| `POST /api/questions`、`PUT /api/questions/:id`、`DELETE /api/questions/:id` | FR-007 | 題目 CRUD；出過的題刪除改封存 `archived:true`；刪除承上題的前題回 409 帶 `children`、刪除匯入任務產生的題回 409 請改封存（FR-019）〔修訂 2026-09-15f〕；刪除變式藍本回 409 帶 `job_ids`、封存仍有在庫承上題的前題回 409 帶 `children`；`?group=1` 整組（此題＋全部後代承上題）單一交易處理，組內有作答或任務引用則整組封存（FR-019 PR3，細節見 `docs/interfaces-stage1.md` §12.1）〔修訂 2026-09-16〕 |
 | `POST /api/batch-save-questions` | FR-007 | 批次入庫（白名單硬驗證、部分入庫；`?strict=1` 舊行為） |
 | `POST /api/questions/batch-source` | FR-017 | 批次補標題源：`{question_ids(≤200), source_type?, source_detail?}` 至少一項；兩欄皆「帶了才改」、封存題不動〔修訂 2026-08-29b〕 |
 | `GET /api/chapters`、`GET /api/chapter-whitelist` | FR-002 | 實際存在章節／完整白名單 |
@@ -118,7 +119,7 @@ app.use((err, req, res, next) => {
 | `POST /api/confirm-paper` | FR-008 | 確認出卷（同一交易建卷＋attempts；預覽過期回 409；承上組依承接順序相鄰排序〔修訂 2026-09-15g〕） |
 | `DELETE /api/papers/:id` | FR-008 | 刪卷連 attempts，題目回候選池（裁決 S4-3） |
 | `POST /api/analyze-pdf` | FR-001 | 舊版單呼叫拆題（保留）；限流 10/min、PDF 上限 15 MB |
-| `POST /api/download-word` | FR-009 | Word 匯出（LaTeX→OOXML，docx 原生 Math 物件） |
+| `POST /api/download-word` | FR-009、FR-018 | Word 匯出（LaTeX→OOXML，docx 原生 Math 物件）；`question_img` 為 `/figures/<檔名>` 的題嵌入本機裁圖，讀不到時該題放「（附圖遺失）」、整份仍回 200（`docs/figures.md`）〔修訂 2026-09-16〕 |
 | `POST /api/jobs`（15 MB、超限 413；限流 10/min，與 `/analyze-pdf` 共用同一桶；檔案內容缺 `%PDF-` 檔頭回 400〔修訂 2026-09-15c〕） | FR-001 | 建立拆題 job（恆掛載；FEATURE_PIPELINE 僅控制前端上傳入口） |
 | `GET /api/jobs/:id`、`GET /api/jobs/:id/questions`、`POST /api/jobs/:id/retry` | FR-001 | job 狀態／逐題清單／斷點續跑（恆掛載） |
 | `GET /api/review`、`GET /api/review/:jqId`、`POST /api/review/:jqId/approve`、`POST /api/review/:jqId/reject` | FR-006 | 人工複核佇列四支（恆掛載）；〔修訂 2026-09-15f〕FR-020 的「題幹與原卷不符」沿用同四支，approve 不重跑原卷比對、只在事件記 `source_recheck`／`stem_edited`（`docs/interfaces-stage2.md` 第 6.6 條） |
