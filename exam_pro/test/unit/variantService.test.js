@@ -204,6 +204,31 @@ describe('requestVariants 的三條主要分支（注入假 db）', () => {
             { status: 404, body: { message: '找不到該題目' } });
     });
 
+    test('藍本是承上題 → 409 follow_up_blueprint，不檢索也不建 job（FR-019 PR3）', async () => {
+        const { db, seen } = fakeDb({
+            source: { ...SOURCE, follows_question_id: 11 },
+            onCreate: () => { throw new Error('承上題不該建 job'); }
+        });
+        const r = await svc.requestVariants(12, { force_generate: true }, { db });
+        assert.deepEqual(r, {
+            status: 409,
+            body: { message: '承上題缺少前題脈絡，請改用前題出變式。', reason: 'follow_up_blueprint', follows_question_id: 11 }
+        });
+        assert.equal(seen.length, 1, '只讀了藍本一句，沒有碰 jobs 或檢索');
+    });
+
+    test('承上題檢查先於向量檢查：沒向量的承上題也回 follow_up_blueprint', async () => {
+        const { db } = fakeDb({ source: { ...SOURCE, follows_question_id: 11, embedding: null } });
+        const r = await svc.requestVariants(12, {}, { db });
+        assert.equal(r.body.reason, 'follow_up_blueprint');
+    });
+
+    test('前題本身（follows_question_id 為 null）照常可以出變式', async () => {
+        const { db } = fakeDb({ source: { ...SOURCE, follows_question_id: null } });
+        const r = await svc.requestVariants(12, { force_generate: true }, { db });
+        assert.equal(r.status, 202);
+    });
+
     test('藍本沒有向量 → 409，訊息與 /similar 逐字相同', async () => {
         const { db } = fakeDb({ source: { ...SOURCE, embedding: null } });
         const r = await svc.requestVariants(12, {}, { db });

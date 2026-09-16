@@ -13,6 +13,7 @@
 > 🛠 **2026-09-15f 修訂**（feat/follow-up-links 審查修正）：NFR-003 測試數更新為 1,507／290／11（本分支實跑）；§6 ACPT-019-* 狀態改為已驗證。修改處以〔修訂 2026-09-15f〕行內標記。
 > 🛠 **2026-09-15f 修訂**（feat/source-check，DEC-013、ADR-009）：§1 新增 FR-020 拆題結果對照原卷文字層、FR-006 複核原因八種→九種；NFR-003 測試數 1,476／262／11→1,534／269／11（feat/source-check 實測）；NFR-006 migrations 範圍補 0007、0009；§3 管線資料補原卷片段；§6 補 ACPT-020-* 對照；§7 追溯同步。修改處以〔修訂 2026-09-15f〕行內標記。
 > 🛠 **2026-09-15 合併同步**（feat/follow-up-links 併入 feat/source-check）：定位行功能需求數 19→20；NFR-003 測試數更新為單元 1,565（其後原卷比對審查修正補 2 項單元測試，現況 1,567）／整合 297／e2e 11（合併後實跑）；NFR-006 migrations 範圍合為 0001–0009 共 9 份；§7 追溯之 DEC／FR 範圍合併。上列兩分支修訂列所載之各分支實測數與範圍為當時紀錄，保留不改。合併重算處以〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕雙標記。
+> 🛠 **2026-09-16 修訂**（feat/follow-up-protect-badge，FR-019 PR3）：§1 FR-019 列補端點變更；§6 ACPT-019-* 補 TC-019-6～7 與 ACPT-019-6 狀態。全域測試數未改（由主線合併時統一更新）。修改處以〔修訂 2026-09-16〕行內標記。
 
 ## 目錄
 
@@ -48,7 +49,7 @@
 | FR-016 | 對話式助教（主控 LLM ReAct 迴圈＋五個只讀工具；出卷僅 dry-run 預覽） | POST /api/assistant | FEATURE_ASSISTANT | DEC-007 | Could | ACPT-016-1 |
 | FR-017 | 題目來源標記 source_type（著作權管理；五值白名單 official／school／publisher／self／unknown，入庫路徑全覆蓋、變式繼承藍本標記）〔修訂 2026-08-29〕 | 無獨立端點，附掛既有端點：POST /api/questions、POST /api/batch-save-questions、PUT /api/questions/:id（改標）、GET /api/questions（source_type 篩選）、POST /api/generate-paper（source_types 過濾，非法值 400）、POST /api/jobs（job 帶 source_type） | 沿用各宿主端點旗標 | DEC-010（PR #7，merge f8f6574） | Must | ACPT-017-1 |
 | FR-018 | 附圖裁切入庫（extract 回 bbox→`services/figureService.js` 裁 PNG→`question_img`；權威文件 `docs/figures.md`） 〔修訂 2026-08-29〕 | 管線節點（`workers/jobRunner.js` attachFigureImages）＋GET /figures 靜態路由（`app.js` 掛載，非 /api、不經 x-api-key） | 同 FR-001 | DEC-011（PR #3，merge bc57c23） | Should | ACPT-018-1～3（ACPT-018-3：POST /api/download-word 嵌入本機附圖〔修訂 2026-09-16〕） |
-| FR-019 | 承上題綁定（題幹含「承上題」者以 `questions.follows_question_id` 指向同份考卷上一題所落的題目；偵測 `utils/followUp.js`、寫入 `services/followUpLinker.js`；整組抽題與刪除保護待後續 PR）〔修訂 2026-09-15e〕 | 無新端點：runner 於 job_question 進終態後重算（非新節點）；POST /api/review/:jqId/approve 回應加 `follows_question_id`、reject 後重算；GET /api/review/:jqId 加 `follow_up` 區塊；回填 `npm run follow:backfill` | 同 FR-001 | DEC-012 | Should | ACPT-019-1 |
+| FR-019 | 承上題綁定（題幹含「承上題」者以 `questions.follows_question_id` 指向同份考卷上一題所落的題目；偵測 `utils/followUp.js`、寫入 `services/followUpLinker.js`；整組抽題待後續 PR；刪除／封存保護已實作〔修訂 2026-09-16〕）〔修訂 2026-09-15e〕 | 無新端點：runner 於 job_question 進終態後重算（非新節點）；POST /api/review/:jqId/approve 回應加 `follows_question_id`、reject 後重算；GET /api/review/:jqId 加 `follow_up` 區塊；回填 `npm run follow:backfill`；〔修訂 2026-09-16〕DELETE /api/questions/:id 加 `?group=1`、GET /api/questions 加 `follows_question_id`／`has_follow_ups`、POST /api/questions/:id/variants 對承上題回 409 | 同 FR-001 | DEC-012 | Should | ACPT-019-1 |
 | FR-020 | 拆題結果對照原卷文字層（決定性比對、不呼叫 LLM；extract 階段以 mupdf 抽該 chunk 文字層並定位每題片段，lint 之後的 source_check 節點比對負號與字母／數字；權威文件 `docs/source-check.md`）〔修訂 2026-09-15f〕 | 管線節點（`agents/source_check.js`；片段由 `workers/jobRunner.js` attachSourceText → `services/sourceTextService.js` 寫入 `payload.extract.source_text`）；複核沿用 GET /api/review?reason=transcription_mismatch 與 approve | 同 FR-001；另 `SOURCE_CHECK_MODE`（off／shadow／enforce，預設 enforce，非法值退回 enforce） | DEC-013（feat/source-check） | Must | ACPT-020-1 |
 
 註：POST /api/analyze-pdf（單段拆題舊路徑）保留於核心區，與 FR-001 並存；FEATURE_PIPELINE 開啟時前端上傳改走 POST /api/jobs。
@@ -109,7 +110,7 @@ AC 以 Given/When/Then 落在 [`prd.md`](./prd.md) ACPT 段；此處維護對照
 | ACPT-014-* – ACPT-016-* | FR-014–016 | TC-014-1–TC-016-1（學生管理、批改、對話式助教）；邊界場景 SCN-015、SCN-016 | 已驗證 |
 | ACPT-017-* | FR-017 | 單元（SOURCE_TYPES 凍結＋與 0006 CHECK 一致）＋整合（建題→過濾→組卷過濾→改標端到端）〔修訂 2026-08-29〕 | 已驗證（CI 全綠 @ f7a9c41） |
 | ACPT-018-* | FR-018 | 單元＋整合（cassette 已重錄 @ 4af4647，含 extract bbox 節點）〔修訂 2026-08-29〕；ACPT-018-3 為 TC-018-2（單元 `test/unit/wordFigures.test.js`）＋TC-009-2 e2e 附圖斷言〔修訂 2026-09-16〕 | 已驗證（CI）；真實考卷 bbox 準度待驗；ACPT-018-3 本機實跑通過、待 CI 與 Word 實機開檔確認〔修訂 2026-09-16〕 |
-| ACPT-019-* | FR-019 | TC-019-1～TC-019-4：單元（isFollowUp／findPredecessorRow／resolveQuestionId）＋整合（followUp.pg.test.js：runner 綁定、複核重算、保護與補強、回填腳本；schema.test.js 0008 斷言）〔修訂 2026-09-15e〕 | ACPT-019-1～4 已驗證（本分支實跑單元 1,507／整合 290／e2e 11；複核畫面前端顯示待 PR3）〔修訂 2026-09-15f〕；ACPT-019-5 待 PR2、ACPT-019-6 待 PR3（硬刪已回 409） |
+| ACPT-019-* | FR-019 | TC-019-1～TC-019-4：單元（isFollowUp／findPredecessorRow／resolveQuestionId）＋整合（followUp.pg.test.js：runner 綁定、複核重算、保護與補強、回填腳本；schema.test.js 0008 斷言）〔修訂 2026-09-15e〕；TC-019-6～7：整組刪除／封存、變式藍本 409、列表承上欄位、承上題不得當變式藍本〔修訂 2026-09-16〕 | ACPT-019-1～4 已驗證（本分支實跑單元 1,507／整合 290／e2e 11；複核畫面前端顯示待 PR3）〔修訂 2026-09-15f〕；ACPT-019-5 待 PR2；ACPT-019-6 已驗證（feat/follow-up-protect-badge：DELETE `?group=1` 整組處理、封存前題 409、題庫列表徽章）〔修訂 2026-09-16〕 |
 | ACPT-020-* | FR-020 | TC-020-1～3：單元（正規化／定位／比對／agent 合約、公開樣卷 0 誤報）＋整合（transcription_mismatch 進複核、approve 事件、0009 CHECK）＋e2e（樣卷 source_text 落地、無誤判）＋eval pipeline〔修訂 2026-09-15f〕 | 已驗證（feat/source-check 本機全綠）；真實原卷校準見 `docs/source-check.md` 第 4 節 |
 
 ## 7. 追溯
