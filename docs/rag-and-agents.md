@@ -231,7 +231,7 @@ verify 用不同模型重算答案（單一模型抄錯會錯得像模像樣，�
 
 ### 2.6 測試與量測策略（讓 LLM 系統可回歸）
 
-- 金字塔：`npm test` 1,507 項（2026-09-15）不連網不連庫；整合測試對 tmpfs 測試庫（`--test-concurrency=1`）；
+- 金字塔：`npm test` 1,613 項（2026-09-16）不連網不連庫；整合測試對 tmpfs 測試庫（`--test-concurrency=1`）；
   e2e 兩條（上傳 PDF→部分入庫；組卷→Word 含 OOXML 公式）。
 - **record/replay cassette**：`LLM_MODE=record` 真呼叫並把回應存檔（鍵＝agent＋模板版本＋
   模型 ID＋輸入雜湊）；CI 恆 `LLM_MODE=replay`／`EMBED_MODE=fixture`——**零成本、零網路、

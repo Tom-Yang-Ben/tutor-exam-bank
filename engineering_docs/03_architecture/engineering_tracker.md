@@ -15,6 +15,7 @@
 > 🛠 **2026-09-15 合併同步**（feat/follow-up-links 併入 feat/source-check）：NFR-003 單元測試數更新為 1,565（其後原卷比對審查修正補 2 項單元測試，現況 1,567）（合併後實跑）；NFR-006 migrations 範圍合為 0001–0009；§4 追溯與 §5.1 熱點表合併兩分支新增。上列兩分支修訂列所載之各分支實測數與範圍為當時紀錄，保留不改。合併重算處以〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕雙標記。
 > 🛠 **2026-09-15g 修訂**（feat/follow-up-paper-group，FR-019 PR2）：FR-019 列狀態補 PR2 組卷整組抽取、模組路徑補 utils/paperGroups.js 等、驗證補 paperGroups 單元與整合測試。NFR-003 全域測試數由主線合併時統一更新，本分支不動。修改處以〔修訂 2026-09-15g〕行內標記。
 > 🛠 **2026-09-16 修訂**（feat/follow-up-protect-badge，FR-019 PR3）：FR-019 列狀態補 PR3 已實作範圍。修改處以〔修訂 2026-09-16〕行內標記。
+> 🛠 **2026-09-16b 修訂**（主線同步，PR #30–#33 合併後）：NFR-003 單元測試數同步為 1,613（PR #30–#33 併入 main 後 CI 實測）。修改處以〔修訂 2026-09-16b〕行內標記。
 
 ## 目錄
 
@@ -57,7 +58,7 @@
 |---|---|---|---|---|---|
 | NFR-001 | 安全：x-api-key（timing-safe）、CORS 白名單、防 SSRF、正式環境不回傳錯誤細節 | 已實作 | exam_pro/middleware/、exam_pro/app.js、exam_pro/services/wordService.js（isSafeImageUrl） | ADR-005 | 單元 |
 | NFR-002 | 成本：限流、RPM 節流、逐 token 計費、單 job／每日成本上限 | 已實作 | exam_pro/middleware/rateLimit.js、exam_pro/services/llm/throttle.js、exam_pro/config/pricing.js | ADR-003 | 單元＋job_events 成本紀錄 |
-| NFR-003 | 可測試性：agent 純函式合約、cassette record/replay、CI 零金鑰零網路 | 已實作 | exam_pro/agents/、exam_pro/services/llm/、exam_pro/eval/cassettes/ | ADR-006 | 單元 1,567 項不連網不連庫（feat/follow-up-links 併入 feat/source-check 後實測，2026-09-15〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕）；CI replay |
+| NFR-003 | 可測試性：agent 純函式合約、cassette record/replay、CI 零金鑰零網路 | 已實作 | exam_pro/agents/、exam_pro/services/llm/、exam_pro/eval/cassettes/ | ADR-006 | 單元 1,613 項不連網不連庫（PR #30–#33 併入 main 後 CI 實測，2026-09-16〔修訂 2026-09-16b〕）；CI replay |
 | NFR-004 | 品質門檻：eval golden＋ratchet（首測 −0.03、只升不降），低於門檻 CI 轉紅 | 已實作 | exam_pro/eval/run.js、exam_pro/eval/thresholds.json、exam_pro/eval/lib/ | ADR-006 | 五個 eval suite（[qa_tracker §2](../05_qa/qa_tracker.md)） |
 | NFR-005 | 可靠性：SKIP LOCKED＋租約認領、斷點續跑、逾時退避重試、重試預算 | 已實作 | exam_pro/workers/jobRunner.js、exam_pro/pipeline/stateMachine.js | ADR-003 | 整合＋e2e |
 | NFR-006 | 資料一致性：組卷與作答歷史同交易；migrations 只增不改（0001–0009〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕） | 已實作 | exam_pro/controllers/examController.js、exam_pro/migrations/、exam_pro/migrate.js | ADR-001 | 整合 |
