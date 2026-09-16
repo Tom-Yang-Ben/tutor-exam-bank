@@ -408,7 +408,7 @@ paths:
                 question_ids: { type: array, items: { type: integer }, minItems: 1, description: 順序即出卷順序；封存題仍可印出 }
       responses:
         "200":
-          description: 成功；回傳 .docx 二進位
+          description: 成功；回傳 .docx 二進位。question_img 為 /figures/<檔名> 的題嵌入本機附圖（FR-018，docs/figures.md），圖檔讀不到時該題放「（附圖遺失）」、仍回 200
           content:
             application/vnd.openxmlformats-officedocument.wordprocessingml.document:
               schema: { type: string, format: binary }
