@@ -14,6 +14,7 @@
 > 🛠 **2026-09-15 合併同步**（feat/follow-up-links 併入 feat/source-check）：②執行證據 單元 1,565（其後原卷比對審查修正補 2 項單元測試，現況 1,567）／整合 297／e2e 11（合併後實跑）；§3 上游補 FR-019。上列兩分支修訂列所載之各分支實測數與範圍為當時紀錄，保留不改。合併重算處以〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕雙標記。
 > 🛠 **2026-09-15g 修訂**（feat/follow-up-paper-group，FR-019 PR2）：§1 新增 TC-019-8（組卷整組抽取，單元 19 項＋整合 8 項；審查修正後裝箱改子集和）。§2 全域執行證據數由主線合併時統一更新，本分支不動。修改處以〔修訂 2026-09-15g〕行內標記。
 > 🛠 **2026-09-16 修訂**（feat/follow-up-protect-badge，FR-019 PR3）：§1 新增 TC-019-6～7。②執行證據之全域測試數未改（由主線合併時統一更新）。修改處以〔修訂 2026-09-16〕行內標記。
+> 🛠 **2026-09-16b 修訂**（主線同步，PR #30–#33 合併後）：②執行證據同步為單元 1,613／整合 317／e2e 11（PR #30–#33 併入 main 後 CI 實測）。修改處以〔修訂 2026-09-16b〕行內標記。
 
 ## 目錄
 
@@ -71,8 +72,8 @@ TC 依 FR 分組（`TC-<FR 號>-<序>`）；層級：U=單元、I=整合、E=e2e
 
 | 層級 | 數量 | 位置 | 執行條件 |
 |---|---:|---|---|
-| 單元 | 1,567 | exam_pro/test/unit/ | 不連網、不連庫、零 secrets；`npm test` 可完整重現〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕 |
-| 整合 | 297 | exam_pro/test/integration/ | tmpfs 測試庫（5433，`_test` 後綴強制）〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕 |
+| 單元 | 1,613 | exam_pro/test/unit/ | 不連網、不連庫、零 secrets；`npm test` 可完整重現〔修訂 2026-09-16b〕 |
+| 整合 | 317 | exam_pro/test/integration/ | tmpfs 測試庫（5433，`_test` 後綴強制）〔修訂 2026-09-16b〕 |
 | e2e | 11 | exam_pro/test/e2e/ | HTTP 全路徑（上傳→部分入庫；組卷→Word 公式） |
 
 CI（`.github/workflows/ci.yml`）：unit（Node 22/24 矩陣）＋integration（pgvector service→migrations→整合→e2e→五個 eval suite）；全程零金鑰、零網路、零成本（cassette replay；replay miss 於 main 視為錯誤）。CI badge 見 repo 根 `README.md`；全綠 @ f8f6574（PR #7 merge）〔修訂 2026-08-29〕。

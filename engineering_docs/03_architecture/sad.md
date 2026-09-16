@@ -13,6 +13,7 @@
 > 🛠 **2026-09-15d 修訂**（測試數同步）：部署視圖測試列 整合 260→262（main f2af3c2 實測，2026-09-15 晚間）。修改處以〔修訂 2026-09-15d〕行內標記。
 > 🛠 **2026-09-15f 修訂**（feat/source-check，FR-020、ADR-009）：§1.3 services 補 sourceText／mupdf、agents 補 source_check；§2 逐題狀態加 source_checked、review_reason 八種→九種；§5.1 管線資料流插入原卷文字層比對節點；§6 schema 演進補 0007、0009；§7 整合測試 262→269；§10 追溯補 DEC-013／FR-020／ADR-009。修改處以〔修訂 2026-09-15f〕行內標記。
 > 🛠 **2026-09-15 合併同步**（feat/follow-up-links 併入 feat/source-check）：部署視圖測試列整合數更新為 297（合併後實跑）；§5 schema 演進補 0008_follow_up。上列兩分支修訂列所載之各分支實測數與範圍為當時紀錄，保留不改。合併重算處以〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕雙標記。
+> 🛠 **2026-09-16b 修訂**（主線同步，PR #30–#33 合併後）：§部署視圖測試列整合數同步為 317（PR #30–#33 併入 main 後 CI 實測）。修改處以〔修訂 2026-09-16b〕行內標記。
 
 ## 目錄
 
@@ -172,7 +173,7 @@ sequenceDiagram
 | 環境 | Deployment 模式 | 資料庫 | 備份／監控 |
 | :--- | :--- | :--- | :--- |
 | 開發（唯一運行環境） | 本機 `npm start`＋`docker compose up` | postgres :5442（volume 持久化） | `exam_pro/scripts/` 備份腳本；`npm run report:jobs` 成本報表 |
-| 測試（本機） | 同機，另指 TEST_DATABASE_URL | postgres_test :5433（tmpfs，`_test` 後綴強制） | 整合 297〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕／e2e 11，`--test-concurrency=1` |
+| 測試（本機） | 同機，另指 TEST_DATABASE_URL | postgres_test :5433（tmpfs，`_test` 後綴強制） | 整合 317〔修訂 2026-09-16b〕／e2e 11，`--test-concurrency=1` |
 | CI（GitHub Actions） | workflow 起 pg16 service | 臨時容器 | `LLM_MODE=replay`＋`EMBED_MODE=fixture`，零金鑰零網路 |
 
 - 開發埠取 5442 而非 5432：開發機原生 PostgreSQL 17 服務占用 5432，同埠並存會產生誤導性的驗證失敗（`exam_pro/README.md` 安裝節）。
