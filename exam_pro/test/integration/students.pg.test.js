@@ -961,7 +961,8 @@ function runSuite() {
                 }
             });
 
-            test('五個頂層鍵齊備，且只有這五個', async () => {
+            // 〔stage5 整合〕標題跟著斷言改（原本寫「五個頂層鍵齊備，且只有這五個」，斷言早已是六個）
+            test('六個頂層鍵齊備（既有五個＋by_error_type），且只有這六個', async () => {
                 const studentId = fixture.students[0];
                 const { body } = await request(app).get(`/api/students/${studentId}/weakness`);
                 // 〔stage5 WS-A〕DEC-015／第 4.1 條第 3 項刻意新增第六個鍵 by_error_type，接在既有五個之後；
