@@ -16,12 +16,16 @@ const { CHAPTERS, QUESTION_TYPES, LEGACY_SUBJECTS, LEGACY_CHAPTERS } = require('
 
 /**
  * x-enum 的合法值 → 來源。全部來自 config/chapters.js，不得手抄。
- * chapter 是**兩科合併的 66 個**（不分科）：Gemini 的 schema 沒辦法「依 subject 切換 enum」，
+ * chapter 是**兩科合併的 86 個**（不分科；〔章節重整 CH-A〕2026-09-25 前為 66 個）：Gemini 的 schema 沒辦法「依 subject 切換 enum」，
  * 跨科的錯配由伺服器端的 isValidChapter(subject, chapter) 擋（第 3.4 條）。
  *
  * 〔stage5 WS-B〕化學併入 SUBJECTS／CHAPTERS 之後，這裡改讀 LEGACY_*（內容與順序和併入之前
  * 逐字相同）：數學／物理的 schema 進了既有 cassette 的 schemaHash，值域一變全部 cassette 失效
  * （docs/interfaces-stage5.md 第 1.1、3.2 條）。化學的值域另外放在 GROUP_ENUM_SOURCES.chemistry。
+ *
+ * 〔章節重整 CH-A〕2026-09-25 起 LEGACY_CHAPTERS 是重整後的數學 52＋物理 34 章（docs/chapter-restructure.md）：
+ * 這次是 Owner 定案、**刻意**讓數學／物理的值域改變，extract／classify／variant／nlq 的 cassette 因此失效，
+ * 由 Owner 依該檔第 5 條一次重錄。化學的值域與 cassette 不受影響。
  */
 const ENUM_SOURCES = {
     subject: LEGACY_SUBJECTS.slice(),

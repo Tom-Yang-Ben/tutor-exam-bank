@@ -13,6 +13,7 @@
 > 🛠 **2026-08-29 修訂之二**（feat/source-detail，同日使用者核准）：0007_source_detail.sql 為 questions／jobs 追加 `source_detail`（自由文字來源註記，學校＋年份等；FR-017 延伸）；§2.1／§2.3／§5／§6 同步。標記〔修訂 2026-08-29b〕。
 > 🛠 **2026-09-15f 修訂**（feat/source-check，FR-020、ADR-009）：0009_source_check.sql 重建三條 CHECK——`job_questions.state` 加 `source_checked`、`review_reason` 加 `transcription_mismatch`、`job_events.error_class` 加 `transcription_mismatch`；payload 加 `extract.source_text`（原卷片段 ≤1500 字）與 `source_check` 鍵；§2.4／§5／§6 同步。0008 預留給承上題綁定分支。修改處以〔修訂 2026-09-15f〕行內標記。
 > 🛠 **2026-09-15 合併同步**（feat/follow-up-links 併入 feat/source-check）：定位行、§5 Migration 策略、§6 追溯之 migration 範圍合為 0001–0009 共 9 份，0008 已存在、不再記為預留。上列兩分支修訂列所載之各分支實測數與範圍為當時紀錄，保留不改。合併重算處以〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕雙標記。
+> 🛠 **2026-09-25 修訂**（數學／物理章節重整，分支 `stage5/ch-a`；契約 `docs/chapter-restructure.md`、[ADR-016](../03_architecture/adr/ADR-016-chapter-whitelist-restructure.md)）：新增 `0014_chapter_migration_log.sql`（新表 `chapter_migration_log`，舊題搬章工具 `npm run chapters:migrate` 的處理紀錄與稽核軌跡；契約沒有預先列出這支 schema 變更，已揭露、待主控核准）。§1 ERD、新增 §2.6、§3、§5、§6 同步。修改處以〔修訂 2026-09-25〕行內標記。
 > 🛠 **2026-09-24 修訂**（階段 5 整合回填，分支 `stage5/int-docs`；契約 `docs/interfaces-stage5.md` 第 2 條）：migrations 0010–0012（`stage5/base` 預建、各 WS 不得再改；預留的 0013–0017 五條 WS 皆未使用）——0010 attempts 批改細節與 students 檔案欄位、0011 questions 化學與文字詳解、jobs 卷別、0012 知識點三表。§1 ERD 補三表、§2.1～2.3 補欄位與寫入者、新增 §2.5 知識點三表、§3 資料字典、§4 索引、§5 migration 策略、§6 追溯同步。修改處以〔修訂 2026-09-24〕行內標記。
 
 ## 目錄
@@ -43,7 +44,10 @@ erDiagram
     KNOWLEDGE_COMPONENTS ||--o{ QUESTION_KCS : "kc_id (CASCADE)"
     KNOWLEDGE_COMPONENTS ||--o{ KC_PREREQUISITES : "kc_id (CASCADE)"
     KNOWLEDGE_COMPONENTS ||--o{ KC_PREREQUISITES : "prereq_kc_id (CASCADE)"
+    QUESTIONS ||--o{ CHAPTER_MIGRATION_LOG : "question_id (CASCADE)"
 ```
+
+〔修訂 2026-09-25〕0014 的 `chapter_migration_log` 見 §2.6。
 
 〔修訂 2026-09-24〕0012 的三張表（`knowledge_components`、`question_kcs`、`kc_prerequisites`）見 §2.5；`question_kcs` 隨題目 CASCADE，`attempts` 對題目仍是 RESTRICT（不變）。
 
@@ -159,6 +163,21 @@ erDiagram
 | `kc_prerequisites.kc_id` / `prereq_kc_id` | INT / INT | 皆 FK → knowledge_components ON DELETE CASCADE；PK (kc_id, prereq_kc_id)；CHECK kc_id <> prereq_kc_id | 載入腳本（`src='ai'`；未受保護知識點的本批未列 ai 先備會移除，human／curriculum 不動） | 可跨科；**不得成環**——DB 無法以約束表達，由載入腳本寫完後對全體先備做 DFS，成環整批回滾 |
 | `kc_prerequisites.strength` / `src` | REAL / TEXT | strength NOT NULL DEFAULT 1, CHECK 0 < s ≤ 1；src NOT NULL DEFAULT 'ai', CHECK IN ('ai','human','curriculum') | 同上 | 補救卷先備桶依 strength 高→低挑選（WS-D） |
 
+### 2.6 `chapter_migration_log`（0014）〔修訂 2026-09-25〕
+
+數學／物理章節重整的舊題搬章紀錄。設計理由見 [ADR-016](../03_architecture/adr/ADR-016-chapter-whitelist-restructure.md)；操作步驟見 `docs/chapter-restructure.md` 第 6.1 節。
+為什麼需要這張表：9 個沿用舊名的拆分章（排列、組合…），老師確認「留在原章」之後 `questions.chapter` 與遷移前一模一樣，只看題目分不出「還沒處理」與「確認過」。
+
+| 欄位 | 型態 | 約束 | 寫入者 | 說明 |
+| :--- | :--- | :--- | :--- | :--- |
+| `question_id` | INT | NOT NULL, FK → questions **ON DELETE CASCADE**；PK (question_id, plan) | `scripts/migrate_chapters.js --apply`（單一交易） | 每題每次重整最多一列：`--dry-run` 不再列出已記錄的題；`--apply` 遇到已記錄的題一律不再改（`ON CONFLICT DO NOTHING`，紀錄保持第一次套用的值） |
+| `plan` | TEXT | NOT NULL, CHECK 1–40 字 | 同上 | 這一次重整的代號（`PLAN_ID = 'chapters-2026-09'`）；之後再重整換新代號，舊紀錄不影響 |
+| `subject` / `from_chapter` / `to_chapter` | TEXT ×3 | NOT NULL | 同上 | 老師確認的去處；確認留在原章時 from = to |
+| `basis` | TEXT | 可 NULL, CHECK ≤ 80 字 | 同上 | 提議依據：`rename`／`keyword:<命中詞>`／`default`／`removed` |
+| `applied_at` | TIMESTAMPTZ | NOT NULL DEFAULT now() | — | 稽核用 |
+
+`--dry-run` 另以 `schema_migrations` 裡 0014 的 `applied_at` 當時間截點：沿用舊名的章只列截點之前入庫的題（之後入庫的是 AI 以新白名單分類的），`--include-new` 取消截點。
+
 ## 3. 資料字典 (Data Dictionary)
 
 | 欄位 | 業務語意 | 來源 | 敏感等級 |
@@ -173,6 +192,7 @@ erDiagram
 | `jobs.subject_group`〔修訂 2026-09-24〕 | 上傳卷別（數學／物理、化學） | FR-026 | 一般 |
 | `knowledge_components.*` / `kc_prerequisites.*`〔修訂 2026-09-24〕 | 知識點與先備（AI 依 108 課綱草擬、Owner 審定） | FR-028 | 一般（教學內容；種子檔 `config/kc/*.json` 進版控） |
 | `question_kcs.*`〔修訂 2026-09-24〕 | 題目—知識點標註 | FR-029、FR-030 | 私有（題庫衍生） |
+| `chapter_migration_log.*`〔修訂 2026-09-25〕 | 章節重整的搬章紀錄（哪一題從哪章搬到哪章、依據） | ADR-016 | 私有（題庫衍生；不含題幹） |
 
 ## 4. 索引與效能
 
@@ -197,7 +217,7 @@ erDiagram
 
 | 項目 | 政策 |
 | :--- | :--- |
-| **Migration 策略** | 只增不改（NFR-006）：0001–0009 逐一凍結〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕，任何欄位變更一律新開 migration 檔；ENUM 一律以 TEXT+CHECK 實作（改值域走 DROP/ADD CONSTRAINT，如 0004）；0006_source_type.sql（2026-08-28 核准）為 questions／jobs 追加 source_type〔修訂 2026-08-29〕；0007_source_detail.sql（2026-08-29 核准）為兩表追加 source_detail〔修訂 2026-08-29b〕；0008_follow_up.sql（2026-09-15 核准）為 questions 追加 follows_question_id／follows_src 與兩條具名 CHECK、部分索引〔修訂 2026-09-15e〕；0009_source_check.sql 以 DROP／ADD 重建 job_questions.state、review_reason 與 job_events.error_class 三條 CHECK（約束名以 pg_constraint 查證；0008 與 0009 由兩條分支平行開發、編號開工前預先分配，migrate.js 依檔名排序逐支判斷，先套過 0009 的環境補上 0008 亦照常套用；之後再改這三條約束須以含 0009 新值的完整值域重建）〔修訂 2026-09-15f〕；〔修訂 2026-09-24〕階段 5 三支由 `stage5/base` 預建並凍結（五條 WS 平行開發只讀 schema、不改這三支）：`0010_attempt_detail_student_profile.sql`（attempts 四欄＋部分 GIN 索引、students 五欄）、`0011_chemistry_solution_subject_group.sql`（`questions_subject_check` DROP／ADD 加化學、solution 兩欄＋`questions_solution_pair_check`、jobs.subject_group）、`0012_knowledge_components.sql`（三表＋三索引）；預留給 WS-A～E 的 `0013`–`0017` 皆未使用。〔最終審查修正〕整合後新增 `0013_teacher_edit_markers.sql`（`questions.solution_cleared_at`、`knowledge_components.edited_at`，兩欄可 NULL、無預設，既有資料視為「老師沒動過」），之後依序從 0014 編號。錯因、學生檔案選項與知識點代碼格式的合法值刻意不寫 CHECK，由 `config/` 白名單在伺服器端驗證（改值域不需 migration） |
+| **Migration 策略** | 只增不改（NFR-006）：0001–0009 逐一凍結〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕，任何欄位變更一律新開 migration 檔；ENUM 一律以 TEXT+CHECK 實作（改值域走 DROP/ADD CONSTRAINT，如 0004）；0006_source_type.sql（2026-08-28 核准）為 questions／jobs 追加 source_type〔修訂 2026-08-29〕；0007_source_detail.sql（2026-08-29 核准）為兩表追加 source_detail〔修訂 2026-08-29b〕；0008_follow_up.sql（2026-09-15 核准）為 questions 追加 follows_question_id／follows_src 與兩條具名 CHECK、部分索引〔修訂 2026-09-15e〕；0009_source_check.sql 以 DROP／ADD 重建 job_questions.state、review_reason 與 job_events.error_class 三條 CHECK（約束名以 pg_constraint 查證；0008 與 0009 由兩條分支平行開發、編號開工前預先分配，migrate.js 依檔名排序逐支判斷，先套過 0009 的環境補上 0008 亦照常套用；之後再改這三條約束須以含 0009 新值的完整值域重建）〔修訂 2026-09-15f〕；〔修訂 2026-09-24〕階段 5 三支由 `stage5/base` 預建並凍結（五條 WS 平行開發只讀 schema、不改這三支）：`0010_attempt_detail_student_profile.sql`（attempts 四欄＋部分 GIN 索引、students 五欄）、`0011_chemistry_solution_subject_group.sql`（`questions_subject_check` DROP／ADD 加化學、solution 兩欄＋`questions_solution_pair_check`、jobs.subject_group）、`0012_knowledge_components.sql`（三表＋三索引）；預留給 WS-A～E 的 `0013`–`0017` 皆未使用。〔最終審查修正〕整合後新增 `0013_teacher_edit_markers.sql`（`questions.solution_cleared_at`、`knowledge_components.edited_at`，兩欄可 NULL、無預設，既有資料視為「老師沒動過」），之後依序從 0014 編號。〔修訂 2026-09-25〕數學／物理章節重整新增 `0014_chapter_migration_log.sql`（新表 `chapter_migration_log`，§2.6；只建表、不改既有表，`CREATE TABLE IF NOT EXISTS`；章節白名單本身不寫 CHECK，所以換白名單不需要改 `questions`）。錯因、學生檔案選項與知識點代碼格式的合法值刻意不寫 CHECK，由 `config/` 白名單在伺服器端驗證（改值域不需 migration） |
 | **唯一約束沿革（0005）** | 0003 先建非唯一 `idx_questions_text_hash`（舊題回填必有碰撞）→ scripts/backfill_text_hash.js 印碰撞清單 → 2026-08-23 人工確認 #2/#3、#5/#38 為真重複，attempts 併到保留題、#3/#38 封存 → 0005 建部分唯一索引（封存題與 NULL 不受限）（裁決 S2-30） |
 | **刪除策略** | 題目軟刪除（archived_at）；attempts ON DELETE RESTRICT；jobs 子表 CASCADE；job_events 只追加不更新 |
 | **保留期限** | 單人自用系統，無法規要求；PDF 原檔於拆題完成後刪除（pdf_path 清成 NULL），其餘資料無限期保留 |
@@ -206,6 +226,6 @@ erDiagram
 
 ## 6. 追溯
 
-- 上游：DEC-003、DEC-004、DEC-009、DEC-012〔修訂 2026-09-15e〕、DEC-013〔修訂 2026-09-15f〕、DEC-015、DEC-017、DEC-019〔修訂 2026-09-24〕；FR-001、FR-002、FR-005、FR-006、FR-007、FR-008、FR-010、FR-011、FR-013、FR-014、FR-015、FR-017〔修訂 2026-08-29〕、FR-019〔修訂 2026-09-15e〕、FR-020〔修訂 2026-09-15f〕、FR-021～FR-031、FR-033〔修訂 2026-09-24〕；NFR-002、NFR-005、NFR-006；ADR-001、ADR-002、ADR-008、ADR-009〔修訂 2026-09-15f〕、ADR-010、ADR-011、ADR-015〔修訂 2026-09-24〕
-- 實作真相：`exam_pro/migrations/0001_init.sql`–`0009_source_check.sql`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕、`0010_attempt_detail_student_profile.sql`–`0013_teacher_edit_markers.sql`〔修訂 2026-09-24〕
+- 上游：DEC-003、DEC-004、DEC-009、DEC-012〔修訂 2026-09-15e〕、DEC-013〔修訂 2026-09-15f〕、DEC-015、DEC-017、DEC-019〔修訂 2026-09-24〕；FR-001、FR-002、FR-005、FR-006、FR-007、FR-008、FR-010、FR-011、FR-013、FR-014、FR-015、FR-017〔修訂 2026-08-29〕、FR-019〔修訂 2026-09-15e〕、FR-020〔修訂 2026-09-15f〕、FR-021～FR-031、FR-033〔修訂 2026-09-24〕；NFR-002、NFR-005、NFR-006；ADR-001、ADR-002、ADR-008、ADR-009〔修訂 2026-09-15f〕、ADR-010、ADR-011、ADR-015〔修訂 2026-09-24〕、ADR-016〔修訂 2026-09-25〕
+- 實作真相：`exam_pro/migrations/0001_init.sql`–`0009_source_check.sql`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕、`0010_attempt_detail_student_profile.sql`–`0013_teacher_edit_markers.sql`〔修訂 2026-09-24〕、`0014_chapter_migration_log.sql`〔修訂 2026-09-25〕
 - 下游：[api_spec.md](./api_spec.md)（欄位命名對齊）、[lld.md](./lld.md)（jobs/job_questions 狀態機轉移）、[../03_architecture/engineering_tracker.md](../03_architecture/engineering_tracker.md)、[../06_ops/runbook-job-stuck.md](../06_ops/runbook-job-stuck.md)（locked_until 租約）

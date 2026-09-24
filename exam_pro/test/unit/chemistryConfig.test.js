@@ -47,12 +47,14 @@ describe('config/chapters.js：化學併入（第 3.2 條）', () => {
         assert.ok(CHAPTERS['化學'].includes('醇、酚、醚'), '「醇、酚、醚」是一章');
     });
 
-    test('LEGACY_SUBJECTS／LEGACY_CHAPTERS 與化學併入之前逐字相同（66 章）', () => {
+    // 〔章節重整 CH-A〕LEGACY 指「數學／物理這一組的 schema 值域」，2026-09-25 起為重整後的 52＋34＝86 章
+    // （docs/chapter-restructure.md 第 2 條）。逐字等於兩科攤平、首尾兩章、凍結，這幾條斷言都照舊。
+    test('LEGACY_SUBJECTS／LEGACY_CHAPTERS 是數學＋物理兩科攤平（重整後 86 章）', () => {
         assert.deepEqual(LEGACY_SUBJECTS, ['數學', '物理']);
-        assert.equal(LEGACY_CHAPTERS.length, 66);
+        assert.equal(LEGACY_CHAPTERS.length, 86);
         assert.deepEqual(LEGACY_CHAPTERS, [...CHAPTERS['數學'], ...CHAPTERS['物理']]);
         assert.equal(LEGACY_CHAPTERS[0], '實數');
-        assert.equal(LEGACY_CHAPTERS[65], '核物理與基本粒子');
+        assert.equal(LEGACY_CHAPTERS[85], '核物理與基本粒子');
         assert.ok(Object.isFrozen(LEGACY_CHAPTERS));
     });
 
@@ -127,8 +129,9 @@ describe('buildSchema 的卷別（第 3.2 條）', () => {
 describe('agents/promptParts', () => {
     test('沒指定科目時只列數學與物理（進的是既有 prompt）', () => {
         const text = chapterWhitelistText();
-        assert.ok(text.includes('【數學科精細章節白名單（共 34 章）】'));
-        assert.ok(text.includes('【物理科精細章節白名單（共 32 章）】'));
+        // 〔章節重整 CH-A〕34／32 → 52／34（docs/chapter-restructure.md 第 2 條）
+        assert.ok(text.includes('【數學科精細章節白名單（共 52 章）】'));
+        assert.ok(text.includes('【物理科精細章節白名單（共 34 章）】'));
         for (const c of CHAPTERS['化學']) assert.ok(!text.includes(c), `不該列化學章節「${c}」`);
     });
 

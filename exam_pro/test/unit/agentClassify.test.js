@@ -50,7 +50,8 @@ describe('config/chapterExamples.js', () => {
         assert.deepEqual(Object.keys(CHAPTER_EXAMPLES).sort(), [...SUBJECTS].sort());
     });
 
-    test('66 章全部填好，沒有空殼', () => {
+    // 〔章節重整 CH-A〕標題原為「66 章」；斷言本來就涵蓋 CHAPTERS 全部科目（重整後數學 52＋物理 34＋化學 44）
+    test('每一章都填好，沒有空殼', () => {
         assert.deepEqual(missingExamples(), []);
     });
 
@@ -87,7 +88,10 @@ describe('nearestChapters／invalidChapterFeedback', () => {
         const a = classify.nearestChapters('數學', '三角函數', 3);
         const b = classify.nearestChapters('數學', '三角函數', 3);
         assert.deepEqual(a, b);
-        assert.equal(a[0], '三角函數的定義');
+        // 〔章節重整 CH-A〕舊章「三角函數的定義」已拆分（docs/chapter-restructure.md 第 2 條）。
+        // 「三角函數的圖形」與「三角函數的疊合」分數相同，依宣告順序取前者——仍是確定的單一答案。
+        assert.equal(a[0], '三角函數的圖形');
+        assert.equal(a[1], '三角函數的疊合');
     });
 });
 
@@ -247,7 +251,10 @@ describe('第二層：few-shot + LLM', () => {
         await classify.run(ctx, { subject: '物理', chapter: null, chapter_confidence: 0.1, question_text: '線圈磁通量變化' });
         const prompt = calls[0].parts[0].text;
         assert.ok(prompt.includes('電磁感應'));
-        assert.ok(!prompt.includes('克拉瑪公式'), '物理題的 prompt 不該混進數學章節');
+        // 〔章節重整 CH-A〕原本用「克拉瑪公式」，那已不是章名（拆成一次方程組／面積與行列式），
+        // 留著會讓這條斷言恆真；改用重整後的數學章名，意圖不變。
+        assert.ok(!prompt.includes('一次方程組'), '物理題的 prompt 不該混進數學章節');
+        assert.ok(!prompt.includes('面積與行列式'), '物理題的 prompt 不該混進數學章節');
     });
 
     test('上一次的 feedback 會進 prompt', async () => {
@@ -261,8 +268,11 @@ describe('第二層：few-shot + LLM', () => {
 // ───────────────────────── 輸出閘門 ─────────────────────────
 
 describe('輸出必須再過一次 isValidChapter', () => {
-    test('跨科錯配（enum 是兩科合併的 66 個）被伺服器端擋下', async () => {
-        const { ctx } = fakeCtx({ data: { chapter: '電磁感應', confidence: 0.95, rationale: 'r' } });
+    // 〔章節重整 CH-A〕enum 由 66 變 86 個（數學 52＋物理 34）。模型回的物理章節由「電磁感應」改成「靜電學」：
+    // 重整後的數學章名出現了「應用」（多項式的運算與應用、矩陣的應用），和「電磁感應」共用一個「應」字，
+    // 相似度不再是 0，就測不到下面註解說的「落回宣告順序」。「靜電學」與 52 個數學章名沒有任何共同字。
+    test('跨科錯配（enum 是兩科合併的 86 個）被伺服器端擋下', async () => {
+        const { ctx } = fakeCtx({ data: { chapter: '靜電學', confidence: 0.95, rationale: 'r' } });
         const outcome = await classify.run(ctx, {
             subject: '數學', chapter: null, chapter_confidence: 0.1, question_text: QUESTION
         });
@@ -270,7 +280,7 @@ describe('輸出必須再過一次 isValidChapter', () => {
         assert.equal(outcome.reason, 'chapter_invalid');
         // 跨科時所有數學章節的相似度都是 0，候選就落回宣告順序的前兩章——
         // feedback 的格式是凍結的（第 3.3 條），沒有位置可以說「這是物理的章節」。
-        assert.equal(outcome.feedback, '「電磁感應」不在白名單內，最接近的是「實數」「絕對值」');
+        assert.equal(outcome.feedback, '「靜電學」不在白名單內，最接近的是「實數」「絕對值」');
         assert.equal(outcome.data.source, 'llm');
     });
 

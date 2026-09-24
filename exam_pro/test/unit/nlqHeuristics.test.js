@@ -108,7 +108,9 @@ describe('parseQuery：章節本名與別名的子字串比對（長的優先）
 
     test('subject 由第一個命中的章節反推；沒命中章節時為 null', () => {
         assert.equal(parse('向量內積').filters.subject, '數學');
-        assert.equal(parse('浮力').filters.subject, '物理');
+        // 〔章節重整 CH-A〕「浮力」的章（流體的壓力與浮力）已刪除、別名一併移除，改用仍在的物理別名
+        assert.equal(parse('衝量').filters.subject, '物理');
+        assert.equal(parse('浮力').filters.subject, null);
         assert.equal(parse('難度 3 的計算題').filters.subject, null);
     });
 

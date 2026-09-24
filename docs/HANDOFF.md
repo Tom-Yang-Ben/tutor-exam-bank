@@ -18,7 +18,7 @@
 - **交付分支：`stage5/integration`**（HEAD `936a6b5`）。基底是 `cb47dbe`（`docs/sync-after-prs-30-33`，該分支尚未併入 main，因此對 main 開 PR 時會連帶這一個文件同步 commit）。
 - **組成**：`stage5/base`（契約、migrations 0010–0012、旗標與前端骨架）→ 五條程式 WS（`stage5/ws-a`～`ws-e`）＋三組知識點內容（`stage5/kc-math`／`kc-phys`／`kc-chem`）→ 整合補測（`stage5/int-code`）＋共用文件回填（`stage5/int-docs`）→ 最終審查修正（`stage5/int-fix`，含 migration 0013）。
 - **狀態**：完整 `ci.sh` 全綠——unit 2287、integration 485、e2e 11、五個 eval（replay）量測值與階段 5 之前相同，**沒有重錄任何 cassette**。從未呼叫真 Gemini；前端只以 miniDom 測過，未在真瀏覽器操作。
-- **migrations**：0010（批改細節、學生檔案）、0011（化學 CHECK、文字詳解、上傳卷別）、0012（知識點三表）、0013（老師修改標記：`questions.solution_cleared_at`、`knowledge_components.edited_at`）。全部只增不改，已在「只套到 0009、含舊資料」的庫上逐支驗證過。
+- **migrations**：0010（批改細節、學生檔案）、0011（化學 CHECK、文字詳解、上傳卷別）、0012（知識點三表）、0013（老師修改標記：`questions.solution_cleared_at`、`knowledge_components.edited_at`）。全部只增不改，已在「只套到 0009、含舊資料」的庫上逐支驗證過。〔修訂 2026-09-25 章節重整〕數學／物理章節重整（[`chapter-restructure.md`](chapter-restructure.md)、ADR-016）另加 0014（`chapter_migration_log`：舊題搬章的處理紀錄；契約未預列，待主控核准）。
 - **功能文件**（權威）：[`grading-and-profile.md`](grading-and-profile.md)、[`chemistry.md`](chemistry.md)、[`knowledge-components.md`](knowledge-components.md)、[`remedial.md`](remedial.md)、[`tutor.md`](tutor.md)、`kc-review-{數學,物理,化學}.md`。上線步驟：`engineering_docs/06_ops/deployment_and_operations.md` §3.4。
 
 ### 0.2 Ben 待辦（建議順序，待 Owner 確認）
@@ -35,11 +35,11 @@
 3. 簽核 DEC-014～019 與 DEC-003 例外條款（`requirements_tracker.md` 核准欄，AI 不代填）；ADR-014、ADR-015 狀態為「提議」，一併審閱。
 4. 數學知識點章節切法（`kc-review-數學.md` 第 2 節，尤其第 1、2、6 點）——**第一次 `kc:load` 之前**決定，搬移知識點會改變 code。
 5. 化學章節表 `exam_pro/config/chemistryChapters.js`——**第一次上傳化學卷之前**定稿，入庫的題會記章名。
-6. 物理「熱學另立章」**明確延後**：會改到數學／物理的章節清單（`LEGACY_CHAPTERS`），全部既有 cassette 都要重錄，另開裁決再議。
+6. 物理「熱學另立章」**明確延後**：會改到數學／物理的章節清單（`LEGACY_CHAPTERS`），全部既有 cassette 都要重錄，另開裁決再議。〔修訂 2026-09-25 章節重整〕已由 2026-09-25 的章節重整一併處理（新章「理想氣體與氣體動力論」，見 [`chapter-restructure.md`](chapter-restructure.md)）；cassette 依該檔第 5 條由 Owner 重錄。
 
 **C. 上線（不呼叫 LLM、不花錢；§3.4）**
 
-7. 備份 → `npm run migrate`（到 0013）→ **`npm run search:reindex`（必跑，緊接 migrate）** → `npm run kc:load`（先 `--dry-run`；可跳過）→ `npm run solution:backfill`（先 `--dry-run`、再 `--limit 20`、抽讀）→ 啟動。
+7. 備份 → `npm run migrate`（到 0013；〔修訂 2026-09-25 章節重整〕併入章節重整後到 0014）→ 〔修訂 2026-09-25 章節重整〕`npm run chapters:migrate`（產生提議檔 → 老師確認 → `--apply`，步驟見 [`chapter-restructure.md`](chapter-restructure.md) 第 6.1 節）→ `npm run embed:backfill`（搬過章的題重算向量，費用很小）→ **`npm run search:reindex`（必跑，緊接 migrate）** → `npm run kc:load`（先 `--dry-run`；可跳過）→ `npm run solution:backfill`（先 `--dry-run`、再 `--limit 20`、抽讀）→ 啟動。
 8. 瀏覽器實際走一遍核心延伸：批改卡（錯因、部分給分、對錯切換清分數）、錯因分布、學生檔案、題目詳解欄、Word 三種版本（詳解版的「AI 驗算摘要」加註）、小量化學卷上傳；貼一次 `$\href{javascript:alert(1)}{x}$` 確認不產生連結、`$\ce{2H2 + O2 -> 2H2O}$` 照常排版。
 9. 用 Microsoft Word 開一份含化學式與反應箭頭條件的卷，確認排版。
 

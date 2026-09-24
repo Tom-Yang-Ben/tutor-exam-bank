@@ -333,9 +333,13 @@ function runSuite() {
             });
 
             test('level 3 + level 2 同時成立 → 回較高的 3，warnings 兩句都有', async () => {
-                // 「宇宙膨脹」是章節別名（宇宙學簡介）→ 規則命中、不呼叫 LLM；
+                // 「棣美弗定理」是章節別名（複數的幾何意涵）→ 規則命中、不呼叫 LLM；
                 // 但題庫裡沒有這一章的題，而且它的向量不在 fixture 裡 → 先 3 後 2。
-                const res = await post({ query: '宇宙膨脹的計算題' });
+                // 〔章節重整 CH-A〕原本用「宇宙膨脹」（宇宙學簡介）；那一章已刪、別名一併移除（docs/chapter-restructure.md
+                // 第 3.1 條第 2 點），改用一個同樣「有別名、沒有題、沒有向量」的新章，測的條件不變。
+                const res = await post({ query: '棣美弗定理的計算題' });
+                assert.deepEqual(res.body.filters.chapters, ['複數的幾何意涵']);
+                assert.equal(res.body.parse_path, 'rules');
                 assert.equal(res.body.fallback_level, 3);
                 assert.ok(res.body.warnings.includes('embedding 服務不可用，改用關鍵字 LIKE 檢索。'));
                 assert.ok(res.body.warnings.includes('hybrid 檢索 0 筆，已放寬條件重查。'));

@@ -12,12 +12,14 @@ const assert = require('node:assert/strict');
 const { CHAPTERS, VOLUMES, volumeOf, SUBJECTS } = require('../../config/chapters');
 
 describe('config/chapters — VOLUMES 分冊結構', () => {
-    test('CHAPTERS 是 VOLUMES 的攤平（同序、同內容），數學 34、物理 32', () => {
+    // 〔章節重整 CH-A〕數學 34 → 52、物理 32 → 34（Owner 2026-09-25 定案，docs/chapter-restructure.md 第 2 條）。
+    // 「攤平、同序、同內容」的斷言不變，只有兩個數字照新清單更新。
+    test('CHAPTERS 是 VOLUMES 的攤平（同序、同內容），數學 52、物理 34', () => {
         for (const s of SUBJECTS) {
             assert.deepEqual(CHAPTERS[s], VOLUMES[s].flatMap(v => v.chapters), s);
         }
-        assert.equal(CHAPTERS['數學'].length, 34);
-        assert.equal(CHAPTERS['物理'].length, 32);
+        assert.equal(CHAPTERS['數學'].length, 52);
+        assert.equal(CHAPTERS['物理'].length, 34);
     });
 
     test('每個章節恰好屬於一冊（跨冊不重複）', () => {

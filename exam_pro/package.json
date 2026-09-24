@@ -28,6 +28,7 @@
     "embed:backfill": "node scripts/backfill_embeddings.js",
     "embed:backfill:test": "node scripts/backfill_embeddings.js --test",
     "search:reindex": "node scripts/reindex_search_tsv.js",
+    "chapters:migrate": "node scripts/migrate_chapters.js",
     "follow:backfill": "node scripts/backfill_follow_ups.js",
     "solution:backfill": "node scripts/backfill_solutions.js",
     "kc:load": "node scripts/load_kc.js",

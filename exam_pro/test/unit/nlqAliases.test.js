@@ -58,14 +58,16 @@ describe('config/chapterAliases.js（第 6.2 條）', () => {
         assert.deepEqual(few, [], `這些章節的別名不足 3 個：${few.map(f => f.chapter).join('、')}`);
     });
 
-    test('66 個章節一個都沒漏', () => {
+    // 〔章節重整 CH-A〕數學／物理由 66 章重整為 52＋34＝86 章（docs/chapter-restructure.md 第 2 條），
+    // 總數 110 → 130。逐章檢查與「宣告的章節集合＝白名單」的斷言不變。
+    test('數學＋物理 86 章、化學 44 章一個都沒漏', () => {
         const declared = Object.keys(aliases.ALIASES_BY_CHAPTER);
         const whitelist = Object.values(CHAPTERS).flat();
-        // 〔stage5 WS-B〕DEC-019 把化學 44 章併入白名單（docs/interfaces-stage5.md 第 3.2 條），
-        // 總數由 66 變 110；數學＋物理的 66 章另外逐章釘住（LEGACY_CHAPTERS），一個都不能少。
-        assert.equal(LEGACY_CHAPTERS.length, 66);
+        // 〔stage5 WS-B〕DEC-019 把化學 44 章併入白名單（docs/interfaces-stage5.md 第 3.2 條）；
+        // 數學＋物理的章另外逐章釘住（LEGACY_CHAPTERS），一個都不能少。
+        assert.equal(LEGACY_CHAPTERS.length, 86);
         assert.equal(CHAPTERS['化學'].length, 44);
-        assert.equal(whitelist.length, 66 + 44);
+        assert.equal(whitelist.length, 86 + 44);
         for (const chapter of LEGACY_CHAPTERS) assert.ok(declared.includes(chapter), `數學／物理的「${chapter}」沒有別名`);
         assert.deepEqual([...declared].sort(), [...whitelist].sort());
     });
