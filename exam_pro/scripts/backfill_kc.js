@@ -102,7 +102,8 @@ async function main(argv = process.argv.slice(2)) {
         console.log(`待標註題數：${ids.length}${args.limit ? `（--limit ${args.limit}）` : ''}`);
         if (noKc > 0) console.log(`另有 ${noKc} 題所在的章節還沒有知識點，這次不會處理（先 npm run kc:load）。`);
         console.log(est.estimated
-            ? `預估費用：約 ${usd(est.totalUsd)}（每題約 ${est.tokens.tokenIn} input／${est.tokens.tokenOut} output token，${est.modelId} 單價）`
+            ? `預估費用：約 ${usd(est.totalUsd)}（每題約 ${est.tokens.tokenIn} input／${est.tokens.tokenOut} output` +
+                `${est.tokens.tokenThinking ? `＋至多 ${est.tokens.tokenThinking} thinking` : ''} token，${est.modelId} 單價）`
             : `預估費用：無法估算（config/pricing.js 查不到 ${est.modelId} 的單價）`);
 
         if (args.dryRun || ids.length === 0) {

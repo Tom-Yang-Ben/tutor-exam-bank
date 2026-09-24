@@ -7,6 +7,8 @@
 //   2. schema 的 enum 就是「該章」的 codes（動態 schema），kc_codes 1–3 個。
 //   3. 伺服器端 ajv 再驗一次：模型給了清單外的 code、太多、太少都是 fail，不會被寫進 DB。
 //   4. 模型走 ctx.config.models.kcTag，沒給退回 extract；agent 自己不讀 env。
+//   5. thinkingBudget 與 maxOutputTokens 成對設定（同 lint／verify 的教訓）：thinking 模型的思考 token
+//      計入 maxOutputTokens，不限思考時 JSON 會被截斷、誤歸 schema_invalid。
 // ─────────────────────────────────────────────────────────────
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
@@ -140,6 +142,20 @@ describe('run()', () => {
         assert.deepEqual(c.cacheKeyParts.kcCodes, KCS.map(k => k.code).sort());
         assert.equal(c.parts.length, 1);
         assert.ok(c.parts[0].text.includes(INPUT.question_text));
+    });
+
+    test('thinkingBudget 與 maxOutputTokens 成對送出：思考上限之外還留得下整份 JSON', async () => {
+        const { ctx, calls } = fakeCtx();
+        await agent.run(ctx, INPUT);
+        const c = calls[0];
+        assert.equal(c.thinkingBudget, agent.THINKING_BUDGET);
+        assert.equal(c.maxOutputTokens, agent.MAX_OUTPUT_TOKENS);
+        // services/llm/gemini.js 只在 thinkingBudget 是整數時才送 thinkingConfig
+        assert.ok(Number.isInteger(c.thinkingBudget));
+        // 不設 0：MODEL_KC_TAG 若改成 Pro 系列，那一支不接受關閉思考
+        assert.ok(c.thinkingBudget > 0);
+        // 扣掉思考上限，JSON（1–3 個 code＋100 字 rationale，約 250 token）還有十倍以上的餘裕
+        assert.ok(c.maxOutputTokens - c.thinkingBudget >= 2048, `${c.maxOutputTokens} - ${c.thinkingBudget}`);
     });
 
     test('模型：kcTag 沒給就退回 extract；兩個都沒給就交給 services/llm 的預設', async () => {

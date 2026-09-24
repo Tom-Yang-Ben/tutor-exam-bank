@@ -122,6 +122,15 @@ describe('estimateTagCost（kc:backfill 執行前的預估）', () => {
         assert.deepEqual(e.tokens, svc.EST_TOKENS_PER_QUESTION);
     });
 
+    test('預估把思考 token 的上限算進去（thinking 以 output 單價計，寧可高估）', () => {
+        const { THINKING_BUDGET } = require('../../agents/tagKc');
+        assert.equal(svc.EST_TOKENS_PER_QUESTION.tokenThinking, THINKING_BUDGET);
+        const withThinking = svc.estimateTagCost(1, 'gemini:gemini-3.5-flash');
+        const without = svc.estimateTagCost(1, 'gemini:gemini-3.5-flash', { ...svc.EST_TOKENS_PER_QUESTION, tokenThinking: 0 });
+        assert.ok(withThinking.perQuestionUsd > without.perQuestionUsd,
+            `${withThinking.perQuestionUsd} vs ${without.perQuestionUsd}`);
+    });
+
     test('查不到單價 → estimated=false、金額 0（不猜）', () => {
         const e = svc.estimateTagCost(10, 'gemini:沒有這個模型');
         assert.equal(e.estimated, false);

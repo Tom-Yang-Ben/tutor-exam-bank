@@ -31,7 +31,17 @@ const MAX_CODES = 3;
 const RATIONALE_MAX = 200;
 const DESCRIPTION_MAX = 160;       // 清單裡每個知識點的說明截到這個長度（prompt 不必塞滿 200 字）
 const QUESTION_MAX = 4000;         // 題幹上限：超長的題（題組前導語）截斷，避免一題吃掉整份預算
-const MAX_OUTPUT_TOKENS = 1024;
+// 兩個數字成對設定，不要單獨調（同 agents/lint.js、agents/verify.js 的教訓：2026-08-27 job #4、#5
+// 的「Unterminated string in JSON」）：MODEL_KC_TAG 預設沿用 MODEL_EXTRACT，那是 thinking 模型，
+// 思考 token 計入 maxOutputTokens 額度；不設 thinkingBudget 時思考可能把額度吃光，JSON 寫到一半
+// 被截斷、誤歸 schema_invalid——自動標註就會大量靜默失敗，錢照樣花掉。
+//   - THINKING_BUDGET 512：分類任務不需要長思考，但也不設 0——MODEL_KC_TAG 若改成 Pro 系列，
+//     那一支不接受關閉思考（0 會被拒）。
+//   - MAX_OUTPUT_TOKENS 4096：扣掉思考上限後仍有 3,584 token 給 JSON，實際輸出（1–3 個 code＋
+//     100 字內的 rationale）約 250 token，截斷不會再發生。
+// 預估費用（services/kcTagService.js 的 EST_TOKENS_PER_QUESTION）把思考上限一併算進去。
+const MAX_OUTPUT_TOKENS = 4096;
+const THINKING_BUDGET = 512;
 
 const SYSTEM = '你是一位資深的台灣高中數學、物理與化學家教老師，正在替題庫的題目標註「知識點」——比章節更細的診斷單位，用來找出學生到底卡在哪一個觀念。你只輸出 JSON，不輸出任何其他文字。';
 
@@ -233,6 +243,7 @@ async function run(ctx, input = {}) {
             parts: [{ text: buildPrompt({ ...input, question_text: questionText, kcs }) }],
             schema,
             maxOutputTokens: MAX_OUTPUT_TOKENS,
+            thinkingBudget: THINKING_BUDGET,
             signal: ctx.signal,
             agent: AGENT,
             template: TEMPLATE,
@@ -273,5 +284,5 @@ module.exports = {
     run,
     // 給 service、單元測試與錄製腳本用的零件
     buildTagSchema, buildPrompt, kcListText, kcListHash, normalizeCodes, clampRationale, modelOf,
-    AGENT, TEMPLATE, SYSTEM, PROMPT_TEMPLATE, MAX_CODES
+    AGENT, TEMPLATE, SYSTEM, PROMPT_TEMPLATE, MAX_CODES, MAX_OUTPUT_TOKENS, THINKING_BUDGET
 };

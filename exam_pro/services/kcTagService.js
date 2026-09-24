@@ -31,8 +31,12 @@ const DEFAULT_MIN_CONFIDENCE = 0.6;
  * 預估費用用的每題 token 數（kc:backfill 執行前印出的預估）。
  * 來源：prompt 模板約 450 字＋一章 3–8 個知識點清單（每個約 60–180 字）＋題幹與答案，
  * 中文約 1 字 1 token；輸出是 1–3 個 code 加 100 字內的 rationale。往「不低估」的方向取整。
+ * 思考 token 以 output 單價計費（config/pricing.js），這裡直接取 agent 的思考上限 THINKING_BUDGET——
+ * 實際多半用不滿，但預估寧可偏高。
  */
-const EST_TOKENS_PER_QUESTION = { tokenIn: 1600, tokenOut: 250 };
+const EST_TOKENS_PER_QUESTION = Object.freeze({
+    tokenIn: 1600, tokenOut: 250, tokenThinking: require('../agents/tagKc').THINKING_BUDGET
+});
 
 /**
  * 讀設定（純函式，env 可注入）。
@@ -101,14 +105,16 @@ function bareModelId(model) {
  * 預估 n 題的標註費用（kc:backfill 執行前印出）。
  * @param {number} n
  * @param {string} model 'vendor:id' 或裸 ID
- * @param {{tokenIn:number, tokenOut:number}} [perQuestion]
+ * @param {{tokenIn:number, tokenOut:number, tokenThinking?:number}} [perQuestion]
  * @returns {{perQuestionUsd:number, totalUsd:number, estimated:boolean, modelId:string, tokens:object}}
  *          estimated=false 表示價目表查不到這個模型（config/pricing.js 的規則：查不到記 0）
  */
 function estimateTagCost(n, model, perQuestion = EST_TOKENS_PER_QUESTION) {
     const { estimateCost } = require('../config/pricing');
     const modelId = bareModelId(model);
-    const one = estimateCost({ modelId, tokenIn: perQuestion.tokenIn, tokenOut: perQuestion.tokenOut });
+    const one = estimateCost({
+        modelId, tokenIn: perQuestion.tokenIn, tokenOut: perQuestion.tokenOut, tokenThinking: perQuestion.tokenThinking ?? 0
+    });
     const count = Math.max(0, Number(n) || 0);
     return {
         perQuestionUsd: one.cost_usd,
