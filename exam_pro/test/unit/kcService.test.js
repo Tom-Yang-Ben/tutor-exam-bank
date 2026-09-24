@@ -167,7 +167,7 @@ describe('parseQuestionKcsBody（PUT /api/questions/:id/kcs）', () => {
         assert.ok(kc.parseQuestionKcsBody({ items: 'x' }).error);
         assert.ok(kc.parseQuestionKcsBody({ items: [1, 2, 3, 4, 5, 6].map(k => ({ kc_id: k })) }).error.includes('5'));
         assert.ok(kc.parseQuestionKcsBody({ items: [{ kc_id: 1 }, { kc_id: 1 }] }).error.includes('重複'));
-        for (const bad of [0, -1, 1.5, '3', null]) {
+        for (const bad of [0, -1, 1.5, '3', null, 2147483648, Number.MAX_SAFE_INTEGER]) {
             assert.ok(kc.parseQuestionKcsBody({ items: [{ kc_id: bad }] }).error.includes('kc_id'), `kc_id=${bad}`);
         }
         for (const bad of [0, -0.1, 1.01, '0.5', NaN, null]) {

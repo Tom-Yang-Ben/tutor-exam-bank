@@ -136,7 +136,8 @@ function parseQuestionKcsBody(body) {
     const seen = new Set();
     for (const it of items) {
         if (!it || typeof it !== 'object' || Array.isArray(it)) return { error: 'items 的每一項都必須是 { kc_id, weight? }。' };
-        if (!Number.isInteger(it.kc_id) || it.kc_id < 1) return { error: 'kc_id 必須是正整數。' };
+        // 上限同 parseId：kc_id 是 INT 欄位，超出範圍的值送進 PG 只會變成 500
+        if (!Number.isInteger(it.kc_id) || it.kc_id < 1 || it.kc_id > 2147483647) return { error: 'kc_id 必須是正整數。' };
         if (seen.has(it.kc_id)) return { error: 'items 內有重複的 kc_id。' };
         seen.add(it.kc_id);
         let weight = 1;

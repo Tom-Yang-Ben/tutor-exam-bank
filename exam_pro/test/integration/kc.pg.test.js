@@ -301,7 +301,8 @@ function runSuite() {
                 {}, { items: 'x' }, { items: [1, 2, 3, 4, 5, 6].map(i => ({ kc_id: i })) },
                 { items: [{ kc_id: k }, { kc_id: k }] }, { items: [{ kc_id: 'a' }] },
                 { items: [{ kc_id: k, weight: 0 }] }, { items: [{ kc_id: k, weight: 1.5 }] },
-                { items: [{ kc_id: 99999 }] }
+                { items: [{ kc_id: 99999 }] },
+                { items: [{ kc_id: 2147483648 }] }          // 超出 INT 範圍：要擋在 PG 之前（不是 500）
             ];
             for (const body of bad) {
                 const res = await request(app).put(`/api/questions/${Q.vec}/kcs`).send(body).expect(400);
