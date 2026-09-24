@@ -290,6 +290,7 @@ function conditionLatex(content) {
     const c = String(content ?? '').trim();
     if (!c) return '';
     if (/^\$[\s\S]*\$$/.test(c)) return c.slice(1, -1);
+    if (c.startsWith('\\')) return c;                       // 已經是 LaTeX（\Delta、\text{加熱}）：原樣
     if (CJK_RE.test(c)) return `\\text{${c.replace(/[{}]/g, '')}}`;
     const unbraced = /^\{([\s\S]*)\}$/.exec(c);
     if (unbraced) return `\\text{${unbraced[1]}}`;

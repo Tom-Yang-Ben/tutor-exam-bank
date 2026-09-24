@@ -48,6 +48,11 @@ describe('ceToLatex — mhchem 子集 → 一般 LaTeX（第 4.2 條第 3 點）
     test('箭頭條件：上方是 LaTeX 指令、下方是中文', () => {
         assert.equal(ceToLatex('A ->[\\Delta][加熱] B'), '\\mathrm{A} \\xrightarrow[\\text{加熱}]{\\Delta} \\mathrm{B}');
     });
+    test('條件本身已是 LaTeX（\\text{…}、$…$）時原樣，不再包一層', () => {
+        assert.equal(ceToLatex('A ->[\\text{加熱}] B'), '\\mathrm{A} \\xrightarrow{\\text{加熱}} \\mathrm{B}');
+        assert.equal(ceToLatex('A ->[$T>500$] B'), '\\mathrm{A} \\xrightarrow{T>500} \\mathrm{B}');
+        assert.equal(ceToLatex('A ->[{加熱}] B'), '\\mathrm{A} \\xrightarrow{\\text{加熱}} \\mathrm{B}');
+    });
     test('可逆箭頭也能帶條件', () => {
         assert.equal(ceToLatex('A <=>[Fe] B'), '\\mathrm{A} \\xrightleftharpoons{\\mathrm{Fe}} \\mathrm{B}');
     });
