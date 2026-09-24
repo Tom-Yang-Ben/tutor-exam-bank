@@ -251,6 +251,59 @@ describe('批改卡（第 4.1 條第 7 項）', () => {
         assert.deepEqual(api.calls.find(c => c.method === 'PATCH').body.results, [{ question_id: 11, result: 0, score: 0.6 }]);
     });
 
+    // 〔stage5 整合〕WS-A 審查 low：錯時填的部分給分在改成對之後留著，COALESCE(score, result) 會把它算成全錯
+    test('錯 → 對：部分給分一併清空並送 score: null（輸入框變空白、提示老師）', async () => {
+        const { api } = await mount();
+        const card = await openPaper();
+        const input = card.querySelectorAll('[data-score-box="11"]')[0].querySelectorAll('input')[0];
+        assert.equal(input.value, '50');
+        resultBtn(card, 0, '對').click();
+        assert.equal(input.value, '', '清空後輸入框要跟著變空白');
+        assert.ok(toasts().some(m => m.includes('部分給分已清空')), toasts().join('|'));
+        saveBtn(card).click();
+        for (let i = 0; i < 3; i++) await flush();
+        assert.deepEqual(api.calls.find(c => c.method === 'PATCH').body.results,
+            [{ question_id: 11, result: 1, score: null, error_types: [] }]);
+    });
+
+    test('錯 → 對之後老師重新填分數 → 送新的分數（不是 null）', async () => {
+        const { api } = await mount();
+        const card = await openPaper();
+        resultBtn(card, 0, '對').click();
+        const input = card.querySelectorAll('[data-score-box="11"]')[0].querySelectorAll('input')[0];
+        input.value = '80';
+        input.dispatchEvent({ type: 'change', target: input });
+        saveBtn(card).click();
+        for (let i = 0; i < 3; i++) await flush();
+        assert.deepEqual(api.calls.find(c => c.method === 'PATCH').body.results,
+            [{ question_id: 11, result: 1, score: 0.8, error_types: [] }]);
+    });
+
+    test('對 → 錯也清空；再按一次同一個結果不清（沒有換邊）；本來沒給分就不送 score', async () => {
+        const paper = JSON.parse(JSON.stringify(PAPER));
+        paper.questions[0] = { ...paper.questions[0], result: 1, score: 0.8, error_types: [] };
+        paper.questions.push({
+            question_id: 14, question_text: '數學證明題', question_type: '證明', difficulty: 4, result: 0,
+            subject: '數學', chapter: '向量內積', answer_text: '略', solution_text: null, solution_src: null,
+            score: null, error_types: [], response: null, teacher_note: null
+        });
+        const { api } = await mount(fakeApi({ 'GET /api/papers/41': paper }));
+        const card = await openPaper();
+        const input = card.querySelectorAll('[data-score-box="11"]')[0].querySelectorAll('input')[0];
+        resultBtn(card, 0, '對').click();                          // 同一個結果：不算換邊
+        assert.equal(input.value, '80');
+        resultBtn(card, 0, '錯').click();
+        assert.equal(input.value, '');
+        resultBtn(card, 3, '對').click();                          // 第 14 題本來就沒給分
+        saveBtn(card).click();
+        for (let i = 0; i < 3; i++) await flush();
+        assert.deepEqual(api.calls.find(c => c.method === 'PATCH').body.results, [
+            { question_id: 11, result: 0, score: null },
+            { question_id: 14, result: 1 }
+        ]);
+        assert.equal(toasts().filter(m => m.includes('部分給分已清空')).length, 1, '只有真的清掉分數的那一次才提示');
+    });
+
     test('學生答案與註記：已有內容時預設展開；改註記只送 note', async () => {
         const { api } = await mount();
         const card = await openPaper();
