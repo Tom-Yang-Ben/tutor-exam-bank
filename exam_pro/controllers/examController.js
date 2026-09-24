@@ -68,32 +68,56 @@ async function resolveStudent({ student_id, student_name }) {
     return { student: rows[0], error: null };
 }
 
+// ─────────────────────────────────────────────────────────────
+// 候選池（〔stage5 WS-D〕從 selectPaperQuestions 抽出來的唯一真相；docs/interfaces-stage5.md 第 4.4 條）
+//
+// 單章組卷、跨章配額（blueprint）與補救卷（services/remedialService.js）共用同一段 SQL：
+// 「未封存、該生沒寫過、不在排除清單、題源符合、同科」這五條排除規則只寫在這裡一次，
+// 新路徑不另寫一套會漂移的排除邏輯。新路徑額外可以限章節清單、難度區間與知識點。
+// 單章路徑呼叫時 chapters=[chapter]、其餘新條件全為 NULL，語意與抽出前的 SQL 相同。
+// ─────────────────────────────────────────────────────────────
+
 /**
- * 選題（**只讀不寫**）：generate-paper 與助教工具 preview_paper 共用。
- * 候選池、承上題整組、家族互斥、庫存不足訊息、排序、標題——與寫入路徑用同一段程式碼，
- * 預覽看到什麼、確認就寫什麼。
+ * 組出候選池 SQL（純函式，可離線單測參數順序）。
  *
- * 承上題（FR-019 PR2，utils/paperGroups.js）：選題單位是「前題＋所有承上題」一組，
- * 抽到就整組相鄰出現、整組算多題。**組內任一題不在候選池（已作答、exclude_ids、
- * 已封存、source_types 不符、科目或章節不同）時整組不抽**，避免孤兒承上題。
+ * 參數順序凍結：$1 subject、$2 chapters、$3 studentId、$4 excludeIds、$5 sourceTypes、
+ * $6 difficultyMin、$7 difficultyMax、$8 kcIds。NULL 表示該條件不限制。
  *
- * @param {'note'|'error'} [shortfallPolicy] 湊不滿 N 題時的政策，預設 FOLLOW_UP_SHORTFALL_POLICY
- * @returns {Promise<{error:{status:number,message:string}}|
- *                   {sortedQuestions:object[], finalSortedIds:number[], paperTitle:string, todayStr:string,
- *                    shortfall:{requested:number,actual:number,reason:'follow_up_group'}|null, note:string|null}>}
+ * @param {object} p
+ * @param {string} p.subject
+ * @param {number} p.studentId
+ * @param {string[]|null} [p.chapters]      null＝不限章
+ * @param {number[]} [p.excludeIds]
+ * @param {string[]|null} [p.sourceTypes]   null＝不限題源
+ * @param {number|null} [p.difficultyMin]
+ * @param {number|null} [p.difficultyMax]
+ * @param {number[]|null} [p.kcIds]         非 null 時只收「掛了其中任一知識點」的題（question_kcs）
+ * @returns {{text:string, values:any[]}}
  */
-async function selectPaperQuestions({ studentId, studentName, subject, chapter, limitCount, excludeIds = [], sourceTypes = null,
-    shortfallPolicy = FOLLOW_UP_SHORTFALL_POLICY }) {
-    // 候選池：同學科同章、未封存、該生沒寫過、且不在排除清單內；
-    // sourceTypes（0006 題源過濾）為 null 時不限制——助教工具與既有呼叫端行為不變
-    const { rows: candidates } = await query(
-        `SELECT q.id, q.variant_of, q.follows_question_id FROM questions q
-          WHERE q.subject = $1 AND q.chapter = $2 AND q.archived_at IS NULL
+function buildCandidatePoolQuery({ subject, studentId, chapters = null, excludeIds = [], sourceTypes = null,
+    difficultyMin = null, difficultyMax = null, kcIds = null }) {
+    return {
+        text: `SELECT q.id, q.variant_of, q.follows_question_id, q.chapter, q.difficulty FROM questions q
+          WHERE q.subject = $1 AND ($2::text[] IS NULL OR q.chapter = ANY($2::text[])) AND q.archived_at IS NULL
             AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.question_id = q.id AND a.student_id = $3)
             AND NOT (q.id = ANY($4::int[]))
-            AND ($5::text[] IS NULL OR q.source_type = ANY($5::text[]))`,
-        [subject, chapter, studentId, excludeIds, sourceTypes]
-    );
+            AND ($5::text[] IS NULL OR q.source_type = ANY($5::text[]))
+            AND ($6::int IS NULL OR q.difficulty >= $6::int)
+            AND ($7::int IS NULL OR q.difficulty <= $7::int)
+            AND ($8::int[] IS NULL OR EXISTS (SELECT 1 FROM question_kcs qk
+                                               WHERE qk.question_id = q.id AND qk.kc_id = ANY($8::int[])))`,
+        values: [subject, chapters, studentId, excludeIds, sourceTypes, difficultyMin, difficultyMax, kcIds]
+    };
+}
+
+/**
+ * 候選池＋候選題所在承上組的完整成員（pickPaperUnits 的兩個輸入）。
+ * @param {Parameters<typeof buildCandidatePoolQuery>[0]} opts
+ * @returns {Promise<{candidates:object[], related:object[]}>}
+ */
+async function fetchCandidatePool(opts) {
+    const { text, values } = buildCandidatePoolQuery(opts);
+    const { rows: candidates } = await query(text, values);
 
     // 候選題所在承上組的完整成員（含不在候選池的題，用來判斷整組是否可用）。
     // 無向走訪 follows_question_id：往下找承上題、往上找前題；UNION 去重，資料有環也會停。
@@ -115,6 +139,81 @@ async function selectPaperQuestions({ studentId, studentName, subject, chapter, 
             [candidates.map(c => c.id)]
         ));
     }
+    return { candidates, related };
+}
+
+/**
+ * 多段配額選題（**只讀不寫**；〔stage5 WS-D〕跨章 blueprint 與補救卷共用）。
+ *
+ * 依 quotas 的順序逐段抽：每段各跑一次候選池，再走同一個 pickPaperUnits（家族互斥＋承上題整組）。
+ * 跨段仍維持整張卷的規則：
+ *   - 前面段已抽中的題，後面段不再抽（同一題可能同時符合兩段，例如同章不同難度區間、或掛兩個知識點）。
+ *   - 前面段已占用的變式家族，後面段整組跳過——同一 variant_of 家族在一張卷至多一題。
+ * 承上組內任一題被前面段占用或家族相撞時，該組在 candidates 裡就少了那一題，
+ * pickPaperUnits 會依「組內任一題不可用，整組不抽」把它丟掉（不會出孤兒承上題）。
+ *
+ * 不足量不在這裡判斷對錯，只回報每段的 got 與 availableCount，由呼叫端決定要 400 還是附註。
+ *
+ * @param {object} p
+ * @param {number} p.studentId
+ * @param {string} p.subject
+ * @param {Array<{count:number, pool:{chapters?:string[]|null, kcIds?:number[]|null,
+ *                difficultyMin?:number|null, difficultyMax?:number|null}}>} p.quotas
+ * @param {number[]} [p.excludeIds]
+ * @param {string[]|null} [p.sourceTypes]
+ * @param {(items:Array)=>Array} [p.shuffleFn]
+ * @returns {Promise<Array<{ids:number[], got:number, availableCount:number}>>} 與 quotas 一一對應
+ */
+async function pickByQuotas({ studentId, subject, quotas, excludeIds = [], sourceTypes = null, shuffleFn }) {
+    const usedIds = new Set();
+    const usedFamilies = new Set();
+    const results = [];
+    for (const quota of quotas) {
+        if (!(quota.count > 0)) { results.push({ ids: [], got: 0, availableCount: 0 }); continue; }
+        const { candidates, related } = await fetchCandidatePool({
+            subject, studentId, excludeIds, sourceTypes,
+            chapters: quota.pool.chapters ?? null,
+            kcIds: quota.pool.kcIds ?? null,
+            difficultyMin: quota.pool.difficultyMin ?? null,
+            difficultyMax: quota.pool.difficultyMax ?? null
+        });
+        const free = candidates.filter(c => !usedIds.has(c.id) && !usedFamilies.has(c.variant_of ?? c.id));
+        const picked = pickPaperUnits({
+            candidates: free, related, limitCount: quota.count, ...(shuffleFn ? { shuffleFn } : {})
+        });
+        const byId = new Map(free.map(c => [c.id, c]));
+        for (const id of picked.ids) {
+            usedIds.add(id);
+            usedFamilies.add(byId.get(id).variant_of ?? id);
+        }
+        results.push({ ids: picked.ids, got: picked.actual, availableCount: picked.availableCount });
+    }
+    return results;
+}
+
+/**
+ * 選題（**只讀不寫**）：generate-paper 與助教工具 preview_paper 共用。
+ * 候選池、承上題整組、家族互斥、庫存不足訊息、排序、標題——與寫入路徑用同一段程式碼，
+ * 預覽看到什麼、確認就寫什麼。
+ *
+ * 承上題（FR-019 PR2，utils/paperGroups.js）：選題單位是「前題＋所有承上題」一組，
+ * 抽到就整組相鄰出現、整組算多題。**組內任一題不在候選池（已作答、exclude_ids、
+ * 已封存、source_types 不符、科目或章節不同）時整組不抽**，避免孤兒承上題。
+ *
+ * @param {'note'|'error'} [shortfallPolicy] 湊不滿 N 題時的政策，預設 FOLLOW_UP_SHORTFALL_POLICY
+ * @returns {Promise<{error:{status:number,message:string}}|
+ *                   {sortedQuestions:object[], finalSortedIds:number[], paperTitle:string, todayStr:string,
+ *                    shortfall:{requested:number,actual:number,reason:'follow_up_group'}|null, note:string|null}>}
+ */
+async function selectPaperQuestions({ studentId, studentName, subject, chapter, limitCount, excludeIds = [], sourceTypes = null,
+    shortfallPolicy = FOLLOW_UP_SHORTFALL_POLICY }) {
+    // 候選池：同學科同章、未封存、該生沒寫過、且不在排除清單內；
+    // sourceTypes（0006 題源過濾）為 null 時不限制——助教工具與既有呼叫端行為不變。
+    // 〔stage5 WS-D〕SQL 與承上組查詢抽到 fetchCandidatePool（與 blueprint／補救卷共用），
+    // 單章路徑只帶 chapters=[chapter]，其餘新條件為 NULL，候選池與抽出前相同。
+    const { candidates, related } = await fetchCandidatePool({
+        subject, chapters: [chapter], studentId, excludeIds, sourceTypes
+    });
 
     // 家族互斥：同一 variant_of 家族在同一張卷只取一題（規劃 §4.1）。
     // pickPaperUnits 內部走 pickOnePerFamily（每組洗牌取代表 → 對代表 Fisher-Yates），單位是承上組。
@@ -152,8 +251,19 @@ async function selectPaperQuestions({ studentId, studentName, subject, chapter, 
 exports.selectPaperQuestions = selectPaperQuestions;
 exports.FOLLOW_UP_SHORTFALL_POLICY = FOLLOW_UP_SHORTFALL_POLICY;
 exports.resolveStudentInternal = resolveStudent;
+// 〔stage5 WS-D〕給補救卷（services/remedialService.js）與單元測試共用，不是路由
+exports.buildCandidatePoolQuery = buildCandidatePoolQuery;
+exports.fetchCandidatePool = fetchCandidatePool;
+exports.pickByQuotas = pickByQuotas;
+exports.sortForPaper = sortForPaper;
+exports.MAX_QUESTIONS = MAX_QUESTIONS;
 
 exports.generatePaper = async (req, res, next) => {
+    // 〔stage5 WS-D〕跨章配額（docs/interfaces-stage5.md 第 4.4 條第 3 項）：body 帶 blueprint 才走新分支；
+    // 沒帶（或為 null）時以下的單章路徑一個位元組都不變。
+    if (req.body && req.body.blueprint !== undefined && req.body.blueprint !== null) {
+        return generateBlueprintPaper(req, res, next);
+    }
     const { student_id, student_name, subject, chapter, count, dry_run, exclude_ids, source_types } = req.body;
 
     const hasStudent = (student_id !== undefined && student_id !== null) || student_name;
@@ -234,6 +344,210 @@ exports.generatePaper = async (req, res, next) => {
         next(err);
     }
 };
+
+// ─────────────────────────────────────────────────────────────
+// 〔stage5 WS-D〕跨章配額組卷（docs/interfaces-stage5.md 第 4.4 條第 3 項；DEC-016）
+//
+// body：既有欄位（student_id／student_name、subject、dry_run、exclude_ids、source_types）
+//       ＋ blueprint: [{ chapter, count, difficulty_min?, difficulty_max? }]（1–10 列、count 總和 ≤ 50），
+//       與 chapter／count 互斥。
+// 選題：逐列跑 pickByQuotas（同一段候選池 SQL、同一個 pickPaperUnits），跨列維持家族互斥與不重複。
+// 不足量：**不回 400**，逐列回報 wanted／got，照抽到的題出卷並附 note；
+//         全部列都抽不到任何一題時才回 400（出一張空卷沒有意義）。
+// 回應形狀同單章路徑，另外多 blueprint（逐列 wanted／got）與 shortfalls（只列不足的列）。
+// ─────────────────────────────────────────────────────────────
+
+/** blueprint 最多幾列（契約第 4.4 條第 3 項）。 */
+const MAX_BLUEPRINT_ROWS = 10;
+
+/**
+ * 驗證 exclude_ids（與單章路徑同規則、同訊息）。
+ * @param {any} raw
+ * @returns {{error:string}|{value:number[]}}
+ */
+function parseExcludeIds(raw) {
+    if (raw === undefined || raw === null) return { value: [] };
+    if (!Array.isArray(raw) || raw.some(v => !Number.isInteger(v) || v < 1)) {
+        return { error: 'exclude_ids 必須是正整數陣列。' };
+    }
+    if (raw.length > MAX_EXCLUDE) return { error: `exclude_ids 最多 ${MAX_EXCLUDE} 個。` };
+    return { value: [...new Set(raw)] };
+}
+
+/**
+ * 驗證 source_types（與單章路徑同規則、同訊息；空陣列＝不限制）。
+ * @param {any} raw
+ * @returns {{error:string}|{value:string[]|null}}
+ */
+function parseSourceTypes(raw) {
+    if (raw === undefined || raw === null) return { value: null };
+    const { isValidSourceType } = require('../config/chapters');
+    if (!Array.isArray(raw) || raw.some(v => !isValidSourceType(v))) {
+        return { error: 'source_types 必須是合法題源標記的陣列。' };
+    }
+    return { value: raw.length > 0 ? [...new Set(raw)] : null };
+}
+
+/**
+ * 驗證 blueprint（純函式）。
+ * @param {string} subject 已驗證過的科目
+ * @param {any} blueprint
+ * @returns {{error:string}|{rows:Array<{chapter:string,count:number,difficulty_min:number|null,difficulty_max:number|null}>}}
+ */
+function parseBlueprint(subject, blueprint) {
+    const { CHAPTERS } = require('../config/chapters');
+    if (!Array.isArray(blueprint) || blueprint.length < 1 || blueprint.length > MAX_BLUEPRINT_ROWS) {
+        return { error: `blueprint 必須是 1~${MAX_BLUEPRINT_ROWS} 列的陣列。` };
+    }
+    const rows = [];
+    for (let i = 0; i < blueprint.length; i++) {
+        const row = blueprint[i];
+        const n = i + 1;
+        if (!row || typeof row !== 'object' || Array.isArray(row)) return { error: `blueprint 第 ${n} 列必須是物件。` };
+        if (typeof row.chapter !== 'string' || !(CHAPTERS[subject] || []).includes(row.chapter)) {
+            return { error: `blueprint 第 ${n} 列的章節「${row.chapter ?? ''}」不在${subject}的章節白名單內。` };
+        }
+        if (!Number.isInteger(row.count) || row.count < 1) {
+            return { error: `blueprint 第 ${n} 列的 count 必須是大於 0 的整數。` };
+        }
+        const dMin = row.difficulty_min ?? null;
+        const dMax = row.difficulty_max ?? null;
+        for (const d of [dMin, dMax]) {
+            if (d !== null && (!Number.isInteger(d) || d < 1 || d > 5)) {
+                return { error: `blueprint 第 ${n} 列的 difficulty_min／difficulty_max 必須是 1~5 的整數。` };
+            }
+        }
+        if (dMin !== null && dMax !== null && dMin > dMax) {
+            return { error: `blueprint 第 ${n} 列的 difficulty_min 不得大於 difficulty_max。` };
+        }
+        rows.push({ chapter: row.chapter, count: row.count, difficulty_min: dMin, difficulty_max: dMax });
+    }
+    const total = rows.reduce((s, r) => s + r.count, 0);
+    if (total > MAX_QUESTIONS) return { error: `blueprint 的題數總和最多 ${MAX_QUESTIONS} 題。` };
+    return { rows };
+}
+
+/**
+ * 不足量的原因（純函式）：可用題數本來就不夠＝庫存不足；夠但承上組塞不進＝承上題整組。
+ * @param {{got:number, availableCount:number}} r
+ * @param {number} wanted
+ * @returns {'insufficient_stock'|'follow_up_group'}
+ */
+function shortfallReason(r, wanted) {
+    return r.availableCount < wanted ? 'insufficient_stock' : 'follow_up_group';
+}
+
+/**
+ * 跨章卷的標題（純函式）：1 章同單章路徑；2–3 章列出；4 章以上「第一章等 N 章」。
+ * @param {string} studentName
+ * @param {string[]} chapters 依 blueprint 順序（可重複，會去重）
+ * @param {string} titleDate
+ * @returns {string}
+ */
+function blueprintTitle(studentName, chapters, titleDate) {
+    const uniq = [...new Set(chapters)];
+    const label = uniq.length <= 3 ? uniq.join('、') : `${uniq[0]}等${uniq.length}章`;
+    return `${studentName}-${label}特訓卷(${titleDate})`;
+}
+
+async function generateBlueprintPaper(req, res, next) {
+    const { student_id, student_name, subject, chapter, count, dry_run, blueprint } = req.body;
+
+    if ((chapter !== undefined && chapter !== null) || (count !== undefined && count !== null)) {
+        return res.status(400).json({ message: 'blueprint 與 chapter／count 不可同時使用：跨章配額請只送 blueprint。' });
+    }
+    const hasStudent = (student_id !== undefined && student_id !== null) || student_name;
+    if (!hasStudent || !subject) {
+        return res.status(400).json({ message: '所有篩選欄位皆為必填！' });
+    }
+    const { SUBJECTS } = require('../config/chapters');
+    if (!SUBJECTS.includes(subject)) return res.status(400).json({ message: 'subject 不在白名單內。' });
+
+    const parsed = parseBlueprint(subject, blueprint);
+    if (parsed.error) return res.status(400).json({ message: parsed.error });
+    const ex = parseExcludeIds(req.body.exclude_ids);
+    if (ex.error) return res.status(400).json({ message: ex.error });
+    const st = parseSourceTypes(req.body.source_types);
+    if (st.error) return res.status(400).json({ message: st.error });
+
+    try {
+        const { student, error } = await resolveStudent({ student_id, student_name });
+        if (error) return res.status(error.status).json({ message: error.message });
+
+        const results = await pickByQuotas({
+            studentId: student.id, subject, excludeIds: ex.value, sourceTypes: st.value,
+            quotas: parsed.rows.map(r => ({
+                count: r.count,
+                pool: { chapters: [r.chapter], difficultyMin: r.difficulty_min, difficultyMax: r.difficulty_max }
+            }))
+        });
+
+        const report = parsed.rows.map((r, i) => ({
+            chapter: r.chapter, difficulty_min: r.difficulty_min, difficulty_max: r.difficulty_max,
+            wanted: r.count, got: results[i].got
+        }));
+        const shortfalls = report
+            .map((r, i) => ({ row: i + 1, ...r, reason: shortfallReason(results[i], r.wanted) }))
+            .filter(r => r.got < r.wanted);
+        const ids = results.flatMap(r => r.ids);
+        if (ids.length === 0) {
+            return res.status(400).json({
+                message: `新題目庫存不足！blueprint 每一列都抽不到 [${student.name}] 沒寫過的題目。`,
+                blueprint: report, shortfalls
+            });
+        }
+
+        const { rows: fullQuestions } = await query(
+            `SELECT id, question_text, question_type, difficulty, answer_text, source_type, source_detail, follows_question_id
+               FROM questions WHERE id = ANY($1::int[])`,
+            [ids]
+        );
+        const sortedQuestions = sortForPaper(fullQuestions);
+        const finalSortedIds = sortedQuestions.map(q => q.id);
+        const { titleDate, todayStr } = localDates();
+        const paperTitle = blueprintTitle(student.name, parsed.rows.map(r => r.chapter), titleDate);
+        const requested = parsed.rows.reduce((s, r) => s + r.count, 0);
+        const extra = {
+            blueprint: report,
+            shortfalls,
+            ...(shortfalls.length ? {
+                note: `跨章配額有 ${shortfalls.length} 列不足量：`
+                    + shortfalls.map(s => `第 ${s.row} 列「${s.chapter}」要 ${s.wanted} 題只抽到 ${s.got} 題`
+                        + (s.reason === 'insufficient_stock' ? '（庫存不足）' : '（承上題須整組出題）')).join('；')
+                    + `。本卷實際 ${finalSortedIds.length} 題（要求 ${requested} 題）。`
+            } : {})
+        };
+
+        if (dry_run) {
+            return res.status(200).json({
+                dry_run: true,
+                message: '預覽（尚未寫入）：確認後才會建卷並記入作答歷史。',
+                student_id: student.id,
+                paper_title_preview: paperTitle,
+                question_ids: finalSortedIds,
+                questions: sortedQuestions,
+                ...extra
+            });
+        }
+
+        const outcome = await writePaper({ studentId: student.id, paperTitle, questionIds: finalSortedIds, todayStr });
+        if (outcome.conflict) {
+            return res.status(409).json({ message: '部分題目已被同時指派給該學生，請重試。' });
+        }
+        res.status(200).json({
+            message: '智慧組卷成功！已自動記錄學生作答歷史，避免下次重複。',
+            paper_id: outcome.paperId,
+            paper_title: paperTitle,
+            question_ids: finalSortedIds,
+            questions: sortedQuestions,
+            ...extra
+        });
+    } catch (err) {
+        next(err);
+    }
+}
+// 純函式給單元測試
+exports._blueprintInternals = { parseBlueprint, parseExcludeIds, parseSourceTypes, shortfallReason, blueprintTitle, MAX_BLUEPRINT_ROWS };
 
 /**
  * 建卷＋寫 attempts（generate 與 confirm 共用；同一交易、rowCount 硬閘門）。
