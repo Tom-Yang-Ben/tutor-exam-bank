@@ -166,6 +166,13 @@ describe('其他純函式', () => {
         assert.equal(buildRequestBody({ message: 'q', mode: 'direct', history: [{ role: 'tutor', text: 'x'.repeat(5000) }] }).history[0].text.length, 4000);
     });
 
+    test('parseQuestionId：上限是 int4（2147483647），超過當成不合法（與後端一致）', async () => {
+        const { parseQuestionId } = await load();
+        assert.equal(parseQuestionId('2147483647'), 2147483647);
+        assert.ok(Number.isNaN(parseQuestionId('2147483648')));
+        assert.ok(Number.isNaN(parseQuestionId('99999999999')));
+    });
+
     test('outcomeLabel 與 formatUsd', async () => {
         const { outcomeLabel, formatUsd } = await load();
         assert.equal(outcomeLabel('OUTCOME_OK'), '執行成功');

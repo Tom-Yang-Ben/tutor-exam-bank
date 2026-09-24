@@ -7,6 +7,7 @@
 // 這裡只做 HTTP 轉譯：
 //   400 參數不合法（{ message }）       404 題目或學生不存在
 //   413 錄音超過 5 MB                   429 今日預算用完（每分鐘限流的 429 由 middleware/rateLimit 回）
+//   400 也包括 multipart 本身壞掉（busboy 的解析錯誤，見 handleVoiceUploadError）
 //   502 LLM 端失敗（供應商錯誤、replay miss、逾時、模型輸出格式不符）——「家教暫時無法回應」
 //   其餘（DB 錯誤等）交給 app.js 的全域錯誤中樞（500），不冒充成供應商的問題
 //
@@ -14,6 +15,7 @@
 //   FEATURE_TUTOR                     → POST /api/tutor
 //   FEATURE_TUTOR 且 FEATURE_VOICE    → POST /api/voice/transcribe
 // ─────────────────────────────────────────────────────────────
+const { MulterError } = require('multer');
 const tutorService = require('../services/tutorService');
 const voiceService = require('../services/voiceService');
 
@@ -64,7 +66,16 @@ exports.transcribe = async (req, res, next) => {
 };
 
 /**
- * multer 的錯誤轉成 413／400（預設會落到 app.js 的全域中樞變成 500）。
+ * busboy 解析 multipart 失敗時丟的一般 Error（沒有 code，也不是 MulterError）。
+ * 訊息逐字取自 node_modules/busboy/lib 與 node_modules/multer/lib/make-middleware.js：
+ * 表單沒有結尾 boundary、part header 壞掉、Content-Type 不對、上傳中途斷線——都是送來的請求有問題，
+ * 不是伺服器的問題，所以回 400，不落到全域中樞變成 500。
+ */
+const MALFORMED_UPLOAD_RE = /^(Unexpected end of (form|file)|Malformed (part header|content type|urlencoded form)|Multipart: Boundary not found|Unsupported content type|Missing Content-Type|Request (aborted|closed|error)\b)/;
+
+/**
+ * multer 與 busboy 的錯誤轉成 413／400（預設會落到 app.js 的全域中樞變成 500）。
+ * 其餘錯誤（沒有這些特徵的）原樣往下丟。
  * 四參數：Express 依參數個數判定它是錯誤處理中介軟體。
  */
 exports.handleVoiceUploadError = (err, req, res, next) => {
@@ -72,9 +83,13 @@ exports.handleVoiceUploadError = (err, req, res, next) => {
     if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(413).json({ message: '錄音檔過大，單次最多 5 MB（約數分鐘），請分段說。' });
     }
-    if (err.code && String(err.code).startsWith('LIMIT_')) {
-        // LIMIT_UNEXPECTED_FILE（欄位名不是 audio）、LIMIT_FILE_COUNT、LIMIT_FIELD_* 等
+    if ((err.code && String(err.code).startsWith('LIMIT_')) || err instanceof MulterError) {
+        // LIMIT_UNEXPECTED_FILE（欄位名不是 audio）、LIMIT_FILE_COUNT、LIMIT_FIELD_*、
+        // 以及 multer 2 的 MISSING_FIELD_NAME、INVALID_FIELD_NAME 等
         return res.status(400).json({ message: `上傳格式不符（${err.code}）：請以 multipart 欄位 audio 上傳單一錄音檔。` });
+    }
+    if (MALFORMED_UPLOAD_RE.test(String(err.message ?? ''))) {
+        return res.status(400).json({ message: `上傳的表單不完整或格式錯誤（${err.message}），錄音沒有收到，請再錄一次。` });
     }
     return next(err);
 };

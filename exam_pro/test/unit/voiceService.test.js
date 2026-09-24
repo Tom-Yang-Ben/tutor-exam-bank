@@ -258,6 +258,34 @@ describe('tutorController — multer 錯誤轉譯與限流設定', () => {
         assert.equal(passed, err);
     });
 
+    test('multer 2 的非 LIMIT_ 錯誤（MulterError）→ 400', () => {
+        const { MulterError } = require('multer');
+        for (const code of ['MISSING_FIELD_NAME', 'INVALID_FIELD_NAME']) {
+            const res = mockRes();
+            controller.handleVoiceUploadError(new MulterError(code), {}, res, () => assert.fail('不該往下'));
+            assert.equal(res.statusCode, 400, code);
+            assert.match(res.body.message, new RegExp(code));
+        }
+    });
+
+    test('busboy 的解析錯誤（表單沒有結尾、header 壞掉、沒有 boundary、中途斷線）→ 400；訊息不像的仍往下丟', () => {
+        // 訊息逐字取自 node_modules/busboy/lib 與 multer/lib/make-middleware.js
+        for (const msg of ['Unexpected end of form', 'Unexpected end of file', 'Malformed part header',
+            'Malformed content type', 'Multipart: Boundary not found', 'Unsupported content type: multipart/mixed',
+            'Missing Content-Type', 'Request aborted', 'Request closed']) {
+            const res = mockRes();
+            controller.handleVoiceUploadError(new Error(msg), {}, res, () => assert.fail(`不該往下：${msg}`));
+            assert.equal(res.statusCode, 400, msg);
+            assert.match(res.body.message, /表單不完整或格式錯誤/);
+        }
+        for (const msg of ['connect ECONNREFUSED', 'Requested range not satisfiable', 'x Unexpected end of form']) {
+            const err = new Error(msg);
+            let passed = null;
+            controller.handleVoiceUploadError(err, {}, mockRes(), (e) => { passed = e; });
+            assert.equal(passed, err, msg);
+        }
+    });
+
     test('rateLimitPerMin：正整數才採用，其餘退回預設 10', () => {
         assert.equal(controller.rateLimitPerMin('X', 10, {}), 10);
         assert.equal(controller.rateLimitPerMin('X', 10, { X: '30' }), 30);

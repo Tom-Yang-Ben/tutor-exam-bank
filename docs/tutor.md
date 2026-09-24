@@ -98,8 +98,8 @@ LLM 要能真的呼叫：`LLM_MODE=live`（或 `record`）且有 `GEMINI_API_KEY
 | `message` | string | 必填；trim 後 1–1000 字 |
 | `mode` | `'direct'`／`'socratic'` | 必填 |
 | `subject` | string | 選填；必須在 `config/chapters.js` 的 `SUBJECTS` 內（不寫死，化學併入後自動可用） |
-| `student_id` | 正整數（或數字字串） | 選填；不存在回 404 |
-| `question_id` | 正整數（或數字字串） | 選填；不存在回 404 |
+| `student_id` | 正整數（或數字字串），1–2147483647 | 選填；超過 int4 上限回 400（不讓 DB 丟 out of range 變成 500）；不存在回 404 |
+| `question_id` | 正整數（或數字字串），1–2147483647 | 選填；同上 |
 | `history` | `[{ role: 'user'\|'tutor', text }]` | 選填；最多 8 輪；`text` 非空、每輪 ≤ 4000 字 |
 
 **Response 200**
@@ -147,7 +147,7 @@ LLM 要能真的呼叫：`LLM_MODE=live`（或 `record`）且有 `GEMINI_API_KEY
 - `text` 是繁中逐字稿，數學式以 `$…$` 內嵌；`ambiguities[].options[0]` 是寫進 `text` 的那一個。伺服器端會丟掉少於兩個選項的歧義、選項去重並最多留 4 個。
 - `usage` 是契約之外**多給**的欄位（前端目前沒顯示，保留給之後的花費統計）。
 
-**錯誤**：`400` 沒有檔案、欄位名不是 `audio`、mime 不在白名單、科目不合法；`413` 超過 5 MB；`429` 限流或今日預算用完；`502` LLM 端失敗或模型輸出不合 schema。
+**錯誤**：`400` 沒有檔案、欄位名不是 `audio`、mime 不在白名單、科目不合法，或 multipart 本身壞掉（沒有結尾 boundary、part header 壞掉、沒有 boundary、上傳中途斷線——busboy 的解析錯誤，訊息逐字比對）；`413` 超過 5 MB；`429` 限流或今日預算用完；`502` LLM 端失敗或模型輸出不合 schema。
 
 ### 3.3 `services/llm.generateText`（給其他 WS 用；第 5.1 條）
 
@@ -216,9 +216,9 @@ const { text, codeRuns, finishReason, usage, latencyMs } = await require('./serv
 |---|---|---|
 | 單元 | `test/unit/llmGenerateText.test.js` | `toContents` 既有三種逐字不變＋音訊／圖片；`parseTextResponse` 的配對；`readFinishReason`；`gemini.generateText` 送出的 config（假 client，含 `thinkingConfig`）與回傳的 `finishReason`；`generateJson` 的 config 形狀回歸；replay 命中／miss／壞檔；record → replay 一輪（音訊 base64 與 prompt 原文不進 cassette）；三個模型 getter |
 | 單元 | `test/unit/tutorService.test.js` | body 驗證（400 在查 DB、呼叫 LLM 之前）；脈絡組裝（題目、詳解 NULL、approved 優先與 draft 標註、退回同章、沒有知識點、學生前 5 與錯因、沒有資料時不帶）；**姓名不出現在 system／parts／cacheKeyParts**、回覆換回姓名；兩種模式的系統提示差異與模板註冊；驗算回傳；`thinkingBudget` 與 `maxOutputTokens` 成對送出；`MAX_TOKENS` 截斷提醒（含補結尾圍欄、空回覆的專屬說明、照樣記帳）；成本；每日預算 429 與隔日歸零；LLM 失敗 502、DB 錯誤不冒充 502 |
-| 單元 | `test/unit/voiceService.test.js` | 大小、mime（含 `;codecs=`）、科目；送出的 parts 與 cacheKeyParts；ajv 再驗、正規化；成本併入同一個預算；controller 的 multer 錯誤轉譯、限流設定、buffer 清除 |
+| 單元 | `test/unit/voiceService.test.js` | 大小、mime（含 `;codecs=`）、科目；送出的 parts 與 cacheKeyParts；ajv 再驗、正規化；成本併入同一個預算；controller 的 multer 錯誤轉譯（含 multer 2 的非 `LIMIT_` 代碼與 busboy 的解析錯誤）、限流設定、buffer 清除 |
 | 單元 | `test/unit/tutorUi.test.js` | `renderMarkdown` 的 XSS 案例（`<img onerror>`、`javascript:` 連結、屬性跳脫、偽造佔位符、唯一屬性 `start`）與格式；麥克風可用性；歧義替換；miniDom 實跑：旗標關閉不渲染、麥克風不可用隱藏並說明、送出與回覆呈現、**錄音 → 逐字稿 → 點 chip → 按確認才送出**、取消不送 |
-| 整合 | `test/integration/tutor.pg.test.js` | 旗標三種組合的 404；兩條 API 的 400／404／413；**以 LLM_MODE=replay＋暫存 cassette 目錄跑通一輪**（鍵由 `prepareTutorRequest` 算出，與正式請求同一支函式；並斷言 DB 組出的 prompt 沒有姓名）；退回同章知識點；cassette 記錄 `MAX_TOKENS` 時回覆附截斷提醒；replay miss 502；預算 429；兩個限流 env；錄音不寫進 `uploads/` |
+| 整合 | `test/integration/tutor.pg.test.js` | 旗標三種組合的 404；兩條 API 的 400／404／413（含 ID 超過 int4、multipart 壞掉）；**以 LLM_MODE=replay＋暫存 cassette 目錄跑通一輪**（鍵由 `prepareTutorRequest` 算出，與正式請求同一支函式；並斷言 DB 組出的 prompt 沒有姓名）；退回同章知識點；cassette 記錄 `MAX_TOKENS` 時回覆附截斷提醒；replay miss 502；預算 429；兩個限流 env；錄音不寫進 `uploads/` |
 
 **為什麼整合測試選 replay 而不是在 app 層注入 fake**：走的是正式程式路徑（routes → controller → service → `services/llm` → `fake.js`），app 與 controller 不必為了測試多開注入口；cassette 寫在 `os.tmpdir()`，不進 repo，CI 不需要任何新 cassette。
 

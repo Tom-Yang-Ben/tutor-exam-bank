@@ -135,6 +135,16 @@ describe('validateTutorInput — 第 4.5 條的 body 規則', () => {
         assert.equal(v({ message: 'a', mode: 'direct', student_id: null }).value.studentId, null);
     });
 
+    test('student_id／question_id 的上限是 int4（2147483647）：超過就 400，不讓 DB 丟 out of range 變成 500', () => {
+        assert.equal(tutor.INT4_MAX, 2147483647);
+        assert.equal(v({ message: 'a', mode: 'direct', question_id: 2147483647 }).value.questionId, 2147483647);
+        assert.equal(v({ message: 'a', mode: 'direct', student_id: '2147483647' }).value.studentId, 2147483647);
+        for (const bad of [2147483648, '2147483648', 99999999999, '99999999999', 1e21, Number.MAX_SAFE_INTEGER, '1'.repeat(400)]) {
+            assert.match(v({ message: 'a', mode: 'direct', student_id: bad }).error, /student_id 必須是正整數（1–2147483647）/, String(bad));
+            assert.match(v({ message: 'a', mode: 'direct', question_id: bad }).error, /question_id 必須是正整數（1–2147483647）/, String(bad));
+        }
+    });
+
     test('history：陣列、≤8 輪、role 只能 user／tutor、text 非空且 ≤4000 字', () => {
         const turn = (role, text = '嗨') => ({ role, text });
         assert.match(v({ message: 'a', mode: 'direct', history: 'x' }).error, /history 要是陣列/);

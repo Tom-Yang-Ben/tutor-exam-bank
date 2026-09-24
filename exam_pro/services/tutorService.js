@@ -132,10 +132,17 @@ function httpError(status, message) {
 
 // ───────────────────────── 輸入驗證（純函式）─────────────────────────
 
+/** PostgreSQL INTEGER（int4）的上限：students.id、questions.id 都是 SERIAL */
+const INT4_MAX = 2147483647;
+
+/**
+ * 選填的 ID：沒給回 null；1–INT4_MAX 的整數（或數字字串）回數字；其餘回 NaN（呼叫端回 400）。
+ * 上限要擋在這裡：超過 int4 的值（99999999999、1e21）送進 SQL 會變成 DB 錯誤（500），不是參數錯誤。
+ */
 function positiveIntOrNull(v) {
     if (v === undefined || v === null || v === '') return null;
     const n = typeof v === 'string' && /^\d+$/.test(v.trim()) ? Number(v.trim()) : v;
-    return Number.isInteger(n) && n > 0 ? n : NaN;
+    return Number.isInteger(n) && n > 0 && n <= INT4_MAX ? n : NaN;
 }
 
 /**
@@ -163,9 +170,9 @@ function validateTutorInput(body, opts = {}) {
     }
 
     const studentId = positiveIntOrNull(b.student_id);
-    if (Number.isNaN(studentId)) return { error: 'student_id 必須是正整數。' };
+    if (Number.isNaN(studentId)) return { error: `student_id 必須是正整數（1–${INT4_MAX}）。` };
     const questionId = positiveIntOrNull(b.question_id);
-    if (Number.isNaN(questionId)) return { error: 'question_id 必須是正整數。' };
+    if (Number.isNaN(questionId)) return { error: `question_id 必須是正整數（1–${INT4_MAX}）。` };
 
     let history = [];
     if (b.history !== undefined && b.history !== null) {
@@ -640,5 +647,5 @@ module.exports = {
     SYSTEM, PROMPT_TEMPLATE, TEMPLATES, AGENT, MODES,
     MAX_OUTPUT_TOKENS, THINKING_BUDGET, EMPTY_REPLY, EMPTY_TRUNCATED_REPLY, TRUNCATED_NOTE,
     MAX_MESSAGE_LEN, MAX_HISTORY, MAX_HISTORY_TEXT_LEN, MAX_KCS, TOP_CHAPTERS, STUDENT_WINDOW_DAYS,
-    DEFAULT_DAILY_BUDGET_USD
+    DEFAULT_DAILY_BUDGET_USD, INT4_MAX
 };

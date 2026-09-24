@@ -210,6 +210,24 @@ function runSuite() {
                 }
             });
 
+            test('ID 超過 int4 → 400（不是 DB 的 out of range 500，也不在回應裡洩漏 DB 錯誤訊息）', async () => {
+                const cases = [
+                    [{ message: 'a', mode: 'direct', question_id: 99999999999 }, /question_id/],
+                    [{ message: 'a', mode: 'direct', student_id: '99999999999' }, /student_id/],
+                    [{ message: 'a', mode: 'direct', question_id: 1e21 }, /question_id/],
+                    [{ message: 'a', mode: 'direct', question_id: 2147483648 }, /question_id/]
+                ];
+                for (const [body, re] of cases) {
+                    const res = await request(app).post('/api/tutor').send(body);
+                    assert.equal(res.status, 400, JSON.stringify(body));
+                    assert.match(res.body.message, re);
+                    assert.equal(res.body.error, undefined);
+                }
+                // 上限本身合法：查不到就是 404
+                const max = await request(app).post('/api/tutor').send({ message: 'a', mode: 'direct', question_id: 2147483647 });
+                assert.equal(max.status, 404);
+            });
+
             test('題目或學生不存在 → 404 { message }', async () => {
                 const q = await request(app).post('/api/tutor').send({ message: 'a', mode: 'direct', question_id: 999 });
                 assert.equal(q.status, 404);
@@ -355,6 +373,21 @@ function runSuite() {
                     .attach('audio', Buffer.alloc(5 * 1024 * 1024 + 1), { filename: 'big.wav', contentType: 'audio/wav' });
                 assert.equal(big.status, 413);
                 assert.match(big.body.message, /5 MB/);
+            });
+
+            test('multipart 本身壞掉（沒有結尾 boundary、沒有 boundary、multipart/mixed）→ 400，不是 500', async () => {
+                const truncated = '--XYZ\r\nContent-Disposition: form-data; name="audio"; filename="a.wav"\r\n'
+                    + 'Content-Type: audio/wav\r\n\r\nabc';
+                const cases = [
+                    ['multipart/form-data; boundary=XYZ', truncated],
+                    ['multipart/form-data', truncated],
+                    ['multipart/mixed; boundary=XYZ', truncated]
+                ];
+                for (const [type, payload] of cases) {
+                    const res = await request(app).post('/api/voice/transcribe').set('Content-Type', type).send(payload);
+                    assert.equal(res.status, 400, `${type} → ${res.status} ${JSON.stringify(res.body)}`);
+                    assert.match(res.body.message, /表單不完整或格式錯誤/);
+                }
             });
 
             test('正常路徑（replay）：回逐字稿、數學式與歧義；音訊不落地（uploads/ 沒有多出檔案）', async () => {

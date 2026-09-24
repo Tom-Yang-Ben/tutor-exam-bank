@@ -23,6 +23,7 @@ const HISTORY_TEXT_MAX = 4000;       // 與後端 MAX_HISTORY_TEXT_LEN 一致
 const MAX_RECORD_MS = 60 * 1000;     // 一段最多錄 60 秒（遠低於 5 MB 上限）
 const MIN_RECORD_MS = 600;           // 短於這個多半是誤觸
 const RECORDER_MIMES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg', 'audio/mp4'];
+const INT4_MAX = 2147483647;         // 與後端 services/tutorService.js 的 INT4_MAX 一致（questions.id 是 int4）
 
 // ───────────────────────── 純函式（有單元測試）─────────────────────────
 
@@ -193,12 +194,12 @@ export function replaceMathChoice(text, from, to) {
 }
 
 /**
- * 題目 ID 欄位的解讀：空白 → null；正整數 → 數字；其他 → NaN（UI 擋下並提示）。
+ * 題目 ID 欄位的解讀：空白 → null；1–2147483647 的整數 → 數字；其他 → NaN（UI 擋下並提示）。
  */
 export function parseQuestionId(value) {
     const s = String(value ?? '').trim();
     if (!s) return null;
-    return /^\d+$/.test(s) && Number(s) > 0 ? Number(s) : NaN;
+    return /^\d+$/.test(s) && Number(s) > 0 && Number(s) <= INT4_MAX ? Number(s) : NaN;
 }
 
 /**
