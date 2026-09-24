@@ -316,12 +316,14 @@ describe('readApplyRows：逐列驗證（不碰 DB）', () => {
 
 describe('參數與提議檔路徑', () => {
     test('parseArgs：預設 dry-run；--apply／--out／--test；互斥與缺值丟錯', () => {
-        assert.deepEqual(mig.parseArgs([]), { mode: 'dry-run', apply: null, out: null, test: false, help: false });
+        assert.deepEqual(mig.parseArgs([]), { mode: 'dry-run', apply: null, out: null, test: false, help: false, includeNew: false });
         assert.equal(mig.parseArgs(['--apply', 'a.csv', '--test']).apply, 'a.csv');
         assert.equal(mig.parseArgs(['--dry-run', '--out', 'x.csv']).out, 'x.csv');
+        assert.equal(mig.parseArgs(['--include-new']).includeNew, true);
         assert.throws(() => mig.parseArgs(['--apply']), /--apply 後面/);
         assert.throws(() => mig.parseArgs(['--dry-run', '--apply', 'a.csv']), /擇一/);
         assert.throws(() => mig.parseArgs(['--apply', 'a.csv', '--out', 'b.csv']), /--out 只用在/);
+        assert.throws(() => mig.parseArgs(['--apply', 'a.csv', '--include-new']), /--include-new 只用在/);
         assert.throws(() => mig.parseArgs(['--force']), /未知的參數/);
     });
 

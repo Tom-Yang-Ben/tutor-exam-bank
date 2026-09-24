@@ -4,12 +4,14 @@
 //
 // 釘住契約列的每一項：
 //   ① --dry-run：rename 自動提議、split 的關鍵字命中（題幹與 metadata）與預設、removed 提議 to[0]／沒有 to 留空；
-//      same、純新增章、化學不列；已封存的題照列並加註；對照表外的髒資料只回報；**資料庫一個位元組都不動**。
+//      same、純新增章、化學不列；已封存的題照列並加註；對照表外的髒資料只回報；**資料庫一個位元組都不動**；
+//      時間截點：沿用舊名的章裡 0014 之後入庫的題只計數不列（--include-new 照列）。
 //   ② --apply 的驗證與交易：題號不存在、科目對不上 → 整批不寫；中途丟例外 → 全部回滾；
 //   ③ 換章的題 chapter_src='human'、embed_hash 清空、search_tsv 依新章重算；src='ai' 的知識點標註刪除，human 的保留；
 //      老師確認留在原章的題不動；
 //   ④ 重跑冪等：同一份 CSV 再套一次不改任何東西；之後的 --dry-run 不再列出處理過的題；
-//      產生提議檔之後被老師改過章的題略過（以題庫現值為準）；
+//      產生提議檔之後被老師改過章的題略過（以題庫現值為準）；已套用過的題一律不再改——同一天的第二份提議檔、
+//      搬完之後老師又改回沿用舊名的章，都略過並回報「已於先前套用」；
 //   ⑤ CLI：子行程跑 --dry-run 與 --apply（--test 打測試庫），不合法的 CSV exit 1、資料庫不動，
 //      成功時印出 embed:backfill 與 search:reindex。
 // 不呼叫 LLM（整支沒有注入 LLM，也沒有 cassette）。
@@ -51,21 +53,29 @@ function runSuite() {
     const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'chapter-migration-'));
     const FAKE_HASH = 'a'.repeat(64);
 
-    /** 以「舊章」入庫：search_tsv 用當時的章名算好、embed_hash 填一個假值（驗證會被清空） */
+    /** 重整前入庫的時間（早於 migrations/0014 套用的時間，也就是 --dry-run 的時間截點） */
+    const BEFORE_RESTRUCTURE = '2025-06-01T00:00:00Z';
+
+    /**
+     * 以「舊章」入庫：search_tsv 用當時的章名算好、embed_hash 填一個假值（驗證會被清空）。
+     * created_at 預設是重整前（BEFORE_RESTRUCTURE）；傳 createdAt: null 表示「現在」（0014 之後入庫的新題）。
+     */
     async function insertQ(q) {
-        const row = { question_type: '計算', difficulty: 3, keywords: null, concept_summary: null, ...q };
+        const row = { question_type: '計算', difficulty: 3, keywords: null, concept_summary: null, createdAt: BEFORE_RESTRUCTURE, ...q };
         const { chapterTokens, keywordTokens, stemTokens } = buildTsvTokens(row);
         const { rows } = await query(
             `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text,
-                                    keywords, concept_summary, origin, chapter_src, archived_at, embed_hash, search_tsv)
+                                    keywords, concept_summary, origin, chapter_src, archived_at, embed_hash, search_tsv, created_at)
              VALUES ($4, $5, $6, $7, $8, '自製答案', $9, $10, 'pdf', $11, $12, $13,
                      setweight(to_tsvector('simple', array_to_string($1::text[], ' ')), 'A')
                   || setweight(to_tsvector('simple', array_to_string($2::text[], ' ')), 'A')
-                  || setweight(to_tsvector('simple', array_to_string($3::text[], ' ')), 'B'))
+                  || setweight(to_tsvector('simple', array_to_string($3::text[], ' ')), 'B'),
+                     COALESCE($14::timestamptz, now()))
              RETURNING id`,
             [chapterTokens, keywordTokens, stemTokens,
                 row.subject, row.chapter, row.question_type, row.difficulty, row.question_text,
-                row.keywords, row.concept_summary, row.chapter_src || 'ai', row.archived ? new Date() : null, FAKE_HASH]);
+                row.keywords, row.concept_summary, row.chapter_src || 'ai', row.archived ? new Date() : null, FAKE_HASH,
+                row.createdAt]);
         return rows[0].id;
     }
 
@@ -184,6 +194,31 @@ function runSuite() {
             assert.match(errors[0], new RegExp(`題號 ${ids.fluid}.*「提議新章」是空的`));
 
             assert.deepEqual(await snapshot(), before, 'dry-run 不得改動資料庫');
+        });
+
+        test('時間截點：沿用舊名的章裡 0014 之後入庫的題只計數、不列（--include-new 照列）；舊名不在白名單的章不看時間', async () => {
+            const { rows: m } = await query('SELECT applied_at FROM schema_migrations WHERE version = $1', [mig.LOG_MIGRATION]);
+            assert.equal(m.length, 1, `${mig.LOG_MIGRATION} 沒有記在 schema_migrations`);
+            assert.deepEqual(await mig.migrationCutoff(db), m[0].applied_at);
+
+            // 重整後 AI 用新白名單分到「排列」的新題（排列在新白名單裡仍然有效）：題幹含「集合」，沒有截點會被提議搬走
+            const fresh = await insertQ({ subject: '數學', chapter: '排列', createdAt: null,
+                question_text: '自製題：從集合 {1,2,3,4} 中取三個相異數字排成三位數，共有幾種？' });
+            // 舊名已不在新白名單的章：就算是之後才入庫（例如舊程式還在跑），也一定要處理
+            const lateOld = await insertQ({ subject: '數學', chapter: '多項式除法', createdAt: null, question_text: '自製題：求餘式。' });
+
+            const r = await mig.dryRun({ db, outPath: path.join(TMP, 'cutoff.csv') });
+            assert.equal(r.excludedNew, 1);
+            assert.deepEqual(r.cutoff, m[0].applied_at);
+            assert.ok(!r.proposals.some(p => p.id === fresh), '截點之後入庫、沿用舊名章的題不列');
+            assert.ok(r.proposals.some(p => p.id === lateOld && p.newChapter === '多項式的運算與應用'));
+            assert.equal(r.stats.total, 9);
+
+            const all = await mig.dryRun({ db, outPath: path.join(TMP, 'cutoff-all.csv'), includeNew: true });
+            assert.equal(all.excludedNew, 0);
+            assert.deepEqual(all.proposals.filter(p => p.id === fresh).map(p => [p.newChapter, p.basis]),
+                [['集合與計數原理', 'keyword:集合']]);
+            assert.equal(all.stats.total, 10);
         });
 
         test('沒有需要處理的題：不寫提議檔', async () => {
@@ -307,6 +342,62 @@ function runSuite() {
             assert.equal(r.outPath, null);
         });
 
+        test('同一天產生兩份提議檔：套用改過的那份之後再套另一份，已套用的題一律略過、紀錄不變', async () => {
+            // 「排列」沿用舊名：題幹含「集合」→ 提議去集合與計數原理，老師改回排列（確認留在原章）
+            const perm = await insertQ({ subject: '數學', chapter: '排列',
+                question_text: '自製題：從集合 {1,2,3,4} 中取三個相異數字排成三位數，共有幾種？' });
+            const dir = fs.mkdtempSync(path.join(TMP, 'same-day-'));
+            const fileA = mig.defaultOutPath(dir, '2026-09-25');
+            await mig.dryRun({ db, outPath: fileA });
+            const fileB = mig.defaultOutPath(dir, '2026-09-25');
+            assert.equal(path.basename(fileB), 'chapter-migration-2026-09-25-2.csv');
+            await mig.dryRun({ db, outPath: fileB });
+            assert.ok(readCsv(fileB).rows.some(r => r.id === perm && r.newChapter === '集合與計數原理'));
+
+            const a = teacherEdits(fileA, { [perm]: '排列', [ids.fluid]: '牛頓運動定律' });
+            const r1 = await mig.applyRows({ db, rows: readCsv(a.edited).rows });
+            assert.equal(r1.moved, 7);
+            assert.equal(r1.confirmed, 2);                // 正弦定理那題（default 同名）、排列那題（老師改回原章）
+            const once = await snapshot();
+
+            // 另一份（流體那題老師在這份填了別的章）
+            const b = teacherEdits(fileB, { [ids.fluid]: '位能與能量守恆' });
+            const r2 = await mig.applyRows({ db, rows: readCsv(b.edited).rows });
+            assert.equal(r2.ok, true);
+            assert.equal(r2.moved, 0);
+            assert.equal(r2.confirmed, 0);
+            assert.equal(r2.kcsRemoved, 0);
+            assert.equal(r2.alreadyApplied, 7);
+            assert.deepEqual(r2.stale.map(s => [s.id, s.reason, s.csvNew, s.dbChapter, s.loggedTo]).sort((x, y) => x[0] - y[0]), [
+                [ids.fluid, 'logged', '位能與能量守恆', '牛頓運動定律', '牛頓運動定律'],
+                [perm, 'logged', '集合與計數原理', '排列', '排列']
+            ].sort((x, y) => x[0] - y[0]));
+            assert.deepEqual(await snapshot(), once, '已套用的題不得再搬、遷移紀錄不得改');
+            assert.equal((await qRow(perm)).chapter, '排列');
+        });
+
+        test('搬完之後老師在題庫頁改回沿用舊名的章：同一份 CSV 再套一次不會再搬，以老師後來改的為準', async () => {
+            const { edited } = teacherEdits(dryFile, { [ids.fluid]: '牛頓運動定律' });
+            const { rows } = readCsv(edited);
+            assert.equal((await mig.applyRows({ db, rows })).moved, 7);
+            assert.equal((await qRow(ids.fold)).chapter, '三角函數的疊合');
+
+            // 老師覺得疊合那題還是放正弦與餘弦定理（新白名單裡仍有效）：題庫頁 PUT 的效果
+            await query(`UPDATE questions SET chapter = '正弦與餘弦定理', chapter_src = 'human' WHERE id = $1`, [ids.fold]);
+            const reverted = await snapshot();
+
+            const again = await mig.applyRows({ db, rows });
+            assert.equal(again.ok, true);
+            assert.equal(again.moved, 0);
+            assert.equal(again.alreadyApplied, rows.length - 1);
+            assert.deepEqual(again.stale.map(s => [s.id, s.reason, s.csvOld, s.csvNew, s.dbChapter, s.loggedFrom, s.loggedTo]),
+                [[ids.fold, 'logged', '正弦與餘弦定理', '三角函數的疊合', '正弦與餘弦定理', '正弦與餘弦定理', '三角函數的疊合']]);
+            assert.deepEqual(await snapshot(), reverted, '改回舊名章的題不得被再搬一次');
+
+            const r = await mig.dryRun({ db, outPath: path.join(TMP, 'after-revert.csv') });
+            assert.equal(r.proposals.length, 0, '記錄過的題之後的 dry-run 也不再列出');
+        });
+
         test('暫緩的題（整列刪掉）不記錄，下次 dry-run 再列出來', async () => {
             const { edited } = teacherEdits(dryFile, {}, [ids.fluid, ids.stay]);
             const { rows, errors } = readCsv(edited);
@@ -321,8 +412,8 @@ function runSuite() {
             const { edited } = teacherEdits(dryFile, { [ids.fluid]: '牛頓運動定律' });
             const r = await mig.applyRows({ db, rows: readCsv(edited).rows });
             assert.equal(r.ok, true);
-            assert.deepEqual(r.stale.map(s => [s.id, s.csvOld, s.csvNew, s.dbChapter]),
-                [[ids.stay, '正弦與餘弦定理', '正弦與餘弦定理', '三角測量']]);
+            assert.deepEqual(r.stale.map(s => [s.id, s.reason, s.csvOld, s.csvNew, s.dbChapter]),
+                [[ids.stay, 'changed', '正弦與餘弦定理', '正弦與餘弦定理', '三角測量']]);
             assert.equal((await qRow(ids.stay)).chapter, '三角測量');
             assert.equal((await query('SELECT 1 FROM chapter_migration_log WHERE question_id = $1', [ids.stay])).rowCount, 0);
         });
@@ -351,6 +442,15 @@ function runSuite() {
             assert.match(apply.stdout, /npm run embed:backfill/);
             assert.match(apply.stdout, /npm run search:reindex/);
             assert.equal((await qRow(ids.rename)).chapter, '多項式的運算與應用');
+
+            // 搬完之後老師改回沿用舊名的章，再套一次：不搬、印出「已於先前套用，略過」
+            await query(`UPDATE questions SET chapter = '正弦與餘弦定理', chapter_src = 'human' WHERE id = $1`, [ids.fold]);
+            const again = run(['--apply', edited]);
+            assert.equal(again.status, 0, again.stderr + again.stdout);
+            assert.match(again.stdout, /搬到新章 0 題/);
+            assert.match(again.stdout, /1 題已於先前套用，略過/);
+            assert.match(again.stdout, new RegExp(`題號 ${ids.fold}：此題已於 \\d{4}-\\d{2}-\\d{2} 套用（正弦與餘弦定理 → 三角函數的疊合）`));
+            assert.equal((await qRow(ids.fold)).chapter, '正弦與餘弦定理');
         });
 
         test('不合法的 CSV（留空、不在白名單）→ exit 1，資料庫不動', async () => {

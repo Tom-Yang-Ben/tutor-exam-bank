@@ -3,6 +3,7 @@
 // 用法：
 //   npm run chapters:migrate                            ＝ --dry-run：產生提議檔 data/chapter-migration-<日期>.csv、印出統計
 //   npm run chapters:migrate -- --out <檔名>.csv        提議檔改存到指定路徑
+//   npm run chapters:migrate -- --include-new           沿用舊名的章裡、資料庫更新（0014）之後才入庫的題也列出
 //   npm run chapters:migrate -- --apply <檔名>.csv      套用老師確認（改過）的提議檔
 //   加 --test 改打 TEST_DATABASE_URL（庫名必須以 _test 結尾）
 //
@@ -16,6 +17,8 @@
 //     依據：rename（改名，直接提議新章）、keyword:<命中詞>（拆分，config/chapterMigrationRules.js 的規則命中）、
 //          default（拆分但沒有規則命中，提議 to[0]）、removed（章被刪除，提議 to[0]，沒有 to 就留空，一律要老師確認）。
 //     已封存的題也列出來（作答紀錄還在，弱點統計會用到），題幹欄前面加「（已封存）」。
+//     沿用舊名的拆分章（排列、組合…9 章）只列 0014 套用（上線那一步）之前入庫的題：之後入庫的是 AI 用新章節
+//     分類的，只計數不列（--include-new 照列）。舊名已不在新白名單的章不看時間，一律列出。
 //   --apply <csv>：老師在 Excel 改好「提議新章」欄後存檔再跑。**單一交易**：
 //       - 先逐列驗證（id、科目、新章在該科白名單內、沒有重複列、沒有留空），有任何錯誤整批不寫；
 //       - 真的換章的題：chapter 改成新章、chapter_src='human'（老師確認過）、embed_hash 清成 NULL
@@ -24,8 +27,9 @@
 //       - 老師確認留在原章的題不改題目，只記進 chapter_migration_log；
 //       - 每一列處理完都記進 chapter_migration_log（migrations/0014），之後的 --dry-run 不再列出它；
 //       - 產生提議檔之後題目又被改過章（題庫現在的章既不是「舊章」也不是「提議新章」）→ 略過並警告，以題庫現值為準；
-//       - 重跑同一份 CSV：已記錄、而且題庫已是新章的列直接略過，不再改任何東西（冪等）。老師先在題庫頁
-//         改成提議的章再跑，也算已套用（只補記錄）。
+//       - 已記進 chapter_migration_log 的題**一律不再改**：題庫已是提議新章的算已套用（重跑同一份 CSV，冪等）；
+//         不是的（同一天的另一份提議檔、或搬完之後老師又在題庫頁改回沿用舊名的章）→ 略過並警告「此題已於先前
+//         套用」，以題庫現值為準，紀錄也不改。老師先在題庫頁改成提議的章再跑（還沒記錄過），也算已套用（只補記錄）。
 //     結束時印出之後必跑的指令：npm run embed:backfill（embed_text 含章名）與 npm run search:reindex。
 //
 // **不呼叫 LLM、不需金鑰、不打網路。**
@@ -45,6 +49,9 @@ const { TSV_EXPR } = require('./reindex_search_tsv');
 
 /** 這一次重整的代號（chapter_migration_log.plan）。之後若再重整，換一個新代號。 */
 const PLAN_ID = 'chapters-2026-09';
+
+/** 本工具紀錄表的 migration；它套用的時間是 --dry-run 的時間截點（selectCandidates） */
+const LOG_MIGRATION = '0014_chapter_migration_log.sql';
 
 /** 本工具處理的科目（化學章名不動，docs/chapter-restructure.md 第 1 條） */
 const MIGRATED_SUBJECTS = Object.freeze(['數學', '物理']);
@@ -333,11 +340,12 @@ function readApplyRows(text) {
 // ───────────────────────── 參數與檔案 ─────────────────────────
 
 function parseArgs(argv) {
-    const args = { mode: 'dry-run', apply: null, out: null, test: false, help: false };
+    const args = { mode: 'dry-run', apply: null, out: null, test: false, help: false, includeNew: false };
     let sawDryRun = false;
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === '--dry-run') sawDryRun = true;
+        else if (a === '--include-new') args.includeNew = true;
         else if (a === '--apply') {
             const f = argv[++i];
             if (!f || f.startsWith('--')) throw new Error('--apply 後面要接老師確認過的 CSV 檔名');
@@ -348,10 +356,11 @@ function parseArgs(argv) {
             args.out = f;
         } else if (a === '--test') args.test = true;
         else if (a === '--help' || a === '-h') args.help = true;
-        else throw new Error(`未知的參數「${a}」，可用：--dry-run --out <檔名> --apply <檔名> --test`);
+        else throw new Error(`未知的參數「${a}」，可用：--dry-run --out <檔名> --include-new --apply <檔名> --test`);
     }
     if (sawDryRun && args.mode === 'apply') throw new Error('--dry-run 與 --apply 只能擇一');
     if (args.out && args.mode === 'apply') throw new Error('--out 只用在 --dry-run（產生提議檔）');
+    if (args.includeNew && args.mode === 'apply') throw new Error('--include-new 只用在 --dry-run（產生提議檔）');
     return args;
 }
 
@@ -398,23 +407,48 @@ async function assertLogTable(executor) {
 // ───────────────────────── DB：dry-run ─────────────────────────
 
 /**
- * 撈出需要處理、而且還沒記進 chapter_migration_log 的題（含已封存）。
+ * 時間截點：migrations/0014（本工具的紀錄表）套用的時間。上線時 `npm run migrate` 與換上新白名單的程式
+ * 是同一步（docs/chapter-restructure.md 第 6 條），所以在這之後入庫的題，AI 已經是用新章節分類的。
+ * schema_migrations 查不到（例如資料庫不是用 npm run migrate 建的）→ null，不設截點。
  * @param {{query:Function}} db
- * @returns {Promise<Array<object>>}
+ * @returns {Promise<Date|null>}
  */
-async function selectCandidates(db) {
+async function migrationCutoff(db) {
+    const { rows: t } = await db.query(`SELECT to_regclass('public.schema_migrations') IS NOT NULL AS ok`);
+    if (!t[0].ok) return null;
+    const { rows } = await db.query('SELECT applied_at FROM schema_migrations WHERE version = $1', [LOG_MIGRATION]);
+    return rows[0] ? rows[0].applied_at : null;
+}
+
+/**
+ * 撈出需要處理、而且還沒記進 chapter_migration_log 的題（含已封存）。
+ *
+ * 沿用舊名的拆分章（排列、組合、古典機率、指數與對數、正弦與餘弦定理、隨機變數、動量兩章、剛體轉動與平衡）
+ * 在新白名單裡仍然有效：重整之後 AI 用新章節分類的新題也會掛在這些章，不該再被提議搬走。
+ * 所以這幾章只列**截點（migrationCutoff）之前入庫**的題，之後入庫的只計數、不列（includeNew=true 時照列）。
+ * 舊名已不在新白名單的章（改名、拆掉、刪除）不看截點：新程式不可能把新題分到那裡，掛在那裡的一定要處理。
+ *
+ * @param {{query:Function}} db
+ * @param {{includeNew?:boolean}} [opts]
+ * @returns {Promise<{rows:Array<object>, excludedNew:number, cutoff:Date|null}>}
+ */
+async function selectCandidates(db, { includeNew = false } = {}) {
     await assertLogTable(db);
     const movable = movableChapters();
+    const cutoff = await migrationCutoff(db);
     const { rows } = await db.query(
         `SELECT q.id, q.subject, q.chapter, q.question_text, q.keywords, q.concept_summary,
-                (q.archived_at IS NOT NULL) AS archived
+                (q.archived_at IS NOT NULL) AS archived,
+                (m.still_valid AND $4::timestamptz IS NOT NULL AND q.created_at >= $4::timestamptz) AS after_cutoff
            FROM questions q
-           JOIN unnest($1::text[], $2::text[]) AS m(subject, chapter)
+           JOIN unnest($1::text[], $2::text[], $5::bool[]) AS m(subject, chapter, still_valid)
              ON m.subject = q.subject AND m.chapter = q.chapter
           WHERE NOT EXISTS (SELECT 1 FROM chapter_migration_log l WHERE l.question_id = q.id AND l.plan = $3)
           ORDER BY q.id`,
-        [movable.map(c => c.subject), movable.map(c => c.chapter), PLAN_ID]);
-    return rows;
+        [movable.map(c => c.subject), movable.map(c => c.chapter), PLAN_ID, cutoff,
+            movable.map(c => isValidChapter(c.subject, c.chapter))]);
+    const kept = includeNew ? rows : rows.filter(r => !r.after_cutoff);
+    return { rows: kept, excludedNew: rows.length - kept.length, cutoff };
 }
 
 /**
@@ -440,14 +474,16 @@ async function selectOrphans(db) {
 
 /**
  * --dry-run：產生提議。只讀 DB；有提議時把 CSV 寫到 outPath（沒有需要處理的題就不寫檔）。
- * @param {{db:{query:Function}, outPath?:string|null, write?:boolean}} opts
- * @returns {Promise<{proposals:Array<object>, stats:object, orphans:Array<object>, outPath:string|null, alreadyLogged:number}>}
+ * @param {{db:{query:Function}, outPath?:string|null, write?:boolean, includeNew?:boolean}} opts
+ *   includeNew：沿用舊名的章裡、截點之後入庫的題也列出（見 selectCandidates）
+ * @returns {Promise<{proposals:Array<object>, stats:object, orphans:Array<object>, outPath:string|null, alreadyLogged:number,
+ *                    excludedNew:number, cutoff:Date|null}>}
  */
-async function dryRun({ db, outPath = null, write = true } = {}) {
+async function dryRun({ db, outPath = null, write = true, includeNew = false } = {}) {
     const problems = validateRules();
     if (problems.length) throw new Error(`config/chapterMigrationRules.js 有問題：\n  - ${problems.join('\n  - ')}`);
 
-    const candidates = await selectCandidates(db);
+    const { rows: candidates, excludedNew, cutoff } = await selectCandidates(db, { includeNew });
     const proposals = buildProposals(candidates);
     const stats = summarizeProposals(proposals);
     const orphans = await selectOrphans(db);
@@ -459,7 +495,7 @@ async function dryRun({ db, outPath = null, write = true } = {}) {
         fs.mkdirSync(path.dirname(written), { recursive: true });
         fs.writeFileSync(written, toCsv(proposals), 'utf8');
     }
-    return { proposals, stats, orphans, outPath: written, alreadyLogged: logged[0].n };
+    return { proposals, stats, orphans, outPath: written, alreadyLogged: logged[0].n, excludedNew, cutoff };
 }
 
 // ───────────────────────── DB：apply ─────────────────────────
@@ -470,8 +506,11 @@ async function dryRun({ db, outPath = null, write = true } = {}) {
  * @param {{db:{pool:object}, rows:Array<object>, onRow?:Function}} opts
  *   rows = readApplyRows(...).rows；onRow(row) 在每一列寫入後呼叫（測試用來模擬中途失敗）
  * @returns {Promise<{ok:boolean, errors:string[], moved:number, confirmed:number, alreadyApplied:number,
- *                    stale:Array<{id:number, line:number, csvOld:string, csvNew:string, dbChapter:string}>, kcsRemoved:number,
- *                    movedIds:number[]}>}
+ *                    stale:Array<{id:number, line:number, csvOld:string, csvNew:string, dbChapter:string,
+ *                                 reason:'changed'|'logged', loggedFrom?:string, loggedTo?:string, loggedAt?:Date}>,
+ *                    kcsRemoved:number, movedIds:number[]}>}
+ *   stale 的 reason：'changed' ＝ 產生提議檔之後題目在題庫頁被改過章；'logged' ＝ 這題之前已經套用過
+ *   （遷移紀錄裡有），而題庫現值不是這份 CSV 的提議新章——兩種都略過，以題庫現值為準。
  */
 async function applyRows({ db, rows, onRow } = {}) {
     const result = { ok: false, errors: [], moved: 0, confirmed: 0, alreadyApplied: 0, stale: [], kcsRemoved: 0, movedIds: [] };
@@ -498,19 +537,34 @@ async function applyRows({ db, rows, onRow } = {}) {
             await client.query('ROLLBACK');
             return result;
         }
-        // 已經記錄過的題（重跑同一份 CSV）：「確認留在原章」的列在題庫裡本來就是新章＝舊章，
+        // 已經記錄過的題（之前套用過）：「確認留在原章」的列在題庫裡本來就是新章＝舊章，
         // 只看 questions.chapter 分不出第一次與重跑，所以以遷移紀錄為準。
         const { rows: loggedRows } = await client.query(
-            'SELECT question_id FROM chapter_migration_log WHERE plan = $1 AND question_id = ANY($2::int[])', [PLAN_ID, ids]);
-        const logged = new Set(loggedRows.map(x => Number(x.question_id)));
+            `SELECT question_id, from_chapter, to_chapter, applied_at
+               FROM chapter_migration_log WHERE plan = $1 AND question_id = ANY($2::int[])`, [PLAN_ID, ids]);
+        const logged = new Map(loggedRows.map(x => [Number(x.question_id), x]));
 
         for (const r of rows) {
             const q = byId.get(r.id);
             let logIt = true;
-            if (q.chapter === r.newChapter && (logged.has(r.id) || r.newChapter !== r.oldChapter)) {
-                result.alreadyApplied += 1;                   // 重跑、或老師已經在題庫頁改成提議的章
+            if (logged.has(r.id)) {
+                // 記錄過的題**一律不再改題目、也不改紀錄**（以第一次套用、以及老師之後在題庫頁改的為準）。
+                // 只看「題庫現值＝舊章」會誤判：同一天 dry-run 兩次產生的 -2.csv 再套一次，或搬完之後老師
+                // 又在題庫頁把題目改回沿用舊名的章（排列、組合…），都會被當成還沒搬而再搬一次。
+                logIt = false;
+                if (q.chapter === r.newChapter) {
+                    result.alreadyApplied += 1;               // 重跑同一份 CSV
+                } else {
+                    const l = logged.get(r.id);
+                    result.stale.push({
+                        id: r.id, line: r.line, csvOld: r.oldChapter, csvNew: r.newChapter, dbChapter: q.chapter,
+                        reason: 'logged', loggedFrom: l.from_chapter, loggedTo: l.to_chapter, loggedAt: l.applied_at
+                    });
+                }
+            } else if (q.chapter === r.newChapter && r.newChapter !== r.oldChapter) {
+                result.alreadyApplied += 1;                   // 老師已經在題庫頁改成提議的章：只補記錄
             } else if (q.chapter !== r.oldChapter) {
-                result.stale.push({ id: r.id, line: r.line, csvOld: r.oldChapter, csvNew: r.newChapter, dbChapter: q.chapter });
+                result.stale.push({ id: r.id, line: r.line, csvOld: r.oldChapter, csvNew: r.newChapter, dbChapter: q.chapter, reason: 'changed' });
                 logIt = false;                                // 以題庫現值為準，下次 dry-run 視情況再列
             } else if (r.newChapter === r.oldChapter) {
                 result.confirmed += 1;                        // 老師確認留在原章：題目不動
@@ -578,6 +632,11 @@ function printDryRun(r, target) {
         }
         if (s.byBasis.default > 0) console.log(`⚠ default 的 ${s.byBasis.default} 題沒有關鍵字命中，提議的是預設去處，請特別看一下。`);
     }
+    if (r.excludedNew > 0) {
+        const when = r.cutoff ? `${localDate(new Date(r.cutoff))} 資料庫更新（npm run migrate）` : '資料庫更新';
+        console.log(`\n另有 ${r.excludedNew} 題是 ${when}之後才入庫、掛在沿用舊名的章（排列、組合、古典機率…），`
+            + 'AI 已經用新章節分類，這次不列出。要一起列出請加 --include-new。');
+    }
     if (r.orphans.length > 0) {
         const ids = r.orphans.slice(0, 10).map(o => `#${o.id}（${o.subject}｜${o.chapter}）`).join('、');
         console.log(`\n⚠ 另有 ${r.orphans.length} 題的章名既不在新白名單、也不在對照表，本工具不處理，請在題庫頁手動改章：${ids}${r.orphans.length > 10 ? '…' : ''}`);
@@ -596,10 +655,20 @@ function printApply(r, file) {
     console.log(`\n──────── 結果（${path.basename(file)}）────────`);
     console.log(`搬到新章 ${r.moved} 題；確認留在原章 ${r.confirmed} 題；已經是提議的章（含重跑）${r.alreadyApplied} 題；`
         + `清掉 AI 知識點標註 ${r.kcsRemoved} 筆`);
-    if (r.stale.length > 0) {
-        console.log(`⚠ ${r.stale.length} 題在產生提議檔之後被改過章，已略過（以題庫現值為準）：`);
-        for (const s of r.stale.slice(0, ERROR_LIST_MAX)) {
+    const changed = r.stale.filter(s => s.reason !== 'logged');
+    const logged = r.stale.filter(s => s.reason === 'logged');
+    if (changed.length > 0) {
+        console.log(`⚠ ${changed.length} 題在產生提議檔之後被改過章，已略過（以題庫現值為準）：`);
+        for (const s of changed.slice(0, ERROR_LIST_MAX)) {
             console.log(`  - 第 ${s.line} 行 題號 ${s.id}：提議檔寫「${s.csvOld} → ${s.csvNew}」，題庫現在是「${s.dbChapter}」`);
+        }
+    }
+    if (logged.length > 0) {
+        console.log(`⚠ ${logged.length} 題已於先前套用，略過（以第一次套用、以及之後在題庫頁改的為準；`
+            + '同一天產生過好幾份提議檔時，只要套用你改過的那一份）：');
+        for (const s of logged.slice(0, ERROR_LIST_MAX)) {
+            console.log(`  - 第 ${s.line} 行 題號 ${s.id}：此題已於 ${localDate(new Date(s.loggedAt))} 套用（${s.loggedFrom} → ${s.loggedTo}），`
+                + `這份提議檔寫「${s.csvOld} → ${s.csvNew}」，題庫現在是「${s.dbChapter}」`);
         }
     }
     if (r.moved > 0) {
@@ -612,7 +681,7 @@ function printApply(r, file) {
 async function main() {
     const args = parseArgs(process.argv.slice(2));
     if (args.help) {
-        console.log(fs.readFileSync(__filename, 'utf8').split('\n').slice(0, 7).join('\n'));
+        console.log(fs.readFileSync(__filename, 'utf8').split('\n').slice(0, 8).join('\n'));
         return 0;
     }
 
@@ -636,7 +705,7 @@ async function main() {
     const target = args.test ? 'TEST_DATABASE_URL（測試庫）' : 'DATABASE_URL（開發／正式庫）';
     try {
         if (args.mode === 'dry-run') {
-            const r = await dryRun({ db, outPath: args.out });
+            const r = await dryRun({ db, outPath: args.out, includeNew: args.includeNew });
             printDryRun(r, target);
             return 0;
         }
@@ -655,11 +724,11 @@ async function main() {
 }
 
 module.exports = {
-    PLAN_ID, CSV_HEADER, NEXT_COMMANDS, MIGRATED_SUBJECTS,
+    PLAN_ID, LOG_MIGRATION, CSV_HEADER, NEXT_COMMANDS, MIGRATED_SUBJECTS,
     movableChapters, proposeChapter, buildProposals, summarizeProposals, stemPreview,
     toCsv, parseCsv, decodeCsvBuffer, resolveChapter, readApplyRows,
     parseArgs, localDate, defaultOutPath,
-    selectCandidates, selectOrphans, dryRun, applyRows
+    migrationCutoff, selectCandidates, selectOrphans, dryRun, applyRows
 };
 
 if (require.main === module) {
