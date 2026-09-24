@@ -32,6 +32,7 @@
 // ─────────────────────────────────────────────────────────────
 const { createPseudonymizer } = require('../utils/pseudonym');
 const { registerTemplate, sha256Hex } = require('./llm/templates');
+const { labelOf: labelOfErrorType } = require('../config/errorTypes');
 
 const AGENT = 'tutor';
 const MODES = ['direct', 'socratic'];
@@ -318,22 +319,16 @@ function buildPrompt({ question, kcs, kcSource, student, history, message }) {
 
 // ───────────────────────── 錯因標籤 ─────────────────────────
 
-// 錯因代碼凍結於 docs/interfaces-stage5.md 第 3.1 條；白名單本體 config/errorTypes.js 由 WS-A 建立。
-// 本檔在各 WS 平行開發期間不能假設它存在，所以先讀它、讀不到才退回這份同內容的對照表。
-const ERROR_TYPE_LABEL_FALLBACK = {
-    concept: '觀念不清', method: '方法選錯', calc: '計算錯誤', reading: '審題錯誤', unit: '單位或有效數字',
-    formula: '公式記錯', careless: '粗心抄錯', blank: '未作答', time: '時間不足', chem_equation: '化學式或係數'
-};
+// 錯因代碼凍結於 docs/interfaces-stage5.md 第 3.1 條；標籤唯一的真相是 WS-A 的 config/errorTypes.js。
+// 〔stage5 整合〕平行開發期間留的「讀不到才用」同內容對照表已刪除：兩份清單遲早會走鐘。
+// 白名單外的代碼（直接改 DB 寫進去的）原樣回傳代碼本身——給模型看的摘要裡總得有個名字。
 
+/**
+ * @param {string} code attempts.error_types 的一個代碼
+ * @returns {string} 中文標籤；不認得的代碼原樣回傳
+ */
 function errorTypeLabel(code) {
-    try {
-        const mod = require('../config/errorTypes');
-        if (mod && typeof mod.labelOf === 'function') {
-            const label = mod.labelOf(code);
-            if (label) return label;
-        }
-    } catch (err) { /* WS-A 尚未合併：退回對照表 */ }
-    return ERROR_TYPE_LABEL_FALLBACK[code] || code;
+    return labelOfErrorType(code) || code;
 }
 
 // ───────────────────────── 預設的 DB 查詢 ─────────────────────────
