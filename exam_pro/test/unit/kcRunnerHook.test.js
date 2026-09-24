@@ -40,12 +40,26 @@ describe('runKcTagHook（純函式）', () => {
         const seen = [];
         const r = await runKcTagHook({
             questionId: 42, enabled: true, logger: log,
-            tagger: async (id) => { seen.push(id); return { status: 'tagged', written: [{ code: 'MATH.向量內積.02' }] }; }
+            tagger: async (id) => {
+                seen.push(id);
+                return { status: 'tagged', written: [{ code: 'MATH.向量內積.02' }], usage: { calls: 1, costUsd: 0.0031 } };
+            }
         });
         assert.deepEqual(seen, [42]);
         assert.equal(r.status, 'tagged');
         assert.equal(log.lines.info[0].question_id, 42);
         assert.deepEqual(log.lines.info[0].kc_codes, ['MATH.向量內積.02']);
+        assert.equal(log.lines.info[0].cost_usd, 0.0031, '標註費用不進 job_events，只留在 log');
+    });
+
+    test('沒有呼叫 LLM（例如該章沒有知識點）時 log 不帶費用', async () => {
+        const log = recordingLogger();
+        await runKcTagHook({
+            questionId: 3, enabled: true, logger: log,
+            tagger: async () => ({ status: 'skipped', reason: 'no_kcs', written: [], usage: { calls: 0, costUsd: 0 } })
+        });
+        assert.equal(log.lines.info[0].reason, 'no_kcs');
+        assert.equal('cost_usd' in log.lines.info[0], false);
     });
 
     test('tagger 同步丟錯 → 只記 warn，promise 仍然 resolve(null)', async () => {

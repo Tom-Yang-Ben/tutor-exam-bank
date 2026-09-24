@@ -305,7 +305,9 @@ function runKcTagHook({ questionId, enabled, tagger, logger }) {
             log.info({
                 msg: '知識點自動標註', question_id: questionId, status: r && r.status,
                 ...(r && r.reason ? { reason: r.reason } : {}),
-                ...(r && Array.isArray(r.written) && r.written.length ? { kc_codes: r.written.map(w => w.code) } : {})
+                ...(r && Array.isArray(r.written) && r.written.length ? { kc_codes: r.written.map(w => w.code) } : {}),
+                // 標註的費用不進 jobs／job_events（那是拆題管線的帳），只留在這一行 log
+                ...(r && r.usage && r.usage.calls ? { cost_usd: r.usage.costUsd } : {})
             });
             return r ?? null;
         }, (err) => {
