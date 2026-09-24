@@ -124,7 +124,7 @@
 ## 5. Owner 重錄（整合後）
 
 1. 把整合分支取到 Windows 本機。
-2. `cd exam_pro` → `npm run cassettes:rerecord -- --dry-run`，看缺多少、預估費用。
+2. `cd exam_pro` → `npm run db:up` → `npm run migrate:test`（〔CR-7〕測試庫是 tmpfs，每次啟動都是空的；沒套 migration 時 nlq 的 Recall@10 會是 n/a）→ `npm run cassettes:rerecord -- --dry-run`，看缺多少、預估費用。
 3. `npm run cassettes:rerecord`，輸入 `yes`。
 4. 跑完把新的 cassette 與 embeddings fixture commit、push。主控接手看門檻；若 eval 的量測值低於門檻，另開裁決，不自動放寬門檻。
 5. `npm run cassettes:prune -- --apply` 清掉過期檔，再 commit。
@@ -212,4 +212,5 @@
 | CR-4 | 白名單換新後，classify 回放與依賴 embedding fixture 的單元測試在重錄前必然缺檔 | 這類測試改為「算出實際的 cassette 鍵／向量 id，缺檔才略過」，零成本閘門測試移出回放組、無條件執行。Owner 重錄（第 5 條）後自動恢復執行；**不得**把缺檔略過擴大到其他測試 | 重錄前 unit 綠燈但有略過；重錄後略過數應歸零，主控核對 |
 | CR-5 | `seed_questions.js` 原「三角函數的定義」7 題要整組放「廣義角與極坐標」還是拆兩章 | 整組放「廣義角與極坐標」（維持單章密度，拆開兩章都不足以練習）；「直角三角形的邊角關係」「三角函數的圖形」日後另補種子題 | `exam_pro/README.md` 分佈表已同步 |
 | CR-6 | CH-C 審查指出「指數與對數」「三次函數」拆分的搬章關鍵字不足，一般底數對數、換底與方程式題會被留在第一冊 | `chapterMigrationRules.js` 補：→指數函數與對數函數 `換底`、`指數方程式`、`對數方程式`、`指數不等式`、`對數不等式` 與樣式 `nonCommonLogBase`（`\log_{b}`，b≠10）；→複數與多項式方程式 `根與係數`、`共軛` | 只影響 `--dry-run` 的提議；最後仍由老師確認。單元測試已補 |
+| CR-7 | 第一次重錄（2026-09-25，Owner 本機，錄到 variant 中途因 Gemini 預付額度用完而中斷）量到 classify accuracy 0.8022＜0.87、macro-F1 0.7862＜0.8956；nlq llm.filters_exact 0.625＜0.72 | **不調門檻**。逐題比對重整前（`7184f53` 回放）與重錄後：①物理 9 題錯誤（直線運動↔物體的運動、電場與電位↔靜電學、摩擦力與向心力↔平面運動）重整前就存在、已含在舊基準 0.90 內；②新增的 8 題全是「指數函數與對數函數 → 指數與對數」，根因是 CH-A 沿用舊章的例句與別名：`chapterExamples` 的「指數與對數」例句是 $\log_2$ 方程式、`chapterAliases` 把「指數方程式」掛在第一冊，與 CR-6／CH-C 的分冊（第一冊只教常用對數）矛盾。修正：第一冊例句改為常用對數估位數、第三冊例句改為指數方程式＋$y=\log_2 x$ 圖形；「指數方程式」「換底公式」改掛第三冊、第一冊補「常用對數」。以本次報表模擬：只要這 8 題改對，accuracy 0.8901、macro-F1 0.9306，兩項都過門檻。③nlq 新錯的一題是 nlq-042（期望〔向量內積〕、得到〔向量內積, 空間向量內積〕），題意沒講平面或空間，屬語意歧義，先照原 golden 重錄再量。④錄製前要先 `npm run migrate:test`（第 5 條第 2 點）。classify 的 cassette 鍵只含 few-shot 的 **id**（第 5.2 條），config 例句改了鍵不變——所以必須重錄，回放舊 cassette 看不到修正效果 | 重錄 classify、nlq、variant、pipeline、e2e（`npm run cassettes:rerecord`）；物理必修／選修同主題的歸屬（①）是否要另加例句區分，留給 Owner 決定 |
 
