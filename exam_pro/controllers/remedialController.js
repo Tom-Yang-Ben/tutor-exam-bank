@@ -3,9 +3,10 @@
 //
 //   GET  /api/students/:id/weakness/kc?days=&subject=   知識點弱點（Wilson 下界排序）
 //   POST /api/students/:id/remedial-paper               依弱點出補救卷草稿（只讀不寫）
+//   GET  /api/students/:id/remedial-paper/items?ids=    草稿手動加題前查題目與承上組（只讀；契約之外多的一支，見 docs/remedial.md）
 //   GET  /api/coverage?subject=&student_id=             題庫覆蓋率（章 × 難度、知識點題數）
 //
-// 三支只在 FEATURE_REMEDIAL 開啟時掛載（routes/index.js 檔尾的 WS-D 區塊；關閉時落到 Express 預設 404）。
+// 全部只在 FEATURE_REMEDIAL 開啟時掛載（routes/index.js 檔尾的 WS-D 區塊；關閉時落到 Express 預設 404）。
 // 都不呼叫 LLM、不寫資料庫，所以沒有套限流（契約第 1.2 條的限流要求是針對會呼叫 LLM 的端點）。
 //
 // 慣例沿用 controllers/studentController.js：
@@ -96,6 +97,32 @@ function parseCoverageQuery(q) {
     return { subject, studentId };
 }
 
+/** 手動加題查詢一次最多幾題（同 confirm-paper 的 question_ids 上限）。 */
+const MAX_LOOKUP_IDS = 50;
+/** PostgreSQL int4 上限：超過的 id 送進 `$1::int[]` 會丟錯（500），在驗證就擋成 400。 */
+const PG_INT_MAX = 2147483647;
+
+/**
+ * 驗證手動加題查詢的 `ids`（純函式）：逗號分隔的正整數，1~50 個，重複的去掉（保留第一次出現的順序）。
+ * 同名參數重複（`?ids=1&ids=2`）也接受，視同逗號串接。
+ * @param {object} q req.query
+ * @returns {{error:string} | {ids:number[]}}
+ */
+function parseItemIdsQuery(q) {
+    const raw = Array.isArray(q.ids) ? q.ids.join(',') : q.ids;
+    const error = `ids 必須是 1~${MAX_LOOKUP_IDS} 個以逗號分隔的正整數。`;
+    if (typeof raw !== 'string' || raw.trim() === '') return { error };
+    const ids = [];
+    for (const token of raw.split(',').map(s => s.trim())) {
+        if (!/^\d+$/.test(token)) return { error };
+        const n = Number(token);
+        if (!Number.isSafeInteger(n) || n < 1 || n > PG_INT_MAX) return { error };
+        if (!ids.includes(n)) ids.push(n);
+    }
+    if (ids.length > MAX_LOOKUP_IDS) return { error };
+    return { ids };
+}
+
 /** 學生存在嗎。 */
 async function studentExists(id) {
     const { rowCount } = await query('SELECT 1 FROM students WHERE id = $1', [id]);
@@ -137,6 +164,24 @@ exports.remedialPaper = async (req, res, next) => {
     }
 };
 
+// ─────────────────── GET /api/students/:id/remedial-paper/items ───────────────────
+// 草稿「用題目 ID 加題」前查題目資料與所在承上組（docs/remedial.md 第 2.5 節）。只讀、不呼叫 LLM。
+
+exports.remedialItems = async (req, res, next) => {
+    const studentId = parseId(req.params.id);
+    if (studentId === null) return res.status(404).json({ message: STUDENT_NOT_FOUND });
+    const parsed = parseItemIdsQuery(req.query);
+    if (parsed.error) return res.status(400).json({ message: parsed.error });
+
+    try {
+        if (!(await studentExists(studentId))) return res.status(404).json({ message: STUDENT_NOT_FOUND });
+        const out = await remedial.lookupItems({ studentId, ids: parsed.ids }, { query });
+        res.status(200).json(out);
+    } catch (err) {
+        next(err);
+    }
+};
+
 // ─────────────────── GET /api/coverage ───────────────────
 
 exports.getCoverage = async (req, res, next) => {
@@ -153,4 +198,4 @@ exports.getCoverage = async (req, res, next) => {
     }
 };
 
-exports._internals = { parseRemedialBody, parseCoverageQuery };
+exports._internals = { parseRemedialBody, parseCoverageQuery, parseItemIdsQuery, MAX_LOOKUP_IDS };

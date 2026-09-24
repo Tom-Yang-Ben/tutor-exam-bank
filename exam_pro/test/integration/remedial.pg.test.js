@@ -4,10 +4,13 @@
 // 涵蓋：
 //   GET  /api/students/:id/weakness/kc   加權、COALESCE(score, result)、Wilson 排序、時間窗、科目、untagged_graded
 //   POST /api/students/:id/remedial-paper  kc 基底、chapter 退回、各 bucket 配額、不足量、已作答排除、
-//                                          家族互斥、承上題整組、題源過濾、不寫庫、接 confirm-paper
-//   POST /api/generate-paper（blueprint）  跨章配額、難度區間、跨列家族互斥與不重複、不足量逐列回報、互斥 400
+//                                          家族互斥、承上題整組（items 帶 follows_question_id／group_ids）、
+//                                          題源過濾、不寫庫、接 confirm-paper
+//   GET  /api/students/:id/remedial-paper/items  手動加題前的查詢：承上組完整成員、封存與已寫過的旗標、missing
+//   POST /api/generate-paper（blueprint）  跨章配額、難度區間、跨列家族互斥與不重複、不足量逐列回報、互斥 400；
+//                                          單章路徑收到非字串 chapter 時與抽出候選池前相同（400 庫存不足，不是多章或 500）
 //   GET  /api/coverage                    章 × 難度、封存不計、unseen_by_student、知識點題數
-//   FEATURE_REMEDIAL 關閉 → 三支 404
+//   FEATURE_REMEDIAL 關閉 → 四支 404
 //
 // 契約第 2 條：本 WS 的測試**自己插入**知識點、question_kcs、kc_prerequisites、attempts fixture，
 // 不假設 WS-C 已載入任何知識點。題幹全為自製內容。
@@ -162,14 +165,17 @@ function runSuite() {
 
         // ───────────────────────── 旗標 ─────────────────────────
         describe('FEATURE_REMEDIAL 關閉 → 路由不掛載（404）', () => {
-            test('三支 API 都是 404', async () => {
+            test('四支 API 都是 404', async () => {
                 const s = await addStudent();
+                const q = await addQ();
                 const a = await request(appDisabled).get(`/api/students/${s.id}/weakness/kc`);
                 const b = await request(appDisabled).post(`/api/students/${s.id}/remedial-paper`).send({ subject: '數學' });
                 const c = await request(appDisabled).get('/api/coverage');
+                const d = await request(appDisabled).get(`/api/students/${s.id}/remedial-paper/items?ids=${q}`);
                 assert.equal(a.status, 404);
                 assert.equal(b.status, 404);
                 assert.equal(c.status, 404);
+                assert.equal(d.status, 404);
             });
 
             test('blueprint 是既有 generate-paper 的擴充，不吃這個旗標', async () => {
@@ -435,6 +441,12 @@ function runSuite() {
                 assert.ok(chainState(ids, chain), '承上鏈整組出現');
                 assert.ok(!ids.includes(burnt[1]), '前題已作答的承上題不得單獨出現');
                 for (const id of singles) assert.ok(ids.includes(id));
+
+                // items 帶承上組資訊：前端據此標「承上 #x」並整組刪（confirm-paper 不驗組是否完整）
+                const byId = Object.fromEntries(body.items.map(i => [i.question_id, i]));
+                assert.deepEqual([byId[chain[0]].follows_question_id, byId[chain[0]].group_ids], [null, chain]);
+                assert.deepEqual([byId[chain[1]].follows_question_id, byId[chain[1]].group_ids], [chain[0], chain]);
+                for (const id of singles) assert.deepEqual([byId[id].follows_question_id, byId[id].group_ids], [null, [id]]);
             });
 
             test('source_types 過濾與 generate-paper 同規則', async () => {
@@ -454,6 +466,59 @@ function runSuite() {
                 assert.equal(res.status, 200);
                 assert.deepEqual([res.body.question_ids, res.body.items, res.body.blueprint, res.body.shortfalls], [[], [], [], []]);
                 assert.match(res.body.notes[0], /沒有已批改的題/);
+            });
+        });
+
+        // ───────────────────── 手動加題前的查詢 ─────────────────────
+        describe('GET /api/students/:id/remedial-paper/items', () => {
+            const items = (studentId, ids) => request(app).get(`/api/students/${studentId}/remedial-paper/items?ids=${ids}`);
+
+            test('404：:id 不合法或學生不存在；400：ids 不合法', async () => {
+                assert.equal((await items('abc', '1')).status, 404);
+                assert.equal((await items(999, '1')).status, 404);
+                const s = await addStudent();
+                for (const bad of ['', 'x', '0', '1,,2', '2147483648', Array.from({ length: 51 }, (_, i) => i + 1).join(',')]) {
+                    const res = await items(s.id, bad);
+                    assert.equal(res.status, 400, bad);
+                    assert.match(res.body.message, /ids 必須是 1~50 個以逗號分隔的正整數/);
+                }
+                assert.equal((await request(app).get(`/api/students/${s.id}/remedial-paper/items`)).status, 400, '缺 ids');
+            });
+
+            test('回題目與所在承上組的全部成員（承接順序）、封存與已寫過的旗標、查不到的 id；不寫庫', async () => {
+                const s = await addStudent();
+                // 鏈 lead ← f1 ← f2；另一條鏈的前題他寫過；封存題；物理題
+                const lead = await addQ({ chapter: '向量內積', difficulty: 2 });
+                const f1 = await addQ({ chapter: '向量內積', difficulty: 3, follows: lead });
+                const f2 = await addQ({ chapter: '向量內積', difficulty: 4, follows: f1 });
+                const burnt = await addQ({ chapter: '排列' });
+                const burntF = await addQ({ chapter: '排列', follows: burnt });
+                await attempt(s.id, burnt, { result: 1 });
+                const gone = await addQ({ archived: true });
+                const phys = await addQ({ subject: '物理', chapter: '靜電學', difficulty: 1 });
+                const attemptsBefore = await count('attempts');
+
+                const res = await items(s.id, [f1, burntF, gone, phys, 99999, f2].join(','));
+                assert.equal(res.status, 200, JSON.stringify(res.body));
+                assert.deepEqual(Object.keys(res.body).sort(), ['items', 'missing']);
+                assert.deepEqual(res.body.missing, [99999]);
+                assert.deepEqual(res.body.items.map(i => i.question_id), [lead, f1, f2, burnt, burntF, gone, phys],
+                    '要 f1 → 整條鏈依承接順序；f2 已列過不重複');
+                const by = Object.fromEntries(res.body.items.map(i => [i.question_id, i]));
+                assert.deepEqual(Object.keys(by[f1]),
+                    ['question_id', 'subject', 'chapter', 'difficulty', 'question_text_preview', 'follows_question_id', 'group_ids', 'archived', 'answered']);
+                assert.deepEqual(by[f1], {
+                    question_id: f1, subject: '數學', chapter: '向量內積', difficulty: 3,
+                    question_text_preview: by[f1].question_text_preview, follows_question_id: lead,
+                    group_ids: [lead, f1, f2], archived: false, answered: false
+                });
+                assert.ok(by[f1].question_text_preview.startsWith('自製補救卷測試題'));
+                assert.deepEqual([by[lead].follows_question_id, by[lead].group_ids], [null, [lead, f1, f2]]);
+                assert.deepEqual([by[burnt].answered, by[burntF].answered, by[burntF].group_ids], [true, false, [burnt, burntF]],
+                    '前題他寫過：前端據此拒絕整組');
+                assert.deepEqual([by[gone].archived, by[gone].group_ids], [true, [gone]]);
+                assert.equal(by[phys].subject, '物理');
+                assert.equal(await count('attempts'), attemptsBefore);
             });
         });
 

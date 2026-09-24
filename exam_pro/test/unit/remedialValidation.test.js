@@ -16,7 +16,7 @@ process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://unit:unit@127
 const { _internals: remedialInternals } = require('../../controllers/remedialController');
 const exam = require('../../controllers/examController');
 
-const { parseRemedialBody, parseCoverageQuery } = remedialInternals;
+const { parseRemedialBody, parseCoverageQuery, parseItemIdsQuery, MAX_LOOKUP_IDS } = remedialInternals;
 const { parseBlueprint, parseExcludeIds, parseSourceTypes, shortfallReason, blueprintPolicyError, blueprintTitle, MAX_BLUEPRINT_ROWS } = exam._blueprintInternals;
 
 describe('parseRemedialBody', () => {
@@ -86,6 +86,23 @@ describe('parseCoverageQuery', () => {
             assert.match(parseCoverageQuery({ student_id: s }).error, /student_id/, s);
         }
         assert.deepEqual(parseCoverageQuery({ subject: '物理', student_id: '12' }), { subject: '物理', studentId: 12 });
+    });
+});
+
+describe('parseItemIdsQuery（手動加題前的查詢）', () => {
+    test('逗號分隔的正整數，去重並保留順序；重複的同名參數視同串接', () => {
+        assert.deepEqual(parseItemIdsQuery({ ids: '5, 3,5,12' }), { ids: [5, 3, 12] });
+        assert.deepEqual(parseItemIdsQuery({ ids: ['5', '7,8'] }), { ids: [5, 7, 8] });
+        assert.deepEqual(parseItemIdsQuery({ ids: '2147483647' }), { ids: [2147483647] });
+    });
+
+    test('缺、空、非數字、0、負數、小數、超過 int4、超過上限 → 錯誤', () => {
+        assert.equal(MAX_LOOKUP_IDS, 50);
+        for (const ids of [undefined, '', '  ', 'x', '1,,2', '0', '-1', '1.5', '2147483648', '1e3', { a: 1 },
+            Array.from({ length: 51 }, (_, i) => i + 1).join(',')]) {
+            assert.match(parseItemIdsQuery({ ids }).error, /ids 必須是 1~50 個以逗號分隔的正整數/, JSON.stringify(ids));
+        }
+        assert.deepEqual(parseItemIdsQuery({ ids: Array.from({ length: 51 }, () => 7).join(',') }), { ids: [7] }, '上限算的是去重後的題數');
     });
 });
 

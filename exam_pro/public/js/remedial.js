@@ -7,6 +7,9 @@
 //                          → 依 bucket（補救／先備／延伸／手動加入）分組列出理由與不足量
 //                          → 可刪題、可用題目 ID 加題 → 確認呼叫既有的 POST /api/confirm-paper
 //                          → 提供既有的 Word 下載（POST /api/download-word）。
+//                          承上題（follows_question_id）一律整組處理：草稿標「承上 #x」、刪除鈕變「刪這組」且整組刪；
+//                          手動加題先查 GET /api/students/:id/remedial-paper/items，連同前題／承上題整組加入，
+//                          組內有封存或已寫過的題就不加。confirm-paper 不重驗組是否完整，所以把關在這一端。
 //                          另列「知識點掌握度」（GET /api/students/:id/weakness/kc），讓老師看得到草稿為什麼這樣選。
 //   #coverage（題庫視圖）  GET /api/coverage：章 × 難度的熱度表；選了學生改看「還沒寫過」的題數；
 //                          另列每個知識點掛了幾題。
@@ -30,7 +33,7 @@ const BUCKET_HINT = {
     remedial: '最弱的單位，選不超過他答錯題難度＋1 的題',
     prerequisite: '弱知識點的先備知識點，選基礎題',
     extension: '已相對掌握的單位，選難一點的題',
-    manual: '老師自己加的題（確認時由伺服器檢查是否已寫過或已封存）'
+    manual: '老師自己加的題；承上題會連同前題整組加入，已封存或他寫過的題不會加入'
 };
 const SHORTFALL_REASON = { insufficient_stock: '庫存不足', follow_up_group: '承上題須整組出題' };
 
@@ -40,6 +43,7 @@ export const DEFAULT_TOTAL = 20;
 export const MIN_TOTAL = 5;
 export const MAX_TOTAL = 50;
 export const MAX_PAPER = 50;                 // confirm-paper 的 question_ids 上限
+const PG_INT_MAX = 2147483647;               // 題目 id 是 PostgreSQL int4，超過的一定不是合法 id
 export const DEFAULT_MIX_PERCENT = { remedial: 60, prerequisite: 20, extension: 20 };
 const KC_TABLE_LIMIT = 10;                   // 「知識點掌握度」只列最弱的 10 個
 
@@ -156,7 +160,7 @@ export function parseQuestionIds(text) {
     for (const token of String(text ?? '').split(/[\s,，、]+/).filter(Boolean)) {
         const t = token.replace(/^#/, '');
         const n = Number(t);
-        if (/^\d+$/.test(t) && Number.isInteger(n) && n >= 1) {
+        if (/^\d+$/.test(t) && Number.isInteger(n) && n >= 1 && n <= PG_INT_MAX) {
             if (!ids.includes(n)) ids.push(n);
         } else {
             invalid.push(token);
@@ -193,36 +197,188 @@ export function draftFromResponse(body, studentName) {
 }
 
 /**
- * 把一題加進草稿（純函式，回新的草稿）。
+ * 加題前的同步檢查（純函式；不必問伺服器就知道不能加的情況）。
  * @param {object|null} draft
- * @param {{question_id:number, student_id?:number|null, chapter?:string|null, difficulty?:number|null, question_text?:string}} detail
- * @returns {{draft:object}|{error:'no_draft'|'bad_id'|'other_student'|'duplicate'}}
+ * @param {{question_id:number, student_id?:number|null, subject?:string|null}} detail
+ * @returns {null|'no_draft'|'bad_id'|'other_student'|'other_subject'|'duplicate'}
+ */
+export function precheckAdd(draft, detail) {
+    if (!draft) return 'no_draft';
+    const id = detail?.question_id;
+    if (!Number.isInteger(id) || id < 1) return 'bad_id';
+    if (detail.student_id !== undefined && detail.student_id !== null && detail.student_id !== draft.student_id) {
+        return 'other_student';
+    }
+    // 補救卷限單科（契約：候選一律排除不同科）；confirm-paper 不驗科目，所以在這裡擋
+    if (detail.subject !== undefined && detail.subject !== null && detail.subject !== '' && detail.subject !== draft.subject) {
+        return 'other_subject';
+    }
+    if (draft.items.some(i => i.question_id === id)) return 'duplicate';
+    return null;
+}
+
+/**
+ * 把一題加進草稿（純函式，回新的草稿）。承上組的整組規則由 planManualAdd 負責，本函式只加一題。
+ * @param {object|null} draft
+ * @param {{question_id:number, student_id?:number|null, subject?:string|null, chapter?:string|null, difficulty?:number|null,
+ *          question_text?:string, question_text_preview?:string, follows_question_id?:number|null, group_ids?:number[]}} detail
+ * @returns {{draft:object}|{error:'no_draft'|'bad_id'|'other_student'|'other_subject'|'duplicate'}}
  */
 export function addManualItem(draft, detail) {
-    if (!draft) return { error: 'no_draft' };
-    const id = detail?.question_id;
-    if (!Number.isInteger(id) || id < 1) return { error: 'bad_id' };
-    if (detail.student_id !== undefined && detail.student_id !== null && detail.student_id !== draft.student_id) {
-        return { error: 'other_student' };
-    }
-    if (draft.items.some(i => i.question_id === id)) return { error: 'duplicate' };
-    const text = String(detail.question_text ?? '').replace(/\s+/g, ' ').trim();
+    const error = precheckAdd(draft, detail);
+    if (error) return { error };
+    const text = String(detail.question_text_preview ?? detail.question_text ?? '').replace(/\s+/g, ' ').trim();
     const item = {
-        question_id: id, bucket: 'manual', target: null,
+        question_id: detail.question_id, bucket: 'manual', target: null,
         chapter: detail.chapter ?? null, difficulty: detail.difficulty ?? null,
-        question_text_preview: text.length > 80 ? `${text.slice(0, 80)}…` : text
+        question_text_preview: text.length > 80 ? `${text.slice(0, 80)}…` : text,
+        follows_question_id: detail.follows_question_id ?? null
     };
+    if (Array.isArray(detail.group_ids) && detail.group_ids.length > 1) item.group_ids = [...detail.group_ids];
     return { draft: { ...draft, items: [...draft.items, item] } };
 }
 
 /**
- * 從草稿刪一題（純函式）。
+ * 草稿裡與 questionId 同一個承上組的題（含自己），依草稿順序；不在草稿裡回 []。
+ * 組＝以 follows_question_id 與伺服器給的 group_ids 相連的連通分量，只看草稿裡的題
+ * （與組卷的 utils/paperGroups.groupFollowUps 同一個定義：可多層鏈、可分岔）。
+ * @param {object|null} draft
+ * @param {number} questionId
+ * @returns {number[]}
+ */
+export function groupMembers(draft, questionId) {
+    const items = draft?.items || [];
+    const inDraft = new Set(items.map(i => i.question_id));
+    if (!inDraft.has(questionId)) return [];
+    const adj = new Map([...inDraft].map(id => [id, new Set()]));
+    const link = (a, b) => {
+        if (a === b || !inDraft.has(a) || !inDraft.has(b)) return;
+        adj.get(a).add(b);
+        adj.get(b).add(a);
+    };
+    for (const i of items) {
+        if (i.follows_question_id !== undefined && i.follows_question_id !== null) link(i.question_id, i.follows_question_id);
+        for (const g of Array.isArray(i.group_ids) ? i.group_ids : []) link(i.question_id, g);
+    }
+    const seen = new Set([questionId]);
+    const stack = [questionId];
+    while (stack.length) {
+        for (const next of adj.get(stack.pop())) {
+            if (!seen.has(next)) { seen.add(next); stack.push(next); }
+        }
+    }
+    return items.map(i => i.question_id).filter(id => seen.has(id));
+}
+
+/**
+ * 從草稿刪題（純函式）：刪的是**整個承上組**——只刪前題會留下學生寫不了的承上題，
+ * 而 confirm-paper 照給的題出卷、不重驗組是否完整。沒有綁定的題就只刪它自己。
  * @param {object} draft
  * @param {number} questionId
  * @returns {object}
  */
 export function removeItem(draft, questionId) {
-    return { ...draft, items: draft.items.filter(i => i.question_id !== questionId) };
+    const members = new Set(groupMembers(draft, questionId));
+    members.add(questionId);
+    return { ...draft, items: draft.items.filter(i => !members.has(i.question_id)) };
+}
+
+/**
+ * 草稿裡「前題不在草稿」的承上題（確認前的最後一道檢查；正常操作下應該是空的）。
+ * @param {object|null} draft
+ * @returns {Array<{question_id:number, follows_question_id:number}>}
+ */
+export function orphanFollowUps(draft) {
+    const items = draft?.items || [];
+    const ids = new Set(items.map(i => i.question_id));
+    return items
+        .filter(i => i.follows_question_id !== undefined && i.follows_question_id !== null && !ids.has(i.follows_question_id))
+        .map(i => ({ question_id: i.question_id, follows_question_id: i.follows_question_id }));
+}
+
+/**
+ * 依 GET /api/students/:id/remedial-paper/items 的查詢結果，把要加的題**整組**加進草稿（純函式）。
+ *
+ * 規則（與組卷的承上題整組同一個原則：寧可不加，也不出寫不了的題）：
+ *   - 已在草稿 → duplicate；查不到 → missing；不同科 → other_subject；
+ *     本身已封存 → archived；該生已寫過 → answered（confirm-paper 也會擋，這裡先講清楚）。
+ *   - 題目屬於承上組（group_ids 超過 1 題）：組內每一題都要能出（存在、同科、沒封存、他沒寫過），
+ *     就把整組還不在草稿裡的題一起加入；有任何一題不能出 → group_unavailable，整組不加。
+ *   - 同一批裡同組的其他 id 已隨前面那題加入時，不再重複回報。
+ *
+ * @param {object} draft
+ * @param {{items:object[], missing?:number[]}} lookup
+ * @param {number[]} ids 老師要加的題（依輸入順序）
+ * @returns {{draft:object, added:Array<{question_id:number, ids:number[], group:number[]}>,
+ *            errors:Array<{question_id:number, error:string, subject?:string, group?:number[], blockers?:number[]}>}}
+ */
+export function planManualAdd(draft, lookup, ids) {
+    const byId = new Map((lookup?.items || []).map(i => [i.question_id, i]));
+    let d = draft;
+    const added = [];
+    const errors = [];
+    const addedNow = new Set();
+    for (const id of ids) {
+        if (addedNow.has(id)) continue;
+        if (d.items.some(i => i.question_id === id)) { errors.push({ question_id: id, error: 'duplicate' }); continue; }
+        const info = byId.get(id);
+        if (!info) { errors.push({ question_id: id, error: 'missing' }); continue; }
+        if (info.subject !== d.subject) { errors.push({ question_id: id, error: 'other_subject', subject: info.subject }); continue; }
+        if (info.archived) { errors.push({ question_id: id, error: 'archived' }); continue; }
+        if (info.answered) { errors.push({ question_id: id, error: 'answered' }); continue; }
+        const group = Array.isArray(info.group_ids) && info.group_ids.length ? info.group_ids : [id];
+        const blockers = group.filter(g => {
+            const m = byId.get(g);
+            return !m || m.archived || m.answered || m.subject !== d.subject;
+        });
+        if (blockers.length) { errors.push({ question_id: id, error: 'group_unavailable', group, blockers }); continue; }
+        const toAdd = group.filter(g => !d.items.some(i => i.question_id === g));
+        for (const g of toAdd) {
+            const m = byId.get(g);
+            const r = addManualItem(d, {
+                question_id: g, subject: m.subject, chapter: m.chapter, difficulty: m.difficulty,
+                question_text_preview: m.question_text_preview, follows_question_id: m.follows_question_id, group_ids: group
+            });
+            if (r.draft) { d = r.draft; addedNow.add(g); }
+        }
+        added.push({ question_id: id, ids: toAdd, group });
+    }
+    return { draft: d, added, errors };
+}
+
+/** `#1、#2` */
+const idList = ids => ids.map(id => `#${id}`).join('、');
+
+/**
+ * planManualAdd 的結果 → 要顯示的提示（純函式）。
+ * @param {{added:object[], errors:object[]}} result
+ * @param {object} draft 加完之後的草稿（取學生姓名與科目）
+ * @returns {Array<{message:string, type:'success'|'info'|'error'}>}
+ */
+export function manualAddToasts(result, draft) {
+    const out = [];
+    const who = draft?.student_name ?? '';
+    const singles = [];
+    for (const a of result.added) {
+        if (a.group.length > 1) {
+            out.push({ type: 'success', message: `#${a.question_id} 屬於承上題組（${idList(a.group)}），承上題要與前題整組出：已整組加入 ${who} 的補救卷草稿。` });
+        } else {
+            singles.push(a.question_id);
+        }
+    }
+    if (singles.length) out.push({ type: 'success', message: `已把 ${idList(singles)} 加入 ${who} 的補救卷草稿。` });
+    const of = code => result.errors.filter(e => e.error === code);
+    if (of('duplicate').length) out.push({ type: 'info', message: `${idList(of('duplicate').map(e => e.question_id))} 已在補救卷草稿裡，略過。` });
+    if (of('missing').length) out.push({ type: 'error', message: `找不到題目 ${idList(of('missing').map(e => e.question_id))}。` });
+    for (const e of of('other_subject')) {
+        out.push({ type: 'error', message: `#${e.question_id} 是${e.subject}題，這份草稿是${draft?.subject ?? ''}；補救卷不混科，沒有加入。` });
+    }
+    if (of('archived').length) out.push({ type: 'error', message: `${idList(of('archived').map(e => e.question_id))} 已封存，沒有加入。` });
+    if (of('answered').length) out.push({ type: 'error', message: `${idList(of('answered').map(e => e.question_id))} ${who} 已經寫過（出過卷），沒有加入。` });
+    for (const e of of('group_unavailable')) {
+        out.push({ type: 'error', message: `#${e.question_id} 屬於承上題組（${idList(e.group)}），但 ${idList(e.blockers)} 已封存、他寫過或不同科；承上題要整組出，這一組沒有加入。` });
+    }
+    return out;
 }
 
 /**
@@ -459,9 +615,14 @@ function renderDraft(app, ui) {
         }
         const list = el('div', 'mt-2 space-y-2');
         for (const item of group.items) {
-            const card = el('div', 'rounded-xl border border-slate-100 bg-slate-50/60 p-3', { 'data-question-id': item.question_id });
+            // 承上組（同組組卷預覽的「換這組」）：標「承上 #x」、刪除鈕改「刪這組」，按下去整組刪
+            const members = groupMembers(draft, item.question_id);
+            const inGroup = members.length > 1;
+            const card = el('div', `rounded-xl border border-slate-100 bg-slate-50/60 p-3${inGroup ? ' border-l-4 border-l-violet-300' : ''}`,
+                { 'data-question-id': item.question_id, ...(inGroup ? { 'data-group': members.join(',') } : {}) });
             const meta = [
                 `#${item.question_id}`,
+                item.follows_question_id ? `承上 #${item.follows_question_id}` : (inGroup ? '有承上題' : ''),
                 item.chapter || '',
                 item.difficulty ? '★'.repeat(item.difficulty) : '',
                 item.target && item.bucket !== 'manual' ? `目標：${item.target.name}` : ''
@@ -469,7 +630,9 @@ function renderDraft(app, ui) {
             const row = el('div', 'flex items-start justify-between gap-2');
             row.appendChild(el('p', 'text-[11px] font-bold text-slate-400', { textContent: meta }));
             const del = el('button', 'text-[11px] font-bold px-2 py-1 rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 cursor-pointer', {
-                type: 'button', textContent: '刪除', 'aria-label': `從草稿刪除 #${item.question_id}`
+                type: 'button',
+                textContent: inGroup ? '刪這組' : '刪除',
+                'aria-label': inGroup ? `從草稿刪除承上題組 ${idList(members)}` : `從草稿刪除 #${item.question_id}`
             });
             del.addEventListener('click', () => {
                 state.draft = removeItem(state.draft, item.question_id);
@@ -496,14 +659,9 @@ function renderDraft(app, ui) {
     addBtn.addEventListener('click', () => {
         const { ids, invalid } = parseQuestionIds(addInput.value);
         if (invalid.length) { app.showToast(`看不懂的題目 ID：${invalid.join('、')}`, 'error'); return; }
-        let added = 0;
-        for (const id of ids) {
-            const r = addManualItem(state.draft, { question_id: id });
-            if (r.draft) { state.draft = r.draft; added++; }
-        }
+        if (ids.length === 0) return;
         addInput.value = '';
-        if (added) renderDraft(app, ui);
-        if (added < ids.length) app.showToast(`${ids.length - added} 題已在草稿裡，略過。`, 'info');
+        addQuestions(app, ui, ids).catch(err => console.error('[remedial] 加題失敗', err));
     });
     add.append(addInput, addBtn);
     box.appendChild(add);
@@ -558,6 +716,12 @@ async function confirmDraft(app, ui, btn) {
     const ids = draftQuestionIds(draft);
     if (ids.length === 0) return app.showToast('草稿是空的。', 'error');
     if (ids.length > MAX_PAPER) return app.showToast(`一張卷最多 ${MAX_PAPER} 題，請先刪掉一些。`, 'error');
+    // 最後一道：confirm-paper 照給的題出卷、不驗承上組是否完整；缺前題的承上題學生寫不了
+    const orphans = orphanFollowUps(draft);
+    if (orphans.length) {
+        return app.showToast(`承上題不能沒有前題：${orphans.map(o => `#${o.question_id}（承上 #${o.follows_question_id}）`).join('、')}。`
+            + '請用題目 ID 把前題加回來，或按「刪這組」整組刪掉。', 'error');
+    }
     btn.disabled = true;
     try {
         const res = await postJson(app, '/api/confirm-paper', { student_id: draft.student_id, question_ids: ids });
@@ -607,7 +771,49 @@ async function downloadWord(app, paper) {
 }
 
 /**
+ * 把題目整組加進目前的草稿（「用題目 ID 加題」與 `remedial:add` 共用）。
+ *
+ * 先查 GET /api/students/:id/remedial-paper/items（題目資料＋所在承上組的全部成員），
+ * 再交給 planManualAdd 決定整組加入或拒絕。已在草稿裡的題不必問伺服器，直接提示。
+ * 查詢期間草稿若換成另一位學生或另一科（老師重新產生了草稿），就不加，請老師再加一次。
+ *
+ * @param {object} app
+ * @param {object} ui
+ * @param {number[]} ids
+ * @returns {Promise<number>} 實際加入的題數（含整組帶進來的前題／承上題）
+ */
+async function addQuestions(app, ui, ids) {
+    const draft = state.draft;
+    if (!draft || ids.length === 0) return 0;
+    const inDraft = new Set(draft.items.map(i => i.question_id));
+    const dupes = ids.filter(id => inDraft.has(id));
+    const fresh = ids.filter(id => !inDraft.has(id));
+    if (dupes.length) app.showToast(`${idList(dupes)} 已在補救卷草稿裡，略過。`, 'info');
+    if (fresh.length === 0) return 0;
+
+    let lookup;
+    try {
+        const params = new URLSearchParams({ ids: fresh.join(',') });
+        lookup = await getJson(app, `/api/students/${draft.student_id}/remedial-paper/items?${params.toString()}`);
+    } catch (err) {
+        app.showToast(`無法確認題目資料（${err.message || '連線失敗'}），沒有加入。`, 'error');
+        return 0;
+    }
+    const current = state.draft;
+    if (!current || current.student_id !== draft.student_id || current.subject !== draft.subject) {
+        app.showToast('草稿在查詢期間換掉了，請再加一次。', 'info');
+        return 0;
+    }
+    const result = planManualAdd(current, lookup, fresh);
+    state.draft = result.draft;
+    renderDraft(app, ui);
+    for (const t of manualAddToasts(result, state.draft)) app.showToast(t.message, t.type);
+    return result.draft.items.length - current.items.length;
+}
+
+/**
  * `remedial:add` 的處理：加進目前的草稿；還沒有草稿就以目前選的學生與科目開一份空草稿。
+ * 別的學生、別的科目、已在草稿裡的題在這裡就擋（不必問伺服器）；其餘交給 addQuestions 整組加。
  * @param {object} app
  * @param {object} ui
  * @param {object} shared
@@ -623,17 +829,22 @@ function handleAdd(app, ui, shared, detail) {
         if (!student) { app.showToast('請先在「依弱點出補救卷」選學生，再加入題目。', 'error'); return; }
         const subject = (detail.subject && shared.subjects.includes(detail.subject)) ? detail.subject : ui.subject.value;
         state.draft = emptyDraft(student.id, student.name, subject);
+        renderDraft(app, ui);
     }
-    const r = addManualItem(state.draft, detail);
-    if (r.error === 'other_student') { app.showToast('目前的草稿是另一位學生的，請先確認或清掉那份草稿。', 'error'); return; }
-    if (r.error === 'duplicate') { app.showToast(`#${detail.question_id} 已在補救卷草稿裡。`, 'info'); return; }
-    if (r.error) return;
-    state.draft = r.draft;
-    renderDraft(app, ui);
-    app.showToast(`已把 #${detail.question_id} 加入 ${state.draft.student_name} 的補救卷草稿。`, 'success');
-    if (typeof app.showSection === 'function') app.showSection('students');
-    const node = document.getElementById('remedial');
-    if (node && typeof node.scrollIntoView === 'function') node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const error = precheckAdd(state.draft, detail);
+    if (error === 'other_student') { app.showToast('目前的草稿是另一位學生的，請先確認或清掉那份草稿。', 'error'); return; }
+    if (error === 'other_subject') {
+        app.showToast(`#${detail.question_id} 是${detail.subject}題，目前的草稿是${state.draft.subject}；補救卷不混科，沒有加入。`, 'error');
+        return;
+    }
+    if (error === 'duplicate') { app.showToast(`#${detail.question_id} 已在補救卷草稿裡。`, 'info'); return; }
+    if (error) return;
+    addQuestions(app, ui, [detail.question_id]).then(added => {
+        if (!added) return;
+        if (typeof app.showSection === 'function') app.showSection('students');
+        const node = document.getElementById('remedial');
+        if (node && typeof node.scrollIntoView === 'function') node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }).catch(err => console.error('[remedial] 加入補救卷失敗', err));
 }
 
 function mountRemedial(app, section, shared) {

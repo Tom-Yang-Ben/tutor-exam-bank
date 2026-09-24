@@ -4,10 +4,11 @@
 // 三層（沿用 stage3Ui／stage3Render 的做法）：
 //   1. 檔案層級契約：旗標從 <meta name="feature-remedial"> 讀、parseBool 與後端逐字相同、
 //      科目不寫死、不自己複製橋接函式。
-//   2. 純函式：配比、題數、題目 ID 解析、草稿增刪與分組、掌握度與熱度的顯示。
+//   2. 純函式：配比、題數、題目 ID 解析、草稿增刪與分組、承上組（整組刪、整組加、缺前題）、
+//      掌握度與熱度的顯示。
 //   3. 用 test/unit/lib/miniDom.js 真的把 module 跑起來：旗標關閉整段不渲染、產生草稿、
-//      刪題／加題、remedial:add 事件、確認出卷、覆蓋率熱度表；以及「找相似」結果上的
-//      〔stage5 WS-D〕「加入補救卷」掛鉤（public/js/variants.js）。
+//      刪題／加題（含承上題「刪這組」與整組加入、不混科）、remedial:add 事件、確認出卷、覆蓋率熱度表；
+//      以及「找相似」結果上的〔stage5 WS-D〕「加入補救卷」掛鉤（public/js/variants.js）。
 // ─────────────────────────────────────────────────────────────
 const { test, describe, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
@@ -55,15 +56,56 @@ const COVERAGE = {
     kc_rows: [{ code: 'MATH.向量內積.01', name: '內積的意義', chapter: '向量內積', total: 0 }]
 };
 
+/**
+ * 假題庫（給 GET /api/students/:id/remedial-paper/items 用）：
+ *   4 ← 5（承上組）、40（他寫過）← 41、8 封存、60 物理、77／78 單題、55 物理（李小華的草稿用）
+ */
+const CATALOG = {
+    4: { subject: '數學', chapter: '向量內積', difficulty: 2, follows: null, group: [4, 5] },
+    5: { subject: '數學', chapter: '向量內積', difficulty: 3, follows: 4, group: [4, 5] },
+    40: { subject: '數學', chapter: '向量內積', difficulty: 2, follows: null, group: [40, 41], answered: true },
+    41: { subject: '數學', chapter: '向量內積', difficulty: 2, follows: 40, group: [40, 41] },
+    8: { subject: '數學', chapter: '向量內積', difficulty: 1, follows: null, group: [8], archived: true },
+    60: { subject: '物理', chapter: '靜電學', difficulty: 2, follows: null, group: [60] },
+    77: { subject: '數學', chapter: '向量內積', difficulty: 2, follows: null, group: [77] },
+    78: { subject: '數學', chapter: '向量內積', difficulty: 4, follows: null, group: [78] },
+    55: { subject: '物理', chapter: '靜電學', difficulty: 3, follows: null, group: [55] }
+};
+
+/** 模擬 remedialService.lookupItems：每個要求的 id 後面接同組成員，不重複；查不到的進 missing。 */
+function lookupBody(url) {
+    const ids = new URL(url, 'http://x').searchParams.get('ids').split(',').map(Number);
+    const items = [];
+    const missing = [];
+    const seen = new Set();
+    for (const id of ids) {
+        if (!CATALOG[id]) { missing.push(id); continue; }
+        for (const m of CATALOG[id].group) {
+            if (seen.has(m)) continue;
+            seen.add(m);
+            const c = CATALOG[m];
+            items.push({ question_id: m, subject: c.subject, chapter: c.chapter, difficulty: c.difficulty,
+                question_text_preview: `自製題 ${m}`, follows_question_id: c.follows, group_ids: c.group,
+                archived: Boolean(c.archived), answered: Boolean(c.answered) });
+        }
+    }
+    return { items, missing };
+}
+
+/** 假 API 的 JSON 回應。 */
+const respond = (body, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
+
 /** 依網址回假資料的橋接；calls.fetches 記下每一次請求（含 body）。 */
 function routedBridge(overrides = {}) {
     const bridge = fakeBridge();
-    const json = (body, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
+    const json = respond;
     const routes = {
         'GET /api/students': () => json({ items: [{ id: 1, name: '王小明', papers: 2, graded_ratio: 1 }, { id: 2, name: '李小華', papers: 0, graded_ratio: 0 }] }),
         'GET /api/chapter-whitelist': () => json({ 數學: ['向量內積'], 物理: ['靜電學'], 化學: ['化學平衡與平衡常數'] }),
         'POST /api/students/1/remedial-paper': () => json(DRAFT),
         'GET /api/students/1/weakness/kc': () => json({ rows: [{ kc_id: 1, code: 'MATH.向量內積.01', name: '內積的意義', subject: '數學', chapter: '向量內積', graded: 3, correct: 1, correct_rate: 0.3333, mastery_lb: 0.0615, low_sample: true }], untagged_graded: 4 }),
+        'GET /api/students/1/remedial-paper/items': (body, url) => json(lookupBody(url)),
+        'GET /api/students/2/remedial-paper/items': (body, url) => json(lookupBody(url)),
         'POST /api/confirm-paper': (body) => json({ message: 'ok', paper_id: 9, paper_title: '王小明-向量內積特訓卷(2026_9_24)', question_ids: body.question_ids, questions: [] }),
         'GET /api/coverage': () => json(COVERAGE),
         ...overrides
@@ -153,17 +195,75 @@ describe('remedial.js 的純函式', () => {
         assert.deepEqual(mod.parseQuestionIds('12, 34 #56、12，7'), { ids: [12, 34, 56, 7], invalid: [] });
         assert.deepEqual(mod.parseQuestionIds('3 x 0 -2 4.5'), { ids: [3], invalid: ['x', '0', '-2', '4.5'] });
         assert.deepEqual(mod.parseQuestionIds(''), { ids: [], invalid: [] });
+        assert.deepEqual(mod.parseQuestionIds('2147483647 2147483648'), { ids: [2147483647], invalid: ['2147483648'] }, '超過 int4 的不是合法 id');
     });
 
-    test('addManualItem：沒有草稿、ID 不合法、別的學生、重複 → 錯誤代碼；成功回新草稿（不改原物件）', () => {
+    test('addManualItem：沒有草稿、ID 不合法、別的學生、別的科目、重複 → 錯誤代碼；成功回新草稿（不改原物件）', () => {
         assert.deepEqual(mod.addManualItem(null, { question_id: 1 }), { error: 'no_draft' });
         const d = mod.emptyDraft(1, '王小明', '數學');
         assert.deepEqual(mod.addManualItem(d, { question_id: 0 }), { error: 'bad_id' });
         assert.deepEqual(mod.addManualItem(d, { question_id: 5, student_id: 2 }), { error: 'other_student' });
-        const r = mod.addManualItem(d, { question_id: 5, student_id: 1, chapter: '向量內積', difficulty: 2, question_text: '  自製\n題幹 ' });
+        assert.deepEqual(mod.addManualItem(d, { question_id: 5, student_id: 1, subject: '物理' }), { error: 'other_subject' }, '補救卷不混科');
+        const r = mod.addManualItem(d, { question_id: 5, student_id: 1, subject: '數學', chapter: '向量內積', difficulty: 2, question_text: '  自製\n題幹 ' });
         assert.equal(d.items.length, 0, '不改原草稿');
-        assert.deepEqual(r.draft.items, [{ question_id: 5, bucket: 'manual', target: null, chapter: '向量內積', difficulty: 2, question_text_preview: '自製 題幹' }]);
+        assert.deepEqual(r.draft.items, [{ question_id: 5, bucket: 'manual', target: null, chapter: '向量內積', difficulty: 2, question_text_preview: '自製 題幹', follows_question_id: null }]);
         assert.deepEqual(mod.addManualItem(r.draft, { question_id: 5 }), { error: 'duplicate' });
+        // 沒帶 subject（例如只知道 ID）不在這裡擋，交給 planManualAdd 依查詢結果判斷
+        assert.ok(mod.addManualItem(d, { question_id: 6 }).draft);
+    });
+
+    test('groupMembers／removeItem：承上組整組刪（follows_question_id 或 group_ids 相連，可多層鏈、可分岔）', () => {
+        const item = (id, extra = {}) => ({ question_id: id, bucket: 'remedial', target: null, chapter: '向量內積', difficulty: 2, question_text_preview: '', ...extra });
+        const d = { ...mod.emptyDraft(1, '王小明', '數學'), items: [
+            item(1), item(4), item(5, { follows_question_id: 4 }), item(6, { follows_question_id: 5 }), item(7, { follows_question_id: 4 }),
+            item(9, { group_ids: [9, 10] }), item(10, { group_ids: [9, 10] }), item(11, { follows_question_id: 999 })
+        ] };
+        assert.deepEqual(mod.groupMembers(d, 1), [1], '沒有綁定＝自己一組');
+        assert.deepEqual(mod.groupMembers(d, 6), [4, 5, 6, 7], '從鏈尾也找得到整組（含分岔）');
+        assert.deepEqual(mod.groupMembers(d, 10), [9, 10], 'group_ids 也算相連');
+        assert.deepEqual(mod.groupMembers(d, 11), [11], '前題不在草稿：只有自己');
+        assert.deepEqual(mod.groupMembers(d, 123), [], '不在草稿');
+        // 刪前題 → 整組（含承上題）一起刪；刪沒有綁定的題只刪它
+        assert.deepEqual(mod.draftQuestionIds(mod.removeItem(d, 4)), [1, 9, 10, 11]);
+        assert.deepEqual(mod.draftQuestionIds(mod.removeItem(d, 9)), [1, 4, 5, 6, 7, 11]);
+        assert.deepEqual(mod.draftQuestionIds(mod.removeItem(d, 1)), [4, 5, 6, 7, 9, 10, 11]);
+        assert.equal(d.items.length, 8, '不改原草稿');
+        // 確認前的最後一道：缺前題的承上題
+        assert.deepEqual(mod.orphanFollowUps(d), [{ question_id: 11, follows_question_id: 999 }]);
+        assert.deepEqual(mod.orphanFollowUps(mod.removeItem(d, 11)), []);
+        assert.deepEqual(mod.orphanFollowUps(null), []);
+    });
+
+    test('planManualAdd：承上題連同前題整組加入；組內有題不能出就整組不加；缺題、重複、不同科、封存、已寫過各自回報', () => {
+        const d = mod.draftFromResponse(DRAFT, '王小明');
+        const ids = [5, 4, 77, 11, 41, 8, 60, 999];
+        const lookup = lookupBody(`/x?ids=${ids.join(',')}`);
+        const r = mod.planManualAdd(d, lookup, ids);
+        assert.deepEqual(mod.draftQuestionIds(r.draft), [11, 12, 21, 4, 5, 77], '要 5 → 4、5 整組加在手動組；同批的 4 不再重複');
+        const added = Object.fromEntries(r.draft.items.filter(i => i.bucket === 'manual').map(i => [i.question_id, i]));
+        assert.deepEqual([added[4].follows_question_id, added[5].follows_question_id, added[5].group_ids], [null, 4, [4, 5]]);
+        assert.equal(added[5].question_text_preview, '自製題 5');
+        assert.deepEqual(r.added, [{ question_id: 5, ids: [4, 5], group: [4, 5] }, { question_id: 77, ids: [77], group: [77] }]);
+        assert.deepEqual(r.errors, [
+            { question_id: 11, error: 'duplicate' },
+            { question_id: 41, error: 'group_unavailable', group: [40, 41], blockers: [40] },
+            { question_id: 8, error: 'archived' },
+            { question_id: 60, error: 'other_subject', subject: '物理' },
+            { question_id: 999, error: 'missing' }
+        ]);
+        assert.equal(d.items.length, 3, '不改原草稿');
+        // 前題本身他寫過 → answered
+        assert.deepEqual(mod.planManualAdd(d, lookupBody('/x?ids=40'), [40]).errors, [{ question_id: 40, error: 'answered' }]);
+
+        const toasts = mod.manualAddToasts(r, r.draft);
+        const text = toasts.map(t => `${t.type}:${t.message}`).join('\n');
+        assert.match(text, /success:#5 屬於承上題組（#4、#5），承上題要與前題整組出：已整組加入 王小明 的補救卷草稿。/);
+        assert.match(text, /success:已把 #77 加入 王小明 的補救卷草稿。/);
+        assert.match(text, /info:#11 已在補救卷草稿裡，略過。/);
+        assert.match(text, /error:找不到題目 #999。/);
+        assert.match(text, /error:#60 是物理題，這份草稿是數學；補救卷不混科，沒有加入。/);
+        assert.match(text, /error:#8 已封存，沒有加入。/);
+        assert.match(text, /error:#41 屬於承上題組（#40、#41），但 #40 已封存、他寫過或不同科；承上題要整組出，這一組沒有加入。/);
     });
 
     test('removeItem／draftQuestionIds／groupDraft（固定順序：補救 → 先備 → 延伸 → 手動加入）', () => {
@@ -272,12 +372,15 @@ describe('remedial.js 的渲染（miniDom）', () => {
         card.querySelector('button').click();
         await settle();
         assert.equal($('remDraft').querySelectorAll('div[data-question-id]').length, 2);
-        // 用 ID 加兩題（其中 11 已在草稿裡）
+        // 用 ID 加兩題（其中 11 已在草稿裡：不必問伺服器；77 先查題目資料再加）
         $('remAddId').value = '#77, 11';
         $('remAddBtn').click();
         await settle();
         assert.ok($('remDraft').querySelector('div[data-bucket="manual"]'), '手動加入的題要自成一組');
-        assert.ok(env.window.ExamApp.calls.toasts.some(t => t.message.includes('已在草稿裡')));
+        assert.ok(env.window.ExamApp.calls.toasts.some(t => t.message.includes('#11 已在補救卷草稿裡')));
+        const lookup = env.window.ExamApp.calls.fetches.filter(f => f.url.startsWith('/api/students/1/remedial-paper/items'));
+        assert.deepEqual(lookup.map(f => f.url), ['/api/students/1/remedial-paper/items?ids=77'], '已在草稿裡的題不查');
+        assert.ok($('remDraft').textContent.includes('自製題 77'), '手動加的題顯示查回來的題幹預覽');
         // 確認
         $('remConfirm').click();
         await settle();
@@ -315,6 +418,100 @@ describe('remedial.js 的渲染（miniDom）', () => {
         env.document.dispatchEvent(new CustomEvent(mod.REMEDIAL_ADD_EVENT, { detail: { question_id: 55 } }));
         await settle();
         assert.ok(env.window.ExamApp.calls.toasts.some(t => t.type === 'error' && t.message.includes('選學生')));
+    });
+
+    // ── 承上題整組（審查發現：刪前題會留下學生寫不了的承上題，confirm-paper 照出）──
+    const target = DRAFT.items[0].target;
+    const GROUPED = {
+        ...DRAFT, question_ids: [4, 5, 11, 21],
+        items: [
+            { question_id: 4, bucket: 'remedial', target, chapter: '向量內積', difficulty: 2, question_text_preview: '前題', follows_question_id: null, group_ids: [4, 5] },
+            { question_id: 5, bucket: 'remedial', target, chapter: '向量內積', difficulty: 2, question_text_preview: '承上題', follows_question_id: 4, group_ids: [4, 5] },
+            { ...DRAFT.items[0], follows_question_id: null, group_ids: [11] },
+            { ...DRAFT.items[2], follows_question_id: null, group_ids: [21] }
+        ]
+    };
+    const cardsOf = root => root.querySelectorAll('div[data-question-id]');
+    const idsOf = root => cardsOf(root).map(c => Number(c.getAttribute('data-question-id')));
+    const cardOf = (root, id) => cardsOf(root).find(c => c.getAttribute('data-question-id') === String(id));
+
+    async function generated(draftBody) {
+        await mount({ examApp: routedBridge({ 'POST /api/students/1/remedial-paper': () => respond(draftBody) }) });
+        $('remStudent').value = '1';
+        $('remGenerate').click();
+        await settle();
+    }
+
+    test('承上題組：標「承上 #x」、按鈕是「刪這組」；刪前題連承上題一起刪，確認送出的不會有半組', async () => {
+        await generated(GROUPED);
+        const draft = $('remDraft');
+        assert.equal(cardOf(draft, 4).getAttribute('data-group'), '4,5');
+        assert.ok(cardOf(draft, 5).textContent.includes('承上 #4'));
+        assert.ok(cardOf(draft, 4).textContent.includes('有承上題'));
+        assert.deepEqual([4, 5, 11].map(id => cardOf(draft, id).querySelector('button').textContent), ['刪這組', '刪這組', '刪除']);
+        assert.equal(cardOf(draft, 4).querySelector('button').getAttribute('aria-label'), '從草稿刪除承上題組 #4、#5');
+        assert.equal(cardOf(draft, 11).getAttribute('data-group'), null, '沒有綁定的題不標組');
+
+        cardOf(draft, 4).querySelector('button').click();
+        await settle();
+        assert.deepEqual(idsOf($('remDraft')), [11, 21], '刪前題 → 承上題一起刪');
+        $('remConfirm').click();
+        await settle();
+        assert.deepEqual(env.window.ExamApp.calls.fetches.find(f => f.url === '/api/confirm-paper').body.question_ids, [11, 21]);
+    });
+
+    test('刪承上題也是整組刪', async () => {
+        await generated(GROUPED);
+        cardOf($('remDraft'), 5).querySelector('button').click();
+        await settle();
+        assert.deepEqual(idsOf($('remDraft')), [11, 21]);
+    });
+
+    test('用 ID 加承上題：連同前題整組加入；組內有他寫過的題、封存、不同科、查不到 → 不加並說明', async () => {
+        await generated(DRAFT);
+        $('remAddId').value = '5 41 8 60 999';
+        $('remAddBtn').click();
+        await settle();
+        const manual = $('remDraft').querySelector('div[data-bucket="manual"]');
+        assert.deepEqual(idsOf(manual), [4, 5], '只有 4、5 整組加入');
+        assert.ok(cardOf(manual, 5).textContent.includes('承上 #4'));
+        assert.deepEqual([4, 5].map(id => cardOf(manual, id).querySelector('button').textContent), ['刪這組', '刪這組']);
+        const toasts = env.window.ExamApp.calls.toasts.map(t => t.message).join('\n');
+        for (const re of [/#5 屬於承上題組（#4、#5）.*已整組加入/, /#41 屬於承上題組（#40、#41），但 #40 .*這一組沒有加入/,
+            /#8 已封存/, /#60 是物理題.*不混科/, /找不到題目 #999/]) {
+            assert.match(toasts, re);
+        }
+        // 手動加入的組同樣整組刪
+        cardOf(manual, 4).querySelector('button').click();
+        await settle();
+        assert.equal($('remDraft').querySelector('div[data-bucket="manual"]'), null);
+        assert.deepEqual(idsOf($('remDraft')), [11, 12, 21]);
+    });
+
+    test('remedial:add：別的科目直接擋（不查伺服器）；承上題同樣整組加入', async () => {
+        const mod = await mount();
+        $('remStudent').value = '1';
+        $('remGenerate').click();
+        await settle();
+        const lookups = () => env.window.ExamApp.calls.fetches.filter(f => f.url.includes('/remedial-paper/items')).length;
+        env.document.dispatchEvent(new CustomEvent(mod.REMEDIAL_ADD_EVENT, { detail: { question_id: 60, student_id: 1, subject: '物理' } }));
+        await settle();
+        assert.ok(env.window.ExamApp.calls.toasts.some(t => t.type === 'error' && t.message.includes('#60 是物理題') && t.message.includes('不混科')));
+        assert.equal(lookups(), 0, '科目不同在前端就擋');
+        assert.deepEqual(idsOf($('remDraft')), [11, 12, 21]);
+
+        env.document.dispatchEvent(new CustomEvent(mod.REMEDIAL_ADD_EVENT, { detail: { question_id: 5, student_id: 1, subject: '數學' } }));
+        await settle();
+        assert.equal(lookups(), 1);
+        assert.deepEqual(idsOf($('remDraft')), [11, 12, 21, 4, 5], '承上題 #5 連同前題 #4 加入');
+    });
+
+    test('確認前的最後一道：草稿裡有缺前題的承上題 → 不送 confirm-paper', async () => {
+        await generated({ ...DRAFT, items: [...DRAFT.items, { ...DRAFT.items[0], question_id: 6, follows_question_id: 999 }] });
+        $('remConfirm').click();
+        await settle();
+        assert.ok(env.window.ExamApp.calls.toasts.some(t => t.type === 'error' && t.message.includes('承上題不能沒有前題：#6（承上 #999）')));
+        assert.equal(env.window.ExamApp.calls.fetches.filter(f => f.url === '/api/confirm-paper').length, 0);
     });
 
     test('覆蓋率：預設第一個科目；章 × 難度的熱度表；0 題的知識點標紅；選學生多一欄「還沒寫過」', async () => {

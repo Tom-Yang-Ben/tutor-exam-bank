@@ -20,11 +20,17 @@
 //      與 generate-paper 同一段候選池 SQL（未封存、該生沒寫過、同科、source_types）與
 //      同一個 pickPaperUnits（家族互斥＋承上題整組）；跨目標不重複、家族互斥。
 //   5. 不足量逐目標回報在 shortfalls，不自動拿別的單位補——補什麼由老師決定（可用題目 ID 加題）。
+//   6. items 每題帶 follows_question_id 與 group_ids（同一承上組在草稿裡的全部成員，承接順序），
+//      前端據此「整組刪、整組加」，不會把承上題和它的前題拆開（confirm-paper 不重驗組是否完整）。
+//
+// 另有 lookupItems（GET /api/students/:id/remedial-paper/items）：草稿「用題目 ID 加題」前查題目資料與
+// 所在承上組的完整成員（含封存、已寫過的旗標），讓前端能整組加入或拒絕（docs/remedial.md 第 2.5 節）。
 //
 // 純函式（allocateQuotas、splitCount、chooseUnits、choosePrereqTargets、buildPlan…）不連 DB、無隨機，
 // 由 test/unit/remedialService.test.js 釘住；I/O 的 planRemedialPaper 由整合測試驗。
 // ─────────────────────────────────────────────────────────────
 const kcWeakness = require('./kcWeaknessService');
+const { groupFollowUps } = require('../utils/paperGroups');
 
 /** 契約第 4.4 條第 2 項的預設與區間。 */
 const DEFAULT_TOTAL = 20;
@@ -290,6 +296,20 @@ function previewText(text, n = PREVIEW_LEN) {
     return s.length > n ? `${s.slice(0, n)}…` : s;
 }
 
+/**
+ * 每題所在承上組的成員（純函式）：依 follows_question_id 分組（utils/paperGroups.groupFollowUps，
+ * 與組卷同一個分組函式），回 id → 該組全部 id（承接順序）。沒有綁定的題對應 [自己]。
+ * 只看 rows 裡的題：指向 rows 之外的前題不算（該題在這批資料裡視為組首）。
+ *
+ * @param {Array<{id:number, follows_question_id?:number|null}>} rows
+ * @returns {Map<number, number[]>}
+ */
+function groupIdsById(rows) {
+    const out = new Map();
+    for (const ids of groupFollowUps(rows)) for (const id of ids) out.set(id, ids);
+    return out;
+}
+
 // ───────────────────────── SQL builder（純函式）─────────────────────────
 
 /**
@@ -327,6 +347,36 @@ function buildPrereqQuery(kcIds) {
   FROM kc_prerequisites p JOIN knowledge_components k ON k.id = p.prereq_kc_id
  WHERE p.kc_id = ANY($1::int[])`,
         values: [kcIds]
+    };
+}
+
+/**
+ * 「用題目 ID 加題」前的查詢（$1 ids、$2 studentId）：題目本身＋所在承上組的全部成員。
+ *
+ * 承上組的走訪與 examController.fetchCandidatePool 同一段遞迴（無向走訪 follows_question_id：
+ * 往下找承上題、往上找前題；UNION 去重，資料有環也會停）。這裡**不排除**封存題與已寫過的題——
+ * 它們正是「這一組能不能加」要知道的事，改用 archived／answered 兩個旗標回報。
+ * 不存在的 id 自然不會出現在結果裡。
+ *
+ * @param {number[]} ids
+ * @param {number} studentId
+ * @returns {{text:string, values:any[]}}
+ */
+function buildItemLookupQuery(ids, studentId) {
+    return {
+        text: `WITH RECURSIVE grp(id) AS (
+    SELECT unnest($1::int[])
+    UNION
+    SELECT CASE WHEN q.id = g.id THEN q.follows_question_id ELSE q.id END
+      FROM questions q JOIN grp g
+        ON q.follows_question_id = g.id
+        OR (q.id = g.id AND q.follows_question_id IS NOT NULL)
+)
+SELECT q.id, q.subject, q.chapter, q.difficulty, q.question_text, q.follows_question_id,
+       (q.archived_at IS NOT NULL) AS archived,
+       EXISTS (SELECT 1 FROM attempts a WHERE a.question_id = q.id AND a.student_id = $2) AS answered
+  FROM questions q JOIN grp g ON g.id = q.id`,
+        values: [ids, studentId]
     };
 }
 
@@ -388,6 +438,7 @@ async function planRemedialPaper({ studentId, subject, total, mix, days, sourceT
 
     const allIds = results.flatMap(r => r.ids);
     let rowsById = new Map();
+    let groupsById = new Map();
     let questionIds = [];
     if (allIds.length) {
         const { rows } = await deps.query(
@@ -396,6 +447,8 @@ async function planRemedialPaper({ studentId, subject, total, mix, days, sourceT
             [allIds]
         );
         rowsById = new Map(rows.map(r => [r.id, r]));
+        // pickPaperUnits 整組抽，所以草稿裡的承上組一定完整；group_ids 讓前端整組刪（不拆散前題與承上題）
+        groupsById = groupIdsById(rows);
         // 與 confirm-paper 同一個排序函式：草稿的 question_ids 就是確認後的出題順序
         questionIds = deps.sortForPaper(rows).map(r => r.id);
     }
@@ -410,7 +463,9 @@ async function planRemedialPaper({ studentId, subject, total, mix, days, sourceT
                 target: q.target,
                 chapter: row.chapter ?? null,
                 difficulty: row.difficulty ?? null,
-                question_text_preview: previewText(row.question_text)
+                question_text_preview: previewText(row.question_text),
+                follows_question_id: row.follows_question_id ?? null,
+                group_ids: groupsById.get(id) || [id]
             });
         }
     });
@@ -430,6 +485,51 @@ async function planRemedialPaper({ studentId, subject, total, mix, days, sourceT
     return { student_id: studentId, subject, basis, question_ids: questionIds, items, blueprint, shortfalls, notes };
 }
 
+/**
+ * 查草稿要手動加的題（只讀）：每題的資料，以及它所在承上組的**全部**成員。
+ *
+ * 前端用它決定「整組加入」或「拒絕」：承上題要與前題整組出（同 generate-paper 的 pickPaperUnits），
+ * 而 confirm-paper 不重驗組是否完整，所以把關只能在草稿這一端。
+ *
+ * @param {{studentId:number, ids:number[]}} p
+ * @param {{query:Function}} deps
+ * @returns {Promise<{items:Array<{question_id:number, subject:string, chapter:string, difficulty:number,
+ *           question_text_preview:string, follows_question_id:number|null, group_ids:number[],
+ *           archived:boolean, answered:boolean}>, missing:number[]}>}
+ *   items   依要求的順序，每題後面緊接同組的其他成員（組內承接順序），不重複
+ *   missing 資料庫裡沒有的 id（依要求的順序）
+ */
+async function lookupItems({ studentId, ids }, deps) {
+    const q = buildItemLookupQuery(ids, studentId);
+    const { rows } = await deps.query(q.text, q.values);
+    const byId = new Map(rows.map(r => [r.id, r]));
+    const groups = groupIdsById(rows);
+
+    const items = [];
+    const seen = new Set();
+    const missing = [];
+    for (const id of ids) {
+        if (!byId.has(id)) { missing.push(id); continue; }
+        for (const member of groups.get(id)) {
+            if (seen.has(member)) continue;
+            seen.add(member);
+            const r = byId.get(member);
+            items.push({
+                question_id: r.id,
+                subject: r.subject,
+                chapter: r.chapter,
+                difficulty: r.difficulty,
+                question_text_preview: previewText(r.question_text),
+                follows_question_id: r.follows_question_id ?? null,
+                group_ids: groups.get(member),
+                archived: Boolean(r.archived),
+                answered: Boolean(r.answered)
+            });
+        }
+    }
+    return { items, missing };
+}
+
 module.exports = {
     DEFAULT_TOTAL, MIN_TOTAL, MAX_TOTAL, DEFAULT_DAYS, DEFAULT_MIX, BUCKETS,
     MAX_REMEDIAL_UNITS, MAX_EXTENSION_UNITS, MAX_PREREQ_TARGETS, PREREQ_DIFFICULTY_MAX, PREVIEW_LEN,
@@ -441,7 +541,10 @@ module.exports = {
     choosePrereqTargets,
     buildPlan,
     previewText,
+    groupIdsById,
     buildChapterMastery,
     buildPrereqQuery,
-    planRemedialPaper
+    buildItemLookupQuery,
+    planRemedialPaper,
+    lookupItems
 };

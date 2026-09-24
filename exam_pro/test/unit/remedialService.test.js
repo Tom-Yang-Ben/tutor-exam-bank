@@ -302,8 +302,11 @@ describe('planRemedialPaper（注入假依賴，只驗組裝）', () => {
         assert.deepEqual(deps.seen.quotas[0].pool, { chapters: ['向量內積'], difficultyMax: 3 });
         assert.deepEqual(out.question_ids, [102, 101, 3, 2, 1]);
         assert.deepEqual(out.items.map(i => [i.question_id, i.bucket]), [[1, 'remedial'], [2, 'remedial'], [3, 'remedial'], [101, 'extension'], [102, 'extension']]);
-        assert.deepEqual(Object.keys(out.items[0]), ['question_id', 'bucket', 'target', 'chapter', 'difficulty', 'question_text_preview']);
+        assert.deepEqual(Object.keys(out.items[0]),
+            ['question_id', 'bucket', 'target', 'chapter', 'difficulty', 'question_text_preview', 'follows_question_id', 'group_ids']);
         assert.equal(out.items[0].question_text_preview, '題 1 內容');
+        // 沒有承上綁定：follows_question_id 為 null、group_ids 只有自己
+        assert.deepEqual(out.items.map(i => [i.follows_question_id, i.group_ids]), [[null, [1]], [null, [2]], [null, [3]], [null, [101]], [null, [102]]]);
         assert.deepEqual(out.blueprint.map(b => [b.bucket, b.target.chapter, b.wanted, b.got]), [['remedial', '向量內積', 8, 3], ['extension', '排列', 2, 2]]);
         for (const b of out.blueprint) for (const k of ['bucket', 'target', 'wanted', 'got']) assert.ok(k in b);
         assert.deepEqual(out.shortfalls, [{ bucket: 'remedial', target: { type: 'chapter', chapter: '向量內積', name: '向量內積' }, wanted: 8, got: 3, reason: 'insufficient_stock' }]);
@@ -333,5 +336,69 @@ describe('planRemedialPaper（注入假依賴，只驗組裝）', () => {
         const deps = fakeDeps({ tagged: 0 });
         const out = await r.planRemedialPaper({ studentId: 5, subject: '數學', total: 10, mix: r.DEFAULT_MIX, days: 90, sourceTypes: null, minN: 0 }, deps);
         assert.equal(out.basis, 'chapter');
+    });
+
+    test('承上組：items 帶 follows_question_id 與整組的 group_ids（前端據此整組刪，不拆散前題與承上題）', async () => {
+        const deps = fakeDeps();
+        const realQuery = deps.query;
+        // 題 2 ← 3 ← 1（鏈，id 故意不照順序）；101 單題
+        const follows = { 1: 3, 3: 2 };
+        deps.query = async (text, values) => {
+            const out = await realQuery(text, values);
+            if (/FROM questions WHERE id = ANY/.test(text)) out.rows.forEach(row => { row.follows_question_id = follows[row.id] ?? null; });
+            return out;
+        };
+        const out = await r.planRemedialPaper({ studentId: 5, subject: '數學', total: 10, mix: r.DEFAULT_MIX, days: 90, sourceTypes: null, minN: 5 }, deps);
+        const by = Object.fromEntries(out.items.map(i => [i.question_id, [i.follows_question_id, i.group_ids]]));
+        assert.deepEqual(by[1], [3, [2, 3, 1]]);
+        assert.deepEqual(by[2], [null, [2, 3, 1]]);
+        assert.deepEqual(by[3], [2, [2, 3, 1]]);
+        assert.deepEqual(by[101], [null, [101]]);
+    });
+});
+
+describe('groupIdsById', () => {
+    test('與組卷同一個分組函式：鏈、分岔、前題不在這批就自成組首', () => {
+        const m = r.groupIdsById([
+            { id: 5, follows_question_id: 4 }, { id: 4, follows_question_id: null }, { id: 6, follows_question_id: 4 },
+            { id: 9, follows_question_id: 888 }, { id: 7, follows_question_id: null }
+        ]);
+        assert.deepEqual(m.get(4), [4, 5, 6]);
+        assert.deepEqual(m.get(6), [4, 5, 6]);
+        assert.deepEqual(m.get(9), [9], '前題 888 不在這批：自己一組');
+        assert.deepEqual(m.get(7), [7]);
+    });
+});
+
+describe('lookupItems（手動加題前的查詢；注入假依賴）', () => {
+    test('buildItemLookupQuery：$1 ids、$2 studentId；走訪承上組、不排除封存與已寫過（改回報旗標）', () => {
+        const { text, values } = r.buildItemLookupQuery([5, 7], 3);
+        assert.deepEqual(values, [[5, 7], 3]);
+        assert.match(text, /WITH RECURSIVE grp/);
+        assert.match(text, /q\.follows_question_id = g\.id/);
+        assert.match(text, /archived_at IS NOT NULL\) AS archived/);
+        assert.match(text, /a\.student_id = \$2\) AS answered/);
+        assert.doesNotMatch(text, /archived_at IS NULL/, '封存題也要查得到，才能說明為什麼不能加');
+    });
+
+    test('每題後面接同組成員（承接順序）、不重複；查不到的進 missing；旗標轉成布林', async () => {
+        const rows = [
+            { id: 4, subject: '數學', chapter: '向量內積', difficulty: 2, question_text: '前題\n內容', follows_question_id: null, archived: false, answered: true },
+            { id: 5, subject: '數學', chapter: '向量內積', difficulty: 3, question_text: '承上題', follows_question_id: 4, archived: false, answered: false },
+            { id: 7, subject: '物理', chapter: '靜電學', difficulty: 1, question_text: '單題', follows_question_id: null, archived: true, answered: false }
+        ];
+        const seen = [];
+        const out = await r.lookupItems({ studentId: 3, ids: [5, 999, 7, 4] }, {
+            async query(text, values) { seen.push(values); return { rows }; }
+        });
+        assert.deepEqual(seen, [[[5, 999, 7, 4], 3]]);
+        assert.deepEqual(out.missing, [999]);
+        assert.deepEqual(out.items.map(i => i.question_id), [4, 5, 7], '要 5 → 先列整組 4、5；4 已列過不重複');
+        assert.deepEqual(out.items[0], {
+            question_id: 4, subject: '數學', chapter: '向量內積', difficulty: 2, question_text_preview: '前題 內容',
+            follows_question_id: null, group_ids: [4, 5], archived: false, answered: true
+        });
+        assert.deepEqual([out.items[1].follows_question_id, out.items[1].group_ids], [4, [4, 5]]);
+        assert.deepEqual([out.items[2].group_ids, out.items[2].archived], [[7], true]);
     });
 });
