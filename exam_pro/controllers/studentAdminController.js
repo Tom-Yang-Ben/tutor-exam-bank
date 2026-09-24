@@ -12,8 +12,16 @@
 //
 // 四支全部掛在核心區（不在 FEATURE_STUDENTS 旗標內）：組卷是核心功能，
 // 它依賴的學生管理不該被一個展示用旗標關掉。
+//
+// 階段 5 WS-A（docs/interfaces-stage5.md 第 4.1 條第 4 項；DEC-017、缺口 G09）：
+//   POST 與 PATCH 另外接受學生檔案六欄的任意子集（grade、track、target_exams、school、
+//   textbook_version、note；白名單在 config/studentProfile.js）。PATCH 沒送的欄位不動，
+//   name 也從「必填」變成「有送才改」——但只送 name 的既有請求，行為與訊息完全不變。
+//   兩支的回應都帶回完整檔案（id、name 之後接六欄），前端不必再打一次清單。
+//   另加 GET /api/student-profile-options（核心區，唯讀），前端表單的選項從這裡讀。
 // ─────────────────────────────────────────────────────────────
 const { pool, query } = require('../config/db');
+const { PROFILE_FIELDS, parseProfile, profileOptions } = require('../config/studentProfile');
 
 const STUDENT_NOT_FOUND = '找不到該學生';
 /** students.name 沒有長度 DDL 限制，這裡給一個防呆上限（貼 UI 而不是貼資料庫）。 */
@@ -29,15 +37,30 @@ function validName(raw) {
 /** PG unique_violation */
 const UNIQUE_VIOLATION = '23505';
 
+/** 回應的欄位（id、name 之後接學生檔案六欄；順序同 GET /api/students 的後六欄）。 */
+const RETURNING = `RETURNING id, name, ${PROFILE_FIELDS.join(', ')}`;
+
+// ─────────────────── GET /api/student-profile-options（〔stage5 WS-A〕）───────────────────
+// 前端學生檔案表單的選項。唯讀、純設定，不碰 DB。
+exports.getProfileOptions = (req, res) => {
+    res.status(200).json(profileOptions());
+};
+
 // ─────────────────── POST /api/students ───────────────────
 exports.createStudent = async (req, res, next) => {
     const name = validName(req.body?.name);
     if (!name) return res.status(400).json({ message: `學生姓名必填，且長度不得超過 ${MAX_NAME_LEN} 字。` });
+    // 〔stage5 WS-A〕檔案欄位可選；沒送的欄位走 DDL 預設（NULL／空陣列）
+    const profile = parseProfile(req.body);
+    if (profile.error) return res.status(400).json({ message: profile.error });
+    const cols = ['name', ...Object.keys(profile.fields)];
+    const values = [name, ...Object.values(profile.fields)];
     try {
         const { rows: [row] } = await query(
-            'INSERT INTO students (name) VALUES ($1) RETURNING id, name', [name]
+            `INSERT INTO students (${cols.join(', ')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(', ')}) ${RETURNING}`,
+            values
         );
-        res.status(201).json({ id: row.id, name: row.name });
+        res.status(201).json(row);
     } catch (err) {
         if (err.code === UNIQUE_VIOLATION) {
             return res.status(409).json({ message: `學生「${name}」已存在。` });
@@ -47,14 +70,31 @@ exports.createStudent = async (req, res, next) => {
 };
 
 // ─────────────────── PATCH /api/students/:id ───────────────────
+// 〔stage5 WS-A〕改名之外也改學生檔案：body 可以是 name 與六個檔案欄位的任意子集，沒送的不動。
+// 有送 name 時照舊驗證（同一句 400 訊息）；一個可改的欄位都沒送才回「至少要提供一個欄位」。
+// 匯出名維持 renameStudent（routes/index.js 核心區那一行不動），另掛 updateStudent 別名。
 exports.renameStudent = async (req, res, next) => {
     const id = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ message: '學生 id 無效。' });
-    const name = validName(req.body?.name);
-    if (!name) return res.status(400).json({ message: `學生姓名必填，且長度不得超過 ${MAX_NAME_LEN} 字。` });
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const hasName = Object.prototype.hasOwnProperty.call(body, 'name');
+    const name = hasName ? validName(body.name) : null;
+    if (hasName && !name) return res.status(400).json({ message: `學生姓名必填，且長度不得超過 ${MAX_NAME_LEN} 字。` });
+    const profile = parseProfile(body);
+    if (profile.error) return res.status(400).json({ message: profile.error });
+
+    const sets = { ...(hasName ? { name } : {}), ...profile.fields };
+    const cols = Object.keys(sets);
+    if (cols.length === 0) {
+        return res.status(400).json({
+            message: `至少要提供一個要修改的欄位（name、${PROFILE_FIELDS.join('、')}）。`
+        });
+    }
     try {
         const { rows } = await query(
-            'UPDATE students SET name = $1 WHERE id = $2 RETURNING id, name', [name, id]
+            `UPDATE students SET ${cols.map((c, i) => `${c} = $${i + 1}`).join(', ')}
+              WHERE id = $${cols.length + 1} ${RETURNING}`,
+            [...Object.values(sets), id]
         );
         if (rows.length === 0) return res.status(404).json({ message: STUDENT_NOT_FOUND });
         res.status(200).json(rows[0]);
@@ -143,3 +183,6 @@ exports.mergeStudent = async (req, res, next) => {
         client.release();
     }
 };
+
+// 〔stage5 WS-A〕PATCH 現在不只改名，給一個名實相符的別名（路由仍掛 renameStudent）
+exports.updateStudent = exports.renameStudent;

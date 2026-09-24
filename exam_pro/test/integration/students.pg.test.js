@@ -95,6 +95,9 @@ function runSuite() {
 
     // ─────────────────── 灌資料輔助 ───────────────────
 
+    /** 〔stage5 WS-A〕GET /api/students 每列新增的學生檔案六欄，沒填時的值（第 4.1 條第 4 項）。 */
+    const EMPTY_PROFILE = { grade: null, track: null, target_exams: [], school: null, textbook_version: null, note: null };
+
     const MATH_CHAPTERS = ['向量內積', '排列', '組合'];
     const PHYS_CHAPTERS = ['牛頓運動定律', '靜電學'];
     const TYPES = ['單選', '多選', '填空', '計算', '證明'];
@@ -325,11 +328,15 @@ function runSuite() {
 
                 const res = await request(app).get('/api/students');
                 assert.equal(res.status, 200);
+                // 〔stage5 WS-A〕DEC-017／interfaces-stage5.md 第 4.1 條第 4 項刻意在每列後面加上學生檔案六欄；
+                // 既有四欄的值與順序不變，新欄在沒填檔案時是 NULL／空陣列。斷言仍是逐欄 deepEqual（沒有放寬）。
                 assert.deepEqual(res.body.items, [
                     // A 完全沒有試卷也要出現（LEFT JOIN），papers: 0、graded_ratio: 0
-                    { id: idA, name: '測試學生A', papers: 0, graded_ratio: 0 },
-                    { id: idB, name: '測試學生B', papers: 2, graded_ratio: 0.625 }
+                    { id: idA, name: '測試學生A', papers: 0, graded_ratio: 0, ...EMPTY_PROFILE },
+                    { id: idB, name: '測試學生B', papers: 2, graded_ratio: 0.625, ...EMPTY_PROFILE }
                 ]);
+                assert.deepEqual(Object.keys(res.body.items[0]).slice(0, 4), ['id', 'name', 'papers', 'graded_ratio'],
+                    '既有四欄必須維持在最前面、順序不變');
                 // 型別：不得是字串、不得是 null／NaN
                 for (const item of res.body.items) {
                     assert.equal(typeof item.papers, 'number');
@@ -347,7 +354,8 @@ function runSuite() {
                 await seedPaper(id, questions.map(q => q.id));
 
                 const { body } = await request(app).get('/api/students');
-                assert.deepEqual(body.items, [{ id, name: '測試學生A', papers: 1, graded_ratio: 0 }]);
+                // 〔stage5 WS-A〕同上：每列多了學生檔案六欄（第 4.1 條第 4 項）
+                assert.deepEqual(body.items, [{ id, name: '測試學生A', papers: 1, graded_ratio: 0, ...EMPTY_PROFILE }]);
             });
 
             test('papers 不會被 attempts 的列數放大（兩張表分別聚合再 LEFT JOIN）', async () => {
@@ -886,8 +894,11 @@ function runSuite() {
                 const recent = body.recent_wrong;
 
                 assert.equal(recent.length, 20, 'LIMIT 凍結為 20');
+                // 〔stage5 WS-A〕DEC-015／第 4.1 條第 3 項刻意在每列加上 error_types 與 score；既有四欄不變。
                 assert.deepEqual(Object.keys(recent[0]).sort(),
-                    ['assigned_at', 'chapter', 'question_id', 'question_text']);
+                    ['assigned_at', 'chapter', 'error_types', 'question_id', 'question_text', 'score']);
+                // fixture 沒有標錯因也沒有部分給分：新欄必須是 [] 與 null（不是 undefined）
+                assert.ok(recent.every(r => Array.isArray(r.error_types) && r.error_types.length === 0 && r.score === null));
                 for (const row of recent) {
                     assert.match(row.assigned_at, /^\d{4}-\d{2}-\d{2}$/, 'assigned_at 必須是字串');
                 }
@@ -947,8 +958,11 @@ function runSuite() {
             test('五個頂層鍵齊備，且只有這五個', async () => {
                 const studentId = fixture.students[0];
                 const { body } = await request(app).get(`/api/students/${studentId}/weakness`);
-                assert.deepEqual(Object.keys(body).sort(),
-                    ['by_chapter', 'by_difficulty', 'by_type', 'recent_wrong', 'trend_weekly']);
+                // 〔stage5 WS-A〕DEC-015／第 4.1 條第 3 項刻意新增第六個鍵 by_error_type，接在既有五個之後；
+                // 既有五個的順序也一併釘住（比原本的 sort 後比對更嚴）。
+                assert.deepEqual(Object.keys(body),
+                    ['by_chapter', 'by_type', 'by_difficulty', 'trend_weekly', 'recent_wrong', 'by_error_type']);
+                assert.deepEqual(body.by_error_type, [], 'fixture 沒有標錯因，錯因分布應為空陣列');
             });
         });
 

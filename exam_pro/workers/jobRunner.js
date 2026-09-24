@@ -250,6 +250,35 @@ function buildSaveFields(payload) {
     };
 }
 
+/** questions.solution_text 的字數上限（migrations/0011 的 CHECK）。 */
+const SOLUTION_MAX_LEN = 4000;
+
+/**
+ * 〔stage5 WS-A〕由 payload 的 verify 結果決定入庫時要不要一併寫文字詳解
+ * （docs/interfaces-stage5.md 第 4.1 條第 5 項；DEC-017、缺口 G05）。
+ *
+ * verify 節點（agents/verify.js）pass 時，runner 的 mergePayload 把它的 data 原樣存成
+ * `payload.verify = { skipped:false, final_answer, answer_form, steps_summary, claimed_answer, compare, samples }`。
+ * 「判定一致」看的是 `compare === 'agree'`（answerCompare 的結論），不是 outcome 的 kind——
+ * payload 裡只留得下 data。證明題走 skipped（`{ skipped: true }`，沒有 steps_summary）。
+ *
+ * 只有「一致且 steps_summary 非空」才寫；其他情況（沒跑、跳過、uncertain／disagree、空白、
+ * 超過 4000 字）一律兩欄 NULL。超長**不截斷**：截一半的詳解比沒有詳解更會誤導學生。
+ *
+ * scripts/backfill_solutions.js 回填既有題目時也呼叫這一支，兩條路徑的判定因此不會走鐘。
+ *
+ * @param {object} payload job_questions.payload
+ * @returns {{ solution_text:string|null, solution_src:'verify'|null }}
+ */
+function buildSolutionFields(payload) {
+    const none = { solution_text: null, solution_src: null };
+    const v = payload && payload.verify;
+    if (!v || typeof v !== 'object' || v.skipped === true || v.compare !== 'agree') return none;
+    const text = typeof v.steps_summary === 'string' ? v.steps_summary.trim() : '';
+    if (text === '' || [...text].length > SOLUTION_MAX_LEN) return none;
+    return { solution_text: text, solution_src: 'verify' };
+}
+
 /**
  * 入庫時的 `chapter_src`，依 `payload.classify.source` 決定
  * （interfaces-stage3.md 第 4.7、5.2 條的對照表）：
@@ -566,6 +595,8 @@ function createRunner(opts = {}) {
         // 來源註記（0007）：同路徑沿用；變式 job 沒有註記（不繼承藍本——改寫後不是原卷的題）
         const sourceType = ctx?.job?.source_type ?? 'unknown';
         const sourceDetail = ctx?.job?.source_detail ?? null;
+        // 〔stage5 WS-A〕文字詳解：verify 判定一致且 steps_summary 非空才寫（buildSolutionFields）
+        const solution = buildSolutionFields(input);
         const client = await db.pool.connect();
         try {
             await client.query('BEGIN');
@@ -577,15 +608,18 @@ function createRunner(opts = {}) {
             const { rows } = await client.query(
                 `INSERT INTO questions
                     (subject, chapter, question_type, difficulty, question_text, question_img, answer_text,
-                     origin, chapter_src, variant_of, text_hash, source_type, source_detail, search_tsv)
+                     origin, chapter_src, variant_of, text_hash, source_type, source_detail, search_tsv,
+                     solution_text, solution_src)
                  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
                          setweight(to_tsvector('simple', array_to_string($14::text[], ' ')), 'A')
                       || setweight(to_tsvector('simple', array_to_string($15::text[], ' ')), 'A')
-                      || setweight(to_tsvector('simple', array_to_string($16::text[], ' ')), 'B'))
+                      || setweight(to_tsvector('simple', array_to_string($16::text[], ' ')), 'B'),
+                         $17, $18)
                  RETURNING id`,
                 [v.value.subject, v.value.chapter, v.value.question_type, v.value.difficulty,
                 v.value.question_text, questionImg, v.value.answer_text || '略', origin, chapterSrc, variantOf, textHash,
-                    sourceType, sourceDetail, chapterTokens, keywordTokens, stemTokens]);
+                    sourceType, sourceDetail, chapterTokens, keywordTokens, stemTokens,
+                    solution.solution_text, solution.solution_src]);
 
             const questionId = rows[0].id;
             await client.query('UPDATE job_questions SET question_id = $2 WHERE id = $1', [ctx.jq.id, questionId]);
@@ -1322,6 +1356,7 @@ module.exports = {
     createRunner, startInlineRunner,
     // 純函式，供單元測試與 report_jobs 共用
     loadConfig, loadStage3Config, loadSourceCheckConfig, planChunks, backoffMs, attemptNo, buildSaveFields, chapterSrcFor, normalizeErrorClass, makeLogger, resolveJobPath,
+    buildSolutionFields,   // 〔stage5 WS-A〕save 與 scripts/backfill_solutions.js 共用
     readFeatures, schemaFallbackOf,
     ADVANCEABLE_STATES, FREE_NODES, AGENT_MODULE_FOR_NODE, ERROR_CLASSES, SOURCE_CHECK_MODES,
     RENEW_INTERVAL_MS, BACKOFF_BASE_MS, BACKOFF_MAX_MS, EXTRACT_MAX_RETRIES

@@ -190,4 +190,24 @@ if (featuresS4.FEATURE_ASSISTANT) {
     router.post('/assistant', assistantRateLimit, assistantController.chat);
 }
 
+// ── 階段 5 WS-A：資料地基——批改細節、學生檔案、文字詳解（docs/interfaces-stage5.md 第 4.1 條）──
+// WS-A 不另加旗標（第 1.3 條）：擴充既有端點都改在原本的 controller（PATCH /papers/:id/results、
+// /students、/questions、/download-word），這裡只掛三支新的**唯讀**端點，全部不呼叫 LLM。
+//   GET /questions/:id              題目詳情（含詳解；已封存的題也查得到）——核心區
+//   GET /student-profile-options    學生檔案表單的選項（config/studentProfile.js）——核心區
+//   GET /error-types                錯因白名單（config/errorTypes.js）——只給批改與弱點面板用，
+//                                   跟著 FEATURE_STUDENTS：旗標關閉時不掛載，落到 Express 預設 404
+{
+    const questionControllerWs5A = require('../controllers/questionController');
+    const studentAdminControllerWs5A = require('../controllers/studentAdminController');
+    router.get('/questions/:id', questionControllerWs5A.getQuestion);
+    router.get('/student-profile-options', studentAdminControllerWs5A.getProfileOptions);
+    if (require('../config/features').FEATURE_STUDENTS) {
+        const { ERROR_TYPES, MAX_ERROR_TYPES } = require('../config/errorTypes');
+        router.get('/error-types', (req, res) => {
+            res.status(200).json({ items: ERROR_TYPES, max_per_attempt: MAX_ERROR_TYPES });
+        });
+    }
+}
+
 module.exports = router;
