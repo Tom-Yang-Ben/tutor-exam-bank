@@ -53,6 +53,7 @@ describe('npm run eval:classify-chem', () => {
     test('沒有 cassette：印出「尚未錄製，略過」並 exit 0', () => {
         const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'chem-cassette-empty-'));
         const r = runScript({ EVAL_CASSETTE_DIR: empty });
+        fs.rmSync(empty, { recursive: true, force: true });
         assert.equal(r.status, 0, r.stderr);
         assert.match(r.stdout, /尚未錄製，略過/);
     });
@@ -73,6 +74,7 @@ describe('npm run eval:classify-chem', () => {
             }));
         }
         const r = runScript({ EVAL_CASSETTE_DIR: dir });
+        fs.rmSync(dir, { recursive: true, force: true });
         assert.equal(r.status, 0, r.stdout + r.stderr);
         assert.match(r.stdout, /accuracy 1、macro-F1 1/);
         // 報表寫進 eval/reports（已 gitignore）；測試跑完清掉，不留垃圾
@@ -85,6 +87,7 @@ describe('npm run eval:classify-chem', () => {
         fs.mkdirSync(path.join(dir, AGENT), { recursive: true });
         fs.writeFileSync(path.join(dir, AGENT, 'deadbeef.json'), '{"meta":{},"request":{},"response":{"data":{}}}');
         const r = runScript({ EVAL_CASSETTE_DIR: dir });
+        fs.rmSync(dir, { recursive: true, force: true });
         assert.equal(r.status, 0, r.stderr);
         assert.match(r.stdout, /replay miss/);
     });
