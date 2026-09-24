@@ -180,8 +180,12 @@ async function transcribe(input, deps = {}) {
             cacheKeyParts: { audio_sha256: audioSha256, mime: mimeType, subject }
         });
     } catch (err) {
+        // 〔stage5 審查修正 S5-45〕模型已回應、JSON 卻解析失敗（截斷、空字串、非 JSON）時，
+        // 這次呼叫的錢已經花掉了：services/llm/gemini.js 把用量掛在 err.usage，先記帳再回 502——
+        // 否則「請再錄一次」的重試會一直花錢，預算閘門卻永遠不會關。
+        if (err && err.usage) budget.add(tutor.estimateUsd(modelId, err.usage));
         // 同 tutorService：LLM 端的失敗一律 502，不讓 SDK 自帶的 status 冒充成參數錯誤
-        throw Object.assign(tutor.httpError(502, `語音轉寫暫時無法使用：${err.message}`), { cause: err });
+        throw Object.assign(tutor.httpError(502, tutor.publicLlmError('語音轉寫暫時無法使用', err)), { cause: err });
     }
 
     // 成本先記：就算輸出格式不合，這次呼叫的錢也已經花掉了

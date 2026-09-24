@@ -55,7 +55,7 @@
 **選擇**: 選項四，並附四項配套決策。
 
 1. **確認不可省**——轉寫結果一律先進可編輯面板；歧義列成 chip（`options[0]` 是寫進逐字稿的那一個，點選即替換）；只有「確認送出」會呼叫家教，「取消」什麼都不送。前端測試以假 MediaRecorder 走完整流程，斷言確認之前 `/api/tutor` 呼叫次數為 0。
-2. **音訊不落地**——`multer.memoryStorage()`（不沿用既有會寫 `uploads/` 的上傳設定），≤ 5 MB、單一檔案、五種 mime（比對前剝掉 `;codecs=` 參數）；請求結束即清掉 buffer；不寫 DB、不進 log；cassette（record 模式）只存位元組數與 sha256，鍵也只用錄音雜湊。整合測試斷言上傳前後 `uploads/` 檔案數不變。
+2. **音訊不落地**——`multer.memoryStorage()`（不沿用既有會寫 `uploads/` 的上傳設定），≤ 5 MB、單一檔案、五種 mime（比對前剝掉 `;codecs=` 參數）；請求結束即清掉 buffer；不寫 DB、不進 log；cassette（record 模式）的 request 只存音訊的位元組數與 sha256，鍵也只用錄音雜湊——〔2026-09-24 最終審查更正〕但 response 會原樣存模型的輸出，也就是**逐字稿原文**，錄音裡講到的學生姓名不經遮罩就寫進 `eval/cassettes/voice/`；因此該目錄（與 `tutor/`）列入 `.gitignore`，不進版控。整合測試斷言上傳前後 `uploads/` 檔案數不變。
 3. **只在安全環境與桌機開放**——非 localhost／HTTPS、瀏覽器缺 `getUserMedia`／`MediaRecorder`、或沒有精準指標（`any-pointer: fine`，視為非桌機）時，隱藏按鈕並寫明原因（DEC-018 的 D3 = a）。一段最多 60 秒、短於 0.6 秒視為誤觸。
 4. **成本與限流獨立於家教、預算共用**——`VOICE_RATE_LIMIT_PER_MIN`（預設 10）是獨立的限流桶；花費併入 `TUTOR_DAILY_BUDGET_USD`，模型輸出不合 schema（502）時這次的花費照樣記帳。
 

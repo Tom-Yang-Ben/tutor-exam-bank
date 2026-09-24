@@ -691,7 +691,7 @@ function mountTutorSection(app, section, { voice }) {
         el('p', 'eyebrow text-teal-600', { textContent: 'AI Tutor' }),
         el('h2', 'mt-1 text-xl font-extrabold tracking-tight text-slate-900', { textContent: 'AI 家教' }),
         el('p', 'mt-1 text-xs sm:text-sm text-slate-500', {
-            textContent: '問高中數學、物理、化學的題目或觀念。填了題目 ID 會帶入題幹、答案與詳解；選了學生會帶入他的弱點（姓名不送出）。數值與代數結果由程式驗算，但仍請自行判斷。'
+            textContent: '問高中數學、物理、化學的題目或觀念。填了題目 ID 會帶入題幹、答案與詳解；選了學生會帶入他的弱點（代號化）。訊息裡的學生全名與三字姓名的名字（例如「小明」）會自動換成代號，單字名、暱稱遮不到，請改用「這位學生」稱呼。數值與代數結果由程式驗算，但仍請自行判斷。'
         })
     );
     head.append(el('span', 'section-icon bg-teal-50 text-teal-700', { textContent: '教' }), titleBox);

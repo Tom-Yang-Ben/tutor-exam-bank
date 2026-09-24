@@ -15,6 +15,12 @@ uploads/
 # 資料庫備份 JSON（含題庫資料，避免外流）
 *_backup_*.json
 
+# AI 家教與語音轉寫在 LLM_MODE=record 下錄的 cassette（階段 5 審查修正）：
+# 語音的 response 存的是逐字稿原文，錄音裡講到的學生姓名不會被遮罩；家教的回覆也是對特定學生的講解。
+# CI 不需要它們（整合測試用暫存目錄自己寫 cassette），Owner 要刻意納入版控時再逐檔 git add -f。
+exam_pro/eval/cassettes/voice/
+exam_pro/eval/cassettes/tutor/
+
 # 維運腳本產出的報告（含題庫題目內容，且可隨時重新產生）
 公式健檢報告.html
 公式修正預覽.html

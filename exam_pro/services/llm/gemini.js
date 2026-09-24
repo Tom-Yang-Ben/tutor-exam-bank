@@ -300,24 +300,29 @@ async function generateJson({ model, system, parts, schema, maxOutputTokens, thi
     }
 
     const usageMeta = res?.usageMetadata || {};
+    const usage = {
+        tokenIn: usageMeta.promptTokenCount ?? 0,
+        tokenOut: usageMeta.candidatesTokenCount ?? 0,
+        tokenThinking: usageMeta.thoughtsTokenCount ?? 0,
+        // 沒有快取命中時整個鍵不存在（不是 0）——裁決 S0-6 第 2 點
+        tokenCached: usageMeta.cachedContentTokenCount ?? 0
+    };
     let data;
     try {
         data = parseJsonText(res?.text);
     } catch (err) {
         // JSON 壞掉是「模型輸出」的問題，不是供應商掛掉；讓 agent 走 schema_invalid 而不是無謂退避
         err.errorClass = 'schema_invalid';
+        // 〔stage5 審查修正 S5-45〕模型已經回應、這次呼叫已經計費（截斷、空字串、非 JSON 都一樣），
+        // 用量掛在錯誤上，讓有自己預算閘門的呼叫端（語音、知識點標註）照樣記帳。附加欄位，既有呼叫端不讀。
+        err.usage = usage;
+        err.finishReason = res?.candidates?.[0]?.finishReason ?? null;
         throw err;
     }
 
     return {
         data,
-        usage: {
-            tokenIn: usageMeta.promptTokenCount ?? 0,
-            tokenOut: usageMeta.candidatesTokenCount ?? 0,
-            tokenThinking: usageMeta.thoughtsTokenCount ?? 0,
-            // 沒有快取命中時整個鍵不存在（不是 0）——裁決 S0-6 第 2 點
-            tokenCached: usageMeta.cachedContentTokenCount ?? 0
-        },
+        usage,
         latencyMs: Date.now() - startedAt,
         raw: res,
         schemaFallback

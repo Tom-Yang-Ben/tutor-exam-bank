@@ -212,6 +212,55 @@ describe('transcribe — 成本併入 TUTOR_DAILY_BUDGET_USD', () => {
         assert.ok(b.spent() > 0);
     });
 
+    // 〔stage5 審查修正 S5-45〕
+    test('模型已回應但 JSON 解析失敗（err.usage）→ 502，這次的錢照樣記帳', async () => {
+        const b = budget('10');
+        const llm = {
+            async generateJson() {
+                throw Object.assign(new Error('Unexpected end of JSON input'), {
+                    errorClass: 'schema_invalid', usage: { tokenIn: 40000, tokenOut: 3072, tokenThinking: 1024, tokenCached: 0 }
+                });
+            }
+        };
+        await assert.rejects(() => voice.transcribe({ file: file() }, { llm, budget: b }), (e) => e.status === 502);
+        assert.equal(b.spent(), tutor.estimateUsd('gemini-3.5-flash', { tokenIn: 40000, tokenOut: 3072, tokenThinking: 1024 }));
+        // 沒有 usage 的供應商錯誤（連線失敗、400）不記帳
+        const b2 = budget('10');
+        await assert.rejects(() => voice.transcribe({ file: file() }, {
+            llm: { async generateJson() { throw new Error('socket hang up'); } }, budget: b2
+        }), (e) => e.status === 502);
+        assert.equal(b2.spent(), 0);
+    });
+
+    test('經 services/llm（live）＋假 SDK client：回截斷的 JSON 時照樣記帳，預算用完就擋下一次', async () => {
+        const gemini = require('../../services/llm/gemini');
+        const saved = process.env.LLM_MODE;
+        process.env.LLM_MODE = 'live';
+        let calls = 0;
+        gemini._setClientForTest({
+            models: {
+                async generateContent() {
+                    calls += 1;
+                    return {
+                        text: '{"text":"x 平方減五 x',
+                        candidates: [{ finishReason: 'MAX_TOKENS' }],
+                        usageMetadata: { promptTokenCount: 40000, candidatesTokenCount: 3072, thoughtsTokenCount: 1024 }
+                    };
+                }
+            }
+        });
+        try {
+            const b = budget('0.05');
+            await assert.rejects(() => voice.transcribe({ file: file() }, { budget: b }), (e) => e.status === 502);
+            assert.ok(b.spent() > 0.05, `spent=${b.spent()}`);
+            await assert.rejects(() => voice.transcribe({ file: file() }, { budget: b }), (e) => e.status === 429);
+            assert.equal(calls, 1, '預算用完後不得再呼叫供應商');
+        } finally {
+            gemini._setClientForTest(null);
+            if (saved === undefined) delete process.env.LLM_MODE; else process.env.LLM_MODE = saved;
+        }
+    });
+
     test('沒注入 budget 時，家教與語音都用程序內同一個 sharedBudget', async () => {
         // 本檔自己一個行程（node --test 逐檔隔離），把共用預算灌爆不會影響別的測試檔
         const saved = process.env.TUTOR_DAILY_BUDGET_USD;

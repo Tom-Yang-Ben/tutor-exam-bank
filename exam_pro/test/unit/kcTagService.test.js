@@ -257,6 +257,24 @@ describe('tagQuestion', () => {
         assert.ok(r.usage.costUsd > 0);
     });
 
+    // 〔stage5 審查修正 S5-45〕
+    test('真的 agent + 模型回了截斷的 JSON（err.usage）→ failed，但這次的用量照樣記進 usage', async () => {
+        const db = fakeDb();
+        const llm = {
+            async generateJson() {
+                throw Object.assign(new Error('Unexpected end of JSON input'), {
+                    errorClass: 'schema_invalid', usage: { tokenIn: 1600, tokenOut: 250, tokenThinking: 512, tokenCached: 0 }
+                });
+            }
+        };
+        const r = await svc.tagQuestion(5, { db, llm, ...CFG });
+        assert.equal(r.status, 'failed');
+        assert.equal(r.usage.calls, 1);
+        assert.equal(r.usage.tokenIn, 1600);
+        assert.equal(r.usage.tokenThinking, 512);
+        assert.ok(r.usage.costUsd > 0, 'kc:backfill 的實際費用要算進失敗的呼叫');
+    });
+
     test('真的 agent + 會丟錯的 llm（例如 replay miss）→ failed，不丟例外給呼叫端', async () => {
         const db = fakeDb();
         const llm = { async generateJson() { throw new Error('LLM_MODE=replay 找不到 cassette（agent=kc_tag）'); } };

@@ -57,3 +57,46 @@ describe('pseudonym — mask／unmask', () => {
         assert.equal(q.mask('AxB(C) 的題'), 'AxB(C) 的題');
     });
 });
+
+// 〔stage5 審查修正 S5-46〕家教的自由文字：名字、空白、大小寫、全形
+describe('pseudonym — 常見的「不是逐字全名」寫法', () => {
+    const p = createPseudonymizer([
+        { id: 3, name: '王小明' }, { id: 4, name: 'Amy Chen' }, { id: 5, name: '華' },
+        { id: 6, name: '李大同' }, { id: 7, name: '張大同' }, { id: 8, name: 'Tan' }, { id: 9, name: '歐陽娜娜' }
+    ]);
+
+    test('三字姓名只叫名字也遮；四字（複姓）取後兩字', () => {
+        assert.equal(p.mask('小明這題一直算錯'), '學生#3這題一直算錯');
+        assert.equal(p.unmask('學生#3這題一直算錯'), '王小明這題一直算錯', '換回的是全名');
+        assert.equal(p.mask('娜娜的化學'), '學生#9的化學');
+    });
+
+    test('中文姓名中間夾空白也遮', () => {
+        assert.equal(p.mask('王 小明 的問題'), '學生#3 的問題');
+        assert.equal(p.mask('王　小明'), '學生#3');
+    });
+
+    test('多個英文單字的姓名：不分大小寫、空白可多可少、全形也算，但不吃掉更長的單字', () => {
+        assert.equal(p.mask('amy chen 跟 Amy  Chen 都不會'), '學生#4 跟 學生#4 都不會');
+        assert.equal(p.mask('ＡＭＹ　ｃｈｅｎ'), '學生#4');
+        assert.equal(p.mask('Amy Chenny'), 'Amy Chenny');
+    });
+
+    test('單一英文單字的姓名維持逐字比對（數學式裡的 tan、max 不能被吃掉）', () => {
+        assert.equal(p.mask('tan x 的週期；Tan 不會'), 'tan x 的週期；學生#8 不會');
+    });
+
+    test('兩位學生名字相同 → 換成「某位學生」（全名照舊各自對應）', () => {
+        assert.equal(p.mask('大同說他不會'), '某位學生說他不會');
+        assert.equal(p.mask('李大同和張大同'), '學生#6和學生#7');
+    });
+
+    test('單字名仍然遮不到（誤傷常用字的風險高於價值，文件與畫面照實說明）', () => {
+        assert.equal(p.mask('華這次考很差'), '華這次考很差');
+    });
+
+    test('名字剛好是另一位學生的全名時不另遮，全名優先', () => {
+        const q = createPseudonymizer([{ id: 1, name: '小明' }, { id: 2, name: '王小明' }]);
+        assert.equal(q.mask('小明和王小明'), '學生#1和學生#2');
+    });
+});

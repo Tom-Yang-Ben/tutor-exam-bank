@@ -30,7 +30,7 @@ FEATURE_VOICE=true          # 按住說話（要同時開 FEATURE_TUTOR）
 TUTOR_DAILY_BUDGET_USD=1.0  # 家教＋語音每天最多花多少美元（預設 1.0）
 ```
 
-LLM 要能真的呼叫：`LLM_MODE=live`（或 `record`）且有 `GEMINI_API_KEY`。`LLM_MODE=replay`（CI 的設定）時沒有錄過的問題一律回「AI 家教暫時無法回應：…找不到 cassette」。
+LLM 要能真的呼叫：`LLM_MODE=live`（或 `record`）且有 `GEMINI_API_KEY`。平常使用請用 `live`：`record` 會把每一次的回應寫成 cassette，語音的 cassette 存的是**逐字稿原文**（錄音裡講到的學生姓名不會被遮罩），所以 `eval/cassettes/voice/`、`eval/cassettes/tutor/` 已列入 `.gitignore`〔最終審查修正〕。`LLM_MODE=replay`（CI 的設定）時沒有錄過的問題一律回「AI 家教暫時無法回應：…找不到 cassette」。
 
 ### 2.2 問問題
 
@@ -40,7 +40,8 @@ LLM 要能真的呼叫：`LLM_MODE=live`（或 `record`）且有 `GEMINI_API_KEY
    - **引導式**：一次只給一步，最後問學生下一步怎麼做；學生還沒自己試之前不給最終答案。學生坐在旁邊一起用時選這個。
 3. 選填三個欄位（都可以不填）：
    - **科目**：沒有指定題目時給家教的提示。
-   - **學生**：會把這位學生近一年的「章節錯誤率前 5」與「錯因分布」帶進去，讓講解的深淺與提醒對準他。**姓名不會送出**，送出去的是「學生#編號」，回覆回來再換回姓名。學生還沒有批改紀錄時不帶。
+   - **學生**：會把這位學生近一年的「章節錯誤率前 5」與「錯因分布」帶進去，讓講解的深淺與提醒對準他。送出去的是「學生#編號」，回覆回來再換回姓名。學生還沒有批改紀錄時不帶。
+   - **訊息裡提到學生時**〔最終審查修正 S5-46〕：送出前，整段文字（你的訊息、對話紀錄、題幹、口語版）裡的學生姓名會換成代號。認得的寫法：完整姓名（中間夾空白也算，例如「王 小明」）；三、四個字的中文姓名**只叫名字**（「小明」、複姓「歐陽娜娜」的「娜娜」）；兩個以上英文單字的姓名不分大小寫、空白多寡（「amy chen」「Amy  Chen」）；全形英文字母。兩位學生名字相同（李大同、張大同只叫「大同」）時換成「某位學生」。**遮不到的**：單字名（「華」）、兩字姓名只叫名字（「明」）、暱稱、錯字，以及只有一個英文單字的名字寫成不同大小寫（「Tan」寫成「tan」——為了不吃掉數學式裡的 tan、max，這種名字只比對原本的大小寫）。提到學生時請用「這位學生」稱呼，家教畫面上也有這句提醒。
    - **題目 ID**：會帶入題幹、標準答案、詳解，以及這題標註的知識點口語版（這題沒標就用同一章的）。題目的科目優先於上面選的科目。題目有附圖時，家教看不到圖，會請你用文字描述。
 4. 在輸入框打字；有 `$…$` 公式時下方會即時預覽。`Ctrl＋Enter`（Mac 是 `⌘＋Enter`）或按「送出」。一次最多 1000 字。
 5. 家教會記得最近 8 輪對話；按「清除對話」或重新整理頁面就歸零。
@@ -65,12 +66,13 @@ LLM 要能真的呼叫：`LLM_MODE=live`（或 `record`）且有 `GEMINI_API_KEY
    - 聽起來有兩種寫法的公式（例如「x 平方加一分之一」）會列成 chip，點你要的那一個，逐字稿會跟著換。
 4. 確認無誤按「**確認送出**」才會送給家教；按「取消」什麼都不送。送出成功後面板才收起；上一則還在等回覆、題目 ID 不合法、家教回錯或連線失敗時，**逐字稿會留著**，處理好再按一次「確認送出」就好，不用重錄（重錄會再花一次語音費用）。
 
-**錄音裡不要講學生全名。** 姓名遮罩只作用在文字上：錄音本身會原樣送到 Gemini 轉寫。轉寫出來的文字在送給家教之前會再遮罩一次。
+**錄音裡不要講學生的名字。** 姓名遮罩只作用在文字上：錄音本身會原樣送到 Gemini 轉寫。轉寫出來的文字在送給家教之前會再遮罩一次（規則同第 2.2 節）。
 
 ### 2.5 花費
 
 - 家教與語音共用一個每日上限 `TUTOR_DAILY_BUDGET_USD`（預設 US$1.0），伺服器依 `config/pricing.js` 估算每一次的花費並累計，用完回「今天的 AI 家教預算已用完」，**隔天（伺服器所在時區的午夜）自動重置**。伺服器重啟也會歸零。
-- 花費是呼叫完才知道的，所以最後一次可能讓當天總額略超過上限。
+- 花費是呼叫完才知道的，所以最後一次可能讓當天總額略超過上限。同時送出好幾則（例如家教與語音同時在途、開了好幾個分頁）時，這幾則都會在任何一筆入帳前通過閘門，超出的量是「同時在途的則數 × 單次花費」（最多約一分鐘的限流量）。
+- 〔最終審查修正 S5-45〕語音轉寫回 502「格式不完整」或類似訊息時（模型的輸出被截斷、空白或不是 JSON），**這一次的錢照樣計入每日預算**——模型已經回應、供應商已經計費。一直重錄同一段有問題的錄音，預算用完就會擋下。
 - 每一次的估計（**依價目表推算，未實測**；實際 token 數依題目長短、思考長度、跑了幾段程式差很多）：
 
   | 動作 | 模型（預設） | 假設 | 估計 |
@@ -120,7 +122,7 @@ LLM 要能真的呼叫：`LLM_MODE=live`（或 `record`）且有 `GEMINI_API_KEY
 - **截斷**：`generateText` 回 `finishReason = 'MAX_TOKENS'` 時，`reply` 後面附上一段「**⚠ 回覆因長度上限被截斷**：…」（停在沒有結尾圍欄的程式碼區塊裡時，先補上結尾圍欄）；截斷前沒有任何文字時，`reply` 改成「家教這次的輸出額度在寫出回覆之前就用完了…」。回應形狀不變（仍是上面五個欄位），所以任何前端都看得到提醒；費用照樣記帳。
 - 送出的參數：`maxOutputTokens = 8192` 與 `thinkingBudget = 2048` **成對設定**（同 `agents/verify.js` 的教訓：`MODEL_VERIFY` 是 thinking 模型，思考計入輸出額度，不限思考時難題會把額度吃光）。`thinkingBudget` 不在 cassette 鍵內。
 
-**錯誤**：`400 { message }` 參數不合法；`404` 題目或學生不存在；`429` 每分鐘限流或今日預算用完（訊息不同）；`502` LLM 端失敗（供應商錯誤、replay miss、逾時；訊息以「AI 家教暫時無法回應：」開頭）；DB 錯誤走全域錯誤處理（500）。
+**錯誤**：`400 { message }` 參數不合法；`404` 題目或學生不存在；`429` 每分鐘限流或今日預算用完（訊息不同）；`502` LLM 端失敗（供應商錯誤、replay miss、逾時；訊息以「AI 家教暫時無法回應：」開頭）；DB 錯誤走全域錯誤處理（500）。〔最終審查修正〕`NODE_ENV=production` 時 502 的冒號後面只放分類後的原因（逾時、配額或頻率限制、回應格式不完整、重播模式找不到錄製檔、供應商錯誤），原始錯誤只寫進伺服器 log——原始訊息可能帶 cassette 的伺服器路徑、供應商的專案編號與配額名稱；其他環境照舊附上原始錯誤（與 `app.js` 全域錯誤中樞同一條線）。語音的 502 同一套規則。
 
 ### 3.2 `POST /api/voice/transcribe`（`FEATURE_VOICE` 且 `FEATURE_TUTOR`）
 
@@ -147,7 +149,7 @@ LLM 要能真的呼叫：`LLM_MODE=live`（或 `record`）且有 `GEMINI_API_KEY
 - `text` 是繁中逐字稿，數學式以 `$…$` 內嵌；`ambiguities[].options[0]` 是寫進 `text` 的那一個。伺服器端會丟掉少於兩個選項的歧義、選項去重並最多留 4 個。
 - `usage` 是契約之外**多給**的欄位（前端目前沒顯示，保留給之後的花費統計）。
 
-**錯誤**：`400` 沒有檔案、欄位名不是 `audio`、mime 不在白名單、科目不合法，或 multipart 本身壞掉（沒有結尾 boundary、part header 壞掉、沒有 boundary、上傳中途斷線——busboy 的解析錯誤，訊息逐字比對）；`413` 超過 5 MB；`429` 限流或今日預算用完；`502` LLM 端失敗或模型輸出不合 schema。
+**錯誤**：`400` 沒有檔案、欄位名不是 `audio`、mime 不在白名單、科目不合法，或 multipart 本身壞掉（沒有結尾 boundary、part header 壞掉、沒有 boundary、上傳中途斷線——busboy 的解析錯誤，訊息逐字比對）；`413` 超過 5 MB；`429` 限流或今日預算用完；`502` LLM 端失敗或模型輸出不合 schema。〔S5-45〕模型已回應但 JSON 解析失敗（截斷、空字串、非 JSON）時，`services/llm/gemini.js` 把用量掛在錯誤的 `usage` 上，`voiceService` 先記入每日預算再回 502。
 
 ### 3.3 `services/llm.generateText`（給其他 WS 用；第 5.1 條）
 
@@ -248,5 +250,5 @@ const { text, codeRuns, finishReason, usage, latencyMs } = await require('./serv
 - **srs**：建議新增 FR「AI 家教解題講解（direct／socratic）」、FR「計算驗證（code execution）」、FR「按住說話（老師確認才送出）」；NFR-002 的限流清單補 tutor 10/min、voice 10/min 與 `TUTOR_DAILY_BUDGET_USD`；NFR-001 補「錄音不落地」。
 - **db_design**：本 WS **沒有新增 migration**（只讀 `questions.solution_text`、`knowledge_components`、`question_kcs`、`attempts.error_types`）。
 - **ui_spec**：新分頁「AI 家教」；`index.html` 的最小掛鉤〔stage5 WS-E〕只有一行（`VIEW_FOR_ANCHOR.tutor`／`TOP_ANCHORS`）。WS-C 的 `#kc` 若也沒補這張表，會有同樣的「點了落回建立題目視圖」問題。
-- **MathJax 安全設定（整合階段已處理，尚待瀏覽器實測）**：`public/index.html` 的 `window.MathJax` 已改成 `loader: { load: ['[tex]/mhchem', 'ui/safe'] }`（`ui/safe` 預設只允許 http／https／file 協定的連結，並過濾 `\class`、`\style`、`\cssId`），`eval/tools/check_html.js` 會擋下漏掉任一項的改版。沒有採用 `tex: { packages: { '[-]': ['html'] } }` 的做法：`\require{html}` 仍可能把它載回來。**還沒做的驗收**：用 `$\href{javascript:alert(1)}{x}$` 在家教回覆、題庫預覽各試一次，確認連結被拿掉、其他公式（含 `\ce{}`）照常排版。
+- **MathJax 安全設定（整合階段已處理，尚待瀏覽器實測）**：`public/index.html` 的 `window.MathJax` 已改成 `loader: { load: ['[tex]/mhchem', 'ui/safe'] }`（`ui/safe` 預設只允許 http／https／file 協定的連結，並過濾 `\class`、`\style`、`\cssId`），`eval/tools/check_html.js` 會擋下漏掉任一項的改版。〔最終審查修正〕`ui/safe` 預設仍放行 http／https／file 的 `\href`，被 prompt injection 影響的題幹或回覆可以在數學式裡夾帶可點的外部連結（例如釣魚網址）；所以另設 `options: { safeOptions: { allow: { URLs: 'none' } } }`，數學式裡一律不產生連結，`check:html` 同樣檢查這一項（以 mathjax-full 3.2.2 在 Node 實測：設定後 https、file、javascript 三種 `\href` 都不再產生連結）。沒有採用 `tex: { packages: { '[-]': ['html'] } }` 的做法：`\require{html}` 仍可能把它載回來。**還沒做的驗收**：用 `$\href{javascript:alert(1)}{x}$` 與 `$\href{https://example.com}{x}$` 在家教回覆、題庫預覽各試一次，確認兩種連結都被拿掉、其他公式（含 `\ce{}`）照常排版。
 - **HANDOFF／roadmap**：未做的後續——題目附圖送進家教、家教 eval suite、音訊輸入的分開計價、預算跨重啟累計、手機版語音、Gemini Live 即時語音（G08 第二段）。

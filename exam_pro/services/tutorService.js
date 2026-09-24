@@ -43,6 +43,10 @@ const HISTORY_ROLES = ['user', 'tutor'];
 const STUDENT_WINDOW_DAYS = 365;       // 學生弱點摘要的時間窗
 const TOP_CHAPTERS = 5;                // 第 4.5 條：章節錯誤率前 5
 const MAX_KCS = 6;                     // 放進 prompt 的知識點上限（同章最多 8 個，取前 6）
+// 〔stage5 審查修正〕題幹與答案在 DB 沒有長度上限（只有詳解限 4000 字）：比照 agents/tagKc.js 的 QUESTION_MAX
+// 截斷，避免一題超長的題組前導語讓單次成本失控。實際題目遠短於此，prompt 與 cassette 鍵不受影響。
+const QUESTION_TEXT_MAX = 4000;
+const ANSWER_TEXT_MAX = 2000;
 // 兩個數字是一組的，不要單獨調（同 agents/verify.js 的教訓，2026-08-27 job #4）：
 // MODEL_TUTOR 預設沿用 MODEL_VERIFY（thinking 模型），思考 token 計入 maxOutputTokens 的額度。
 // 不限思考時，難題的思考會把額度吃光，講解寫到一半就被切掉——而契約要求的「驗算」結論在最後一段，
@@ -219,6 +223,20 @@ function orderKcs(kcs) {
         .map(x => x.kc);
 }
 
+/**
+ * 資料區塊的內容（純函式）：截斷到上限，並把分隔符 `<<<`／`>>>` 換成形近字（‹‹‹／›››）。
+ * 〔stage5 審查修正〕題幹來自 PDF 或模型拆題，若本身含 `>>>`，可以提前關掉資料區塊、在外面偽造
+ * 「標準答案：」或看起來像系統規則的行。一般題目不含這兩組字，prompt 與 cassette 鍵不變。
+ * @param {any} text
+ * @param {number} max
+ * @returns {string}
+ */
+function dataText(text, max) {
+    const s = String(text ?? '').trim();
+    const cut = s.length > max ? `${s.slice(0, max)}…（以下截斷）` : s;
+    return cut.replace(/<<</g, '‹‹‹').replace(/>>>/g, '›››');
+}
+
 /** 題目區塊；沒有題目回空字串 */
 function questionBlock(q) {
     if (!q) return '';
@@ -227,12 +245,12 @@ function questionBlock(q) {
         `科目：${q.subject}｜章節：${q.chapter}｜題型：${q.question_type ?? '未標'}｜題目 ID：${q.id}`,
         '題幹：',
         '<<<',
-        String(q.question_text ?? '').trim() || '（題幹為空）',
+        dataText(q.question_text, QUESTION_TEXT_MAX) || '（題幹為空）',
         '>>>'
     ];
     if (q.question_img) lines.push('（此題附有圖片，但你看不到圖；解題需要圖上的資訊時，請使用者用文字描述。）');
-    lines.push(`標準答案：${String(q.answer_text ?? '').trim() || '（題庫沒有答案）'}`);
-    const solution = String(q.solution_text ?? '').trim();
+    lines.push(`標準答案：${dataText(q.answer_text, ANSWER_TEXT_MAX) || '（題庫沒有答案）'}`);
+    const solution = dataText(q.solution_text, Infinity);
     if (solution) {
         lines.push(`詳解（來源：${SOLUTION_SRC_LABEL[q.solution_src] || '未標'}）：`, '<<<', solution, '>>>');
     } else {
@@ -348,8 +366,11 @@ const defaultDb = {
     async listQuestionKcs(questionId) {
         const { rows } = await query(
             `SELECT kc.code, kc.name, kc.description, kc.spoken_text, kc.status, qk.weight
-               FROM question_kcs qk JOIN knowledge_components kc ON kc.id = qk.kc_id
+               FROM question_kcs qk
+               JOIN knowledge_components kc ON kc.id = qk.kc_id
+               JOIN questions q ON q.id = qk.question_id
               WHERE qk.question_id = $1
+                AND kc.subject = q.subject              -- 〔S5-42〕別科的殘留標註不餵給家教
               ORDER BY kc.sort, kc.id`, [questionId]);
         return rows;
     },
@@ -458,6 +479,34 @@ function estimateUsd(modelId, usage = {}) {
     const n = v => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0);
     const cost = (n(usage.tokenIn) * maxIn + (n(usage.tokenOut) + n(usage.tokenThinking)) * maxOut) / 1_000_000;
     return Number(cost.toFixed(6));
+}
+
+// ───────────────────────── 502 的對外訊息 ─────────────────────────
+
+/**
+ * LLM 失敗時回給用戶端的訊息（家教與語音共用）。〔stage5 審查修正，low：錯誤訊息洩漏〕
+ *
+ * 開發環境（NODE_ENV ≠ production）照舊附上原始錯誤，方便除錯——與 app.js 全域錯誤中樞同一條線。
+ * 正式環境只給分類後的原因：原始訊息可能帶 cassette 的伺服器絕對路徑、供應商的專案編號、配額名稱與
+ * 模型設定提示；完整內容只寫進伺服器 log。
+ *
+ * @param {string} prefix 例：「AI 家教暫時無法回應」
+ * @param {Error & {errorClass?:string}} err
+ * @param {object} [env]
+ * @returns {string}
+ */
+function publicLlmError(prefix, err, env = process.env) {
+    const raw = String((err && err.message) || err || '');
+    if (env.NODE_ENV !== 'production') return `${prefix}：${raw}`;
+    console.warn(`[llm] ${prefix}：${raw}`);
+    const cls = err && err.errorClass;
+    let reason;
+    if (/找不到 cassette/.test(raw)) reason = '重播模式（LLM_MODE=replay）找不到這次請求的錄製檔';
+    else if (cls === 'timeout' || /abort|timeout|逾時/i.test(raw)) reason = '呼叫逾時，請稍後再試';
+    else if (cls === 'rate_limited' || /\b429\b|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(raw)) reason = '供應商配額或頻率限制，請稍後再試';
+    else if (cls === 'schema_invalid') reason = 'AI 回應的格式不完整，請再試一次';
+    else reason = 'AI 服務供應商回報錯誤，請稍後再試（詳細原因已記在伺服器 log）';
+    return `${prefix}：${reason}`;
 }
 
 // ───────────────────────── 截斷提醒（純函式）─────────────────────────
@@ -591,7 +640,7 @@ async function runTutor(body, deps = {}) {
     } catch (err) {
         // 供應商失敗、replay miss、逾時：一律 502（SDK 的錯誤可能自帶 400／429 之類的 status，
         // 不能讓它冒充成「你的參數錯了」或「今日預算用完」）。DB 錯誤不在這裡，會以 500 往上丟。
-        throw Object.assign(httpError(502, `AI 家教暫時無法回應：${err.message}`), { cause: err });
+        throw Object.assign(httpError(502, publicLlmError('AI 家教暫時無法回應', err)), { cause: err });
     }
 
     const usage = res.usage || {};
@@ -638,7 +687,7 @@ async function runTutor(body, deps = {}) {
 module.exports = {
     runTutor, prepareTutorRequest, validateTutorInput, buildPrompt, orderKcs,
     questionBlock, kcBlock, studentBlock, historyBlock, errorTypeLabel,
-    createBudget, sharedBudget, readDailyBudget, estimateUsd, httpError, withTruncationNote,
+    createBudget, sharedBudget, readDailyBudget, estimateUsd, httpError, withTruncationNote, publicLlmError,
     SYSTEM, PROMPT_TEMPLATE, TEMPLATES, AGENT, MODES,
     MAX_OUTPUT_TOKENS, THINKING_BUDGET, EMPTY_REPLY, EMPTY_TRUNCATED_REPLY, TRUNCATED_NOTE,
     MAX_MESSAGE_LEN, MAX_HISTORY, MAX_HISTORY_TEXT_LEN, MAX_KCS, TOP_CHAPTERS, STUDENT_WINDOW_DAYS,

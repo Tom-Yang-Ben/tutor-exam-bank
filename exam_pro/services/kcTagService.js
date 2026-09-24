@@ -127,16 +127,26 @@ function estimateTagCost(n, model, perQuestion = EST_TOKENS_PER_QUESTION) {
 
 /** 包一層 llm，記下這一題實際用了多少 token（回報與 kc:backfill 的實際費用用） */
 function meteredLlm(llm, meter) {
+    const record = (args, u) => {
+        meter.calls += 1;
+        meter.model = args.model || meter.model;
+        meter.tokenIn += u.tokenIn ?? 0;
+        meter.tokenOut += u.tokenOut ?? 0;
+        meter.tokenThinking += u.tokenThinking ?? 0;
+        meter.tokenCached += u.tokenCached ?? 0;
+    };
     return {
         async generateJson(args = {}) {
-            const res = await llm.generateJson(args);
-            const u = (res && res.usage) || {};
-            meter.calls += 1;
-            meter.model = args.model || meter.model;
-            meter.tokenIn += u.tokenIn ?? 0;
-            meter.tokenOut += u.tokenOut ?? 0;
-            meter.tokenThinking += u.tokenThinking ?? 0;
-            meter.tokenCached += u.tokenCached ?? 0;
+            let res;
+            try {
+                res = await llm.generateJson(args);
+            } catch (err) {
+                // 〔stage5 審查修正 S5-45〕模型已回應、但 JSON 解析失敗：services/llm/gemini.js 把用量掛在
+                // err.usage。這次的錢已經花了，照樣記進 meter（kc:backfill 印的實際費用才不會偏低）。
+                if (err && err.usage) record(args, err.usage);
+                throw err;
+            }
+            record(args, (res && res.usage) || {});
             return res;
         }
     };
