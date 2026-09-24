@@ -73,6 +73,7 @@ function fixtureHash() {
 /**
  * 把 parts 壓成不含內容的摘要。
  * text → {kind:'text', chars, sha256}；PDF → {kind:'pdf', bytes, sha256}（sha256 算在 base64 解碼後的原始位元組上）
+ * 音訊／圖片（階段 5）→ {kind:'audio'|'image', mimeType, bytes, sha256}
  */
 function summarizeParts(parts) {
     return (parts || []).map((p) => {
@@ -85,6 +86,17 @@ function summarizeParts(parts) {
             return { kind: 'pdf', bytes: buf.length, sha256: crypto.createHash('sha256').update(buf).digest('hex') };
         }
         if (p.fileUri !== undefined) return { kind: 'fileUri', uri: String(p.fileUri) };
+        // 階段 5 WS-E：音訊與圖片同樣只留位元組數與 sha256（錄音內容絕不進版控）
+        if (p.audioBase64 !== undefined || p.imageBase64 !== undefined) {
+            const isAudio = p.audioBase64 !== undefined;
+            const buf = Buffer.from(String(isAudio ? p.audioBase64 : p.imageBase64), 'base64');
+            return {
+                kind: isAudio ? 'audio' : 'image',
+                mimeType: String(p.mimeType ?? ''),
+                bytes: buf.length,
+                sha256: crypto.createHash('sha256').update(buf).digest('hex')
+            };
+        }
         return { kind: 'unknown' };
     });
 }

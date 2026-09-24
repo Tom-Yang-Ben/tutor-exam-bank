@@ -82,3 +82,32 @@ Object.defineProperty(module.exports, 'MODEL_VARIANT', {
     enumerable: true,
     get: () => (String(process.env.MODEL_VARIANT || '').trim() || null)
 });
+
+// ── 階段 5（docs/interfaces-stage5.md 第 5.2 條，擁有者：WS-E）──
+// 三個新模型設定。與 MODEL_VARIANT 不同，第 5.2 條明訂「預設沿用」另一個模型，
+// 所以退回直接寫在 getter 裡（呼叫端讀到的永遠是一個可用的模型字串，不會是 null）。
+// 退回的目標也是 getter——MODEL_VERIFY 之後被改，MODEL_TUTOR 會跟著變。
+/**
+ * 讀環境變數；未設或全空白時回 fallback()（即時呼叫，不快照）。
+ * @param {string} name
+ * @param {() => string} fallback
+ * @returns {string}
+ */
+function envOr(name, fallback) {
+    return String(process.env[name] || '').trim() || fallback();
+}
+// AI 家教（POST /api/tutor）：解題與講解，要推理強 → 預設沿用 MODEL_VERIFY
+Object.defineProperty(module.exports, 'MODEL_TUTOR', {
+    enumerable: true,
+    get: () => envOr('MODEL_TUTOR', () => module.exports.MODEL_VERIFY)
+});
+// 按住說話（POST /api/voice/transcribe）：音訊轉寫＋數學式，要便宜、快 → 預設沿用 MODEL_EXTRACT
+Object.defineProperty(module.exports, 'MODEL_VOICE', {
+    enumerable: true,
+    get: () => envOr('MODEL_VOICE', () => module.exports.MODEL_EXTRACT)
+});
+// 知識點自動標註（WS-C 的 agents/tagKc.js 讀）：預設沿用 MODEL_EXTRACT
+Object.defineProperty(module.exports, 'MODEL_KC_TAG', {
+    enumerable: true,
+    get: () => envOr('MODEL_KC_TAG', () => module.exports.MODEL_EXTRACT)
+});

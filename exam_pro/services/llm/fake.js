@@ -62,9 +62,60 @@ function generateJson({ model, schema, agent, cacheKeyParts, template }) {
     };
 }
 
+/**
+ * 回放一次 generateText（階段 5 WS-E，docs/interfaces-stage5.md 第 5.1 條）。
+ *
+ * 鍵與 generateJson 同一條公式（schema 欄恆為空）；cassette 的 response 存 { text, codeRuns, usage }。
+ * miss 的訊息與 generateJson **同一串**（eval/lib/replayMiss.js 靠前綴辨識，不得分叉）。
+ *
+ * @param {{model:string, agent:string, cacheKeyParts?:object, template?:string}} opts
+ *        model 必須是**裸 ID**
+ * @returns {{text:string, codeRuns:Array<{language:string,code:string,outcome:string|null,output:string}>,
+ *           usage:{tokenIn:number,tokenOut:number,tokenThinking:number,tokenCached:number},
+ *           latencyMs:number, raw:null, replayed:true, cassetteKey:string}}
+ */
+function generateText({ model, agent, cacheKeyParts, template }) {
+    const key = cassetteKey({ agent, modelId: model, template, schema: undefined, cacheKeyParts });
+    const cassette = readCassette(agent, key);
+
+    if (!cassette) {
+        throw new Error(
+            `LLM_MODE=replay 找不到 cassette（agent=${agent} key=${key}）。請在本機執行 npm run eval:record -- --suite <suite>` +
+            `\n（預期路徑：${cassettePath(agent, key)}）`
+        );
+    }
+
+    const response = cassette.response || {};
+    if (typeof response.text !== 'string') {
+        throw new Error(`cassette 缺少 response.text：${cassettePath(agent, key)}`);
+    }
+
+    const usage = response.usage || {};
+    const codeRuns = Array.isArray(response.codeRuns) ? response.codeRuns : [];
+    return {
+        text: response.text,
+        codeRuns: codeRuns.map(r => ({
+            language: String(r?.language ?? 'PYTHON'),
+            code: String(r?.code ?? ''),
+            outcome: r?.outcome === undefined || r?.outcome === null ? null : String(r.outcome),
+            output: String(r?.output ?? '')
+        })),
+        usage: {
+            tokenIn: usage.tokenIn ?? 0,
+            tokenOut: usage.tokenOut ?? 0,
+            tokenThinking: usage.tokenThinking ?? 0,
+            tokenCached: usage.tokenCached ?? 0
+        },
+        latencyMs: usage.latencyMs ?? response.latencyMs ?? 0,
+        raw: null,
+        replayed: true,
+        cassetteKey: key
+    };
+}
+
 /** 測試用：清掉「已警告過」的記憶 */
 function _resetForTest() {
     warnedStale.clear();
 }
 
-module.exports = { generateJson, _resetForTest };
+module.exports = { generateJson, generateText, _resetForTest };
