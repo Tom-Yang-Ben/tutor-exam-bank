@@ -572,6 +572,26 @@ function runSuite() {
             });
         });
 
+        // ─────────── 單章路徑：候選池抽成共用函式後，非字串 chapter 的結果不變 ───────────
+        describe('POST /api/generate-paper 的單章路徑（〔stage5 WS-D〕候選池抽出後逐字不變）', () => {
+            test('chapter 是陣列或巢狀陣列：同抽出前的 `q.chapter = $2`，比不到任何章 → 400 庫存不足（不是多章卷、不是 500）', async () => {
+                const s = await addStudent('探針生');
+                await addMany(3, { chapter: '向量內積' });
+                await addMany(3, { chapter: '排列' });
+                for (const chapter of [['向量內積', '排列'], ['向量內積'], ['向量內積', ['排列']], { a: 1 }, 7]) {
+                    const res = await request(app).post('/api/generate-paper')
+                        .send({ student_id: s.id, subject: '數學', chapter, count: 2, dry_run: true });
+                    assert.equal(res.status, 400, `${JSON.stringify(chapter)} → ${JSON.stringify(res.body)}`);
+                    assert.equal(res.body.message, '新題目庫存不足！該章節 [探針生] 沒寫過的題目僅剩 0 題。');
+                }
+                // 字串照常
+                const ok = await request(app).post('/api/generate-paper')
+                    .send({ student_id: s.id, subject: '數學', chapter: '向量內積', count: 2, dry_run: true });
+                assert.equal(ok.status, 200, JSON.stringify(ok.body));
+                assert.equal(ok.body.question_ids.length, 2);
+            });
+        });
+
         // ───────────────────────── 題庫覆蓋率 ─────────────────────────
         describe('GET /api/coverage', () => {
             test('400／404', async () => {

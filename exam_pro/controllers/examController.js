@@ -1,5 +1,8 @@
 const { pool, query } = require('../config/db');
 const { pickPaperUnits, sortForPaperGrouped } = require('../utils/paperGroups');
+// 〔stage5 WS-D〕pg 序列化查詢參數的同一支函式（pg 的 package.json exports 公開 ./lib/*）：
+// 單章路徑用它把 chapter 轉成與抽出前 `q.chapter = $2` 相同的比對字串（見 selectPaperQuestions）
+const { prepareValue } = require('pg/lib/utils');
 
 const MAX_QUESTIONS = 50; // 單次抽題上限，避免一次撈整章
 const MAX_EXCLUDE = 200;  // 換一題／重抽的排除清單上限（roadmap-plan.md §6.2.2）
@@ -211,8 +214,12 @@ async function selectPaperQuestions({ studentId, studentName, subject, chapter, 
     // sourceTypes（0006 題源過濾）為 null 時不限制——助教工具與既有呼叫端行為不變。
     // 〔stage5 WS-D〕SQL 與承上組查詢抽到 fetchCandidatePool（與 blueprint／補救卷共用），
     // 單章路徑只帶 chapters=[chapter]，其餘新條件為 NULL，候選池與抽出前相同。
+    // chapter 先過 pg 自己的 prepareValue：抽出前是 `q.chapter = $2`，pg 把非字串的 chapter
+    // （陣列、物件、數字）序列化成**一個**字串去比（比不到任何章 → 400 庫存不足）。直接包成
+    // [chapter] 的話，陣列會變成二維 text[]、被 `= ANY` 攤平成多章（或參差陣列丟 500），行為就變了。
+    // 字串原樣通過，所以正常請求的參數與抽出前逐位元組相同。
     const { candidates, related } = await fetchCandidatePool({
-        subject, chapters: [chapter], studentId, excludeIds, sourceTypes
+        subject, chapters: [prepareValue(chapter)], studentId, excludeIds, sourceTypes
     });
 
     // 家族互斥：同一 variant_of 家族在同一張卷只取一題（規劃 §4.1）。
