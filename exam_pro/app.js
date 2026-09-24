@@ -79,7 +79,12 @@ function serveIndex(req, res, next) {
                 .replaceAll('__FEATURE_NLQ__', process.env.FEATURE_NLQ || 'false')
                 .replaceAll('__FEATURE_VARIANTS__', process.env.FEATURE_VARIANTS || 'false')
                 .replaceAll('__FEATURE_SIMILAR__', process.env.FEATURE_SIMILAR || 'false')
-                .replaceAll('__FEATURE_ASSISTANT__', process.env.FEATURE_ASSISTANT || 'false'));
+                .replaceAll('__FEATURE_ASSISTANT__', process.env.FEATURE_ASSISTANT || 'false')
+                // 階段 5（docs/interfaces-stage5.md 第 1.3 條）
+                .replaceAll('__FEATURE_KC__', process.env.FEATURE_KC || 'false')
+                .replaceAll('__FEATURE_REMEDIAL__', process.env.FEATURE_REMEDIAL || 'false')
+                .replaceAll('__FEATURE_TUTOR__', process.env.FEATURE_TUTOR || 'false')
+                .replaceAll('__FEATURE_VOICE__', process.env.FEATURE_VOICE || 'false'));
     });
 }
 app.get('/', serveIndex);

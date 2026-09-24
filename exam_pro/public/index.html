@@ -26,6 +26,11 @@
     <meta name="feature-similar" content="__FEATURE_SIMILAR__">
     <!-- 階段 4 A1：對話式助教。app.js 的第七個 replaceAll 對應這一個。 -->
     <meta name="feature-assistant" content="__FEATURE_ASSISTANT__">
+    <!-- 階段 5（docs/interfaces-stage5.md 第 1.3 條）：四個新注入點，讀法同上 -->
+    <meta name="feature-kc" content="__FEATURE_KC__">
+    <meta name="feature-remedial" content="__FEATURE_REMEDIAL__">
+    <meta name="feature-tutor" content="__FEATURE_TUTOR__">
+    <meta name="feature-voice" content="__FEATURE_VOICE__">
     <title>家教專用數學物理題庫系統</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
@@ -240,6 +245,8 @@
                 <a href="#library" data-view="view-library" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">題庫管理</a>
                 <a href="#students" data-view="view-students" data-feature="students" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">學生</a>
                 <a href="#assistant" data-view="view-assistant" data-feature="assistant" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">助教</a>
+                <a href="#kc" data-view="view-kc" data-feature="kc" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">知識點</a>
+                <a href="#tutor" data-view="view-tutor" data-feature="tutor" class="px-3 py-2 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">AI 家教</a>
             </nav>
             <span class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
                 <span class="relative flex h-2 w-2"><span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-50"></span><span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span></span>
@@ -610,11 +617,17 @@
 
         <!-- 變式題（內容由 public/js/variants.js 建立，規則同上） -->
         <section id="variants"></section>
+
+        <!-- 題庫覆蓋率（階段 5 WS-D；內容由 public/js/remedial.js 建立，FEATURE_REMEDIAL 關閉時整段不渲染） -->
+        <section id="coverage"></section>
         </div><!-- /view-library -->
 
         <!-- 學生視圖（弱點面板、批改、管理；內容由 public/js/students.js 建立，規則同上） -->
         <div id="view-students" class="app-view hidden">
         <section id="students"></section>
+
+        <!-- 依弱點出補救卷（階段 5 WS-D；內容由 public/js/remedial.js 建立，FEATURE_REMEDIAL 關閉時整段不渲染） -->
+        <section id="remedial"></section>
         </div><!-- /view-students -->
 
         <!-- 助教視圖（階段 4 A1 的空錨點：內容由 public/js/assistant.js 建立；
@@ -622,6 +635,16 @@
         <div id="view-assistant" class="app-view hidden">
         <section id="assistant"></section>
         </div><!-- /view-assistant -->
+
+        <!-- 知識點視圖（階段 5 WS-C；內容由 public/js/kc.js 建立，FEATURE_KC 關閉時整段不渲染） -->
+        <div id="view-kc" class="app-view hidden">
+        <section id="kc"></section>
+        </div><!-- /view-kc -->
+
+        <!-- AI 家教視圖（階段 5 WS-E；內容由 public/js/tutor.js 建立，FEATURE_TUTOR 關閉時整段不渲染） -->
+        <div id="view-tutor" class="app-view hidden">
+        <section id="tutor"></section>
+        </div><!-- /view-tutor -->
 
         <footer class="mt-8 flex flex-col sm:flex-row items-center justify-between gap-2 px-2 text-xs text-slate-400">
             <p>家教專用數學物理題庫系統</p>
@@ -1674,6 +1697,9 @@
     <script type="module" src="/js/nlq.js"></script>
     <script type="module" src="/js/variants.js"></script>
     <script type="module" src="/js/assistant.js"></script>
+    <script type="module" src="/js/kc.js"></script>
+    <script type="module" src="/js/remedial.js"></script>
+    <script type="module" src="/js/tutor.js"></script>
 </body>
 
 </html>

@@ -96,10 +96,10 @@ describe('migrations 套用結果', { skip: SKIP }, () => {
             await assert.rejects(
                 client.query(
                     `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text)
-                     VALUES ('化學', '莫耳', '計算', 3, 'x', 'y')`
+                     VALUES ('生物', '細胞', '計算', 3, 'x', 'y')`
                 ),
                 /violates check constraint/i,
-                'subject 的 CHECK 應該擋掉「化學」'
+                'subject 的 CHECK 應該擋掉白名單外的科目（「生物」；化學自 0011 起合法）'
             );
         } finally {
             await client.query('ROLLBACK');
