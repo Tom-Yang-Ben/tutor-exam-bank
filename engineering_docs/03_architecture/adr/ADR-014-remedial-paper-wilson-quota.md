@@ -59,7 +59,7 @@
 ## 4. 後果
 
 - **正面**: 弱點面板到下一份卷的閉環成立（G04）；草稿每一題都帶 bucket 與目標單位、每個目標帶理由與不足量；跨章配額（`blueprint`）成為組卷 API 的一部分；新路徑零 LLM 成本、零 cassette 變動、零 migration。
-- **負面**: `examController.selectPaperQuestions` 的 SQL 改為呼叫共用函式（候選池多了章節清單、難度下限、難度上限、知識點四個「NULL＝不限制」的條件，單章路徑語意不變）；補救卷的規則參數（k、難度區間、先備難度上限）寫在 `services/remedialService.js` 的常數，調整要改程式；低樣本單位偏向被補救，老師需要看「樣本不足」標記判斷。
+- **負面**: `examController.selectPaperQuestions` 的 SQL 改為呼叫共用函式（候選池多了章節清單、難度下限、難度上限、知識點四個「NULL＝不限制」的條件，單章路徑語意不變）；補救卷的規則參數（k、難度區間、先備難度上限）寫在 `services/remedialService.js` 的常數，調整要改程式；低樣本單位偏向被補救，老師需要看「樣本不足」標記判斷；草稿交給老師刪題、加題之後，承上題整組的把關落在前端（草稿 `items` 帶 `follows_question_id`／`group_ids`，手動加題先查 `GET /api/students/:id/remedial-paper/items`），因為 `confirm-paper` 照給的題出卷、不重驗組是否完整（契約規定不改），直接呼叫 API 自行拼題的人仍可能出半組。
 - **影響範圍**: `exam_pro/controllers/examController.js`、`exam_pro/services/kcWeaknessService.js`、`exam_pro/services/remedialService.js`、`exam_pro/services/coverageService.js`、`exam_pro/controllers/remedialController.js`、`exam_pro/routes/index.js`、`exam_pro/public/js/remedial.js`、`exam_pro/public/js/variants.js`（「加入補救卷」掛鉤）。
 - **重新評估觸發**: 單一學生單一知識點的已批改題中位數超過 10 題（資料量足以估 BKT 參數）；或老師回報補救卷常把已精熟的單位排入；或錯題重練（G11，需 DEC-003 例外條款）上線，使同一題的多次作答成為常態。
 

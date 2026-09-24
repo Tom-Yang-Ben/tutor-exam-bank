@@ -20,9 +20,10 @@
 
 ## 2. API
 
-四支，前三支掛在 `FEATURE_REMEDIAL` 之後（關閉時不掛載，請求落到 Express 預設 404）；
-`blueprint` 是既有 `POST /api/generate-paper` 的擴充，**不吃旗標**（它不呼叫 LLM，是組卷核心功能的延伸）。
-四支都不呼叫 LLM，前三支不寫資料庫，所以沒有套限流（契約第 1.2 條的限流針對會花錢的端點）。
+五支。2.1、2.2、2.4、2.5 掛在 `FEATURE_REMEDIAL` 之後（關閉時不掛載，請求落到 Express 預設 404）；
+2.3 的 `blueprint` 是既有 `POST /api/generate-paper` 的擴充，**不吃旗標**（它不呼叫 LLM，是組卷核心功能的延伸）。
+五支都不呼叫 LLM，掛在旗標後的四支不寫資料庫，所以沒有套限流（契約第 1.2 條的限流針對會花錢的端點）。
+2.5 是契約之外多的一支（理由見第 6 節）。
 
 ### 2.1 `GET /api/students/:id/weakness/kc?days=&subject=`
 
@@ -59,7 +60,7 @@ body：
 |---|---|---|---|
 | `subject` | ✅ | 在科目白名單內 | — |
 | `total` | | 5–50 的整數 | 20 |
-| `mix` | | `{ remedial, prerequisite, extension }` 三個非負數、總和 > 0；只看比例（送 60／20／20 或 0.6／0.2／0.2 相同）；缺鍵或多鍵都 400 | 0.6／0.2／0.2 |
+| `mix` | | `{ remedial, prerequisite, extension }` 三個非負的有限數、總和 > 0 且總和也是有限數（`1e308 + 1e308` 溢位成 Infinity → 400）；只看比例（送 60／20／20 或 0.6／0.2／0.2 相同）；缺鍵或多鍵都 400 | 0.6／0.2／0.2 |
 | `days` | | 1–365 的整數 | 90 |
 | `source_types` | | 合法題源標記的陣列；空陣列＝不限制（同 `generate-paper`） | 不限制 |
 
@@ -72,7 +73,8 @@ body：
   "items": [
     { "question_id": 17, "bucket": "remedial",
       "target": { "type": "kc", "code": "MATH.向量內積.02", "chapter": "向量內積", "name": "內積的坐標算法" },
-      "chapter": "向量內積", "difficulty": 2, "question_text_preview": "設 $\\vec{a}=(1,2)$ …" }
+      "chapter": "向量內積", "difficulty": 2, "question_text_preview": "設 $\\vec{a}=(1,2)$ …",
+      "follows_question_id": null, "group_ids": [17, 18] }
   ],
   "blueprint": [
     { "bucket": "remedial", "target": { "type": "kc", "code": "MATH.向量內積.02", "chapter": "向量內積", "name": "內積的坐標算法" },
@@ -88,7 +90,11 @@ body：
 ```
 
 - `question_ids` 是**確認後的出題順序**（與 `confirm-paper` 同一個排序函式：題型權重 → 難度，承上題組相鄰）。
-- `items` 依 bucket 分組（remedial → prerequisite → extension），同一目標內保持抽出順序。
+- `items` 依 bucket 分組（remedial → prerequisite → extension），同一目標內保持抽出順序（承上組相鄰、依承接順序）。
+- `items[].follows_question_id`（前題 id，沒有就 `null`）與 `items[].group_ids`（同一承上組在草稿裡的**全部**成員，
+  承接順序；沒有綁定就是 `[自己]`）是契約之外多給的鍵。抽題是整組抽，所以草稿裡的組一定完整；前端靠這兩個鍵
+  標「承上 #x」、把刪除鈕改成「刪這組」並整組刪——`confirm-paper` 照給的題出卷、**不重驗組是否完整**，
+  只刪前題就會出一張有「承上題卻沒有前題」、學生寫不了的卷。
 - `target.type` 是 `'kc'` 或 `'chapter'`；`chapter` 基底時 `name` 就是章名、沒有 `code`。
 - `blueprint` 每個目標一列；`difficulty_min`／`difficulty_max`／`rationale` 是契約之外**多給**的鍵（前端要顯示「為什麼選這個單位」）。
 - `shortfalls` 只列 `got < wanted` 的目標；`reason` 是 `insufficient_stock`（可用題數本來就不夠）或 `follow_up_group`（夠，但承上題組塞不進剩下的名額）。
@@ -112,8 +118,17 @@ body：
   - `note`：有不足時的一句話摘要（與單章路徑的 `note` 同一個鍵，既有前端會顯示它）
 - **不足量不回 400**：照抽到的題出（dry_run 預覽或真出卷），逐列回報；**全部列都抽不到任何一題**才回 400
   `新題目庫存不足！blueprint 每一列都抽不到…`（回應同時帶 `blueprint`／`shortfalls`）。
+- 承上題湊不滿的政策與單章路徑是**同一個開關** `FOLLOW_UP_SHORTFALL_POLICY`（`controllers/examController.js`，待 owner 決定）：
+  預設 `'note'` 即上一條；切成 `'error'` 時，`reason = follow_up_group` 的列會讓整個請求回 400
+  `承上題須與前題整組出題，blueprint 第 N 列「章」無法剛好湊滿…`（同樣帶 `blueprint`／`shortfalls`）。
+  「庫存不足」的列不受這個開關影響（同單章路徑）。
+- 補救卷草稿（2.2）不看這個開關：它本來就不出卷，不足量一律逐目標回報，由老師在草稿裡補。
 - 卷名：1 章同單章路徑；2–3 章列出（`小明-向量內積、排列特訓卷(…)`）；4 章以上 `小明-向量內積等4章特訓卷(…)`。
 - **沒帶 `blueprint`（或為 `null`）時，單章路徑的行為與回應逐字不變**（既有整合測試與 e2e 驗）。
+  候選池抽成共用的 `buildCandidatePoolQuery`（`q.chapter = ANY($2::text[])`）後，單章路徑把 `chapter` 先過 pg 的
+  `prepareValue` 再包成一元素陣列：字串原樣通過；非字串（陣列、物件、數字）和抽出前的 `q.chapter = $2` 一樣被序列化成
+  **一個**字串去比，比不到任何章 → 400 庫存不足。直接包 `[chapter]` 的話，陣列會被 `= ANY` 攤平成多章卷（200），
+  參差陣列會丟 500；改用 `String(chapter)` 則 `['向量內積']` 會變成 `'向量內積'` 而比中（抽出前是 400），兩者都不是原本的行為。
 
 ### 2.4 `GET /api/coverage?subject=&student_id=`
 
@@ -133,6 +148,38 @@ body：
 - `unseen_by_student`：沒給 `student_id` 時為 `null`；給了＝該章未封存題中該生沒有 `attempts` 的題數。
 - `kc_rows`：每個知識點掛了幾題未封存題（`question_kcs`），0 題的也列；順序＝科目 → 章節白名單順序 → `sort` → `code`。
 - 錯誤：`subject` 不在白名單、`student_id` 不是正整數 → 400；學生不存在 → 404。
+
+### 2.5 `GET /api/students/:id/remedial-paper/items?ids=`（草稿手動加題前的查詢；只讀）
+
+草稿「用題目 ID 加題」與「找相似 → 加入補救卷」加題前，前端先問這支：題目資料，以及它所在**承上組的全部成員**。
+
+```json
+{
+  "items": [
+    { "question_id": 40, "subject": "數學", "chapter": "向量內積", "difficulty": 2, "question_text_preview": "…",
+      "follows_question_id": null, "group_ids": [40, 41], "archived": false, "answered": false },
+    { "question_id": 41, "subject": "數學", "chapter": "向量內積", "difficulty": 3, "question_text_preview": "承上題，…",
+      "follows_question_id": 40, "group_ids": [40, 41], "archived": false, "answered": false }
+  ],
+  "missing": [999]
+}
+```
+
+- `ids`：逗號分隔的正整數（int4 範圍內），去重後 1–50 個；同名參數重複（`?ids=1&ids=2`）視同串接。不合法 → 400。
+- `items`：依要求的順序，每題後面緊接同組其他成員（組內承接順序），不重複。承上組的走訪與組卷候選池同一段遞迴
+  （`follows_question_id` 無向連通分量），**不排除**封存題與該生寫過的題，改用 `archived`／`answered` 回報。
+- `missing`：資料庫裡沒有的 id。
+- 錯誤：`:id` 不合法或學生不存在 → 404。
+
+前端的規則（`public/js/remedial.js` 的 `planManualAdd`，與組卷「承上題整組」同一個原則：寧可不加，也不出寫不了的題）：
+
+| 情況 | 結果 |
+|---|---|
+| 題目屬於承上組，組內每一題都能出（同科、沒封存、他沒寫過） | **整組**加進「手動加入」組（例：加承上題 #41，前題 #40 一起進來），提示「已整組加入」 |
+| 組內有任何一題封存、他寫過或不同科 | 整組不加，提示是哪一題擋住 |
+| 題目本身不同科／封存／他寫過／查不到／已在草稿 | 不加，逐項提示 |
+
+確認前還有最後一道：草稿裡若有「前題不在草稿」的承上題，不送 `confirm-paper`。
 
 ---
 
@@ -196,9 +243,9 @@ body：
 | 檔案 | 職責 |
 |---|---|
 | `services/kcWeaknessService.js` | Wilson 下界（純函式）、知識點聚合 SQL builder、排序 |
-| `services/remedialService.js` | 配額、目標、難度區間（純函式 `buildPlan`）與草稿組裝 |
+| `services/remedialService.js` | 配額、目標、難度區間（純函式 `buildPlan`）與草稿組裝；手動加題查詢 `lookupItems` |
 | `services/coverageService.js` | 覆蓋率 SQL builder 與白名單順序組裝 |
-| `controllers/remedialController.js` | 三支 API 的驗證與回應 |
+| `controllers/remedialController.js` | 四支 API（2.1、2.2、2.4、2.5）的驗證與回應 |
 | `controllers/examController.js` | 〔擴充〕候選池抽成 `buildCandidatePoolQuery`／`fetchCandidatePool`、多段配額 `pickByQuotas`、`blueprint` 分支 |
 | `routes/index.js` | 〔擴充〕檔尾 WS-D 區塊 |
 | `public/js/remedial.js` | `#remedial`、`#coverage` |
@@ -209,6 +256,16 @@ body：
 ## 5. 給老師的操作說明
 
 先在 `.env` 設 `FEATURE_REMEDIAL=true` 並重啟。學生分頁與題庫管理分頁會各多一個區塊。
+
+這兩個區塊掛在既有的分頁裡，所以還要看那些分頁本身的開關：
+
+| 想用的功能 | 需要同時開啟的旗標 | 為什麼 |
+|---|---|---|
+| 題庫覆蓋率（題庫管理分頁） | `FEATURE_REMEDIAL` | 題庫管理分頁本身沒有旗標 |
+| 依弱點出補救卷（學生分頁） | `FEATURE_REMEDIAL`＋`FEATURE_STUDENTS` | 補救卷區塊在「學生」分頁裡；`FEATURE_STUDENTS` 關閉時導覽列不顯示「學生」，整個區塊到不了 |
+| 「找相似」結果上的「加入補救卷」 | `FEATURE_REMEDIAL`＋`FEATURE_STUDENTS`＋`FEATURE_VARIANTS`＋`FEATURE_SIMILAR` | 「找相似」按鈕在學生分頁的最近錯題上（`FEATURE_STUDENTS`、`FEATURE_SIMILAR`）；結果由變式模組畫，`FEATURE_VARIANTS` 關閉時它不掛載、不會回應「找相似」，按鈕也就不會出現 |
+
+用題目 ID 手動加題只需要前兩個旗標。
 
 ### 5.1 出一份補救卷（學生分頁 →「依弱點出補救卷」）
 
@@ -222,9 +279,14 @@ body：
      **紅字**表示題庫不夠——到題庫管理的「題庫覆蓋率」看那一章缺什麼難度，補題後再產生一次。
    - 展開「知識點掌握度」可以看到這位學生最弱的 10 個知識點。「樣本不足」表示批改的題還太少，數字只供參考。
 5. **調整**：每題右上角「刪除」；下方輸入題目 ID（可一次多個，用逗號分隔）按「加題」。
-   也可以在題庫管理分頁「找相似」的結果上直接按「**加入補救卷**」，題目會進到這份草稿的「手動加入」組。
+   也可以在「找相似」的結果上直接按「**加入補救卷**」，題目會進到這份草稿的「手動加入」組。
+   - **承上題整組處理**：題號旁標「承上 #x」的是承上題，左邊有紫色邊線的是同一組。它們的按鈕是「**刪這組**」，
+     按了會把前題和承上題一起刪掉——只留承上題的話，學生拿到的是沒有前情、寫不了的題。
+   - 加題時若加的是承上題（或有承上題的前題），系統會**連同同組的題一起加入**，並跳出提示。
+     組裡有題已封存或這位學生寫過，整組都不會加，提示會說是哪一題擋住。
+   - 別科的題、已封存的題、他寫過的題、查不到的題號都不會加入，會各自提示原因。
 6. 按「**確認出卷**」：這時才建卷、記入作答歷史（之後不會再出給同一位學生）。成功後按「下載 Word 考卷」。
-   若出現「部分題目已被指派給該學生」，表示手動加的題他寫過了，刪掉那題再確認。
+   若出現「部分題目已被指派給該學生」，表示草稿產生之後他又被出了其中某題（例如另一張卷先確認了），重新產生草稿即可。
 
 > 掌握度為什麼不是答對率？答對率 100% 可能只是「1 題對 1 題」。系統用的是「在 95% 信心下，他的答對率至少有多少」
 > （Wilson 下界）：1 題對 1 題只有 21%，10 題對 8 題是 49%。所以批改越多，判斷越準；剛開始上課的學生，
@@ -249,7 +311,10 @@ body：
 |---|---|---|
 | 第 4.4 條第 5 項：「`public/js/students.js` 唯一的掛鉤：最近錯題的『找相似』結果每列加一顆『加入補救卷』按鈕」 | 按鈕掛在 **`public/js/variants.js`** 的 `findSimilar`（加註〔stage5 WS-D〕），`students.js` 完全沒改 | 「找相似」的結果是 `variants.js` 畫的：`students.js` 只在最近錯題列上發 `examapp:variant-request` 事件，自己沒有結果列可以掛按鈕。掛在 students.js 只能把按鈕放在「錯題本身」上，而錯題學生已經寫過、confirm-paper 必定 409。掛鉤同樣只 dispatch `remedial:add`、`FEATURE_REMEDIAL` 關閉時不顯示 |
 | 回應欄位 | `remedial-paper` 的 `blueprint[]` 多 `difficulty_min`、`difficulty_max`、`rationale`；`generate-paper` 的 blueprint 回應多 `note`（有不足時） | 前端要顯示「為什麼選這個單位」；`note` 讓既有組卷畫面不用改就能顯示不足量。契約列出的鍵全部照給 |
-| 補救卷的限流 | 三支新端點沒有套 `createRateLimiter` | 契約第 1.2 條的限流要求是針對會呼叫 LLM 的端點；這三支只讀資料庫 |
+| 補救卷的限流 | 四支新端點沒有套 `createRateLimiter` | 契約第 1.2 條的限流要求是針對會呼叫 LLM 的端點；這四支只讀資料庫 |
+| 第 4.4 條第 2 項的 `items` 形狀 | 多 `follows_question_id`、`group_ids` | 契約要求候選「套用承上題整組規則」，但草稿交到前端後老師可以刪題、加題，`confirm-paper`（契約：不改）又不重驗組是否完整；前端要知道誰跟誰一組才能整組刪。契約列出的鍵全部照給 |
+| 第 4.4 條只列三支 API | 多一支 `GET /api/students/:id/remedial-paper/items`（2.5），同樣在 `FEATURE_REMEDIAL` 後、只讀 | 「用題目 ID 加題」只有 ID，前端不知道那題是不是承上題、前題在不在草稿、是不是別科或已封存；既有 API 沒有「依 ID 查題目」的端點（`GET /api/questions` 沒有 id 篩選、`/similar` 不回 `follows_question_id`，兩者都不屬 WS-D）。沒有這支就只能在確認時才發現、或根本發現不了 |
+| 第 4.4 條第 3 項：單章路徑「逐字不變」 | `FOLLOW_UP_SHORTFALL_POLICY` 的效果延伸到 blueprint 分支（2.3） | 那個常數是「承上題湊不滿怎麼辦」的單點切換；只有單章路徑聽它的話，owner 切成 `'error'` 時兩條組卷路徑的行為會不一致。預設 `'note'` 時 blueprint 行為不變 |
 | ADR 編號 | 新增 ADR-014（契約第 6 條只分配到 ADR-013） | 任務要求 WS-D 交付 ADR；整合時若要改號，改檔名與本檔連結即可 |
 
 契約沒有寫、由本實作決定的細節（都寫在第 3 節）：k = min(3, ⌈n/2⌉)、先備難度 ≤ 3、延伸難度 ≥ ⌊平均⌋+1、
@@ -262,11 +327,11 @@ body：
 | 層 | 檔案 | 驗什麼 |
 |---|---|---|
 | 單元 | `test/unit/kcWeakness.test.js` | Wilson 下界（n=0、全對、全錯、小數樣本）、SQL 參數順序、排序與 low_sample |
-| 單元 | `test/unit/remedialService.test.js` | 最大餘數配額、目標挑選、難度區間、併桶 notes、草稿組裝（注入假依賴） |
+| 單元 | `test/unit/remedialService.test.js` | 最大餘數配額、目標挑選、難度區間、併桶 notes、草稿組裝（注入假依賴）、items 的承上組資訊、`lookupItems` |
 | 單元 | `test/unit/coverageService.test.js` | 白名單每章都列、舊章節、unseen 的 null／數字、知識點排序 |
-| 單元 | `test/unit/remedialValidation.test.js` | 補救卷 body、覆蓋率 query、blueprint 驗證、候選池 SQL 的參數順序 |
-| 單元 | `test/unit/remedialUi.test.js` | 前端檔案契約、純函式、miniDom 渲染（旗標關閉不渲染、草稿、刪題加題、`remedial:add`、確認、覆蓋率）、variants.js 掛鉤 |
-| 整合 | `test/integration/remedial.pg.test.js` | 旗標關閉 404；kc 加權與 Wilson 排序；kc 基底／chapter 退回；各 bucket 配額；不足量；已作答、封存、跨科、題源排除；家族互斥；承上題整組；不寫庫並接 confirm-paper；blueprint 的互斥 400、逐列不足、跨列家族互斥與不重複、真出卷；覆蓋率 |
+| 單元 | `test/unit/remedialValidation.test.js` | 補救卷 body（含 mix 總和溢位）、覆蓋率 query、加題查詢的 `ids`、blueprint 驗證與承上題政策開關、候選池 SQL 的參數順序 |
+| 單元 | `test/unit/remedialUi.test.js` | 前端檔案契約、純函式、miniDom 渲染（旗標關閉不渲染、草稿、刪題加題、`remedial:add`、確認、覆蓋率）、承上題整組（「承上 #x」、「刪這組」、整組加入或拒絕、不混科、確認前擋缺前題的承上題）、variants.js 掛鉤 |
+| 整合 | `test/integration/remedial.pg.test.js` | 旗標關閉 404；kc 加權與 Wilson 排序；kc 基底／chapter 退回；各 bucket 配額；不足量；已作答、封存、跨科、題源排除；家族互斥；承上題整組與 items 的組資訊；不寫庫並接 confirm-paper；加題查詢（承上組成員、封存與已寫過旗標、missing、400／404）；blueprint 的互斥 400、逐列不足、跨列家族互斥與不重複、真出卷；單章路徑收到非字串 chapter 仍是 400 庫存不足；覆蓋率 |
 
 整合測試自己插入知識點、`question_kcs`、`kc_prerequisites`、`attempts` fixture，不依賴 WS-C 的種子檔。
 
