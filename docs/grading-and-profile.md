@@ -1,6 +1,6 @@
 # docs/grading-and-profile.md — 批改細節、學生檔案與文字詳解
 
-> 版本 v1.0 | 2026-09-24 | 分支 `stage5/ws-a` | 對應：`docs/interfaces-stage5.md` 第 4.1 條（WS-A）、缺口 G03／G05／G09、DEC-015、DEC-017、ADR-014
+> 版本 v1.0 | 2026-09-24 | 分支 `stage5/ws-a` | 對應：`docs/interfaces-stage5.md` 第 4.1 條（WS-A）、缺口 G03／G05／G09、DEC-015、DEC-017、ADR-015
 > 本檔是 WS-A 三項功能的權威文件：API、資料、設計取捨與給老師的操作說明。共用文件（`engineering_docs/**` 的 api_spec、openapi、db_design、各 tracker，`README.md`，`docs/HANDOFF.md`）由整合階段依本檔回填，WS-A 沒有動。
 > migrations 沒有新增：用的是 `stage5/base` 已建好的 `0010`（attempts 批改細節、students 檔案欄位）與 `0011`（questions 文字詳解）。WS-A 也沒有新的環境變數與功能旗標（第 1.3 條：WS-A 屬既有核心流程的延伸）。
 
@@ -224,7 +224,7 @@ body 多一個 `edition`：沒送（或 null）＝`standard`（現行行為）�
 | 5 | `PATCH /api/students/:id` 空 body 的訊息 | 由「學生姓名必填…」改為「至少要提供一個要修改的欄位（…）」 | name 已不是必填；只送 name 的請求行為與訊息不變 |
 | 6 | PUT 帶與現值相同的詳解 | 保留原來源（不改成 teacher） | 第 5.5 條 |
 | 7 | 回填略過「入庫後題幹或答案被改過」的題 | 列為 `edited` | 避免把舊題目的解法貼到新題目上 |
-| 8 | ADR 編號 | ADR-014 | 契約第 6 條沒有分配 WS-A 的 ADR 編號；取下一個未用的號碼，整合時可重編 |
+| 8 | ADR 編號 | ADR-015 | 契約第 6 條沒有分配 WS-A 的 ADR 編號；取下一個未用的號碼，整合時可重編 |
 | 9 | 既有測試的修改 | `test/integration/students.pg.test.js` 四處形狀斷言加上新欄位（標〔stage5 WS-A〕） | 契約刻意擴充了 `GET /api/students` 每列、`recent_wrong` 每列與 weakness 的頂層鍵；斷言仍是逐欄 deepEqual，另外多釘了既有欄位的順序，沒有放寬 |
 
 ## 7. 測試
@@ -244,6 +244,6 @@ body 多一個 `edition`：沒送（或 null）＝`standard`（現行行為）�
 
 ## 8. 檔案清單
 
-新增：`exam_pro/config/errorTypes.js`、`exam_pro/config/studentProfile.js`、`exam_pro/scripts/backfill_solutions.js`、本檔、`engineering_docs/03_architecture/adr/ADR-014-grading-detail-and-solution-provenance.md`、上表八支測試。
+新增：`exam_pro/config/errorTypes.js`、`exam_pro/config/studentProfile.js`、`exam_pro/scripts/backfill_solutions.js`、本檔、`engineering_docs/03_architecture/adr/ADR-015-grading-detail-and-solution-provenance.md`、上表八支測試。
 
 修改：`controllers/paperController.js`、`controllers/studentController.js`、`controllers/studentAdminController.js`、`controllers/questionController.js`、`controllers/wordController.js`、`services/weaknessService.js`（只在檔尾新增）、`services/wordService.js`、`workers/jobRunner.js`（只在 save 寫詳解）、`routes/index.js`（檔尾 WS-A 區塊）、`public/js/students.js`、`public/index.html`（題目編輯 modal 的詳解欄、題庫列表的「有詳解」標籤、Word 版本選單）、`package.json`（`solution:backfill`）、`test/integration/students.pg.test.js`（第 6 條第 9 項）。
