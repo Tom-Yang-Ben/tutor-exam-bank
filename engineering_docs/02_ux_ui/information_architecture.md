@@ -1,6 +1,7 @@
 # 資訊架構 (Information Architecture) - 家教專用數理題庫系統
 
-> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
+> **版本:** v1.2 | **更新:** 2026-09-24 | **狀態:** 活躍
+> 🛠 **2026-09-24 修訂**（階段 5 整合回填，分支 `stage5/int-docs`）：§1 新增兩個頂層分頁（知識點 `#kc`、AI 家教 `#tutor`）與兩個子區塊（`#remedial` 折入學生視圖、`#coverage` 折入題庫管理視圖），總計更新為 7 個視圖容器、12 個錨點；§2 導覽補兩個 nav 連結；§3 路由表補階段 5 API；§4 旗標表補 FEATURE_KC／REMEDIAL／TUTOR／VOICE；§5 補 `remedial:add` 事件與 meta 注入點數；§7 追溯。行號描述沿用 2026-08-29 版本、未重算，以 `VIEW_FOR_ANCHOR` 為準。修改處以〔修訂 2026-09-24〕行內標記。
 > 🛠 **2026-08-29 修訂**（PR #3/#6/#7 程式碼同步）：§1 前言由「捲動導覽」改寫為 5 個 `.app-view` 視圖的 hash 路由切換；§1 表格刪除 Hero 列（#0 `#top`，Hero 已於 commit 995f444 自程式碼移除）；§1 總計行更正為 5 視圖容器＋8 錨點並更新空 section 行號（原「9 個錨點、545／552–554／558 行、#nlq 與 #library 間隔 #assistant」描述已刪除）；§2 品牌名 Tutor Question Lab → Tutor-exam-bank、顯示條件更正（行動版橫向捲動、旗標關閉時 nav 連結 hidden）、刪除 Hero CTA 列；§2 註解改為 VIEW_FOR_ANCHOR 折入視圖的到達機制；§5 資料表「頂欄／Hero」改「頂欄」。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 > **Owner:** Ben（楊本顥）
 > **語域:** L2（橋接）
@@ -37,8 +38,12 @@
 | 6 | `#nlq` | 自然語言查題 | 中文查詢→解析→回寫題庫篩選 | `public/js/nlq.js` | FR-012 |
 | 7 | `#assistant` | 對話式助教 | 主控 LLM＋只讀工具問答、dry-run 出卷預覽 | `public/js/assistant.js` | FR-016 |
 | 8 | `#library` | 題庫管理 | 題目列表、篩選、檢視、維護 | index.html inline script | FR-007 |
+| 9〔修訂 2026-09-24〕 | `#kc` | 知識點 | 依科目／冊／章瀏覽知識點、審定口語版、題目→知識點人工標註 | `public/js/kc.js`（`view-kc`） | FR-028、FR-029 |
+| 10〔修訂 2026-09-24〕 | `#tutor` | AI 家教 | 問三科題目與觀念、計算驗證、按住說話 | `public/js/tutor.js`（`view-tutor`） | FR-034、FR-035 |
+| 11〔修訂 2026-09-24〕 | `#remedial` | 依弱點出補救卷（子區塊） | 產生補救卷草稿、刪加題、確認出卷、知識點掌握度 | `public/js/remedial.js`（折入 `view-students`，在 `#students` 下方） | FR-030、FR-031 |
+| 12〔修訂 2026-09-24〕 | `#coverage` | 題庫覆蓋率（子區塊） | 章 × 難度熱度表、學生未寫題數、知識點題數 | `public/js/remedial.js`（折入 `view-library`，在 `#variants` 下方） | FR-033 |
 
-**總計:** 1 條頁面路由、5 個視圖容器、8 個錨點區塊。〔修訂 2026-08-29〕視圖容器為 `view-create`（index.html:254，含 `#create`＋`#review`）、`view-paper`（:419）、`view-library`（:522，含 `#nlq`＋`#library`＋`#variants`）、`view-students`（:582）、`view-assistant`（:588）。#3–#7 在殼內僅是空 `<section>`（`#review` :415、`#nlq` :523、`#variants` :578、`#students` :583、`#assistant` :589），內容全部由對應 ES module 動態建立（藏在 hidden 視圖裡渲染無副作用，切換即可見）；`#nlq` 緊貼 `#library` 上方（同屬 view-library），對應階段 3 規劃「題庫管理搜尋框旁」的落點。各分頁欄位與互動細節見 [`ui_spec-main.md`](./ui_spec-main.md)、[`ui_spec-review.md`](./ui_spec-review.md)、[`ui_spec-students.md`](./ui_spec-students.md)、[`ui_spec-nlq.md`](./ui_spec-nlq.md)、[`ui_spec-variants.md`](./ui_spec-variants.md)、[`ui_spec-assistant.md`](./ui_spec-assistant.md)。
+**總計:** 1 條頁面路由、5 個視圖容器、8 個錨點區塊。〔修訂 2026-08-29〕〔修訂 2026-09-24〕階段 5 起為 7 個視圖容器（另加 `view-kc`、`view-tutor`）、12 個錨點區塊；`#kc`、`#tutor` 由 WS-C／WS-E 各在 `VIEW_FOR_ANCHOR`／`TOP_ANCHORS` 補一行成為頂層分頁，`#remedial`、`#coverage` 由整合補進 `VIEW_FOR_ANCHOR` 成為子錨點（裁決 S5-2、S5-5）。視圖容器為 `view-create`（index.html:254，含 `#create`＋`#review`）、`view-paper`（:419）、`view-library`（:522，含 `#nlq`＋`#library`＋`#variants`）、`view-students`（:582）、`view-assistant`（:588）。#3–#7 在殼內僅是空 `<section>`（`#review` :415、`#nlq` :523、`#variants` :578、`#students` :583、`#assistant` :589），內容全部由對應 ES module 動態建立（藏在 hidden 視圖裡渲染無副作用，切換即可見）；`#nlq` 緊貼 `#library` 上方（同屬 view-library），對應階段 3 規劃「題庫管理搜尋框旁」的落點。各分頁欄位與互動細節見 [`ui_spec-main.md`](./ui_spec-main.md)、[`ui_spec-review.md`](./ui_spec-review.md)、[`ui_spec-students.md`](./ui_spec-students.md)、[`ui_spec-nlq.md`](./ui_spec-nlq.md)、[`ui_spec-variants.md`](./ui_spec-variants.md)、[`ui_spec-assistant.md`](./ui_spec-assistant.md)。
 
 ---
 
@@ -52,8 +57,11 @@
 | 學生 | `#students` | 同上，但 `data-feature` 旗標關閉時整個 nav 連結加 `hidden`（:1471-1474）〔修訂 2026-08-29〕 |
 | 助教 | `#assistant` | 同上（同前） |
 | 題庫管理 | `#library` | 同上（永遠顯示，不掛旗標） |
+| 知識點〔修訂 2026-09-24〕 | `#kc` | `data-feature="kc"`：FEATURE_KC 關閉時 nav 連結加 `hidden` |
+| AI 家教〔修訂 2026-09-24〕 | `#tutor` | `data-feature="tutor"`：FEATURE_TUTOR 關閉時 nav 連結加 `hidden` |
 
 - 頂欄為 sticky（`z-40`），視圖內子錨點以 `scroll-mt-24` 避免標題被遮擋；`#review`、`#variants`、`#nlq` 不設頂欄導覽項，由 `VIEW_FOR_ANCHOR` 折入視圖到達（review→view-create、nlq／variants→view-library）：流程入口（複核佇列由拆題結果進入、變式與查題內嵌於題庫脈絡）呼叫 `showSection` 先切到所屬視圖再捲至該錨點。〔修訂 2026-08-29〕
+- 〔修訂 2026-09-24〕`#remedial`（→ view-students）與 `#coverage`（→ view-library）同樣不設頂欄導覽項，由 `VIEW_FOR_ANCHOR` 折入所屬視圖：老師在學生分頁看完弱點就往下出補救卷，在題庫管理看完題目就往下看覆蓋率。補救卷區塊需要 `FEATURE_STUDENTS` 的學生分頁才到得了。
 - 麵包屑：無（單頁、深度 1 層，無需求）。
 - 返回機制：瀏覽器 back 依 hash 歷史回捲；無顯式 back button。
 
@@ -72,7 +80,12 @@
 | `#variants` | `POST /api/questions/:id/variants`；`GET /api/questions/:id/similar` | x-api-key | FEATURE_VARIANTS；FEATURE_SIMILAR（兩支獨立開關，裁決 S3-R25） | 10/min；60/min |
 | `#nlq` | `POST /api/questions/search-nl` | x-api-key | FEATURE_NLQ | 30/min |
 | `#assistant` | `POST /api/assistant` | x-api-key | FEATURE_ASSISTANT | 10/min |
-| `#library` | `GET /api/questions`、`PUT/DELETE /api/questions/:id`、`GET /api/chapters`、`POST /api/batch-save-questions` | x-api-key | 無 | — |
+| `#library` | `GET /api/questions`、`PUT/DELETE /api/questions/:id`、`GET /api/chapters`、`POST /api/batch-save-questions`；〔修訂 2026-09-24〕`GET /api/questions/:id`（詳情含詳解） | x-api-key | 無 | — |
+| `#students`（階段 5 擴充）〔修訂 2026-09-24〕 | `GET /api/error-types`（FEATURE_STUDENTS）、`GET /api/student-profile-options`（核心區）；既有 `PATCH /api/papers/:id/results`、`GET /api/students/:id/weakness`、學生三支的欄位擴充 | x-api-key | FEATURE_STUDENTS（選項端點不吃旗標） | — |
+| `#kc`〔修訂 2026-09-24〕 | `GET /api/chapter-volumes`、`GET /api/kc`、`PATCH /api/kc/:id`、`GET/PUT /api/questions/:id/kcs` | x-api-key | FEATURE_KC | 120/min（知識點四支共用） |
+| `#remedial`〔修訂 2026-09-24〕 | `GET /api/students`、`GET /api/chapter-whitelist`、`GET /api/students/:id/weakness/kc`、`POST /api/students/:id/remedial-paper`、`GET /api/students/:id/remedial-paper/items`；確認與下載沿用 `POST /api/confirm-paper`、`POST /api/download-word` | x-api-key | FEATURE_REMEDIAL（所在學生視圖需 FEATURE_STUDENTS） | — |
+| `#coverage`〔修訂 2026-09-24〕 | `GET /api/coverage` | x-api-key | FEATURE_REMEDIAL | — |
+| `#tutor`〔修訂 2026-09-24〕 | `POST /api/tutor`；`POST /api/voice/transcribe`（multipart） | x-api-key | FEATURE_TUTOR；語音另需 FEATURE_VOICE | 10/min；10/min（皆可由 env 調整）；另有每日預算 |
 
 單人使用、單一角色（家教老師本人），無角色矩陣；URL 與 hash 不含 token 或內部 ID。
 
@@ -90,6 +103,11 @@
 | FEATURE_VARIANTS | `<meta name="feature-variants">` | variants.js 整段不渲染 | variants 不掛載→404 |
 | FEATURE_SIMILAR | `<meta name="feature-similar">` | 學生分頁「找相似」入口不渲染 | similar 不掛載→404 |
 | FEATURE_ASSISTANT | `<meta name="feature-assistant">` | assistant.js 整段不渲染 | /api/assistant 不掛載→404 |
+| FEATURE_KC〔修訂 2026-09-24〕 | `<meta name="feature-kc">` | kc.js 整段不渲染；nav「知識點」隱藏 | 知識點四支不掛載→404 |
+| FEATURE_REMEDIAL〔修訂 2026-09-24〕 | `<meta name="feature-remedial">` | remedial.js 兩個區塊都不渲染；variants.js 不畫「加入補救卷」 | 知識點弱點、補救卷、加題查詢、覆蓋率四支不掛載→404（`generate-paper` 的 blueprint 不受影響） |
+| FEATURE_TUTOR〔修訂 2026-09-24〕 | `<meta name="feature-tutor">` | tutor.js 整段不渲染；nav「AI 家教」隱藏 | /api/tutor 不掛載→404 |
+| FEATURE_VOICE〔修訂 2026-09-24〕 | `<meta name="feature-voice">` | 不渲染按住說話與逐字稿面板 | /api/voice/transcribe 不掛載→404（FEATURE_TUTOR 關閉時也不掛載） |
+| FEATURE_KC_TAGGING〔修訂 2026-09-24〕 | 無（純後端） | — | 只控制管線入庫後是否自動標知識點 |
 
 規則：各 module 以 `parseBool` 讀 meta；佔位字串未被替換時判為 false＝安全預設（旗標讀法見 interfaces-stage2.md 第 8 條；「不得只是隱藏，須整段不渲染」見 interfaces-stage3.md 第 7.2 條）。後端一律「不掛載→Express 預設 404」，不回傳旗標狀態。
 
@@ -99,7 +117,9 @@
 
 | 來源 | 目標 | 載體 | 資料內容 | 為何選此載體 |
 | :--- | :--- | :--- | :--- | :--- |
-| 伺服器（serveIndex） | 全部 module | `<meta>` 標籤（7 個注入點） | api-key、六個 FEATURE_* | 零打包器下唯一的伺服器→前端組態通道；module 各自讀取、互不耦合 |
+| 伺服器（serveIndex） | 全部 module | `<meta>` 標籤（7 個注入點；〔修訂 2026-09-24〕階段 5 起 11 個：另加 feature-kc／remedial／tutor／voice） | api-key、六個 FEATURE_*（階段 5 起十個） | 零打包器下唯一的伺服器→前端組態通道；module 各自讀取、互不耦合 |
+| 「找相似」結果列（variants.js）〔修訂 2026-09-24〕 | `#remedial` 草稿 | `document` 上的 `remedial:add` CustomEvent（`detail.question_id`，另帶 student_id、subject、chapter、difficulty、question_text） | 要加入補救卷的題目 | 契約凍結的唯一跨 module 通道；接收端先查整組再決定加不加（`ui_spec-remedial.md`） |
+| `#remedial` 草稿〔修訂 2026-09-24〕 | 確認出卷 | in-page state（`state.draft`） | 草稿題目與分組 | 同 `#paper` 草稿：確認（confirm-paper）才寫入 |
 | 頂欄導覽〔修訂 2026-08-29〕 | 各分頁 | URL hash（`#paper` 等） | 目標區塊 | 可分享、可書籤、back 自然 |
 | `#nlq` 解析結果 | `#library` 篩選列 | DOM 回寫（filter 控件） | 學科／章節／題型／關鍵字 | 解析結果即篩選狀態，回寫後沿用既有查詢流程（FR-012） |
 | `#paper` 草稿 | 確認出卷 | in-page state（resultBox） | 草稿題目清單 | 草稿為過渡狀態，確認（confirm-paper）才與作答歷史同交易入庫（NFR-006） |
@@ -125,7 +145,7 @@
 | 項目 | ID／文件 |
 | :--- | :--- |
 | 上游需求決策 | DEC-001、DEC-005、DEC-006、DEC-007、DEC-009 |
-| 上游功能需求 | FR-001、FR-006、FR-007、FR-008、FR-009、FR-010、FR-011、FR-012、FR-013、FR-014、FR-015、FR-016 |
+| 上游功能需求 | FR-001、FR-006、FR-007、FR-008、FR-009、FR-010、FR-011、FR-012、FR-013、FR-014、FR-015、FR-016；〔修訂 2026-09-24〕FR-021～FR-024、FR-028～FR-031、FR-033～FR-035 |
 | 上游非功能需求 | NFR-001（x-api-key／CORS）、NFR-006（草稿→確認同交易） |
-| 下游文件 | `ui_spec-main.md`、`ui_spec-review.md`、`ui_spec-students.md`、`ui_spec-nlq.md`、`ui_spec-variants.md`、`ui_spec-assistant.md` |
+| 下游文件 | `ui_spec-main.md`、`ui_spec-review.md`、`ui_spec-students.md`、`ui_spec-nlq.md`、`ui_spec-variants.md`、`ui_spec-assistant.md`；〔修訂 2026-09-24〕[`ui_spec-kc.md`](./ui_spec-kc.md)、[`ui_spec-tutor.md`](./ui_spec-tutor.md)、[`ui_spec-remedial.md`](./ui_spec-remedial.md) |
 | 來源碼 | `exam_pro/public/index.html`（殼與錨點）、`exam_pro/routes/index.js`（路由全表）、`exam_pro/config/features.js`（旗標） |

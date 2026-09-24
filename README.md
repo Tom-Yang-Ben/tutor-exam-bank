@@ -6,7 +6,7 @@
 > 組卷時依作答紀錄排除學生已練習的題目，並匯出含 Word 原生方程式的 `.docx` 考卷。
 > 在此基礎上另建 RAG 檢索（相似題、自然語言查題）與具備工具調用能力的對話式助教。
 
-本儲存庫保留完整的開發歷程：早期原型（`exam/`）、重構後的系統本體與四個階段的演進（`exam_pro/`），以及全部設計文件與決策紀錄（`docs/`）。
+本儲存庫保留完整的開發歷程：早期原型（`exam/`）、重構後的系統本體與四個階段的演進（`exam_pro/`），以及全部設計文件與決策紀錄（`docs/`）。階段 5「教學診斷平台」（錯因診斷、知識點、補救卷、化學、AI 家教）已完成開發、在整合分支待併入 main，見[下方專節](#階段-5教學診斷平台功能旗標與給老師的快速開始)〔修訂 2026-09-24〕。
 
 > ⚖️ 本儲存庫為作者的個人工具與技術作品集：**保留所有權利，僅供瀏覽與技術評估，不授權使用**（見 [`LICENSE`](./LICENSE)）。儲存庫不含任何題庫或考卷內容，示範題與 eval 素材均為作者自行編寫（見 [`NOTICE`](./NOTICE)）。
 
@@ -48,8 +48,9 @@
 | 階段 2 Agent 管線 | `jobs` 狀態機 + 六個 sub-agent | 拆題／分類／公式修復／獨立驗答／兩段去重，硬閘門、重試預算、**部分入庫**、人工複核佇列、cassette record/replay | ✅ |
 | 階段 3 產品面（RAG 三落點） | 相似題、變式題生成、學生弱點面板、自然語言查題 | 檢索優先、九道閘門、kNN few-shot 分類、四級回退階梯 | ✅ |
 | 階段 4 產品收斂 | 日常流程矯正＋主控 agent | 選學生出卷（草稿→確認）、批改輕量化、學生管理、**對話式助教**（主控 LLM 調度五個只讀工具） | ✅ |
+| 階段 5 教學診斷平台〔修訂 2026-09-24〕 | 從出卷工具到診斷與教學（DEC-014～019） | 批改記錯因與部分給分、學生檔案、文字詳解與 Word 詳解版；**化學**入庫（卷別分流，數學／物理 cassette 一個都不重錄）；**知識點**與口語版；依弱點出**補救卷**、跨章配額、題庫覆蓋率；**AI 家教**（code execution 驗算）與按住說話 | 開發完成、整合中（`stage5/integration`，未併入 main） |
 
-四個階段由四條平行 workstream（git worktree）同步施工，以「介面凍結＋裁決」制度整合：介面於開工前凍結為契約，開發期間的疑義以編號裁決回覆並記入文件。全部裁決見 [`docs/interfaces*.md`](./docs)，交接紀錄見 [`docs/HANDOFF.md`](./docs/HANDOFF.md)。
+四個階段由四條平行 workstream（git worktree）同步施工，以「介面凍結＋裁決」制度整合：介面於開工前凍結為契約，開發期間的疑義以編號裁決回覆並記入文件。全部裁決見 [`docs/interfaces*.md`](./docs)，交接紀錄見 [`docs/HANDOFF.md`](./docs/HANDOFF.md)。階段 5 沿用同一制度，由五條程式 workstream 與三組知識點內容平行施工（契約 [`docs/interfaces-stage5.md`](./docs/interfaces-stage5.md)，裁決 S5-1～S5-39）〔修訂 2026-09-24〕。
 
 ---
 
@@ -79,7 +80,9 @@ exam_pro/
 │   ├─ models.js              #   模型 ID 單一真相（MODEL_EXTRACT/VERIFY/VARIANT/ASSISTANT）
 │   ├─ pricing.js             #   每模型單價（官方頁面查證）與成本估算（thinking 同價計）
 │   ├─ features.js            #   FEATURE_* 旗標（預設全關；掛載與渲染的總開關）
-│   ├─ chapters.js            #   章節白名單 + 驗證（prompt 不是保證，這裡才是）
+│   ├─ chapters.js            #   章節白名單 + 驗證（prompt 不是保證，這裡才是）；階段 5 起三科、LEGACY_*（餵既有 LLM 的兩科）
+│   ├─ chemistryChapters.js / errorTypes.js / studentProfile.js  # 階段 5：化學 44 章、錯因白名單、學生檔案選項
+│   ├─ kc/                    #   階段 5：知識點種子檔（數學／物理／化學 .json，AI 草擬待審）
 │   └─ chapterAliases.js / chapterExamples.js  # NLQ 別名、分類 few-shot 素材
 │
 ├─ agents/                    # 六個 sub-agent（純函式合約：不碰 DB、不讀 env、依賴 ctx 注入）
@@ -89,6 +92,7 @@ exam_pro/
 │   ├─ verify.js              #   獨立解題驗證（pro；與拆題不同模型互相制衡）
 │   ├─ dedup.js (dedup0/1)    #   兩段去重：正規化雜湊 → 向量餘弦
 │   ├─ generateVariant.js     #   變式生成（藍本＋5 鄰居錨點；跑題餘弦閘門）
+│   ├─ tagKc.js               #   階段 5：知識點自動標註（agent kc_tag）；各 agent 另有化學分支 *_chem
 │   └─ schemas/               #   各 agent 輸出的 JSON Schema（ajv 硬驗證）
 │
 ├─ workers/jobRunner.js       # 編排者＝程式碼：認領（SKIP LOCKED＋租約）、重試預算、RPM 節流、成本上限
@@ -103,10 +107,13 @@ exam_pro/
 │   ├─ assistantService.js    #   對話式助教：主控 agent + 五個只讀工具（階段 4）
 │   ├─ embedService.js        #   embedding 寫入
 │   ├─ figureService.js       #   附圖裁切（extract bbox → mupdf 渲染＋sharp 裁圖；詳 docs/figures.md）
+│   ├─ kcService.js / kcTagService.js / kcWeaknessService.js      # 階段 5：知識點、自動標註、知識點弱點
+│   ├─ remedialService.js / coverageService.js                    # 階段 5：補救卷、題庫覆蓋率
+│   ├─ tutorService.js / voiceService.js                          # 階段 5：AI 家教、語音轉寫（llm/ 新增 generateText）
 │   └─ wordService.js / aiService.js  # Word 匯出（防 SSRF）／舊版單呼叫拆題（保留對照）
 │
 ├─ controllers/               # HTTP 薄殼：question / exam（草稿→確認）/ studentAdmin / student /
-│                             # paper（批改）/ review（複核佇列）/ job / assistant / word / ai
+│                             # paper（批改）/ review（複核佇列）/ job / assistant / word / ai；階段 5：kc / remedial / tutor
 ├─ middleware/                # x-api-key（timing-safe）、記憶體限流
 ├─ queries/hybrid.js          # hybrid 檢索 SQL（RRF 融合）——API 與 eval 共用同一段
 │
@@ -119,10 +126,10 @@ exam_pro/
 │   └─ formulaFix.js / formulaLint.js / questionValidation.js
 │
 ├─ public/                    # 前端（無打包器）
-│   ├─ index.html             #   單頁殼＋題庫/組卷 inline script＋5 個 hash 路由視圖（分頁錨點折入視圖）
-│   └─ js/                    #   ES modules：review / students / nlq / variants / assistant
+│   ├─ index.html             #   單頁殼＋題庫/組卷 inline script＋hash 路由視圖（階段 5 起 7 個；分頁錨點折入視圖）
+│   └─ js/                    #   ES modules：review / students / nlq / variants / assistant；階段 5：kc / remedial / tutor
 │
-├─ migrations/ + migrate.js   # 只增不改的 SQL（0001 init → 0007）＋極簡執行器
+├─ migrations/ + migrate.js   # 只增不改的 SQL（0001 init → 0012 knowledge_components）＋極簡執行器
 ├─ eval/                      # 量測體系
 │   ├─ run.js                 #   五個 suite：retrieval / classify / pipeline / nlq / variant
 │   ├─ lib/                   #   指標、golden loader、pg engine、pipeline driver、門檻 ratchet
@@ -132,8 +139,9 @@ exam_pro/
 │   └─ thresholds.json        #   門檻（首測 −0.03、只升不降）
 │
 ├─ test/
-│   ├─ unit/                  #   1,613 項：不連網、不連庫、零 secrets
-│   ├─ integration/           #   262 項：對 tmpfs 測試庫（_test 後綴強制）
+│   ├─ unit/                  #   1,613 項（main）：不連網、不連庫、零 secrets
+│   ├─ integration/           #   317 項（main）：對 tmpfs 測試庫（_test 後綴強制）
+│   │                         #   整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中
 │   └─ e2e/                   #   11 項：HTTP 全路徑（上傳→部分入庫；組卷→Word 公式）
 │
 ├─ scripts/                   # 維運：備份、向量回填、成本報表、公式健檢
@@ -151,7 +159,9 @@ exam_pro/
 | [`interfaces-stage1.md`](./docs/interfaces-stage1.md) ／ [`-stage2`](./docs/interfaces-stage2.md) ／ [`-stage3`](./docs/interfaces-stage3.md) | 三份**凍結介面**與全部裁決（階段 1 裁決 1–27、S2-1～30、S3-1～R29）——平行開發的契約 |
 | [`rag-and-agents.md`](./docs/rag-and-agents.md) | RAG 與多 Agent 技術決策全紀錄（本 README 技術選型章的完整版） |
 | [`variants.md`](./docs/variants.md) ／ [`retrieval.md`](./docs/retrieval.md) ／ [`llm.md`](./docs/llm.md) ／ [`formulas.md`](./docs/formulas.md) | 變式題九道閘門與閾值校準／檢索設計／LLM 層 |
-| [`HANDOFF.md`](./docs/HANDOFF.md) | 交接檔：角色、狀態、標準流程、踩過的坑 |
+| [`HANDOFF.md`](./docs/HANDOFF.md) | 交接檔：角色、狀態、標準流程、踩過的坑；階段 5 交接〔修訂 2026-09-24〕 |
+| [`interfaces-stage5.md`](./docs/interfaces-stage5.md)〔修訂 2026-09-24〕 | 階段 5 凍結介面與裁決 S5-1～S5-39 |
+| [`grading-and-profile.md`](./docs/grading-and-profile.md) ／ [`chemistry.md`](./docs/chemistry.md) ／ [`knowledge-components.md`](./docs/knowledge-components.md) ／ [`remedial.md`](./docs/remedial.md) ／ [`tutor.md`](./docs/tutor.md)〔修訂 2026-09-24〕 | 階段 5 五份功能文件（API、設計取捨、給老師的操作說明）；知識點內容抽查紀錄 `kc-review-*.md` |
 | [`archive/`](./docs/archive) | 已結案的歷史紀錄：`cutover-runbook.md`（MySQL→PG 切換之夜，2026-08-21 已執行）、`stage*-parallel-prompts.md` ／ `questions*-ws*.md`（四條平行 workstream 的分工提示詞與提問裁決）——**多人（多 agent）協作制度的完整紀錄**，索引見該資料夾 README |
 
 ---
@@ -375,16 +385,16 @@ Gemini 已回傳 JSON，為何不直接入庫？
 ## 🧰 技術棧
 
 - **後端**：Node.js 24 · Express 5 · PostgreSQL 16 + pgvector（Docker；2026-08-21 由 MySQL 切換，runbook 見 [`docs/archive/cutover-runbook.md`](./docs/archive/cutover-runbook.md)）
-- **AI**：Google Gemini（`@google/genai`）——拆題／分類／變式 `gemini-3.5-flash`、獨立驗答 `gemini-3.1-pro-preview`、embedding `gemini-embedding-001`（768 維）；模型 ID 單一真相在 [`exam_pro/config/models.js`](./exam_pro/config/models.js)
+- **AI**：Google Gemini（`@google/genai`）——拆題／分類／變式 `gemini-3.5-flash`、獨立驗答 `gemini-3.1-pro-preview`、embedding `gemini-embedding-001`（768 維）；模型 ID 單一真相在 [`exam_pro/config/models.js`](./exam_pro/config/models.js)；階段 5 另用 code execution（AI 家教驗算）與音訊輸入（語音轉寫）〔修訂 2026-09-24〕
 - **文件**：`docx`（自製 LaTeX → OOXML 數學公式轉換）
-- **前端**：單頁 HTML + Tailwind（CDN）+ MathJax + 五個 ES module 分頁（零打包器）
-- **測試／量測**：`node:test`（單元 1,613／整合 317／e2e 11）＋五個 eval suite（golden＋ratchet 門檻）＋ LLM record/replay cassette——CI 全程零金鑰、零網路、零成本
+- **前端**：單頁 HTML + Tailwind（CDN）+ MathJax + 五個 ES module 分頁（零打包器）；階段 5 另加三個 module（知識點、補救卷與覆蓋率、AI 家教），MathJax 載入 mhchem〔修訂 2026-09-24〕
+- **測試／量測**：`node:test`（單元 1,613／整合 317／e2e 11；整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中〔修訂 2026-09-24〕）＋五個 eval suite（golden＋ratchet 門檻）＋ LLM record/replay cassette——CI 全程零金鑰、零網路、零成本
 
 ---
 
 ## 🧪 品質保證的三層（怎麼測一個 LLM 系統）
 
-1. **合約層單元測試**：agent 為純函式（依賴全數注入），1,613 項測試不連網、不連庫、不需任何金鑰，clone 後執行 `npm test` 即可完整重現。
+1. **合約層單元測試**：agent 為純函式（依賴全數注入），1,613 項測試（main；整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中〔修訂 2026-09-24〕）不連網、不連庫、不需任何金鑰，clone 後執行 `npm test` 即可完整重現。
 2. **cassette record/replay**：真實呼叫錄製為 cassette（鍵含模型 ID、模板版本與輸入雜湊），CI 以 replay 模式確定性地重播完整管線；replay miss 於 main 分支視為錯誤——cassette 缺漏不得以綠燈掩蓋。
 3. **eval golden + ratchet**：五個 suite 對人工定案的 golden 量指標，門檻＝首測 −0.03、只升不降；任何改動讓指標掉到門檻下，CI 轉紅。
 
@@ -404,6 +414,41 @@ npm start                 # http://localhost:3000
 ```
 
 完整安裝步驟、環境變數表、API 一覽與維運工具說明，請見 **[`exam_pro/README.md`](./exam_pro/README.md)**。
+
+## 階段 5：教學診斷平台——功能、旗標與給老師的快速開始
+
+> 〔修訂 2026-09-24〕狀態：五條程式 workstream 與三組知識點內容已完成開發並併入整合分支 `stage5/integration`（完整 CI 全綠），**尚未併入 main**；整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中（主控合併後更新數字）。需求決策 DEC-014～019 的核准欄仍待 Owner 簽核。
+
+從「出卷工具」轉成「教學診斷平台」（DEC-014）：不只出卷，還要看懂學生為什麼錯、把弱點直接變成下一份卷，並能用說的問三科問題。所有新功能預設關閉，逐一打開。
+
+| 功能 | 老師看到什麼 | 旗標 | 權威文件 |
+|---|---|---|---|
+| 批改細節與錯因分布 | 批改時按「錯」可點錯因（觀念不清、計算錯誤…可複選）、計算／證明題可給部分分數、記學生答案與註記；弱點面板多一張「錯因分布」 | 既有 `FEATURE_STUDENTS` | [`docs/grading-and-profile.md`](./docs/grading-and-profile.md) |
+| 學生檔案 | 年級、類組、目標考試、學校、教材版本、備註 | 無（核心） | 同上 |
+| 文字詳解與 Word 版本 | 新拆題自動存驗算摘要當詳解、老師可改寫；Word 可匯出學生版（不附答案）與詳解版 | 無（核心） | 同上 |
+| 化學 | 上傳時選「化學」卷別；44 章白名單；化學式與反應式匯出成 Word 原生方程式；答案比對會看單位與化學式 | 既有 `FEATURE_PIPELINE`（上傳） | [`docs/chemistry.md`](./docs/chemistry.md) |
+| 知識點 | 三科 637 個知識點（AI 草擬），每個有一段上課講給學生聽的「口語版」；可朗讀、就地修改、審定；可替題目標知識點 | `FEATURE_KC`；自動標新題 `FEATURE_KC_TAGGING` | [`docs/knowledge-components.md`](./docs/knowledge-components.md) |
+| 補救卷與題庫覆蓋率 | 依弱點一鍵產生補救卷草稿（補救／先備／延伸配比，說得出為什麼選這些題）；章 × 難度熱度表看哪裡沒題 | `FEATURE_REMEDIAL`（補救卷另需 `FEATURE_STUDENTS`） | [`docs/remedial.md`](./docs/remedial.md) |
+| AI 家教 | 問三科題目與觀念；直接講解或引導式；數值由程式驗算並攤開程式與輸出；每日花費上限 | `FEATURE_TUTOR` | [`docs/tutor.md`](./docs/tutor.md) |
+| 按住說話 | 按住說話、放開後看逐字稿與公式，改好按確認才送給家教（桌機、localhost 或 HTTPS） | `FEATURE_VOICE`（需同時開 `FEATURE_TUTOR`） | 同上 |
+
+**給老師的快速開始**（升級一次；完整步驟與每一步要確認什麼見 [`engineering_docs/06_ops/deployment_and_operations.md`](./engineering_docs/06_ops/deployment_and_operations.md) §3.4）：
+
+```bash
+cd exam_pro
+npm run db:backup                               # 1. 先備份
+npm run migrate                                 # 2. 套用 0010–0012
+npm run kc:load -- --dry-run                    # 3. 先看知識點會新增幾個（數學的章節切法要在第一次載入前決定）
+npm run kc:load                                 #    數字合理再真的載入
+npm run search:reindex -- --dry-run             # 4. 必跑：化學詞彙改變了分詞
+npm run search:reindex
+npm run solution:backfill -- --dry-run          # 5. 看會補幾題詳解、略過幾題，確認後再去掉 --dry-run
+npm start
+```
+
+之後在 `exam_pro/.env` 一次開一個旗標、重啟、實際用一次：`FEATURE_KC` → `FEATURE_REMEDIAL` → `FEATURE_TUTOR`（需 `LLM_MODE=live` 與金鑰，確認 `TUTOR_DAILY_BUDGET_USD`）→ `FEATURE_VOICE` → 最後才 `FEATURE_KC_TAGGING`。步驟 1–5 都不呼叫 AI、不花錢。
+
+**尚未做到**（依 DEC 列管）：錯題重練與間隔複習、訂正卷、學習路徑與學習報告、學生端；AI 家教與知識點標註都還沒對真的 Gemini 跑過，化學的拆題與分類品質也還沒量測。交接與 Owner 待辦見 [`docs/HANDOFF.md`](./docs/HANDOFF.md)，裁決見 [`docs/interfaces-stage5.md`](./docs/interfaces-stage5.md) 第 9 條。
 
 ---
 

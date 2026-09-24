@@ -1,6 +1,6 @@
 # 階段 5 介面凍結：教學診斷平台（2026-09-24）
 
-> **狀態**：凍結（contract 階段，commit 於 `stage5/base`）。開發期間的疑義以「裁決 S5-n」回覆，於整合時記入本檔第 9 條。
+> **狀態**：凍結（contract 階段，commit 於 `stage5/base`）。開發期間的疑義以「裁決 S5-n」回覆，於整合時記入本檔第 9 條。〔修訂 2026-09-24〕第 9 條已由整合階段填入 S5-1～S5-39，優先於上文對應條文。
 > **需求來源**：`engineering_docs/01_requirements/requirements_tracker.md` DEC-014～019 與 DEC-003 例外條款（核准欄待 Owner 簽核；Owner 2026-09-24 於對話中指示「缺口總表 P0 全部做完」）。
 > **範圍**：缺口分析（claude.ai 專案文件 `claude/gap-analysis-2026-09-24.md`）的 P0 項目 G01–G10。G00（需求登錄）已完成。
 > **本檔是五條 workstream 與三組知識點內容的共同契約**：各 WS 只依本檔與 `stage5/base` 的程式碼施工，不讀取、不依賴其他 WS 的分支。
@@ -444,4 +444,78 @@ generateText({
 
 ## 9. 裁決紀錄
 
-（開發期間的裁決 S5-n 記於此。）
+〔修訂 2026-09-24〕整合階段依各 WS 回報的「與契約不同之處」、審查後保留（未修）的決定，以及主控在整合時的決定整理成 S5-1～S5-39。以下裁決**優先於上文對應條文**（條文不逐句回改，以本節為準）。「決定」欄標**待 Owner 確認**者，程式目前照該行為運作，Owner 可推翻；推翻時依「理由」欄所述的影響範圍改。各項細節以對應功能文件為準：WS-A [`grading-and-profile.md`](grading-and-profile.md)、WS-B [`chemistry.md`](chemistry.md)、WS-C [`knowledge-components.md`](knowledge-components.md)、WS-D [`remedial.md`](remedial.md)、WS-E [`tutor.md`](tutor.md)。
+
+### 9.1 整合（主控）
+
+| 編號 | 主題 | 決定 | 理由 | 影響的 WS |
+|---|---|---|---|---|
+| S5-1 | ADR 編號衝突 | WS-A 的 ADR 改號為 **ADR-015**（`ADR-015-grading-detail-and-solution-provenance.md`，`grading-and-profile.md` 的引用同步）；WS-D 保留 **ADR-014**（補救卷）。主控整合提交 `bbea5e6` | 第 6 條只分配 ADR-010～013，WS-A 與 WS-D 各自取了下一個未用號 014；兩份 ADR 都註明整合時可改號，改一方即可消除撞號 | WS-A、WS-D |
+| S5-2 | `#remedial`／`#coverage` 子錨點 | `index.html` 路由表補 `VIEW_FOR_ANCHOR.remedial = 'view-students'`、`VIEW_FOR_ANCHOR.coverage = 'view-library'`（不加進 `TOP_ANCHORS`），標〔stage5 整合〕。主控在 WS-E 的合併提交 `93ba65d` 解衝突時補上 | base 骨架只放了空 section，路由表沒有對應，`showSection('remedial')` 不會切換視圖；兩者是既有分頁裡的子區塊，不是頂層分頁 | WS-D |
+| S5-3 | WS-B 審查修正的提交 | WS-B 的審查修正（NLQ 化學分流、`search:reindex`、℃／K 以 273 換算、單一大寫字母後接中文不當單位、度符號與 `\mathrm{C}`）由**主控接手，驗證全綠後提交**（`6fe425a`）；實際上 WS-B 是最後一個併入的分支（第 8 條原訂 A→B→C→D→E） | WS-B 的修正 agent 因額度中斷；修正內容已寫好，需要有人驗證並提交 | WS-B |
+| S5-4 | `.env.example` 重複說明 | 刪掉 WS-E 段落裡重複的 `MODEL_KC_TAG` 說明，保留 WS-C 段落的那一份（`bbea5e6`） | 兩條 WS 各寫了一份；讀這個變數的是 WS-C 的 `kcTagService`，WS-E 只在 `config/models.js` 加 getter | WS-C、WS-E |
+| S5-5 | 路由表的最小掛鉤 | 接受 WS-C、WS-E 在 `index.html` inline script 各補一行 `VIEW_FOR_ANCHOR`／`TOP_ANCHORS`（`kc`、`tutor`），標〔stage5 WS-X〕；此為第 1.3 條「各 WS 不需要再動骨架」的偏離 | base 的路由表漏了兩個新分頁，點導覽會落回建立題目視圖；依第 1.5 條以最小掛鉤處理 | WS-C、WS-E |
+| S5-6 | 修改既有測試的範圍 | 接受：WS-A 在 `students.pg.test.js` 四處形狀斷言加上新欄位；WS-B 把「化學必須被拒」改用「生物」並補正向斷言，`agentExtract` 改對 `LEGACY_SUBJECTS`（另逐字釘 `['數學','物理']`）、`nlqAliases` 改為 66＋44 章（66 章逐章釘住）、`nlqService` 改為「每科各跑一次」、`tokenize` 對「醇、酚、醚」改為三個單字各成 token。全部加註〔stage5 WS-X〕 | 都是 DEC-015／017／019 刻意改變的行為（第 1.6 條允許）；斷言仍逐欄或逐章，沒有放寬 | WS-A、WS-B |
+
+### 9.2 WS-A 資料地基
+
+| 編號 | 主題 | 決定 | 理由 | 影響的 WS |
+|---|---|---|---|---|
+| S5-7 | 錯改對時的錯因 | `result ≠ 0` 時 `error_types` 一律清空，**即使沒送 `error_types`**；`score`、`response`、`note` 仍照「沒送不動」；錯因分布 SQL 另加 `result = 0` 作第二道檢查 | 第 4.1 條「沒送不動」與「只能在 result = 0 時非空」在「只送 `result: 1`」時衝突；不變量優先，否則錯因分布會算進答對的題 | WS-A（讀者 WS-D、WS-E） |
+| S5-8 | 契約外的唯讀端點與回應欄位 | 接受新增 `GET /api/questions/:id`（核心區，封存題也查得到）、`GET /api/student-profile-options`（核心區）、`GET /api/error-types`（`FEATURE_STUDENTS`）；`GET /api/papers/:id` 多回 `solution_src`；`POST`／`PATCH /api/students` 回完整一列；PATCH 空 body 的訊息改為「至少要提供一個要修改的欄位（…）」。`/questions/:id` 未限定數字路徑：之後新增同前綴的字面路徑須註冊在它之前 | 前端需要題目詳情、選項與錯因清單，不另抄白名單；回應只增不減；`name` 已非必填，只送 `name` 的行為與訊息不變 | WS-A |
+| S5-9 | 詳解來源與回填規則 | PUT 帶與現值 trim 後相同的詳解時保留原來源（前端也只在老師動過詳解欄時才送）；回填略過入庫後題幹或答案被改過的題（`edited`）；`--limit N`＝這一輪最多寫 N 題；整批一交易、`--dry-run` 在交易內跑完再 ROLLBACK；複核 approve 不寫詳解（靠回填補） | 避免把驗算摘要誤標成老師寫的、避免把舊題目的解法貼到新題目；契約只授權 save 節點寫詳解 | WS-A |
+| S5-10 | `recent_wrong` 的批改細節 | 凍結的 `buildRecentWrong` 不動，`error_types`、`score` 由 controller 以 `(student_id, question_id)` 另查一次補上 | 契約只允許在 `weaknessService.js` 檔尾新增 `buildByErrorType` | WS-A |
+
+### 9.3 WS-B 化學
+
+| 編號 | 主題 | 決定 | 理由 | 影響的 WS |
+|---|---|---|---|---|
+| S5-11 | 文字型答案的單位衝突 | 維持**裁決 S2-26**：`answer_form = text` 時單位衝突回 `uncertain`；「5 cm 對 5 m」的 disagree 由 number 與 expression 兩種形式達成，三種形式都不會判 agree。**待 Owner 確認**；若要改，只動 `compareText` 一行並改 `answer_chem.json` 的 unit-007 | S2-26「text 永遠不回 disagree」與第 4.2 條第 4 點在 text 上互相衝突；uncertain 會進人工複核，不會讓錯答案入庫 | WS-B |
+| S5-12 | jobs 冪等鍵 | `POST /api/jobs` 的冪等鍵由 `pdf_sha256` 改為 `(pdf_sha256, subject_group)`：同卷別重傳回既有 job，換卷別重傳建新 job | 老師選錯卷別時不必用 `?force=1`；既有流程兩次都是 `math_physics`，行為不變 | WS-B |
+| S5-13 | 助教與 NLQ 的化學支援 | 助教只改工具驗證的科目清單（讀 `SUBJECTS`），工具說明書（SYSTEM 的一部分）仍寫「數學\|物理」；NLQ 的 LLM 輔路徑本階段不支援化學。要支援需另開裁決並重錄兩者的 cassette | 第 1.1 條：既有 agent 的 SYSTEM、模板、schema 一個字都不能改 | WS-B |
+| S5-14 | `\mathrm` 正體 | `\mathrm{…}` 在 OMML 一律輸出正體（每個 `m:r` 補 `m:sty p`），影響所有科目（數學／物理的 `\mathrm{m/s}` 也變正體） | 契約要求，排版規範本來就該正體；凍結對照語料沒有 `\mathrm`，逐位元對照測試仍通過 | WS-B |
+| S5-15 | 化學的新程式路徑 | 接受新增共用模組 `utils/chemFormula.js`、`utils/units.js` 與 `config/chapters.js` 的額外匯出（`SUBJECT_GROUP_KEYS`、`normalizeSubjectGroup`、`subjectGroupOf`、`subjectChoiceText` 等）；新箭頭符號放 `EXTRA_SYMBOLS`、不併入 `SYMBOLS`；`utils/embedText.js` 不改；化學 extract 用 `CHEM_LATEX_RULES`（不放數學版 `LATEX_RULES`），化學章名在 prompt 內加「」；source_check 的化學分支先把 `\ce` 換成可比對文字 | `SYMBOLS` 同時給 embedText 用，併入會讓既有題目的 embed_text 改變、向量被判過期；改 embedText 會讓全部向量作廢；「醇、酚、醚」本身含頓號 | WS-B |
+| S5-16 | 可擴充清單外的一行修改 | 接受 WS-B 修改 `controllers/questionController.js` 與 `utils/questionValidation.js`（各一行，科目錯誤訊息改由 `SUBJECTS` 產生；兩科時與原字串逐字相同）；合併時保留 WS-A 的版本再套這一行 | 訊息寫死兩科，化學併入後會誤導；無功能改動 | WS-B、WS-A |
+| S5-17 | NLQ 的化學分流 | 規則抓不到章節時：句子有化學線索**而且沒有任何數理線索**才跳過 LLM、`subject` 設化學；有數理線索（點名科目、含化學線索字的數理用語、既有數理詞典）照舊走 LLM；拿不準就走 LLM | 審查發現原版會把寫了「物理」的句子鎖進化學（數理 NLQ 回歸，已修）；把數理句子鎖進化學的代價大於化學句子查得較散 | WS-B |
+| S5-18 | 分詞改變與 `search_tsv` | 新增 `npm run search:reindex`（不呼叫 LLM、不動 embedding），併入後**必跑**，之後改詞典或章節名都要再跑；更正 `chemistry.md` 原「既有 `search_tsv` 不必重建」的結論 | 化學詞彙改變部分既有數理題的切法（質量數、理想氣體、週期表、反應速率），`search_tsv` 是寫入當下切好存進 DB 的；fixture 語料剛好沒有這些詞，CI 看不出來 | WS-B（上線步驟） |
+| S5-19 | 單位讀取與溫度換算 | ℃↔K 同時接受 273 與 273.15；答案後單一大寫字母緊接中文（「A 點」「N 極」）不當單位；度符號寫在單位巨集前讀成攝氏 | 高中慣用 0 ℃ = 273 K；避免「A 點」被讀成安培、「27°C」被讀成庫侖造成假 disagree（審查 low，已修） | WS-B |
+
+### 9.4 WS-C 知識點
+
+| 編號 | 主題 | 決定 | 理由 | 影響的 WS |
+|---|---|---|---|---|
+| S5-20 | 「依 id 取題」的三條平行實作 | 接受 WS-C 的 `GET /api/questions/:id/kcs?detail=1` 附加形狀（沒帶 `detail` 時逐字照契約）。整合後有三條依 id 取題的讀取路徑並存：WS-A 的 `GET /api/questions/:id`、WS-C 的 `?detail=1`、WS-D 的 `GET …/remedial-paper/items`；本階段不收斂，列為後續整理 | 平行開發時既有程式沒有「以 id 取單題」的 API，三條 WS 各依需要補上；用途不同（題目詳情、知識點小工具、承上組查詢） | WS-A、WS-C、WS-D |
+| S5-21 | 知識點 PATCH 的嚴格驗證 | `PATCH /api/kc/:id` 遇到不認得的鍵、空 body、非物件 body 一律 400；`:id` 格式不合法 400，只有查無此列回 404 | 靜默略過拼錯的鍵（例 `spokenText`）會讓老師以為存好了 | WS-C |
+| S5-22 | `kc:load` 的契約外行為 | 接受：`--test` 旗標；未受保護的知識點，本批沒列出的 `ai` 先備會移除（`human`／`curriculum` 不動、受保護者只補不刪）；寫完後對 DB **全部**先備做環檢查；DB 有而種子檔沒有的知識點不刪、只回報；已審定列若內容相同算「內容相同」；`--force` 連 status 一起覆寫；先換暫名避開同章換名撞 UNIQUE；現有列以 `SELECT … FOR UPDATE` 讀；23505 轉成指名道姓的錯誤 | 單檔載入時跨科成環只有全體檢查看得到；Owner 的審定是最貴的內容，載入途中按審定不得被覆寫（審查 low，已修） | WS-C |
+| S5-23 | AI 標註的欄位語意 | AI 寫入的 `question_kcs.weight` 一律 1，信心只存在 `confidence`；`GET /api/kc` 的 `question_count` 只數未封存題；`kc:backfill` 只挑「未封存、沒有任何標註、所在章節有知識點」的題 | 「模型多有把握」與「這題有多少成分在考它」是兩回事；封存題在題庫看不到，算進去老師會對不上 | WS-C（讀者 WS-D） |
+| S5-24 | 標註費用與預算煞車 | 標註的 LLM 費用不記入 `job_events`，不計入 `DAILY_COST_BUDGET_USD` 與 job 的 `budget_usd`；但掛鉤呼叫前先查，該 job 預算用盡或當日管線花費已達上限就不標；`kc_tag` 設 `thinkingBudget = 512`、`maxOutputTokens = 4096`；`MODEL_KC_TAG` 的解析放在 `kcTagService`（agent 不讀 env） | 記進 `job_events` 會改動拆題管線的帳與報表；save 是零成本節點、管線觸頂後仍會跑，標註卻要付錢；thinking 模型不限思考會截斷 JSON（審查 medium，已修） | WS-C |
+| S5-25 | 限流套用範圍 | 知識點四支 API 套 120/min（不呼叫 LLM，獨立一桶當防呆）；WS-D 的四支與 WS-A 的三支唯讀端點不套限流 | 第 1.2 條的限流要求針對會呼叫 LLM 的端點 | WS-C、WS-D、WS-A |
+
+### 9.5 WS-D 出題閉環
+
+| 編號 | 主題 | 決定 | 理由 | 影響的 WS |
+|---|---|---|---|---|
+| S5-26 | 「加入補救卷」掛鉤位置 | 按鈕掛在 `public/js/variants.js` 的 `findSimilar` 結果列（加註〔stage5 WS-D〕），`students.js` 不改；`?remedial=1` 保留為本機驗收開關（API 仍依旗標）。**待 Owner 確認** | 「找相似」的結果列是 variants.js 畫的；放在 students.js 只能掛在錯題本身，而錯題學生已寫過、confirm-paper 必定 409 | WS-D |
+| S5-27 | 補救卷的契約外回應與端點 | 接受 `remedial-paper` 的 `blueprint[]` 多 `difficulty_min`／`difficulty_max`／`rationale`，`items[]` 多 `follows_question_id`／`group_ids`；新增只讀的 `GET /api/students/:id/remedial-paper/items?ids=`（`FEATURE_REMEDIAL`） | 前端要顯示選題理由、要整組刪與整組加；手動加題只有 id，既有 API 無法得知題目是否為承上題、是否封存或已寫過（審查 medium，已修） | WS-D |
+| S5-28 | confirm-paper 不驗承上組 | 維持第 4.4 條「沿用既有 confirm-paper（不改）」：伺服器不重驗承上組是否完整，把關在前端（整組刪、整組加、確認前擋缺前題的承上題）；直接呼叫 API 仍可出半組。**待 Owner 確認**是否另開伺服器端檢查 | 契約凍結 confirm-paper，既有程式刻意「照給的題出卷」 | WS-D |
+| S5-29 | 跨章配額（blueprint）規則 | 不掛旗標（核心組卷的延伸、不呼叫 LLM）；至少抽到一題就 200 並逐列回報不足，全部列都抽不到才 400；`FOLLOW_UP_SHORTFALL_POLICY` 延伸到 blueprint（`'error'` 時承上組不足的列回 400）；單章路徑把 `chapter` 先過 pg `prepareValue` 再包成一元素陣列，非字串輸入維持原本的 400 | 契約只寫「逐列回報不足量」；單點政策開關應同時管兩條組卷路徑；候選池改為 `= ANY($2::text[])` 後直接包陣列，陣列輸入會變成多章卷或 500（審查 low，已修） | WS-D |
+| S5-30 | 補救卷選題參數 | remedial 取最弱 k = min(3, ⌈n/2⌉) 個單位、難度 ≤ ⌊答錯題平均難度＋1⌋；先備取同科直接先備最多 3 個、難度 ≤3；延伸取其餘 `mastery_lb` 最高的最多 3 個、難度 ≥ ⌊平均⌋＋1；無先備或無可延伸單位時配額併回 remedial 並寫 notes；跨科先備不納入；不足量不自動拿別的單位補；`WEAKNESS_MIN_N = 0` 時仍至少要 1 題有標註才用知識點基底。**待 Owner 於 DEC-016 簽核時確認** | 契約未規定；屬經驗法則，需實際使用後調整 | WS-D |
+
+### 9.6 WS-E AI 家教
+
+| 編號 | 主題 | 決定 | 理由 | 影響的 WS |
+|---|---|---|---|---|
+| S5-31 | generateText 與 cassette | `generateText` 多回 `finishReason`（第 5.1 條之外；不在鍵內，舊 cassette 回放為 null）；語音回應多 `usage`；`generateText` 的鍵公式同 `generateJson`、`tools` 不在鍵內，家教的 `cacheKeyParts` 放 `{mode, prompt: sha256}`、語音放 `{audio_sha256, mime, subject}`（只存雜湊） | 自由文字不會「解析失敗」，沒有 finishReason 就無從得知被截斷；題幹、學生資料與錄音原文不進 cassette | WS-E |
+| S5-32 | 家教與語音的輸入邊界 | history 每輪 ≤4000 字、超過 8 輪直接 400（不截斷）；`question_id`／`student_id` 查無回 404、超過 int4 上限回 400；有題目時以題目科目為準（與傳入科目不一致不回 400）；LLM 端錯誤一律 502、DB 錯誤交全域 500；錄音 >5 MB 回 413、其他 multer／busboy 錯誤回 400 | 契約未寫；避免 SDK 自帶的 400／429 冒充參數錯誤或預算用完、避免 DB out of range 變成 500（審查 low，已修） | WS-E |
+| S5-33 | 家教的成本估算與輸出上限 | `usage.tokenOut` 含 thinking、`tokenIn` 含 code execution 回灌；價目表查不到的模型以表上最貴單價估；`TUTOR_DAILY_BUDGET_USD = 0` 代表不准花錢；預算在呼叫前檢查（最後一次可能略超）；家教 `thinkingBudget 2048`／`maxOutputTokens 8192`、語音 1024／4096 成對設定；`MAX_TOKENS` 時在 reply 末尾附截斷提醒（不另加 `truncated` 欄，回應仍是五鍵） | 寧可高估，否則預算閘門失效；thinking 模型吃光輸出額度有前例（審查 medium，已修）；不動回應形狀，既有整合斷言不變 | WS-E |
+| S5-34 | 回覆呈現與錯因標籤 | 受限 Markdown 另把 `#` 標題轉成粗體段落（仍不支援連結與圖片）；系統提示改為「不要使用表格、HTML 標籤或超連結」；錯因中文標籤先讀 `config/errorTypes.js`，讀不到才用內建對照表（整合後可刪） | 模型常輸出「### 驗算」；表格在受限 Markdown 下會變成一堆直線符號；平行開發期間不能假設 WS-A 的檔案存在 | WS-E |
+| S5-35 | MathJax 的 `ui/safe` | WS-E 不在自己的分支改全站 MathJax 設定，交整合階段；建議 `loader: { load: ['ui/safe'] }`，改完在家教回覆與題庫預覽各以 `$\href{javascript:alert(1)}{x}$` 實測。**本輪尚未處理，列為待辦** | 全站既有風險（題庫、試卷同樣走 `renderMath`），不該只在家教頁修；需要瀏覽器實測 | WS-E（整合） |
+| S5-36 | 錄音格式 | 瀏覽器錄的 `audio/webm`（opus）照原樣送 Gemini，不在前端轉檔；若實機被拒，退路是前端以 Web Audio 轉成 16 kHz 單聲道 WAV（不需新依賴） | Gemini API 文件（2026-09-23 版）的音訊格式清單列有 `audio/webm`；尚未用真錄音驗證 | WS-E |
+
+### 9.7 知識點內容與文件整合
+
+| 編號 | 主題 | 決定 | 理由 | 影響的 WS |
+|---|---|---|---|---|
+| S5-37 | 知識點內容的產出規則 | 三科 `curriculum_code` 全部填 null；除第 3.5 條的 4 條外全部 `draft`；KC 內容組沒有測試庫，只跑 `validate_kc_seed`、unit 與 `check:html`，未跑完整 `ci.sh`；產生 JSON 的腳本留在 scratchpad、不進版控，之後以 JSON 本身為唯一來源 | 第 3.4 條「不得編造」；內容組只交資料檔與抽查紀錄；整合分支的完整 CI 已涵蓋種子檔驗證（`kcSeed.test.js`） | KC-M、KC-P、KC-C |
+| S5-38 | 白名單外的內容與跨科先備 | 物理不另立「熱學」章（改 `LEGACY_CHAPTERS` 會讓全部 cassette 失效），只在「能量的形式與守恆」放一條概念性知識點，待 Owner 決定；化學建議的 5 條跨科先備暫不寫入（等對方 code 定稿）；物理引用數學 5 章的 6 處跨科先備，整合時以不帶參數的 `validate_kc_seed` 三科一起驗證：637 個知識點、110 章、0 error（2026-09-24 文件整合時實跑） | 第 1.1 條；跨科代碼在單檔驗證時只給 warning，三科齊了才驗得了 | KC-P、KC-C、KC-M |
+| S5-39 | FR 編號分配 | 階段 5 功能需求由整合階段分配為 FR-021～035：021 批改細節、022 錯因分布、023 學生檔案、024 文字詳解、025 Word 版本、026 化學卷拆題入庫、027 化學排版與答案比對、028 知識點、029 題目知識點標註、030 知識點弱點、031 補救卷、032 跨章配額組卷、033 題庫覆蓋率、034 AI 家教、035 按住說話；另立 NFR-007（成本）、NFR-008（隱私）、NFR-009（相容性）。未實作的驗收項（錯題重練、間隔複習、訂正卷、學習路徑、學習報告）不先占號 | 第 8 條；一個 FR 對一個可觀察的功能與一組 API，ACPT→TC 才追溯得清楚（對照表見 `engineering_docs/01_requirements/requirements_tracker.md` §4） | 全部（文件整合） |
