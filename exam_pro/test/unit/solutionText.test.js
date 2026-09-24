@@ -248,4 +248,29 @@ describe('wordService — edition（第 4.1 條第 6 項）', () => {
         // 第 1 題的答案在詳解之前
         assert.ok(xml.indexOf('第 1 題答案：') < xml.indexOf('詳解：'));
     });
+
+    // 〔stage5 整合〕WS-A 審查 low：模型寫、沒人看過的詳解印出來要看得出來源
+    test('solution：verify／ai 來源在「詳解：」後面加註未經老師審閱；teacher 與沒有來源的不加；其他版本不出現', async () => {
+        const note = wordService.UNREVIEWED_SOLUTION_NOTE;
+        assert.equal(note, '（AI 驗算摘要，未經老師審閱）');
+        const qs = [
+            { id: 1, question_type: '計算', difficulty: 2, question_text: '[單測] 甲', answer_text: '$5$', solution_text: '驗算摘要甲 $\\sqrt{25}$', solution_src: 'verify' },
+            { id: 2, question_type: '計算', difficulty: 2, question_text: '[單測] 乙', answer_text: '$6$', solution_text: 'AI 詳解乙', solution_src: 'ai' },
+            { id: 3, question_type: '計算', difficulty: 2, question_text: '[單測] 丙', answer_text: '$7$', solution_text: '老師詳解丙', solution_src: 'teacher' },
+            { id: 4, question_type: '計算', difficulty: 2, question_text: '[單測] 丁', answer_text: '$8$', solution_text: '來源不明丁' }
+        ];
+        const xml = documentXml(await wordService.generateExamPaperDocx('單測卷', '學生', qs, { edition: 'solution', logger: silent }));
+        assert.equal(xml.split(note).length - 1, 2, '只有 verify 與 ai 兩題加註');
+        const at = s => xml.indexOf(s);
+        assert.ok(at('第 1 題答案：') < at(note) && at(note) < at('驗算摘要甲'), '註記在「詳解：」之後、詳解內容之前');
+        assert.ok(xml.slice(at('第 2 題答案：'), at('AI 詳解乙')).includes(note));
+        assert.ok(!xml.slice(at('第 3 題答案：'), at('老師詳解丙')).includes(note), '老師撰寫的不加註');
+        assert.ok(!xml.slice(at('第 4 題答案：'), at('來源不明丁')).includes(note));
+        assert.ok(xml.includes('<m:rad>'), '加註不影響詳解裡的公式轉換');
+
+        for (const edition of ['standard', 'student']) {
+            const other = documentXml(await wordService.generateExamPaperDocx('單測卷', '學生', qs, { edition, logger: silent }));
+            assert.ok(!other.includes(note), edition);
+        }
+    });
 });

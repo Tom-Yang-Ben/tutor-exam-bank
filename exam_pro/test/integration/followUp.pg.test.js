@@ -155,6 +155,28 @@ function runSuite() {
         throw new Error('drain：超過上限仍有未推進的列');
     }
 
+    /**
+     * 逐輪推進（〔整合〕把「兩題並行」的先後改成確定的）：每一輪把目前可推進的列**各推一格**、
+     * 同一輪內並行（Promise.all），等這一輪的工作單位全部結束才進下一輪。
+     *
+     * 為什麼不用 drain()：tick() 的認領迴圈在某個單位提早結束時會把空槽補滿，同一輪裡同一列
+     * 可能連推兩格；而 id 小的前題總是先被認領，DB 來回一慢（CPU 忙），前題就可能追過子題。
+     * 「子題先入庫」這個前提因此取決於時序。這裡等的是「這一輪都跑完」這個條件，不靠時間：
+     * 子題 7 格、前題 7 格＋verify 退避 3 次，子題一定在第 7 輪入庫、前題在第 10 輪。
+     * 走的仍是 runner 的 runJobQuestion（寫回、終態重算綁定都是正式程式碼），只是不經認領。
+     */
+    async function drainLockstep(runner, maxRounds = 80) {
+        for (let i = 0; i < maxRounds; i++) {
+            const { rows } = await query(
+                `SELECT id FROM job_questions
+                  WHERE state IN ('extracted','hashed','classified','linted','source_checked','verified','deduped')
+                  ORDER BY id`);
+            if (rows.length === 0) return i;
+            await Promise.all(rows.map(r => runner.runJobQuestion(Number(r.id))));
+        }
+        throw new Error('drainLockstep：超過上限仍有未推進的列');
+    }
+
     const GOOD_BODY = {
         subject: SUBJECT, chapter: CHAPTER, question_type: '計算', difficulty: 3,
         question_text: '老師修正後的自製前題：設 $y=5$，求 $2y$。', answer_text: '$10$'
@@ -192,7 +214,7 @@ function runSuite() {
                     plainQ(1, { verify: { kind: 'error', errorClass: 'rate_limited', times: 3 } }),
                     followQ(2)
                 ]);
-                await drain(makeRunner());
+                assert.equal(await drainLockstep(makeRunner()), 10, '前題 7 格＋退避 3 次');
 
                 const { rows: saves } = await query(
                     `SELECT jq_id FROM job_events WHERE node = 'save' AND jq_id = ANY($1::bigint[]) ORDER BY id`, [jqIds]);

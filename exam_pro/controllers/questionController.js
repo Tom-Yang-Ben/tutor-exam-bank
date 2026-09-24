@@ -322,6 +322,9 @@ exports.updateQuestion = async (req, res, next) => {
         //   embed_hash   embed_text 的來源欄位有變 ⇒ 設 NULL，讓 backfill 的 --missing-only
         //                一定撿得到（interfaces-stage1.md 12.4）。embedding 刻意留著不清空，
         //                否則向量補上之前這題會直接從 /similar 消失。
+        //   solution_*   〔stage5 整合〕沒帶 solution_text、現有詳解來源是 verify，而題幹或答案真的改了
+        //                ⇒ 兩欄一併清成 NULL：那份驗算摘要解的是改之前的題目（與回填腳本略過 edited
+        //                同一個理由，docs/grading-and-profile.md 第 3.6 條）。老師寫的（teacher）不動。
         // 題源標記（0006）：body 有帶合法值才更新，沒帶維持原值（COALESCE(NULL, …)）
         const sourceType = isValidSourceType(req.body.source_type) ? req.body.source_type : null;
         const { rows } = await client.query(
@@ -329,8 +332,13 @@ exports.updateQuestion = async (req, res, next) => {
                 SET subject=$1, chapter=$2, question_type=$3, difficulty=$4, question_text=$5, answer_text=$6,
                     source_type = COALESCE($8, source_type),
                     source_detail = CASE WHEN $9 THEN $10 ELSE source_detail END,
-                    solution_text = CASE WHEN $11 THEN $12::text ELSE solution_text END,
-                    solution_src  = CASE WHEN NOT $11 THEN solution_src
+                    solution_text = CASE WHEN $11 THEN $12::text
+                                         WHEN solution_src = 'verify'
+                                              AND (question_text, answer_text) IS DISTINCT FROM ($5, $6) THEN NULL
+                                         ELSE solution_text END,
+                    solution_src  = CASE WHEN NOT $11 AND solution_src = 'verify'
+                                              AND (question_text, answer_text) IS DISTINCT FROM ($5, $6) THEN NULL
+                                         WHEN NOT $11 THEN solution_src
                                          WHEN $12::text IS NULL THEN NULL
                                          WHEN $12::text = solution_text THEN solution_src
                                          ELSE 'teacher' END,

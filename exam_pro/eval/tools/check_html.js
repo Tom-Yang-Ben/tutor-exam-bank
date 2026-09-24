@@ -160,6 +160,25 @@ const STAGE4_PAGES = [
     { id: 'assistant', meta: 'feature-assistant', placeholder: '__FEATURE_ASSISTANT__' }
 ];
 
+// 階段 5 的三個分頁（docs/interfaces-stage5.md 第 1.3、1.5 條；檢查項目同 STAGE3_PAGES）。
+// remedial.js 一支 module 管兩個錨點（#remedial 學生視圖、#coverage 題庫視圖），所以多列 sections。
+const STAGE5_PAGES = [
+    { id: 'kc', meta: 'feature-kc', placeholder: '__FEATURE_KC__' },
+    { id: 'remedial', meta: 'feature-remedial', placeholder: '__FEATURE_REMEDIAL__', sections: ['remedial', 'coverage'] },
+    { id: 'tutor', meta: 'feature-tutor', placeholder: '__FEATURE_TUTOR__' }
+];
+
+// FEATURE_VOICE 沒有自己的分頁：它決定家教分頁裡要不要有「按住說話」（第 1.3 條），形狀同 STAGE3_EXTRA_METAS。
+const STAGE5_EXTRA_METAS = [
+    { meta: 'feature-voice', placeholder: '__FEATURE_VOICE__', reader: 'public/js/tutor.js' }
+];
+
+// window.MathJax 的 loader 必須載入的擴充（〔stage5 整合〕）：
+//   [tex]/mhchem  化學式 \ce{…}（第 4.2 條第 3 點：明確載入，不靠 autoload）
+//   ui/safe       過濾 \href{javascript:…}、\class、\style、\cssId——題幹來自上傳的 PDF、家教回覆來自模型，
+//                 全站的 renderMath 都會吃到（docs/tutor.md 第 5、8 節）。少了它沒有任何語法錯誤，只是防線悄悄消失。
+const MATHJAX_REQUIRED_LOADS = ['[tex]/mhchem', 'ui/safe'];
+
 // 第 7.1 條凍結的 window.ExamApp 鍵：階段 2 的五個 + 階段 3 的五個。
 const BRIDGE_KEYS = [
     'apiFetch', 'showToast', 'renderMath', 'escapeHtml', 'createQuestionEditor',
@@ -199,15 +218,17 @@ function checkContracts() {
     //
     // 這裡刻意用**字面比對**而不是 regex：三個接點的寫法在第 7.2 條裡是逐字給定的，
     // 用 regex 去容忍單雙引號只會讓「差一個字」的錯誤悄悄通過，而那正是要擋的東西。
-    for (const page of [...STAGE3_PAGES, ...STAGE4_PAGES]) {
+    for (const page of [...STAGE3_PAGES, ...STAGE4_PAGES, ...STAGE5_PAGES]) {
         if (!html.includes(`<meta name="${page.meta}"`)) {
             problems.push(`public/index.html 少了 <meta name="${page.meta}">（interfaces-stage3.md 第 7.2 條第 1 列）`);
         } else if (!html.includes(`<meta name="${page.meta}" content="${page.placeholder}">`)) {
             // 佔位字串被改成別的東西＝旗標從此不可能由後端控制（app.js 的 replaceAll 換不到）。
             problems.push(`<meta name="${page.meta}"> 的 content 不是佔位字串 ${page.placeholder}（第 7.3 條的 replaceAll 對象）`);
         }
-        if (!html.includes(`<section id="${page.id}">`)) {
-            problems.push(`public/index.html 少了 <section id="${page.id}">（第 7.2 條第 3 列）`);
+        for (const section of page.sections || [page.id]) {
+            if (!html.includes(`<section id="${section}">`)) {
+                problems.push(`public/index.html 少了 <section id="${section}">（第 7.2 條第 3 列）`);
+            }
         }
         if (!html.includes(`<script type="module" src="/js/${page.id}.js">`)) {
             problems.push(`public/index.html 少了 <script type="module" src="/js/${page.id}.js">（第 7.2 條第 4 列）`);
@@ -233,13 +254,26 @@ function checkContracts() {
     }
 
     // 只有 <meta> 的那幾個旗標（裁決 S3-R25）
-    for (const extra of STAGE3_EXTRA_METAS) {
+    for (const extra of [...STAGE3_EXTRA_METAS, ...STAGE5_EXTRA_METAS]) {
         if (!html.includes(`<meta name="${extra.meta}" content="${extra.placeholder}">`)) {
             problems.push(`public/index.html 少了 <meta name="${extra.meta}" content="${extra.placeholder}">（裁決 S3-R25）`);
         }
         const abs = path.join(ROOT, extra.reader);
         if (fs.existsSync(abs) && !fs.readFileSync(abs, 'utf8').includes(`meta[name="${extra.meta}"]`)) {
             problems.push(`${extra.reader} 沒有讀 <meta name="${extra.meta}">（裁決 S3-R25）`);
+        }
+    }
+
+    // MathJax 的 loader（〔stage5 整合〕）：找 window.MathJax 設定裡的 loader.load 陣列，逐項字面比對
+    // （陣列內容本身含 ']'（'[tex]/mhchem'），所以取到「] 後面接 }」為止）
+    const loader = html.match(/window\.MathJax\s*=\s*\{[\s\S]*?loader\s*:\s*\{\s*load\s*:\s*\[(.*?)\]\s*\}/);
+    if (!loader) {
+        problems.push('public/index.html 的 window.MathJax 設定沒有 loader.load（要載入 ' + MATHJAX_REQUIRED_LOADS.join('、') + '）');
+    } else {
+        for (const ext of MATHJAX_REQUIRED_LOADS) {
+            if (!loader[1].includes(`'${ext}'`) && !loader[1].includes(`"${ext}"`)) {
+                problems.push(`public/index.html 的 MathJax loader.load 少了 '${ext}'`);
+            }
         }
     }
 
@@ -270,4 +304,7 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { checkAll, checkContracts, extractInlineScripts, stripHtmlComments, checkSyntax, PUBLIC_DIR, STAGE3_PAGES, STAGE4_PAGES, STAGE3_EXTRA_METAS, BRIDGE_KEYS };
+module.exports = {
+    checkAll, checkContracts, extractInlineScripts, stripHtmlComments, checkSyntax, PUBLIC_DIR,
+    STAGE3_PAGES, STAGE4_PAGES, STAGE5_PAGES, STAGE3_EXTRA_METAS, STAGE5_EXTRA_METAS, MATHJAX_REQUIRED_LOADS, BRIDGE_KEYS
+};

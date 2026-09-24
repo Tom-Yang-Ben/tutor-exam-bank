@@ -878,6 +878,7 @@ function paperCard(app, paper, onGraded) {
  *   - 學生答案與老師註記（收在「學生答案與註記」裡，已有內容時預設展開）
  *   - 「看答案與詳解」：展開標準答案與文字詳解（標示詳解來源）
  *   狀態規則與伺服器同一條：改成「對」或「未批」時錯因清空；改成「未批」時部分給分也清空。
+ *   〔stage5 整合〕在「對」與「錯」之間切換時，部分給分也清空（前端規則；伺服器仍是「沒送不動」）。
  *
  * @param {object} app
  * @param {object} detail GET /api/papers/:id 的回應
@@ -935,10 +936,18 @@ function gradingForm(app, detail, badge, onGraded, errorTypes = null) {
             btn.__value = value;
             btn.__onClass = onClass;
             btn.addEventListener('click', () => {
+                const prev = current[i].result ?? null;
                 current[i].result = value;
                 // 〔stage5 WS-A〕與伺服器同一條規則：只有答錯的題有錯因；取消批改連部分給分一起清
                 if (value !== 0) current[i].error_types = [];
                 if (value === null) current[i].score = null;
+                // 〔stage5 整合〕對 ↔ 錯：部分給分是照原本的對錯填的（例如錯時填 0%），換邊之後就不成立了。
+                // 留著的話 COALESCE(score, result) 會把「改成對」的題算成全錯。清掉（diffResults 會送 score: null），
+                // 老師要給分就重新填，送出的是新值。
+                else if (prev !== null && prev !== value && current[i].score !== null) {
+                    current[i].score = null;
+                    app.showToast(`第 ${i + 1} 題的結果改了，部分給分已清空；需要的話請重新填。`, 'info');
+                }
                 paint();
             });
             buttons.push(btn);

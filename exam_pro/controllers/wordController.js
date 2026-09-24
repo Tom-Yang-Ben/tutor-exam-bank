@@ -3,6 +3,7 @@
 // 〔stage5 WS-A〕body 多一個可選的 edition（docs/interfaces-stage5.md 第 4.1 條第 6 項；DEC-017）：
 //   沒送＝'standard'（現行行為）、'student'（不附答案）、'solution'（答案之後附詳解）；
 //   其他值回 400。既有的 400 訊息與檢查順序不變，edition 的檢查排在它們之後。
+// 〔stage5 整合〕多查 solution_src：詳解版對 verify／ai 來源的詳解加註「未經老師審閱」（services/wordService.js）。
 const { query } = require('../config/db');
 const wordService = require('../services/wordService');
 
@@ -28,7 +29,7 @@ exports.downloadWord = async (req, res, next) => {
         // 這裡**刻意不加** archived_at IS NULL：下載的是「已經出過的試卷」，
         // 題目事後被封存時仍應印得出來，否則舊卷會突然少幾題。
         const { rows: questions } = await query(
-            `SELECT id, question_text, question_type, difficulty, question_img, answer_text, solution_text
+            `SELECT id, question_text, question_type, difficulty, question_img, answer_text, solution_text, solution_src
                FROM questions WHERE id = ANY($1::int[])`,
             [ids]
         );

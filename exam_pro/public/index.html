@@ -219,7 +219,9 @@
     <script>
         window.MathJax = {
             // 〔stage5 WS-B〕化學式 \ce{…}：明確載入 mhchem（不靠 autoload，docs/interfaces-stage5.md 第 4.2 條第 3 點）
-            loader: { load: ['[tex]/mhchem'] },
+            // 〔stage5 整合〕ui/safe：題幹、家教回覆、語音逐字稿都可能帶著模型或 PDF 來的文字進 renderMath，
+            // \href{javascript:…}、\class、\style、\cssId 一律過濾（連結只放行 http／https／file）。docs/tutor.md 第 5、8 節
+            loader: { load: ['[tex]/mhchem', 'ui/safe'] },
             tex: {
                 inlineMath: [['$', '$'], ['\\(', '\\)']],
                 displayMath: [['$$', '$$'], ['\\[', '\\]']],
@@ -1105,7 +1107,8 @@
             const head = el('div', 'flex flex-wrap items-baseline justify-between gap-2');
             head.appendChild(el('label', 'text-sm font-semibold text-slate-600', { textContent: '文字詳解', htmlFor: 'edit_solution' }));
             head.appendChild(el('span', 'text-[11px] text-slate-400', {
-                textContent: obj.solution_text ? `來源：${SOLUTION_SRC_TEXT[obj.solution_src] || obj.solution_src || '未知'}（改寫後會標為老師撰寫）` : '尚無詳解（選填，4000 字內，公式用 $...$）'
+                // 〔stage5 整合〕verify 摘要：改了題幹或答案而沒動詳解時，後端會一併清掉（docs/grading-and-profile.md 第 3.6 條）
+                textContent: obj.solution_text ? `來源：${SOLUTION_SRC_TEXT[obj.solution_src] || obj.solution_src || '未知'}（改寫後會標為老師撰寫${obj.solution_src === 'verify' ? '；只改題幹或答案、沒動這一欄時，這段摘要會一併清掉' : ''}）` : '尚無詳解（選填，4000 字內，公式用 $...$）'
             }));
             const ta = el('textarea', TACLS, { id: 'edit_solution', rows: 4, maxLength: 4000, value: obj.solution_text || '' });
             ta.placeholder = '逐步詳解（公式用 $...$）；Word 匯出選「詳解版」時會接在答案後面';

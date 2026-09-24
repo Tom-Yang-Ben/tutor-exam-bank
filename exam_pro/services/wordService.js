@@ -123,6 +123,10 @@ function isSafeImageUrl(rawUrl) {
 const EDITIONS = Object.freeze(['standard', 'student', 'solution']);
 const DEFAULT_EDITION = 'standard';
 const NO_SOLUTION_TEXT = '（本題尚無文字詳解）';
+// 〔stage5 整合〕模型寫、沒有人看過的詳解（solution_src = verify／ai）印出來要看得出來源：
+// 老師可能直接把詳解版發給學生（WS-A 審查 low）。老師撰寫（teacher）的不加註。
+const UNREVIEWED_SOLUTION_NOTE = '（AI 驗算摘要，未經老師審閱）';
+const UNREVIEWED_SOLUTION_SOURCES = Object.freeze(['verify', 'ai']);
 
 /**
  * 解析 edition：沒給（undefined／null）就是現行的 standard；其他不在清單內的值一律視為錯誤。
@@ -136,7 +140,8 @@ function parseEdition(raw) {
 
 /**
  * 一題的詳解段落（詳解版專用）。solution_text 可能多行，buildParagraphComponents 會自己斷行。
- * @param {object} q
+ * 〔stage5 整合〕solution_src 為 verify／ai 時，「詳解：」後面接一行灰色小字的來源註記。
+ * @param {object} q  需要 solution_text、solution_src
  * @returns {Paragraph[]}
  */
 function buildSolutionParagraphs(q) {
@@ -144,9 +149,11 @@ function buildSolutionParagraphs(q) {
     if (!text) {
         return [new Paragraph({ children: [new TextRun({ text: NO_SOLUTION_TEXT, color: '718096', italics: true })] })];
     }
+    const unreviewed = UNREVIEWED_SOLUTION_SOURCES.includes(q.solution_src);
     return [new Paragraph({
         children: [
             new TextRun({ text: '詳解：', bold: true, color: '2F855A' }),
+            ...(unreviewed ? [new TextRun({ text: UNREVIEWED_SOLUTION_NOTE, color: '718096', size: 18 }), new TextRun({ text: ' ' })] : []),
             ...buildParagraphComponents(text)
         ]
     })];
@@ -245,4 +252,5 @@ exports.FIGURE_MAX_WIDTH_PX = FIGURE_MAX_WIDTH_PX;
 exports.EDITIONS = EDITIONS;
 exports.DEFAULT_EDITION = DEFAULT_EDITION;
 exports.NO_SOLUTION_TEXT = NO_SOLUTION_TEXT;
+exports.UNREVIEWED_SOLUTION_NOTE = UNREVIEWED_SOLUTION_NOTE;
 exports.parseEdition = parseEdition;

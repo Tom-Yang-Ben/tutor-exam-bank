@@ -243,8 +243,15 @@ export function formatUsd(n) {
 
 // ───────────────────────── 環境與橋接 ─────────────────────────
 
+// 兩個旗標的 <meta> 選擇器逐字寫出來〔stage5 整合〕：eval/tools/check_html.js 以字面比對確認
+// 旗標是從 index.html 的注入點讀的（同階段 3 第 7.2 條的檢查），拼字串會讓那道檢查看不到。
+const FEATURE_META = {
+    tutor: 'meta[name="feature-tutor"]',
+    voice: 'meta[name="feature-voice"]'
+};
+
 function featureOn(name) {
-    const meta = document.querySelector(`meta[name="feature-${name}"]`);
+    const meta = FEATURE_META[name] ? document.querySelector(FEATURE_META[name]) : null;
     return parseBool(meta ? meta.content : '');
 }
 
