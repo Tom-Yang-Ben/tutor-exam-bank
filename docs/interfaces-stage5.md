@@ -99,7 +99,7 @@ Claude-Session: https://claude.ai/code/session_01ACd8V6VMkYrSWR3QAig6dq
 
 ## 2. 資料庫（`stage5/base` 已建好，凍結）
 
-三支 migration 已在 base：`0010_attempt_detail_student_profile.sql`、`0011_chemistry_solution_subject_group.sql`、`0012_knowledge_components.sql`。各 WS **不得再改這三支**；真的需要新欄位時，WS-A 用 `0013_*`、WS-B `0014_*`、WS-C `0015_*`、WS-D `0016_*`、WS-E `0017_*`，並在功能文件說明。
+三支 migration 已在 base：`0010_attempt_detail_student_profile.sql`、`0011_chemistry_solution_subject_group.sql`、`0012_knowledge_components.sql`。各 WS **不得再改這三支**；真的需要新欄位時，WS-A 用 `0013_*`、WS-B `0014_*`、WS-C `0015_*`、WS-D `0016_*`、WS-E `0017_*`，並在功能文件說明。〔修訂 2026-09-24 最終審查〕平行開發期間沒有任何 WS 用到上述編號；整合後的審查修正新增一支 `0013_teacher_edit_markers.sql`（`questions.solution_cleared_at`、`knowledge_components.edited_at`），見裁決 S5-41、S5-43。之後的 migration 從 `0014` 起依序編號，不再保留 WS 分配。
 
 | 表.欄 | 語意 | 寫入者 | 讀取者 |
 |---|---|---|---|
@@ -520,3 +520,18 @@ generateText({
 | S5-38 | 白名單外的內容與跨科先備 | 物理不另立「熱學」章（改 `LEGACY_CHAPTERS` 會讓全部 cassette 失效），只在「能量的形式與守恆」放一條概念性知識點，待 Owner 決定；化學建議的 5 條跨科先備暫不寫入（等對方 code 定稿）；物理引用數學 5 章的 6 處跨科先備，整合時以不帶參數的 `validate_kc_seed` 三科一起驗證：637 個知識點、110 章、0 error（2026-09-24 文件整合時實跑） | 第 1.1 條；跨科代碼在單檔驗證時只給 warning，三科齊了才驗得了 | KC-P、KC-C、KC-M |
 | S5-39 | FR 編號分配 | 階段 5 功能需求由整合階段分配為 FR-021～035：021 批改細節、022 錯因分布、023 學生檔案、024 文字詳解、025 Word 版本、026 化學卷拆題入庫、027 化學排版與答案比對、028 知識點、029 題目知識點標註、030 知識點弱點、031 補救卷、032 跨章配額組卷、033 題庫覆蓋率、034 AI 家教、035 按住說話；另立 NFR-007（成本）、NFR-008（隱私）、NFR-009（相容性）。未實作的驗收項（錯題重練、間隔複習、訂正卷、學習路徑、學習報告）不先占號 | 第 8 條；一個 FR 對一個可觀察的功能與一組 API，ACPT→TC 才追溯得清楚（對照表見 `engineering_docs/01_requirements/requirements_tracker.md` §4） | 全部（文件整合） |
 | S5-40 | runner 租約競態 | 整合補測時追到既有偶發失敗的根因：`workers/jobRunner.js` 收尾時無條件清租約，會清掉下一輪剛認領的租約；`inFlight` 以列 id 為鍵，同一列前後兩個工作單位會疊成一個。改為只在尚未寫回時放租約、續租只延長仍鎖著的列、`inFlight` 以工作單位計（commit 5171783），並加兩個以 await 先後排出交錯的確定性回歸測試（舊版紅、新版綠） | 這是階段 2 起就存在的競態，並非階段 5 引入；修正改動核心管線，已由完整 CI 與 eval 驗證行為不變。另發現「error 退避期間該列已解鎖、可被別的槽立刻重跑」的既有設計問題，會改變管線行為，未修，列 Owner 待決 | 整合 |
+
+### 9.8 最終審查修正（2026-09-24）
+
+三位審查者（correctness／security／teacher-flow）對整合分支的最終審查，high／medium 全數查證屬實並修正；以下是改變契約或功能文件所寫行為的部分。未修的項目與理由記在各功能文件的「已知缺口」。
+
+| 編號 | 主題 | 決定 | 理由 | 影響的 WS |
+|---|---|---|---|---|
+| S5-41 | 老師清空的詳解 | 新增 `questions.solution_cleared_at`（`0013`）：`PUT /api/questions/:id` 帶 null／空白、**而且原本有詳解**時記下時間，之後又寫了非空詳解時清回 NULL；`solution:backfill` 看到非 NULL 就略過（列為 `cleared`），UPDATE 本身也帶 `solution_cleared_at IS NULL`。原本沒有詳解時送 null、以及改題幹或答案時系統自動清掉 verify 詳解（回填會以 `edited` 略過）都不記 | 審查 high（實測）：`solution_text IS NULL` 分不出「本來沒有」與「老師刪了」，核准入庫後例行重跑回填會把老師刪掉的（可能是錯的）摘要原樣寫回、再印進 Word 詳解版。沿用 `solution_src` 加一個值會牴觸 `questions_solution_pair_check` 與所有讀 `solution_src` 的地方，所以另開一欄 | WS-A |
+| S5-42 | 題目改科／改章與知識點標註 | `PUT /api/questions/:id` 先 `FOR UPDATE` 讀舊的科目與章節；真的改了就在同一交易刪掉 `src='ai'` 的標註與**與新科目不同科**的標註（含 `human`），同科改章時 `human` 保留；有刪到時回應多 `kcs_removed`。讀取端再守一道：知識點弱點的聚合、補救卷的 `basis` 判斷（`buildGradedTagCounts`）與家教的 `listQuestionKcs` 只採用與題目同科的標註 | 審查 medium（實測）：改科後別科標註殘留，弱點回別科知識點、補救卷判成 kc 基底卻 0 題、`kc:backfill` 永遠挑不到它（只挑沒有標註的題）；PUT `/kcs` 守的「知識點與題目同科」從這條路被繞過。第 4.4 條的 `weakness/kc` 形狀不變 | WS-A、WS-C、WS-D、WS-E |
+| S5-43 | 知識點載入保護老師改過的草稿 | 新增 `knowledge_components.edited_at`（`0013`）：`PATCH /api/kc/:id` 送了名稱、說明、口語版或課綱代碼而且值真的變了才記（只改 `status` 不算）。`kc:load` 對 `edited_at` 非 NULL 的草稿與已審定列一樣不覆寫（計畫值 `edited`、`counts.edited`、回傳 `editedCodes` 逐條列出），`--force` 才覆寫並清回 NULL（同時列出被覆寫的 code）。`PATCH` 回應形狀不變 | 審查 medium ×2（實測）：卡片上的「儲存修改」與「審定通過」是兩顆按鈕，637 條不可能一次審完；Owner 待決事項定案後種子檔勢必要重載，原本只保護 approved，老師存了沒審定的修改會被默默蓋回，只印「更新 N」。修正第 4.3 條第 1 點「已審定不覆寫」的範圍（S5-22 的其餘規則不變） | WS-C |
+| S5-44 | 選錯卷別重傳與 dedup0 | `agents/dedup.js` 的庫內比對多一個例外：命中的題**已封存**、而且是**同一份 PDF（`pdf_sha256` 相同）、另一個卷別**的任務拆出來的，不算重複。沒封存的照舊判重複（部分唯一索引也不允許兩題同時在庫）。`docs/chemistry.md` 第 10 節補完整復原步驟（先封存錯科題再重傳；先重傳則封存後到複核頁核准） | 審查 medium（實測）：S5-12 讓換卷別重傳建新 job，但前一次入錯科的題讓新 job 的同一題在 dedup0 判重複、進不了題庫，文件只說「在複核頁不採用」，沒涵蓋已入庫的題。例外條件同時要求已封存、同 PDF、不同卷別，數理管線的既有行為與 eval 不受影響 | WS-B |
+| S5-45 | 解析失敗的呼叫照樣記帳 | `services/llm/gemini.generateJson` 在 JSON 解析失敗（截斷、空字串、非 JSON）時，把這次的 `usage`（與 `finishReason`）掛在錯誤上（附加欄位，既有呼叫端不讀）；`voiceService` 先把它記入 `TUTOR_DAILY_BUDGET_USD` 再回 502，`kcTagService` 的計量層也照記（`kc:backfill` 的實際費用含失敗的呼叫） | 審查 medium（假 client 實測：20 次截斷回應花約 US$1.94、預算記 0、閘門不關）：模型已回應、供應商已計費；502 又叫老師「再錄一次」，重試會一直花錢。補充 S5-33 | WS-E、WS-C |
+| S5-46 | 姓名遮罩補強 | `utils/pseudonym.js`（NLQ、助教、家教共用）另外認得：姓名 NFKC 後比對、中文字之間夾空白、兩個以上英文單字的姓名不分大小寫與空白多寡（前後不接英文字母）、全形英數字、三／四字中文姓名的兩字名字（撞到別人全名時不遮；兩人同名時換成「某位學生」、不換回）。單一英文單字的姓名維持逐字比對（避免吃掉 tan、max），單字名仍不遮。`docs/tutor.md` 第 2.2 節改寫成實際行為，家教畫面提示用「這位學生」稱呼 | 審查 medium（探針實測四種寫法外洩）：家教是第一條鼓勵老師用自由文字談特定學生的路徑，原本只比對逐字相同的全名，文件卻保證「姓名不會送出」。一般題目不含學生名字，既有 cassette 鍵不受影響 | WS-E（NLQ、助教同受惠） |
+| S5-47 | 低嚴重度的順手修正 | ① 補救卷確認後可選 Word 版本（標準／學生／詳解，送 `edition`、檔名加後綴）、補題源限制選單（送 `source_types`，選項與組卷頁逐字比對）、「捨棄草稿」按鈕、重新產生草稿時提示沒保留的手動題；② 家教與語音的 502 在 `NODE_ENV=production` 只帶分類後的原因（原始錯誤寫伺服器 log）；③ 家教 prompt 的題幹截到 4000 字、答案 2000 字，資料裡的 `<<<`／`>>>` 換成形近字；④ MathJax 另設 `safeOptions.allow.URLs = 'none'`（數學式不產生任何連結，`check:html` 檢查）；⑤ `search:reindex` 正式跑時每批 `FOR UPDATE`；⑥ 題目、學生、試卷的路徑 ID 與 `student_id` 查詢參數超過 int4 上限時回 404／400（原本 500）；⑦ voice／tutor 的 record 模式 cassette 列入 `.gitignore`（語音 cassette 存逐字稿原文），ADR-013 的說法更正；⑧ `kc:backfill` 每題費用的文件數字更正為約 US$0.005–0.01 | 審查 low，成本低、行為明確。補救卷的 `remedial-paper` 本來就接受 `source_types`（第 4.4 條），`download-word` 本來就接受 `edition`（第 4.1 條第 6 項），API 都沒改 | WS-D、WS-E、WS-B、WS-A、WS-C |
+
