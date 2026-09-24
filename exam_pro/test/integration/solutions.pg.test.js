@@ -182,11 +182,33 @@ function runSuite() {
                 assert.equal(rows[0].n, 0);
             });
 
-            test('PUT 沒帶 solution_text → 不動（verify 來源維持 verify）', async () => {
-                const id = await seedQuestion({ solution: '驗算摘要', src: 'verify' });
-                const res = await request(app).put(`/api/questions/${id}`).send({ ...base, question_text: '自製改題幹' });
-                assert.equal(res.status, 200, JSON.stringify(res.body));
-                assert.deepEqual(await solutionOf(id), { solution_text: '驗算摘要', solution_src: 'verify' });
+            // 〔stage5 整合〕原本這一條是「PUT 沒帶 solution_text → 不動（改了題幹，verify 來源維持 verify）」。
+            // WS-A 審查（low）：那份驗算摘要解的是改之前的題目，列表與 Word 詳解版卻會把它接在新答案後面。
+            // 整合階段刻意改成：沒帶 solution_text、來源是 verify、題幹或答案真的改了 ⇒ 兩欄清成 NULL
+            // （docs/grading-and-profile.md 第 3.6 條）。題幹與答案沒變時「不動」的斷言照舊保留。
+            test('PUT 沒帶 solution_text：題幹與答案沒變 → 不動；verify 來源而題幹或答案改了 → 兩欄清空；teacher 一律不動', async () => {
+                const stemOf = async id => (await query('SELECT question_text FROM questions WHERE id = $1', [id])).rows[0].question_text;
+
+                // 只改難度，題幹與答案原樣送回（前後空白會被 trim 掉，不算改）
+                const same = await seedQuestion({ solution: '驗算摘要', src: 'verify' });
+                const r1 = await request(app).put(`/api/questions/${same}`).send({ ...base, difficulty: 4, question_text: ` ${await stemOf(same)} ` });
+                assert.equal(r1.status, 200, JSON.stringify(r1.body));
+                assert.deepEqual(await solutionOf(same), { solution_text: '驗算摘要', solution_src: 'verify' });
+
+                // 改題幹
+                const stem = await seedQuestion({ solution: '驗算摘要', src: 'verify' });
+                assert.equal((await request(app).put(`/api/questions/${stem}`).send({ ...base, question_text: '自製改題幹' })).status, 200);
+                assert.deepEqual(await solutionOf(stem), { solution_text: null, solution_src: null }, '舊題目的驗算摘要要清掉');
+
+                // 只改答案
+                const answer = await seedQuestion({ solution: '驗算摘要', src: 'verify' });
+                assert.equal((await request(app).put(`/api/questions/${answer}`).send({ ...base, question_text: await stemOf(answer), answer_text: '6' })).status, 200);
+                assert.deepEqual(await solutionOf(answer), { solution_text: null, solution_src: null }, '答案改了，與舊答案比對一致的摘要不再可信');
+
+                // 老師寫的詳解：改題幹也不動（老師自己決定要不要改詳解）
+                const teacher = await seedQuestion({ solution: '老師寫的', src: 'teacher' });
+                assert.equal((await request(app).put(`/api/questions/${teacher}`).send({ ...base, question_text: '自製改題幹二' })).status, 200);
+                assert.deepEqual(await solutionOf(teacher), { solution_text: '老師寫的', solution_src: 'teacher' });
             });
 
             test('PUT 帶一樣的詳解 → 保留原來源；改寫 → teacher；清空 → 兩欄 NULL', async () => {

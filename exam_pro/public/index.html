@@ -1107,7 +1107,8 @@
             const head = el('div', 'flex flex-wrap items-baseline justify-between gap-2');
             head.appendChild(el('label', 'text-sm font-semibold text-slate-600', { textContent: '文字詳解', htmlFor: 'edit_solution' }));
             head.appendChild(el('span', 'text-[11px] text-slate-400', {
-                textContent: obj.solution_text ? `來源：${SOLUTION_SRC_TEXT[obj.solution_src] || obj.solution_src || '未知'}（改寫後會標為老師撰寫）` : '尚無詳解（選填，4000 字內，公式用 $...$）'
+                // 〔stage5 整合〕verify 摘要：改了題幹或答案而沒動詳解時，後端會一併清掉（docs/grading-and-profile.md 第 3.6 條）
+                textContent: obj.solution_text ? `來源：${SOLUTION_SRC_TEXT[obj.solution_src] || obj.solution_src || '未知'}（改寫後會標為老師撰寫${obj.solution_src === 'verify' ? '；只改題幹或答案、沒動這一欄時，這段摘要會一併清掉' : ''}）` : '尚無詳解（選填，4000 字內，公式用 $...$）'
             }));
             const ta = el('textarea', TACLS, { id: 'edit_solution', rows: 4, maxLength: 4000, value: obj.solution_text || '' });
             ta.placeholder = '逐步詳解（公式用 $...$）；Word 匯出選「詳解版」時會接在答案後面';
