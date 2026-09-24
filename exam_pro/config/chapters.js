@@ -4,6 +4,15 @@
 // 2026-08-27：分冊結構資料化（原本只是註解）。VOLUMES 是唯一真相，CHAPTERS 由它攤平
 // 導出——**順序逐字不變**，因此 buildSchema 的 enum、schemaHash 與既有 cassette 都不受
 // 影響（test/unit/agentExtract.test.js 釘住 enum 內容與 66 這個數字）。
+//
+// 2026-09-24（階段 5 WS-B，DEC-019；docs/interfaces-stage5.md 第 3.2 條）：化學併入 VOLUMES，
+// 排在物理之後，章節表的唯一真相仍是 config/chemistryChapters.js（本檔只 require 它）。
+// 之後 SUBJECTS = ['數學','物理','化學']、CHAPTERS['化學'] 有 44 章。
+// 既有 LLM 呼叫（數學／物理的 prompt、schema enum、cassette 鍵）一律改讀 LEGACY_*：
+//   LEGACY_SUBJECTS = ['數學','物理']、LEGACY_CHAPTERS = 兩科合併 66 章（順序與原本逐字相同）。
+// SUBJECT_GROUPS 是上傳時的「卷別」（jobs.subject_group）→ 該卷可能出現的科目，見 ADR-010。
+
+const { CHEMISTRY_VOLUMES } = require('./chemistryChapters');
 
 const VOLUMES = {
     '數學': [
@@ -20,7 +29,9 @@ const VOLUMES = {
         { name: '選修物理三', chapters: ['波動的性質', '聲波與交互作用', '幾何光學（反射折射）', '物理光學（干涉繞射）'] },
         { name: '選修物理四', chapters: ['靜電學', '電場與電位', '電流與電路', '電流磁效應', '電磁感應', '交流電'] },
         { name: '選修物理五', chapters: ['近代物理的序幕', '原子結構與光譜', '核物理與基本粒子'] }
-    ]
+    ],
+    // 〔stage5 WS-B〕第 3.3 條凍結的 44 章（AI 草擬，待 Owner 對照教科書定稿）
+    '化學': CHEMISTRY_VOLUMES
 };
 
 const CHAPTERS = Object.fromEntries(
@@ -41,6 +52,58 @@ function volumeOf(subject, chapter) {
 }
 
 const SUBJECTS = Object.keys(CHAPTERS);
+
+// ── 階段 5 WS-B：舊值域與卷別（docs/interfaces-stage5.md 第 3.2 條）──────────────
+//
+// 為什麼要有「舊值域」：數學／物理的 extract／classify／variant／nlq schema 的 enum 與
+// prompt 的白名單都進了既有 cassette 的鍵（schemaHash）或錄製當下的 prompt。
+// 化學併入 SUBJECTS／CHAPTERS 之後，那些地方若繼續讀 SUBJECTS 就會多出化學、cassette 全數失效，
+// 所以它們改讀下面這兩個常數——內容與順序和併入化學之前逐字相同。
+/** 數學與物理（化學併入之前的 SUBJECTS，順序不變） */
+const LEGACY_SUBJECTS = Object.freeze(['數學', '物理']);
+/** 數學＋物理合併的 66 章（化學併入之前的 SUBJECTS.flatMap(s => CHAPTERS[s])，順序逐字相同） */
+const LEGACY_CHAPTERS = Object.freeze(LEGACY_SUBJECTS.flatMap(subject => CHAPTERS[subject]));
+
+/**
+ * 上傳時指定的「卷別」→ 這份卷可能出現的科目（jobs.subject_group；migrations/0011）。
+ * math_physics 沿用凍結的 prompt 與 schema；chemistry 走化學專用的 prompt 與 schema（ADR-010）。
+ */
+const SUBJECT_GROUPS = Object.freeze({
+    math_physics: Object.freeze(['數學', '物理']),
+    chemistry: Object.freeze(['化學'])
+});
+/** 卷別的合法值（與 migrations/0011 的 CHECK 一致）；第一個是預設值 */
+const SUBJECT_GROUP_KEYS = Object.freeze(Object.keys(SUBJECT_GROUPS));
+const DEFAULT_SUBJECT_GROUP = 'math_physics';
+
+function isValidSubjectGroup(group) {
+    return typeof group === 'string' && SUBJECT_GROUP_KEYS.includes(group);
+}
+
+/**
+ * 上傳表單的 subject_group 欄位 → 卷別（POST /api/jobs；docs/interfaces-stage5.md 第 4.2 條第 1 點）。
+ * 沒帶、null 或空白字串 → 預設 'math_physics'（既有上傳流程不帶這個欄位，行為不變）。
+ * @param {unknown} value
+ * @returns {'math_physics'|'chemistry'|null} 不合法回 null（呼叫端回 400）
+ */
+function normalizeSubjectGroup(value) {
+    if (value === undefined || value === null) return DEFAULT_SUBJECT_GROUP;
+    const s = String(value).trim();
+    if (s === '') return DEFAULT_SUBJECT_GROUP;
+    return isValidSubjectGroup(s) ? s : null;
+}
+
+/**
+ * 科目 → 卷別。化學 → 'chemistry'，其餘（含不合法的值）→ 'math_physics'。
+ * @param {string} subject
+ * @returns {'math_physics'|'chemistry'}
+ */
+function subjectGroupOf(subject) {
+    for (const [group, subjects] of Object.entries(SUBJECT_GROUPS)) {
+        if (subjects.includes(subject)) return group;
+    }
+    return DEFAULT_SUBJECT_GROUP;
+}
 const QUESTION_TYPES = ['單選', '多選', '填空', '計算', '證明'];
 
 // 題目來源標記（著作權管理；migrations/0006 的 CHECK 與此必須一致）。
@@ -69,6 +132,16 @@ function isValidSubject(subject) {
     return SUBJECTS.includes(subject);
 }
 
+/**
+ * 錯誤訊息用的科目清單：「數學」、「物理」或「化學」。
+ * 〔stage5 WS-B〕原本寫死成「數學」或「物理」；兩科時這個函式的輸出與原字串逐字相同。
+ * @returns {string}
+ */
+function subjectChoiceText() {
+    const quoted = SUBJECTS.map(s => `「${s}」`);
+    return quoted.length <= 1 ? quoted.join('') : `${quoted.slice(0, -1).join('、')}或${quoted[quoted.length - 1]}`;
+}
+
 function isValidChapter(subject, chapter) {
     return isValidSubject(subject) && CHAPTERS[subject].includes(chapter);
 }
@@ -83,4 +156,10 @@ function normalizeDifficulty(value) {
     return n;
 }
 
-module.exports = { CHAPTERS, VOLUMES, volumeOf, SUBJECTS, QUESTION_TYPES, SOURCE_TYPES, SOURCE_DETAIL_MAX, isValidSubject, isValidChapter, isValidQuestionType, isValidSourceType, normalizeSourceDetail, normalizeDifficulty };
+module.exports = {
+    CHAPTERS, VOLUMES, volumeOf, SUBJECTS, QUESTION_TYPES, SOURCE_TYPES, SOURCE_DETAIL_MAX,
+    isValidSubject, isValidChapter, isValidQuestionType, isValidSourceType, normalizeSourceDetail, normalizeDifficulty,
+    // 階段 5 WS-B（第 3.2 條）
+    LEGACY_SUBJECTS, LEGACY_CHAPTERS, SUBJECT_GROUPS, SUBJECT_GROUP_KEYS, DEFAULT_SUBJECT_GROUP,
+    isValidSubjectGroup, normalizeSubjectGroup, subjectGroupOf, subjectChoiceText
+};

@@ -12,6 +12,7 @@ const { test, describe, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 
 const nlq = require('../../services/nlqService');
+const { SUBJECTS } = require('../../config/chapters');   // 〔stage5 WS-B〕
 
 const DIM = Number(process.env.EMBED_DIM || 768);
 const unitVector = () => {
@@ -438,7 +439,10 @@ describe('searchNl：200 的回應形狀', () => {
         const llm = fakeLlm({ data: { chapters: [], question_types: [], semantic_text: '熱傳導', keywords: [] } });
         const body = await nlq.searchNl({ query: '熱傳導方式的題目', limit: 20 }, { db, llm });
         assert.equal(body.filters.subject, null);
-        assert.equal(db.calls.hybrid, 2, '第一段應該是「數學一次、物理一次」');
+        // 〔stage5 WS-B〕DEC-019 化學併入 SUBJECTS：subject 全空時「每一科各跑一次」由兩次變三次
+        // （數學、物理、化學；化學那一段在這個假資料庫裡回 0 筆，合併結果不變）。
+        assert.equal(db.calls.hybrid, SUBJECTS.length, '第一段應該是「每一科各跑一次」');
+        assert.equal(SUBJECTS.length, 3);
         assert.equal(body.fallback_level, 0);
         assert.deepEqual(body.results.map(r => r.id), [40]);
     });

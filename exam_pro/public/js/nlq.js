@@ -288,9 +288,10 @@ function writeBackDropdowns(app, filters) {
     subjectSel.value = want.subject;
 
     const whitelist = typeof app.getChapterWhitelist === 'function' ? (app.getChapterWhitelist() || {}) : {};
+    // 〔stage5 WS-B〕不分科時列白名單的全部科目（化學併入後三科；科目清單不寫死）
     const list = want.subject
         ? (whitelist[want.subject] || [])
-        : [...(whitelist['數學'] || []), ...(whitelist['物理'] || [])];
+        : Object.values(whitelist).flat();
     chapterSel.innerHTML = '';
     chapterSel.appendChild(el('option', '', { value: '', textContent: '全部章節' }));
     for (const c of list) chapterSel.appendChild(el('option', '', { value: c, textContent: c }));

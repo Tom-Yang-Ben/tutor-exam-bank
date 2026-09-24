@@ -114,14 +114,62 @@ function isSafeImageUrl(rawUrl) {
     return true;
 }
 
+// ── 匯出版本（階段 5 WS-A；docs/interfaces-stage5.md 第 4.1 條第 6 項；DEC-017）──
+//
+//   standard  現行行為：題目區 → 分頁 → 參考答案區（逐位元沿用原本的產生路徑）
+//   student   學生版：只有題目區，不附答案（整段答案區連同分頁一起不產生）
+//   solution  詳解版：參考答案區的每題答案之後接文字詳解（questions.solution_text），
+//             詳解同樣走 buildParagraphComponents，公式轉 Word 原生方程式；沒有詳解的題標一行說明
+const EDITIONS = Object.freeze(['standard', 'student', 'solution']);
+const DEFAULT_EDITION = 'standard';
+const NO_SOLUTION_TEXT = '（本題尚無文字詳解）';
+// 〔stage5 整合〕模型寫、沒有人看過的詳解（solution_src = verify／ai）印出來要看得出來源：
+// 老師可能直接把詳解版發給學生（WS-A 審查 low）。老師撰寫（teacher）的不加註。
+const UNREVIEWED_SOLUTION_NOTE = '（AI 驗算摘要，未經老師審閱）';
+const UNREVIEWED_SOLUTION_SOURCES = Object.freeze(['verify', 'ai']);
+
+/**
+ * 解析 edition：沒給（undefined／null）就是現行的 standard；其他不在清單內的值一律視為錯誤。
+ * @param {any} raw
+ * @returns {string|null} 合法的版本名；不合法回 null
+ */
+function parseEdition(raw) {
+    if (raw === undefined || raw === null) return DEFAULT_EDITION;
+    return EDITIONS.includes(raw) ? raw : null;
+}
+
+/**
+ * 一題的詳解段落（詳解版專用）。solution_text 可能多行，buildParagraphComponents 會自己斷行。
+ * 〔stage5 整合〕solution_src 為 verify／ai 時，「詳解：」後面接一行灰色小字的來源註記。
+ * @param {object} q  需要 solution_text、solution_src
+ * @returns {Paragraph[]}
+ */
+function buildSolutionParagraphs(q) {
+    const text = typeof q.solution_text === 'string' ? q.solution_text.trim() : '';
+    if (!text) {
+        return [new Paragraph({ children: [new TextRun({ text: NO_SOLUTION_TEXT, color: '718096', italics: true })] })];
+    }
+    const unreviewed = UNREVIEWED_SOLUTION_SOURCES.includes(q.solution_src);
+    return [new Paragraph({
+        children: [
+            new TextRun({ text: '詳解：', bold: true, color: '2F855A' }),
+            ...(unreviewed ? [new TextRun({ text: UNREVIEWED_SOLUTION_NOTE, color: '718096', size: 18 }), new TextRun({ text: ' ' })] : []),
+            ...buildParagraphComponents(text)
+        ]
+    })];
+}
+
 /**
  * @param {string} paperTitle
  * @param {string} studentName
  * @param {Array<object>} sortedQuestions
- * @param {{figuresDir?:string, logger?:object}} [options]  測試可注入附圖目錄與 logger
+ * @param {{figuresDir?:string, logger?:object, edition?:string}} [options]  測試可注入附圖目錄與 logger；
+ *        edition 見上方 EDITIONS（〔stage5 WS-A〕；省略＝standard，與原本逐位元相同的產生路徑）
  */
 exports.generateExamPaperDocx = async (paperTitle, studentName, sortedQuestions, options = {}) => {
     const { figuresDir = FIGURES_DIR, logger = console } = options;
+    const edition = parseEdition(options.edition);
+    if (edition === null) throw new Error(`不支援的 Word 匯出版本：${options.edition}`);
     const childrenElements = [];
 
     childrenElements.push(new Paragraph({ text: paperTitle, heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER }));
@@ -167,19 +215,29 @@ exports.generateExamPaperDocx = async (paperTitle, studentName, sortedQuestions,
         }
     }
 
-    childrenElements.push(new Paragraph({ children: [new PageBreak()] }));
-    childrenElements.push(new Paragraph({ text: "🎯 參考答案區（解答邊界）", heading: HeadingLevel.HEADING_1 }));
-
-    sortedQuestions.forEach((q, index) => {
+    // 〔stage5 WS-A〕學生版不附答案：分頁與整個答案區都不產生
+    if (edition !== 'student') {
+        childrenElements.push(new Paragraph({ children: [new PageBreak()] }));
         childrenElements.push(new Paragraph({
-            children: [
-                new TextRun({ text: `第 ${index + 1} 題答案：`, bold: true }),
-                new TextRun({ text: "  " }),
-                ...buildParagraphComponents(q.answer_text, { color: "E53E3E", bold: true }),
-                new TextRun({ text: "  " })
-            ]
+            text: edition === 'solution' ? "🎯 參考答案與詳解" : "🎯 參考答案區（解答邊界）",
+            heading: HeadingLevel.HEADING_1
         }));
-    });
+
+        sortedQuestions.forEach((q, index) => {
+            childrenElements.push(new Paragraph({
+                children: [
+                    new TextRun({ text: `第 ${index + 1} 題答案：`, bold: true }),
+                    new TextRun({ text: "  " }),
+                    ...buildParagraphComponents(q.answer_text, { color: "E53E3E", bold: true }),
+                    new TextRun({ text: "  " })
+                ]
+            }));
+            // 〔stage5 WS-A〕詳解版：答案之後接詳解，題與題之間空一行
+            if (edition === 'solution') {
+                childrenElements.push(...buildSolutionParagraphs(q), new Paragraph({ text: "" }));
+            }
+        });
+    }
 
     const doc = new Document({ sections: [{ children: childrenElements }] });
     return await Packer.toBuffer(doc);
@@ -190,3 +248,9 @@ exports.resolveFigurePath = resolveFigurePath;
 exports.fitFigureSize = fitFigureSize;
 exports.FIGURE_MISSING_TEXT = FIGURE_MISSING_TEXT;
 exports.FIGURE_MAX_WIDTH_PX = FIGURE_MAX_WIDTH_PX;
+// 〔stage5 WS-A〕匯出版本
+exports.EDITIONS = EDITIONS;
+exports.DEFAULT_EDITION = DEFAULT_EDITION;
+exports.NO_SOLUTION_TEXT = NO_SOLUTION_TEXT;
+exports.UNREVIEWED_SOLUTION_NOTE = UNREVIEWED_SOLUTION_NOTE;
+exports.parseEdition = parseEdition;

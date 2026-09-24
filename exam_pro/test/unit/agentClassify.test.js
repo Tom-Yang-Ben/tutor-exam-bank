@@ -298,7 +298,9 @@ describe('輸出必須再過一次 isValidChapter', () => {
 describe('輸入防呆', () => {
     test('學科不在白名單 → fail(chapter_invalid)，不呼叫 LLM', async () => {
         const { ctx, calls } = fakeCtx({ data: {} });
-        const outcome = await classify.run(ctx, { subject: '化學', question_text: QUESTION });
+        // 〔stage5 WS-B〕化學自 DEC-019 起是合法科目（正向測試見 test/unit/chemistryAgents.test.js），
+        // 白名單外的科目改用「生物」驗證同一條拒絕路徑（docs/interfaces-stage5.md 第 1.6、4.2 條第 5 點）。
+        const outcome = await classify.run(ctx, { subject: '生物', question_text: QUESTION });
         assert.equal(outcome.kind, 'fail');
         assert.equal(outcome.reason, 'chapter_invalid');
         assert.match(outcome.feedback, /只接受「數學」「物理」/);

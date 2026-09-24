@@ -29,13 +29,16 @@
 //   題庫初期沒有人工標籤時短路率就是 0——這是誠實的起點，不是 bug。
 //   第一層閘門與 `cacheKeyParts.fewShotIds` 的算法**一個字都沒改**，既有 cassette 全部不失效。
 //
+// 〔stage5 WS-B〕化學題（input.subject === '化學'，或化學卷的題）改用 classify_chem 的
+//   SYSTEM／模板／schema（下方 VARIANTS.chemistry，ADR-010）；兩層閘門與 few-shot 取材共用。
+//
 // ⚠ 錄 cassette 與跑 eval 時 **ctx.db 一律為 null**（裁決 S2-8）：cassette 的鍵含 fewShotIds，
 //   接了資料庫錄出來的鍵帶著一串題目 id，CI 沒有那個庫、fewShotIds 會是 []，鍵對不上、全部 miss。
 
-const { CHAPTERS, isValidChapter, isValidSubject } = require('../config/chapters');
+const { CHAPTERS, SUBJECTS, isValidChapter, isValidSubject } = require('../config/chapters');
 const { getChapterExample } = require('../config/chapterExamples');
 const { buildSchema } = require('./schemas');
-const { chapterWhitelistText } = require('./promptParts');
+const { chapterWhitelistText, resolveSubjectGroup } = require('./promptParts');
 const { registerTemplate } = require('../services/llm/templates');
 
 const TEMPLATE = 'classify.v1';
@@ -67,6 +70,43 @@ const PROMPT_TEMPLATE = `請判斷下面這道題目屬於哪一個精細章節�
 {{QUESTION}}`;
 
 registerTemplate(TEMPLATE, PROMPT_TEMPLATE);
+
+// ───────────────────── 化學題（〔stage5 WS-B〕DEC-019、ADR-010）─────────────────────
+//
+// 科目是化學（或化學卷的題）時改走這一組：agent 名 classify_chem、模板 classify_chem.v1、
+// 化學值域的 schema。第一層零成本閘門、kNN 投票短路、few-shot 取材與 cacheKeyParts 的算法
+// 與數學／物理完全相同——只換 SYSTEM、模板與 schema。上面數學／物理的三者一個字都沒動。
+// 註冊字串 = SYSTEM + '\n---\n' + 模板（docs/interfaces-stage5.md 第 1.2 條）。
+
+const AGENT_CHEM = 'classify_chem';
+const TEMPLATE_CHEM = 'classify_chem.v1';
+
+const SYSTEM_CHEM = '你是一位資深的台灣高中化學家教老師，正在替題庫的化學題標註精細章節。你只輸出 JSON，不輸出任何其他文字。';
+
+const PROMPT_TEMPLATE_CHEM = `請判斷下面這道化學題目屬於哪一個精細章節。
+
+{{CHAPTER_WHITELIST}}
+
+【規則】
+1. chapter 必須「完全等於」白名單裡某一個「」內的字串（連頓號在內），一個字都不能差，也不得自創新詞。
+2. 判斷依據是「解這一題需要用到哪一章的觀念」，不是題目裡出現了哪些名詞。例如用溶度積判斷是否產生沉澱的題目屬於溶解平衡與溶度積，即使題幹在講廢水處理。
+3. 若題目橫跨兩章，選「非用不可」的那一章；只是順帶用到的計算工具（例如莫耳數換算）不算。
+4. confidence 請誠實給分：低於門檻的題目會被送去人工複核，這比標錯章節便宜得多。
+
+{{FEW_SHOT}}
+
+{{FEEDBACK}}
+
+【要分類的題目】
+{{QUESTION}}`;
+
+registerTemplate(TEMPLATE_CHEM, `${SYSTEM_CHEM}\n---\n${PROMPT_TEMPLATE_CHEM}`);
+
+/** 卷別 → agent 名、模板、SYSTEM、模板原文與 schema 選項 */
+const VARIANTS = {
+    math_physics: { agent: 'classify', template: TEMPLATE, system: SYSTEM, promptTemplate: PROMPT_TEMPLATE, schemaOpts: undefined },
+    chemistry: { agent: AGENT_CHEM, template: TEMPLATE_CHEM, system: SYSTEM_CHEM, promptTemplate: PROMPT_TEMPLATE_CHEM, schemaOpts: { group: 'chemistry' } }
+};
 
 // ───────────────────────── 純函式 ─────────────────────────
 
@@ -354,9 +394,12 @@ async function run(ctx, input = {}) {
             return {
                 kind: 'fail',
                 reason: 'chapter_invalid',
-                feedback: `學科「${input.subject}」不在白名單內，只接受「數學」「物理」`
+                // 〔stage5 WS-B〕科目清單改由 SUBJECTS 產生（化學併入後是「數學」「物理」「化學」）
+                feedback: `學科「${input.subject}」不在白名單內，只接受${SUBJECTS.map(s => `「${s}」`).join('')}`
             };
         }
+        // 〔stage5 WS-B〕化學題走化學的 SYSTEM／模板／schema；數學與物理的 v 與階段 5 之前寫死的值相同
+        const v = VARIANTS[resolveSubjectGroup(ctx, { subject })];
         if (!questionText) {
             return { kind: 'fail', reason: 'schema_invalid', feedback: 'classify：question_text 是空的。' };
         }
@@ -406,7 +449,7 @@ async function run(ctx, input = {}) {
             || (ctx.jq && ctx.jq.payload && ctx.jq.payload.classify && ctx.jq.payload.classify.feedback)
             || '';
 
-        const prompt = PROMPT_TEMPLATE
+        const prompt = v.promptTemplate
             .replace('{{CHAPTER_WHITELIST}}', chapterWhitelistText(subject))
             .replace('{{FEW_SHOT}}', fewShotText(examples))
             .replace('{{FEEDBACK}}', feedback ? `【上一次的錯誤，請不要再犯】\n${feedback}` : '')
@@ -414,15 +457,15 @@ async function run(ctx, input = {}) {
 
         const res = await ctx.llm.generateJson({
             model: (ctx.config && ctx.config.models && ctx.config.models.extract) || undefined,
-            system: SYSTEM,
+            system: v.system,
             parts: [{ text: prompt }],
-            schema: buildSchema('classify'),
+            schema: buildSchema('classify', v.schemaOpts),
             signal: ctx.signal,
-            agent: 'classify',
-            template: TEMPLATE,
+            agent: v.agent,
+            template: v.template,
             // 第 5.2 條：鍵納入 few-shot 的 **id 清單**而不是全文——
             // 題庫多一題、排序微動就換一份 cassette 的話，紅燈全是噪音。
-            cacheKeyParts: { template: TEMPLATE, questionText, fewShotIds }
+            cacheKeyParts: { template: v.template, questionText, fewShotIds }
         });
 
         const data = res.data || {};
@@ -467,5 +510,7 @@ module.exports = {
     // 階段 3（第 5 條）
     knnVote, orderExamples,
     TEMPLATE, SYSTEM, PROMPT_TEMPLATE,
-    FEW_SHOT_K, KNN_VOTE_N, KNN_VOTE_MIN_HUMAN, DEFAULT_KNN_VOTE_SIM
+    FEW_SHOT_K, KNN_VOTE_N, KNN_VOTE_MIN_HUMAN, DEFAULT_KNN_VOTE_SIM,
+    // 〔stage5 WS-B〕化學題
+    AGENT_CHEM, TEMPLATE_CHEM, SYSTEM_CHEM, PROMPT_TEMPLATE_CHEM
 };

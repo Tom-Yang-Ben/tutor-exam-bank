@@ -3,6 +3,84 @@
 > 目的：這份檔案讓新的對話在**不重讀歷史**的情況下接手「整合者／審查者」的角色。
 > 讀完本檔後，第一件事通常是執行 §6 的「看進度」流程。
 > 配套：`~/.claude/projects/.../memory/` 裡有 `roadmap-master-plan.md`、`stage1-status.md`、`stage2-status.md`、`stage3-status.md`（系統會自動載入索引）。
+>
+> 〔修訂 2026-09-24〕**最新狀態先看 §0（階段 5 交接）**；§1–§9 是 2026-08-24 階段 1–4 的交接快照，角色與流程仍適用，但其中的分支、數字與待辦已過時。
+
+---
+
+## 0. 階段 5 交接（2026-09-24，最終審查後改寫）〔修訂 2026-09-24b〕
+
+> 本節取代同日稍早版本（`129d941`）。那一版寫於「整合補測」與「最終審查」併入之前，§0.3 有多項已修好，§0.2 以「類型」分組、順序有依賴問題。本版依最終 HEAD `936a6b5` 的實況重寫。
+
+### 0.1 範圍、分支與狀態
+
+- **範圍**：缺口分析 P0 項目 G01–G10；需求 DEC-014～019 與 DEC-003 例外條款（核准欄待 Owner 簽核）→ FR-021～035、NFR-007～009。契約與裁決：[`interfaces-stage5.md`](interfaces-stage5.md)（裁決 S5-1～S5-47 在第 9 條）。
+- **交付分支：`stage5/integration`**（HEAD `936a6b5`）。基底是 `cb47dbe`（`docs/sync-after-prs-30-33`，該分支尚未併入 main，因此對 main 開 PR 時會連帶這一個文件同步 commit）。
+- **組成**：`stage5/base`（契約、migrations 0010–0012、旗標與前端骨架）→ 五條程式 WS（`stage5/ws-a`～`ws-e`）＋三組知識點內容（`stage5/kc-math`／`kc-phys`／`kc-chem`）→ 整合補測（`stage5/int-code`）＋共用文件回填（`stage5/int-docs`）→ 最終審查修正（`stage5/int-fix`，含 migration 0013）。
+- **狀態**：完整 `ci.sh` 全綠——unit 2287、integration 485、e2e 11、五個 eval（replay）量測值與階段 5 之前相同，**沒有重錄任何 cassette**。從未呼叫真 Gemini；前端只以 miniDom 測過，未在真瀏覽器操作。
+- **migrations**：0010（批改細節、學生檔案）、0011（化學 CHECK、文字詳解、上傳卷別）、0012（知識點三表）、0013（老師修改標記：`questions.solution_cleared_at`、`knowledge_components.edited_at`）。全部只增不改，已在「只套到 0009、含舊資料」的庫上逐支驗證過。
+- **功能文件**（權威）：[`grading-and-profile.md`](grading-and-profile.md)、[`chemistry.md`](chemistry.md)、[`knowledge-components.md`](knowledge-components.md)、[`remedial.md`](remedial.md)、[`tutor.md`](tutor.md)、`kc-review-{數學,物理,化學}.md`。上線步驟：`engineering_docs/06_ops/deployment_and_operations.md` §3.4。
+
+### 0.2 Ben 待辦（建議順序，待 Owner 確認）
+
+排序原則：①會改變知識點代碼或章名的決定先做，只改文字的邊用邊做；②免費、可回滾的先做，花錢的後做、一次開一個；③越早讓新批改資料開始累積越好（診斷與補救卷的品質取決於資料量）。
+
+**A. 交付與合併**
+
+1. 取得 `stage5/integration`（GitHub 上的分支，或主控放進本機 repo 的分支），對 main 開 PR，看過再合併；GitHub Actions 綠燈才算完成。
+2. 本機切分支前先 `git checkout -- engineering_docs/01_requirements/requirements_tracker.md`（那份未 commit 的修改已包含在分支內）。
+
+**B. 上線前只做「會改代碼或章名」的決定（約半天）**
+
+3. 簽核 DEC-014～019 與 DEC-003 例外條款（`requirements_tracker.md` 核准欄，AI 不代填）；ADR-014、ADR-015 狀態為「提議」，一併審閱。
+4. 數學知識點章節切法（`kc-review-數學.md` 第 2 節，尤其第 1、2、6 點）——**第一次 `kc:load` 之前**決定，搬移知識點會改變 code。
+5. 化學章節表 `exam_pro/config/chemistryChapters.js`——**第一次上傳化學卷之前**定稿，入庫的題會記章名。
+6. 物理「熱學另立章」**明確延後**：會改到數學／物理的章節清單（`LEGACY_CHAPTERS`），全部既有 cassette 都要重錄，另開裁決再議。
+
+**C. 上線（不呼叫 LLM、不花錢；§3.4）**
+
+7. 備份 → `npm run migrate`（到 0013）→ **`npm run search:reindex`（必跑，緊接 migrate）** → `npm run kc:load`（先 `--dry-run`；可跳過）→ `npm run solution:backfill`（先 `--dry-run`、再 `--limit 20`、抽讀）→ 啟動。
+8. 瀏覽器實際走一遍核心延伸：批改卡（錯因、部分給分、對錯切換清分數）、錯因分布、學生檔案、題目詳解欄、Word 三種版本（詳解版的「AI 驗算摘要」加註）、小量化學卷上傳；貼一次 `$\href{javascript:alert(1)}{x}$` 確認不產生連結、`$\ce{2H2 + O2 -> 2H2O}$` 照常排版。
+9. 用 Microsoft Word 開一份含化學式與反應箭頭條件的卷，確認排版。
+
+**D. 開始累積資料（日常使用 1–2 週）**
+
+10. 每次批改都標錯因（部分給分視需要）——這是弱點診斷與補救卷的原料。
+11. 開 `FEATURE_KC`：**本週教哪章就審哪章**的口語版（朗讀聽一遍→修改→審定通過）；錯因白名單與學生檔案選項若不合用，在累積太多資料前提出。
+12. 開 `FEATURE_REMEDIAL`：先以章節為單位出補救卷（還沒標知識點時自動退回章節基底）。
+
+**E. 小額花錢的功能（一次開一個，每開一個實際用一次）**
+
+13. 查證 `MODEL_VOICE` 的音訊輸入單價補進 `config/pricing.js`、確認 `TUTOR_DAILY_BUDGET_USD` 與 `MODEL_TUTOR`；錄第一批 tutor cassette 前審閱 `tutorService.js`、`voiceService.js` 的 SYSTEM。
+14. `FEATURE_TUTOR`（文字，兩種模式）→ `FEATURE_VOICE`（桌機 Chrome、`http://localhost:3000`，確認 Gemini 接受 audio/webm）。
+15. **切法確定後**才補標舊題：`npm run kc:backfill -- --dry-run` → `--limit 20` → 全跑；看過品質再決定 `KC_TAG_MIN_CONFIDENCE` 與是否開 `FEATURE_KC_TAGGING`。
+16. 化學：定案 `eval/golden/classify_chem.json`（24 筆）後錄 cassette（`LLM_MODE=record node --env-file=.env eval/classify_chem.js`），再決定是否設門檻、併入 CI。
+
+**F. 用過 2–4 週再決定**
+
+17. 補救卷選題參數（`remedial.md` 第 3 節）與裁決 S5-11（文字型答案單位衝突）、S5-13（助教與 NLQ 的 LLM 路徑支援化學，需重錄）、S5-26、S5-28、S5-7（API 只送 `result` 時保留部分給分）。
+18. 管線既有設計「error 退避期間該列已解鎖、可被別的槽立刻重跑」要不要修（會改變管線行為，S5-40）。
+19. （選做）錄 20–30 題家教問答建立家教 eval；人工標一批題目→知識點 golden 以量測標註準確率。
+
+**G. 下一輪開發（依相依順序；FR 自 FR-036 起）**
+
+20. 錯題重練（DEC-003 例外，拆「派題」與「作答」）→ 間隔複習 → 診斷報告（老師／家長版）→ 入班診斷卷 → 學習路徑與提示階梯 → 學生端（最大，放最後）。
+
+### 0.3 已知限制（最終審查後仍未處理者）
+
+- **品質未量測**：家教、語音、知識點標註、化學拆題／分類都沒有真 Gemini 執行與 eval；化學路徑沒有任何 cassette。
+- **內容待審**：三科 637 個知識點只有 4 條已審定，`curriculum_code` 全為 null；化學章節表、例句、別名、`classify_chem.json`、`answer_chem.json` 都是 AI 草擬。
+- **批改**：直接打 API 只送 `{result:1}` 時舊的部分給分保留（前端已處理，S5-7）；合併學生會丟掉來源學生的檔案欄位；複核核准入庫的題不寫詳解（靠回填）。
+- **化學**：NLQ 的 LLM 輔路徑與助教工具說明書只懂數學／物理（S5-13）；別名衝突（「碰撞學說」「原子結構」要打完整章名）；mhchem 子集限制（`\ce{Fe3+}` 要寫 `Fe^{3+}`、不支援 `\pu`）；`embedText` 內 `\ce` 會留下「ce」字樣；上傳頁沒有「目前卷別」的醒目標示（選錯的後果已由 S5-44 處理）。
+- **知識點**：老師清空某題標註後不會被記住，`kc:backfill` 會再挑到；只有管線入庫會自動標；標註費用不記入 `job_events`、不計入 `DAILY_COST_BUDGET_USD`。
+- **補救卷**：手動加題（題目 ID、找相似）不檢查變式家族互斥；直接呼叫 `confirm-paper` 仍可送出半組承上題（S5-28）；確認後卷名沿用第一題章節；跨章配額只有 API 沒有畫面；新增學生後，補救卷／家教／覆蓋率的學生下拉要重整頁面才更新。
+- **家教與語音**：每日預算只在程序內（重啟歸零）、同時送多個請求可略超上限；語音音訊輸入沒有分開計價；題目附圖不送給家教；姓名遮罩已補強（S5-46）但仍是字串比對，綽號不在名單內時擋不住。
+- **路由**：`GET /api/questions/:id` 未限定數字路徑，之後新增 `GET /api/questions/<字面>` 須註冊在它之前（S5-8）。
+
+### 0.4 下一步（主控）
+
+1. 交付 `stage5/integration`：推上 GitHub（需把 repo 加入工作階段的授權來源），或放進 Owner 本機 repo 由 Owner 推送。
+2. 合併後依 Owner 回饋處理第 0.2 節 F、G。
 
 ---
 

@@ -17,6 +17,23 @@
 //      回傳物件帶 schemaFallback:true（runner 記進 job_events.detail）
 //   4. usage 四欄；計費用 tokenOut + tokenThinking（裁決 S0-6：thinking 常常比 candidates 還大）
 //   5. AbortSignal 一路傳到 SDK；被中止時丟 errorClass='timeout' 的錯，且**不重試**
+//
+// generateText 這一半（階段 5 WS-E，docs/interfaces-stage5.md 第 5.1 條）：
+//   1. 自由文字輸出（不設 responseMimeType），可選 code execution 工具：
+//      config.tools = [{ codeExecution: {} }]
+//   2. 回應的 candidates[0].content.parts 逐一走訪：text（跳過 thought）串成 text；
+//      executableCode {language, code} 與 codeExecutionResult {outcome, output} 配對成 codeRuns
+//      （欄位名以 node_modules/@google/genai/dist/genai.d.ts 的 Part／ExecutableCode／
+//       CodeExecutionResult 為準，不憑記憶）
+//   3. 出口配額、退避、abort 與 generateJson 共用 callOnce，一個字都沒改
+//   4. usage 的 tokenIn 另外加上 toolUsePromptTokenCount（code execution 的結果回灌給模型的
+//      那一段是以 input 計價；漏算會低估成本）
+//   5. 回傳 candidates[0].finishReason（STOP／MAX_TOKENS／SAFETY…；沒有時為 null）：
+//      thinking 模型的思考計入 maxOutputTokens，回覆可能寫到一半就被切掉，
+//      自由文字不像 JSON 會「解析失敗」，呼叫端只能靠這個欄位知道被截斷了
+//
+// toContents 在階段 5 多收兩種 part：{audioBase64, mimeType}、{imageBase64, mimeType}
+// → inlineData {mimeType, data}。既有三種 part 的輸出逐字不變（第 5.1 條）。
 
 const { GoogleGenAI } = require('@google/genai');
 const throttle = require('./throttle');
@@ -185,14 +202,27 @@ function whitelistText(enums) {
     return `【欄位值白名單（必須完全相符，不得自創新詞）】\n${lines.join('\n')}`;
 }
 
-/** parts → SDK 的 contents */
+/**
+ * parts → SDK 的 contents。
+ * 前三種（text／pdfBase64／fileUri）的輸出逐字凍結；音訊與圖片是階段 5 新增的兩種（第 5.1 條）。
+ */
 function toContents(parts) {
     return (parts || []).map((p) => {
         if (p.text !== undefined) return { text: p.text };
         if (p.pdfBase64 !== undefined) return { inlineData: { mimeType: 'application/pdf', data: p.pdfBase64 } };
         if (p.fileUri !== undefined) return { fileData: { mimeType: 'application/pdf', fileUri: p.fileUri } };
-        throw new Error('generateJson：parts 只接受 {text} / {pdfBase64} / {fileUri}');
+        // ── 階段 5 WS-E：音訊與圖片一律走 inlineData，mimeType 由呼叫端給（不猜）──
+        if (p.audioBase64 !== undefined) return { inlineData: { mimeType: requireMime(p, 'audioBase64'), data: p.audioBase64 } };
+        if (p.imageBase64 !== undefined) return { inlineData: { mimeType: requireMime(p, 'imageBase64'), data: p.imageBase64 } };
+        throw new Error('generateJson／generateText：parts 只接受 {text} / {pdfBase64} / {fileUri} / {audioBase64, mimeType} / {imageBase64, mimeType}');
     });
+}
+
+/** 音訊與圖片的 part 必須自帶 mimeType：猜錯格式，供應商只會回一個看不出原因的 400 */
+function requireMime(part, field) {
+    const mime = String(part.mimeType ?? '').trim();
+    if (!mime) throw new Error(`parts 的 {${field}} 必須同時提供 mimeType。`);
+    return mime;
 }
 
 /** 模型偶爾會用 ``` 圍起 JSON；把圍欄剝掉再 parse */
@@ -270,28 +300,143 @@ async function generateJson({ model, system, parts, schema, maxOutputTokens, thi
     }
 
     const usageMeta = res?.usageMetadata || {};
+    const usage = {
+        tokenIn: usageMeta.promptTokenCount ?? 0,
+        tokenOut: usageMeta.candidatesTokenCount ?? 0,
+        tokenThinking: usageMeta.thoughtsTokenCount ?? 0,
+        // 沒有快取命中時整個鍵不存在（不是 0）——裁決 S0-6 第 2 點
+        tokenCached: usageMeta.cachedContentTokenCount ?? 0
+    };
     let data;
     try {
         data = parseJsonText(res?.text);
     } catch (err) {
         // JSON 壞掉是「模型輸出」的問題，不是供應商掛掉；讓 agent 走 schema_invalid 而不是無謂退避
         err.errorClass = 'schema_invalid';
+        // 〔stage5 審查修正 S5-45〕模型已經回應、這次呼叫已經計費（截斷、空字串、非 JSON 都一樣），
+        // 用量掛在錯誤上，讓有自己預算閘門的呼叫端（語音、知識點標註）照樣記帳。附加欄位，既有呼叫端不讀。
+        err.usage = usage;
+        err.finishReason = res?.candidates?.[0]?.finishReason ?? null;
         throw err;
     }
 
     return {
         data,
-        usage: {
-            tokenIn: usageMeta.promptTokenCount ?? 0,
-            tokenOut: usageMeta.candidatesTokenCount ?? 0,
-            tokenThinking: usageMeta.thoughtsTokenCount ?? 0,
-            // 沒有快取命中時整個鍵不存在（不是 0）——裁決 S0-6 第 2 點
-            tokenCached: usageMeta.cachedContentTokenCount ?? 0
-        },
+        usage,
         latencyMs: Date.now() - startedAt,
         raw: res,
         schemaFallback
     };
 }
 
-module.exports = { embed, generateJson, stripEnums, classifyError, isSchemaRejection };
+// ───────────────────────── generateText（階段 5 WS-E）─────────────────────────
+
+/**
+ * 把 generateContent 的回應拆成 { text, codeRuns }（純函式，單元測試直接餵假回應）。
+ *
+ * 配對規則：executableCode 開一筆 run；緊接著的 codeExecutionResult 填回「最近一筆還沒有結果」的
+ * run（有 id 時優先以 id 對應）。沒有對應程式碼的結果（理論上不會發生）也保留成一筆，
+ * code 為空字串——驗算輸出寧可多呈現，不可默默丟掉。
+ *
+ * @param {object} res  SDK 的 GenerateContentResponse（或同形狀的物件）
+ * @returns {{text:string, codeRuns:Array<{language:string, code:string, outcome:string|null, output:string}>}}
+ */
+function parseTextResponse(res) {
+    const parts = res?.candidates?.[0]?.content?.parts || [];
+    let text = '';
+    const codeRuns = [];
+    for (const part of parts) {
+        if (!part || typeof part !== 'object') continue;
+        if (typeof part.text === 'string') {
+            if (part.thought === true) continue;         // 思考摘要不是回覆
+            text += part.text;
+            continue;
+        }
+        if (part.executableCode) {
+            codeRuns.push({
+                language: String(part.executableCode.language ?? 'PYTHON'),
+                code: String(part.executableCode.code ?? ''),
+                outcome: null,
+                output: '',
+                _id: part.executableCode.id ?? null
+            });
+            continue;
+        }
+        if (part.codeExecutionResult) {
+            const r = part.codeExecutionResult;
+            let target = null;
+            if (r.id) target = codeRuns.find(run => run._id === r.id && run.outcome === null) || null;
+            if (!target) target = [...codeRuns].reverse().find(run => run.outcome === null) || null;
+            if (!target) {
+                target = { language: 'PYTHON', code: '', outcome: null, output: '', _id: null };
+                codeRuns.push(target);
+            }
+            target.outcome = String(r.outcome ?? 'OUTCOME_UNSPECIFIED');
+            target.output = String(r.output ?? '');
+        }
+    }
+    return { text, codeRuns: codeRuns.map(({ _id, ...run }) => run) };
+}
+
+/**
+ * 讀 candidates[0].finishReason（純函式）。
+ * SDK 的 FinishReason 列舉值就是字串（'STOP'、'MAX_TOKENS'、'SAFETY'…），原樣回傳；沒有時回 null。
+ * @param {object} res  SDK 的 GenerateContentResponse（或同形狀的物件）
+ * @returns {string|null}
+ */
+function readFinishReason(res) {
+    const r = res?.candidates?.[0]?.finishReason;
+    return r === undefined || r === null || r === '' ? null : String(r);
+}
+
+/**
+ * 自由文字生成，可選 code execution（第 5.1 條）。
+ * @param {{model:string, system?:string, parts:Array<object>, tools?:{codeExecution?:boolean},
+ *          maxOutputTokens?:number, thinkingBudget?:number, signal?:AbortSignal}} opts
+ *        model 必須是**裸 ID**（vendor 前綴由 services/llm/index.js 剝掉）
+ * @returns {Promise<{text:string, codeRuns:Array<{language,code,outcome,output}>, finishReason:string|null,
+ *                    usage:{tokenIn,tokenOut,tokenThinking,tokenCached}, latencyMs:number, raw:any}>}
+ *          finishReason = 'MAX_TOKENS' 表示回覆在輸出上限處被截斷（thinking 也吃這個額度）
+ */
+async function generateText({ model, system, parts, tools, maxOutputTokens, thinkingBudget, signal }) {
+    const ai = getClient();
+    const startedAt = Date.now();
+    const contents = toContents(parts);
+
+    const config = {};
+    if (system) config.systemInstruction = system;
+    if (maxOutputTokens) config.maxOutputTokens = maxOutputTokens;
+    if (Number.isInteger(thinkingBudget)) config.thinkingConfig = { thinkingBudget };
+    if (signal) config.abortSignal = signal;
+    if (tools && tools.codeExecution) config.tools = [{ codeExecution: {} }];
+
+    const res = await callOnce({ ai, model, contents, config, signal, label: `generateContent(${model}, text)` });
+    const { text, codeRuns } = parseTextResponse(res);
+    const usageMeta = res?.usageMetadata || {};
+
+    return {
+        text,
+        codeRuns,
+        finishReason: readFinishReason(res),
+        usage: {
+            // code execution 的結果回灌給模型那一段（toolUsePromptTokenCount）以 input 計價
+            tokenIn: (usageMeta.promptTokenCount ?? 0) + (usageMeta.toolUsePromptTokenCount ?? 0),
+            tokenOut: usageMeta.candidatesTokenCount ?? 0,
+            tokenThinking: usageMeta.thoughtsTokenCount ?? 0,
+            tokenCached: usageMeta.cachedContentTokenCount ?? 0
+        },
+        latencyMs: Date.now() - startedAt,
+        raw: res
+    };
+}
+
+/** 測試用：注入假的 SDK client（只需要 models.generateContent）。傳 null 清掉。正式流程不呼叫。 */
+function _setClientForTest(fakeClient) {
+    client = fakeClient || null;
+}
+
+module.exports = {
+    embed, generateJson, stripEnums, classifyError, isSchemaRejection,
+    // 階段 5 WS-E
+    generateText, parseTextResponse, readFinishReason, toContents, _setClientForTest
+};

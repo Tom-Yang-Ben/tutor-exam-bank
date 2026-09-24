@@ -316,6 +316,21 @@ describe('agents/dedup — L0（雜湊），在任何 LLM 呼叫之前', () => {
         assert.ok(out.feedback.includes('128'));
     });
 
+    // 〔stage5 審查修正 S5-44〕
+    test('庫內查詢帶上 job 的 pdf_sha256 與卷別（選錯卷別重傳的例外要用）；沒有 job 資訊時帶 null', async () => {
+        const { ctx, calls } = makeCtx({ query: () => ({ rows: [] }) });
+        ctx.job = { ...ctx.job, pdf_sha256: 'f'.repeat(64), subject_group: 'chemistry' };
+        await dedupAgent.runDedup0(ctx, { question_text: '求 $x$ 之值。' });
+        const dbCall = calls.query.find(c => isQuestionsHashQuery(c.text));
+        assert.deepEqual(dbCall.values.slice(1), ['f'.repeat(64), 'chemistry']);
+        assert.match(dbCall.text, /archived_at IS NOT NULL/);
+
+        const bare = makeCtx({ query: () => ({ rows: [] }) });
+        bare.ctx.job = { id: 1 };
+        await dedupAgent.runDedup0(bare.ctx, { question_text: '求 $x$ 之值。' });
+        assert.deepEqual(bare.calls.query.find(c => isQuestionsHashQuery(c.text)).values.slice(1), [null, 'math_physics']);
+    });
+
     test('撞到同一 job 內較早的題 → fail(duplicate)，hit.scope = job', async () => {
         const { ctx, calls } = makeCtx({
             query: (sql) => (isJobQuery(sql) ? { rows: [{ id: 55, idx: 1000 }] } : { rows: [] }),

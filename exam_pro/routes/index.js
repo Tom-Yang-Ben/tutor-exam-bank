@@ -190,4 +190,88 @@ if (featuresS4.FEATURE_ASSISTANT) {
     router.post('/assistant', assistantRateLimit, assistantController.chat);
 }
 
+// ── 階段 5 WS-A：資料地基——批改細節、學生檔案、文字詳解（docs/interfaces-stage5.md 第 4.1 條）──
+// WS-A 不另加旗標（第 1.3 條）：擴充既有端點都改在原本的 controller（PATCH /papers/:id/results、
+// /students、/questions、/download-word），這裡只掛三支新的**唯讀**端點，全部不呼叫 LLM。
+//   GET /questions/:id              題目詳情（含詳解；已封存的題也查得到）——核心區
+//   GET /student-profile-options    學生檔案表單的選項（config/studentProfile.js）——核心區
+//   GET /error-types                錯因白名單（config/errorTypes.js）——只給批改與弱點面板用，
+//                                   跟著 FEATURE_STUDENTS：旗標關閉時不掛載，落到 Express 預設 404
+{
+    const questionControllerWs5A = require('../controllers/questionController');
+    const studentAdminControllerWs5A = require('../controllers/studentAdminController');
+    router.get('/questions/:id', questionControllerWs5A.getQuestion);
+    router.get('/student-profile-options', studentAdminControllerWs5A.getProfileOptions);
+    if (require('../config/features').FEATURE_STUDENTS) {
+        const { ERROR_TYPES, MAX_ERROR_TYPES } = require('../config/errorTypes');
+        router.get('/error-types', (req, res) => {
+            res.status(200).json({ items: ERROR_TYPES, max_per_attempt: MAX_ERROR_TYPES });
+        });
+    }
+}
+
+// ── 階段 5 WS-C：知識點（docs/interfaces-stage5.md 第 4.3 條）──
+// FEATURE_KC 關閉時四條都不掛載（落到 Express 預設 404，與 FEATURE_ASSISTANT 同一種做法）。
+// 這四支都不呼叫 LLM（自動標註走管線掛鉤與 npm run kc:backfill），限流只是防呆：
+// 120/min 對「逐張審定口語版」的操作綽綽有餘，同時是獨立的桶，不吃其他 API 的額度。
+// 變數名帶 WsC5 後綴，理由同上方 featuresWs3A：合併後不會撞到別的區塊的 const。
+const featuresWsC5 = require('../config/features');
+if (featuresWsC5.FEATURE_KC) {
+    const kcController = require('../controllers/kcController');
+    const kcRateLimit = createRateLimiter({
+        windowMs: 60 * 1000,
+        max: 120,
+        message: '知識點請求過於頻繁，請稍候再試（每分鐘最多 120 次）。'
+    });
+    router.get('/kc', kcRateLimit, kcController.listKc);
+    router.patch('/kc/:id', kcRateLimit, kcController.patchKc);
+    router.get('/questions/:id/kcs', kcRateLimit, kcController.getQuestionKcs);
+    router.put('/questions/:id/kcs', kcRateLimit, kcController.putQuestionKcs);
+}
+
+// ── 階段 5 WS-D：出題閉環（docs/interfaces-stage5.md 第 4.4 條）──
+// 知識點弱點、補救卷草稿（＋手動加題前的題目查詢）、題庫覆蓋率。FEATURE_REMEDIAL 未開啟時不掛載（落到 Express 預設 404）。
+// 全部都不呼叫 LLM、不寫庫，不套限流（第 1.2 條的限流針對會花錢的端點）。
+// 跨章配額（blueprint）是既有 POST /generate-paper 的擴充，改在 examController，不另開路由（第 1.4 條）。
+const featuresS5D = require('../config/features');
+if (featuresS5D.FEATURE_REMEDIAL) {
+    const remedialController = require('../controllers/remedialController');
+    router.get('/students/:id/weakness/kc', remedialController.getKcWeakness);
+    router.post('/students/:id/remedial-paper', remedialController.remedialPaper);
+    router.get('/students/:id/remedial-paper/items', remedialController.remedialItems);
+    router.get('/coverage', remedialController.getCoverage);
+}
+
+// ── 階段 5 WS-E：AI 家教與按住說話（docs/interfaces-stage5.md 第 4.5 條）──
+// FEATURE_TUTOR 關閉時兩條都不掛載；FEATURE_VOICE 需同時開 FEATURE_TUTOR（第 1.3 條）。
+// 兩條都會呼叫 LLM（花錢），各自一個限流桶（createRateLimiter 每次呼叫都是新的 Map）。
+// 錄音用 memoryStorage：音訊只活在這一次請求的記憶體裡，不落地（ADR-013）；
+// 上方既有的 upload（dest: 'uploads/'）會寫暫存檔，所以不沿用。
+const featuresS5E = require('../config/features');
+if (featuresS5E.FEATURE_TUTOR) {
+    const tutorController = require('../controllers/tutorController');
+    const tutorPerMin = tutorController.rateLimitPerMin('TUTOR_RATE_LIMIT_PER_MIN', 10);
+    const tutorRateLimit = createRateLimiter({
+        windowMs: 60 * 1000,
+        max: tutorPerMin,
+        message: `AI 家教請求過於頻繁，請稍候再試（每分鐘最多 ${tutorPerMin} 次）。`
+    });
+    router.post('/tutor', tutorRateLimit, tutorController.chat);
+
+    if (featuresS5E.FEATURE_VOICE) {
+        const voicePerMin = tutorController.rateLimitPerMin('VOICE_RATE_LIMIT_PER_MIN', 10);
+        const voiceRateLimit = createRateLimiter({
+            windowMs: 60 * 1000,
+            max: voicePerMin,
+            message: `語音轉寫請求過於頻繁，請稍候再試（每分鐘最多 ${voicePerMin} 次）。`
+        });
+        const voiceUpload = multer({
+            storage: multer.memoryStorage(),
+            limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 5 }
+        });
+        router.post('/voice/transcribe', voiceRateLimit, voiceUpload.single('audio'),
+            tutorController.handleVoiceUploadError, tutorController.transcribe);
+    }
+}
+
 module.exports = router;

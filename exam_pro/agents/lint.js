@@ -17,6 +17,7 @@
 const { formulaFix } = require('../utils/formulaFix');
 const { formulaLint } = require('../utils/formulaLint');
 const { buildSchema } = require('./schemas');
+const { resolveSubjectGroup } = require('./promptParts');
 const { registerTemplate } = require('../services/llm/templates');
 
 const TEMPLATE = 'lint.v2';   // v2（2026-09-15）：規則 3 補 array 表格、\mathbb 已支援（PR #18）
@@ -64,14 +65,61 @@ const PROMPT_TEMPLATE = [
 // 模組載入時註冊（裁決 S2-5）：四個 LLM 節點都必須註冊，否則 cassette 鍵會退回 sha256(識別名)
 registerTemplate(TEMPLATE, PROMPT_TEMPLATE);
 
+// ───────────────────── 化學題（〔stage5 WS-B〕DEC-019、ADR-010）─────────────────────
+//
+// ①② 兩層零成本閘門兩條路徑共用：utils/textFormatter.js 自階段 5 起認得 \ce{…}、
+// \rightleftharpoons、\xrightarrow 等化學寫法，formulaLint 就不會把它們當未知指令擋下。
+// 只有第三層（LLM 重寫）換成化學用的 SYSTEM 與模板：數學版的規則 3 叫模型「改寫掉不支援的
+// 指令」，化學題照那一版重寫會把 \ce{…} 拆成一般 LaTeX。agent 名 lint_chem、模板 lint_chem.v1。
+// 上面數學／物理的 SYSTEM 與模板一個字都沒動（第 1.1 條）。
+
+const AGENT_CHEM = 'lint_chem';
+const TEMPLATE_CHEM = 'lint_chem.v1';
+
+const SYSTEM_CHEM = [
+    '你是化學題庫的 LaTeX 校對員。',
+    '你唯一的工作是把壞掉的公式與化學式寫法修好，讓它能被轉換成 Word 的數學方塊。',
+    '嚴禁改動題意：數字、單位、化學式的元素與係數、選項內容、中文敘述一個字都不准改，只准改寫法。',
+    '嚴禁自己解題或補上答案。',
+].join('\n');
+
+const PROMPT_TEMPLATE_CHEM = [
+    '以下化學題目的公式或化學式寫法有問題，請修好後照 JSON schema 回覆。',
+    '',
+    '【題幹】',
+    '{{question_text}}',
+    '',
+    '【答案】',
+    '{{answer_text}}',
+    '',
+    '【硬閘門偵測到的問題】（at 是字元位置，0 起算）',
+    '{{issues}}',
+    '{{feedback}}',
+    '',
+    '要求：',
+    '1. 行內公式一律用 $…$ 包起來，展示公式用 $$…$$。',
+    '2. 化學式、離子與反應式用 mhchem 的 \\ce{…}，放在 $…$ 裡：下標直接寫數字（\\ce{H2SO4}），電荷寫成 ^{…}（\\ce{SO4^{2-}}），箭頭用 ->、<- 或 <=>，條件寫成 ->[上][下]，物態 (s)(l)(g)(aq)，氣體 ^、沉澱 v、結晶水用句點。',
+    '3. \\ce{…} 以外的式子：分數用 \\frac{分子}{分母}，根號用 \\sqrt{…}，上下標用 ^{…} 與 _{…}，大括號必須成對；表格用 \\begin{array}{|c|c|}…\\end{array} 放在同一對 $$…$$ 裡；單位用 \\mathrm{…}。',
+    '4. 不要把 Unicode 的上下標（H₂O、Ca²⁺）留在文字裡，一律改成 \\ce{…}。',
+    '5. 中文敘述、數字、單位、選項內容保持原樣。',
+].join('\n');
+
+registerTemplate(TEMPLATE_CHEM, `${SYSTEM_CHEM}\n---\n${PROMPT_TEMPLATE_CHEM}`);
+
+/** 卷別 → agent 名、模板、SYSTEM、模板原文與 schema 選項 */
+const VARIANTS = {
+    math_physics: { agent: 'lint', template: TEMPLATE, system: SYSTEM, promptTemplate: PROMPT_TEMPLATE, schemaOpts: undefined },
+    chemistry: { agent: AGENT_CHEM, template: TEMPLATE_CHEM, system: SYSTEM_CHEM, promptTemplate: PROMPT_TEMPLATE_CHEM, schemaOpts: { group: 'chemistry' } }
+};
+
 /** 把 issues 排成 prompt 用的條列 */
 function issuesToText(issues) {
     if (!issues.length) return '（無）';
     return issues.map(i => `- [${i.sev}] ${i.rule} @${i.at}：${i.msg}`).join('\n');
 }
 
-function renderPrompt({ questionText, answerText, issues, feedback }) {
-    return PROMPT_TEMPLATE
+function renderPrompt({ questionText, answerText, issues, feedback }, promptTemplate = PROMPT_TEMPLATE) {
+    return promptTemplate
         .replace('{{question_text}}', questionText || '（空）')
         .replace('{{answer_text}}', answerText || '（空）')
         .replace('{{issues}}', issuesToText(issues))
@@ -133,25 +181,27 @@ async function run(ctx, input) {
 
     // ── ③ 還有 error 才付錢請模型重寫 ──
     const blocking = errorsOf(first.issues);
+    // 〔stage5 WS-B〕化學題換化學的 SYSTEM／模板；數學與物理的 v 與階段 5 之前寫死的值相同
+    const v = VARIANTS[resolveSubjectGroup(ctx, inp)];
     let res;
     try {
         res = await ctx.llm.generateJson({
             model: ctx.config.models.extract,
-            system: SYSTEM,
+            system: v.system,
             parts: [{ text: renderPrompt({
                 questionText: first.questionText,
                 answerText: first.answerText,
                 issues: blocking,
                 feedback: inp.feedback,
-            }) }],
-            schema: buildSchema('lint'),
+            }, v.promptTemplate) }],
+            schema: buildSchema('lint', v.schemaOpts),
             maxOutputTokens: MAX_OUTPUT_TOKENS,
             thinkingBudget: THINKING_BUDGET,
             signal: ctx.signal,
-            agent: 'lint',
-            template: TEMPLATE,
+            agent: v.agent,
+            template: v.template,
             cacheKeyParts: {
-                template: TEMPLATE,
+                template: v.template,
                 questionText: first.questionText,
                 answerText: first.answerText,
                 issues: blocking.map(i => i.rule).sort(),
@@ -215,4 +265,8 @@ async function run(ctx, input) {
     };
 }
 
-module.exports = { run, PROMPT_TEMPLATE, TEMPLATE, gate };
+module.exports = {
+    run, PROMPT_TEMPLATE, TEMPLATE, gate,
+    // 〔stage5 WS-B〕化學題
+    SYSTEM, AGENT_CHEM, TEMPLATE_CHEM, SYSTEM_CHEM, PROMPT_TEMPLATE_CHEM
+};

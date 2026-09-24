@@ -164,3 +164,50 @@ module.exports = {
     buildRecentWrong,
     DEFAULT_RECENT_LIMIT
 };
+
+// ─────────────────────────────────────────────────────────────
+// 階段 5 WS-A：錯因分布（docs/interfaces-stage5.md 第 4.1 條第 3 項；DEC-015、缺口 G03）
+//
+// 契約只允許在**檔尾新增**這一支，以上五支與它們的 SQL 一個字都不動。
+// 沿用同一組凍結規則：$1 = studentId、$2 = days、$3 = subject（AGG_WHERE 原樣重用）、
+// CTE 外包、不排除已封存題、不讀 process.env、低樣本門檻不寫進 SQL。
+//
+// 語意：
+//   - 分母 wrong = 時間窗與科目篩選內 result = 0 的作答數（沒標錯因的錯題也算在分母裡——
+//     share 回答的是「錯題裡有多少比例是這個原因」，不是「有標錯因的題裡」）。
+//   - 一題可以標多個錯因，所以各列 share 加總可能超過 1。
+//   - 只取 result = 0 的列：PATCH 已保證 result ≠ 0 時 error_types 為空，這裡再擋一次，
+//     手動改 DB 或舊資料也不會把「答對的題」算進錯因分布。
+//   - share 四捨五入到小數第 4 位；wrong = 0 時為 NULL（實際上此時不會有任何列）。
+//   - 排序 count DESC、error_type ASC。error_type 用 COLLATE "C" 比：代碼是 ASCII，
+//     但 en_US 之類的 collation 會忽略底線，換一台機器順序就可能不同。
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * 錯因分布（by_error_type）。label 由 controller 以 config/errorTypes.js 的 labelOf 補上，
+ * 不寫進 SQL——標籤是設定，改一次不該動 SQL（與 low_sample 同一個理由）。
+ *
+ * @param {{ studentId:number, subject:string|null, days:number }} opts
+ * @returns {{ text:string, values:any[] }} values = [studentId, days, subject]
+ */
+function buildByErrorType(opts) {
+    const text = `WITH wrong AS (
+  SELECT a.error_types
+    FROM attempts a JOIN questions q ON q.id = a.question_id
+   ${AGG_WHERE}
+     AND a.result = 0
+), agg AS (
+  SELECT e.error_type, COUNT(*) AS count
+    FROM wrong w CROSS JOIN LATERAL unnest(w.error_types) AS e(error_type)
+   GROUP BY e.error_type
+), total AS (
+  SELECT COUNT(*) AS wrong FROM wrong
+)
+SELECT agg.error_type, agg.count,
+       round((agg.count::numeric / NULLIF(total.wrong, 0)), 4)::float8 AS share
+  FROM agg CROSS JOIN total
+ ORDER BY agg.count DESC, agg.error_type COLLATE "C" ASC`;
+    return { text, values: baseValues(opts) };
+}
+
+module.exports.buildByErrorType = buildByErrorType;

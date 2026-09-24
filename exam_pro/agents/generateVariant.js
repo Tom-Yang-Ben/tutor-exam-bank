@@ -17,6 +17,9 @@
 //   ② 跑題檢查（第 4.4 條）——cos(embed(變式), embed(藍本)) ≥ VARIANT_OFFTOPIC_SIM_MIN，一次 embed 呼叫。
 // 兩道都不過就 fail，feedback 寫清楚是哪一道、數值多少，下一次重試會餵回 prompt。
 //
+// 〔stage5 WS-B〕藍本是化學題時改用 variant_chem 的 SYSTEM／模板／schema（VARIANTS.chemistry，ADR-010）；
+//   兩道閘門與 cacheKeyParts 的算法共用。
+//
 // ⚠ 兩個「不得」（第 3.1 條的 agent 合約）：不得自己 require('../config/db')、
 //   不得自己讀 process.env。模型名走 ctx.config.models、門檻走 ctx.config.thresholds、
 //   鄰居由 runner 查好放進 input。
@@ -26,7 +29,7 @@ const Ajv = require('ajv');
 
 const { isValidChapter, isValidSubject } = require('../config/chapters');
 const { buildSchema } = require('./schemas');
-const { chapterWhitelistText, LATEX_RULES } = require('./promptParts');
+const { chapterWhitelistText, LATEX_RULES, CHEM_LATEX_RULES, resolveSubjectGroup } = require('./promptParts');
 const { registerTemplate } = require('../services/llm/templates');
 const { textGate } = require('../utils/variantTextGate');
 const { buildEmbedText } = require('../utils/embedText');
@@ -71,6 +74,51 @@ ${LATEX_RULES}
 {{FEEDBACK}}`;
 
 registerTemplate(TEMPLATE, PROMPT_TEMPLATE);
+
+// ───────────────────── 化學藍本（〔stage5 WS-B〕DEC-019、ADR-010）─────────────────────
+//
+// 藍本是化學題時改走這一組：agent 名 variant_chem、模板 variant_chem.v1、化學值域的 schema。
+// 兩道閘門（只改字、跑題）、章節繼承與 cacheKeyParts 的算法與數學／物理完全相同。
+// 上面數學／物理的 SYSTEM、模板與 schema 一個字都沒動（第 1.1 條）。
+// 註冊字串 = SYSTEM + '\n---\n' + 模板（第 1.2 條）。
+
+const AGENT_CHEM = 'variant_chem';
+const TEMPLATE_CHEM = 'variant_chem.v1';
+
+const SYSTEM_CHEM = '你是一位資深的台灣高中化學家教老師，正在替題庫出「換湯不換藥」的化學變式題：考的觀念與解法不變，物質、情境、數據與敘述全部重寫。你只輸出 JSON，不輸出任何其他文字。';
+
+const PROMPT_TEMPLATE_CHEM = `請以下面這道「藍本題」為範本，改寫出**一道**同概念的新化學題目。
+
+{{CHAPTER_WHITELIST}}
+
+【藍本題】
+章節：{{SOURCE_CHAPTER}}
+題型：{{SOURCE_TYPE}}
+難度：{{SOURCE_DIFFICULTY}}
+題目：{{SOURCE_QUESTION}}
+答案：{{SOURCE_ANSWER}}
+
+{{NEIGHBORS}}
+
+【這一題要做到的事】
+1. **考的觀念與解法必須和藍本完全相同**，難度請對齊 {{TARGET_DIFFICULTY}}（1 最簡單、5 最難）。
+2. **物質、情境、數據、敘述全部要重寫**：只把數字換掉會被系統的文字閘門直接退回。請換一組不同的反應物或化合物（性質要真實存在、反應要真的會發生）、換一組新的數據、換一種問法。
+3. 化學式、反應式必須正確且已平衡；原子量請用常用值，題目需要時在題幹中註明。
+4. 章節原則上沿用藍本的「{{SOURCE_CHAPTER}}」；只有在改寫後真的落到另一章時才換成白名單裡的另一個字串。
+5. answer_text 必須是你**自己算過**的答案，而且要能被一個獨立的模型重算出同樣的結果；數值答案要帶單位。單選／多選以選項代號開頭。
+6. 不要輸出跟藍本或下面任何一題「同一組物質與數據、同一個情境」的題目——那是重複題，會被去重擋掉。
+
+${CHEM_LATEX_RULES}
+
+{{FEEDBACK}}`;
+
+registerTemplate(TEMPLATE_CHEM, `${SYSTEM_CHEM}\n---\n${PROMPT_TEMPLATE_CHEM}`);
+
+/** 卷別 → agent 名、模板、SYSTEM、模板原文與 schema 選項 */
+const VARIANTS = {
+    math_physics: { agent: 'variant', template: TEMPLATE, system: SYSTEM, promptTemplate: PROMPT_TEMPLATE, schemaOpts: undefined },
+    chemistry: { agent: AGENT_CHEM, template: TEMPLATE_CHEM, system: SYSTEM_CHEM, promptTemplate: PROMPT_TEMPLATE_CHEM, schemaOpts: { group: 'chemistry' } }
+};
 
 // ───────────────────────── 純函式 ─────────────────────────
 
@@ -137,7 +185,9 @@ function anchorIdsOf(neighbors) {
  */
 function buildPrompt(input) {
     const s = input.source || {};
-    return PROMPT_TEMPLATE
+    // 〔stage5 WS-B〕化學藍本用化學模板；數學／物理的模板與階段 5 之前相同
+    const template = VARIANTS[resolveSubjectGroup(null, { subject: s.subject })].promptTemplate;
+    return template
         .replace('{{CHAPTER_WHITELIST}}', chapterWhitelistText(s.subject))
         .replace(/\{\{SOURCE_CHAPTER\}\}/g, String(s.chapter ?? ''))
         .replace('{{SOURCE_TYPE}}', String(s.question_type ?? ''))
@@ -149,12 +199,15 @@ function buildPrompt(input) {
         .replace('{{FEEDBACK}}', input.feedback ? `【上一次生成被退回的理由，請不要再犯】\n${input.feedback}` : '');
 }
 
-let validator = null;
-/** ajv validator（只編譯一次；schema 是深凍結的，複製一份再交給 ajv） */
-function getValidator() {
-    if (validator) return validator;
+/** 卷別 → 已編譯的 validator（〔stage5 WS-B〕化學的 chapter 值域不同，各編一份） */
+const validators = new Map();
+/** ajv validator（每個卷別只編譯一次；schema 是深凍結的，複製一份再交給 ajv） */
+function getValidator(group = 'math_physics') {
+    const key = VARIANTS[group] ? group : 'math_physics';
+    if (validators.has(key)) return validators.get(key);
     const ajv = new Ajv({ allErrors: true, strict: false, verbose: true });
-    validator = ajv.compile(JSON.parse(JSON.stringify(buildSchema('variant'))));
+    const validator = ajv.compile(JSON.parse(JSON.stringify(buildSchema('variant', VARIANTS[key].schemaOpts))));
+    validators.set(key, validator);
     return validator;
 }
 
@@ -245,20 +298,23 @@ async function run(ctx, input = {}) {
         }
 
         const anchorIds = anchorIdsOf(input.neighbors);
+        // 〔stage5 WS-B〕化學藍本走化學的 SYSTEM／模板／schema；數學與物理的 v 與階段 5 之前寫死的值相同
+        const group = resolveSubjectGroup(ctx, { subject: source.subject });
+        const v = VARIANTS[group];
 
         const res = await ctx.llm.generateJson({
             model: modelOf(ctx),
-            system: SYSTEM,
+            system: v.system,
             parts: [{ text: buildPrompt({ ...input, source, difficulty_delta: delta }) }],
-            schema: buildSchema('variant'),
+            schema: buildSchema('variant', v.schemaOpts),
             signal: ctx.signal,
-            agent: 'variant',
-            template: TEMPLATE,
+            agent: v.agent,
+            template: v.template,
             // 第 4.2 條：鍵是 { template, sourceQuestionId, difficultyDelta, idx, anchorIds }，
             // **不放題幹全文**（理由同 classify 的 fewShotIds：題庫動一下就換一份 cassette，
             // 紅燈全是噪音）。feedback 也刻意不進鍵——重試時回放同一捲帶是確定性的行為。
             cacheKeyParts: {
-                template: TEMPLATE,
+                template: v.template,
                 sourceQuestionId: source.id,
                 difficultyDelta: delta,
                 idx,
@@ -269,7 +325,7 @@ async function run(ctx, input = {}) {
         const data = res.data || {};
 
         // ── schema：伺服器端的 ajv 是最終閘門（裁決 S0-1，任何情況都不可略過）──
-        const validate = getValidator();
+        const validate = getValidator(group);
         if (!validate(data)) {
             return {
                 kind: 'fail', reason: 'schema_invalid',
@@ -365,5 +421,7 @@ module.exports = {
     run,
     // 給 runner、cassette 錄製腳本與單元測試用的內部零件
     buildPrompt, neighborsText, anchorIdsOf, targetDifficulty, familyRoot, cosine,
-    TEMPLATE, SYSTEM, PROMPT_TEMPLATE, MAX_NEIGHBORS, INHERITED_CHAPTER_CONFIDENCE, DEFAULT_OFFTOPIC_SIM_MIN
+    TEMPLATE, SYSTEM, PROMPT_TEMPLATE, MAX_NEIGHBORS, INHERITED_CHAPTER_CONFIDENCE, DEFAULT_OFFTOPIC_SIM_MIN,
+    // 〔stage5 WS-B〕化學藍本
+    AGENT_CHEM, TEMPLATE_CHEM, SYSTEM_CHEM, PROMPT_TEMPLATE_CHEM
 };

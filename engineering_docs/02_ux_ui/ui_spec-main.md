@@ -1,8 +1,9 @@
 # UI 規格書：主頁 (UI Spec – Main) - 家教專用數理題庫系統
 
-> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
+> **版本:** v1.2 | **更新:** 2026-09-24 | **狀態:** 活躍
 > 🛠 **2026-08-29 修訂**（PR #3/#6/#7 程式碼同步）：§2 版面配置整節重寫為 5 個 `.app-view` 視圖＋hash 路由（原「Topbar＋Hero」「右欄 #paper lg:sticky」ASCII 圖已刪除——Hero 區塊於 commit 995f444 自程式碼移除）；§1 入口／出口改為視圖切換語意（「先切視圖再捲動」）；§3 章節欄位改科目→冊→單元三層選單並新增 #volume／#paper_volume 列；§3 新增 source_type 三欄位（#source_type／#pdf_source_type／#paper_source_scope）與題庫卡片來源徽章；§4 編輯 Modal 補題目來源改標；§8 刪除「導覽列 md 以下隱藏」與「組卷卡 lg:sticky」，改橫向捲動與獨立視圖；§10 補 FR-017。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 > 🛠 **2026-09-15g 修訂**（feat/follow-up-paper-group，FR-019 PR2）：§3 組卷預覽列補「承上 #id」標示、「換這組」按鈕與少出題附註。修改處以〔修訂 2026-09-15g〕行內標記。
+> 🛠 **2026-09-24 修訂**（階段 5 整合回填，分支 `stage5/int-docs`）：只補階段 5 在本頁的最小掛鉤（WS-A、WS-B，標〔stage5 WS-X〕）——科目下拉改讀 API（含化學）、上傳區「卷別」選單、題目編輯 modal 的「文字詳解」欄、題庫卡片「有詳解」徽章、Word 匯出版本選單、MathJax 載入 mhchem。其餘內容未重掃。修改處以〔修訂 2026-09-24〕行內標記。
 > **Owner:** Ben（楊本顥）
 > **語域:** L2
 > **實例:** 每頁面一份（`ui_spec-<page>.md`）
@@ -50,7 +51,11 @@ view-assistant（:588） ─ #assistant 空錨點（:589）
 
 | 欄位 | 型態 | 來源（API 欄位） | 顯示規則 |
 | :--- | :--- | :--- | :--- |
-| 學科（#subject／#paper_subject／#mgr_subject） | select | 固定值：數學／物理 | 切換時連動冊別與單元下拉（三層選單）〔修訂 2026-08-29〕 |
+| 學科（#subject／#paper_subject／#mgr_subject） | select | 〔修訂 2026-09-24〕依 `GET /api/chapter-volumes` 重建（`syncSubjectSelects`，不再寫死；化學併入後有三科）；原記「固定值：數學／物理」為階段 5 前的行為 | 切換時連動冊別與單元下拉（三層選單）〔修訂 2026-08-29〕 |
+| 卷別（#pdf_subject_group）〔修訂 2026-09-24〕 | select | 固定值：數學／物理（`math_physics`，預設）／化學（`chemistry`） → `POST /api/jobs` 的 `subject_group`（由 `public/js/review.js` 送出） | 在上傳區；舊版單次拆題（`/api/analyze-pdf`）選化學時直接提示「化學卷需要新版拆題管線」、不送出（FR-026） |
+| 文字詳解（編輯 modal #edit_solution）〔修訂 2026-09-24〕 | textarea＋來源標示＋即時預覽 | `GET /api/questions` 的 `solution_text`、`solution_src` → `PUT /api/questions/:id` | 來源標示「管線驗算時由模型解出、與答案比對一致（未經人工審閱）」或「老師撰寫」（附註「改寫後會標為老師撰寫」）；沒有時「尚無詳解（選填，4000 字內，公式用 $...$）」；**只在老師改過這一欄時才送** `solution_text`（FR-024） |
+| 「有詳解」徽章〔修訂 2026-09-24〕 | badge | `solution_text` 非空 | 題庫卡片行尾；title「這題有文字詳解，Word 詳解版會印出來」 |
+| Word 版本（#wordEdition）〔修訂 2026-09-24〕 | select | → `POST /api/download-word` 的 `edition` | 標準版（預設）／學生版／詳解版；檔名加註「（學生版）」「（詳解版）」（FR-025） |
 | 冊別（#volume，建題 :283） | select | `GET /api/chapter-volumes`（科→冊→單元結構，唯一真相 `config/chapters.js` 的 VOLUMES；載入 :650-659） | 選科後列該科各冊；切換時連動單元下拉〔修訂 2026-08-29〕 |
 | 冊別（#paper_volume，組卷 :466） | select | 同上＋`GET /api/chapters` 庫存交集（:941-977） | 只列「該科有庫存題目」的冊；白名單外舊章節歸「其他」；無庫存顯示「(目前此科目無庫存題目)」〔修訂 2026-08-29〕 |
 | 單元（#chapter／#paper_chapter／#mgr_chapter） | select | `GET /api/chapter-volumes` 依所選冊展開（組卷側再以 `GET /api/chapters` 過濾庫存；`#mgr_chapter` 依冊 optgroup 分組、跨科標籤帶科名，:794-808） | 組卷側顯示「-- 請選擇單元 (共 N 個) --」；無庫存顯示「(此冊目前無庫存題目)」〔修訂 2026-08-29〕 |
@@ -121,13 +126,13 @@ view-assistant（:588） ─ #assistant 空錨點（:589）
 | SSOT | `exam_pro/public/index.html`（無 Figma 稿，程式碼即設計權威） |
 | Design Tokens | 同檔 `:root` CSS 變數（--ink／--brand／--mint 等）＋Tailwind CDN |
 | 元件對照 | `createQuestionEditor`／`showToast`／`apiFetch` 等經 `window.ExamApp` 供各分頁 module 共用 |
-| 已知限制 | Tailwind 與 MathJax 走 CDN，離線環境無樣式與公式渲染 |
+| 已知限制 | Tailwind 與 MathJax 走 CDN，離線環境無樣式與公式渲染；〔修訂 2026-09-24〕MathJax 設定明確載入 mhchem（`\ce{…}` 化學式），與 `ui/safe`，並關掉數學式裡的連結（裁決 S5-35，尚待瀏覽器實測）；階段 5 的掛鉤只以 miniDom 與 `check:html` 驗證 |
 
 ## 10. 追溯
 
 | 項目 | ID |
 | :--- | :--- |
-| 對應需求 | FR-001（上傳入口）、FR-007、FR-008、FR-009、FR-014（新增學生入口）、FR-017（source_type 題源標記，PR #7）〔修訂 2026-08-29〕；NFR-001 |
+| 對應需求 | FR-001（上傳入口）、FR-007、FR-008、FR-009、FR-014（新增學生入口）、FR-017（source_type 題源標記，PR #7）〔修訂 2026-08-29〕；FR-024、FR-025、FR-026、FR-027〔修訂 2026-09-24〕；NFR-001 |
 | 對應決策 | DEC-001、DEC-002、DEC-003、DEC-007 |
 | 對應 ADR | [ADR-004](../03_architecture/adr/ADR-004-custom-latex-ooxml-over-pandoc.md)、[ADR-005](../03_architecture/adr/ADR-005-server-side-whitelist-validation.md) |
 | 對應情境 | SCN-009、SCN-010（UAT 主流程：組卷→匯出、避免重複出題，[uat_plan](../05_qa/uat_plan.md) §2.3） |

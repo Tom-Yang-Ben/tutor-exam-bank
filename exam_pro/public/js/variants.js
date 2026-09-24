@@ -476,7 +476,12 @@ async function findSimilar(app, detail) {
         return;
     }
     const list = el('div', 'space-y-2');
-    for (const q of results) list.appendChild(questionCard(app, q));
+    for (const q of results) {
+        const card = questionCard(app, q);
+        // 〔stage5 WS-D〕唯一掛鉤：「找相似」結果每列加「加入補救卷」，只 dispatch remedial:add（見本檔尾）
+        if (remedialEnabled()) card.appendChild(remedialAddButton(q, detail));
+        list.appendChild(card);
+    }
     panel.slot.appendChild(list);
 }
 
@@ -677,6 +682,42 @@ export function init() {
             setActionsDisabled(false);
         });
     });
+}
+
+// ───────────────── 〔stage5 WS-D〕「加入補救卷」掛鉤（docs/interfaces-stage5.md 第 4.4 條第 5 項）─────────────────
+// 契約寫的位置是 students.js，但「找相似」的結果是本檔 findSimilar 畫的（students.js 只發事件），
+// 所以按鈕只能掛在這裡；理由記在 docs/remedial.md。本檔只發 `remedial:add`，草稿的一切由 public/js/remedial.js 管。
+// FEATURE_REMEDIAL 關閉時不顯示。
+
+/** @returns {boolean} FEATURE_REMEDIAL 是否開啟（〔stage5 WS-D〕） */
+function remedialEnabled() {
+    const meta = document.querySelector('meta[name="feature-remedial"]');
+    return parseBool(meta ? meta.content : '');
+}
+
+/**
+ * 〔stage5 WS-D〕一顆「加入補救卷」按鈕：點擊時在 document 上 dispatch `remedial:add`。
+ * @param {object} q      /similar 的一筆結果
+ * @param {object} detail 「找相似」事件的 detail（帶 student_id）
+ * @returns {HTMLElement}
+ */
+function remedialAddButton(q, detail) {
+    const btn = el('button', 'mt-2 text-xs px-3 py-1.5 rounded-lg border border-rose-200 bg-white font-bold text-rose-700 hover:bg-rose-50 cursor-pointer', {
+        type: 'button', textContent: '加入補救卷', 'data-remedial-add': String(q.id)
+    });
+    btn.addEventListener('click', () => {
+        document.dispatchEvent(new CustomEvent('remedial:add', {
+            detail: {
+                question_id: q.id,
+                student_id: detail.student_id ?? null,
+                subject: q.subject ?? null,
+                chapter: q.chapter ?? null,
+                difficulty: q.difficulty ?? null,
+                question_text: q.question_text || ''
+            }
+        }));
+    });
+    return btn;
 }
 
 // 自動掛載只在瀏覽器裡發生（沒有 document 的 Node 裡 import 本檔不該爆）。

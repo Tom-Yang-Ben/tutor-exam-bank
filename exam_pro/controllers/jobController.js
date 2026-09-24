@@ -10,6 +10,9 @@
 //   POST /api/jobs/:id/retry           退回 provider_error / budget_exceeded 的列
 //
 // 這一層只負責「排隊與查詢」，一行 LLM 都不呼叫；真正花錢的是 workers/jobRunner.js。
+//
+// 〔stage5 WS-B〕docs/interfaces-stage5.md 第 4.2 條第 1 點：POST /api/jobs 多一個 multipart 欄位
+// subject_group（'math_physics' 預設／'chemistry'，其他值 400），GET /api/jobs/:id 多回 subject_group。
 // ─────────────────────────────────────────────────────────────
 const fs = require('fs');
 const path = require('path');
@@ -18,6 +21,8 @@ const crypto = require('crypto');
 const { query, pool } = require('../config/db');
 const { isPdfBuffer } = require('../utils/pdfSniff');
 const { NODE_FOR_STATE } = require('../pipeline/stateMachine');
+// 〔stage5 WS-B〕卷別的解析是純函式，放在 config/chapters.js（單元測試不必載入 config/db）
+const { SUBJECT_GROUP_KEYS, normalizeSubjectGroup: parseSubjectGroup } = require('../config/chapters');
 
 const APP_DIR = path.resolve(__dirname, '..');
 /** PDF 一律存這裡，不放 uploads/：app.js:13-27 每小時清一次，會刪掉排隊中的 PDF（第 1.3 條）。 */
@@ -133,17 +138,27 @@ exports.createJob = async (req, res, next) => {
             || path.extname(req.file.originalname || '').toLowerCase() === '.pdf';
         if (!isPdf) return res.status(400).json({ message: '只接受 PDF 檔案！' });
 
+        // 〔stage5 WS-B〕卷別（docs/interfaces-stage5.md 第 4.2 條第 1 點）：沒帶或空字串＝math_physics，
+        // 其他值一律 400（打錯字不該默默當成數學／物理卷去付錢拆題）。
+        const subjectGroup = parseSubjectGroup(req.body?.subject_group);
+        if (subjectGroup === null) {
+            return res.status(400).json({ message: `subject_group 只能是 ${SUBJECT_GROUP_KEYS.join(' 或 ')}。` });
+        }
+
         const buffer = fs.readFileSync(tmpPath);
         // mimetype 與副檔名都是客戶端宣告的；檔頭 %PDF- 才是檔案自己說的（utils/pdfSniff.js）
         if (!isPdfBuffer(buffer)) return res.status(400).json({ message: '檔案內容不是 PDF（缺少 %PDF- 檔頭）。' });
         const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
         const force = req.query.force === '1';
 
-        // 冪等（第 1.3 條）：同一份 PDF 已經有未失敗的 job 就回既有那一筆，不重寫檔、不重付費
+        // 冪等（第 1.3 條）：同一份 PDF 已經有未失敗的 job 就回既有那一筆，不重寫檔、不重付費。
+        // 〔stage5 WS-B〕冪等鍵加上卷別：老師選錯卷別重傳時要能建新 job（同卷別重傳仍回既有那一筆）。
         if (!force) {
             const { rows } = await query(
-                `SELECT id FROM jobs WHERE pdf_sha256 = $1 AND state <> 'failed' ORDER BY id DESC LIMIT 1`,
-                [sha256]);
+                `SELECT id FROM jobs
+                  WHERE pdf_sha256 = $1 AND state <> 'failed' AND subject_group = $2
+                  ORDER BY id DESC LIMIT 1`,
+                [sha256, subjectGroup]);
             if (rows.length > 0) return res.status(202).json({ job_id: rows[0].id, existing: true });
         }
 
@@ -159,9 +174,9 @@ exports.createJob = async (req, res, next) => {
         try {
             await client.query('BEGIN');
             const { rows } = await client.query(
-                `INSERT INTO jobs (kind, pdf_sha256, page_count, state, budget_usd, source_type, source_detail)
-                 VALUES ('pdf', $1, $2, 'queued', $3, $4, $5) RETURNING id`,
-                [sha256, pageCount, Number.isFinite(budget) ? budget : 0.5, sourceType, sourceDetail]);
+                `INSERT INTO jobs (kind, pdf_sha256, page_count, state, budget_usd, source_type, source_detail, subject_group)
+                 VALUES ('pdf', $1, $2, 'queued', $3, $4, $5, $6) RETURNING id`,
+                [sha256, pageCount, Number.isFinite(budget) ? budget : 0.5, sourceType, sourceDetail, subjectGroup]);
             const jobId = rows[0].id;
 
             // 目錄自建，不需要 .gitkeep（第 1.3 條）；檔名用 job id，天然不會撞名
@@ -204,7 +219,7 @@ exports.getJob = async (req, res, next) => {
     if (id === null) return res.status(404).json({ message: '找不到該任務' });
     try {
         const { rows } = await query(
-            `SELECT id, state, token_in, token_out, cost_usd, budget_usd,
+            `SELECT id, state, token_in, token_out, cost_usd, budget_usd, subject_group,
                     ROUND(EXTRACT(EPOCH FROM (
                         (CASE WHEN state IN ('done','failed') THEN updated_at ELSE now() END) - created_at
                     )) * 1000)::bigint AS elapsed_ms
@@ -231,7 +246,9 @@ exports.getJob = async (req, res, next) => {
             // NUMERIC 經 pg 回的是字串（config/db.js 只轉了 INT8 與 DATE），這裡要自己 Number()
             cost_usd: Number(job.cost_usd),
             budget_usd: Number(job.budget_usd),
-            elapsed_ms: Number(job.elapsed_ms)
+            elapsed_ms: Number(job.elapsed_ms),
+            // 〔stage5 WS-B〕上傳時的卷別（第 4.2 條第 1 點；附加鍵，既有欄位與順序不變）
+            subject_group: job.subject_group
         });
     } catch (err) { next(err); }
 };
@@ -347,6 +364,7 @@ module.exports.countPdfPages = countPdfPages;
 module.exports.stateBeforeReview = stateBeforeReview;
 module.exports.clearRetries = clearRetries;
 module.exports.parsePaging = parsePaging;
+module.exports.parseSubjectGroup = parseSubjectGroup;
 module.exports.writeHumanEvent = writeHumanEvent;
 module.exports.maybeFinishJob = maybeFinishJob;
 module.exports.parseId = parseId;

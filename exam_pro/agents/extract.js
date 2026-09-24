@@ -17,6 +17,10 @@
 //
 // 3. **白名單只有一份**：章節從 config/chapters.js 經 agents/promptParts.js 產生，
 //    schema 的 enum 也從同一處注入（第 3.4 條）。aiService.js 手抄的那一份已刪除。
+//
+// 〔stage5 WS-B〕卷別分流（docs/interfaces-stage5.md 第 4.2 條、ADR-010）：ctx.job.subject_group
+// 為 'chemistry' 時改用化學的 agent 名、模板與 schema（下方 VARIANTS.chemistry）；
+// 其餘情況（含 services/aiService.js 的相容包裝，它沒有 ctx.job）走原本的數學／物理路徑，逐位元不變。
 
 const fs = require('fs');
 const path = require('path');
@@ -25,7 +29,7 @@ const Ajv = require('ajv');
 const { PDFDocument } = require('pdf-lib');
 
 const { buildSchema } = require('./schemas');
-const { chapterWhitelistText, questionTypeText, LATEX_RULES } = require('./promptParts');
+const { chapterWhitelistText, questionTypeText, LATEX_RULES, CHEM_LATEX_RULES, resolveSubjectGroup } = require('./promptParts');
 const { registerTemplate } = require('../services/llm/templates');
 
 const TEMPLATE = 'extract.v2';   // v2（2026-09-15）：加【表格】規範，見 docs/formulas.md §2
@@ -59,12 +63,56 @@ ${LATEX_RULES}
 
 registerTemplate(TEMPLATE, PROMPT_TEMPLATE);
 
+// ───────────────────── 化學卷（〔stage5 WS-B〕DEC-019、ADR-010）─────────────────────
+//
+// jobs.subject_group = 'chemistry' 的卷走這一組：新的 agent 名（cassette 子目錄 extract_chem）、
+// 新的模板、化學值域的 schema（subject 只能是化學、chapter 是化學 44 章）。
+// 上面數學／物理的 SYSTEM、PROMPT_TEMPLATE、schema **一個字都沒動**（第 1.1 條）。
+// 註冊字串 = SYSTEM + '\n---\n' + 模板（第 1.2 條）：SYSTEM 一改，cassette 鍵就跟著變。
+
+const AGENT_CHEM = 'extract_chem';
+const TEMPLATE_CHEM = 'extract_chem.v1';
+
+const SYSTEM_CHEM = '你是一位資深的台灣高中化學家教老師，正在把一份化學考卷數位化進題庫。你只輸出 JSON，不輸出任何其他文字。';
+
+const PROMPT_TEMPLATE_CHEM = `請細心閱讀這份化學考卷 PDF，找出裡面「所有的」題目，每一題各自拆解成一個 JSON 物件。
+
+{{CHAPTER_WHITELIST}}
+
+{{QUESTION_TYPES}}
+
+【subject 欄位】這是一份化學卷，subject 一律填「化學」。
+【chapter 欄位】必須「完全等於」白名單裡某一個「」內的字串（連頓號在內，例如「醇、酚、醚」是一章），不得自己發明新名詞、不得只寫分冊名。判斷依據是「解這一題需要用到哪一章的觀念」，例如用平衡常數計算濃度的題目屬於「化學平衡與平衡常數」，即使題幹在講工業製程。
+【chapter_confidence 欄位】是你對該章節的把握程度（0~1）。這個數字會決定要不要再花一次錢請另一個模型重判，請誠實給分——不確定就給低分。
+
+${CHEM_LATEX_RULES}
+
+【表格】考卷裡的資料表（例如各物質的熔點、實驗數據、濃度與速率的對照表）屬於題目文字，放在 question_text，不要寫成 figure_desc。一律寫成 LaTeX 的 array 環境，整個表格放在同一對 $$…$$ 裡，可以跨行：例如 $$\\begin{array}{|c|c|c|} \\hline \\text{實驗} & [\\ce{A}] & \\text{初速率} \\\\ \\hline 1 & 0.10 & 2.0\\times10^{-3} \\\\ \\hline \\end{array}$$。列以 \\\\ 分隔、欄以 & 分隔，框線用欄位格式 {|c|c|} 與 \\hline，中文儲存格用 \\text{…} 包住。不要用 Markdown 表格、tabular 或空白對齊。
+
+【附圖、結構式與實驗裝置】你無法匯出圖片，所以請把附圖的「解題關鍵視覺資訊」寫成文字，放進該題的 figure_desc 欄位：實驗裝置的連接方式與各容器內的物質、有機分子的結構（寫出主鏈、官能基與取代位置）、滴定曲線或溶解度曲線的關鍵點座標與趨勢、能量圖的各能階高低。**不要**寫進 question_text。同時回報附圖的位置，讓系統把圖裁下來存檔：figure_page 是附圖所在頁碼（從你收到的這份 PDF 的第 1 頁數起），figure_box 是該頁上剛好框住整張圖的 [ymin, xmin, ymax, xmax]（0–1000 正規化座標，頁面左上角為原點），不要框到題目文字。沒有附圖的題目，figure_desc、figure_page、figure_box 三個欄位都不要輸出。
+
+【週期表與常數】考卷附的週期表、原子量表或常數表不是題目，不要拆成題目；題目需要的原子量若只出現在那張表上，也不必抄進題幹。
+
+【題目順序】依照題目在紙上出現的先後順序輸出，不要重排、不要合併、不要漏題。同一大題底下的 (1)(2)(3) 若各自有獨立答案，請拆成獨立的題目。`;
+
+registerTemplate(TEMPLATE_CHEM, `${SYSTEM_CHEM}\n---\n${PROMPT_TEMPLATE_CHEM}`);
+
+/** 卷別 → 這一組 agent 名、模板、SYSTEM、prompt 與 schema 選項 */
+const VARIANTS = {
+    math_physics: { agent: 'extract', template: TEMPLATE, system: SYSTEM, promptTemplate: PROMPT_TEMPLATE, subject: null, schemaOpts: undefined },
+    chemistry: { agent: AGENT_CHEM, template: TEMPLATE_CHEM, system: SYSTEM_CHEM, promptTemplate: PROMPT_TEMPLATE_CHEM, subject: '化學', schemaOpts: { group: 'chemistry' } }
+};
+
 // ───────────────────────── 純函式（可單獨測試）─────────────────────────
 
-/** 把模板的挖空欄位填起來，得到真正送出去的 prompt */
-function buildPrompt() {
-    return PROMPT_TEMPLATE
-        .replace('{{CHAPTER_WHITELIST}}', chapterWhitelistText())
+/**
+ * 把模板的挖空欄位填起來，得到真正送出去的 prompt。
+ * @param {'math_physics'|'chemistry'} [group] 〔stage5 WS-B〕沒給＝數學／物理（輸出與階段 5 之前逐字相同）
+ */
+function buildPrompt(group = 'math_physics') {
+    const v = VARIANTS[group] || VARIANTS.math_physics;
+    return v.promptTemplate
+        .replace('{{CHAPTER_WHITELIST}}', chapterWhitelistText(v.subject))
         .replace('{{QUESTION_TYPES}}', questionTypeText());
 }
 
@@ -123,15 +171,18 @@ function normalizeElement(el) {
     return out;
 }
 
-let itemValidator = null;
-/** 逐元素驗證用的 validator（只編譯一次；schema 是深凍結的，複製一份再交給 ajv） */
-function getItemValidator() {
-    if (itemValidator) return itemValidator;
-    const item = buildSchema('extract').properties.questions.items;
+/** 卷別 → 已編譯的 validator（〔stage5 WS-B〕化學卷的 subject／chapter 值域不同，各編一份） */
+const itemValidators = new Map();
+/** 逐元素驗證用的 validator（每個卷別只編譯一次；schema 是深凍結的，複製一份再交給 ajv） */
+function getItemValidator(group = 'math_physics') {
+    const key = VARIANTS[group] ? group : 'math_physics';
+    if (itemValidators.has(key)) return itemValidators.get(key);
+    const item = buildSchema('extract', VARIANTS[key].schemaOpts).properties.questions.items;
     // verbose: true 才會在 error 物件上帶 data（錯誤訊息要印出「模型回了什麼」給人看）
     const ajv = new Ajv({ allErrors: true, strict: false, verbose: true });
-    itemValidator = ajv.compile(JSON.parse(JSON.stringify(item)));
-    return itemValidator;
+    const validator = ajv.compile(JSON.parse(JSON.stringify(item)));
+    itemValidators.set(key, validator);
+    return validator;
 }
 
 /** ajv 的錯誤壓成人看得懂的短句（會進 job_events.detail 與複核畫面） */
@@ -155,10 +206,11 @@ function formatErrors(errors) {
  * 對模型回來的整包資料做逐元素驗證。
  * @param {object} data      generateJson 的 data
  * @param {{chunkNo:number, fromPage:number, toPage:number}} chunk
+ * @param {'math_physics'|'chemistry'} [group] 〔stage5 WS-B〕化學卷用化學值域驗證
  * @returns {{questions:Array<object>, rejected:Array<{idx:number, errors:string[]}>}}
  */
-function validateElements(data, { chunkNo, fromPage, toPage }) {
-    const validate = getItemValidator();
+function validateElements(data, { chunkNo, fromPage, toPage }, group = 'math_physics') {
+    const validate = getItemValidator(group);
     const list = Array.isArray(data && data.questions) ? data.questions : [];
     const questions = [];
     const rejected = [];
@@ -270,23 +322,27 @@ async function run(ctx, input = {}) {
             };
         }
 
-        const schema = buildSchema('extract');
+        // 〔stage5 WS-B〕卷別只看 ctx.job.subject_group（extract 沒有題目可看科目）。
+        // math_physics 時 v 的每個欄位都等於階段 5 之前寫死的值，送出去的請求逐位元相同。
+        const group = resolveSubjectGroup(ctx, input);
+        const v = VARIANTS[group];
+        const schema = buildSchema('extract', v.schemaOpts);
         const res = await ctx.llm.generateJson({
             model: (ctx.config && ctx.config.models && ctx.config.models.extract) || undefined,
-            system: SYSTEM,
+            system: v.system,
             parts: [
                 { pdfBase64: Buffer.from(sliced.bytes).toString('base64') },
-                { text: buildPrompt() }
+                { text: buildPrompt(group) }
             ],
             schema,
             signal: ctx.signal,
-            agent: 'extract',
-            template: TEMPLATE,
+            agent: v.agent,
+            template: v.template,
             // 第 5.2 條：extract 的 cacheKeyParts 是 { template, chunkNo, pdfSha256 }，**不含 PDF 內容**
-            cacheKeyParts: { template: TEMPLATE, chunkNo, pdfSha256 }
+            cacheKeyParts: { template: v.template, chunkNo, pdfSha256 }
         });
 
-        const { questions, rejected } = validateElements(res.data, { chunkNo, fromPage, toPage });
+        const { questions, rejected } = validateElements(res.data, { chunkNo, fromPage, toPage }, group);
 
         // 「整包都不合格才 fail」：有東西但一題都沒過 → schema_invalid；
         // 一題都沒有（封面頁、答案卡那種塊）不是失敗，照常 pass 一個空陣列。
@@ -330,5 +386,7 @@ module.exports = {
     run,
     // 給相容包裝、cassette 錄製腳本與單元測試用的內部零件
     buildPrompt, planChunks, validateElements, normalizeElement, slicePdf,
-    TEMPLATE, SYSTEM, PROMPT_TEMPLATE
+    TEMPLATE, SYSTEM, PROMPT_TEMPLATE,
+    // 〔stage5 WS-B〕化學卷
+    AGENT_CHEM, TEMPLATE_CHEM, SYSTEM_CHEM, PROMPT_TEMPLATE_CHEM
 };

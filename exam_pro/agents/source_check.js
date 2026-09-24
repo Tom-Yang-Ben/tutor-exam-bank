@@ -16,8 +16,21 @@
 // job 預算用盡時回 fail 也保留 transcription_mismatch，不被改寫成 budget_exceeded。
 
 const { compareSegment, describeMismatch } = require('../utils/sourceCheck');
+const { replaceCe, ceToComparable } = require('../utils/chemFormula');
+const { resolveSubjectGroup } = require('./promptParts');
 
 const MODES = ['off', 'shadow', 'enforce'];
+
+/**
+ * 〔stage5 WS-B〕化學題的題幹先把 \ce{…} 換成可比對的純文字（utils/chemFormula.js 的 ceToComparable）。
+ * 反應箭頭 `->`、`<=>` 在原卷文字層是 → ⇌，不先拿掉就會被「負號比原卷多」這條規則當成抄錯
+ * （docs/source-check.md 的規則 1）。數學／物理題不經過這一步，比對器的輸入逐字不變。
+ * @param {string} text
+ * @returns {string}
+ */
+function chemistryComparable(text) {
+    return replaceCe(text, body => ` ${ceToComparable(body)} `);
+}
 
 function modeOf(ctx) {
     const m = ctx && ctx.config && ctx.config.sourceCheck && ctx.config.sourceCheck.mode;
@@ -45,8 +58,9 @@ async function run(ctx, input) {
             return skipped(String(st.status || 'no_source_text'), { mode });
         }
 
+        const rawQuestion = typeof inp.question_text === 'string' ? inp.question_text : '';
         const result = compareSegment({
-            questionText: typeof inp.question_text === 'string' ? inp.question_text : '',
+            questionText: resolveSubjectGroup(ctx, inp) === 'chemistry' ? chemistryComparable(rawQuestion) : rawQuestion,
             segment: st.segment,
             hasFigure: inp.has_figure === true
         }, ctx && ctx.config && ctx.config.sourceCheck && ctx.config.sourceCheck.options);
@@ -80,4 +94,4 @@ async function run(ctx, input) {
     }
 }
 
-module.exports = { run, MODES };
+module.exports = { run, MODES, chemistryComparable };

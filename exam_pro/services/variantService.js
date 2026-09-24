@@ -283,10 +283,14 @@ async function createVariantJob(db, sourceId, params, budgetUsd = tokenBudgetUsd
     const client = await db.pool.connect();
     try {
         await client.query('BEGIN');
+        // 〔stage5 WS-B〕subject_group 依藍本科目：化學藍本 → 'chemistry'（jobs.subject_group，migrations/0011）。
+        // agents 另以題目科目為準（agents/promptParts.js 的 resolveSubjectGroup），這一欄讓 job 本身也看得出卷別。
         const { rows } = await client.query(
-            `INSERT INTO jobs (kind, source_question_id, pdf_sha256, pdf_path, page_count, state, budget_usd, source_type)
+            `INSERT INTO jobs (kind, source_question_id, pdf_sha256, pdf_path, page_count, state, budget_usd, source_type, subject_group)
              VALUES ('variant', $1, NULL, NULL, NULL, 'queued', $2,
-                     (SELECT source_type FROM questions WHERE id = $1))
+                     (SELECT source_type FROM questions WHERE id = $1),
+                     COALESCE((SELECT CASE WHEN subject = '化學' THEN 'chemistry' ELSE 'math_physics' END
+                                 FROM questions WHERE id = $1), 'math_physics'))
              RETURNING id, state`,
             [sourceId, budgetUsd]);
         // 題源標記（0006）：變式預設**繼承藍本**——改寫是否充分要人判斷，

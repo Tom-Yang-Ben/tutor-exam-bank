@@ -250,6 +250,35 @@ function buildSaveFields(payload) {
     };
 }
 
+/** questions.solution_text 的字數上限（migrations/0011 的 CHECK）。 */
+const SOLUTION_MAX_LEN = 4000;
+
+/**
+ * 〔stage5 WS-A〕由 payload 的 verify 結果決定入庫時要不要一併寫文字詳解
+ * （docs/interfaces-stage5.md 第 4.1 條第 5 項；DEC-017、缺口 G05）。
+ *
+ * verify 節點（agents/verify.js）pass 時，runner 的 mergePayload 把它的 data 原樣存成
+ * `payload.verify = { skipped:false, final_answer, answer_form, steps_summary, claimed_answer, compare, samples }`。
+ * 「判定一致」看的是 `compare === 'agree'`（answerCompare 的結論），不是 outcome 的 kind——
+ * payload 裡只留得下 data。證明題走 skipped（`{ skipped: true }`，沒有 steps_summary）。
+ *
+ * 只有「一致且 steps_summary 非空」才寫；其他情況（沒跑、跳過、uncertain／disagree、空白、
+ * 超過 4000 字）一律兩欄 NULL。超長**不截斷**：截一半的詳解比沒有詳解更會誤導學生。
+ *
+ * scripts/backfill_solutions.js 回填既有題目時也呼叫這一支，兩條路徑的判定因此不會走鐘。
+ *
+ * @param {object} payload job_questions.payload
+ * @returns {{ solution_text:string|null, solution_src:'verify'|null }}
+ */
+function buildSolutionFields(payload) {
+    const none = { solution_text: null, solution_src: null };
+    const v = payload && payload.verify;
+    if (!v || typeof v !== 'object' || v.skipped === true || v.compare !== 'agree') return none;
+    const text = typeof v.steps_summary === 'string' ? v.steps_summary.trim() : '';
+    if (text === '' || [...text].length > SOLUTION_MAX_LEN) return none;
+    return { solution_text: text, solution_src: 'verify' };
+}
+
 /**
  * 入庫時的 `chapter_src`，依 `payload.classify.source` 決定
  * （interfaces-stage3.md 第 4.7、5.2 條的對照表）：
@@ -284,6 +313,52 @@ function readFeatures() {
     };
 }
 
+/**
+ * 〔stage5 WS-C〕入庫後的知識點自動標註掛鉤（docs/interfaces-stage5.md 第 4.3 條第 3 點）。
+ *
+ * 規則：
+ *   - `enabled`（= FEATURE_KC_TAGGING）為假時**完全不呼叫** tagger，回 null。
+ *   - 開啟時先問 `budgetCheck()`：回傳非空字串（略過原因）就**不呼叫** tagger，記一行 info、回 null。
+ *     理由：save 在 FREE_NODES 內，當日成本觸頂（DAILY_COST_BUDGET_USD）或該 job 的 budget_usd 用盡時
+ *     仍會照跑；標註卻要付錢給 LLM，不在這裡擋就會繞過兩道煞車。budgetCheck 自己丟錯時同樣不呼叫
+ *     （查不到帳就不花錢），只記 warn。略過的題之後可用 `npm run kc:backfill` 補標。
+ *   - 呼叫 tagger(questionId)；它同步丟錯、回傳 rejected promise 都一樣只記 warn，
+ *     回傳的 promise **永遠 resolve**——呼叫端不 await 也不會冒出 unhandledRejection，
+ *     job 的狀態推進完全不受影響（與 scheduleEmbed 同一個原則）。
+ *   - 標註的費用**不寫進** jobs／job_events（那是拆題管線的帳），只留在 info log 的 cost_usd。
+ *     所以它不會讓當日花費變多、提早觸發煞車；煞車只會在管線本身觸頂後擋下後續的標註。
+ *
+ * @param {{questionId:number, enabled:boolean, tagger:(id:number)=>any, logger:{info:Function, warn:Function},
+ *          budgetCheck?:()=>(string|null|Promise<string|null>)}} opts
+ * @returns {Promise<object|null>} tagger 的結果；沒呼叫、被預算擋下或失敗時為 null
+ */
+function runKcTagHook({ questionId, enabled, tagger, logger, budgetCheck }) {
+    if (!enabled) return Promise.resolve(null);
+    const log = logger || makeLogger();
+    return Promise.resolve()
+        .then(() => (typeof budgetCheck === 'function' ? budgetCheck() : null))
+        .then((blocked) => {
+            if (blocked) {
+                log.info({ msg: '知識點自動標註略過（預算已用盡，不呼叫 LLM）', question_id: questionId, status: 'skipped', reason: blocked });
+                return null;
+            }
+            return Promise.resolve(tagger(questionId)).then((r) => {
+                log.info({
+                    msg: '知識點自動標註', question_id: questionId, status: r && r.status,
+                    ...(r && r.reason ? { reason: r.reason } : {}),
+                    ...(r && Array.isArray(r.written) && r.written.length ? { kc_codes: r.written.map(w => w.code) } : {}),
+                    // 標註的費用不進 jobs／job_events（那是拆題管線的帳），只留在這一行 log
+                    ...(r && r.usage && r.usage.calls ? { cost_usd: r.usage.costUsd } : {})
+                });
+                return r ?? null;
+            });
+        })
+        .catch((err) => {
+            log.warn({ msg: '知識點自動標註失敗（不影響入庫）', question_id: questionId, error: String((err && err.message) || err).split('\n')[0] });
+            return null;
+        });
+}
+
 /** 一行一個 JSON 的預設 logger（第 7.5 條）。 */
 function makeLogger(sink = console) {
     const line = (level, obj) => sink.log(JSON.stringify({ ts: new Date().toISOString(), level, ...obj }));
@@ -308,6 +383,8 @@ function makeLogger(sink = console) {
  * @param {(ms:number)=>Promise<void>} [opts.sleep] 測試可換成不真的睡
  * @param {(meter)=>{cost_usd:number, cost_estimated:boolean}} [opts.estimateCost]
  *        預設查 config/pricing.js（WS-B）；整合測試塞一個假的才測得到預算累加
+ * @param {(questionId:number)=>Promise<object>} [opts.kcTagger]
+ *        〔stage5 WS-C〕入庫後的知識點標註；預設 services/kcTagService.tagQuestion（FEATURE_KC_TAGGING 開啟才會被呼叫）
  * @returns {{tick, start, stop, runJobQuestion, runExtractJob, isBusy, inFlight}}
  */
 function createRunner(opts = {}) {
@@ -318,9 +395,17 @@ function createRunner(opts = {}) {
     const logger = opts.logger || makeLogger();
     const sleep = opts.sleep || ((ms) => new Promise(r => setTimeout(r, ms)));
     const estimateCost = opts.estimateCost || estimateCostFromPricing;
+    // 〔stage5 WS-C〕延遲 require：旗標關閉時連 kcTagService 都不載入
+    const kcTagger = opts.kcTagger
+        || ((questionId) => require('../services/kcTagService').tagQuestion(questionId, { db, llm, logger }));
 
     const agentCache = new Map();
-    const inFlight = new Set();      // 'jq:12' / 'job:3'
+    // 在途的工作單位。成員是每次 spawn 各自一個的 token（'jq:12#7'），不是列 id：
+    // 同一列可能在前一個單位收尾時就被下一輪認領（前一個單位寫回狀態時已放掉租約），
+    // 以列 id 當鍵會讓兩個單位疊成一個，先結束的那個一 delete，inFlight 就少算一個——
+    // tick 以為有空槽而多認領，drain 也會在還有單位在跑時以為已經閒下來（整合階段查到的偶發失敗）。
+    const inFlight = new Set();
+    let spawnSeq = 0;
     let timer = null;
     let ticking = false;
     let dailyWarned = false;
@@ -453,10 +538,15 @@ function createRunner(opts = {}) {
         }
     }
 
-    /** 租約續期：呼叫進行中每 30 秒延一次，避免另一個槽重新認領仍在付費的列。 */
+    /**
+     * 租約續期：呼叫進行中每 30 秒延一次，避免另一個槽重新認領仍在付費的列。
+     * 只延「還鎖著」的列：工作單位寫回狀態時已放掉租約（locked_until = NULL），
+     * 之後才觸發的續期（例如退避睡眠期間）不該把它重新鎖上——那一列會卡到租約過期才有人接手。
+     */
     function startRenew(table, id) {
         const h = setInterval(() => {
-            db.query(`UPDATE ${table} SET locked_until = now() + ($1 || ' milliseconds')::interval WHERE id = $2`,
+            db.query(`UPDATE ${table} SET locked_until = now() + ($1 || ' milliseconds')::interval
+                       WHERE id = $2 AND locked_until IS NOT NULL`,
                 [String(config.leaseMs), id])
                 .catch(err => logger.warn({ msg: '續租失敗', table, id, error: err.message }));
         }, RENEW_INTERVAL_MS);
@@ -566,6 +656,8 @@ function createRunner(opts = {}) {
         // 來源註記（0007）：同路徑沿用；變式 job 沒有註記（不繼承藍本——改寫後不是原卷的題）
         const sourceType = ctx?.job?.source_type ?? 'unknown';
         const sourceDetail = ctx?.job?.source_detail ?? null;
+        // 〔stage5 WS-A〕文字詳解：verify 判定一致且 steps_summary 非空才寫（buildSolutionFields）
+        const solution = buildSolutionFields(input);
         const client = await db.pool.connect();
         try {
             await client.query('BEGIN');
@@ -577,21 +669,36 @@ function createRunner(opts = {}) {
             const { rows } = await client.query(
                 `INSERT INTO questions
                     (subject, chapter, question_type, difficulty, question_text, question_img, answer_text,
-                     origin, chapter_src, variant_of, text_hash, source_type, source_detail, search_tsv)
+                     origin, chapter_src, variant_of, text_hash, source_type, source_detail, search_tsv,
+                     solution_text, solution_src)
                  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
                          setweight(to_tsvector('simple', array_to_string($14::text[], ' ')), 'A')
                       || setweight(to_tsvector('simple', array_to_string($15::text[], ' ')), 'A')
-                      || setweight(to_tsvector('simple', array_to_string($16::text[], ' ')), 'B'))
+                      || setweight(to_tsvector('simple', array_to_string($16::text[], ' ')), 'B'),
+                         $17, $18)
                  RETURNING id`,
                 [v.value.subject, v.value.chapter, v.value.question_type, v.value.difficulty,
                 v.value.question_text, questionImg, v.value.answer_text || '略', origin, chapterSrc, variantOf, textHash,
-                    sourceType, sourceDetail, chapterTokens, keywordTokens, stemTokens]);
+                    sourceType, sourceDetail, chapterTokens, keywordTokens, stemTokens,
+                    solution.solution_text, solution.solution_src]);
 
             const questionId = rows[0].id;
             await client.query('UPDATE job_questions SET question_id = $2 WHERE id = $1', [ctx.jq.id, questionId]);
             await client.query('COMMIT');
 
             scheduleEmbed(questionId, ctx.logger);
+            // 〔stage5 WS-C〕save 成功（已 COMMIT）之後的唯一掛鉤：FEATURE_KC_TAGGING 關閉時完全不呼叫；
+            // 開啟時 fire-and-forget，失敗只記 log，不影響 job 狀態（interfaces-stage5.md 第 4.3 條第 3 點）。
+            // save 是零成本節點、預算用盡仍會跑，標註卻要付錢：該 job 的預算或當日預算用盡就不標。
+            runKcTagHook({
+                questionId, enabled: require('../config/features').FEATURE_KC_TAGGING,
+                tagger: kcTagger, logger: ctx.logger || logger,
+                budgetCheck: async () => {
+                    const jobLeft = ctx?.config?.limits?.budgetLeft;
+                    if (typeof jobLeft === 'number' && jobLeft <= 0) return 'job_budget';
+                    return (await dailySpentUsd()) >= config.dailyCostBudgetUsd ? 'daily_budget' : null;
+                }
+            });
             return {
                 kind: 'pass',
                 data: { question_id: questionId, text_hash: textHash, origin, chapter_src: chapterSrc, ...(variantOf !== null ? { variant_of: variantOf } : {}) }
@@ -696,10 +803,15 @@ function createRunner(opts = {}) {
     // ── 工作單位 B：推進一列 job_questions ────────────────────
     async function runJobQuestion(jqId) {
         const stopRenew = startRenew('job_questions', jqId);
+        // 寫回狀態的那一句 UPDATE 已經順手放掉租約（locked_until = NULL）；從那一刻起這一列
+        // 就可能被下一輪（或另一個 runner）認領。finally 若再無條件清一次，會把**別人剛拿到的**
+        // 租約清掉，同一列於是被兩個單位同時推進（同一節點跑兩次、多一筆事件、多付一次錢）。
+        // 所以只在「還沒寫回就結束」（提早 return 或例外）時才由 finally 放租約。
+        let released = false;
         try {
             const { rows } = await db.query(
                 `SELECT q.id, q.job_id, q.idx, q.state, q.payload, q.retries,
-                        j.kind, j.pdf_sha256, j.source_type, j.source_detail,
+                        j.kind, j.pdf_sha256, j.source_type, j.source_detail, j.subject_group,
                         j.budget_usd::float8 AS budget_usd, j.cost_usd::float8 AS cost_usd
                    FROM job_questions q JOIN jobs j ON j.id = q.job_id
                   WHERE q.id = $1`, [jqId]);
@@ -733,6 +845,7 @@ function createRunner(opts = {}) {
                 await db.query(
                     `UPDATE job_questions SET state = 'needs_review', review_reason = 'awaiting_approval',
                             locked_until = NULL, updated_at = now() WHERE id = $1`, [jq.id]);
+                released = true;
                 logger.info({
                     job_id: jq.job_id, jq_id: jq.id, node: 'save', attempt: attemptNo(jq.retries, 'save'),
                     outcome: 'skipped', latency_ms: 0, state: 'needs_review', review_reason: 'awaiting_approval'
@@ -757,6 +870,8 @@ function createRunner(opts = {}) {
                     job: {
                         id: jq.job_id, kind: jq.kind, pdf_sha256: jq.pdf_sha256 ?? null,
                         source_type: jq.source_type ?? null, source_detail: jq.source_detail ?? null,
+                        // 〔stage5 WS-B〕上傳時的卷別（agents/promptParts.js 的 resolveSubjectGroup 讀它；附加鍵）
+                        subject_group: jq.subject_group ?? 'math_physics',
                         budget_usd: Number(jq.budget_usd), cost_usd: Number(jq.cost_usd)
                     },
                     jq: { id: jq.id, idx: jq.idx, payload: jq.payload, retries: jq.retries },
@@ -797,6 +912,7 @@ function createRunner(opts = {}) {
                 `UPDATE job_questions SET state = $2, retries = $3::jsonb, review_reason = $4,
                         payload = $5::jsonb, locked_until = NULL, updated_at = now() WHERE id = $1`,
                 [jq.id, next.state, JSON.stringify(next.retries), next.review_reason, JSON.stringify(payload)]);
+            released = true;
 
             logger.info({
                 job_id: jq.job_id, jq_id: jq.id, node, attempt: attemptNo(jq.retries, node),
@@ -818,7 +934,9 @@ function createRunner(opts = {}) {
             }
         } finally {
             stopRenew();
-            await db.query('UPDATE job_questions SET locked_until = NULL WHERE id = $1', [jqId]).catch(() => { });
+            if (!released) {
+                await db.query('UPDATE job_questions SET locked_until = NULL WHERE id = $1', [jqId]).catch(() => { });
+            }
         }
     }
 
@@ -846,7 +964,7 @@ function createRunner(opts = {}) {
         const stopRenew = startRenew('jobs', jobId);
         try {
             const { rows } = await db.query(
-                `SELECT id, pdf_path, pdf_sha256, page_count,
+                `SELECT id, pdf_path, pdf_sha256, page_count, subject_group,
                         budget_usd::float8 AS budget_usd, cost_usd::float8 AS cost_usd
                    FROM jobs WHERE id = $1`, [jobId]);
             if (rows.length === 0) return;
@@ -901,6 +1019,8 @@ function createRunner(opts = {}) {
                 db,
                 job: {
                     id: job.id, kind: 'pdf', pdf_sha256: job.pdf_sha256 ?? null,
+                    // 〔stage5 WS-B〕化學卷的 extract 走化學模板與 schema（agents/extract.js 的 VARIANTS）
+                    subject_group: job.subject_group ?? 'math_physics',
                     budget_usd: Number(job.budget_usd), cost_usd: Number(rows[0]?.cost_usd ?? 0)
                 },
                 jq: null, logger, models: loadModels(), limits: { ...DEFAULT_LIMITS, budgetLeft }
@@ -1052,7 +1172,7 @@ function createRunner(opts = {}) {
             const variantService = require('../services/variantService');
 
             const { rows } = await db.query(
-                `SELECT id, source_question_id, budget_usd::float8 AS budget_usd, cost_usd::float8 AS cost_usd
+                `SELECT id, source_question_id, subject_group, budget_usd::float8 AS budget_usd, cost_usd::float8 AS cost_usd
                    FROM jobs WHERE id = $1`, [jobId]);
             if (rows.length === 0) return;
             const job = rows[0];
@@ -1117,6 +1237,8 @@ function createRunner(opts = {}) {
                 db,
                 job: {
                     id: job.id, kind: 'variant', pdf_sha256: null,
+                    // 〔stage5 WS-B〕變式 job 的卷別（建立時依藍本科目寫入；agent 另以藍本科目為準）
+                    subject_group: job.subject_group ?? 'math_physics',
                     budget_usd: Number(job.budget_usd), cost_usd: spent
                 },
                 jq: null, logger, models: loadModels(), limits: { ...DEFAULT_LIMITS, budgetLeft }
@@ -1284,11 +1406,12 @@ function createRunner(opts = {}) {
     }
 
     function spawn(key, fn) {
-        inFlight.add(key);
+        const token = `${key}#${++spawnSeq}`;
+        inFlight.add(token);
         Promise.resolve()
             .then(fn)
             .catch(err => logger.error({ msg: '工作單位異常結束', unit: key, error: err.message, stack: err.stack }))
-            .finally(() => inFlight.delete(key));
+            .finally(() => inFlight.delete(token));
     }
 
     function start() {
@@ -1322,7 +1445,9 @@ module.exports = {
     createRunner, startInlineRunner,
     // 純函式，供單元測試與 report_jobs 共用
     loadConfig, loadStage3Config, loadSourceCheckConfig, planChunks, backoffMs, attemptNo, buildSaveFields, chapterSrcFor, normalizeErrorClass, makeLogger, resolveJobPath,
+    buildSolutionFields,   // 〔stage5 WS-A〕save 與 scripts/backfill_solutions.js 共用
     readFeatures, schemaFallbackOf,
+    runKcTagHook,   // 〔stage5 WS-C〕
     ADVANCEABLE_STATES, FREE_NODES, AGENT_MODULE_FOR_NODE, ERROR_CLASSES, SOURCE_CHECK_MODES,
     RENEW_INTERVAL_MS, BACKOFF_BASE_MS, BACKOFF_MAX_MS, EXTRACT_MAX_RETRIES
 };

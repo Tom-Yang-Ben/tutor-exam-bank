@@ -1,0 +1,107 @@
+{
+  "subject": "數學",
+  "version": 1,
+  "generated_at": "2026-09-24",
+  "source_note": "WS-C 測試用的小型 fixture（只涵蓋兩章；載入時以 chapters 參數限定白名單）。「向量內積」的 4 條 approved 口語版逐字取自 docs/interfaces-stage5.md 第 3.5 條（Owner 已核可）；其餘為自撰草稿。",
+  "components": [
+    {
+      "code": "MATH.向量內積.01",
+      "chapter": "向量內積",
+      "sort": 1,
+      "name": "內積的意義",
+      "curriculum_code": null,
+      "description": "兩向量的內積定義為兩向量長度與其夾角餘弦的乘積，結果為純量。",
+      "spoken_text": "內積就是兩個長度相乘，再乘上夾角的 cos：a·b 等於 |a| 乘 |b| 乘 cosθ。題目給你長度和夾角、要你算內積，就直接套這條。記得算出來是一個數字，不是向量。",
+      "status": "draft",
+      "prereqs": ["MATH.向量的加減與係數積.01"]
+    },
+    {
+      "code": "MATH.向量內積.02",
+      "chapter": "向量內積",
+      "sort": 2,
+      "name": "內積的坐標算法",
+      "curriculum_code": null,
+      "description": "已知兩向量坐標時，內積等於對應分量乘積的和。",
+      "spoken_text": "有坐標就不用管角度：x 跟 x 乘、y 跟 y 乘，全部加起來。三維就多加一個 z 乘 z。記得算出來是一個數字，不是向量。",
+      "status": "approved",
+      "prereqs": ["MATH.向量的加減與係數積.01"]
+    },
+    {
+      "code": "MATH.向量內積.03",
+      "chapter": "向量內積",
+      "sort": 3,
+      "name": "夾角與垂直",
+      "curriculum_code": null,
+      "description": "由內積與長度求兩向量夾角的餘弦；兩非零向量垂直若且唯若其內積為零。",
+      "spoken_text": "要算夾角，就把內積除以兩個長度的乘積，得到 cosθ 再找角度。兩個非零向量垂直，內積一定是 0；反過來內積是 0 也代表垂直。最常錯的是忘了先確認兩個都不是零向量。",
+      "status": "draft",
+      "prereqs": ["MATH.向量內積.01"]
+    },
+    {
+      "code": "MATH.向量內積.04",
+      "chapter": "向量內積",
+      "sort": 4,
+      "name": "正射影",
+      "curriculum_code": null,
+      "description": "向量 a 在向量 b 方向上的正射影長度為內積除以 b 的長度；正射影向量為該長度乘以 b 方向的單位向量。",
+      "spoken_text": "正射影就是正中午的影子，太陽從正上方照下來，a 落在 b 那條線上的影子。影子長度是內積除以 b 的長度；題目要的如果是影子「這個向量」，就再乘上 b 方向的單位向量。",
+      "status": "approved",
+      "prereqs": ["MATH.向量內積.01"]
+    },
+    {
+      "code": "MATH.向量內積.05",
+      "chapter": "向量內積",
+      "sort": 5,
+      "name": "長度平方與展開",
+      "curriculum_code": null,
+      "description": "向量與自身的內積等於其長度平方；向量和的長度平方可依內積的分配律展開。",
+      "spoken_text": "向量跟自己內積，就是長度的平方。看到 |a+b| 就先平方，再像 (a+b)² 那樣展開，中間那項換成 2a·b。千萬別直接寫成 |a|+|b|。",
+      "status": "approved",
+      "prereqs": ["MATH.向量內積.01"]
+    },
+    {
+      "code": "MATH.向量內積.06",
+      "chapter": "向量內積",
+      "sort": 6,
+      "name": "柯西不等式",
+      "curriculum_code": null,
+      "description": "兩向量內積的絕對值不大於兩向量長度的乘積，等號成立於兩向量平行時；可用於求一次式在平方和固定下的極值。",
+      "spoken_text": "內積再大也大不過兩個長度直接相乘，因為 cosθ 最大就是 1。所以題目給你「平方和固定，求一次式最大值」，就把它看成兩個向量的內積，柯西一步到位。",
+      "status": "approved",
+      "prereqs": ["MATH.向量內積.01"]
+    },
+    {
+      "code": "MATH.向量的加減與係數積.01",
+      "chapter": "向量的加減與係數積",
+      "sort": 1,
+      "name": "向量的加法與減法",
+      "curriculum_code": null,
+      "description": "向量加法依首尾相接或平行四邊形法則；以坐標表示時為對應分量相加減。",
+      "spoken_text": "兩個向量相加，就是頭接尾接起來，從第一個的起點走到最後一個的終點；用坐標算就是對應分量相加。減法 a−b 是從 b 的終點指向 a 的終點，方向千萬別畫反。",
+      "status": "draft",
+      "prereqs": []
+    },
+    {
+      "code": "MATH.向量的加減與係數積.02",
+      "chapter": "向量的加減與係數積",
+      "sort": 2,
+      "name": "向量的係數積",
+      "curriculum_code": null,
+      "description": "實數 k 乘以向量，長度變為原來的 |k| 倍，k 為正時方向不變、為負時方向相反。",
+      "spoken_text": "向量乘上一個數字 k，方向不變或剛好相反，長度變成 |k| 倍。k 是負的就把方向反過來。用坐標算，就是每個分量都乘上 k。最常錯的是忘了負號會讓方向反轉。",
+      "status": "draft",
+      "prereqs": []
+    },
+    {
+      "code": "MATH.向量的加減與係數積.03",
+      "chapter": "向量的加減與係數積",
+      "sort": 3,
+      "name": "向量的線性組合",
+      "curriculum_code": null,
+      "description": "平面上任一向量可唯一表示為兩個不平行向量的線性組合。",
+      "spoken_text": "平面上任兩個不平行的向量，可以組合出任何向量：x 倍的 a 加上 y 倍的 b。題目要你找 x、y，就把坐標代進去，列出兩條方程式聯立解。記得兩個向量不能平行。",
+      "status": "draft",
+      "prereqs": ["MATH.向量的加減與係數積.01", "MATH.向量的加減與係數積.02"]
+    }
+  ]
+}

@@ -12,7 +12,7 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { CHAPTERS, isValidChapter } = require('../../config/chapters');
+const { CHAPTERS, LEGACY_CHAPTERS, isValidChapter } = require('../../config/chapters');
 const aliases = require('../../config/chapterAliases');
 
 describe('config/chapterAliases.js（第 6.2 條）', () => {
@@ -61,7 +61,12 @@ describe('config/chapterAliases.js（第 6.2 條）', () => {
     test('66 個章節一個都沒漏', () => {
         const declared = Object.keys(aliases.ALIASES_BY_CHAPTER);
         const whitelist = Object.values(CHAPTERS).flat();
-        assert.equal(whitelist.length, 66);
+        // 〔stage5 WS-B〕DEC-019 把化學 44 章併入白名單（docs/interfaces-stage5.md 第 3.2 條），
+        // 總數由 66 變 110；數學＋物理的 66 章另外逐章釘住（LEGACY_CHAPTERS），一個都不能少。
+        assert.equal(LEGACY_CHAPTERS.length, 66);
+        assert.equal(CHAPTERS['化學'].length, 44);
+        assert.equal(whitelist.length, 66 + 44);
+        for (const chapter of LEGACY_CHAPTERS) assert.ok(declared.includes(chapter), `數學／物理的「${chapter}」沒有別名`);
         assert.deepEqual([...declared].sort(), [...whitelist].sort());
     });
 

@@ -36,7 +36,12 @@ const INJECTIONS = [
     // 那條路由沒掛載時按鈕得跟著關，否則老師只會拿到 404。
     ['__FEATURE_SIMILAR__', 'FEATURE_SIMILAR'],
     // 階段 4 A1：對話式助教（第七個注入點）
-    ['__FEATURE_ASSISTANT__', 'FEATURE_ASSISTANT']
+    ['__FEATURE_ASSISTANT__', 'FEATURE_ASSISTANT'],
+    // 階段 5（interfaces-stage5.md 第 1.3 條）
+    ['__FEATURE_KC__', 'FEATURE_KC'],
+    ['__FEATURE_REMEDIAL__', 'FEATURE_REMEDIAL'],
+    ['__FEATURE_TUTOR__', 'FEATURE_TUTOR'],
+    ['__FEATURE_VOICE__', 'FEATURE_VOICE']
 ];
 
 describe('app.js 的 serveIndex — 階段 3 的四個 replaceAll（第 7.3 條 + S3-R25）', () => {

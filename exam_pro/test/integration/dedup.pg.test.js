@@ -220,6 +220,42 @@ describe('dedup L0 — 對真 questions.text_hash 與 job_questions', { skip }, 
         assert.equal(out.data.hit.question_id, idOf.archived);
     });
 
+    // 〔stage5 審查修正 S5-44〕選錯卷別 → 封存錯科的題 → 換卷別重傳同一份 PDF
+    test('封存的題若是同一份 PDF、另一個卷別的任務拆出來的 → 不算重複（重傳更正）；其餘情況照舊', async () => {
+        const sha = 'c'.repeat(64);
+        const text = '自編重傳測試題：$0.5$ mol 的水含有多少個水分子？';
+        const { rows: [q] } = await pool.query(
+            `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text, origin, chapter_src, text_hash)
+             VALUES ('物理', '功與動能', '計算', 2, $1, '略', 'pdf', 'ai', $2) RETURNING id`, [text, textHash(text)]);
+        const { rows: [wrongJob] } = await pool.query(
+            `INSERT INTO jobs (kind, pdf_sha256, page_count, state, budget_usd, subject_group)
+             VALUES ('pdf', $1, 1, 'done', 0.5, 'math_physics') RETURNING id`, [sha]);
+        await pool.query(
+            `INSERT INTO job_questions (job_id, idx, state, payload, question_id) VALUES ($1, 1, 'saved', '{}'::jsonb, $2)`,
+            [wrongJob.id, q.id]);
+        const chemCtx = makeCtx({ job: { id: jobId, pdf_sha256: sha, subject_group: 'chemistry', budget_usd: 0.5, cost_usd: 0 } });
+
+        // 錯科的題還在庫：照舊判重複（部分唯一索引也不允許兩題同時在庫）
+        let out = await dedupAgent.runDedup0(chemCtx, { question_text: text });
+        assert.equal(out.kind, 'fail');
+        assert.equal(out.data.hit.question_id, q.id);
+
+        await pool.query('UPDATE questions SET archived_at = now() WHERE id = $1', [q.id]);
+        out = await dedupAgent.runDedup0(chemCtx, { question_text: text });
+        assert.equal(out.kind, 'pass', JSON.stringify(out));
+
+        // 同卷別（?force=1 重跑）、別份 PDF、沒有 job 資訊：已封存的題仍然算重複
+        for (const job of [
+            { id: jobId, pdf_sha256: sha, subject_group: 'math_physics' },
+            { id: jobId, pdf_sha256: 'd'.repeat(64), subject_group: 'chemistry' },
+            { id: jobId }
+        ]) {
+            const r = await dedupAgent.runDedup0(makeCtx({ job: { budget_usd: 0.5, cost_usd: 0, ...job } }), { question_text: text });
+            assert.equal(r.kind, 'fail', JSON.stringify(job));
+            assert.equal(r.data.hit.question_id, q.id);
+        }
+    });
+
     test('撞到同一份任務中 idx 較小的題 → scope=job', async () => {
         const out = await dedupAgent.runDedup0(makeCtx(), {
             question_text: '同一份考卷裡重複印了兩次的題目：求 $2+2$ 之值。',

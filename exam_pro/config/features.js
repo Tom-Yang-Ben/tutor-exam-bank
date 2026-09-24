@@ -52,5 +52,11 @@ module.exports = {
     // ── 階段 4 A1（docs/roadmap-plan.md §6.5 → 已執行）──
     // 對話式助教：主控 LLM 用受限 JSON 調度五個只讀工具。同樣是「路由掛不掛載 +
     // 前端分頁渲不渲染」的開關，預設關（會呼叫 LLM＝會花錢，CI 也不開）。
-    get FEATURE_ASSISTANT() { return isEnabled('FEATURE_ASSISTANT'); }
+    get FEATURE_ASSISTANT() { return isEnabled('FEATURE_ASSISTANT'); },
+    // 階段 5（docs/interfaces-stage5.md 第 1.3 條）：預設全關，與既有旗標同一種讀法
+    get FEATURE_KC() { return isEnabled('FEATURE_KC'); },                   // 知識點分頁與 API（WS-C）
+    get FEATURE_KC_TAGGING() { return isEnabled('FEATURE_KC_TAGGING'); },   // 入庫後自動標知識點（WS-C；會呼叫 LLM）
+    get FEATURE_REMEDIAL() { return isEnabled('FEATURE_REMEDIAL'); },       // 依弱點出補救卷與題庫覆蓋率（WS-D）
+    get FEATURE_TUTOR() { return isEnabled('FEATURE_TUTOR'); },             // AI 家教（WS-E）
+    get FEATURE_VOICE() { return isEnabled('FEATURE_VOICE'); }              // 按住說話（WS-E；需 FEATURE_TUTOR）
 };

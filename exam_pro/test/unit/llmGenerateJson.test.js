@@ -393,3 +393,41 @@ describe('LLM_MODE 的解讀', () => {
         assert.equal(llm.llmMode(), 'replay');
     });
 });
+
+// ───────────────────────── 〔stage5 審查修正 S5-45〕解析失敗也帶用量 ─────────────────────────
+
+describe('gemini.generateJson：模型已回應但 JSON 解析失敗', () => {
+    const gemini = require('../../services/llm/gemini');
+    after(() => gemini._setClientForTest(null));
+
+    test('截斷的 JSON／空字串 → 丟 schema_invalid，err.usage 帶這次的用量（呼叫端據此記帳）', async () => {
+        for (const text of ['{"text":"x 平方減五 x', '', 'not json']) {
+            gemini._setClientForTest({
+                models: {
+                    async generateContent() {
+                        return {
+                            text,
+                            candidates: [{ finishReason: text ? 'MAX_TOKENS' : 'SAFETY' }],
+                            usageMetadata: { promptTokenCount: 40000, candidatesTokenCount: 3072, thoughtsTokenCount: 1024 }
+                        };
+                    }
+                }
+            });
+            await assert.rejects(() => gemini.generateJson({ model: 'gemini-3.5-flash', parts: [{ text: 'x' }] }), (err) => {
+                assert.equal(err.errorClass, 'schema_invalid');
+                assert.deepEqual(err.usage, { tokenIn: 40000, tokenOut: 3072, tokenThinking: 1024, tokenCached: 0 });
+                assert.equal(err.finishReason, text ? 'MAX_TOKENS' : 'SAFETY');
+                return true;
+            }, JSON.stringify(text));
+        }
+    });
+
+    test('成功時 usage 的形狀不變', async () => {
+        gemini._setClientForTest({
+            models: { async generateContent() { return { text: '{"a":1}', usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 2 } }; } }
+        });
+        const res = await gemini.generateJson({ model: 'gemini-3.5-flash', parts: [{ text: 'x' }] });
+        assert.deepEqual(res.data, { a: 1 });
+        assert.deepEqual(res.usage, { tokenIn: 5, tokenOut: 2, tokenThinking: 0, tokenCached: 0 });
+    });
+});

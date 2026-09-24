@@ -68,10 +68,21 @@ async function runDedup0(ctx, input) {
     const base = { text_hash: hash, normalized_len: normalizedLen };
 
     try {
-        // ① 庫內：已封存的題也算——「新拆的這題和一年前封存的那題是同一題」仍然是重複
+        // ① 庫內：已封存的題也算——「新拆的這題和一年前封存的那題是同一題」仍然是重複。
+        //    〔stage5 審查修正 S5-44〕唯一的例外是「選錯卷別後的重傳」：命中的題已封存，而且它是
+        //    **同一份 PDF（pdf_sha256 相同）、另一個卷別**的任務拆出來的。那是老師發現卷別選錯、把錯科的
+        //    題封存後換卷別重傳（裁決 S5-12），新任務的這一題正是要取代它，不算重複。
+        //    沒封存就照舊判重複（0005 的部分唯一索引也不允許兩題同時在庫）。
+        const job = ctx.job || {};
         const dbHit = await ctx.db.query(
-            'SELECT id FROM questions WHERE text_hash = $1 ORDER BY id LIMIT 1',
-            [hash]
+            `SELECT q.id FROM questions q
+              WHERE q.text_hash = $1
+                AND NOT (q.archived_at IS NOT NULL AND $2::text IS NOT NULL AND EXISTS (
+                        SELECT 1 FROM jobs j JOIN job_questions jq ON jq.job_id = j.id
+                         WHERE jq.question_id = q.id AND j.pdf_sha256 = $2
+                           AND j.subject_group IS DISTINCT FROM $3))
+              ORDER BY q.id LIMIT 1`,
+            [hash, job.pdf_sha256 ?? null, job.subject_group ?? 'math_physics']
         );
         if (dbHit.rows.length) {
             return {
