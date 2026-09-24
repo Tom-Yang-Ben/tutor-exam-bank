@@ -1,0 +1,248 @@
+{
+  "_notice": "本檔題幹全部由本專案作者自行編寫（階段 5 WS-B，AI 草擬），不取自任何考卷、題本或出版社教材（見 repo 根目錄 NOTICE 第 2 條）。",
+  "_status": "draft 2026-09-24 — AI 草擬 24 筆（化學六冊各 3–5 筆），needs_human_confirm 全部為 true，待 Owner 逐筆定案；章節表本身也是 AI 草擬（docs/interfaces-stage5.md 第 3.3 條）。",
+  "_schema": "entries[]：\n  id                  string，唯一；chem-cls-NNN\n  question_text       string，非空；送進 classify 的題幹（化學式用 $\\ce{…}$）\n  subject             一律 '化學'\n  chapter             正解章節，必須過 isValidChapter('化學', chapter)\n  source              一律 'authored'（本檔沒有 fixture 題可沿用）\n  decoy_chapter       string|null；最可能被誤判成的章節（多半是同冊或相鄰概念的章）\n  note                string|null\n  needs_human_confirm boolean；true = 尚未人工定案\n\n用法：npm run eval:classify-chem（沒有 cassette 時印出「尚未錄製，略過」並 exit 0；錄製方式見 docs/chemistry.md）",
+  "version": 1,
+  "entries": [
+    {
+      "id": "chem-cls-001",
+      "question_text": "某混合物含有食鹽、細沙和碘。老師先加熱使碘昇華並收集，再加水溶解剩下的固體後過濾，最後蒸乾濾液。說明每一步分離所依據的物理性質差異。",
+      "subject": "化學",
+      "chapter": "物質的分類與分離",
+      "source": "authored",
+      "decoy_chapter": "溶解度",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-002",
+      "question_text": "已知 $\\ce{CO2}$ 的分子量為 $44$，求 $11$ 克二氧化碳中含有多少個氧原子？（亞佛加厥數以 $6.0\\times10^{23}$ 計）",
+      "subject": "化學",
+      "chapter": "原子量與莫耳",
+      "source": "authored",
+      "decoy_chapter": "化學計量",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-003",
+      "question_text": "依反應式 $\\ce{CaCO3 -> CaO + CO2}$，完全分解 $25$ 克碳酸鈣，可得到多少克氧化鈣？（原子量 Ca = 40、C = 12、O = 16）",
+      "subject": "化學",
+      "chapter": "化學計量",
+      "source": "authored",
+      "decoy_chapter": "限量試劑與產率",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-004",
+      "question_text": "以 $0.20\\ \\mathrm{M}$ 的氫氧化鈉溶液中和 $25.0$ 毫升未知濃度的鹽酸，恰好用去 $20.0$ 毫升，求鹽酸的體積莫耳濃度。",
+      "subject": "化學",
+      "chapter": "酸鹼反應",
+      "source": "authored",
+      "decoy_chapter": "酸鹼滴定",
+      "note": "必修的酸鹼中和計算；與選修三的滴定曲線題區分。",
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-005",
+      "question_text": "在反應 $\\ce{2Mg + O2 -> 2MgO}$ 中，哪一個物質被氧化？哪一個物質是氧化劑？說明判斷依據。",
+      "subject": "化學",
+      "chapter": "氧化還原反應",
+      "source": "authored",
+      "decoy_chapter": "氧化數與氧化還原滴定",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-006",
+      "question_text": "將 $4.0$ 克氫氣與 $16$ 克氧氣混合點燃，何者為限量試劑？理論上可生成多少克水？若實際只得到 $13.5$ 克水，產率為多少？",
+      "subject": "化學",
+      "chapter": "限量試劑與產率",
+      "source": "authored",
+      "decoy_chapter": "化學計量",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-007",
+      "question_text": "已知 $\\ce{C(s) + O2(g) -> CO2(g)}$ 與 $\\ce{CO(g) + 1/2O2(g) -> CO2(g)}$ 的反應熱，利用兩式相減，求 $\\ce{C(s) + 1/2O2(g) -> CO(g)}$ 的反應熱。",
+      "subject": "化學",
+      "chapter": "反應熱與赫斯定律",
+      "source": "authored",
+      "decoy_chapter": "化學反應中的能量變化",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-008",
+      "question_text": "一個容器內含 $0.30$ 莫耳氮氣與 $0.10$ 莫耳氧氣，總壓為 $1.2$ 大氣壓，求氧氣的分壓。",
+      "subject": "化學",
+      "chapter": "氣體分壓",
+      "source": "authored",
+      "decoy_chapter": "氣體性質與理想氣體",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-009",
+      "question_text": "將 $18$ 克葡萄糖（分子量 $180$）溶於 $500$ 克水中，已知水的凝固點下降常數為 $1.86\\ ^\\circ\\mathrm{C}\\cdot\\mathrm{kg/mol}$，求此溶液的凝固點。",
+      "subject": "化學",
+      "chapter": "溶液的依數性質",
+      "source": "authored",
+      "decoy_chapter": "溶液的種類與濃度",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-010",
+      "question_text": "寫出原子序 $24$ 的鉻原子的基態電子組態，並說明它與依照能階高低順序填入所預期的結果有何不同。",
+      "subject": "化學",
+      "chapter": "原子軌域與電子組態",
+      "source": "authored",
+      "decoy_chapter": "元素性質的週期性",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-011",
+      "question_text": "判斷 $\\ce{BF3}$ 中心原子硼的混成軌域與分子形狀，並估計鍵角大小。",
+      "subject": "化學",
+      "chapter": "化學鍵結與混成軌域",
+      "source": "authored",
+      "decoy_chapter": "分子極性與分子間作用力",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-012",
+      "question_text": "某反應 $\\ce{A + 2B -> C}$ 的初速率實驗顯示：[A] 加倍時初速率變為 2 倍，[B] 加倍時初速率變為 4 倍。寫出速率定律式，並求總反應級數。",
+      "subject": "化學",
+      "chapter": "反應速率定律",
+      "source": "authored",
+      "decoy_chapter": "碰撞學說與催化",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-013",
+      "question_text": "說明溫度升高 $10$ 度常使反應速率大幅增加的原因，並以分子動能分布曲線解釋有效碰撞所占比例的變化。",
+      "subject": "化學",
+      "chapter": "碰撞學說與催化",
+      "source": "authored",
+      "decoy_chapter": "反應速率定律",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-014",
+      "question_text": "某溫度下 $\\ce{H2(g) + I2(g) <=> 2HI(g)}$ 的 $K_c = 49$。若起始只將 $1.0$ 莫耳 $\\ce{H2}$ 與 $1.0$ 莫耳 $\\ce{I2}$ 放入 $1.0$ 升容器，求平衡時 $\\ce{HI}$ 的濃度。",
+      "subject": "化學",
+      "chapter": "化學平衡與平衡常數",
+      "source": "authored",
+      "decoy_chapter": "勒沙特列原理",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-015",
+      "question_text": "工業上以放熱反應 $\\ce{N2 + 3H2 <=> 2NH3}$ 製造氨，說明為何要在高壓下進行，以及升高溫度對氨的平衡產率有何影響。",
+      "subject": "化學",
+      "chapter": "勒沙特列原理",
+      "source": "authored",
+      "decoy_chapter": "化學平衡與平衡常數",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-016",
+      "question_text": "已知 $\\ce{PbI2}$ 的溶度積常數，判斷將等體積的 $0.010\\ \\mathrm{M}$ 硝酸鉛與 $0.010\\ \\mathrm{M}$ 碘化鉀溶液混合時是否會產生沉澱。",
+      "subject": "化學",
+      "chapter": "溶解平衡與溶度積",
+      "source": "authored",
+      "decoy_chapter": "溶解度",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-017",
+      "question_text": "以 $0.10\\ \\mathrm{M}$ 氫氧化鈉滴定 $0.10\\ \\mathrm{M}$ 醋酸溶液，畫出滴定曲線的大致形狀，並說明當量點的 pH 為何大於 7、應選用哪一種指示劑。",
+      "subject": "化學",
+      "chapter": "酸鹼滴定",
+      "source": "authored",
+      "decoy_chapter": "緩衝溶液",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-018",
+      "question_text": "在酸性溶液中以 $0.020\\ \\mathrm{M}$ 過錳酸鉀滴定 $25.0$ 毫升草酸溶液，用去 $20.0$ 毫升達到終點，求草酸溶液的濃度。",
+      "subject": "化學",
+      "chapter": "氧化數與氧化還原滴定",
+      "source": "authored",
+      "decoy_chapter": "酸鹼滴定",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-019",
+      "question_text": "將鋅片浸在硫酸鋅溶液、銅片浸在硫酸銅溶液，以鹽橋連接組成電池。指出正負極與電子流動方向，並由標準還原電位計算電池電壓。",
+      "subject": "化學",
+      "chapter": "電化電池",
+      "source": "authored",
+      "decoy_chapter": "電解與電鍍",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-020",
+      "question_text": "以 $2.0$ 安培的電流電解硫酸銅水溶液 $965$ 秒，陰極可析出多少克銅？（法拉第常數以 $96500$ 庫侖計）",
+      "subject": "化學",
+      "chapter": "電解與電鍍",
+      "source": "authored",
+      "decoy_chapter": "電化電池",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-021",
+      "question_text": "某有機物只含碳、氫、氧，燃燒分析得到各元素的質量百分組成，求其實驗式；若已知分子量為 $60$，再求出分子式。",
+      "subject": "化學",
+      "chapter": "有機化合物的組成與結構",
+      "source": "authored",
+      "decoy_chapter": "化學式與化學反應式",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-022",
+      "question_text": "丙醛與丙酮互為同分異構物，用哪一種試劑可以區分兩者？寫出各自觀察到的現象。",
+      "subject": "化學",
+      "chapter": "醛與酮",
+      "source": "authored",
+      "decoy_chapter": "有機化合物的組成與結構",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-023",
+      "question_text": "乙酸與乙醇在濃硫酸存在下加熱，生成具有水果香味的產物。寫出這個反應的化學反應式並命名產物。",
+      "subject": "化學",
+      "chapter": "羧酸與酯",
+      "source": "authored",
+      "decoy_chapter": "醇、酚、醚",
+      "note": null,
+      "needs_human_confirm": true
+    },
+    {
+      "id": "chem-cls-024",
+      "question_text": "耐綸 66 由己二胺與己二酸反應而成，說明這屬於加成聚合還是縮合聚合，並指出鏈與鏈之間連結的官能基。",
+      "subject": "化學",
+      "chapter": "聚合物",
+      "source": "authored",
+      "decoy_chapter": "胺與醯胺",
+      "note": null,
+      "needs_human_confirm": true
+    }
+  ]
+}

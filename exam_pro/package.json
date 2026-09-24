@@ -19,6 +19,7 @@
     "eval:pipeline": "npm run eval -- --suite pipeline",
     "eval:nlq": "npm run eval -- --suite nlq",
     "eval:variant": "npm run eval -- --suite variant",
+    "eval:classify-chem": "node --env-file=eval/.env.replay eval/classify_chem.js",
     "eval:golden": "node eval/tools/suggest_golden.js",
     "eval:record": "node eval/record_embeddings.js",
     "eval:sample-pdf": "node eval/fixtures/make_sample_pdf.js",
