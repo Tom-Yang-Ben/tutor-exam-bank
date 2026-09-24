@@ -180,6 +180,96 @@ function runSuite() {
             assert.equal((await row('MATH.向量的加減與係數積.02')).name, '向量的加法與減法');
         });
 
+        test('新名稱撞到種子檔已沒有的舊列 → 整批回滾，error 指出是哪兩個知識點（不是裸的 23505）', async () => {
+            await load([readSeed('數學')]);
+            const seed = readSeed('數學');
+            const old03 = component(seed, 'MATH.向量內積.03');
+            seed.components = seed.components.filter(c => c.code !== 'MATH.向量內積.03');
+            seed.components.push({ ...old03, code: 'MATH.向量內積.07', sort: 7 });   // 換了 code、沿用舊名
+            const before = await count('knowledge_components');
+
+            const r = await load([seed]);
+            assert.equal(r.ok, false);
+            assert.equal(r.errors.length, 1);
+            const e = r.errors[0];
+            assert.ok(!/duplicate key/.test(e), e);
+            assert.ok(e.includes('MATH.向量內積.07') && e.includes('MATH.向量內積.03') && e.includes('夾角與垂直'), e);
+            assert.ok(e.includes('已不在這次的種子檔中'), e);
+            assert.equal(await count('knowledge_components'), before);
+            assert.equal(await row('MATH.向量內積.07'), undefined);
+        });
+
+        test('新名稱撞到已審定受保護的列 → 整批回滾，error 提示 --force；--force 之後就載得進去', async () => {
+            await load([readSeed('數學')]);
+            // Owner 在畫面上把 .03 改名並審定；種子檔（仍是舊名）又把草稿 .01 改成同一個名字
+            await query(`UPDATE knowledge_components SET name = '老師改過的名字', status = 'approved' WHERE code = 'MATH.向量內積.03'`);
+            const seed = readSeed('數學');
+            component(seed, 'MATH.向量內積.01').name = '老師改過的名字';
+
+            const r = await load([seed]);
+            assert.equal(r.ok, false);
+            const e = r.errors[0];
+            assert.ok(e.includes('MATH.向量內積.01') && e.includes('MATH.向量內積.03'), e);
+            assert.ok(e.includes('已審定') && e.includes('--force'), e);
+            assert.equal((await row('MATH.向量內積.03')).name, '老師改過的名字');
+            assert.equal((await row('MATH.向量內積.01')).name, '內積的意義', '整批回滾');
+
+            const forced = await load([seed], { force: true });
+            assert.equal(forced.ok, true, forced.errors.join('\n'));
+            assert.equal((await row('MATH.向量內積.01')).name, '老師改過的名字');
+            assert.equal((await row('MATH.向量內積.03')).name, '夾角與垂直');
+        });
+
+        test('載入途中老師按「審定通過」：載入已鎖住該列，PATCH 要等載入結束（剛審定的不會被當草稿覆寫）', async () => {
+            await load([readSeed('數學')]);
+            const seed = readSeed('數學');
+            component(seed, 'MATH.向量內積.01').description = '種子檔的新說明。';
+            const { id } = await row('MATH.向量內積.01');
+
+            // 包一層 pool：載入交易讀完現有列（載入計畫已定）的那一刻，另一條連線試著審定同一列。
+            // 有鎖 → 那條連線等不到鎖（lock_timeout → 55P03）；沒鎖 → PATCH 先生效，再被載入蓋成草稿。
+            let probe = null;
+            const wrapped = {
+                query,
+                pool: {
+                    async connect() {
+                        const client = await pool.connect();
+                        return {
+                            release: (...a) => client.release(...a),
+                            async query(text, values) {
+                                const res = await client.query(text, values);
+                                if (probe === null && /curriculum_code[\s\S]*FROM knowledge_components WHERE code = ANY/.test(text)) {
+                                    const other = await pool.connect();
+                                    try {
+                                        await other.query("SET lock_timeout = '300ms'");
+                                        await kc.patchKc({ query: (t, v) => other.query(t, v) }, id, { status: 'approved' });
+                                        probe = 'patched';
+                                    } catch (err) {
+                                        probe = err.code || err.message;
+                                    } finally {
+                                        await other.query('RESET lock_timeout').catch(() => { });
+                                        other.release();
+                                    }
+                                }
+                                return res;
+                            }
+                        };
+                    }
+                }
+            };
+            const r = await kc.loadSeeds(wrapped, [seed], { chapters: CH });
+            assert.equal(r.ok, true, r.errors.join('\n'));
+            assert.equal(probe, '55P03', `載入交易讀現有列時沒有上鎖（probe=${probe}）`);
+            assert.equal((await row('MATH.向量內積.01')).description, '種子檔的新說明。');
+
+            // 載入結束後，老師再按一次就審定成功，而且再載入一次也不會被覆寫
+            const after = await kc.patchKc(db, id, { status: 'approved' });
+            assert.equal(after.status, 200);
+            const again = await load([seed]);
+            assert.equal(again.ok, true);
+            assert.equal((await row('MATH.向量內積.01')).status, 'approved');
+        });
+
         test('DB 有、種子檔沒有的知識點：不刪，只回報 orphans', async () => {
             await load([readSeed('數學')]);
             const seed = readSeed('數學');

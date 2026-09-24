@@ -438,6 +438,13 @@ async function replaceQuestionKcs(db, questionId, items) {
  *   4. 寫完之後對 DB 全部先備關係再做一次環檢查（單檔載入時，跨科的環只有這裡看得到）。
  *   5. dryRun：以上全部照做，最後 ROLLBACK——數字與真的載入完全相同。
  *
+ * 併發：讀現有列時 `FOR UPDATE`（依 id 排序上鎖）。載入計畫（更新／受保護）是依這份快照決定的，
+ * 若不鎖，老師在載入途中按「審定通過」（PATCH），剛審定的內容會被當成草稿覆寫掉；鎖住之後
+ * PATCH 會排隊到載入結束才生效。
+ * 撞名：新名稱與「這次不會改到的列」（已審定受保護的列，或種子檔已沒有的舊列）同章同名時，
+ * UNIQUE (subject, chapter, name) 會擋下；這裡把 PG 的 23505 翻成指出是哪一個知識點、撞到誰的
+ * error，整批回滾（不再只丟出一行看不懂的 duplicate key）。
+ *
  * @param {{pool:{connect:Function}}} db
  * @param {object[]} seeds 已 JSON.parse 的種子檔
  * @param {{force?:boolean, dryRun?:boolean, chapters?:Record<string,string[]>}} [opts]
@@ -465,7 +472,8 @@ async function loadSeeds(db, seeds, opts = {}) {
 
         const { rows: existing } = await client.query(
             `SELECT id, code, name, curriculum_code, description, spoken_text, status, sort
-               FROM knowledge_components WHERE code = ANY($1::text[])`, [codes]);
+               FROM knowledge_components WHERE code = ANY($1::text[])
+              ORDER BY id FOR UPDATE`, [codes]);
         const dbByCode = new Map(existing.map(r => [r.code, r]));
         const idByCode = new Map(existing.map(r => [r.code, r.id]));
         const protectedCodes = new Set();
@@ -488,7 +496,8 @@ async function loadSeeds(db, seeds, opts = {}) {
                         SET name = $2, curriculum_code = $3, description = $4, spoken_text = $5,
                             status = $6, sort = $7, updated_at = now()
                       WHERE id = $1`,
-                    [idByCode.get(s.code), s.name, s.curriculum_code, s.description, s.spoken_text, s.status, s.sort]);
+                    [idByCode.get(s.code), s.name, s.curriculum_code, s.description, s.spoken_text, s.status, s.sort])
+                    .catch(tagSeedRow(s));
                 counts.updated++;
             } else if (p.plan === 'unchanged') {
                 counts.unchanged++;
@@ -505,7 +514,8 @@ async function loadSeeds(db, seeds, opts = {}) {
                 `INSERT INTO knowledge_components
                     (code, subject, chapter, name, curriculum_code, description, spoken_text, status, sort)
                  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
-                [s.code, s.subject, s.chapter, s.name, s.curriculum_code, s.description, s.spoken_text, s.status, s.sort]);
+                [s.code, s.subject, s.chapter, s.name, s.curriculum_code, s.description, s.spoken_text, s.status, s.sort])
+                .catch(tagSeedRow(s));
             idByCode.set(s.code, ins.id);
             counts.inserted++;
         }
@@ -563,11 +573,63 @@ async function loadSeeds(db, seeds, opts = {}) {
         await client.query(dryRun ? 'ROLLBACK' : 'COMMIT');
     } catch (err) {
         await client.query('ROLLBACK').catch(() => { });
+        if (err && err.code === '23505' && err.kcSeedRow) {
+            return fail([await describeUniqueConflict(client, err.kcSeedRow, err, { force, codes })]);
+        }
         throw err;
     } finally {
         client.release();
     }
     return { ok: true, errors: [], warnings, stats, counts };
+}
+
+/** 寫入知識點失敗時，把「正在寫哪一列」掛在例外上，讓 loadSeeds 的 catch 能指名道姓（原例外照樣往上丟） */
+function tagSeedRow(seedRow) {
+    return (err) => {
+        if (err && typeof err === 'object') err.kcSeedRow = seedRow;
+        throw err;
+    };
+}
+
+/**
+ * 23505 → 給老師看的一句話（loadSeeds 已 ROLLBACK 之後呼叫）。
+ *
+ * 回滾之後 DB 回到載入前的樣子，而撞到的那一列一定是「這次沒有要改的列」（受保護的已審定列，
+ * 或種子檔已沒有的舊列——同一份種子檔內同章不會同名，validateSeeds 擋過了），所以回滾後
+ * 還查得到它是誰。查詢本身失敗就退回不指名的版本，不讓錯誤訊息把原本的錯蓋掉。
+ *
+ * @param {{query:Function}} client
+ * @param {object} s seedRowOf() 的輸出（撞名的那一列）
+ * @param {Error & {constraint?:string}} err
+ * @param {{force:boolean, codes:string[]}} ctx
+ * @returns {Promise<string>}
+ */
+async function describeUniqueConflict(client, s, err, { force, codes }) {
+    const where = `${s.code}（${s.subject}／${s.chapter}）`;
+    if (err.constraint === 'knowledge_components_code_key') {
+        return `${where}寫入時 code 已存在：可能有另一個 kc:load 同時在跑，請等它結束後再試一次。`;
+    }
+    let holder = null;
+    try {
+        const { rows } = await client.query(
+            `SELECT code, status FROM knowledge_components
+              WHERE subject = $1 AND chapter = $2 AND name = $3 AND code <> $4
+              ORDER BY id LIMIT 1`, [s.subject, s.chapter, s.name, s.code]);
+        holder = rows[0] || null;
+    } catch { /* 查不到就不指名 */ }
+
+    const head = `${where}的名稱「${s.name}」與同一章`;
+    if (!holder) {
+        return `${head}另一個知識點撞名（同一章的名稱不可重複），整批回滾。請改種子檔的名稱，或先在「知識點」分頁把資料庫裡那一條改名。`;
+    }
+    const inSeed = codes.includes(holder.code);
+    const state = holder.status === 'approved' ? '已審定' : '草稿';
+    const hint = inSeed && holder.status === 'approved' && !force
+        ? `${holder.code} 是已審定的列，載入不覆寫它，資料庫裡保留的是它目前的名稱。要以種子檔為準覆寫它請加 --force；否則請改 ${s.code} 在種子檔裡的名稱。`
+        : inSeed
+            ? `請檢查種子檔裡 ${holder.code} 與 ${s.code} 的名稱。`
+            : `${holder.code} 已不在這次的種子檔中（載入不會刪除它）。請先在「知識點」分頁把它改名，或改 ${s.code} 在種子檔裡的名稱。`;
+    return `${head}的 ${holder.code}（${state}）撞名（同一章的名稱不可重複），整批回滾。${hint}`;
 }
 
 module.exports = {
