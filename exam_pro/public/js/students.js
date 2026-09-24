@@ -1306,8 +1306,10 @@ async function renderManagePanel(app, box) {
 function profileEditor(app, st, options, onSaved) {
     const GRADE_LABEL = { 10: '高一', 11: '高二', 12: '高三' };
     const form = el('div', 'grid gap-2 sm:grid-cols-2');
-    const field = (label, control) => {
-        const wrap = el('label', 'flex flex-col gap-1 text-[11px] font-bold text-slate-600');
+    // 單一控制項用 <label> 包起來（點標題就能聚焦）；目標考試是一組核取方塊、各自已有 <label>，
+    // 外層改用 <div>——<label> 裡不能再放 <label>。
+    const field = (label, control, tag = 'label') => {
+        const wrap = el(tag, 'flex flex-col gap-1 text-[11px] font-bold text-slate-600');
         wrap.append(el('span', '', { textContent: label }), control);
         return wrap;
     };
@@ -1347,7 +1349,7 @@ function profileEditor(app, st, options, onSaved) {
         field('年級', gradeSel), field('類組', trackSel),
         field('教材版本', bookSel), field('學校', schoolIn)
     );
-    const examsField = field('目標考試（可複選）', examsBox);
+    const examsField = field('目標考試（可複選）', examsBox, 'div');
     const noteField = field('備註', noteIn);
     const save = el('button', 'mt-2 text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer', {
         type: 'button', textContent: '儲存檔案'
