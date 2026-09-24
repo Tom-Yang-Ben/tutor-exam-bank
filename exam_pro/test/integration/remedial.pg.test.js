@@ -270,6 +270,7 @@ function runSuite() {
                     [{ subject: '數學', total: 51 }, /total/],
                     [{ subject: '數學', mix: { remedial: 0, prerequisite: 0, extension: 0 } }, /mix/],
                     [{ subject: '數學', mix: { remedial: 1 } }, /mix/],
+                    [{ subject: '數學', mix: { remedial: 1e308, prerequisite: 1e308, extension: 0 } }, /mix/],   // 總和溢位成 Infinity
                     [{ subject: '數學', days: 400 }, /days/],
                     [{ subject: '數學', source_types: ['bogus'] }, /source_types/]
                 ];

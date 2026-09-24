@@ -56,7 +56,10 @@ function parseRemedialBody(body) {
         const extra = Object.keys(m).filter(k => !keys.includes(k));
         if (extra.length) return { error: `mix 只接受 ${keys.join('、')}，不認得：${extra.join('、')}。` };
         if (keys.some(k => typeof m[k] !== 'number' || !Number.isFinite(m[k]) || m[k] < 0)) return { error: mixError };
-        if (keys.reduce((s, k) => s + m[k], 0) <= 0) return { error: mixError };
+        // 總和也要是有限數：每個值有限、加起來仍可能溢位成 Infinity（例：1e308 + 1e308），
+        // 配額會算成 Infinity ÷ Infinity = NaN，草稿變成 0 題卻回 200
+        const sum = keys.reduce((s, k) => s + m[k], 0);
+        if (!Number.isFinite(sum) || sum <= 0) return { error: mixError };
         mix = Object.fromEntries(keys.map(k => [k, m[k]]));
     }
 

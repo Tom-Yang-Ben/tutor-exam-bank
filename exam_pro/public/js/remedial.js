@@ -128,7 +128,9 @@ export function mixFromPercent(raw) {
         if (!Number.isFinite(n) || n < 0) return null;
         out[k] = n;
     }
-    return out.remedial + out.prerequisite + out.extension > 0 ? out : null;
+    // 總和也要有限（伺服器同一條規則：1e308 + 1e308 會溢位成 Infinity）
+    const sum = out.remedial + out.prerequisite + out.extension;
+    return Number.isFinite(sum) && sum > 0 ? out : null;
 }
 
 /**

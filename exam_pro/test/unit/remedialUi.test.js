@@ -133,11 +133,12 @@ describe('remedial.js 的純函式', () => {
     let mod;
     beforeEach(async () => { mod = await import('data:text/javascript;charset=utf-8,' + encodeURIComponent(source('remedial.js') + `\n// p${++seq}\n`)); });
 
-    test('mixFromPercent：三個非負數、總和 > 0，否則 null', () => {
+    test('mixFromPercent：三個非負數、總和 > 0 且有限，否則 null', () => {
         assert.deepEqual(mod.mixFromPercent({ remedial: '60', prerequisite: '20', extension: '20' }), { remedial: 60, prerequisite: 20, extension: 20 });
         assert.deepEqual(mod.mixFromPercent({ remedial: 0, prerequisite: 0, extension: 5 }), { remedial: 0, prerequisite: 0, extension: 5 });
         for (const bad of [{ remedial: '', prerequisite: 1, extension: 1 }, { remedial: -1, prerequisite: 1, extension: 1 },
-            { remedial: 'x', prerequisite: 1, extension: 1 }, { remedial: 0, prerequisite: 0, extension: 0 }, null]) {
+            { remedial: 'x', prerequisite: 1, extension: 1 }, { remedial: 0, prerequisite: 0, extension: 0 }, null,
+            { remedial: '1e308', prerequisite: '1e308', extension: '0' }]) {
             assert.equal(mod.mixFromPercent(bad), null, JSON.stringify(bad));
         }
     });

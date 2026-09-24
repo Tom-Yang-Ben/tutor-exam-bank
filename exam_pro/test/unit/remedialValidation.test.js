@@ -49,6 +49,12 @@ describe('parseRemedialBody', () => {
         for (const mix of bad) {
             assert.match(parseRemedialBody({ subject: '數學', mix }).error, /mix/, JSON.stringify(mix));
         }
+        // 每個值有限、總和卻溢位成 Infinity：配額會算出 NaN、草稿 0 題卻回 200——一律 400
+        for (const mix of [{ remedial: 1e308, prerequisite: 1e308, extension: 0 }, { remedial: Number.MAX_VALUE, prerequisite: 0, extension: Number.MAX_VALUE }]) {
+            assert.match(parseRemedialBody({ subject: '數學', mix }).error, /mix/, JSON.stringify(mix));
+        }
+        assert.deepEqual(parseRemedialBody({ subject: '數學', mix: { remedial: 1e308, prerequisite: 0, extension: 0 } }).value.mix,
+            { remedial: 1e308, prerequisite: 0, extension: 0 }, '單一極大值、總和有限仍合法（只看比例）');
         assert.deepEqual(parseRemedialBody({ subject: '數學', mix: { remedial: 0, prerequisite: 0, extension: 2 } }).value.mix,
             { remedial: 0, prerequisite: 0, extension: 2 });
     });
