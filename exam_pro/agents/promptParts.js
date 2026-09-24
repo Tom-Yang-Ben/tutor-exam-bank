@@ -7,6 +7,10 @@
 //
 // 分冊標題（第一冊、選修物理二…）刻意**不寫**：config/chapters.js 只有「科 → 章節陣列」
 // 這一層結構，分冊資訊在那裡不存在，硬要在 prompt 裡補一份就又是一份會漂的真相。
+// 〔章節重整整合 CR-8〕上一段已過時：章節重整後分冊資料有唯一真相 config/chapterPlan.js 的 PLAN_VOLUMES
+// （CHAPTERS 就是由它攤平而來）。拆章後出現多組「同主題分兩章」（第一冊「指數與對數」vs 第三冊
+// 「指數函數與對數函數」、必修物理 vs 選修物理），Owner 2026-09-25 裁決：數學／物理的白名單改成依冊別分組列出，
+// 幫模型分辨邊界。章節集合與順序不變（仍等於 CHAPTERS），只多了冊名前綴；化學的輸出逐字不變。
 
 //
 // 〔stage5 WS-B〕化學併入 config/chapters.js 之後（docs/interfaces-stage5.md 第 3.2 條）：
@@ -22,6 +26,7 @@
 // 這段文字進的是 extract.v2／classify.v1 等既有 prompt，對應的 cassette 本來就要依第 5 條重錄。
 
 const { CHAPTERS, QUESTION_TYPES, LEGACY_SUBJECTS, subjectGroupOf, isValidSubject } = require('../config/chapters');
+const { PLAN_VOLUMES } = require('../config/chapterPlan');
 
 /**
  * 產生章節白名單的 prompt 文字。
@@ -32,8 +37,24 @@ function chapterWhitelistText(subject = null) {
     const subjects = subject ? [subject] : LEGACY_SUBJECTS;
     return subjects
         .filter(s => Array.isArray(CHAPTERS[s]))
-        .map(s => `【${s}科精細章節白名單（共 ${CHAPTERS[s].length} 章）】\n${joinChapters(CHAPTERS[s])}`)
+        .map(s => `【${s}科精細章節白名單（共 ${CHAPTERS[s].length} 章）】\n${chapterListBody(s)}`)
         .join('\n\n');
+}
+
+/**
+ * 白名單本文。〔CR-8〕數學／物理依 PLAN_VOLUMES 分冊，每冊一行「冊名：章、章、…」；
+ * 分冊攤平後必須與 CHAPTERS 完全一致（集合與順序），不一致就退回平鋪，避免 prompt 與 schema enum 分岔。
+ * 化學（不在 PLAN_VOLUMES）照舊平鋪，輸出與階段 5 逐字相同。
+ * @param {string} subject
+ * @returns {string}
+ */
+function chapterListBody(subject) {
+    const volumes = PLAN_VOLUMES[subject];
+    const flat = CHAPTERS[subject];
+    if (!Array.isArray(volumes)) return joinChapters(flat);
+    const same = volumes.flatMap(v => v.chapters).join('\u0000') === flat.join('\u0000');
+    if (!same) return joinChapters(flat);
+    return volumes.map(v => `${v.name}：${joinChapters(v.chapters)}`).join('\n');
 }
 
 /**

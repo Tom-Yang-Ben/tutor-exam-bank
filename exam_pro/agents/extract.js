@@ -47,6 +47,7 @@ const SYSTEM = '你是一位資深的台灣高中數學與物理家教老師，�
 const PROMPT_TEMPLATE = `請細心閱讀這份 PDF，找出裡面「所有的」題目，每一題各自拆解成一個 JSON 物件。
 
 {{CHAPTER_WHITELIST}}
+（白名單依冊別分組列出；「第一冊」「選修物理一」這類冊名只是分組標題，不是章名。）
 
 {{QUESTION_TYPES}}
 

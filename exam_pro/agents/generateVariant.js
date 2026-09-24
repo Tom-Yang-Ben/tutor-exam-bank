@@ -52,6 +52,7 @@ const SYSTEM = '你是一位資深的台灣高中數學與物理家教老師，�
 const PROMPT_TEMPLATE = `請以下面這道「藍本題」為範本，改寫出**一道**同概念的新題目。
 
 {{CHAPTER_WHITELIST}}
+（白名單依冊別分組列出；「第一冊」「選修物理一」這類冊名只是分組標題，不是章名。）
 
 【藍本題】
 章節：{{SOURCE_CHAPTER}}

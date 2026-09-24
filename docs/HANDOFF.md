@@ -16,6 +16,7 @@
 - **分支：`stage5/chapters`**，基底 `stage5/integration`（含 `7184f53`：DEC-014～019 與 DEC-003 例外條款依 Owner 對話指示登錄為已核准）。組成：`stage5/chapters-base`（介面凍結、`config/chapterPlan.js`）→ CH-A（白名單換新、`npm run chapters:migrate`、migration 0014）、CH-B（eval 素材改標、`npm run cassettes:rerecord`／`cassettes:prune`）、CH-C（數學 254 個知識點）、CH-D（物理 196 個、化學恆等對照）→ 整合（CR-1～CR-6）。
 - **狀態**：unit、check:html、migrate、integration 全綠；e2e 與五個 eval 的失敗**全部**是 replay miss 或缺 embedding fixture（白名單在 schema enum 裡，數學／物理 cassette 刻意失效）。依賴 cassette 的單元測試缺檔即略過（CR-4），重錄後恢復。
 - **合併順序**：先合 `stage5/integration`（階段 5 PR）→ Owner 在 `stage5/chapters` 上重錄（`chapter-restructure.md` 第 5 條，Owner 的 Windows 本機執行，金鑰不離開本機）→ 主控核對門檻（低於門檻另開裁決，不自動放寬）→ 開 `stage5/chapters` 的 PR。
+- 〔修訂 2026-09-25 CR-7／CR-8〕第一次重錄因 Gemini 預付額度用完而中斷，量到 classify 低於門檻；根因（例句與分冊矛盾）已修（CR-7），並在不呼叫 Gemini 的前提下完成全面審查與 Owner 裁決的 golden 改標、白名單分冊（CR-8）。**Owner 決定延後重錄**：`stage5/chapters` 暫不合併，等補額度後一次重錄（`npm run db:up` → `npm run migrate:test` → `npm run cassettes:rerecord`，約 US$0.75～2.82），主控再核對門檻。
 - **上線**多兩步（已寫進下方 0.2 第 7 項）：`migrate` 之後 `chapters:migrate`（提議檔 → 老師確認 → `--apply`）、`embed:backfill`。
 
 > 本節取代同日稍早版本（`129d941`）。那一版寫於「整合補測」與「最終審查」併入之前，§0.3 有多項已修好，§0.2 以「類型」分組、順序有依賴問題。本版依最終 HEAD `936a6b5` 的實況重寫。

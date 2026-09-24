@@ -246,3 +246,40 @@ describe('prompt 白名單與 schema enum（第 3.1 條第 5 點）', () => {
         assert.ok(nlqSchema.includes('拋物線') && !nlqSchema.includes('宇宙學簡介'));
     });
 });
+
+describe('〔CR-8〕白名單依冊別分組（Owner 2026-09-25 裁決）', () => {
+    const crypto = require('crypto');
+    const { chapterWhitelistText } = require('../../agents/promptParts');
+    const { PLAN_VOLUMES } = require('../../config/chapterPlan');
+    const { CHAPTERS } = require('../../config/chapters');
+
+    test('數學／物理每冊一行「冊名：章、章…」，攤平後的章節集合與順序等於 CHAPTERS', () => {
+        for (const subject of ['數學', '物理']) {
+            const lines = chapterWhitelistText(subject).split('\n').slice(1);
+            assert.equal(lines.length, PLAN_VOLUMES[subject].length, subject);
+            const flat = [];
+            lines.forEach((line, i) => {
+                const vol = PLAN_VOLUMES[subject][i];
+                assert.ok(line.startsWith(`${vol.name}：`), line);
+                flat.push(...line.slice(vol.name.length + 1).split('、'));
+            });
+            assert.deepEqual(flat, CHAPTERS[subject]);
+        }
+    });
+
+    test('化學的白名單文字逐字不變（sha256 釘住階段 5 的輸出）', () => {
+        const sha = crypto.createHash('sha256').update(chapterWhitelistText('化學')).digest('hex');
+        assert.equal(sha, '3e654308a33b6c9ed500e72c64af809645b18805d1da530560360d88aac38acd');
+    });
+
+    test('數學／物理模板註明冊名不是章名；化學模板不含這句', () => {
+        const NOTE = '冊名只是分組標題，不是章名';
+        for (const f of ['../../agents/classify.js', '../../agents/extract.js', '../../agents/generateVariant.js']) {
+            const src = require('fs').readFileSync(require('path').join(__dirname, f), 'utf8');
+            const main = src.slice(src.indexOf('const PROMPT_TEMPLATE = `'), src.indexOf('`;', src.indexOf('const PROMPT_TEMPLATE = `')));
+            const chem = src.slice(src.indexOf('const PROMPT_TEMPLATE_CHEM = `'), src.indexOf('`;', src.indexOf('const PROMPT_TEMPLATE_CHEM = `')));
+            assert.ok(main.includes(NOTE), f);
+            assert.ok(!chem.includes(NOTE), f);
+        }
+    });
+});
