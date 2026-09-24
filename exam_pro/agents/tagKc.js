@@ -166,14 +166,18 @@ function kcListText(kcs) {
 function buildPrompt(input) {
     const question = String(input.question_text ?? '').trim().slice(0, QUESTION_MAX);
     const answer = String(input.answer_text ?? '').trim();
-    // 一律用函式當替換值：題幹是 LaTeX，`$$…$$` 若以字串替換會被 String.prototype.replace
+    const slots = {
+        SUBJECT: String(input.subject ?? ''),
+        CHAPTER: String(input.chapter ?? ''),
+        KC_LIST: kcListText(input.kcs),
+        QUESTION: question,
+        ANSWER: answer || '（未提供）'
+    };
+    // 一次掃過模板、只換模板本身的佔位字串：逐個 .replace() 串接時，前面填進去的題幹或知識點說明
+    // 若含字面的 {{ANSWER}}，下一步會換到題幹裡面，真正的欄位反而留著佔位字串（prompt 被改壞）。
+    // 替換值一律用函式回傳：題幹是 LaTeX，`$$…$$` 若以字串替換會被 String.prototype.replace
     // 當成特殊樣式（`$$` → `$`、`$'` → 比對之後的整段），送出去的題目就被改壞了。
-    return PROMPT_TEMPLATE
-        .replace('{{SUBJECT}}', () => String(input.subject ?? ''))
-        .replace('{{CHAPTER}}', () => String(input.chapter ?? ''))
-        .replace('{{KC_LIST}}', () => kcListText(input.kcs))
-        .replace('{{QUESTION}}', () => question)
-        .replace('{{ANSWER}}', () => answer || '（未提供）');
+    return PROMPT_TEMPLATE.replace(/\{\{(SUBJECT|CHAPTER|KC_LIST|QUESTION|ANSWER)\}\}/g, (_, key) => slots[key]);
 }
 
 /** 清單內容的短雜湊：老師改了某個知識點的名稱或說明，prompt 就變了，cassette 鍵也該跟著變 */

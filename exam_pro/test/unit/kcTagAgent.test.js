@@ -110,6 +110,20 @@ describe('prompt', () => {
         assert.ok(p.includes('$$\\frac12$$'));
     });
 
+    test('題幹或知識點說明裡有字面的 {{ANSWER}}／{{QUESTION}}：原樣保留，真正的欄位照樣填好', () => {
+        const q = '求 {{ANSWER}} 的值，並寫出 {{SUBJECT}}。';
+        const p = agent.buildPrompt({
+            ...INPUT, question_text: q, answer_text: '42',
+            kcs: [{ ...KCS[0], description: '說明裡有 {{QUESTION}} 與 {{KC_LIST}}' }, ...KCS.slice(1)]
+        });
+        assert.ok(p.includes(`【題目】\n${q}`), p);
+        assert.ok(p.endsWith('【參考答案】\n42'), p);
+        assert.ok(p.includes('說明裡有 {{QUESTION}} 與 {{KC_LIST}}'), p);
+        assert.ok(p.includes('【科目】數學'));
+        // 模板本身的每一個佔位字串都換掉了：剩下的 {{ 只來自題幹與說明
+        assert.equal(p.split('{{').length - 1, 4, p);
+    });
+
     test('沒有答案時寫「（未提供）」；說明太長會截斷', () => {
         const p = agent.buildPrompt({ ...INPUT, answer_text: '', kcs: [{ ...KCS[0], description: '長'.repeat(500) }] });
         assert.ok(p.includes('（未提供）'));
