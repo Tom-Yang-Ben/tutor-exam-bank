@@ -45,6 +45,28 @@ export const MAX_TOTAL = 50;
 export const MAX_PAPER = 50;                 // confirm-paper 的 question_ids 上限
 const PG_INT_MAX = 2147483647;               // 題目 id 是 PostgreSQL int4，超過的一定不是合法 id
 export const DEFAULT_MIX_PERCENT = { remedial: 60, prerequisite: 20, extension: 20 };
+/**
+ * 題源限制（著作權；0006）。〔stage5 審查修正〕與組卷頁 index.html 的 #paper_source_scope／SOURCE_SCOPE_MAP 同一組
+ * 值（test/unit/remedialUi.test.js 逐字比對兩邊，不會走鐘）。補救卷正是要印給學生的卷，不能只有組卷頁有這個選項。
+ * [值, 標籤, 送出的 source_types（null＝不帶＝不過濾）]
+ */
+export const SOURCE_SCOPES = [
+    ['all', '全部來源', null],
+    ['clean', '僅乾淨題源（官方／學校／自寫）', ['official', 'school', 'self']],
+    ['no_publisher', '排除出版社（未標記仍可用）', ['official', 'school', 'self', 'unknown']]
+];
+
+/**
+ * 產生草稿的 POST body（純函式）。題源選「全部」時不帶 source_types（伺服器不過濾）。
+ * @param {{subject:string, total:number, mix:object, days:number, scope?:string}} p
+ * @returns {object}
+ */
+export function remedialRequestBody({ subject, total, mix, days, scope }) {
+    const body = { subject, total, mix, days };
+    const row = SOURCE_SCOPES.find(r => r[0] === scope);
+    if (row && row[2]) body.source_types = row[2];
+    return body;
+}
 const KC_TABLE_LIMIT = 10;                   // 「知識點掌握度」只列最弱的 10 個
 
 /** 模組層狀態：目前的草稿與上一次確認的卷（重整就歸零）。 */
@@ -398,6 +420,16 @@ export function groupDraft(draft) {
 }
 
 /**
+ * 重新產生草稿時會被換掉的手動加入題（純函式）。〔stage5 審查修正〕產生草稿會整份取代，老師手動加的題要提示。
+ * @param {object|null} draft
+ * @returns {number[]}
+ */
+export function manualIdsLost(draft) {
+    if (!draft || !Array.isArray(draft.items)) return [];
+    return draft.items.filter(i => i.bucket === 'manual').map(i => i.question_id);
+}
+
+/**
  * 送給 confirm-paper 的 question_ids（草稿裡的順序；伺服器會再依題型、難度排）。
  * @param {object} draft
  * @returns {number[]}
@@ -503,7 +535,7 @@ function mountRemedialSkeleton(section) {
     section.appendChild(sectionHead('補', 'bg-rose-50 text-rose-700', 'Remedial paper', '依弱點出補救卷',
         '依學生最近的批改結果，自動挑最弱的單位補救、補先備、再加一點延伸。只產草稿；確認後才出卷並記入作答歷史。'));
 
-    const controls = el('div', 'grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-[1.2fr_.8fr_.6fr_.7fr_.6fr_.6fr_.6fr_auto] gap-3 items-end rounded-2xl border border-slate-100 bg-slate-50 p-4');
+    const controls = el('div', 'grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-[1.2fr_.8fr_.6fr_.7fr_.6fr_.6fr_.6fr_1fr_auto] gap-3 items-end rounded-2xl border border-slate-100 bg-slate-50 p-4');
     const ui = {
         student: el('select', 'field-control p-2 text-sm', { id: 'remStudent', 'aria-label': '學生' }),
         subject: el('select', 'field-control p-2 text-sm', { id: 'remSubject', 'aria-label': '科目' }),
@@ -512,6 +544,7 @@ function mountRemedialSkeleton(section) {
         mixRemedial: el('input', 'field-control p-2 text-sm', { id: 'remMixRemedial', type: 'number', min: 0, 'aria-label': '補救配比（%）' }),
         mixPrereq: el('input', 'field-control p-2 text-sm', { id: 'remMixPrereq', type: 'number', min: 0, 'aria-label': '先備配比（%）' }),
         mixExt: el('input', 'field-control p-2 text-sm', { id: 'remMixExt', type: 'number', min: 0, 'aria-label': '延伸配比（%）' }),
+        scope: el('select', 'field-control p-2 text-sm', { id: 'remSourceScope', 'aria-label': '題源限制（著作權）' }),
         generate: el('button', 'bg-rose-600 hover:bg-rose-700 text-white text-sm font-extrabold py-2 px-4 rounded-xl cursor-pointer disabled:opacity-40', {
             id: 'remGenerate', type: 'button', textContent: '產生草稿'
         })
@@ -522,9 +555,12 @@ function mountRemedialSkeleton(section) {
     ui.mixExt.value = String(DEFAULT_MIX_PERCENT.extension);
     fillSelect(ui.days, DAYS_OPTIONS.map(d => [d, `最近 ${d} 天`]));
     ui.days.value = String(DEFAULT_DAYS);
+    fillSelect(ui.scope, SOURCE_SCOPES.map(([value, label]) => [value, label]));
+    ui.scope.value = 'all';
     controls.append(
         labeled('學生', ui.student), labeled('科目', ui.subject), labeled('題數（5–50）', ui.total), labeled('看哪段批改', ui.days),
-        labeled('補救 %', ui.mixRemedial), labeled('先備 %', ui.mixPrereq), labeled('延伸 %', ui.mixExt), ui.generate
+        labeled('補救 %', ui.mixRemedial), labeled('先備 %', ui.mixPrereq), labeled('延伸 %', ui.mixExt),
+        labeled('題源限制', ui.scope), ui.generate
     );
     section.appendChild(controls);
 
@@ -594,6 +630,16 @@ function renderDraft(app, ui) {
             textContent: draft.basis === 'kc' ? '以知識點判斷弱點' : '以章節判斷弱點'
         }));
     }
+    // 〔stage5 審查修正〕捨棄草稿：草稿是別的學生的時候，「加入補救卷」會被擋，原本沒有任何清掉它的控制項
+    const discard = el('button', 'ml-auto text-[11px] font-bold px-2 py-1 rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 cursor-pointer', {
+        id: 'remDiscard', type: 'button', textContent: '捨棄草稿', 'aria-label': `捨棄 ${draft.student_name} 的補救卷草稿（不會出卷）`
+    });
+    discard.addEventListener('click', () => {
+        state.draft = null;
+        renderDraft(app, ui);
+        app.showToast('已捨棄補救卷草稿（沒有出卷、沒有記錄）。', 'info');
+    });
+    head.appendChild(discard);
     box.appendChild(head);
 
     if (draft.notes.length) {
@@ -692,12 +738,16 @@ async function generateDraft(app, ui, shared) {
     try {
         const params = new URLSearchParams({ subject, days: String(days) });
         const [res, kcRes] = await Promise.all([
-            postJson(app, `/api/students/${student.id}/remedial-paper`, { subject, total, mix, days }),
+            postJson(app, `/api/students/${student.id}/remedial-paper`, remedialRequestBody({ subject, total, mix, days, scope: ui.scope.value })),
             app.apiFetch(`/api/students/${student.id}/weakness/kc?${params.toString()}`)
         ]);
         if (!res.ok) { app.showToast(await messageOf(res), 'error'); ui.status.textContent = ''; return; }
         const body = await res.json();
+        const droppedManual = manualIdsLost(state.draft);
         state.draft = draftFromResponse(body, student.name);
+        if (droppedManual.length) {
+            app.showToast(`原草稿手動加入的 ${idList(droppedManual)} 沒有保留在新草稿裡；需要的話請再加一次。`, 'info');
+        }
         state.lastPaper = null;
         ui.result.textContent = '';
         ui.status.textContent = `草稿已產生（尚未寫入）：${body.items.length} 題。`;
@@ -739,31 +789,59 @@ async function confirmDraft(app, ui, btn) {
     }
 }
 
-/** 確認後：標題＋既有的 Word 下載。 */
+/**
+ * Word 匯出版本（POST /api/download-word 的 edition；與組卷頁 index.html 的 #wordEdition 同一組值與檔名後綴）。
+ * 〔stage5 審查修正〕補救卷原本只送三個鍵、拿到的永遠是標準版；補救卷正是要印給學生的卷，學生版／詳解版最用得到。
+ */
+export const WORD_EDITIONS = [
+    ['standard', '標準版（卷末附答案）', ''],
+    ['student', '學生版（不附答案）', '（學生版）'],
+    ['solution', '詳解版（答案＋詳解）', '（詳解版）']
+];
+
+/**
+ * 下載請求的 body 與檔名（純函式）。不認得的版本一律當 standard。
+ * @param {{paper_title:string, student_name:string, question_ids:number[]}} paper
+ * @param {string} edition
+ * @returns {{body:object, filename:string}}
+ */
+export function wordDownloadRequest(paper, edition) {
+    const row = WORD_EDITIONS.find(e => e[0] === edition) || WORD_EDITIONS[0];
+    return {
+        body: { paper_title: paper.paper_title, student_name: paper.student_name, question_ids: paper.question_ids, edition: row[0] },
+        filename: `${paper.paper_title}${row[2]}.docx`
+    };
+}
+
+/** 確認後：標題＋既有的 Word 下載（可選版本）。 */
 function renderResult(app, ui) {
     ui.result.textContent = '';
     const p = state.lastPaper;
     if (!p) return;
     const box = el('div', 'flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4');
     box.appendChild(el('p', 'text-sm font-extrabold text-emerald-900', { textContent: `已出卷：${p.paper_title}（${p.question_ids.length} 題）` }));
+    const actions = el('div', 'flex flex-wrap items-center gap-2');
+    const edition = el('select', 'field-control min-h-0 py-2 px-3 text-xs font-bold', { id: 'remWordEdition', 'aria-label': 'Word 匯出版本' });
+    for (const [value, label] of WORD_EDITIONS) edition.appendChild(el('option', '', { value, textContent: label }));
+    edition.value = 'standard';
     const dl = el('button', 'bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold py-2.5 px-4 rounded-xl cursor-pointer', {
         id: 'remDownload', type: 'button', textContent: '下載 Word 考卷 (.docx)'
     });
-    dl.addEventListener('click', () => { downloadWord(app, p).catch(() => app.showToast('匯出 Word 失敗', 'error')); });
-    box.appendChild(dl);
+    dl.addEventListener('click', () => { downloadWord(app, p, edition.value).catch(() => app.showToast('匯出 Word 失敗', 'error')); });
+    actions.append(edition, dl);
+    box.appendChild(actions);
     ui.result.appendChild(box);
 }
 
 /** 走既有的 POST /api/download-word（與組卷分頁同一支）。 */
-async function downloadWord(app, paper) {
-    const res = await postJson(app, '/api/download-word', {
-        paper_title: paper.paper_title, student_name: paper.student_name, question_ids: paper.question_ids
-    });
+async function downloadWord(app, paper, edition = 'standard') {
+    const { body, filename } = wordDownloadRequest(paper, edition);
+    const res = await postJson(app, '/api/download-word', body);
     const type = res.headers.get('content-type') || '';
     if (!res.ok || !type.includes('application/vnd.openxmlformats-officedocument')) throw new Error(await messageOf(res));
     const blob = new Blob([await res.arrayBuffer()], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
     const url = URL.createObjectURL(blob);
-    const a = el('a', '', { href: url, download: `${paper.paper_title}.docx` });
+    const a = el('a', '', { href: url, download: filename });
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -832,7 +910,10 @@ function handleAdd(app, ui, shared, detail) {
         renderDraft(app, ui);
     }
     const error = precheckAdd(state.draft, detail);
-    if (error === 'other_student') { app.showToast('目前的草稿是另一位學生的，請先確認或清掉那份草稿。', 'error'); return; }
+    if (error === 'other_student') {
+        app.showToast(`目前的草稿是另一位學生（${state.draft.student_name}）的，請先確認出卷，或按草稿右上角的「捨棄草稿」再加。`, 'error');
+        return;
+    }
     if (error === 'other_subject') {
         app.showToast(`#${detail.question_id} 是${detail.subject}題，目前的草稿是${state.draft.subject}；補救卷不混科，沒有加入。`, 'error');
         return;

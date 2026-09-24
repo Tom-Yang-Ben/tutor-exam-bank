@@ -33,11 +33,11 @@
 ```text
 #remedial（學生視圖）
   標題列（「補」icon ＋ eyebrow Remedial paper ＋ h2「依弱點出補救卷」＋ 說明）
-  控制列（lg 八欄）：學生 #remStudent｜科目 #remSubject｜題數（5–50）#remTotal｜看哪段批改 #remDays｜補救 % #remMixRemedial｜先備 % #remMixPrereq｜延伸 % #remMixExt｜產生草稿 #remGenerate
+  控制列（lg 九欄）：學生 #remStudent｜科目 #remSubject｜題數（5–50）#remTotal｜看哪段批改 #remDays｜補救 % #remMixRemedial｜先備 % #remMixPrereq｜延伸 % #remMixExt｜題源限制 #remSourceScope〔審查修正〕｜產生草稿 #remGenerate
   狀態列 #remStatus
   知識點掌握度 #remKc（最弱 10 個，Wilson 下界由弱到強）
-  草稿 #remDraft：抬頭（姓名・科目・草稿 N 題 ＋ 判斷基準標籤）→ 系統說明 #remNotes（黃框）→ 依 bucket 分組（補救／先備／延伸／手動加入：每組列目標、理由、要幾題、找到幾題 → 題目卡片）→ 加題列（#remAddId ＋ 加題 #remAddBtn）→ 確認出卷 #remConfirm
-  結果 #remResult：出卷成功後的「下載 Word 考卷 (.docx)」#remDownload
+  草稿 #remDraft：抬頭（姓名・科目・草稿 N 題 ＋ 判斷基準標籤 ＋ 捨棄草稿 #remDiscard〔審查修正〕）→ 系統說明 #remNotes（黃框）→ 依 bucket 分組（補救／先備／延伸／手動加入：每組列目標、理由、要幾題、找到幾題 → 題目卡片）→ 加題列（#remAddId ＋ 加題 #remAddBtn）→ 確認出卷 #remConfirm
+  結果 #remResult：出卷成功後的版本選單 #remWordEdition（標準版／學生版／詳解版）＋「下載 Word 考卷 (.docx)」#remDownload〔審查修正：版本選單〕
 
 #coverage（題庫管理視圖）
   標題列（「覆」icon ＋ eyebrow Coverage ＋ h2「題庫覆蓋率」＋ 說明）
@@ -67,12 +67,13 @@
 
 | 操作 | 觸發 | 結果 | 權限 |
 | :--- | :--- | :--- | :--- |
-| 產生草稿 | #remGenerate | 並行 `POST /api/students/:id/remedial-paper`（body `{subject, total, mix, days}`；前端不送 `source_types`）與 `GET …/weakness/kc`（掌握度）；**不出卷、不寫庫**，可重複按（每次隨機換一批） | 單人系統，`x-api-key` |
+| 產生草稿 | #remGenerate | 並行 `POST /api/students/:id/remedial-paper`（body `{subject, total, mix, days}`；〔審查修正〕題源限制不是「全部」時另帶 `source_types`，對照與組卷頁的 `SOURCE_SCOPE_MAP` 相同）與 `GET …/weakness/kc`（掌握度）；**不出卷、不寫庫**，可重複按（每次隨機換一批；整份換掉，先前手動加入的題會以 toast 列出沒保留的題號） | 單人系統，`x-api-key` |
+| 捨棄草稿 | #remDiscard | 清掉目前的草稿（不打 API）；草稿屬於別的學生時，「加入補救卷」的錯誤提示會指向這顆按鈕 | 同上 |
 | 刪題／刪這組 | 卡片按鈕 | 從草稿移除該題；承上組整組移除（含鏈與分岔） | 同上 |
 | 用題目 ID 加題 | #remAddBtn（可逗號分隔多個） | 先 `GET /api/students/:id/remedial-paper/items?ids=` 取整組 → 組內全可出才**整組**加入「手動加入」組；任一題封存、已寫過、別科、查不到或已在草稿則不加並逐項提示 | 同上 |
 | 加入補救卷（跨區塊） | 「找相似」結果列按鈕（`public/js/variants.js`〔stage5 WS-D〕） | dispatch `document` 上的 `remedial:add`（`detail.question_id`，另帶 student_id、subject、chapter、difficulty、question_text）；remedial.js 監聽後走同一套整組加題規則；別科題 toast「補救卷不混科」 | 同上 |
 | 確認出卷 | #remConfirm | 前端先擋「前題不在草稿的承上題」→ 既有 `POST /api/confirm-paper { student_id, question_ids }`（同交易建卷＋attempts）→ toast「補救卷已出卷，並記入作答歷史。」並顯示下載鈕 | 同上 |
-| 下載 Word | #remDownload | 既有 `POST /api/download-word` | 同上 |
+| 下載 Word | #remDownload | 既有 `POST /api/download-word`，〔審查修正〕帶 #remWordEdition 選的 `edition`（standard／student／solution），檔名加「（學生版）」「（詳解版）」後綴，與組卷頁一致 | 同上 |
 | 看覆蓋率 | #covSubject／#covStudent 變更或 #covRefresh | `GET /api/coverage?subject=&student_id=` 重畫熱度表與知識點題數 | 同上 |
 
 ## 5. UI 狀態 (States)

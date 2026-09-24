@@ -391,6 +391,45 @@ describe('remedial.js 的渲染（miniDom）', () => {
         assert.equal($('remDraft').querySelectorAll('div[data-question-id]').length, 0, '確認後草稿清空');
     });
 
+    // 〔stage5 審查修正〕補救卷也要拿得到學生版／詳解版
+    test('確認後可選 Word 版本：送出的 body 帶 edition，預設 standard', async () => {
+        await mount({
+            examApp: routedBridge({
+                'POST /api/download-word': () => Promise.resolve(new Response(new Uint8Array([80, 75, 3, 4]), {
+                    status: 200, headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }
+                }))
+            })
+        });
+        $('remStudent').value = '1';
+        $('remGenerate').click();
+        await settle();
+        $('remConfirm').click();
+        await settle();
+        const sel = $('remWordEdition');
+        assert.ok(sel, '要有版本選單');
+        assert.deepEqual(sel.querySelectorAll('option').map(o => o.getAttribute('value')), ['standard', 'student', 'solution']);
+        $('remDownload').click();
+        await settle();
+        sel.value = 'solution';
+        $('remDownload').click();
+        await settle();
+        const posts = env.window.ExamApp.calls.fetches.filter(f => f.url === '/api/download-word');
+        assert.deepEqual(posts.map(f => f.body.edition), ['standard', 'solution']);
+        assert.deepEqual(posts[1].body.question_ids, [11, 12, 21]);
+    });
+
+    test('wordDownloadRequest：檔名加版本後綴，不認得的版本當 standard', async () => {
+        const mod = await loadFresh('remedial.js');
+        const paper = { paper_title: '王小明-補救卷', student_name: '王小明', question_ids: [1, 2] };
+        assert.deepEqual(mod.wordDownloadRequest(paper, 'student'), {
+            body: { paper_title: '王小明-補救卷', student_name: '王小明', question_ids: [1, 2], edition: 'student' },
+            filename: '王小明-補救卷（學生版）.docx'
+        });
+        assert.equal(mod.wordDownloadRequest(paper, 'solution').filename, '王小明-補救卷（詳解版）.docx');
+        assert.equal(mod.wordDownloadRequest(paper, 'bogus').body.edition, 'standard');
+        assert.equal(mod.wordDownloadRequest(paper, 'bogus').filename, '王小明-補救卷.docx');
+    });
+
     test('remedial:add：沒有草稿時以事件帶的學生開一份，加進「手動加入」；重複的只提示', async () => {
         const mod = await mount();
         env.document.dispatchEvent(new CustomEvent(mod.REMEDIAL_ADD_EVENT, {
@@ -411,6 +450,61 @@ describe('remedial.js 的渲染（miniDom）', () => {
         await settle();
         assert.ok(env.window.ExamApp.calls.toasts.some(t => t.message.includes('另一位學生')));
         assert.equal(draft.querySelectorAll('div[data-question-id]').length, 1);
+    });
+
+    // 〔stage5 審查修正〕跨學生加入時卡住：提供「捨棄草稿」
+    test('草稿是別的學生的 → 提示「捨棄草稿」；按下捨棄後同一個事件就能開新草稿', async () => {
+        const mod = await mount();
+        env.document.dispatchEvent(new CustomEvent(mod.REMEDIAL_ADD_EVENT, { detail: { question_id: 55, student_id: 2, subject: '物理' } }));
+        await settle();
+        const add77 = () => env.document.dispatchEvent(new CustomEvent(mod.REMEDIAL_ADD_EVENT, { detail: { question_id: 77, student_id: 1, subject: '數學' } }));
+        add77();
+        await settle();
+        const blocked = env.window.ExamApp.calls.toasts.find(t => t.message.includes('另一位學生'));
+        assert.ok(blocked && blocked.message.includes('李小華') && blocked.message.includes('捨棄草稿'), JSON.stringify(blocked));
+
+        $('remDiscard').click();
+        await settle();
+        assert.ok($('remDraft').textContent.includes('選好學生與科目後按「產生草稿」'), '捨棄後回到空白狀態');
+        add77();
+        await settle();
+        assert.ok($('remDraft').textContent.includes('王小明　·　數學　·　草稿 1 題'), $('remDraft').textContent.slice(0, 80));
+    });
+
+    test('已有手動加入的題時重新產生草稿 → 提示哪些手動題沒有保留', async () => {
+        await mount();
+        $('remStudent').value = '1';
+        $('remGenerate').click();
+        await settle();
+        $('remAddId').value = '77';
+        $('remAddBtn').click();
+        await settle();
+        $('remGenerate').click();
+        await settle();
+        assert.ok(env.window.ExamApp.calls.toasts.some(t => t.message.includes('#77') && t.message.includes('沒有保留')));
+    });
+
+    test('題源限制：預設不帶 source_types；選「僅乾淨題源」送出與組卷頁相同的陣列', async () => {
+        await mount();
+        $('remStudent').value = '1';
+        $('remSourceScope').value = 'clean';
+        $('remGenerate').click();
+        await settle();
+        const post = env.window.ExamApp.calls.fetches.find(f => f.method === 'POST' && f.url === '/api/students/1/remedial-paper');
+        assert.deepEqual(post.body.source_types, ['official', 'school', 'self']);
+    });
+
+    test('SOURCE_SCOPES 與組卷頁 index.html 的選項、SOURCE_SCOPE_MAP 逐字相同（兩邊不會走鐘）', async () => {
+        const mod = await loadFresh('remedial.js');
+        const html = fs.readFileSync(path.resolve(JS_DIR, '..', 'index.html'), 'utf8');
+        const select = html.match(/<select id="paper_source_scope"[\s\S]*?<\/select>/)[0];
+        const options = [...select.matchAll(/<option value="(\w+)"[^>]*>([^<]+)<\/option>/g)].map(m => [m[1], m[2]]);
+        assert.deepEqual(mod.SOURCE_SCOPES.map(r => [r[0], r[1]]), options);
+        const map = html.match(/const SOURCE_SCOPE_MAP = (\{[\s\S]*?\});/)[1];
+        const parsed = Function(`return (${map});`)();
+        for (const [value, , types] of mod.SOURCE_SCOPES) assert.deepEqual(types, parsed[value] ?? null, value);
+        assert.deepEqual(mod.remedialRequestBody({ subject: '數學', total: 10, mix: {}, days: 90, scope: 'all' }),
+            { subject: '數學', total: 10, mix: {}, days: 90 });
     });
 
     test('remedial:add：沒有草稿也沒選學生 → 提示先選學生', async () => {
