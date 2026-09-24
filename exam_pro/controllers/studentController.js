@@ -12,10 +12,16 @@
 //
 // SQL 分兩處：弱點面板的五條在 services/weaknessService.js（純函式，可離線單測）；
 // 前兩支的兩條 SQL 很短、且形狀就是回應本身，留在這裡讀起來比拆出去清楚。
+//
+// 階段 5 WS-A（docs/interfaces-stage5.md 第 4.1 條第 3、4 項；DEC-015、DEC-017）：
+//   - GET /api/students 每列多帶學生檔案六欄（grade、track、target_exams、school、textbook_version、note）
+//   - weakness 多一個頂層鍵 by_error_type（放在既有五個鍵之後），recent_wrong 每列多 error_types、score
+//   既有欄位、順序與錯誤訊息都不變。
 // ─────────────────────────────────────────────────────────────
 const { query } = require('../config/db');
 const { SUBJECTS } = require('../config/chapters');
 const weakness = require('../services/weaknessService');
+const { labelOf } = require('../config/errorTypes');
 
 /** 第 1.5 條的預設時間窗。 */
 const DEFAULT_DAYS = 90;
@@ -99,6 +105,56 @@ function withLowSample(rows, minN) {
     return rows.map(row => ({ ...row, low_sample: Number(row.graded) < minN }));
 }
 
+// ─────────── 〔stage5 WS-A〕錯因分布與最近錯題的批改細節 ───────────
+
+/**
+ * by_error_type 的後處理：補上中文標籤（第 4.1 條第 3 項的形狀 { error_type, label, count, share }）。
+ * 不認得的代碼 label 為 null（labelOf 的規則），不從回應裡丟掉——那代表資料庫裡有白名單外的值，
+ * 老師看得到才有機會發現。
+ *
+ * @param {Array<{error_type:string, count:number, share:number|null}>} rows
+ * @returns {Array<{error_type:string, label:string|null, count:number, share:number|null}>}
+ */
+function withErrorTypeLabels(rows) {
+    return rows.map(r => ({ error_type: r.error_type, label: labelOf(r.error_type), count: r.count, share: r.share }));
+}
+
+/**
+ * 最近錯題的批改細節查詢（純函式）。
+ * @param {number} studentId
+ * @param {number[]} questionIds
+ * @returns {{ text:string, values:any[] }}
+ */
+function buildRecentWrongDetail(studentId, questionIds) {
+    return {
+        text: `SELECT question_id, error_types, score::float8 AS score
+                 FROM attempts
+                WHERE student_id = $1 AND question_id = ANY($2::int[])`,
+        values: [studentId, questionIds]
+    };
+}
+
+/** @returns {Promise<Map<number, {error_types:string[], score:number|null}>>} */
+async function recentWrongDetail(studentId, recentRows) {
+    if (recentRows.length === 0) return new Map();
+    const { text, values } = buildRecentWrongDetail(studentId, recentRows.map(r => r.question_id));
+    const { rows } = await query(text, values);
+    return new Map(rows.map(r => [r.question_id, { error_types: r.error_types || [], score: r.score }]));
+}
+
+/**
+ * recent_wrong 每列接上 error_types 與 score（既有四欄的順序不動，新欄接在後面）。
+ * @param {object[]} rows
+ * @param {Map<number, {error_types:string[], score:number|null}>} detail
+ * @returns {object[]}
+ */
+function withAttemptDetail(rows, detail) {
+    return rows.map(r => {
+        const d = detail.get(r.question_id);
+        return { ...r, error_types: d ? d.error_types : [], score: d ? d.score : null };
+    });
+}
+
 // ─────────────────── 1.1 GET /api/students ───────────────────
 
 exports.listStudents = async (req, res, next) => {
@@ -175,14 +231,19 @@ exports.getWeakness = async (req, res, next) => {
         if (rowCount === 0) return res.status(404).json({ message: STUDENT_NOT_FOUND });
 
         const opts = { studentId, subject, days };
-        // 五條互不相依，一起發出去；同一個 pool，五條各借一條連線。
-        const [chapter, type, difficulty, trend, recent] = await Promise.all([
+        // 六條互不相依，一起發出去；同一個 pool，六條各借一條連線。
+        const [chapter, type, difficulty, trend, recent, errorType] = await Promise.all([
             weakness.buildByChapter(opts),
             weakness.buildByType(opts),
             weakness.buildByDifficulty(opts),
             weakness.buildTrendWeekly(opts),
-            weakness.buildRecentWrong(opts)
+            weakness.buildRecentWrong(opts),
+            weakness.buildByErrorType(opts)          // 〔stage5 WS-A〕
         ].map(({ text, values }) => query(text, values)));
+
+        // 〔stage5 WS-A〕recent_wrong 的 SQL 凍結在 weaknessService（契約只允許檔尾新增），
+        // 所以批改細節另外補一條查詢。(student_id, question_id) 是唯一鍵，一題對到一列。
+        const detail = await recentWrongDetail(studentId, recent.rows);
 
         const minN = weaknessMinN();
         res.status(200).json({
@@ -192,7 +253,8 @@ exports.getWeakness = async (req, res, next) => {
             // trend_weekly 沒有 low_sample：它是「這週批了幾題、錯幾題」的原始計數，
             // 不是比率，沒有樣本不足的問題（第 1.5 條的形狀只有三個鍵）。
             trend_weekly: trend.rows,
-            recent_wrong: recent.rows
+            recent_wrong: withAttemptDetail(recent.rows, detail),
+            by_error_type: withErrorTypeLabels(errorType.rows)
         });
     } catch (err) {
         next(err);
@@ -200,4 +262,8 @@ exports.getWeakness = async (req, res, next) => {
 };
 
 // 給整合測試與同 WS 的 paperController 共用（不對外掛成路由）
-exports._internals = { parseId, parseWeaknessQuery, weaknessMinN, withLowSample };
+exports._internals = {
+    parseId, parseWeaknessQuery, weaknessMinN, withLowSample,
+    // 〔stage5 WS-A〕
+    withErrorTypeLabels, buildRecentWrongDetail, withAttemptDetail
+};

@@ -886,8 +886,11 @@ function runSuite() {
                 const recent = body.recent_wrong;
 
                 assert.equal(recent.length, 20, 'LIMIT 凍結為 20');
+                // 〔stage5 WS-A〕DEC-015／第 4.1 條第 3 項刻意在每列加上 error_types 與 score；既有四欄不變。
                 assert.deepEqual(Object.keys(recent[0]).sort(),
-                    ['assigned_at', 'chapter', 'question_id', 'question_text']);
+                    ['assigned_at', 'chapter', 'error_types', 'question_id', 'question_text', 'score']);
+                // fixture 沒有標錯因也沒有部分給分：新欄必須是 [] 與 null（不是 undefined）
+                assert.ok(recent.every(r => Array.isArray(r.error_types) && r.error_types.length === 0 && r.score === null));
                 for (const row of recent) {
                     assert.match(row.assigned_at, /^\d{4}-\d{2}-\d{2}$/, 'assigned_at 必須是字串');
                 }
@@ -947,8 +950,11 @@ function runSuite() {
             test('五個頂層鍵齊備，且只有這五個', async () => {
                 const studentId = fixture.students[0];
                 const { body } = await request(app).get(`/api/students/${studentId}/weakness`);
-                assert.deepEqual(Object.keys(body).sort(),
-                    ['by_chapter', 'by_difficulty', 'by_type', 'recent_wrong', 'trend_weekly']);
+                // 〔stage5 WS-A〕DEC-015／第 4.1 條第 3 項刻意新增第六個鍵 by_error_type，接在既有五個之後；
+                // 既有五個的順序也一併釘住（比原本的 sort 後比對更嚴）。
+                assert.deepEqual(Object.keys(body),
+                    ['by_chapter', 'by_type', 'by_difficulty', 'trend_weekly', 'recent_wrong', 'by_error_type']);
+                assert.deepEqual(body.by_error_type, [], 'fixture 沒有標錯因，錯因分布應為空陣列');
             });
         });
 
