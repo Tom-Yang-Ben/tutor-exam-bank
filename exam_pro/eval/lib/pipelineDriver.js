@@ -189,6 +189,20 @@ function stubSave(fields) {
 // ───────────────────── 主流程 ─────────────────────
 
 /**
+ * 一份考卷的成本預算（美元）：opts.config.budgetUsd ＞ JOB_COST_BUDGET_USD ＞ 0.5。
+ * 〔章節重整 CH-B〕抽成函式、行為不變，讓單元測試能驗 eval/lib/suiteProcess.js 組出來的子行程環境下預算是多少。
+ * 注意讀法是 `??`：變數是**空字串**時不會退回 0.5（`'' ?? 0.5` 是 `''`，Number('') 是 0）；
+ * 預算 0 會讓任何一次 fail 直接進 needs_review(budget_exceeded)、不重試。所以子行程不能用空字串擋這個變數
+ * （suiteProcess.js 的 CI_EFFECTIVE_DEFAULTS）。
+ * @param {{budgetUsd?:number}} [config] runPipeline 的 opts.config
+ * @param {Record<string,string|undefined>} [env=process.env]
+ * @returns {number}
+ */
+function resolveBudgetUsd(config, env = process.env) {
+    return Number((config && config.budgetUsd) ?? env.JOB_COST_BUDGET_USD ?? 0.5);
+}
+
+/**
  * 把一份 PDF 走完整條管線。
  *
  * @param {object} opts
@@ -216,7 +230,7 @@ async function runPipeline(opts) {
         nodeTimeoutMs: Number(process.env.JOB_NODE_TIMEOUT_MS || 120000)
     }, (opts.config && opts.config.thresholds) || {});
 
-    const budgetUsd = Number((opts.config && opts.config.budgetUsd) ?? process.env.JOB_COST_BUDGET_USD ?? 0.5);
+    const budgetUsd = resolveBudgetUsd(opts.config);
 
     const agents = {};
     const agentSources = {};
@@ -561,5 +575,6 @@ function stubCaveats(res) {
 
 module.exports = {
     runPipeline, summarizePipeline, stubCaveats,
-    runDedup0, gateClassify, oracleExtract, AGENT_FILES
+    runDedup0, gateClassify, oracleExtract, AGENT_FILES,
+    resolveBudgetUsd   // 〔章節重整 CH-B〕
 };

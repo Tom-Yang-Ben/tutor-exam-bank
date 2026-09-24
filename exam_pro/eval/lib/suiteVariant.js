@@ -31,8 +31,9 @@ const path = require('path');
 
 const { loadFixture } = require('./fixtures');
 const { loadEmbeddings, assertComplete } = require('./embeddings');
-const { isValidChapter, isValidSubject, isValidQuestionType, normalizeDifficulty } = require('../../config/chapters');
+const { isValidQuestionType, normalizeDifficulty } = require('../../config/chapters');
 const { isPrivatePath } = require('./golden');
+const { chapterGate } = require('./chapterGate');
 const metrics = require('./metrics');
 const shims = require('./stage2Shims');
 const replayMiss = require('./replayMiss');
@@ -61,9 +62,12 @@ const GOLDEN_DEFAULT_PATH = path.resolve(__dirname, '..', 'golden', 'variant.jso
  * 逐筆驗證，回傳「所有」問題（不是遇到第一個就停）——一次修完比修五輪省事。
  * @param {Array<object>} entries
  * @param {Map<number,object>} [fixtureById]
+ * @param {{chapters?:Record<string,string[]>}} [opts] 〔章節重整 CH-B〕注入章節白名單（見 eval/lib/chapterGate.js）；
+ *        未給時照舊用 config/chapters.js
  * @returns {string[]}
  */
-function validateGoldenEntries(entries, fixtureById) {
+function validateGoldenEntries(entries, fixtureById, opts = {}) {
+    const { isValidSubject, isValidChapter } = chapterGate(opts.chapters);
     const problems = [];
     if (!Array.isArray(entries) || entries.length === 0) {
         return ['variant golden 的 entries 必須是非空陣列'];
@@ -115,7 +119,8 @@ function validateGoldenEntries(entries, fixtureById) {
 }
 
 /**
- * @param {{file?:string, fixtureById?:Map<number,object>}} [opts]
+ * @param {{file?:string, fixtureById?:Map<number,object>, chapters?:Record<string,string[]>}} [opts]
+ *        chapters：〔章節重整 CH-B〕注入章節白名單（同 validateGoldenEntries）
  * @returns {{file:string, isPrivate:boolean, version:number, entries:Array<object>, pendingConfirm:number}}
  */
 function loadVariantGolden(opts = {}) {
@@ -123,7 +128,7 @@ function loadVariantGolden(opts = {}) {
     if (!fs.existsSync(target)) throw new Error(`找不到 variant golden：${target}`);
 
     const raw = JSON.parse(fs.readFileSync(target, 'utf8'));
-    const problems = validateGoldenEntries(raw.entries, opts.fixtureById);
+    const problems = validateGoldenEntries(raw.entries, opts.fixtureById, { chapters: opts.chapters });
     if (problems.length > 0) {
         throw new Error(`variant golden 未通過硬閘門（${target}）：\n  - ${problems.join('\n  - ')}`);
     }

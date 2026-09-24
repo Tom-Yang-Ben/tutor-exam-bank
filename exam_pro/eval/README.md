@@ -23,7 +23,7 @@
 | | 公開層 | 私有層 |
 |---|---|---|
 | 位置 | `eval/fixtures/`、`eval/golden/` | `eval/private/`（`.gitignore` 排除） |
-| 內容 | **自行編寫**的 60 題教科書型例題、自製樣卷 `sample_exam.pdf`，以及四份 golden（檢索 40／分類 90／答案 50／重複 30） | 對真實題庫與真實考卷的人工標註 |
+| 內容 | **自行編寫**的 61 題教科書型例題、自製樣卷 `sample_exam.pdf`，以及四份 golden（檢索 40／分類 91／答案 50／重複 30） | 對真實題庫與真實考卷的人工標註 |
 | 進版控 | ✅ | ❌ 永不 |
 | 進 CI | ✅ 守「不退步」 | ❌ 只在本機跑 |
 | 數字的意義 | 相對比較（這次 vs 上次） | 真實表現，手動抄進 README |
@@ -141,7 +141,7 @@ npm run eval:pipeline     # = npm run eval -- --suite pipeline
 這個約定已由**裁決 S2-13 寫進 `interfaces-stage2.md` 第 3.3 條**，不再是 WS-D 的單方決定。
 suite 仍保留「`source='gate'` 應為 0」的斷言——那是這條約定有沒有真的生效的唯一訊號。
 
-輸出：accuracy、macro-F1、Top-5 混淆對，另外分段報「fixture 60 題」與「漂移變體 30 筆」
+輸出：accuracy、macro-F1、Top-5 混淆對，另外分段報「fixture 61 題」與「漂移變體 30 筆」
 （再細分同題幹改寫／章節名同義詞）——漂移那一段掉得特別多，就是 prompt 該補的地方。
 
 ### `--suite pipeline`——對自製樣卷跑完整條管線
@@ -255,6 +255,57 @@ npm run check:html
 
 ---
 
+## 3f. 章節重整後的重錄與清除（`npm run cassettes:rerecord`／`cassettes:prune`）
+
+`docs/chapter-restructure.md` 刻意讓數學／物理的 cassette 與部分向量失效：章節白名單一換，classify／extract／nlq／variant
+的 schemaHash 就變；fixture 改標後，embed_text 第一行的章名也跟著變。改標清單見 `eval/CHAPTER_RELABEL-2026-09.md`。
+
+```powershell
+cd exam_pro
+npm run cassettes:rerecord -- --dry-run     # 只回放、不連網：每個 suite 缺多少 cassette、預估呼叫次數與費用
+npm run cassettes:rerecord                  # 同一份盤點印完之後輸入 yes 才開始錄（會呼叫 Gemini、會產生費用）
+npm run cassettes:prune                     # 列出 CI 已經不會再讀到的 cassette（不刪）
+npm run cassettes:prune -- --apply          # 確認清單後刪除
+```
+
+**錄製完全沿用既有機制**，`eval/tools/rerecord_all.js` 只負責依序呼叫與設環境：
+
+| 步驟 | 指令 | 模式 |
+|---|---|---|
+| 1. fixture 題缺的向量 | `node eval/record_embeddings.js --only-missing` | `EMBED_MODE=live`，只送向量檔裡還沒有的題 |
+| 2. classify | `node eval/run.js --suite classify` | `LLM_MODE=record` |
+| 3. nlq | `node eval/run.js --suite nlq` | `LLM_MODE=record`＋`EMBED_MODE=record`（裁決 S3-20） |
+| 4. variant | `node eval/run.js --suite variant` | `LLM_MODE=record`＋`EMBED_MODE=record`（裁決 S3-20） |
+| 5. pipeline | `node eval/run.js --suite pipeline` | `LLM_MODE=record`；extract 與後續節點，e2e 用的是同一組呼叫 |
+| 6. e2e 的 dedup1 向量 | `node --test test/e2e/…` | `LLM_MODE=replay`＋`EMBED_MODE=record`＋`FEATURE_SIMILAR=true`；CI 用不到，`--no-similar` 可略過 |
+| 7. 驗證 | 五個 eval 與 e2e 各跑一次 | CI 的設定（replay／fixture），印出結果與門檻比較 |
+
+三件容易踩到的事：
+
+- **子行程一律照 `.github/workflows/ci.yml` 的設定**（`MODEL_EXTRACT`／`MODEL_VERIFY`），`.env` 裡的 `MODEL_*`、`FEATURE_*`
+  與其他設定不會帶進去（`eval/lib/suiteProcess.js`）。cassette 的鍵含模型 ID：照 `.env` 錄的鍵，CI 讀不到。
+  CI 沒設的變數在子行程裡設成空字串（擋住 dotenv 從 `.env` 補值）；例外是讀取端用 `??` 取預設值的變數，
+  空字串在那裡不等於「沒設」，改設成 CI 實際生效的值（`CI_EFFECTIVE_DEFAULTS`，目前只有 `JOB_COST_BUDGET_USD=0.5`；
+  設成空字串的話 pipeline 的預算是 0，錄製時一次暫時性錯誤就直接 needs_review、不重試，cassette 會錄不齊）。
+- **`LLM_MODE=record` 會把一個 suite 的每一次呼叫都真的打一次**，連原本還讀得到的也一樣——repo 沒有「只補缺的」LLM 錄製模式。
+  所以 dry-run 的「錄製時 LLM 呼叫」是「命中＋缺」。下限是這一輪回放看得到的呼叫；
+  上限再加上沒被讀到、也不是某次 miss 舊版的 cassette（被 miss 擋住的下游多半在這裡）。
+  費用依 `config/pricing.js`，token 數取同一呼叫的舊版 cassette；沒有舊版時，取同 agent 的平均。
+- **清除要在重錄之後**：`--apply` 在還有 replay miss、只跑了部分 suite、或某個 suite 沒有任何回放紀錄時
+  （最常見的原因是沒設 `TEST_DATABASE_URL`，e2e 整支跳過）拒絕刪除。
+  重錄完、清除之前，`test/unit/sourceCheckSample.test.js` 會紅，因為它要求 extract.v2 的 cassette 恰好一份；清掉舊的那份就會轉綠。
+- **向量檔只增不減**：`record_embeddings.js` 寫檔是「併入」既有的 `embeddings.<model>.<dim>.json`（`--only-missing` 只送缺的；
+  沒加時全部重送，同一個鍵以新值為準）。原本整檔覆寫會洗掉 nlq／variant／e2e 另外補錄的向量，所以改成併入。
+  代價是改標前舊 embed_text 的向量（鍵是舊文字的 sha256）會一直留在檔裡：沒有任何 suite 會再讀到它們，
+  只是多佔空間，不影響任何數字。`cassettes:prune` 只清 cassette，**不清這些向量**；
+  要瘦身得另外處理（例如整檔重錄後手動補回 nlq／variant／e2e 的向量），目前不值得。
+
+怎麼知道「讀了哪些」：兩支工具以 `node --require eval/lib/cassetteProbe.js` 啟動各 suite 的**既有入口**。
+探針包住 `services/llm/fake.js`（回放）與 `services/llm/fixture.js`（向量）的查表點，記下每一次命中與 miss，行為一個字都不改。
+範圍只有 extract／classify／lint／verify／nlq／variant 六個 agent，化學（`*_chem`）、tutor、voice 與其他目錄一律不碰。
+
+---
+
 ## 4. 門檻（ratchet）
 
 `eval/thresholds.json` 的初值 = **第一次量測 − 0.03**，之後**只升不降**。
@@ -321,7 +372,7 @@ npm run check:html
 
 | 項目 | 狀態 | 誰做 |
 |---|---|---|
-| `eval/fixtures/questions.public.json` 的 60 題答案 | ✅ 2026-08-22 已逐題核對 | — |
+| `eval/fixtures/questions.public.json` 的 61 題答案 | #1–#60 ✅ 2026-08-22 已逐題核對；#61（2026-09-25 章節重整新增的干擾題）待核對 | 開發者本人 |
 | `eval/golden/retrieval.json` 的 40 筆相關性判定 | ✅ 已逐筆定案 | — |
 | `eval/golden/classify.json` 的 90 筆章節標籤 | 90/90 `needs_human_confirm` | 開發者本人 |
 | `eval/golden/answer.json` 的 50 題 | 50/50 `needs_human_confirm` | 開發者本人 |
@@ -330,8 +381,8 @@ npm run check:html
 
 ### 階段 2 三份 golden 具體要看哪些欄位
 
-**`classify.json`（90 筆）——只有 30 筆需要真的花時間。**
-前 60 筆（`cls-fx-*`）的標籤直接沿用已定案的 fixture，有測試守著兩邊一致，**掃過即可**。
+**`classify.json`（91 筆）——只有 30 筆需要真的花時間。**
+前 61 筆（`cls-fx-*`）的標籤直接沿用已定案的 fixture，有測試守著兩邊一致，**掃過即可**。
 後 30 筆（`cls-dr-*`）是手寫改寫，要看的是：
 
 | 欄位 | 要判斷什麼 |
@@ -389,13 +440,13 @@ eval/
   .env.replay               LLM_MODE=replay / EMBED_MODE=fixture（無金鑰，進版控）
   compare_pipeline.js       E-X12a：新舊對照（--method legacy|pipeline），不進 CI
   fixtures/
-    questions.public.json   60 題自製 fixture
+    questions.public.json   61 題自製 fixture
     embeddings.<model>.768.json   由 record_embeddings.js 產生
     sample_exam.pdf         自製樣卷（10 題），--suite pipeline 與 E-X12a 的輸入
     make_sample_pdf.js      樣卷產生器（只在本機跑）
   golden/
     retrieval.json          40 筆檢索 golden
-    classify.json           90 筆分類 golden（60 fixture + 30 漂移變體）
+    classify.json           91 筆分類 golden（61 fixture + 30 漂移變體）
     answer.json             50 題答案 golden（各 3 等價 + 2 錯答 = 250 案例）
     dedup.json              30 組重複判定 golden
     formula.json            公式 golden（**WS-C 產出**，走 node --test 不走本入口）
@@ -419,6 +470,11 @@ eval/
     legacyAdapter.js             解析 --method legacy 的進入點與 prompt_hash
   tools/suggest_golden.js   產生 golden 建議稿
   tools/check_html.js       npm run check:html
+  tools/rerecord_all.js     npm run cassettes:rerecord（章節重整後一次重錄；第 3f 節）
+  tools/prune_cassettes.js  npm run cassettes:prune（清掉 CI 讀不到的 cassette；第 3f 節）
+  lib/cassetteProbe.js  cassetteAudit.js  cassettePlan.js  suiteProcess.js   兩支工具共用（探針、盤點、估算、CI 環境）
+  lib/chapterGate.js        硬閘門的章節白名單來源（預設 config/chapters.js；測試可注入新清單）
+  CHAPTER_RELABEL-2026-09.md  章節重整的改標清單（題號、舊章、新章、理由）
   reports/                  報表輸出（.gitignore）
   private/                  私有層（.gitignore）
 ```

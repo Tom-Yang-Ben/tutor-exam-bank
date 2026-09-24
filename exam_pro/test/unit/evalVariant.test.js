@@ -12,6 +12,7 @@ const fs = require('node:fs');
 
 const suite = require('../../eval/lib/suiteVariant');
 const { loadFixture } = require('../../eval/lib/fixtures');
+const { fixtureVectorGap } = require('./lib/recordedData');
 
 // eval 的三個模式旗標：單元測試一律 fixture／replay（與 eval/.env.replay 一致）
 process.env.EMBED_MODE = process.env.EMBED_MODE || 'fixture';
@@ -29,11 +30,14 @@ describe('eval/golden/variant.json 的硬閘門（第 8.4 條）', () => {
         }
     });
 
-    test('涵蓋兩科 8 章與五種題型（證明題的 verify 會 skipped，那條路徑必須量得到）', () => {
+    test('涵蓋兩科 10 章與五種題型（證明題的 verify 會 skipped，那條路徑必須量得到）', () => {
         const golden = suite.loadVariantGolden({ fixtureById: fixture.byId });
         const chapters = new Set(golden.entries.map(e => `${e.subject}/${e.chapter}`));
         const types = new Set(golden.entries.map(e => e.question_type));
-        assert.equal(chapters.size, 8);
+        // 〔章節重整 CH-B〕8 → 10 章：藍本照 fixture 改標後，「指數與對數」拆成「指數與對數」與
+        // 「指數函數與對數函數」，「三角函數的定義」拆成「直角三角形的邊角關係」（var-013，藍本 #25）與
+        // 「廣義角與極坐標」（var-014～016）（eval/CHAPTER_RELABEL-2026-09.md）。仍是精確值，不是放寬成 ≥。
+        assert.equal(chapters.size, 10);
         assert.deepEqual([...types].sort(), ['single', '單選', '多選', '填空', '計算', '證明'].filter(t => types.has(t)).sort());
         assert.ok(types.has('證明'), 'golden 要有證明題');
         assert.ok(types.has('多選'), 'golden 要有多選題');
@@ -48,7 +52,9 @@ describe('eval/golden/variant.json 的硬閘門（第 8.4 條）', () => {
     });
 
     test('抓得到壞掉的標註：id 格式、藍本不在 fixture、欄位與 fixture 不符、重複藍本', () => {
-        const ok = { id: 'var-001', source_question_id: 1, subject: '數學', chapter: '指數與對數', difficulty: 1, question_type: '單選', expect: { min_retrieved: 2 }, needs_human_confirm: true };
+        // 〔章節重整 CH-B〕合法樣本原本用 fixture #1（指數與對數），#1 已改標為「指數函數與對數函數」；
+        // 改用章名未受重整影響的 #9（數學／向量內積／難度 2／計算），下面每一種壞法照舊逐條檢查。
+        const ok = { id: 'var-001', source_question_id: 9, subject: '數學', chapter: '向量內積', difficulty: 2, question_type: '計算', expect: { min_retrieved: 2 }, needs_human_confirm: true };
         assert.deepEqual(suite.validateGoldenEntries([ok], fixture.byId), []);
 
         const bad = suite.validateGoldenEntries([
@@ -73,11 +79,15 @@ describe('retrieveInMemory（第 3.1 條的候選條件）', () => {
     const fixture = loadFixture();
     const { loadEmbeddings } = require('../../eval/lib/embeddings');
     const emb = loadEmbeddings({ questions: fixture.questions });
+    // 〔章節重整 CH-B〕retrieveInMemory 的前提是「每個候選都有向量」（suite 先 assertComplete 才呼叫它）。
+    // 改標後有幾題的向量要等 Owner 重錄；這四則驗的是候選條件與排序，所以只餵有向量的題。
+    // 向量齊全時這個 filter 不會拿掉任何一題，斷言與原本逐字相同。
+    const questions = fixture.questions.filter(q => emb.vectorOf(q));
 
     test('鎖定單一難度、排除自己、只收同學科', () => {
         const source = fixture.byId.get(9);      // 數學／向量內積／難度 2
         const hits = suite.retrieveInMemory({
-            source, questions: fixture.questions, vectorOf: emb.vectorOf, simMin: 0
+            source, questions, vectorOf: emb.vectorOf, simMin: 0
         });
         assert.ok(hits.every(h => h.id !== source.id));
         for (const h of hits) {
@@ -90,30 +100,45 @@ describe('retrieveInMemory（第 3.1 條的候選條件）', () => {
     test('difficulty_delta 是字面語意（+1 就只收 difficulty+1）', () => {
         const source = fixture.byId.get(9);
         const hits = suite.retrieveInMemory({
-            source, questions: fixture.questions, vectorOf: emb.vectorOf, simMin: 0, difficultyDelta: 1
+            source, questions, vectorOf: emb.vectorOf, simMin: 0, difficultyDelta: 1
         });
         for (const h of hits) assert.equal(fixture.byId.get(h.id).difficulty, 3);
     });
 
     test('依 cosine 由大到小排序，門檻拉高只會變少不會變多', () => {
         const source = fixture.byId.get(9);
-        const all = suite.retrieveInMemory({ source, questions: fixture.questions, vectorOf: emb.vectorOf, simMin: 0 });
+        const all = suite.retrieveInMemory({ source, questions, vectorOf: emb.vectorOf, simMin: 0 });
         for (let i = 1; i < all.length; i++) assert.ok(all[i - 1].cosine >= all[i].cosine);
 
-        const strict = suite.retrieveInMemory({ source, questions: fixture.questions, vectorOf: emb.vectorOf, simMin: 0.9 });
+        const strict = suite.retrieveInMemory({ source, questions, vectorOf: emb.vectorOf, simMin: 0.9 });
         assert.ok(strict.length <= all.length);
         assert.ok(strict.every(h => h.cosine >= 0.9));
     });
 
     test('「同概念換數字」的那一題一定排在最前面（這就是 embed_text 的設計目的）', () => {
         const source = fixture.byId.get(9);       // dot-basic base
-        const hits = suite.retrieveInMemory({ source, questions: fixture.questions, vectorOf: emb.vectorOf, simMin: 0 });
+        const hits = suite.retrieveInMemory({ source, questions, vectorOf: emb.vectorOf, simMin: 0 });
         assert.equal(hits[0].id, 10, 'dot-basic 的 numeric_variant');
         assert.ok(hits[0].cosine > 0.9);
     });
 });
 
-describe('runVariantSuite', () => {
+// 〔章節重整 CH-B〕runVariantSuite 在量測前先檢查 fixture 每一題的向量（assertComplete，不拿假向量湊數字）。
+// 改標後那幾題的向量要等 Owner 重錄：這段期間下面這組 skip 並指名缺哪幾題，
+// 另由「向量不齊時拒絕執行」那一則確認 suite 確實是以「查不到向量」停下來。錄好之後自動恢復執行。
+const VECTOR_GAP = fixtureVectorGap();
+
+describe('runVariantSuite：向量不齊時拒絕執行（〔章節重整 CH-B〕）', { skip: VECTOR_GAP.complete ? '向量齊全，這一則不適用' : false }, () => {
+    test('以「查不到向量」拒絕，並列出缺的題號（不拿假向量湊 retrieved_coverage）', async () => {
+        await assert.rejects(() => suite.runVariantSuite({}), (err) => {
+            assert.match(err.message, /查不到向量/);
+            for (const id of VECTOR_GAP.missing) assert.ok(err.message.includes(String(id)), `訊息沒有列出 id=${id}`);
+            return true;
+        });
+    });
+});
+
+describe('runVariantSuite', { skip: VECTOR_GAP.reason }, () => {
     test('形狀符合第 8.1 條，retrieved_coverage 永遠量得到', async () => {
         const res = await suite.runVariantSuite({});
         assert.equal(res.suite, 'variant');

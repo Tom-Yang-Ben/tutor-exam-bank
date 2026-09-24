@@ -86,7 +86,7 @@ describe('textHash', () => {
 });
 
 describe('與 S0 自含版（scripts/backfill_text_hash.js @ e1740ca）逐位元相同', () => {
-    test('對公開 fixture 60 題的題幹與答案', () => {
+    test('對公開 fixture 61 題的題幹與答案', () => {
         for (const q of fixture.questions) {
             for (const field of ['question_text', 'answer_text']) {
                 assert.equal(normalizeStem(q[field]), s0.normalizeStem(q[field]), `#${q.id} ${field}`);

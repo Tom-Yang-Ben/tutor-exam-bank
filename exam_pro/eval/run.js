@@ -217,7 +217,7 @@ async function runRetrieval(args) {
 
     const fixture = loadFixture();
     if (fixture.needsHumanConfirm) {
-        warnings.push('fixture 仍標記 needs_human_confirm：60 題的答案尚未由開發者本人逐題核對，數字只能當骨架驗證用。');
+        warnings.push(`fixture 仍標記 needs_human_confirm：${fixture.questions.length} 題的答案尚未由開發者本人逐題核對，數字只能當骨架驗證用。`);
     }
 
     const golden = loadGolden({ file: args.golden, fixtureById: fixture.byId });
