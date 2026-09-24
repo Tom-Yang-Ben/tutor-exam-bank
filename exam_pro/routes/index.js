@@ -198,6 +198,8 @@ if (featuresS4.FEATURE_ASSISTANT) {
 //   GET /error-types                錯因白名單（config/errorTypes.js）——只給批改與弱點面板用，
 //                                   跟著 FEATURE_STUDENTS：旗標關閉時不掛載，落到 Express 預設 404
 {
+    const studentAdminControllerWs5A = require('../controllers/studentAdminController');
+    router.get('/student-profile-options', studentAdminControllerWs5A.getProfileOptions);
     if (require('../config/features').FEATURE_STUDENTS) {
         const { ERROR_TYPES, MAX_ERROR_TYPES } = require('../config/errorTypes');
         router.get('/error-types', (req, res) => {

@@ -167,9 +167,11 @@ exports.listStudents = async (req, res, next) => {
         // 在 JS 端 Math.round(x*10000)/10000 會踩到浮點數的邊界。
         // 該生沒有任何 attempts 時 COALESCE 回 0（不是 null、不是 NaN）。
         const { rows } = await query(
+            // 〔stage5 WS-A〕學生檔案六欄接在既有四欄之後（第 4.1 條第 4 項）
             `SELECT s.id, s.name,
                     COALESCE(p.papers, 0)::int AS papers,
-                    COALESCE(round(a.graded::numeric / NULLIF(a.total, 0), 4), 0)::float8 AS graded_ratio
+                    COALESCE(round(a.graded::numeric / NULLIF(a.total, 0), 4), 0)::float8 AS graded_ratio,
+                    s.grade, s.track, s.target_exams, s.school, s.textbook_version, s.note
                FROM students s
                LEFT JOIN (SELECT student_id, COUNT(*) AS papers
                             FROM exam_papers GROUP BY student_id) p ON p.student_id = s.id

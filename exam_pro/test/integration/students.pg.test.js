@@ -95,6 +95,9 @@ function runSuite() {
 
     // ─────────────────── 灌資料輔助 ───────────────────
 
+    /** 〔stage5 WS-A〕GET /api/students 每列新增的學生檔案六欄，沒填時的值（第 4.1 條第 4 項）。 */
+    const EMPTY_PROFILE = { grade: null, track: null, target_exams: [], school: null, textbook_version: null, note: null };
+
     const MATH_CHAPTERS = ['向量內積', '排列', '組合'];
     const PHYS_CHAPTERS = ['牛頓運動定律', '靜電學'];
     const TYPES = ['單選', '多選', '填空', '計算', '證明'];
@@ -325,11 +328,15 @@ function runSuite() {
 
                 const res = await request(app).get('/api/students');
                 assert.equal(res.status, 200);
+                // 〔stage5 WS-A〕DEC-017／interfaces-stage5.md 第 4.1 條第 4 項刻意在每列後面加上學生檔案六欄；
+                // 既有四欄的值與順序不變，新欄在沒填檔案時是 NULL／空陣列。斷言仍是逐欄 deepEqual（沒有放寬）。
                 assert.deepEqual(res.body.items, [
                     // A 完全沒有試卷也要出現（LEFT JOIN），papers: 0、graded_ratio: 0
-                    { id: idA, name: '測試學生A', papers: 0, graded_ratio: 0 },
-                    { id: idB, name: '測試學生B', papers: 2, graded_ratio: 0.625 }
+                    { id: idA, name: '測試學生A', papers: 0, graded_ratio: 0, ...EMPTY_PROFILE },
+                    { id: idB, name: '測試學生B', papers: 2, graded_ratio: 0.625, ...EMPTY_PROFILE }
                 ]);
+                assert.deepEqual(Object.keys(res.body.items[0]).slice(0, 4), ['id', 'name', 'papers', 'graded_ratio'],
+                    '既有四欄必須維持在最前面、順序不變');
                 // 型別：不得是字串、不得是 null／NaN
                 for (const item of res.body.items) {
                     assert.equal(typeof item.papers, 'number');
@@ -347,7 +354,8 @@ function runSuite() {
                 await seedPaper(id, questions.map(q => q.id));
 
                 const { body } = await request(app).get('/api/students');
-                assert.deepEqual(body.items, [{ id, name: '測試學生A', papers: 1, graded_ratio: 0 }]);
+                // 〔stage5 WS-A〕同上：每列多了學生檔案六欄（第 4.1 條第 4 項）
+                assert.deepEqual(body.items, [{ id, name: '測試學生A', papers: 1, graded_ratio: 0, ...EMPTY_PROFILE }]);
             });
 
             test('papers 不會被 attempts 的列數放大（兩張表分別聚合再 LEFT JOIN）', async () => {
