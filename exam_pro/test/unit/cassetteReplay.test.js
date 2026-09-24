@@ -57,6 +57,36 @@ function extractCassetteReady() {
 
 const READY = extractCassetteReady();
 
+/**
+ * 〔章節重整 CH-A〕公開 fixture 第 1 題的 classify cassette 在不在（算法與 extractCassetteReady 相同）。
+ *
+ * 原本 classify 這組只看「classify/ 目錄底下有沒有檔案」。2026-09-25 數學／物理章節重整刻意改了
+ * classify schema 的 enum（docs/chapter-restructure.md 第 1 條），schemaHash 一變鍵就全變：目錄裡有檔，
+ * 卻沒有一個對得上，測試就在斷言那一行以「找不到 cassette」紅掉——正是上面 extractCassetteReady
+ * 註解說的那種難懂的紅燈。改成算出這一題實際要用的鍵：Owner 依第 5 條重錄之後，這組照原樣恢復執行，
+ * 斷言一條都沒有改。鍵的組法逐項對照 agents/classify.js 第二層的 generateJson 呼叫
+ * （few-shot 在 db=null 時是空陣列）。
+ */
+function classifyCassetteReady() {
+    let q;
+    try {
+        q = JSON.parse(fs.readFileSync(FIXTURE, 'utf8')).questions.find(x => x.id === 1);
+    } catch (err) {
+        return false;
+    }
+    if (!q) return false;
+    const key = cassetteKey({
+        agent: 'classify',
+        modelId: models.parseModel(models.MODEL_EXTRACT).id,
+        template: classifyAgent.TEMPLATE,
+        schema: buildSchema('classify'),
+        cacheKeyParts: { template: classifyAgent.TEMPLATE, questionText: String(q.question_text ?? '').trim(), fewShotIds: [] }
+    });
+    return fs.existsSync(cassettePath('classify', key));
+}
+
+const CLASSIFY_READY = classifyCassetteReady();
+
 const envBackup = {};
 const ENV_KEYS = ['LLM_MODE', 'EVAL_CASSETTE_DIR', 'MODEL_EXTRACT'];
 
@@ -141,7 +171,11 @@ describe('cassette 回放 — extract（LLM_MODE=replay，不連外）', { skip:
 // classify 的 cassette 與樣卷無關（鍵是 questionText + fewShotIds），
 // 所以樣卷換掉時它仍然有效——兩組獨立 skip，不要互相拖累。
 describe('cassette 回放 — classify（LLM_MODE=replay，不連外）', {
-    skip: hasCassettes('classify') ? false : '尚未錄製 classify cassette（需要金鑰，見 docs/llm.md）'
+    // 〔章節重整 CH-A〕多一個條件：這一題在現行 schema 下的 cassette 要真的在（見 classifyCassetteReady）
+    skip: !hasCassettes('classify') ? '尚未錄製 classify cassette（需要金鑰，見 docs/llm.md）'
+        : !CLASSIFY_READY ? '現行 classify schema 下沒有公開 fixture 第 1 題的 cassette——2026-09-25 章節重整改了 enum，'
+            + '等 Owner 依 docs/chapter-restructure.md 第 5 條重錄（npm run cassettes:rerecord）'
+            : false
 }, () => {
     test('classify：回放公開 fixture 的題目，輸出通過 isValidChapter', async () => {
         const fixture = JSON.parse(fs.readFileSync(FIXTURE, 'utf8'));
