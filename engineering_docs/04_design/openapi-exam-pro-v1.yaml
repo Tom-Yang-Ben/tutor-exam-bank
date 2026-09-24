@@ -1,15 +1,20 @@
 # openapi-exam-pro-v1.yaml — 家教專用數理題庫系統 API 契約
-# 版本: v1.2 | 更新: 2026-09-15 | 狀態: 活躍 | Owner: Ben（楊本顥）  # 修訂 2026-09-15f（feat/source-check：review reason 值域加 transcription_mismatch，FR-020）
+# 版本: v1.3 | 更新: 2026-09-24 | 狀態: 活躍 | Owner: Ben（楊本顥）  # 修訂 2026-09-24（階段 5 整合回填：新增 13 支、擴充 13 支端點，FR-021～035）
 # 追溯：上游 FR-001～FR-017、NFR-001（x-api-key／限流）、NFR-002（成本節流）  # 修訂 2026-08-29：FR-017 題源標記
+#       上游 FR-021～FR-035、NFR-007（家教／語音每日預算）、NFR-008（錄音不落地）  # 修訂 2026-09-24
+# 修訂 2026-09-24：另更正既有錯誤——PATCH /papers/{id}/results 的 body 鍵名改為 results（依實作）；batch-source 的 200 描述加引號（原本使整份 YAML 無法解析）
 #       下游 ../05_qa/test_plan.md（TC-* 依本檔端點派生）、../05_qa/qa_tracker.md
 # 端點來源：exam_pro/routes/index.js（核心區＋各階段 append-only 區塊）；
 # FEATURE_SIMILAR／VARIANTS／NLQ／STUDENTS／ASSISTANT（exam_pro/config/features.js，預設全關）
 # 未開啟時對應路由不掛載，請求落到 404。例外：jobs／review 八支恆掛載（管線屬階段 2 核心），
 # FEATURE_PIPELINE 僅控制前端上傳入口與複核分頁渲染，不影響路由。
+# 修訂 2026-09-24（階段 5）：另有 FEATURE_KC（/kc*、/questions/{id}/kcs）、FEATURE_REMEDIAL（/students/{id}/weakness/kc、
+# /students/{id}/remedial-paper*、/coverage）、FEATURE_TUTOR（/tutor）、FEATURE_VOICE（/voice/transcribe，需同時開 FEATURE_TUTOR），
+# FEATURE_STUDENTS 另控制 /error-types；FEATURE_KC_TAGGING 不控制路由（只控制管線入庫後的自動標註）。
 openapi: 3.1.0
 info:
   title: exam_pro API
-  version: 1.2.0 # 修訂 2026-09-15f（feat/source-check）
+  version: 1.3.0 # 修訂 2026-09-24（階段 5 整合回填）
   description: |
     家教專用數理題庫系統（exam_pro）之 HTTP API 契約。版本 v1.1，更新 2026-08-29，Owner：Ben（楊本顥）。
     本檔為端點清單唯一權威（對應 exam_pro/routes/index.js）；設計約定（錯誤格式、分頁、驗證規則）
@@ -18,6 +23,11 @@ info:
     2026-08-29 修訂（PR #6/#7 程式碼同步）：新增 GET /chapter-volumes；listQuestions／generatePaper／createJob／QuestionCreate 補 source_type（FR-017）。
     2026-08-29 修訂之二（feat/source-detail 0007）：QuestionCreate／createJob 補 source_detail 來源註記；新增 POST /questions/batch-source 批次補標（FR-017 延伸）。
     2026-09-15f 修訂（feat/source-check 0009，FR-020）：GET /review 的 reason 值域加 transcription_mismatch（九個值）；job_questions.state 值域加 source_checked；GET /review/{jqId} 的 payload 可含 extract.source_text 與 source_check。端點形狀不變。
+    2026-09-24 修訂（階段 5 教學診斷平台，FR-021～035；契約 docs/interfaces-stage5.md）：新增 GET /questions/{id}、/student-profile-options、
+    /error-types、/kc、/kc/{id}、/questions/{id}/kcs、/students/{id}/weakness/kc、/students/{id}/remedial-paper、
+    /students/{id}/remedial-paper/items、/coverage、/tutor、/voice/transcribe；擴充 PATCH /papers/{id}/results（錯因、部分給分、
+    學生答案、註記；並更正 body 鍵名為 results）、GET /papers/{id}、GET /students/{id}/weakness（by_error_type）、學生三支（檔案欄位）、
+    題目列表／新增／修改（文字詳解）、POST /generate-paper（blueprint）、POST /download-word（edition）、POST /jobs 與 GET /jobs/{id}（subject_group）。
 servers:
   - url: http://localhost:3000/api
 security:
@@ -29,6 +39,9 @@ tags:
   - { name: jobs, description: 拆題管線 jobs／複核（FR-001、FR-006） }
   - { name: ai, description: AI 解析／檢索／變式／NLQ／助教（FR-010～FR-012、FR-016） }
   - { name: export, description: Word 匯出（FR-009） }
+  - { name: kc, description: 知識點與題目標註（FR-028、FR-029；FEATURE_KC；修訂 2026-09-24） }
+  - { name: remedial, description: 知識點弱點、補救卷、題庫覆蓋率（FR-030～FR-033；FEATURE_REMEDIAL；修訂 2026-09-24） }
+  - { name: tutor, description: AI 家教與按住說話（FR-034、FR-035；FEATURE_TUTOR／FEATURE_VOICE；修訂 2026-09-24） }
 paths:
   /questions:
     get:
@@ -59,6 +72,38 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
   /questions/{id}:
     parameters: [{ $ref: "#/components/parameters/IdPath" }]
+    get: # 修訂 2026-09-24（階段 5 WS-A，FR-024）
+      tags: [questions]
+      summary: 題目詳情（含文字詳解；封存題也查得到；核心區不吃旗標）
+      operationId: getQuestion
+      responses:
+        "200":
+          description: 成功；不回 embedding、search_tsv
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+                  subject: { type: string }
+                  chapter: { type: string }
+                  question_type: { type: string }
+                  difficulty: { type: integer }
+                  question_text: { type: string }
+                  question_img: { type: ["string", "null"] }
+                  answer_text: { type: string }
+                  solution_text: { type: ["string", "null"] }
+                  solution_src: { type: ["string", "null"], enum: [verify, teacher, ai, null] }
+                  source_type: { type: string }
+                  source_detail: { type: ["string", "null"] }
+                  origin: { type: string }
+                  chapter_src: { type: string }
+                  variant_of: { type: ["integer", "null"] }
+                  follows_question_id: { type: ["integer", "null"] }
+                  created_at: { type: string }
+                  archived_at: { type: ["string", "null"] }
+        "400": { description: ":id 不是正整數（無效的題目 ID）" }
+        "404": { $ref: "#/components/responses/NotFound" }
     put:
       tags: [questions]
       summary: 更新題目
@@ -120,7 +165,7 @@ paths:
                 source_type: { type: string, enum: [official, school, publisher, self, unknown], description: 帶了才改 }
                 source_detail: { type: string, maxLength: 100, description: 帶了非空才改（批次不提供清空——清空走單題 PUT） }
       responses:
-        "200": { description: 成功；回 { message, updated }（updated＝實際更新筆數） }
+        "200": { description: "成功；回 { message, updated }（updated＝實際更新筆數）" } # 修訂 2026-09-24：加引號（原未加引號使整份 YAML 無法解析）
         "400": { description: question_ids 不合法、兩欄皆未提供、source_type 非法或註記超長 }
   /chapters:
     get:
@@ -166,7 +211,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [subject, chapter, count]
+              required: [subject] # 修訂 2026-09-24：單章路徑需 chapter＋count；跨章路徑改送 blueprint，兩者互斥（同送 400）
               properties:
                 student_id: { type: integer, description: 指定學生（排除其已作答題） }
                 student_name: { type: string }
@@ -177,7 +222,24 @@ paths:
                 exclude_ids: { type: array, items: { type: integer }, description: 另行排除的題目 ID }
                 # 修訂 2026-08-29（PR #7 source_type / PR #6 chapter-volumes）：題源過濾（FR-017）
                 source_types: { type: array, items: { type: string, enum: [official, school, publisher, self, unknown] }, description: 題源過濾（FR-017）；空陣列或未帶＝不限制，伺服器端去重後過濾候選池 }
+                # 修訂 2026-09-24（階段 5 WS-D，FR-032）：跨章配額；不吃旗標
+                blueprint:
+                  type: ["array", "null"]
+                  minItems: 1
+                  maxItems: 10
+                  description: 跨章配額（count 總和 ≤50；同一章可出現多列）；與 chapter／count 互斥。null 或未帶＝單章路徑，回應逐字不變
+                  items:
+                    type: object
+                    required: [chapter, count]
+                    properties:
+                      chapter: { type: string, description: 該科章節白名單內 }
+                      count: { type: integer, minimum: 1 }
+                      difficulty_min: { type: integer, minimum: 1, maximum: 5 }
+                      difficulty_max: { type: integer, minimum: 1, maximum: 5, description: 需 ≥ difficulty_min }
       responses:
+        # 修訂 2026-09-24（FR-032）：帶 blueprint 時回應另有 blueprint:[{chapter, difficulty_min, difficulty_max, wanted, got}] 與
+        #   shortfalls:[{row, chapter, difficulty_min, difficulty_max, wanted, got, reason}]（reason ∈ insufficient_stock／follow_up_group），
+        #   有不足時加 note；部分列不足仍 200；全部列抽不到才 400（同樣附兩鍵）；FOLLOW_UP_SHORTFALL_POLICY='error' 時承上組不足的列 → 400
         # 修訂 2026-09-15g（feat/follow-up-paper-group，FR-019 PR2）：承上題整組抽取，契約見 docs/interfaces-stage1.md 第 7.1 條
         "200": { description: "成功；回傳草稿題目清單。承上題以組為單位整組抽、相鄰排列，questions[] 逐題帶 follows_question_id；題數因整組而湊不滿時（FOLLOW_UP_SHORTFALL_POLICY='note'，預設）少出題並額外帶 shortfall {requested, actual, reason:'follow_up_group'} 與 note（僅少出時出現）" }
         "400": { description: "欄位缺漏、該生可抽題數不足（家族互斥與承上組整組剔除後計算，examController 回 400 非 409）、source_types 含非法值；承上組一題都湊不出來，或政策為 'error' 時湊不滿題數" } # 修訂 2026-08-29（PR #7 source_type / PR #6 chapter-volumes）；修訂 2026-09-15g
@@ -210,7 +272,36 @@ paths:
       summary: 取得試卷（批改頁；FEATURE_STUDENTS）
       operationId: getPaper
       responses:
-        "200": { description: 成功；含題目與逐題批改結果 }
+        "200": # 修訂 2026-09-24（階段 5 WS-A，FR-021）：questions[] 多九欄
+          description: 成功；含題目與逐題批改結果（questions 依出題順序；封存題照樣出現）
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+                  title: { type: string }
+                  student_id: { type: integer }
+                  created_at: { type: string }
+                  questions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        question_id: { type: integer }
+                        question_text: { type: string }
+                        question_type: { type: string }
+                        difficulty: { type: integer }
+                        result: { type: ["integer", "null"] }
+                        subject: { type: string }
+                        chapter: { type: string }
+                        answer_text: { type: string }
+                        solution_text: { type: ["string", "null"] }
+                        solution_src: { type: ["string", "null"], enum: [verify, teacher, ai, null], description: 契約外多帶一欄，批改卡標示詳解來源 }
+                        score: { type: ["number", "null"], description: 部分給分 0～1 }
+                        error_types: { type: array, items: { $ref: "#/components/schemas/ErrorTypeCode" }, description: 沒有 attempts 列時為空陣列 }
+                        response: { type: ["string", "null"] }
+                        teacher_note: { type: ["string", "null"] }
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
       tags: [papers]
@@ -232,19 +323,33 @@ paths:
           application/json:
             schema:
               type: object
-              required: [items]
+              required: [results]
+              # 修訂 2026-09-24：鍵名依 controllers/paperController.js parseResultsBody 實作為 results（原記 items 與實作不符）；
+              # 階段 5 WS-A 加四個可選鍵（FR-021）：沒送不動、送 null 清空；整批仍單一交易全有全無
               properties:
-                items:
+                results:
                   type: array
+                  minItems: 1
+                  maxItems: 100
+                  description: question_id 不可重複
                   items:
                     type: object
                     required: [question_id, result]
                     properties:
                       question_id: { type: integer }
-                      result: { type: ["integer", "null"], description: 批改結果；null 表取消批改（graded_at 一併清除） }
+                      result: { type: ["integer", "null"], enum: [0, 1, null], description: 批改結果；null 表取消批改（graded_at、score、error_types 一併清除；response、note 保留） }
+                      score: { type: ["number", "null"], minimum: 0, maximum: 1, description: 部分給分，最多兩位小數；只能搭配 result 為 0 或 1 }
+                      error_types:
+                        type: ["array", "null"]
+                        maxItems: 5
+                        uniqueItems: true
+                        items: { $ref: "#/components/schemas/ErrorTypeCode" }
+                        description: 只能在 result=0 時非空、chem_equation 只能用於化學題；result≠0 時伺服器一律清空（錯改對即使沒送也清）；null＝[]；存成白名單順序
+                      response: { type: ["string", "null"], maxLength: 500, description: 學生實際答案（trim；空字串＝null） }
+                      note: { type: ["string", "null"], maxLength: 500, description: 老師註記，寫入 attempts.teacher_note }
       responses:
-        "200": { description: 已更新 }
-        "400": { description: 題號不在卷內或格式錯誤 }
+        "200": { description: "已更新；回 { updated }" }
+        "400": { description: 題號不在卷內或格式錯誤；階段 5 另有 9 種批改細節的 400（排在既有六個之後；訊息逐字見 docs/grading-and-profile.md §3.1） }
         "404": { $ref: "#/components/responses/NotFound" }
   /students:
     get:
@@ -252,41 +357,63 @@ paths:
       summary: 學生清單（組卷下拉恆常需要，不掛旗標；裁決 S4-2）
       operationId: listStudents
       responses:
-        "200": { description: 成功 }
+        "200": # 修訂 2026-09-24（階段 5 WS-A，FR-023）：每列在既有四欄之後多六個檔案欄位
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      allOf:
+                        - type: object
+                          properties:
+                            id: { type: integer }
+                            name: { type: string }
+                            papers: { type: integer }
+                            graded_ratio: { type: number }
+                        - { $ref: "#/components/schemas/StudentProfile" }
     post:
       tags: [students]
-      summary: 建立學生
+      summary: 建立學生（可同時帶檔案欄位的任意子集；修訂 2026-09-24，FR-023）
       operationId: createStudent
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [name]
-              properties:
-                name: { type: string, minLength: 1 }
+              allOf:
+                - type: object
+                  required: [name]
+                  properties:
+                    name: { type: string, minLength: 1 }
+                - { $ref: "#/components/schemas/StudentProfile" }
       responses:
-        "201": { description: 已建立 }
+        "201": { description: 已建立；回完整一列（id、name＋六個檔案欄位）, content: { application/json: { schema: { $ref: "#/components/schemas/StudentRow" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "409": { description: 姓名重複 }
   /students/{id}:
     parameters: [{ $ref: "#/components/parameters/IdPath" }]
     patch:
       tags: [students]
-      summary: 學生改名
+      summary: 學生改名／部分更新檔案（修訂 2026-09-24，FR-023：name 與六個檔案欄位的任意子集，沒送的不動；只送 name 的行為與訊息不變）
       operationId: renameStudent
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [name]
-              properties:
-                name: { type: string, minLength: 1 }
+              allOf:
+                - type: object
+                  minProperties: 1
+                  description: 一個可改的欄位都沒送 → 400「至少要提供一個要修改的欄位（name、grade、track、target_exams、school、textbook_version、note）。」
+                  properties:
+                    name: { type: string, minLength: 1 }
+                - { $ref: "#/components/schemas/StudentProfile" }
       responses:
-        "200": { description: 已更新 }
+        "200": { description: 已更新；回完整一列, content: { application/json: { schema: { $ref: "#/components/schemas/StudentRow" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: 姓名重複 }
@@ -374,6 +501,18 @@ paths:
                         chapter: { type: string }
                         question_text: { type: string }
                         assigned_at: { type: string, description: "'YYYY-MM-DD' 字串" }
+                        error_types: { type: array, items: { type: string }, description: 修訂 2026-09-24（FR-022）：批改時標的錯因 }
+                        score: { type: ["number", "null"], description: 修訂 2026-09-24（FR-022）：部分給分 }
+                  by_error_type: # 修訂 2026-09-24（階段 5 WS-A，FR-022）：接在既有五個鍵之後
+                    type: array
+                    description: 只看 result=0 的列；排序 count DESC、error_type ASC（COLLATE "C"）
+                    items:
+                      type: object
+                      properties:
+                        error_type: { type: string }
+                        label: { type: ["string", "null"], description: 白名單外的代碼為 null }
+                        count: { type: integer }
+                        share: { type: ["number", "null"], description: count ÷ 時間窗與科目內的錯題數（含未標錯因者），四捨五入至第 4 位；分母 0 時 null；一題可多標，加總可能 > 1 }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
   /analyze-pdf:
@@ -411,6 +550,8 @@ paths:
                 paper_title: { type: string }
                 student_name: { type: string }
                 question_ids: { type: array, items: { type: integer }, minItems: 1, description: 順序即出卷順序；封存題仍可印出 }
+                # 修訂 2026-09-24（階段 5 WS-A，FR-025）
+                edition: { type: ["string", "null"], enum: [standard, student, solution, null], default: standard, description: "standard＝現行（題目＋卷末答案）；student＝不附答案；solution＝答案後接詳解（公式轉原生 OMML，無詳解者標「（本題尚無文字詳解）」）；其他值（含空字串）400「edition 只接受 standard、student、solution。」" }
       responses:
         "200":
           description: 成功；回傳 .docx 二進位。question_img 為 /figures/<檔名> 的題嵌入本機附圖（FR-018，docs/figures.md），圖檔讀不到時該題放「（附圖遺失）」、仍回 200
@@ -495,6 +636,8 @@ paths:
                 source_type: { type: string, enum: [official, school, publisher, self, unknown], description: 選填；該 job 入庫的所有題沿用此標記（FR-017）。未帶或非法值落 NULL，入庫時以 'unknown' 落地 }
                 # 修訂 2026-08-29b（feat/source-detail 0007）：整份考卷的來源註記（FR-017 延伸）
                 source_detail: { type: string, maxLength: 100, description: 選填；該 job 入庫的所有題沿用此註記（例「北一女 2024 段考」）；variant job 不繼承藍本註記 }
+                # 修訂 2026-09-24（階段 5 WS-B，FR-026）：卷別分流
+                subject_group: { type: string, enum: [math_physics, chemistry], default: math_physics, description: "沒帶或空字串＝math_physics；其他值 400「subject_group 只能是 math_physics 或 chemistry。」；冪等鍵為 (pdf_sha256, subject_group)——換卷別重傳建新 job" }
       responses:
         "202":
           description: 已受理
@@ -506,7 +649,7 @@ paths:
                 properties:
                   job_id: { type: integer }
                   existing: { type: boolean, description: true 表命中冪等、回既有 job }
-        "400": { description: 沒有上傳檔案或非 PDF }
+        "400": { description: 沒有上傳檔案或非 PDF；subject_group 非法（修訂 2026-09-24） }
         "413": { description: 檔案超過 15 MB（multer LIMIT_FILE_SIZE 轉譯） }
         "429": { $ref: "#/components/responses/RateLimited" }
   /jobs/{id}:
@@ -538,6 +681,7 @@ paths:
                   cost_usd: { type: number }
                   budget_usd: { type: number }
                   elapsed_ms: { type: integer, description: 終態取 updated_at−created_at，進行中取 now()−created_at }
+                  subject_group: { type: string, enum: [math_physics, chemistry], description: 修訂 2026-09-24（FR-026）：附加在最後，既有欄位與順序不變 }
         "404": { $ref: "#/components/responses/NotFound" }
   /jobs/{id}/questions:
     get:
@@ -683,6 +827,444 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "502": { description: 上游 LLM 失敗 }
         "429": { $ref: "#/components/responses/RateLimited" }
+  # ──────────────── 階段 5（修訂 2026-09-24；docs/interfaces-stage5.md 第 4 條，FR-021～035）────────────────
+  /error-types:
+    get:
+      tags: [students]
+      summary: 錯因白名單（config/errorTypes.js；FEATURE_STUDENTS，關閉時不掛載；FR-021）
+      operationId: listErrorTypes
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        code: { $ref: "#/components/schemas/ErrorTypeCode" }
+                        label: { type: string, description: 中文標籤，如「觀念不清」 }
+                        subjects: { type: ["array", "null"], items: { type: string }, description: 適用科目；null＝全部科目（chem_equation 只適用化學） }
+                  max_per_attempt: { type: integer, description: 每題最多幾個錯因（5） }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /student-profile-options:
+    get:
+      tags: [students]
+      summary: 學生檔案表單選項（config/studentProfile.js；核心區、不吃旗標；FR-023）
+      operationId: getStudentProfileOptions
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  grades: { type: array, items: { type: integer }, description: "[10, 11, 12]" }
+                  tracks: { type: array, items: { type: string }, description: 自然組、社會組、未分組 }
+                  target_exams: { type: array, items: { type: string }, description: 學測、分科、統測、段考、其他 }
+                  textbook_versions: { type: array, items: { type: string }, description: 龍騰、翰林、南一、泰宇、三民、全華、康熹、其他 }
+                  school_max_length: { type: integer, description: "50" }
+                  note_max_length: { type: integer, description: "500" }
+  /kc:
+    get:
+      tags: [kc]
+      summary: 知識點清單（FEATURE_KC；限流 120/min；FR-028）
+      operationId: listKc
+      parameters:
+        - { name: subject, in: query, schema: { type: string }, description: 科目白名單內；同名參數給兩次回 400 }
+        - { name: chapter, in: query, schema: { type: string }, description: 該科章節白名單內 }
+        - { name: status, in: query, schema: { type: string, enum: [draft, approved] } }
+      responses:
+        "200":
+          description: 成功；依科目白名單→章節白名單順序→sort→id 排序
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/KnowledgeComponent" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /kc/{id}:
+    parameters: [{ $ref: "#/components/parameters/IdPath" }]
+    patch:
+      tags: [kc]
+      summary: 修改或審定知識點（FEATURE_KC；API 不受「已審定不覆寫」限制，那一條只約束 kc:load；FR-028）
+      operationId: patchKc
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              additionalProperties: false
+              description: 字串會 trim；不認得的鍵與空 body 一律 400；同章改成已存在的名稱 400
+              properties:
+                name: { type: string, minLength: 1, maxLength: 30 }
+                description: { type: string, minLength: 1, maxLength: 200 }
+                spoken_text: { type: string, minLength: 40, maxLength: 300, description: 口語版；不得含 LaTeX（$ 或反斜線指令） }
+                curriculum_code: { type: ["string", "null"], maxLength: 40, description: 108 課綱學習內容代碼；null 清空；沒把握不得編造 }
+                status: { type: string, enum: [draft, approved] }
+      responses:
+        "200": { description: 更新後的那一列（形狀同 KnowledgeComponent），並更新 updated_at, content: { application/json: { schema: { $ref: "#/components/schemas/KnowledgeComponent" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /questions/{id}/kcs:
+    parameters: [{ $ref: "#/components/parameters/IdPath" }]
+    get:
+      tags: [kc]
+      summary: 題目的知識點標註（FEATURE_KC；FR-029）
+      operationId: getQuestionKcs
+      parameters:
+        - { name: detail, in: query, schema: { type: string, enum: ["1"] }, description: "帶 detail=1 時改回 { question, items }（契約外的附加形狀，給前端小工具）；沒帶時回陣列" }
+      responses:
+        "200":
+          description: 成功；依 weight 由大到小、章節白名單順序、sort。封存的題也查得到
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items: { $ref: "#/components/schemas/QuestionKc" }
+                  - type: object
+                    properties:
+                      question:
+                        type: object
+                        properties:
+                          id: { type: integer }
+                          subject: { type: string }
+                          chapter: { type: string }
+                          question_type: { type: string }
+                          difficulty: { type: integer }
+                          question_text: { type: string }
+                          archived: { type: boolean }
+                      items: { type: array, items: { $ref: "#/components/schemas/QuestionKc" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    put:
+      tags: [kc]
+      summary: 人工標註（src='human' 取代該題全部標註；知識點須與題目同科、可不同章；FEATURE_KC；FR-029）
+      operationId: putQuestionKcs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  minItems: 0
+                  maxItems: 5
+                  description: "[] ＝清空該題全部標註；kc_id 不可重複；任何一個不同科或不存在 → 400，原標註一個都不動"
+                  items:
+                    type: object
+                    required: [kc_id]
+                    properties:
+                      kc_id: { type: integer, minimum: 1, maximum: 2147483647 }
+                      weight: { type: number, exclusiveMinimum: 0, maximum: 1, default: 1 }
+      responses:
+        "200": { description: 標註後的陣列（形狀同 GET 不帶 detail）, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/QuestionKc" } } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /students/{id}/weakness/kc:
+    get:
+      tags: [remedial]
+      summary: 知識點弱點（依 question_kcs.weight 加權、COALESCE(score, result)、Wilson 下界排序；FEATURE_REMEDIAL；FR-030）
+      operationId: getKcWeakness
+      parameters:
+        - { $ref: "#/components/parameters/IdPath" }
+        - { name: days, in: query, schema: { type: integer, minimum: 1, maximum: 365, default: 90 } }
+        - { name: subject, in: query, schema: { type: string }, description: 科目白名單內 }
+      responses:
+        "200":
+          description: 成功；rows 依 mastery_lb 由低到高（null 最後）→ graded 由多到少 → code
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rows:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        kc_id: { type: integer }
+                        code: { type: string }
+                        name: { type: string }
+                        subject: { type: string }
+                        chapter: { type: string }
+                        graded: { type: number, description: 依 weight 加權的已批改題數（可能是小數） }
+                        correct: { type: number, description: 每題乘上 COALESCE(score, result) }
+                        correct_rate: { type: ["number", "null"], description: 四捨五入至第 4 位；graded=0 時 null }
+                        mastery_lb: { type: ["number", "null"], description: 正確率的 Wilson 下界（z=1.96）；graded=0 時 null }
+                        low_sample: { type: boolean, description: graded < WEAKNESS_MIN_N }
+                  untagged_graded: { type: integer, description: 時間窗內已批改、但沒有任何知識點標註的題數 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { description: ":id 不合法或學生不存在；FEATURE_REMEDIAL 關閉時路由不存在" }
+  /students/{id}/remedial-paper:
+    post:
+      tags: [remedial]
+      summary: 依弱點產生補救卷草稿（只產草稿、不寫庫；確認沿用 POST /confirm-paper；FEATURE_REMEDIAL；FR-031）
+      operationId: planRemedialPaper
+      parameters: [{ $ref: "#/components/parameters/IdPath" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subject]
+              properties:
+                subject: { type: string, description: 科目白名單內 }
+                total: { type: integer, minimum: 5, maximum: 50, default: 20 }
+                mix:
+                  type: object
+                  additionalProperties: false
+                  required: [remedial, prerequisite, extension]
+                  description: 三個非負有限數、總和 > 0 且總和也有限；只看比例（60/20/20 與 0.6/0.2/0.2 相同）；缺鍵或多鍵 400。預設 0.6/0.2/0.2
+                  properties:
+                    remedial: { type: number, minimum: 0 }
+                    prerequisite: { type: number, minimum: 0 }
+                    extension: { type: number, minimum: 0 }
+                days: { type: integer, minimum: 1, maximum: 365, default: 90 }
+                source_types: { type: array, items: { type: string, enum: [official, school, publisher, self, unknown] }, description: 空陣列＝不限制（同 generate-paper） }
+      responses:
+        "200":
+          description: 草稿；完全沒有批改時為空草稿並在 notes 說明
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  student_id: { type: integer }
+                  subject: { type: string }
+                  basis: { type: string, enum: [kc, chapter], description: 有標註的已批改題 ≥ WEAKNESS_MIN_N（且 ≥1）用 kc，否則 chapter }
+                  question_ids: { type: array, items: { type: integer }, description: 確認後的出題順序（與 confirm-paper 同一排序函式） }
+                  items: { type: array, items: { $ref: "#/components/schemas/RemedialItem" } }
+                  blueprint:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        bucket: { type: string, enum: [remedial, prerequisite, extension] }
+                        target: { $ref: "#/components/schemas/RemedialTarget" }
+                        wanted: { type: integer }
+                        got: { type: integer }
+                        difficulty_min: { type: ["integer", "null"], description: 契約外多給 }
+                        difficulty_max: { type: ["integer", "null"], description: 契約外多給 }
+                        rationale: { type: string, description: 選這個單位的理由（契約外多給） }
+                  shortfalls:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        bucket: { type: string }
+                        target: { $ref: "#/components/schemas/RemedialTarget" }
+                        wanted: { type: integer }
+                        got: { type: integer }
+                        reason: { type: string, enum: [insufficient_stock, follow_up_group] }
+                  notes: { type: array, items: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { description: ":id 不合法或學生不存在；FEATURE_REMEDIAL 關閉時路由不存在" }
+  /students/{id}/remedial-paper/items:
+    get:
+      tags: [remedial]
+      summary: 補救卷草稿手動加題前的查詢（題目＋所在承上組的全部成員；只讀；契約外新增；FEATURE_REMEDIAL；FR-031）
+      operationId: lookupRemedialItems
+      parameters:
+        - { $ref: "#/components/parameters/IdPath" }
+        - { name: ids, in: query, required: true, schema: { type: string }, description: "逗號分隔的正整數（int4 範圍內），去重後 1–50 個；同名參數重複視同串接" }
+      responses:
+        "200":
+          description: 成功；items 依要求順序，每題後面緊接同組其他成員（不排除封存與已寫過的題，以旗標回報）
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        question_id: { type: integer }
+                        subject: { type: string }
+                        chapter: { type: string }
+                        difficulty: { type: integer }
+                        question_text_preview: { type: string }
+                        follows_question_id: { type: ["integer", "null"] }
+                        group_ids: { type: array, items: { type: integer } }
+                        archived: { type: boolean }
+                        answered: { type: boolean, description: 該生已有 attempts }
+                  missing: { type: array, items: { type: integer }, description: 資料庫裡沒有的 id }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { description: ":id 不合法或學生不存在；FEATURE_REMEDIAL 關閉時路由不存在" }
+  /coverage:
+    get:
+      tags: [remedial]
+      summary: 題庫覆蓋率（章 × 難度；只算未封存題；FEATURE_REMEDIAL；FR-033）
+      operationId: getCoverage
+      parameters:
+        - { name: subject, in: query, schema: { type: string }, description: 省略＝全部科目 }
+        - { name: student_id, in: query, schema: { type: integer, minimum: 1 }, description: 給了才算 unseen_by_student }
+      responses:
+        "200":
+          description: 成功；rows 依科目→冊→章白名單順序，白名單每一章都列（0 題也列），不在白名單的舊章節接在該科最後、volume=null
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rows:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        subject: { type: string }
+                        volume: { type: ["string", "null"] }
+                        chapter: { type: string }
+                        total: { type: integer }
+                        by_difficulty: { type: object, description: '鍵 "1"～"5"，值為題數', additionalProperties: { type: integer } }
+                        unseen_by_student: { type: ["integer", "null"], description: 沒給 student_id 時 null }
+                  kc_rows:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        code: { type: string }
+                        name: { type: string }
+                        chapter: { type: string }
+                        total: { type: integer, description: 掛了幾題未封存題（0 題也列） }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { description: 學生不存在；FEATURE_REMEDIAL 關閉時路由不存在 }
+  /tutor:
+    post:
+      tags: [tutor]
+      summary: AI 家教（direct／socratic；Gemini code execution 驗算；FEATURE_TUTOR；限流 TUTOR_RATE_LIMIT_PER_MIN 預設 10；每日預算 TUTOR_DAILY_BUDGET_USD；FR-034、ADR-012）
+      operationId: tutorChat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message, mode]
+              properties:
+                message: { type: string, minLength: 1, maxLength: 1000, description: trim 後 1–1000 字 }
+                mode: { type: string, enum: [direct, socratic] }
+                subject: { type: string, description: 選填；科目白名單內（有題目時以題目科目為準，不一致不回 400） }
+                student_id: { type: integer, minimum: 1, maximum: 2147483647, description: 選填（數字字串亦可）；超過 int4 上限回 400、不存在 404 }
+                question_id: { type: integer, minimum: 1, maximum: 2147483647, description: 選填；同上 }
+                history:
+                  type: array
+                  maxItems: 8
+                  description: 選填；超過 8 輪直接 400（不截斷）
+                  items:
+                    type: object
+                    required: [role, text]
+                    properties:
+                      role: { type: string, enum: [user, tutor] }
+                      text: { type: string, minLength: 1, maxLength: 4000 }
+      responses:
+        "200":
+          description: 成功；回應恰為五個鍵
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reply: { type: string, description: "Markdown；數學式 $…$／$$…$$。finishReason=MAX_TOKENS 時末尾附「⚠ 回覆因長度上限被截斷」段落" }
+                  mode: { type: string, enum: [direct, socratic] }
+                  verification:
+                    type: object
+                    properties:
+                      used: { type: boolean, description: 這一輪有沒有執行任何程式 }
+                      runs:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            code: { type: string }
+                            outcome: { type: ["string", "null"], description: OUTCOME_OK／OUTCOME_FAILED／OUTCOME_DEADLINE_EXCEEDED；沒有結果時 null }
+                            output: { type: ["string", "null"] }
+                  context:
+                    type: object
+                    properties:
+                      question_id: { type: integer, description: 只在有題目時出現 }
+                      kc_codes: { type: array, items: { type: string }, description: 送進 prompt 的知識點（approved 在前） }
+                      student_context: { type: boolean, description: 學生弱點摘要是否真的放進 prompt }
+                  usage:
+                    type: object
+                    properties:
+                      tokenIn: { type: integer, description: 含 code execution 回灌的 toolUsePromptTokenCount }
+                      tokenOut: { type: integer, description: 含 thinking tokens }
+                      costUsd: { type: number, description: 依 config/pricing.js 估算 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { description: 題目或學生不存在；FEATURE_TUTOR 關閉時路由不存在 }
+        "429": { description: 每分鐘限流，或當日 TUTOR_DAILY_BUDGET_USD 已用完（訊息不同） }
+        "502": { description: "LLM 端失敗（供應商錯誤、replay miss、逾時）；訊息以「AI 家教暫時無法回應：」開頭" }
+  /voice/transcribe:
+    post:
+      tags: [tutor]
+      summary: 按住說話的語音轉寫（錄音 memoryStorage、不落地；FEATURE_VOICE 且 FEATURE_TUTOR；限流 VOICE_RATE_LIMIT_PER_MIN 預設 10；成本併入 TUTOR_DAILY_BUDGET_USD；FR-035、ADR-013）
+      operationId: transcribeVoice
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [audio]
+              properties:
+                audio: { type: string, format: binary, description: "單一檔案 ≤5 MB；mime ∈ audio/webm、audio/ogg、audio/mp4、audio/mpeg、audio/wav（比對前剝掉 ;codecs= 等參數）" }
+                subject: { type: string, description: 選填；科目白名單內，作為轉寫提示 }
+      responses:
+        "200":
+          description: 成功（模型輸出經 ajv 再驗；少於兩個選項的歧義丟棄、選項去重且最多 4 個）
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  text: { type: string, description: '繁中逐字稿，數學式以 $…$ 內嵌；每個歧義的第一個選項即寫進 text 的那一個' }
+                  math_segments:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        spoken: { type: string }
+                        latex: { type: string }
+                  ambiguities:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        spoken: { type: string }
+                        options: { type: array, items: { type: string } }
+                  usage:
+                    type: object
+                    description: 契約外多給（前端目前未顯示）
+                    properties:
+                      tokenIn: { type: integer }
+                      tokenOut: { type: integer }
+                      costUsd: { type: number }
+        "400": { description: 沒有檔案、欄位名不是 audio、mime 不在白名單、科目不合法，或 multipart 本身壞掉（busboy 解析錯誤） }
+        "404": { description: FEATURE_VOICE 或 FEATURE_TUTOR 關閉時路由不存在 }
+        "413": { description: 錄音超過 5 MB }
+        "429": { description: 每分鐘限流，或當日 TUTOR_DAILY_BUDGET_USD 已用完 }
+        "502": { description: LLM 端失敗或模型輸出不合 schema }
 components:
   parameters:
     IdPath:
@@ -702,7 +1284,7 @@ components:
       required: [subject, chapter, question_type, difficulty, question_text, answer_text]
       description: 欄位白名單硬驗證（ADR-005）；chapter 必須在 config/chapters.js 白名單內
       properties:
-        subject: { type: string }
+        subject: { type: string, description: 修訂 2026-09-24：白名單為數學、物理、化學（FR-026） }
         chapter: { type: string }
         question_type: { type: string }
         difficulty: { type: integer, minimum: 1, maximum: 5, description: 1–5 整數（normalizeDifficulty 收斂；DDL CHECK 同值域） }
@@ -714,6 +1296,8 @@ components:
         source_type: { type: string, enum: [official, school, publisher, self, unknown], default: unknown, description: 選填題源標記（FR-017）；建題未帶或非法值伺服器落 'unknown'（DDL DEFAULT 同值）——不擋錄入的管理標記。PUT 更新時未帶或非法值以 COALESCE 保留原值 }
         # 修訂 2026-08-29b（feat/source-detail 0007）：來源註記（FR-017 延伸）
         source_detail: { type: ["string", "null"], maxLength: 100, description: 選填來源註記（例「北一女 2024 段考」，FR-017 延伸）；trim 後空值落 NULL、超過 100 字回 400。PUT 更新時帶空字串＝清成 NULL、未帶欄位＝保留原值 }
+        # 修訂 2026-09-24（階段 5 WS-A，FR-024）：文字詳解
+        solution_text: { type: ["string", "null"], maxLength: 4000, description: "選填文字詳解（公式用 $…$）。POST：非空 → solution_src='teacher'，沒帶或空白 → 兩欄 NULL。PUT：沒帶此鍵＝不動；null 或空白＝兩欄 NULL；與現值 trim 後相同＝保留原來源；其他＝寫入並標 teacher。batch-save 與複核 approve 不寫詳解" }
     WeaknessRow:
       type: object
       description: 弱點三表共用列（分組欄依表為 chapter／question_type／difficulty）
@@ -739,6 +1323,82 @@ components:
               id: { type: integer }
               follows_question_id: { type: ["integer", "null"], description: 承上題的前題 id；非承上題為 null（FR-019） }
               has_follow_ups: { type: boolean, description: 是否有在庫（未封存）的承上題接續此題（FR-019） }
+              solution_text: { type: ["string", "null"], description: 修訂 2026-09-24（FR-024）：文字詳解 }
+              solution_src: { type: ["string", "null"], enum: [verify, teacher, ai, null], description: 修訂 2026-09-24（FR-024）：verify＝管線驗算摘要（未經人工審閱）、teacher＝老師撰寫、ai＝保留 }
+    # ──────────────── 階段 5 共用 schema（修訂 2026-09-24）────────────────
+    ErrorTypeCode:
+      type: string
+      enum: [concept, method, calc, reading, unit, formula, careless, blank, time, chem_equation]
+      description: 錯因代碼白名單（config/errorTypes.js，代碼凍結、只增不改名）；chem_equation 只適用化學；「未作答」＝result=0 且含 blank
+    StudentProfile:
+      type: object
+      description: 學生檔案欄位（白名單 config/studentProfile.js；FR-023）。POST／PATCH 可帶任意子集；PATCH 沒送的欄位不動
+      properties:
+        grade: { type: ["integer", "null"], enum: [10, 11, 12, null] }
+        track: { type: ["string", "null"], enum: [自然組, 社會組, 未分組, null], description: 空字串＝null }
+        target_exams: { type: ["array", "null"], uniqueItems: true, items: { type: string, enum: [學測, 分科, 統測, 段考, 其他] }, description: 'null 視同空陣列；存成白名單順序' }
+        school: { type: ["string", "null"], maxLength: 50 }
+        textbook_version: { type: ["string", "null"], enum: [龍騰, 翰林, 南一, 泰宇, 三民, 全華, 康熹, 其他, null] }
+        note: { type: ["string", "null"], maxLength: 500 }
+    StudentRow:
+      description: POST／PATCH /students 的回應與 GET /students 的每列（GET 另有 papers、graded_ratio）
+      allOf:
+        - type: object
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        - { $ref: "#/components/schemas/StudentProfile" }
+    KcRef:
+      type: object
+      properties:
+        id: { type: integer }
+        code: { type: string }
+        name: { type: string }
+        subject: { type: string }
+        chapter: { type: string }
+    KnowledgeComponent:
+      type: object
+      description: 知識點（knowledge_components；FR-028）。code 格式 MATH|PHYS|CHEM.<章名>.<兩位序號>，是穩定識別碼；id 會因載入順序而不同
+      properties:
+        id: { type: integer }
+        code: { type: string }
+        subject: { type: string }
+        chapter: { type: string }
+        name: { type: string }
+        curriculum_code: { type: ["string", "null"] }
+        description: { type: string }
+        spoken_text: { type: string, description: 口語版（上課講給學生聽的說法；不含 LaTeX） }
+        status: { type: string, enum: [draft, approved] }
+        sort: { type: integer, description: 章內教學順序 }
+        prereqs: { type: array, items: { $ref: "#/components/schemas/KcRef" } }
+        question_count: { type: integer, description: 掛了幾題未封存題 }
+    QuestionKc:
+      type: object
+      properties:
+        kc_id: { type: integer }
+        code: { type: string }
+        name: { type: string }
+        weight: { type: number, description: "(0, 1]；AI 標註一律 1" }
+        src: { type: string, enum: [ai, human] }
+        confidence: { type: ["number", "null"], description: 只有 AI 標註才有 }
+    RemedialTarget:
+      type: object
+      properties:
+        type: { type: string, enum: [kc, chapter] }
+        code: { type: string, description: 只有 kc 基底才有 }
+        chapter: { type: string }
+        name: { type: string, description: 知識點名稱；chapter 基底時即章名 }
+    RemedialItem:
+      type: object
+      properties:
+        question_id: { type: integer }
+        bucket: { type: string, enum: [remedial, prerequisite, extension] }
+        target: { $ref: "#/components/schemas/RemedialTarget" }
+        chapter: { type: string }
+        difficulty: { type: integer }
+        question_text_preview: { type: string }
+        follows_question_id: { type: ["integer", "null"], description: 契約外多給：前題 id }
+        group_ids: { type: array, items: { type: integer }, description: '契約外多給：同一承上組在草稿裡的全部成員（承接順序）；沒有綁定就是只含自己的一元素陣列' }
     Error:
       type: object
       required: [message]

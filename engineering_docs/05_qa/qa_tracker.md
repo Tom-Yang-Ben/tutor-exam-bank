@@ -1,6 +1,6 @@
 # 測試追蹤簿 (QA Tracker) - 家教專用數理題庫系統
 
-> **版本:** v1.3 | **更新:** 2026-09-15 | **狀態:** 活躍
+> **版本:** v1.4 | **更新:** 2026-09-24 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 單例（本檔為發布快照；`qa_tracker.xlsx` 由本檔轉出，人工維護欄位以本檔為準）
@@ -15,6 +15,7 @@
 > 🛠 **2026-09-15g 修訂**（feat/follow-up-paper-group，FR-019 PR2）：§1 新增 TC-019-8（組卷整組抽取，單元 19 項＋整合 8 項；審查修正後裝箱改子集和）。§2 全域執行證據數由主線合併時統一更新，本分支不動。修改處以〔修訂 2026-09-15g〕行內標記。
 > 🛠 **2026-09-16 修訂**（feat/follow-up-protect-badge，FR-019 PR3）：§1 新增 TC-019-6～7。②執行證據之全域測試數未改（由主線合併時統一更新）。修改處以〔修訂 2026-09-16〕行內標記。
 > 🛠 **2026-09-16b 修訂**（主線同步，PR #30–#33 合併後）：②執行證據同步為單元 1,613／整合 317／e2e 11（PR #30–#33 併入 main 後 CI 實測）。修改處以〔修訂 2026-09-16b〕行內標記。
+> 🛠 **2026-09-24 修訂**（階段 5 整合回填，分支 `stage5/int-docs`）：§1 新增 TC-021-1～TC-035-2（依各 WS 回報的測試檔整理，對應 FR-021～035）；§2.1 測試數寫為「整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中」，主控合併後更新；§2.2 補化學 classify eval（不進 CI、尚未錄製）；§3 追溯。狀態「通過（stage5/integration CI）」指整合分支 @ `6f8e671` 完整 `ci.sh` 全綠（主控實跑），尚未併入 main、尚未在 GitHub Actions 上跑。修改處以〔修訂 2026-09-24〕行內標記。
 
 ## 目錄
 
@@ -65,6 +66,38 @@ TC 依 FR 分組（`TC-<FR 號>-<序>`）；層級：U=單元、I=整合、E=e2e
 | TC-020-1 | FR-020 | 比對器純函式：正規化（`\frac` 負號、`\pm` 不算、array 欄位格式、sin/cos 保留、NFKC、PUA 對映、題號與配分移除）、依序定位（選項歸屬、題幹相同的兩題、共用詞組不從上一題起算、題組重疊標 shared、low_anchor／not_found／no_text_layer）、比對（多負號、漏字母、無負號字形不觸發、附圖題不比字母、等價改寫 match、定位錯段 skipped）、agent 合約（off／shadow／enforce、內部例外不 throw）（`exam_pro/test/unit/sourceCheck.test.js`）；公開樣卷＋extract.v2 cassette 10 題 0 誤報、漏一個字母即 mismatch（`exam_pro/test/unit/sourceCheckSample.test.js`）〔修訂 2026-09-15f〕 | U | 通過 |
 | TC-020-2 | FR-020 | 管線接線：source_check 回 transcription_mismatch → needs_review、verify 不跑、job_events 有 source_check 列；零成本節點在當日止血時仍推進；單 job 預算用盡時 source_check／dedup0／dedup1 的 fail 保留原本原因、不進 retry 清單〔修訂 2026-09-16〕；GET /api/review?reason=transcription_mismatch；approve 入庫且事件記 source_recheck／stem_edited、不重跑閘門；0009 新值可寫入、亂值撞 CHECK；抽文字層失敗只記 status=error（`exam_pro/test/integration/jobs.pg.test.js`「runner — source_check 節點與 0009」）〔修訂 2026-09-15f〕 | I | 通過 |
 | TC-020-3 | FR-020 | 樣卷端到端：每題 payload.extract.source_text 落地、無任何 transcription_mismatch（`exam_pro/test/e2e/pipeline.e2e.test.js`）；eval pipeline 的 source_check 5 pass／5 skipped、saved_rate 門檻不掉〔修訂 2026-09-15f〕 | E＋EV | 通過 |
+| TC-021-1 | FR-021 | 錯因白名單十碼、標籤、適用科目逐字凍結，`isValidErrorType`／`labelOf`（`test/unit/errorTypes.test.js`）；PATCH 解析：既有六個 400 訊息與順序不變、新規則不搶先、四個可選鍵的「沒送／null」（`test/unit/gradingDetail.test.js`）〔修訂 2026-09-24〕 | U | 通過（stage5/integration CI） |
+| TC-021-2 | FR-021 | PATCH 四鍵的寫入、不動、清空、錯→對清錯因、取消批改、每個 400 與 ROLLBACK、化學錯因限化學題、100 筆上限；GET /api/papers/:id 新欄位；`/api/error-types` 與旗標關閉 404（`test/integration/grading.pg.test.js`）〔修訂 2026-09-24〕 | I | 通過（stage5/integration CI） |
+| TC-021-3 | FR-021 | 批改卡以 miniDom 實際渲染：錯因 chip 依科目過濾與上限、載入失敗退回只記對錯、部分給分、學生答案與註記、答案與詳解展開、送出的 PATCH body（`test/unit/gradingUi.test.js`）〔修訂 2026-09-24〕 | U | 通過（stage5/integration CI）；真瀏覽器未驗 |
+| TC-022-1 | FR-022 | `buildByErrorType` 參數順序與凍結規則（`gradingDetail.test.js`）；錯因分布的分母、排序、四捨五入、科目與時間窗、只算答錯、封存題（`grading.pg.test.js`）；weakness 頂層六鍵與 recent_wrong 欄位逐欄斷言（`test/integration/students.pg.test.js`，〔stage5 WS-A〕四處形狀修改）〔修訂 2026-09-24〕 | U＋I | 通過（stage5/integration CI） |
+| TC-023-1 | FR-023 | 白名單、`parseProfile` 的「沒送／送 null」、每個 400、code point 計數（`test/unit/studentProfile.test.js`）；選項端點（旗標關閉也在）、POST／PATCH 子集更新與每個 400／404／409、清單欄位順序、合併（`test/integration/studentProfile.pg.test.js`）；管理面板檔案表單（`gradingUi.test.js`）〔修訂 2026-09-24〕 | U＋I | 通過（stage5/integration CI） |
+| TC-024-1 | FR-024 | `buildSolutionFields`、`normalizeSolutionText`、回填規劃（來源、原因分類、edited、多列、limit、不 require LLM）（`test/unit/solutionText.test.js`）；題目 POST／PUT／列表／詳情的詳解欄位與來源規則、save 節點寫詳解（一致／證明題／空摘要）、回填 dry-run／正式／重跑／limit／CLI 輸出（`test/integration/solutions.pg.test.js`）〔修訂 2026-09-24〕 | U＋I | 通過（stage5/integration CI）；未對正式庫回填 |
+| TC-025-1 | FR-025 | Word 三種版本的 document.xml（`solutionText.test.js`）與 API 400（`solutions.pg.test.js`）〔修訂 2026-09-24〕 | U＋I | 通過（stage5/integration CI）；Word 實機未開 |
+| TC-026-1 | FR-026 | 白名單三科、`LEGACY_*`、`SUBJECT_GROUPS`、`buildSchema` 卷別、promptParts、NLQ 規則路徑與化學分流（點名數理或帶數理名詞的句子照舊走 LLM）（`test/unit/chemistryConfig.test.js`）；五個 agent 的化學路徑，以及數學／物理請求（agent 名、模板、SYSTEM、schema 實例、prompt）與 base 相同（`test/unit/chemistryAgents.test.js`）〔修訂 2026-09-24〕 | U | 通過（stage5/integration CI） |
+| TC-026-2 | FR-026 | `subject_group` 的 400／預設／冪等鍵；化學卷用真的 agents（replay）走完入庫；題庫列表與手動新增；NLQ 規則路徑；組卷→批改→弱點；化學變式（`test/integration/chemistry.pg.test.js`）〔修訂 2026-09-24〕 | I | 通過（stage5/integration CI） |
+| TC-026-3 | FR-026 | `search:reindex`：舊詞典切的 `search_tsv` 查不到新 token、dry-run 不寫、重算後查得到、重跑 0 題、封存與 NULL 也補、`--limit`、與 POST／PUT 寫入值逐字相同（`test/unit/reindexSearchTsv.test.js`、`test/integration/searchReindex.pg.test.js`）〔修訂 2026-09-24〕 | U＋I | 通過（stage5/integration CI）；正式庫尚未執行 |
+| TC-026-4 | FR-026 | 化學 classify eval 骨架：golden 硬閘門、沒有 cassette 印「尚未錄製，略過」並 exit 0、假 cassette 完整回放 accuracy 1、不完整回放 n/a（`test/unit/evalClassifyChem.test.js`）〔修訂 2026-09-24〕 | U | 通過（stage5/integration CI）；**真實分數未量測**（待 Owner 錄製） |
+| TC-026-5 | FR-026、NFR-009 | 不重錄任何 cassette，五個 eval suite 全綠且量測值與 `stage5/base` 相同（WS-B 回報；CI replay）〔修訂 2026-09-24〕 | EV | 通過（stage5/integration CI） |
+| TC-027-1 | FR-027 | mhchem 子集每一種記法與 `ceToComparable`（`test/unit/chemFormula.test.js`）；打包成 .docx 後的 OMML、`\mathrm` 正體、parseLatexStrict 無事件、formulaLint 放行（`test/unit/textFormatterChem.test.js`）；化學卷 Word 匯出（`chemistry.pg.test.js`）〔修訂 2026-09-24〕 | U＋I | 通過（stage5/integration CI）；Word 實機未開 |
+| TC-027-2 | FR-027 | `eval/golden/answer_chem.json` 90 案例、單位與化學式的介入邊界（℃／K 的 273 慣例、`^{\circ}\mathrm{C}`、「A 點」不是安培）、`utils/units.js`（`test/unit/answerCompareChem.test.js`）；既有 `answer.json` 250 案例不變（既有 answerCompare 測試）；verify 的單位與化學式比對（`chemistry.pg.test.js`）〔修訂 2026-09-24〕 | U＋I | 通過（stage5/integration CI） |
+| TC-028-1 | FR-028 | 參數驗證、載入計畫、環偵測、PATCH SQL、`checkKcField` 與 `validateSeeds` 逐樣本判定一致（`test/unit/kcService.test.js`）；CLI 參數與 package.json scripts（`kcCli.test.js`）；fixture 合法與 4 條 approved 口語版逐字（`kcFixtures.test.js`）；repo 內 `config/kc/*.json` 全部通過驗證（`kcSeed.test.js`）〔修訂 2026-09-24〕 | U | 通過（stage5/integration CI） |
+| TC-028-2 | FR-028 | 載入規則逐條（已審定受保護、`--force`、先備同步、DB 全體環檢查、23505 指名錯誤、載入中審定的 FOR UPDATE 排隊）、CLI 子行程載入涵蓋數學全部章節的種子檔、不合法檔整批拒絕（`test/integration/kcLoad.pg.test.js`）〔修訂 2026-09-24〕 | I | 通過（stage5/integration CI） |
+| TC-028-3 | FR-028 | 知識點四支 API、旗標關閉 404、400／404、限流（`test/integration/kc.pg.test.js`）；前端純函式、檔案契約、miniDom 渲染（旗標、卡片、篩選、編輯、審定、朗讀）（`test/unit/kcUi.test.js`）〔修訂 2026-09-24〕 | U＋I | 通過（stage5/integration CI）；真瀏覽器與 speechSynthesis 未驗 |
+| TC-029-1 | FR-029 | agent `kc_tag`：模板字串含 SYSTEM、動態 schema、prompt 保留 `$$`、佔位字串一次替換、cacheKeyParts、ajv 擋清單外 code、thinking 預算成對（`test/unit/kcTagAgent.test.js`）；`tagQuestion` 門檻、human 優先、no_kcs、交易順序、交易內再查 human、費用預估含 thinking（`test/unit/kcTagService.test.js`）〔修訂 2026-09-24〕 | U | 通過（stage5/integration CI）；未對真 Gemini 執行 |
+| TC-029-2 | FR-029、NFR-007 | runner 掛鉤：旗標關閉完全不呼叫、開啟時失敗不影響 job、budgetCheck（job_budget／daily_budget／查帳失敗）不呼叫 LLM（`test/unit/kcRunnerHook.test.js`）；tagQuestion 真 DB＋假 LLM、backfill 挑題與 CLI dry-run／replay miss、當日 `job_events` 花費超過上限不標（`test/integration/kcTagging.pg.test.js`）〔修訂 2026-09-24〕 | U＋I | 通過（stage5/integration CI） |
+| TC-029-3 | FR-029 | PUT 人工標註：同科檢查、0–5 個、kc_id 超過 int4 回 400、human 取代全部列（`kc.pg.test.js`、`kcService.test.js`）；題目→知識點小工具（`kcUi.test.js`）〔修訂 2026-09-24〕 | U＋I | 通過（stage5/integration CI） |
+| TC-030-1 | FR-030 | Wilson 下界（n=0、全對、全錯、小數樣本）、SQL 參數順序、排序與 low_sample、toApiRow（`test/unit/kcWeakness.test.js`）；kc 加權、Wilson 排序、時間窗與科目（`test/integration/remedial.pg.test.js`）〔修訂 2026-09-24〕 | U＋I | 通過（stage5/integration CI） |
+| TC-031-1 | FR-031 | 最大餘數配額、splitCount、難度區間、chooseUnits、先備挑選（含跨科）、buildPlan 併桶 notes、草稿組裝、items 承上組資訊、`lookupItems`（`test/unit/remedialService.test.js`）；補救卷 body（含 mix 總和溢位）、加題查詢 ids（`test/unit/remedialValidation.test.js`）〔修訂 2026-09-24〕 | U | 通過（stage5/integration CI） |
+| TC-031-2 | FR-031 | 旗標關閉 404；kc 基底／chapter 退回（含 notes）；各 bucket 配額；不足量；排除已作答／封存／跨科／題源；家族互斥；承上組整組與 items 組資訊；不寫庫並接 confirm-paper；加題查詢（組成員、封存與已寫過旗標、missing、400／404）（`remedial.pg.test.js`）〔修訂 2026-09-24〕 | I | 通過（stage5/integration CI） |
+| TC-031-3 | FR-031 | 前端：旗標關閉不渲染、草稿、刪題加題、`remedial:add`、確認並下載、承上題整組（「承上 #x」、「刪這組」、整組加入或拒絕、不混科、確認前擋缺前題的承上題）、variants.js 掛鉤在旗標開關兩種情況（`test/unit/remedialUi.test.js`）〔修訂 2026-09-24〕 | U | 通過（stage5/integration CI）；真瀏覽器未驗 |
+| TC-032-1 | FR-032 | blueprint 驗證與承上題政策開關（`remedialValidation.test.js`）；互斥 400、逐列不足、全空 400、跨列家族互斥與不重複、承上題整組與真出卷、單章路徑收到非字串 chapter 仍是 400（`remedial.pg.test.js`）；單章路徑回應不變由既有 controllers／paperGroups 整合與 e2e 守〔修訂 2026-09-24〕 | U＋I | 通過（stage5/integration CI） |
+| TC-033-1 | FR-033 | 白名單每章都列、舊章節、unseen 的 null／數字、知識點排序、SQL builder（`test/unit/coverageService.test.js`）；覆蓋率 400／404／內容（`remedial.pg.test.js`）〔修訂 2026-09-24〕 | U＋I | 通過（stage5/integration CI） |
+| TC-034-1 | FR-034 | `generateText`：`toContents` 既有三種 part 逐字不變＋音訊／圖片、`parseTextResponse` 配對、`readFinishReason`、送出的 config（含 `thinkingConfig`）、`generateJson` config 回歸、replay 命中／miss／壞檔、record→replay 一輪、三個模型 getter（`test/unit/llmGenerateText.test.js`）〔修訂 2026-09-24〕 | U | 通過（stage5/integration CI） |
+| TC-034-2 | FR-034、NFR-007、NFR-008 | 輸入驗證 400 先於 DB 與 LLM、脈絡組裝（approved 優先、draft 標註、退回同章、學生前 5 與錯因）、姓名不出現在 system／parts／cacheKeyParts、兩模式模板、驗算回傳、截斷提醒、成本與每日預算 429 與隔日歸零、LLM 失敗 502、DB 錯誤不冒充 502（`test/unit/tutorService.test.js`）〔修訂 2026-09-24〕 | U | 通過（stage5/integration CI） |
+| TC-034-3 | FR-034、NFR-001 | 受限 Markdown 的 XSS 案例與格式、巢狀佔位符完整還原、截斷提醒在 `<pre>` 外、miniDom：旗標關閉不渲染、送出與回覆呈現、確認送出失敗時逐字稿保留（`test/unit/tutorUi.test.js`）〔修訂 2026-09-24〕 | U | 通過（stage5/integration CI）；真瀏覽器未驗 |
+| TC-034-4 | FR-034 | 三種旗標組合 404、400／404（含 ID 超過 int4）、LLM_MODE=replay＋暫存 cassette 跑通一輪並斷言 DB 組出的 prompt 無姓名、退回同章知識點、cassette 記 MAX_TOKENS 時附截斷提醒、replay miss 502、預算 429、兩個限流 env（`test/integration/tutor.pg.test.js`）〔修訂 2026-09-24〕 | I | 通過（stage5/integration CI）；**未呼叫真 Gemini**，家教 eval 未做 |
+| TC-035-1 | FR-035 | 大小、mime（含 `;codecs=`）、科目、送出的 parts 與 cacheKeyParts、ajv 再驗與正規化、共用預算、multer／busboy 錯誤轉譯、buffer 清除（`test/unit/voiceService.test.js`）；錄音→逐字稿→點 chip→按確認才送出、取消不送、麥克風不可用時隱藏並說明（`tutorUi.test.js`，假 MediaRecorder）〔修訂 2026-09-24〕 | U | 通過（stage5/integration CI） |
+| TC-035-2 | FR-035、NFR-008 | voice 的 400（沒檔、欄位名、mime、multipart 壞掉）與 413、錄音不寫進 `uploads/`、模型輸出不合 schema 502（`tutor.pg.test.js`）〔修訂 2026-09-24〕 | I | 通過（stage5/integration CI）；Gemini 收 audio/webm 未實機驗證 |
 
 ## 2. 執行證據
 
@@ -75,6 +108,8 @@ TC 依 FR 分組（`TC-<FR 號>-<序>`）；層級：U=單元、I=整合、E=e2e
 | 單元 | 1,613 | exam_pro/test/unit/ | 不連網、不連庫、零 secrets；`npm test` 可完整重現〔修訂 2026-09-16b〕 |
 | 整合 | 317 | exam_pro/test/integration/ | tmpfs 測試庫（5433，`_test` 後綴強制）〔修訂 2026-09-16b〕 |
 | e2e | 11 | exam_pro/test/e2e/ | HTTP 全路徑（上傳→部分入庫；組卷→Word 公式） |
+
+〔修訂 2026-09-24〕上表為 main（PR #30–#33 合併後）的數字。階段 5：**整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中**（主控合併後更新數字）。階段 5 新增 29 支單元測試檔與 10 支整合測試檔（清單見 §1 TC-021-*～TC-035-*）；e2e 未新增。
 
 CI（`.github/workflows/ci.yml`）：unit（Node 22/24 矩陣）＋integration（pgvector service→migrations→整合→e2e→五個 eval suite）；全程零金鑰、零網路、零成本（cassette replay；replay miss 於 main 視為錯誤）。CI badge 見 repo 根 `README.md`；全綠 @ f8f6574（PR #7 merge）〔修訂 2026-08-29〕。
 
@@ -94,7 +129,9 @@ CI（`.github/workflows/ci.yml`）：unit（Node 22/24 矩陣）＋integration�
 
 任何改動使指標低於門檻，CI 轉紅（`exam_pro/eval/thresholds.json`）。
 
+〔修訂 2026-09-24〕階段 5 沒有新增 CI 門檻，也沒有重錄任何 cassette（NFR-009）；五個 suite 的量測值與 `stage5/base` 相同（WS-B 回報）。另有一支**不進 CI** 的 `npm run eval:classify-chem`（化學 classify，golden 24 筆自撰、`needs_human_confirm` 全為 true）：目前沒有 cassette，執行時印「尚未錄製，略過」並 exit 0；錄製與是否併入 CI 需另開裁決（`docs/chemistry.md` §6）。AI 家教、`kc_tag` 標註準確率都尚無 eval suite。
+
 ## 3. 追溯
 
-- 上游：FR-001～016、FR-017～018、FR-019〔修訂 2026-09-15e〕、FR-020〔修訂 2026-09-15f〕／NFR-003、NFR-004（[engineering_tracker](../03_architecture/engineering_tracker.md)）；DEC-005、DEC-006 之業務驗收（[requirements_tracker](../01_requirements/requirements_tracker.md) §1）。
+- 上游：FR-001～016、FR-017～018、FR-019〔修訂 2026-09-15e〕、FR-020〔修訂 2026-09-15f〕、FR-021～035〔修訂 2026-09-24〕／NFR-003、NFR-004、NFR-007～009〔修訂 2026-09-24〕（[engineering_tracker](../03_architecture/engineering_tracker.md)）；ACPT-021-*～035-* 的可觀察判準見 [srs §6.1](../01_requirements/srs.md)〔修訂 2026-09-24〕；DEC-005、DEC-006 之業務驗收（[requirements_tracker](../01_requirements/requirements_tracker.md) §1）。
 - 下游：Gate 簽核證據（[requirements_tracker](../01_requirements/requirements_tracker.md) §3）；門檻失守處置（[../06_ops/runbook-eval-threshold-fail.md](../06_ops/runbook-eval-threshold-fail.md)）。

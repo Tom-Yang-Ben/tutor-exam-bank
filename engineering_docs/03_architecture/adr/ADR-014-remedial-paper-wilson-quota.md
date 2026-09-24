@@ -5,7 +5,7 @@
 > **語域:** L3
 > **實例:** 每決策一份（`ADR-NNN-<slug>.md`）
 > **定位:** 本文件回答「依弱點出補救卷時，弱點怎麼排序、題目怎麼選，以及為何不另寫一套選題邏輯」；規則細節與操作說明歸 [`docs/remedial.md`](../../../docs/remedial.md)，介面歸 `docs/interfaces-stage5.md` 第 4.4 條。
-> **編號說明:** `docs/interfaces-stage5.md` 第 6 條只分配到 ADR-013；本號由 WS-D 暫用，整合時如需改號，連同 `docs/remedial.md` 的連結一起改。
+> **編號說明:** `docs/interfaces-stage5.md` 第 6 條只分配到 ADR-013；本號由 WS-D 暫用，整合時如需改號，連同 `docs/remedial.md` 的連結一起改。〔修訂 2026-09-24〕整合時確認保留 ADR-014；同樣取了 014 的批改細節 ADR 改號為 ADR-015（裁決 S5-1）。
 
 ## 目錄
 

@@ -6,6 +6,7 @@
 上傳考卷 PDF 後由**多 Agent 管線**拆題入庫（七個 sub-agent、硬閘門、原卷文字層比對、部分入庫、人工複核）；
 組卷依作答紀錄排除學生已練習的題目（先預覽、確認後寫入），並匯出含 Word 原生方程式的考卷；
 在此基礎上另建 **RAG**（相似題／變式題／自然語言查題／檢索式分類）與**對話式助教**（主控 agent＋唯讀工具）。
+〔修訂 2026-09-24〕階段 5「教學診斷平台」加上錯因診斷、知識點、依弱點出補救卷、化學，以及經程式驗算的 AI 家教與按住說話；已完成開發、在整合分支 `stage5/integration` 待併入 main，新功能全部預設關閉（見[階段 5](#階段-5教學診斷平台)）。
 
 > 🧭 **技術選型（RAG 與多 Agent 的採用理由、限制與替代方案評估）**見
 > [根目錄 README](../README.md) 的技術選型 ①② 兩章，完整版本見
@@ -27,6 +28,12 @@
 | 💬 **對話式助教** | 主控 LLM 調度五個**唯讀**工具（學生弱點／自然語言搜題／相似題／出卷預覽），工具調用軌跡完整呈現於介面；實際出卷仍由使用者確認；學生姓名送模型前換成「學生#<id>」代號，不出境 |
 | 🧾 **成本與品質可觀測** | 逐 token 記帳（官方單價查證）、job／日成本上限；五個 eval suite ＋ ratchet 門檻進 CI |
 | 🔒 **安全設計** | 參數化 SQL、CORS 白名單、防 SSRF、上傳檔以 `%PDF-` 檔頭驗證（不信任副檔名與 mimetype）、可選 API Key（timing-safe；能力邊界見[安全注意事項](#-安全注意事項)）；全部 FEATURE_* 旗標預設關；資料庫埠只綁 127.0.0.1；CI 以 `npm audit --omit=dev --audit-level=high` 擋已知弱點、Dependabot 週更 |
+| **批改細節與錯因分布**〔修訂 2026-09-24〕 | 按「錯」可點錯因（十種白名單、可複選）、計算／證明題可部分給分、記學生答案與註記；弱點面板多「錯因分布」（階段 5，`docs/grading-and-profile.md`） |
+| **學生檔案、文字詳解、Word 版本**〔修訂 2026-09-24〕 | 年級／類組／目標考試／學校／教材版本；拆題時驗算一致的解題摘要自動存成詳解、老師可改寫；Word 另出學生版與詳解版（同上） |
+| **化學**〔修訂 2026-09-24〕 | 上傳選「化學」卷別，走化學專用模板與 44 章白名單；數學／物理的 prompt 與 cassette 一字不動；`\ce{…}` 化學式轉 Word 原生方程式；答案比對看單位與化學式（`docs/chemistry.md`） |
+| **知識點與口語版**〔修訂 2026-09-24〕 | 三科 637 個知識點（AI 草擬、Owner 審定），各有一段上課講給學生聽的口語版；可朗讀、審定、替題目標知識點，入庫可自動標（`docs/knowledge-components.md`） |
+| **補救卷與題庫覆蓋率**〔修訂 2026-09-24〕 | 依知識點掌握度（Wilson 下界）一鍵產生補救卷草稿（補救／先備／延伸配比），確認才寫入；跨章配額組卷；章 × 難度熱度表（`docs/remedial.md`） |
+| **AI 家教與按住說話**〔修訂 2026-09-24〕 | 直接講解或引導式；數值由 Gemini code execution 驗算並攤開程式與輸出；按住說話轉逐字稿與公式，老師確認才送出；每日花費上限（`docs/tutor.md`） |
 
 ---
 
@@ -143,10 +150,10 @@ exam_pro/
 ├─ utils/                              # textFormatter(LaTeX→OOXML)、tokenize(全案唯一分詞)、
 │                                      # embedText、shuffle、pickOnePerFamily、normalizeStem、
 │                                      # answerCompare、variantTextGate、nlqHeuristics、formula*
-├─ public/index.html + public/js/      # 單頁殼（5 個 hash 路由視圖）+ 五個 ES module（review/students/nlq/variants/assistant）
-├─ migrations/ + migrate.js            # 只增不改的 SQL（0001~0009）＋執行器
+├─ public/index.html + public/js/      # 單頁殼（7 個 hash 路由視圖）+ ES module（review/students/nlq/variants/assistant；階段 5：kc/remedial/tutor）
+├─ migrations/ + migrate.js            # 只增不改的 SQL（0001~0012）＋執行器
 ├─ eval/                               # run.js（五個 suite）、lib/、golden/、cassettes/、fixtures/、thresholds.json
-├─ test/  unit(1,613) · integration(317) · e2e(11)
+├─ test/  unit(1,613) · integration(317) · e2e(11)（main）；整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中
 ├─ scripts/ + *.bat                    # 備份、向量回填、成本報表、公式健檢（Windows 雙擊）
 └─ docker-compose.yml                  # PG16+pgvector：5442 開發（volume）／5433 測試（tmpfs）；皆只綁 127.0.0.1
 ```
@@ -241,6 +248,15 @@ cp .env.example .env
 | `IMAGE_HOST_ALLOWLIST` | Word 匯圖時允許的圖片網域（逗號分隔，選填）| 空 |
 | `NODE_ENV` | `production` 時錯誤不外洩細節 | `development` |
 | `SOURCE_CHECK_MODE` | 拆題結果對照原卷文字層：`off` 不比對／`shadow` 只記錄不攔／`enforce` 題幹與原卷不符即進複核；非法值一律 `enforce`（`docs/source-check.md`）| `enforce` |
+| `FEATURE_KC` / `FEATURE_KC_TAGGING`〔修訂 2026-09-24〕 | 知識點分頁與 API／入庫後自動標知識點（會呼叫 LLM） | `false` |
+| `KC_TAG_MIN_CONFIDENCE` / `MODEL_KC_TAG`〔修訂 2026-09-24〕 | 自動標註的信心門檻／模型（未設沿用 `MODEL_EXTRACT`） | `0.6` / — |
+| `FEATURE_REMEDIAL`〔修訂 2026-09-24〕 | 知識點弱點、補救卷、題庫覆蓋率（補救卷區塊需同時開 `FEATURE_STUDENTS`） | `false` |
+| `FEATURE_TUTOR` / `FEATURE_VOICE`〔修訂 2026-09-24〕 | AI 家教／按住說話（`FEATURE_VOICE` 需同時開 `FEATURE_TUTOR`；兩者都會呼叫 LLM） | `false` |
+| `MODEL_TUTOR` / `MODEL_VOICE`〔修訂 2026-09-24〕 | 家教模型（未設沿用 `MODEL_VERIFY`）／語音轉寫模型（未設沿用 `MODEL_EXTRACT`） | — |
+| `TUTOR_DAILY_BUDGET_USD`〔修訂 2026-09-24〕 | 家教＋語音合計每日花費上限（美元；程序內累計，重啟歸零；`0` ＝不准花錢） | `1.0` |
+| `TUTOR_RATE_LIMIT_PER_MIN` / `VOICE_RATE_LIMIT_PER_MIN`〔修訂 2026-09-24〕 | 家教／語音每分鐘上限 | `10` / `10` |
+
+〔修訂 2026-09-24〕完整變數表（含說明與相依）見 [`engineering_docs/06_ops/deployment_and_operations.md`](../engineering_docs/06_ops/deployment_and_operations.md) §3.2；`.env.example` 的「階段 5」段落有逐項註解。
 
 ### 4. 啟動資料庫並套用 migrations
 
@@ -412,7 +428,7 @@ npm run eval:baseline                                                           
 
 | # | 步驟 | 通過標準 |
 |---|------|----------|
-| 6 | `npm test` | **全數通過（2026-09-16 現況：1,613 passed / 0 failed）**；不連網、不連庫、零 secrets。CI 亦會在 push 後自動跑（badge 見本頁最上方）|
+| 6 | `npm test` | **全數通過（2026-09-16 現況：1,613 passed / 0 failed）**；不連網、不連庫、零 secrets。CI 亦會在 push 後自動跑（badge 見本頁最上方）。〔修訂 2026-09-24〕整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中 |
 | 7 | 靜態檔完整性：確認 `public/index.html` 結尾為 `</script></body></html>`，且 `<div>`、`<script>` 開闔數相等 | 檔案未被截斷（詳見下方「截斷檔自檢」）|
 | 8 | `npm start` | 終端印出 `🚀 家教題庫後端系統已成功安全啟動：http://localhost:3000` |
 
@@ -465,30 +481,39 @@ fs.writeFileSync('.tmp_inline.js',b)" && node --check .tmp_inline.js && echo "JS
 
 | 方法 | 路徑 | 說明 |
 |------|------|------|
-| GET | `/api/questions` | 題庫列表（`subject/chapter/question_type/source_type/q/page/limit` 篩選分頁）|
+| GET | `/api/questions` | 題庫列表（`subject/chapter/question_type/source_type/q/page/limit` 篩選分頁）；每題帶 `solution_text`／`solution_src`〔修訂 2026-09-24〕|
+| GET | `/api/questions/:id`〔修訂 2026-09-24〕 | 題目詳情（含詳解；封存題也查得到）|
+| GET | `/api/student-profile-options`〔修訂 2026-09-24〕 | 學生檔案表單選項 |
 | POST / PUT / DELETE | `/api/questions(/:id)` | 新增／更新／刪除（**出過的題改封存** `archived:true`）|
 | POST | `/api/batch-save-questions` | 批次入庫，**部分入庫**回 `{saved_count, rejected:[{idx,reason}]}`；`?strict=1` 走舊行為 |
 | POST | `/api/questions/batch-source` | 批次補標題源：`{question_ids(≤200), source_type?, source_detail?}` 至少一項，兩欄「帶了才改」、封存題不動（0007）|
 | GET | `/api/chapters` ／ `/api/chapter-whitelist` | 實際存在章節／完整白名單 |
 | GET | `/api/chapter-volumes` | 分冊結構（科 → 冊 → 章節；前端三層選單用，唯一真相 `config/chapters.js` 的 `VOLUMES`）|
 | GET | `/api/students` | 學生清單（組卷下拉；裁決 S4-2 恆常掛載）|
-| POST / PATCH / DELETE | `/api/students(/:id)` | 建立（**唯一**的新學生入口，S4-1）／改名／刪除（連作答與考卷）|
+| POST / PATCH / DELETE | `/api/students(/:id)` | 建立（**唯一**的新學生入口，S4-1）／改名／刪除（連作答與考卷）；〔修訂 2026-09-24〕POST／PATCH 可帶檔案欄位（年級、類組、目標考試、學校、教材版本、備註），PATCH 沒送的不動 |
 | POST | `/api/students/:id/merge` | 把 A 併入 B（清打錯字生出的分身；衝突題保留目標側批改）|
-| POST | `/api/generate-paper` | 組卷。收 `student_id`（或 `student_name`，查無 404 不再自動建）；`dry_run:true` 預覽不寫庫、`exclude_ids` 換題重抽、`source_types` 題源過濾（0006 著作權管理，如僅抽官方／學校／自寫）|
+| POST | `/api/generate-paper` | 組卷。收 `student_id`（或 `student_name`，查無 404 不再自動建）；`dry_run:true` 預覽不寫庫、`exclude_ids` 換題重抽、`source_types` 題源過濾（0006 著作權管理，如僅抽官方／學校／自寫）；〔修訂 2026-09-24〕另可送 `blueprint` 跨章配額（與 `chapter`／`count` 互斥）|
 | POST | `/api/confirm-paper` | 確認出卷：`{student_id, question_ids}` 同一交易建卷＋attempts；預覽過期回 409 |
 | DELETE | `/api/papers/:id` | 刪卷（連 attempts，題目回到候選池；S4-3）|
-| POST | `/api/analyze-pdf` ／ `/api/download-word` | 舊版單呼叫拆題（保留）／產生 Word 考卷 |
+| POST | `/api/analyze-pdf` ／ `/api/download-word` | 舊版單呼叫拆題（保留）／產生 Word 考卷；〔修訂 2026-09-24〕`download-word` 可帶 `edition`：`standard`／`student`／`solution` |
 
 **旗標控制掛載**（`FEATURE_*`，預設全關）
 
 | 旗標 | 路由 | 說明 |
 |------|------|------|
-| `FEATURE_PIPELINE` | POST `/api/jobs`、GET `/api/jobs/:id`、複核 `/api/review*`（approve/reject）| 多 Agent 拆題管線與人工複核 |
+| `FEATURE_PIPELINE` | POST `/api/jobs`、GET `/api/jobs/:id`、複核 `/api/review*`（approve/reject）| 多 Agent 拆題管線與人工複核；〔修訂 2026-09-24〕POST `/api/jobs` 可帶 `subject_group`（`math_physics`／`chemistry`）|
 | `FEATURE_SIMILAR` | GET `/api/questions/:id/similar` | 相似題（hybrid 檢索）|
 | `FEATURE_NLQ` | POST `/api/questions/search-nl`（30/min 限流）| 自然語言查題 |
 | `FEATURE_VARIANTS` | POST `/api/questions/:id/variants`、GET `/api/variants/:jobId` | 變式題（檢索優先，池不足走 jobs 生成）|
 | `FEATURE_STUDENTS` | GET `/api/students/:id/papers` 與 `…/weakness`、GET `/api/papers/:id`、PATCH `/api/papers/:id/results` | 學生分頁：試卷、弱點面板、批改回填 |
 | `FEATURE_ASSISTANT` | POST `/api/assistant`（10/min 限流）| 對話式助教（主控 agent＋五個只讀工具）|
+| `FEATURE_STUDENTS`〔修訂 2026-09-24〕 | GET `/api/error-types`；`PATCH /api/papers/:id/results` 多錯因、部分給分、學生答案、註記；weakness 多 `by_error_type` | 批改細節與錯因分布 |
+| `FEATURE_KC`〔修訂 2026-09-24〕 | GET `/api/kc`、PATCH `/api/kc/:id`、GET／PUT `/api/questions/:id/kcs`（120/min）| 知識點與人工標註 |
+| `FEATURE_REMEDIAL`〔修訂 2026-09-24〕 | GET `/api/students/:id/weakness/kc`、POST `/api/students/:id/remedial-paper`、GET `/api/students/:id/remedial-paper/items`、GET `/api/coverage` | 知識點弱點、補救卷草稿、題庫覆蓋率 |
+| `FEATURE_TUTOR`〔修訂 2026-09-24〕 | POST `/api/tutor`（10/min）| AI 家教 |
+| `FEATURE_VOICE`＋`FEATURE_TUTOR`〔修訂 2026-09-24〕 | POST `/api/voice/transcribe`（multipart、≤5 MB、10/min）| 按住說話 |
+
+〔修訂 2026-09-24〕請求與回應形狀以 [`engineering_docs/04_design/openapi-exam-pro-v1.yaml`](../engineering_docs/04_design/openapi-exam-pro-v1.yaml) 為準。
 
 ---
 
@@ -538,6 +563,23 @@ node seed_questions.js --apply  # 實際寫入（交易保護；同題幹已存�
 
 **擱置區**（隨時可重啟）：P-16 高頻章節參數化模板、私有 golden（真題庫）、跑題閾值 0.88 重評、
 fixture 擴 120 題、A-T16 新舊管線前後對照、A-T17 異家（Anthropic）驗證 adapter。
+
+### 階段 5：教學診斷平台
+
+〔修訂 2026-09-24〕狀態：開發完成，併入整合分支 `stage5/integration`（完整 CI 全綠），**尚未併入 main**；整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中。
+需求 DEC-014～019（核准欄待 Owner 簽核）→ 功能需求 FR-021～035；契約與裁決 [`docs/interfaces-stage5.md`](../docs/interfaces-stage5.md)；功能與旗標總表見[根 README 的階段 5 專節](../README.md#階段-5教學診斷平台功能旗標與給老師的快速開始)。
+
+**給老師的快速開始**（升級一次；步驟 1–5 不呼叫 AI、不花錢，完整說明見 [`engineering_docs/06_ops/deployment_and_operations.md`](../engineering_docs/06_ops/deployment_and_operations.md) §3.4）：
+
+1. `npm run db:backup`，停掉正在跑的伺服器。
+2. `npm run migrate`（套用 0010–0012）。
+3. `npm run kc:load -- --dry-run`，數字合理再 `npm run kc:load`（數學知識點的章節切法要在第一次載入前決定，見 `docs/kc-review-數學.md` 第 2 節）。
+4. **必跑** `npm run search:reindex -- --dry-run` → `npm run search:reindex`（化學詞彙改變了分詞，不跑的話部分舊數理題用關鍵字查不到）。
+5. `npm run solution:backfill -- --dry-run` → `--limit 20` 試補、讀幾題 → 全部補。
+6. `npm start`，在瀏覽器試批改卡的錯因與部分給分、學生檔案、題目詳解欄、Word 三種版本、化學卷上傳。
+7. `.env` 一次開一個旗標並重啟：`FEATURE_KC` → `FEATURE_REMEDIAL` → `FEATURE_TUTOR`（需 `LLM_MODE=live` 與金鑰）→ `FEATURE_VOICE`（桌機、localhost）→ 補標舊題 `npm run kc:backfill -- --dry-run` → 最後 `FEATURE_KC_TAGGING`。
+
+尚未做到：錯題重練與間隔複習、訂正卷、學習路徑與學習報告、學生端；AI 家教、語音與知識點標註都還沒對真的 Gemini 跑過，化學的拆題與分類品質也還沒量測（`npm run eval:classify-chem` 待錄製）。Owner 待辦見 [`docs/HANDOFF.md`](../docs/HANDOFF.md)。
 
 ---
 
