@@ -190,4 +190,16 @@ if (featuresS4.FEATURE_ASSISTANT) {
     router.post('/assistant', assistantRateLimit, assistantController.chat);
 }
 
+// ── 階段 5 WS-D：出題閉環（docs/interfaces-stage5.md 第 4.4 條）──
+// 知識點弱點、補救卷草稿、題庫覆蓋率。FEATURE_REMEDIAL 未開啟時不掛載（落到 Express 預設 404）。
+// 三支都不呼叫 LLM、不寫庫，不套限流（第 1.2 條的限流針對會花錢的端點）。
+// 跨章配額（blueprint）是既有 POST /generate-paper 的擴充，改在 examController，不另開路由（第 1.4 條）。
+const featuresS5D = require('../config/features');
+if (featuresS5D.FEATURE_REMEDIAL) {
+    const remedialController = require('../controllers/remedialController');
+    router.get('/students/:id/weakness/kc', remedialController.getKcWeakness);
+    router.post('/students/:id/remedial-paper', remedialController.remedialPaper);
+    router.get('/coverage', remedialController.getCoverage);
+}
+
 module.exports = router;
