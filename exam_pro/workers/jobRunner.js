@@ -284,6 +284,36 @@ function readFeatures() {
     };
 }
 
+/**
+ * 〔stage5 WS-C〕入庫後的知識點自動標註掛鉤（docs/interfaces-stage5.md 第 4.3 條第 3 點）。
+ *
+ * 規則：
+ *   - `enabled`（= FEATURE_KC_TAGGING）為假時**完全不呼叫** tagger，回 null。
+ *   - 開啟時呼叫 tagger(questionId)；它同步丟錯、回傳 rejected promise 都一樣只記 warn，
+ *     回傳的 promise **永遠 resolve**——呼叫端不 await 也不會冒出 unhandledRejection，
+ *     job 的狀態推進完全不受影響（與 scheduleEmbed 同一個原則）。
+ *
+ * @param {{questionId:number, enabled:boolean, tagger:(id:number)=>any, logger:{info:Function, warn:Function}}} opts
+ * @returns {Promise<object|null>} tagger 的結果；沒呼叫或失敗時為 null
+ */
+function runKcTagHook({ questionId, enabled, tagger, logger }) {
+    if (!enabled) return Promise.resolve(null);
+    const log = logger || makeLogger();
+    return Promise.resolve()
+        .then(() => tagger(questionId))
+        .then((r) => {
+            log.info({
+                msg: '知識點自動標註', question_id: questionId, status: r && r.status,
+                ...(r && r.reason ? { reason: r.reason } : {}),
+                ...(r && Array.isArray(r.written) && r.written.length ? { kc_codes: r.written.map(w => w.code) } : {})
+            });
+            return r ?? null;
+        }, (err) => {
+            log.warn({ msg: '知識點自動標註失敗（不影響入庫）', question_id: questionId, error: String((err && err.message) || err).split('\n')[0] });
+            return null;
+        });
+}
+
 /** 一行一個 JSON 的預設 logger（第 7.5 條）。 */
 function makeLogger(sink = console) {
     const line = (level, obj) => sink.log(JSON.stringify({ ts: new Date().toISOString(), level, ...obj }));
@@ -308,6 +338,8 @@ function makeLogger(sink = console) {
  * @param {(ms:number)=>Promise<void>} [opts.sleep] 測試可換成不真的睡
  * @param {(meter)=>{cost_usd:number, cost_estimated:boolean}} [opts.estimateCost]
  *        預設查 config/pricing.js（WS-B）；整合測試塞一個假的才測得到預算累加
+ * @param {(questionId:number)=>Promise<object>} [opts.kcTagger]
+ *        〔stage5 WS-C〕入庫後的知識點標註；預設 services/kcTagService.tagQuestion（FEATURE_KC_TAGGING 開啟才會被呼叫）
  * @returns {{tick, start, stop, runJobQuestion, runExtractJob, isBusy, inFlight}}
  */
 function createRunner(opts = {}) {
@@ -318,6 +350,9 @@ function createRunner(opts = {}) {
     const logger = opts.logger || makeLogger();
     const sleep = opts.sleep || ((ms) => new Promise(r => setTimeout(r, ms)));
     const estimateCost = opts.estimateCost || estimateCostFromPricing;
+    // 〔stage5 WS-C〕延遲 require：旗標關閉時連 kcTagService 都不載入
+    const kcTagger = opts.kcTagger
+        || ((questionId) => require('../services/kcTagService').tagQuestion(questionId, { db, llm, logger }));
 
     const agentCache = new Map();
     const inFlight = new Set();      // 'jq:12' / 'job:3'
@@ -592,6 +627,12 @@ function createRunner(opts = {}) {
             await client.query('COMMIT');
 
             scheduleEmbed(questionId, ctx.logger);
+            // 〔stage5 WS-C〕save 成功（已 COMMIT）之後的唯一掛鉤：FEATURE_KC_TAGGING 關閉時完全不呼叫；
+            // 開啟時 fire-and-forget，失敗只記 log，不影響 job 狀態（interfaces-stage5.md 第 4.3 條第 3 點）。
+            runKcTagHook({
+                questionId, enabled: require('../config/features').FEATURE_KC_TAGGING,
+                tagger: kcTagger, logger: ctx.logger || logger
+            });
             return {
                 kind: 'pass',
                 data: { question_id: questionId, text_hash: textHash, origin, chapter_src: chapterSrc, ...(variantOf !== null ? { variant_of: variantOf } : {}) }
@@ -1323,6 +1364,7 @@ module.exports = {
     // 純函式，供單元測試與 report_jobs 共用
     loadConfig, loadStage3Config, loadSourceCheckConfig, planChunks, backoffMs, attemptNo, buildSaveFields, chapterSrcFor, normalizeErrorClass, makeLogger, resolveJobPath,
     readFeatures, schemaFallbackOf,
+    runKcTagHook,   // 〔stage5 WS-C〕
     ADVANCEABLE_STATES, FREE_NODES, AGENT_MODULE_FOR_NODE, ERROR_CLASSES, SOURCE_CHECK_MODES,
     RENEW_INTERVAL_MS, BACKOFF_BASE_MS, BACKOFF_MAX_MS, EXTRACT_MAX_RETRIES
 };
