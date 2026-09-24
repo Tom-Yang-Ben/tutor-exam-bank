@@ -10,6 +10,14 @@
 //   LLM_MODE   = live | record | replay       CI 恆為 replay
 //
 // 階段 1 只要求 embed() 可用；generateJson() 留簽名與 gemini 骨架，階段 2 才接上五個 sub-agent。
+//
+// 階段 5（WS-E，docs/interfaces-stage5.md 第 5.1 條）新增：
+//   generateText({ model, system, parts, tools:{codeExecution?}, maxOutputTokens, thinkingBudget, signal,
+//                  agent, template, cacheKeyParts })
+//     → { text, codeRuns: [{ language, code, outcome, output }], finishReason, usage, latencyMs }
+//   record／replay 規則與 generateJson 相同（同一條鍵公式，schema 欄恆為空）；
+//   cassette 存 { text, codeRuns, finishReason, usage }（finishReason 不在鍵內；舊 cassette 沒有這欄時回放為 null）。
+//   generateJson 的行為與簽名一個字都沒改。
 
 const DEFAULT_MODEL = 'gemini-embedding-001';
 const DEFAULT_DIM = 768;
@@ -143,4 +151,69 @@ async function generateJson(opts = {}) {
     return res;
 }
 
-module.exports = { embed, generateJson, l2Normalize, embedMode, llmMode };
+/**
+ * 自由文字生成，可選 code execution 驗算（docs/interfaces-stage5.md 第 5.1 條）。
+ *
+ * 三個模式與 generateJson 相同；replay miss 的訊息也是同一串（services/llm/fake.js）。
+ * record 模式的 cassette：request 只存 parts 摘要（音訊只留位元組數與 sha256），
+ * response 存 { text, codeRuns, finishReason, usage, latencyMs }（finishReason 讓回放也重現「被截斷」）。
+ *
+ * @param {{model?:string, system?:string, parts:Array<object>, tools?:{codeExecution?:boolean},
+ *          maxOutputTokens?:number, thinkingBudget?:number, signal?:AbortSignal,
+ *          agent?:string, template?:string, cacheKeyParts?:object}} opts
+ *        record／replay 模式下 agent 必填（同 generateJson）。
+ * @returns {Promise<{text:string, codeRuns:Array<{language:string,code:string,outcome:string|null,output:string}>,
+ *                    finishReason:string|null, usage:{tokenIn,tokenOut,tokenThinking,tokenCached}, latencyMs:number}>}
+ */
+async function generateText(opts = {}) {
+    const mode = llmMode();
+    const { parseModel } = require('../../config/models');
+    const models = require('../../config/models');
+    const { vendor, id } = parseModel(opts.model || models.MODEL_EXTRACT);
+
+    if (mode === 'replay') {
+        const fake = require('./fake');
+        return fake.generateText({ ...opts, model: id });
+    }
+
+    if (vendor !== 'gemini') {
+        throw new Error(`services/llm：第一版只有 gemini adapter，收到 vendor=「${vendor}」（anthropic／openai 留給 A-T17）。`);
+    }
+
+    const gemini = require('./gemini');
+    const res = await gemini.generateText({ ...opts, model: id });
+
+    if (mode === 'record') {
+        const cassette = require('./cassette');
+        const key = cassette.cassetteKey({
+            agent: opts.agent, modelId: id, template: opts.template,
+            schema: undefined, cacheKeyParts: opts.cacheKeyParts
+        });
+        const { file, overwritten } = cassette.writeCassette({
+            agent: opts.agent,
+            key,
+            meta: {
+                agent: opts.agent,
+                model: id,
+                template: opts.template ?? null,
+                kind: 'text',
+                recorded_at: new Date().toISOString(),
+                fixtureHash: cassette.fixtureHash()
+            },
+            request: {
+                parts: cassette.summarizeParts(opts.parts),
+                tools: { codeExecution: !!(opts.tools && opts.tools.codeExecution) },
+                cacheKeyParts: opts.cacheKeyParts ?? {}
+            },
+            response: {
+                text: res.text, codeRuns: res.codeRuns, finishReason: res.finishReason ?? null,
+                usage: res.usage, latencyMs: res.latencyMs
+            }
+        });
+        console.log(`[llm:record] ${overwritten ? '覆寫' : '寫入'} cassette → ${file}`);
+    }
+
+    return res;
+}
+
+module.exports = { embed, generateJson, generateText, l2Normalize, embedMode, llmMode };
