@@ -361,6 +361,7 @@ exports.generatePaper = async (req, res, next) => {
 // 選題：逐列跑 pickByQuotas（同一段候選池 SQL、同一個 pickPaperUnits），跨列維持家族互斥與不重複。
 // 不足量：**不回 400**，逐列回報 wanted／got，照抽到的題出卷並附 note；
 //         全部列都抽不到任何一題時才回 400（出一張空卷沒有意義）。
+//         例外：FOLLOW_UP_SHORTFALL_POLICY 切成 'error' 時，承上題湊不滿的列同單章路徑回 400（blueprintPolicyError）。
 // 回應形狀同單章路徑，另外多 blueprint（逐列 wanted／got）與 shortfalls（只列不足的列）。
 // ─────────────────────────────────────────────────────────────
 
@@ -445,6 +446,27 @@ function shortfallReason(r, wanted) {
 }
 
 /**
+ * FOLLOW_UP_SHORTFALL_POLICY 在 blueprint 分支的效果（純函式）。
+ *
+ * 那個常數是「承上題整組湊不滿 N 題時怎麼辦」的**單點切換**（待 owner 決定）：切成 'error' 時，
+ * 單章路徑回 400，blueprint 也必須跟著回 400，否則同一個政策在兩條組卷路徑上不一致。
+ * 只看 reason 為 follow_up_group 的列——「庫存不足」在 blueprint 本來就是逐列附註、不回 400
+ * （docs/remedial.md 第 2.3 節），不受這個政策影響，同單章路徑「真的庫存不足不受此政策影響」。
+ *
+ * @param {Array<{row:number, chapter:string, wanted:number, got:number, reason:string}>} shortfalls
+ * @param {'note'|'error'} policy
+ * @returns {string|null} 要回 400 的訊息；政策是 'note' 或沒有承上題不足時為 null
+ */
+function blueprintPolicyError(shortfalls, policy) {
+    if (policy !== 'error') return null;
+    const bad = shortfalls.filter(s => s.reason === 'follow_up_group');
+    if (bad.length === 0) return null;
+    return '承上題須與前題整組出題，blueprint '
+        + bad.map(s => `第 ${s.row} 列「${s.chapter}」無法剛好湊滿 ${s.wanted} 題（最多可出 ${s.got} 題）`).join('；')
+        + '，請調整題數。';
+}
+
+/**
  * 跨章卷的標題（純函式）：1 章同單章路徑；2–3 章列出；4 章以上「第一章等 N 章」。
  * @param {string} studentName
  * @param {string[]} chapters 依 blueprint 順序（可重複，會去重）
@@ -503,6 +525,9 @@ async function generateBlueprintPaper(req, res, next) {
                 blueprint: report, shortfalls
             });
         }
+        // 承上題湊不滿的政策與單章路徑同一個開關（預設 'note'：不回 400，照下面附 note）
+        const policyError = blueprintPolicyError(shortfalls, FOLLOW_UP_SHORTFALL_POLICY);
+        if (policyError) return res.status(400).json({ message: policyError, blueprint: report, shortfalls });
 
         const { rows: fullQuestions } = await query(
             `SELECT id, question_text, question_type, difficulty, answer_text, source_type, source_detail, follows_question_id
@@ -554,7 +579,7 @@ async function generateBlueprintPaper(req, res, next) {
     }
 }
 // 純函式給單元測試
-exports._blueprintInternals = { parseBlueprint, parseExcludeIds, parseSourceTypes, shortfallReason, blueprintTitle, MAX_BLUEPRINT_ROWS };
+exports._blueprintInternals = { parseBlueprint, parseExcludeIds, parseSourceTypes, shortfallReason, blueprintPolicyError, blueprintTitle, MAX_BLUEPRINT_ROWS };
 
 /**
  * 建卷＋寫 attempts（generate 與 confirm 共用；同一交易、rowCount 硬閘門）。

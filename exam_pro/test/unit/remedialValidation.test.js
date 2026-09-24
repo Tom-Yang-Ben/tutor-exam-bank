@@ -17,7 +17,7 @@ const { _internals: remedialInternals } = require('../../controllers/remedialCon
 const exam = require('../../controllers/examController');
 
 const { parseRemedialBody, parseCoverageQuery } = remedialInternals;
-const { parseBlueprint, parseExcludeIds, parseSourceTypes, shortfallReason, blueprintTitle, MAX_BLUEPRINT_ROWS } = exam._blueprintInternals;
+const { parseBlueprint, parseExcludeIds, parseSourceTypes, shortfallReason, blueprintPolicyError, blueprintTitle, MAX_BLUEPRINT_ROWS } = exam._blueprintInternals;
 
 describe('parseRemedialBody', () => {
     test('只給 subject：套用預設 total 20、mix 0.6／0.2／0.2、days 90、不限題源', () => {
@@ -130,6 +130,19 @@ describe('generate-paper 的 blueprint 驗證', () => {
     test('shortfallReason：可用題數不夠＝庫存不足，否則是承上組塞不進', () => {
         assert.equal(shortfallReason({ got: 2, availableCount: 2 }, 5), 'insufficient_stock');
         assert.equal(shortfallReason({ got: 4, availableCount: 6 }, 5), 'follow_up_group');
+    });
+
+    test('blueprintPolicyError：FOLLOW_UP_SHORTFALL_POLICY 是單點切換，blueprint 分支也聽它的', () => {
+        assert.equal(exam.FOLLOW_UP_SHORTFALL_POLICY, 'note', '預設仍是少出題附註');
+        const shortfalls = [
+            { row: 1, chapter: '向量內積', wanted: 3, got: 1, reason: 'insufficient_stock' },
+            { row: 2, chapter: '實數', wanted: 4, got: 3, reason: 'follow_up_group' }
+        ];
+        assert.equal(blueprintPolicyError(shortfalls, 'note'), null, "'note'：不回 400");
+        assert.equal(blueprintPolicyError(shortfalls, 'error'),
+            '承上題須與前題整組出題，blueprint 第 2 列「實數」無法剛好湊滿 4 題（最多可出 3 題），請調整題數。');
+        assert.equal(blueprintPolicyError([shortfalls[0]], 'error'), null, '庫存不足不受此政策影響（同單章路徑）');
+        assert.equal(blueprintPolicyError([], 'error'), null);
     });
 
     test('blueprintTitle：1 章同單章路徑、2–3 章列出、4 章以上「等 N 章」', () => {
