@@ -61,6 +61,36 @@ exports.getChapterVolumes = (req, res) => {
     res.json(require('../config/chapters').VOLUMES);
 };
 
+// ─────────────────────────────────────────────────────────────
+// 文字詳解（階段 5 WS-A；docs/interfaces-stage5.md 第 4.1 條第 5 項；DEC-017、缺口 G05）
+//
+// questions.solution_text／solution_src（migrations/0011）兩欄同 NULL 或同非 NULL：
+//   verify   管線驗答時獨立解出、且與答案比對一致的 steps_summary（save 節點或回填腳本寫入）
+//   teacher  老師在這裡（POST／PUT）寫入或修改
+//   ai       保留給之後的 AI 另外生成
+// 老師送的 solution_text 與現值**逐字相同**時保留原來源——在編輯視窗改了別的欄位按儲存，
+// 不該讓一段 AI 產生的詳解被標成「老師寫的」。
+// ─────────────────────────────────────────────────────────────
+
+/** 詳解字數上限（migrations/0011 的 CHECK）。 */
+const SOLUTION_MAX_LEN = 4000;
+
+/**
+ * 驗證並正規化 body.solution_text。trim 後空字串視為 null（清空）。
+ * 字數以 code point 計，與 PG 的 char_length 同一把尺。
+ *
+ * @param {any} raw
+ * @returns {{ ok:true, value:string|null } | { ok:false, error:string }}
+ */
+function normalizeSolutionText(raw) {
+    if (raw === null || raw === undefined) return { ok: true, value: null };
+    if (typeof raw !== 'string') return { ok: false, error: '詳解必須是文字或 null。' };
+    const v = raw.trim();
+    if (v === '') return { ok: true, value: null };
+    if ([...v].length > SOLUTION_MAX_LEN) return { ok: false, error: `詳解最多 ${SOLUTION_MAX_LEN} 字。` };
+    return { ok: true, value: v };
+}
+
 // 共用：驗證並正規化題目欄位（手動新增與編輯共用）
 // A-T12 起管線的 save 節點與 POST /api/review/:jqId/approve 也要跑同一道閘門，
 // 因此本函式已搬到 utils/questionValidation.js，這裡只留 require（行為完全不變）。
@@ -75,6 +105,9 @@ exports.createQuestion = async (req, res, next) => {
     if (sourceDetail === undefined) {
         return res.status(400).json({ message: `來源註記最多 ${SOURCE_DETAIL_MAX} 字。` });
     }
+    // 〔stage5 WS-A〕文字詳解（可選）：老師寫入 → solution_src='teacher'；沒送或空白 → 兩欄 NULL
+    const solution = normalizeSolutionText(req.body.solution_text);
+    if (!solution.ok) return res.status(400).json({ message: solution.error });
     if (!subject || !chapter || !question_text || !answer_text) {
         return res.status(400).json({ message: '學科、章節、題目內容與答案皆為必填欄位！' });
     }
@@ -105,16 +138,18 @@ exports.createQuestion = async (req, res, next) => {
         // 手動錄入 → origin='manual'、chapter_src='human'（規劃 §4.3.1 的來源標記規則）
         const sql = `INSERT INTO questions
                         (subject, chapter, question_type, difficulty, question_text, question_img, answer_text, solution_img,
-                         origin, chapter_src, source_type, source_detail, search_tsv)
+                         origin, chapter_src, source_type, source_detail, search_tsv, solution_text, solution_src)
                      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'manual', 'human', $9, $10,
                              setweight(to_tsvector('simple', array_to_string($11::text[], ' ')), 'A')
                           || setweight(to_tsvector('simple', array_to_string($12::text[], ' ')), 'A')
-                          || setweight(to_tsvector('simple', array_to_string($13::text[], ' ')), 'B'))
+                          || setweight(to_tsvector('simple', array_to_string($13::text[], ' ')), 'B'),
+                             $14, $15)
                      RETURNING id`;
         const { rows } = await query(sql, [
             row.subject, row.chapter, row.question_type, row.difficulty, row.question_text,
             question_img || null, answer_text.trim(), solution_img || null, sourceType, sourceDetail,
-            chapterTokens, keywordTokens, stemTokens
+            chapterTokens, keywordTokens, stemTokens,
+            solution.value, solution.value === null ? null : 'teacher'
         ]);
         res.status(201).json({ message: '題目錄入成功！', questionId: rows[0].id });
         // 回應送出後才補向量（interfaces-stage1.md 12.4）：embedding IS NULL 本來就會被 backfill 撿到
@@ -225,13 +260,36 @@ exports.listQuestions = async (req, res, next) => {
 
         const { rows } = await query(
             `SELECT id, subject, chapter, question_type, difficulty, question_text, question_img, answer_text, source_type, source_detail, created_at,
-                    follows_question_id,
+                    follows_question_id, solution_text, solution_src,
                     EXISTS (SELECT 1 FROM questions c
                              WHERE c.follows_question_id = questions.id AND c.archived_at IS NULL) AS has_follow_ups
              FROM questions ${whereSql} ORDER BY id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
             [...params, limit, offset]
         );
         res.json({ total, page, limit, totalPages: Math.ceil(total / limit) || 1, questions: rows });
+    } catch (err) { next(err); }
+};
+
+// 〔stage5 WS-A〕單題詳情：GET /api/questions/:id（第 4.1 條第 5 項的「題目詳情」）
+//
+// 與列表不同，**已封存的題也查得到**（回 archived_at）：試卷明細、批改卡與 AI 家教拿到的題號
+// 可能指向事後被封存的題，那一題的內容與詳解仍然要讀得到（裁決 S3-2 的同一條線）。
+exports.getQuestion = async (req, res, next) => {
+    const raw = String(req.params.id ?? '').trim();
+    const id = Number(raw);
+    if (!Number.isInteger(id) || id < 1 || String(id) !== raw) {
+        return res.status(400).json({ message: '無效的題目 ID' });
+    }
+    try {
+        const { rows } = await query(
+            `SELECT id, subject, chapter, question_type, difficulty, question_text, question_img, answer_text,
+                    solution_text, solution_src, source_type, source_detail, origin, chapter_src,
+                    variant_of, follows_question_id, created_at, archived_at
+               FROM questions WHERE id = $1`,
+            [id]
+        );
+        if (rows.length === 0) return res.status(404).json({ message: '找不到該題目' });
+        res.status(200).json(rows[0]);
     } catch (err) { next(err); }
 };
 
@@ -249,6 +307,10 @@ exports.updateQuestion = async (req, res, next) => {
     if (hasDetail && sourceDetail === undefined) {
         return res.status(400).json({ message: `來源註記最多 ${SOURCE_DETAIL_MAX} 字。` });
     }
+    // 〔stage5 WS-A〕文字詳解：沒帶這個鍵＝不動（舊前端與其他呼叫端不受影響）；帶 null 或空白＝清空
+    const hasSolution = Object.prototype.hasOwnProperty.call(req.body, 'solution_text');
+    const solution = normalizeSolutionText(hasSolution ? req.body.solution_text : null);
+    if (hasSolution && !solution.ok) return res.status(400).json({ message: solution.error });
     const client = await pool.connect();
     try {
         const { subject, chapter, question_type, difficulty, question_text, answer_text } = v.value;
@@ -267,13 +329,19 @@ exports.updateQuestion = async (req, res, next) => {
                 SET subject=$1, chapter=$2, question_type=$3, difficulty=$4, question_text=$5, answer_text=$6,
                     source_type = COALESCE($8, source_type),
                     source_detail = CASE WHEN $9 THEN $10 ELSE source_detail END,
+                    solution_text = CASE WHEN $11 THEN $12::text ELSE solution_text END,
+                    solution_src  = CASE WHEN NOT $11 THEN solution_src
+                                         WHEN $12::text IS NULL THEN NULL
+                                         WHEN $12::text = solution_text THEN solution_src
+                                         ELSE 'teacher' END,
                     chapter_src = CASE WHEN chapter IS DISTINCT FROM $2 THEN 'human' ELSE chapter_src END,
                     embed_hash  = CASE WHEN (subject, chapter, question_type, difficulty, question_text)
                                        IS DISTINCT FROM ($1, $2, $3, $4::smallint, $5)
                                   THEN NULL ELSE embed_hash END
               WHERE id=$7 AND archived_at IS NULL
           RETURNING id, subject, chapter, question_type, difficulty, question_text, keywords, concept_summary`,
-            [subject, chapter, question_type, difficulty, question_text, answer_text || '略', id, sourceType, hasDetail, sourceDetail]
+            [subject, chapter, question_type, difficulty, question_text, answer_text || '略', id, sourceType, hasDetail, sourceDetail,
+                hasSolution, hasSolution ? solution.value : null]
         );
         if (rows.length === 0) {
             await client.query('ROLLBACK');
@@ -498,3 +566,6 @@ exports.batchSourceTag = async (req, res, next) => {
         res.json({ message: `已更新 ${rows.length} 題的題源標記。`, updated: rows.length });
     } catch (err) { next(err); }
 };
+
+// 〔stage5 WS-A〕給單元測試用（不對外掛成路由）
+exports._internals = { normalizeSolutionText, SOLUTION_MAX_LEN };
