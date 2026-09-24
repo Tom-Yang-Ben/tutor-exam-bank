@@ -64,9 +64,9 @@
 ## 4. 後果
 
 - **正面**: 老師可以用說的提問，且口述公式的歧義在送出前被人看過；錄音不留在本機任何地方；語音與家教共用同一套測試（replay）、成本與遮罩基礎設施。
-- **負面**: 非即時、多一步確認；錄音本身會送到 Gemini，**學生姓名若被說出口無法遮罩**（操作說明要求不要在錄音中講學生全名；轉寫後的文字送給家教前會再遮罩）；Chrome 的 MediaRecorder 主要錄 `audio/webm`（opus），**Gemini 是否接受 `audio/webm` 尚未實機驗證**；`config/pricing.js` 沒有音訊輸入的分開單價，語音成本可能被低估；手機與平板暫不支援。
+- **負面**: 非即時、多一步確認；錄音本身會送到 Gemini，**學生姓名若被說出口無法遮罩**（操作說明要求不要在錄音中講學生全名；轉寫後的文字送給家教前會再遮罩）；Chrome 的 MediaRecorder 主要錄 `audio/webm`（opus）：Gemini API 文件（ai.google.dev/gemini-api/docs/audio，2026-09-23 更新版，2026-09-24 查閱）的音訊格式清單**有列** `audio/webm`，Firefox 的 `audio/ogg` 也有列，但**尚未用真的錄音實機驗證**；Safari 送的 `audio/mp4` 不在清單上（清單寫的是 `audio/m4a`），Safari 不在本階段支援的瀏覽器內；`config/pricing.js` 沒有音訊輸入的分開單價，語音成本可能被低估；手機與平板暫不支援。
 - **影響範圍**: `exam_pro/services/voiceService.js`、`exam_pro/controllers/tutorController.js`（`transcribe`、`handleVoiceUploadError`）、`exam_pro/routes/index.js`（memoryStorage 上傳）、`exam_pro/services/llm/gemini.js`（`toContents` 的音訊 part）、`exam_pro/services/llm/cassette.js`（音訊摘要）、`exam_pro/public/js/tutor.js`（按住說話與確認面板）。
-- **重新評估觸發**: 實機驗證 Gemini 不接受 `audio/webm`（改錄其他格式或伺服器端轉檔）；老師回報確認步驟過於頻繁且歧義 chip 幾乎都選第一個（可考慮無歧義時一鍵送出）；需要在手機上使用；需要即時對話（選項一）；或錄音不得出境成為硬需求（選項三）。
+- **重新評估觸發**: 實機驗證 Gemini 不接受 `audio/webm`（改錄其他格式、前端用 Web Audio 轉成 WAV，或伺服器端轉檔）；老師回報確認步驟過於頻繁且歧義 chip 幾乎都選第一個（可考慮無歧義時一鍵送出）；需要在手機上使用；需要即時對話（選項一）；或錄音不得出境成為硬需求（選項三）。
 
 ## 5. 追溯
 
