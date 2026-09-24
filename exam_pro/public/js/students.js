@@ -1386,6 +1386,28 @@ function profileEditor(app, st, options, onSaved) {
 }
 
 /**
+ * 〔stage5 WS-B〕弱點面板的科目選項（docs/interfaces-stage5.md 第 1.5 條：科目清單不得寫死）。
+ * 先用 index.html 已載好的白名單（ExamApp.getChapterWhitelist），還沒載好就自己打 GET /api/chapter-whitelist。
+ * 失敗時只剩「不分科」——弱點面板照樣能用，只是不能篩科。
+ * @param {object} app
+ * @param {HTMLSelectElement} sel
+ */
+async function fillSubjectOptions(app, sel) {
+    let subjects = [];
+    try {
+        const cached = typeof app.getChapterWhitelist === 'function' ? (app.getChapterWhitelist() || {}) : {};
+        if (Object.keys(cached).length) subjects = Object.keys(cached);
+        else {
+            const res = await app.apiFetch('/api/chapter-whitelist');
+            if (res.ok) subjects = Object.keys(await res.json());
+        }
+    } catch (err) {
+        console.warn('[students] 載入科目清單失敗，只保留「不分科」', err);
+    }
+    for (const s of subjects) sel.appendChild(el('option', '', { value: s, textContent: s }));
+}
+
+/**
  * 建立 <section id="students"> 裡的骨架（index.html 只放一個空的錨點）。
  * @param {object} app
  * @param {HTMLElement} section
@@ -1409,11 +1431,8 @@ function mountStudentsSection(app, section) {
     const controls = el('div', 'flex flex-wrap items-center gap-2');
     const studentSel = el('select', 'field-control min-h-0 p-2.5 text-sm', { id: 'stuStudent', 'aria-label': '選擇學生' });
     const subjectSel = el('select', 'field-control min-h-0 p-2.5 text-sm', { id: 'stuSubject', 'aria-label': '篩選學科' });
-    subjectSel.append(
-        el('option', '', { value: '', textContent: '不分科' }),
-        el('option', '', { value: '數學', textContent: '數學' }),
-        el('option', '', { value: '物理', textContent: '物理' })
-    );
+    subjectSel.append(el('option', '', { value: '', textContent: '不分科' }));
+    fillSubjectOptions(app, subjectSel);   // 〔stage5 WS-B〕科目選項讀 API，不寫死（化學併入）
     const daysSel = el('select', 'field-control min-h-0 p-2.5 text-sm', { id: 'stuDays', 'aria-label': '統計天數' });
     for (const d of DAYS_OPTIONS) {
         const o = el('option', '', { value: String(d), textContent: `近 ${d} 天` });

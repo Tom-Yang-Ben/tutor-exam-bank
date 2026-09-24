@@ -17,7 +17,7 @@
 //   驗證規則、判斷順序與訊息文字完全沒動，只是把同一則訊息也包成長度 1 的陣列。
 // ─────────────────────────────────────────────────────────────
 const {
-    isValidSubject, isValidChapter, isValidQuestionType, normalizeDifficulty, QUESTION_TYPES
+    isValidSubject, isValidChapter, isValidQuestionType, normalizeDifficulty, QUESTION_TYPES, subjectChoiceText
 } = require('../config/chapters');
 
 /**
@@ -38,7 +38,8 @@ function validateQuestionFields(body) {
     const difficulty = normalizeDifficulty(body.difficulty ?? 3);
 
     if (!subject || !chapter || !question_text) return fail('學科、章節、題目內容皆為必填！');
-    if (!isValidSubject(subject)) return fail('學科僅能為「數學」或「物理」！');
+    // 〔stage5 WS-B〕科目清單由 config/chapters.js 產生（化學併入後三科；兩科時與原字串逐字相同）
+    if (!isValidSubject(subject)) return fail(`學科僅能為${subjectChoiceText()}！`);
     if (!isValidChapter(subject, chapter)) return fail(`章節「${chapter}」不在 ${subject} 的精細章節白名單中！`);
     if (!isValidQuestionType(question_type)) return fail(`題型僅能為：${QUESTION_TYPES.join('、')}`);
     if (difficulty === null) return fail('難度必須為 1 到 5 的整數！');

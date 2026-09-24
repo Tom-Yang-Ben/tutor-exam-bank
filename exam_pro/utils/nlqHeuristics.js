@@ -34,7 +34,7 @@
 //   這一句的向量查詢字串會變成「加 的」——**規則抓得越準、向量側就越沒東西可查**，
 //   那顯然不是這個欄位的用意。
 
-const { CHAPTERS, QUESTION_TYPES } = require('../config/chapters');
+const { CHAPTERS, QUESTION_TYPES, LEGACY_SUBJECTS } = require('../config/chapters');
 
 /** 字元標記：0 = 自由文字、1 = 概念詞（章節／別名）、2 = 被規則吃掉的條件詞 */
 const FREE = 0;
@@ -99,6 +99,84 @@ for (const [subject, list] of Object.entries(CHAPTERS)) {
 
 /** 夾在 1~5 */
 const clampLevel = (n) => Math.min(5, Math.max(1, n));
+
+// ───────────────────────── 化學的科目線索（〔stage5 WS-B〕）─────────────────────────
+
+/**
+ * 「一看就是在問化學」的詞（docs/interfaces-stage5.md 第 4.2 條第 2 點）。
+ *
+ * 用途只有一個：規則一章都沒抓到（confident === false）時，決定**要不要跳過 LLM 輔路徑**。
+ * NLQ 的 LLM 輔路徑本階段不支援化學——nlq.v1 的 prompt 與 schema 凍結為數學／物理兩科
+ * （既有 cassette 不失效，第 1.1 條），送出去模型也只能在兩科裡硬挑一章。所以句子裡有
+ * 這些詞、**而且沒有任何數理線索**（mentionsMathPhysics）時，才只用規則的結果、subject 設成化學。
+ *
+ * 挑選原則：只收數學／物理題幾乎不會出現的詞。「平衡」（受力平衡）、「反應」（反應時間）、
+ * 「離子」、「元素」（集合的元素）、「電位」這類跨科詞一律不收。
+ * 章節本名與別名不必列在這裡——它們會讓 confident 為真，本來就不會走 LLM。
+ * 「幾乎不會」不是「不會」（數學的藥物濃度、物理的核反應式、化學能），所以單靠這張表不能決定科目，
+ * 見下方 isChemistryOnlyQuery。
+ */
+const CHEMISTRY_HINTS = Object.freeze([
+    '化學', '化合物', '反應式', '莫耳', '溶液', '濃度', '酸鹼', '氧化', '還原', '沉澱', '有機物', '週期表'
+]);
+
+/**
+ * 句子裡有沒有化學的科目線索。純函式。
+ * @param {string} text
+ * @returns {boolean}
+ */
+function mentionsChemistry(text) {
+    const s = String(text ?? '');
+    return CHEMISTRY_HINTS.some(w => s.includes(w));
+}
+
+/**
+ * 點名數學／物理的寫法：LEGACY_SUBJECTS（數學、物理）加上考科的簡稱。
+ * 規則層本身從不讀科目名（subject 只由章節反推），所以老師寫了「物理」「數學」，
+ * 只有這裡看得到——看到了就不能再把句子當成化學。
+ */
+const MATH_PHYSICS_SUBJECT_NAMES = Object.freeze([...LEGACY_SUBJECTS, '數甲', '數乙', '數A', '數B']);
+
+/**
+ * 含化學線索字、但其實是數理用語的詞（直接視為數理線索）：
+ *   化學能（物理「能量的形式與守恆」）、核反應（物理「核物理與基本粒子」，「核反應式」含「反應式」）、
+ *   衰減（數學指數衰減的「藥物濃度衰減」、物理的振幅衰減；化學講半生期、衰變）。
+ */
+const MATH_PHYSICS_COMPOUNDS = Object.freeze(['化學能', '核反應', '衰減']);
+
+/**
+ * 句子裡有沒有數學／物理的線索。純函式。
+ *   1. 點名數學或物理（MATH_PHYSICS_SUBJECT_NAMES）；
+ *   2. 含化學線索字的數理用語（MATH_PHYSICS_COMPOUNDS）；
+ *   3. opts.terms（呼叫端注入；nlqService 傳 utils/tokenize.js 的 MATH_PHYSICS_TERMS，
+ *      即階段 5 之前的數理自訂詞典）——比對前先把化學線索詞挖掉，「週期表」才不會被「週期」算成物理。
+ * 注入而不直接 require：utils/tokenize.js 一載入就會讀 jieba 詞典，本檔維持純函式、不帶這個負擔
+ *（同 parseQuery 的 opts.aliases）。
+ * @param {string} text
+ * @param {{ terms?: readonly string[] }} [opts]
+ * @returns {boolean}
+ */
+function mentionsMathPhysics(text, opts = {}) {
+    const s = String(text ?? '');
+    if (MATH_PHYSICS_SUBJECT_NAMES.some(w => s.includes(w))) return true;
+    if (MATH_PHYSICS_COMPOUNDS.some(w => s.includes(w))) return true;
+    let rest = s;
+    for (const w of CHEMISTRY_HINTS) rest = rest.split(w).join(' ');
+    return (opts.terms || []).some(w => w && rest.includes(w));
+}
+
+/**
+ * 規則沒抓到章節時，這一句能不能直接當成「只查化學」（跳過 LLM、subject 設成化學）。純函式。
+ *
+ * 有化學線索、**而且**沒有任何數理線索才算。拿不準就回 false，讓句子照舊走 LLM 輔路徑——
+ * 那是這個分支加進來之前數學／物理句子的行為，化學句子頂多查得比較散，數理句子卻不會被鎖進化學。
+ * @param {string} text
+ * @param {{ mathPhysicsTerms?: readonly string[] }} [opts]
+ * @returns {boolean}
+ */
+function isChemistryOnlyQuery(text, opts = {}) {
+    return mentionsChemistry(text) && !mentionsMathPhysics(text, { terms: opts.mathPhysicsTerms });
+}
 
 /**
  * 在 marks 全是 FREE 的區段裡找 needle 的第一個位置。
@@ -386,5 +464,12 @@ module.exports = {
     TYPE_ALIASES,
     STUDENT_RE,
     SUBJECT_OF_CHAPTER,
-    trimFiller
+    trimFiller,
+    // 〔stage5 WS-B〕化學只走規則路徑（nlqService.parseOnly）
+    CHEMISTRY_HINTS,
+    MATH_PHYSICS_SUBJECT_NAMES,
+    MATH_PHYSICS_COMPOUNDS,
+    mentionsChemistry,
+    mentionsMathPhysics,
+    isChemistryOnlyQuery
 };

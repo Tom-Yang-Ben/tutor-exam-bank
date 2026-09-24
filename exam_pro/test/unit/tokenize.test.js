@@ -73,6 +73,14 @@ describe('tokenize — 學科名詞（自訂詞典）', () => {
         for (const [subject, list] of Object.entries(CHAPTERS)) {
             for (const chapter of list) {
                 const toks = tokenize(chapter);
+                // 〔stage5 WS-B〕化學的「醇、酚、醚」三段都只有一個字，頓號又會被 jieba 當成切點，
+                // 不可能切出長度 ≥ 2 的子詞。這種「每段都是單字」的章名改為要求每一段都各自成為一個 token
+                // （查「醇」「酚」「醚」都命中得到），其餘章節的要求一字不改。
+                const segments = chapter.split('、');
+                if (segments.length > 1 && segments.every(s => s.length === 1)) {
+                    for (const s of segments) assert.ok(toks.includes(s), `${subject}／${chapter} 缺少單字 token「${s}」：${JSON.stringify(toks)}`);
+                    continue;
+                }
                 const hit = toks.some(t => t.length >= 2 && chapter.includes(t));
                 assert.ok(hit, `${subject}／${chapter} 被切成 ${JSON.stringify(toks)}`);
             }

@@ -18,6 +18,9 @@
 // 純函式：無 I/O、無隨機、無時間、不讀 process.env。
 
 const { normalizeStem } = require('./normalizeStem');
+// 〔stage5 WS-B〕單位與化學式（docs/interfaces-stage5.md 第 4.2 條第 4 點）
+const { parseUnit, sameDims, toBase, conversionVariants, unitTextOfAnswer, trailingUnitText } = require('./units');
+const { findCe, parseChemAnswer } = require('./chemFormula');
 
 const OPTION_LETTERS = 'ABCDEFGH';
 const EPSILON = 1e-9;
@@ -114,19 +117,30 @@ function lastRelationIndex(s) {
  * @returns {string|null}  抽不到回 null
  */
 function extractFinalAnswer(claimed) {
+    const loc = locateFinalAnswer(claimed);
+    return loc ? loc.answer : null;
+}
+
+/**
+ * extractFinalAnswer 的本體，另外回傳「答案那一段 $…$ 在原文的結束位置」。
+ * 〔stage5 WS-B〕單位常寫在 $…$ 外面（「…＝ 25$ m。」），比對單位時要讀 end 之後的文字；
+ * 抽取規則本身（上面凍結的四步）一個字都沒改，extractFinalAnswer 的輸出逐字不變。
+ * @returns {{answer:string, end:number}|null}  end = 該段右 $ 之後的位置；走「整段等號」規則時為原文長度
+ */
+function locateFinalAnswer(claimed) {
     if (typeof claimed !== 'string' || claimed.trim() === '') return null;
 
-    const segments = [...claimed.matchAll(/\$([^$]+)\$/g)].map(m => m[1]);
+    const matches = [...claimed.matchAll(/\$([^$]+)\$/g)];
 
     // 由後往前找第一個「不是純單位上下標」的 $…$
-    for (let i = segments.length - 1; i >= 0; i--) {
-        const seg = segments[i].trim();
+    for (let i = matches.length - 1; i >= 0; i--) {
+        const seg = matches[i][1].trim();
         if (seg === '') continue;
         if (SCRIPT_ONLY_RE.test(seg.replace(/\s+/g, ''))) continue;   // 單位的一部分，跳過
 
         const rel = lastRelationIndex(seg);
         const piece = (rel ? seg.slice(rel.at + rel.len) : seg).trim();
-        if (piece !== '') return piece;
+        if (piece !== '') return { answer: piece, end: matches[i].index + matches[i][0].length };
         // 切完是空的（例如 `$x =$`）：往前再找一段
     }
 
@@ -134,7 +148,7 @@ function extractFinalAnswer(claimed) {
     const rel = lastRelationIndex(claimed);
     if (rel) {
         const tail = claimed.slice(rel.at + rel.len).trim();
-        if (tail !== '') return tail;
+        if (tail !== '') return { answer: tail, end: claimed.length };
     }
     return null;
 }
@@ -316,9 +330,41 @@ function toNumberList(raw) {
 
 const nearlyEqual = (a, b) => Math.abs(a - b) <= EPSILON * Math.max(1, Math.abs(a), Math.abs(b));
 
+// ───────────────────────── 單位（〔stage5 WS-B〕）─────────────────────────
+//
+// docs/interfaces-stage5.md 第 4.2 條第 4 點：數值帶單位時單位必須一致——「5 cm」對「5 m」
+// 不得判 agree。單位的解析在 utils/units.js；這裡只決定「什麼時候介入」：
+//   **兩邊都有認得的單位**才介入（units 參數非 null），因次不同 → disagree，因次相同 → 換算到 SI 再比。
+//   任何一邊沒有單位、或單位不在 utils/units.js 的表裡 → units 為 null，走下面凍結的原規則，一個字不變。
+// claimed 的單位常寫在 $…$ 外面（「…＝ 25$ m。」），所以先看抽出來的答案本身，
+// 沒有再看答案那一段 $…$ 後面緊接的文字（locateFinalAnswer 的 end）。
+
+/**
+ * 兩邊都有認得的單位才回 {claimed, model}，否則 null（呼叫端照原規則比）。
+ * @returns {{claimed:object, model:object}|null}
+ */
+function unitPair(claimedUnit, modelUnit) {
+    return claimedUnit && modelUnit ? { claimed: claimedUnit, model: modelUnit } : null;
+}
+
+/**
+ * 單位介入時的數值比對：因次不同 → disagree；相同 → 換算後比。
+ * ℃ 對 K 另外試高中慣用的 0 ℃ = 273 K（utils/units.js 的 conversionVariants）：25 ℃ 對 298 K 是 agree。
+ */
+function compareWithUnits(na, nb, units) {
+    if (!sameDims(units.claimed, units.model)) return 'disagree';
+    return conversionVariants(units.claimed, units.model)
+        .some(([uc, um]) => nearlyEqual(toBase(na, uc), toBase(nb, um))) ? 'agree' : 'disagree';
+}
+
 // ───────────────────────── 各 answer_form 的比法 ─────────────────────────
 
-function compareNumber(claimedAnswer, modelAnswer) {
+/**
+ * @param {string} claimedAnswer
+ * @param {string} modelAnswer
+ * @param {{claimed:object, model:object}|null} [units] 〔stage5 WS-B〕兩邊都有認得的單位時才有值
+ */
+function compareNumber(claimedAnswer, modelAnswer, units = null) {
     const a = toNumberList(claimedAnswer);
     const b = toNumberList(modelAnswer);
     if (a.list.length === 0 || b.list.length === 0) return 'uncertain';
@@ -329,12 +375,24 @@ function compareNumber(claimedAnswer, modelAnswer) {
     // 多解時長度不同：可能只是其中一邊省略了，判不出來
     if (a.list.length !== b.list.length) return 'uncertain';
 
-    const sa = [...a.list].sort((x, y) => x - y);
-    const sb = [...b.list].sort((x, y) => x - y);
-    const same = a.plusMinus
+    // 〔stage5 WS-B〕兩邊都有認得的單位：因次不同直接 disagree，相同就換算到 SI 再比
+    //（℃ 對 K 另外試高中慣用的 273，見 utils/units.js 的 conversionVariants）。沒有單位時照原規則比一次。
+    if (units && !sameDims(units.claimed, units.model)) return 'disagree';
+    const variants = units ? conversionVariants(units.claimed, units.model) : [[null, null]];
+    const same = variants.some(([uc, um]) => sameNumberLists(
+        uc ? a.list.map(v => toBase(v, uc)) : a.list,
+        um ? b.list.map(v => toBase(v, um)) : b.list,
+        a.plusMinus));
+    return same ? 'agree' : 'disagree';
+}
+
+/** 兩串數值排序後逐一相等（± 時比絕對值）。compareNumber 原本的比法，抽出來給單位的多種換算共用。 */
+function sameNumberLists(la, lb, plusMinus) {
+    const sa = [...la].sort((x, y) => x - y);
+    const sb = [...lb].sort((x, y) => x - y);
+    return plusMinus
         ? sa.every((v, i) => nearlyEqual(Math.abs(v), Math.abs(sb[i])))
         : sa.every((v, i) => nearlyEqual(v, sb[i]));
-    return same ? 'agree' : 'disagree';
 }
 
 /**
@@ -342,12 +400,22 @@ function compareNumber(claimedAnswer, modelAnswer) {
  *   去空白、`$`、`\left`／`\right` 後字串相等 → agree；
  *   否則兩邊都能數值化就照 number 比（`\frac{3}{1}` 對 `3` → agree）；
  *   否則 uncertain——只有一邊算得出數值時，判 disagree 等於拿「看不懂」當「不一樣」。
+ * 〔stage5 WS-B〕兩邊都有認得的單位時先比單位：stripDecoration 會把 `\text{ cm}` 整段剝掉，
+ *   「5\text{ cm}」對「5\text{ m}」剝完都是「5」——字串相等的那一步擋不住，要在它之前判。
  */
-function compareExpression(claimedAnswer, modelAnswer) {
+function compareExpression(claimedAnswer, modelAnswer, units = null) {
     const norm = (s) => stripDecoration(s).replace(/\\(left|right)/g, '').replace(/\s+/g, '');
     const a = norm(claimedAnswer);
     const b = norm(modelAnswer);
     if (a === '' || b === '') return 'uncertain';
+
+    if (units) {
+        if (!sameDims(units.claimed, units.model)) return 'disagree';
+        const ua = toNumber(claimedAnswer);
+        const ub = toNumber(modelAnswer);
+        if (ua !== null && ub !== null) return compareWithUnits(ua, ub, units);
+    }
+
     if (a === b) return 'agree';
 
     const na = toNumber(claimedAnswer);
@@ -363,8 +431,10 @@ function compareExpression(claimedAnswer, modelAnswer) {
  *
  * 比的是**整段 claimed**，不走 `$…$` 抽取：文字型答案本來就沒有「最後一個等號右邊」，
  * 抽出來的多半是敘述裡的某個符號（例如 `$90^\circ$`）。
+ * 〔stage5 WS-B〕數值那條 agree 路徑在兩邊都有認得的單位時改成「換算後相等才 agree」，
+ *   單位衝突只會落到 uncertain（「text 永遠不回 disagree」的凍結取捨不變）。
  */
-function compareText(claimedWhole, modelAnswer) {
+function compareText(claimedWhole, modelAnswer, units = null) {
     // 裁決 S2-27：claimed 是整段敘述（「…故夾角為 90°，兩者互相垂直。」），模型給的是結論短語
     // （「互相垂直」）。normalizeStem 兩邊後，claimed **包含** 模型答案 → agree；否則一律 uncertain
     // （包含關係判不出「錯」，只判得出「對」——不回 disagree）。句尾標點由 normalizeStem 之後再剝一次。
@@ -380,7 +450,10 @@ function compareText(claimedWhole, modelAnswer) {
     // 「text 永遠不回 disagree」的凍結取捨（裁決 S2-26）原封不動。
     const na = toNumber(claimedWhole);
     const nb = toNumber(modelAnswer);
-    if (na !== null && nb !== null && nearlyEqual(na, nb)) return 'agree';
+    if (na !== null && nb !== null) {
+        if (units) return compareWithUnits(na, nb, units) === 'agree' ? 'agree' : 'uncertain';
+        if (nearlyEqual(na, nb)) return 'agree';
+    }
     return 'uncertain';
 }
 
@@ -398,6 +471,103 @@ const BY_FORM = {
     text: compareText,
 };
 
+// ───────────────────────── 化學式與反應式（〔stage5 WS-B〕）─────────────────────────
+//
+// 第 4.2 條第 4 點：「化學式要能比對：相同化學式判 agree，不同判 disagree，不能再一律 uncertain」。
+// 解析在 utils/chemFormula.js（parseChemAnswer）。**什麼時候介入**是這裡最要緊的取捨：
+//   - 任何一邊寫了 \ce{…} → 介入（數學／物理的答案不會有 \ce，既有 golden 的結果不受影響）；
+//   - 或者題目是化學（subject === '化學'，verify_chem 才會傳）且 answer_form 不是 number／option；
+//   - 其他一律不介入：「BC」（線段）也剛好是合法化學式（碳化硼），數學題絕不能走這條。
+// 兩邊都解析得出來才判，任何一邊不像化學式 → 回 null，照原本的 answer_form 規則比。
+
+/** 物種清單 → 「正規化式 → 係數」的 Map（同一物種出現兩次時係數相加） */
+function speciesMap(items) {
+    const m = new Map();
+    for (const it of items) m.set(it.canonical, (m.get(it.canonical) || 0) + it.coef);
+    return m;
+}
+
+function sameMap(a, b) {
+    if (a.size !== b.size) return false;
+    for (const [k, v] of a) if (!b.has(k) || !nearlyEqual(v, b.get(k))) return false;
+    return true;
+}
+
+/** 兩邊物種集合相同、係數成比例（4H2 + 2O2 → 4H2O 對 2H2 + O2 → 2H2O） */
+function proportional(a, b) {
+    if (a.size !== b.size) return false;
+    let ratio = null;
+    for (const [k, v] of a) {
+        if (!b.has(k) || !(b.get(k) > 0)) return false;
+        const r = v / b.get(k);
+        if (ratio === null) ratio = r;
+        else if (!nearlyEqual(ratio, r)) return false;
+    }
+    return true;
+}
+
+/** 元素組成＋電荷（忽略寫法順序）：CH3COOH 與 C2H4O2 相同 */
+function compositionKey(sp) {
+    const els = Object.entries(sp.elements).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([el, n]) => `${el}${n}`).join('');
+    return `${els}|${sp.charge ?? 0}|${sp.coef}`;
+}
+
+/**
+ * 兩個已解析的化學答案 → agree／disagree／uncertain。
+ *   物種清單：正規化式與係數完全相同 → agree；只是寫法不同（元素組成相同）→ uncertain；否則 disagree。
+ *   反應式：兩側的「物種→係數」都相同 → agree；左右對調或係數成比例 → uncertain；否則 disagree。
+ *   一邊是反應式、一邊是物種 → uncertain（問的可能根本不是同一件事）。
+ */
+function compareChemStructures(a, b) {
+    if (a.kind !== b.kind) return 'uncertain';
+    if (a.kind === 'species') {
+        if (sameMap(speciesMap(a.items), speciesMap(b.items))) return 'agree';
+        const ka = a.items.map(compositionKey).sort();
+        const kb = b.items.map(compositionKey).sort();
+        if (ka.length === kb.length && ka.every((k, i) => k === kb[i])) return 'uncertain';
+        return 'disagree';
+    }
+    const [la, ra, lb, rb] = [a.left, a.right, b.left, b.right].map(speciesMap);
+    if (sameMap(la, lb) && sameMap(ra, rb)) return 'agree';
+    if (sameMap(la, rb) && sameMap(ra, lb)) return 'uncertain';
+    if (proportional(la, lb) && proportional(ra, rb)) {
+        // 左右兩側的比例也要一樣才算「整條式子乘了一個倍數」
+        const r1 = [...la][0][1] / lb.get([...la][0][0]);
+        const r2 = [...ra][0][1] / rb.get([...ra][0][0]);
+        if (nearlyEqual(r1, r2)) return 'uncertain';
+    }
+    return 'disagree';
+}
+
+/**
+ * claimed 裡要拿來比的那一段化學式：
+ *   有 \ce{…} 時——任一段含箭頭就取最後一段含箭頭的（反應式），否則全部的 \ce 當物種清單；
+ *   沒有 \ce 時——沿用 extractFinalAnswer（最後一個 $…$），抽不到用整段。
+ */
+function claimedChemPart(claimed) {
+    const ces = findCe(claimed);
+    if (ces.length) {
+        const withArrow = ces.filter(c => /->|<-|<=>|→|⇌/.test(c.body));
+        if (withArrow.length) return `\\ce{${withArrow[withArrow.length - 1].body}}`;
+        return ces.map(c => `\\ce{${c.body}}`).join(' ');
+    }
+    return extractFinalAnswer(claimed) ?? claimed;
+}
+
+/**
+ * @returns {'agree'|'disagree'|'uncertain'|null} null ＝ 不介入（照原規則比）
+ */
+function compareChemistry(claimed, finalAnswer, { subject, answerForm } = {}) {
+    const hasCe = findCe(claimed).length > 0 || findCe(finalAnswer).length > 0;
+    const chemQuestion = subject === '化學' && answerForm !== 'number' && answerForm !== 'option';
+    if (!hasCe && !chemQuestion) return null;
+    const a = parseChemAnswer(claimedChemPart(claimed));
+    const b = parseChemAnswer(finalAnswer);
+    if (!a || !b) return null;
+    return compareChemStructures(a, b);
+}
+
 // ───────────────────────── 對外 ─────────────────────────
 
 /**
@@ -406,8 +576,11 @@ const BY_FORM = {
  * @param {{
  *   question_type: '單選'|'多選'|'填空'|'計算'|'證明',
  *   claimed: string,
- *   model: { final_answer: string, answer_form: 'option'|'number'|'expression'|'text' }
+ *   model: { final_answer: string, answer_form: 'option'|'number'|'expression'|'text' },
+ *   subject?: string
  * }} opts
+ *   subject：〔stage5 WS-B〕選用。只有化學題（agents/verify.js 的化學路徑）會傳 '化學'，
+ *   用來決定要不要在沒有 \ce{…} 的答案上嘗試化學式比對。數學／物理不傳，行為不變。
  * @returns {'agree'|'disagree'|'uncertain'}
  */
 function answerCompare(opts) {
@@ -429,20 +602,62 @@ function answerCompare(opts) {
         return compareOption(claimed, finalAnswer);
     }
 
+    const modelAnswer = String(finalAnswer);
+
+    // 〔stage5 WS-B〕化學式／反應式（介入條件見 compareChemistry 上方的說明）
+    const chem = compareChemistry(claimed, modelAnswer, { subject: o.subject, answerForm });
+    if (chem !== null) return chem;
+
+    // 〔stage5 WS-B〕模型答案的單位；認不得或沒有就是 null，之後所有比法照原規則
+    const modelUnit = parseUnit(unitTextOfAnswer(modelAnswer));
+    const loc = locateFinalAnswer(claimed);
+
     // text 不走 $…$ 抽取，直接比整段（裁決 S2-26；見 compareText 的說明）
-    if (answerForm === 'text') return compareText(claimed, String(finalAnswer));
+    if (answerForm === 'text') {
+        const claimedUnit = modelUnit ? claimedUnitOf(claimed, loc, claimed) : null;
+        return compareText(claimed, modelAnswer, unitPair(claimedUnit, modelUnit));
+    }
 
     // 填空／計算（以及任何其他型別）：先從 claimed 抽出 final_answer
-    const claimedFinal = extractFinalAnswer(claimed);
+    let claimedFinal = loc ? loc.answer : null;
+    let claimedUnit = null;
+    if (claimedFinal === null) {
+        // 〔stage5 WS-B〕claimed 整段就是「數值＋認得的單位」（例：「5 cm」，沒有 $ 也沒有等號）：
+        // 只在模型答案也有認得的單位時才把整段當答案——那正是第 4.2 條第 4 點要擋的情形；
+        // 其餘維持原本的 uncertain。
+        const whole = modelUnit ? parseUnit(unitTextOfAnswer(claimed)) : null;
+        if (whole && toNumber(claimed) !== null) {
+            claimedFinal = claimed.trim();
+            claimedUnit = whole;
+        }
+    } else if (modelUnit) {
+        claimedUnit = claimedUnitOf(claimed, loc, claimedFinal);
+    }
     if (claimedFinal === null) return 'uncertain';
 
     const fn = BY_FORM[answerForm];
     if (!fn) return 'uncertain';                       // answer_form 不在四個值內
-    return fn(claimedFinal, String(finalAnswer));
+    return fn(claimedFinal, modelAnswer, unitPair(claimedUnit, modelUnit));
+}
+
+/**
+ * claimed 的單位：先看答案本身（`$5\text{ cm}$`），沒有再看答案那一段 $…$ 後面緊接的文字（`$5$ cm`）。
+ * @param {string} claimed 整段
+ * @param {{answer:string, end:number}|null} loc locateFinalAnswer 的結果
+ * @param {string} own 先看的那一段（計算題是抽出來的答案，文字題是整段）
+ * @returns {object|null}
+ */
+function claimedUnitOf(claimed, loc, own) {
+    const direct = parseUnit(unitTextOfAnswer(own));
+    if (direct) return direct;
+    if (!loc || loc.end >= claimed.length) return null;
+    return parseUnit(trailingUnitText(claimed.slice(loc.end)));
 }
 
 module.exports = {
     answerCompare,
     // 給單元測試與 agents/verify.js 使用的零件（形狀不在凍結介面內，但保持穩定）
     extractOptionCodes, extractFinalAnswer, toNumber, toNumberList,
+    // 〔stage5 WS-B〕
+    locateFinalAnswer, compareChemistry, compareChemStructures
 };

@@ -26,6 +26,11 @@
 // 新增規則只能往後加。ISSUE_RULES 是目前的全集。
 //
 // 純函式：無 I/O、無隨機、無時間、不讀 process.env。
+//
+// 〔stage5 WS-B〕化學（docs/interfaces-stage5.md 第 4.2 條第 3 點）：本檔**沒有**另加化學規則。
+// \ce{…}、\rightleftharpoons、\xrightarrow、\uparrow／\downarrow 由 utils/textFormatter.js 的解析器認得，
+// 第 9 步的 parseLatexStrict 就不會發 unknown_command——「放行」是解析器支援的結果，不是這裡開後門；
+// \ce{…} 沒關、本體裡有未知指令，照樣回 missing_rbrace／unknown_command（error）。
 
 const { parseLatexStrict, foldDisplayMath } = require('./textFormatter');
 

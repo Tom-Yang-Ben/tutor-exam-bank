@@ -4,6 +4,8 @@ const {
     MathRoundBrackets, MathSquareBrackets, MathCurlyBrackets,
     XmlComponent, ImportedXmlComponent
 } = require('docx');
+// 〔stage5 WS-B〕化學：\ce{…} 先轉成等價的一般 LaTeX 再交給本檔的解析器（utils/chemFormula.js）
+const { ceToLatex } = require('./chemFormula');
 
 // ───────────────────────── 對照表 ─────────────────────────
 const GREEK = {
@@ -32,6 +34,19 @@ const SYMBOLS = {
     // 2026-09-15 補：題庫實際出現過而未登錄的四個（\ell 舊題、\triangle 三角形題）
     ell: 'ℓ', hbar: 'ℏ', triangle: '△', square: '□'
 };
+
+// 〔stage5 WS-B〕化學常用的箭頭（docs/interfaces-stage5.md 第 4.2 條第 3 點）。
+// 刻意**不併進 SYMBOLS**：SYMBOLS 有匯出給 utils/embedText.js 的 latexToPlain 共用，
+// 併進去會讓含這些指令的既有題目 embed_text 改變、向量被判過期（embedText.js 檔頭的警告）。
+// 只給 Word 匯出用，放在 parseCommand 查完 SYMBOLS 之後。
+const EXTRA_SYMBOLS = {
+    rightleftharpoons: '⇌', leftrightharpoons: '⇋', rightleftarrows: '⇄',
+    uparrow: '↑', downarrow: '↓', updownarrow: '↕',
+    longrightarrow: '⟶', longleftarrow: '⟵', longleftrightarrow: '⟷'
+};
+
+// \xrightarrow{上}、\xrightarrow[下]{上} 這一族：指令名 → 箭頭字元
+const STRETCH_ARROWS = { xrightarrow: '→', xleftarrow: '←', xrightleftharpoons: '⇌', xleftrightarrow: '↔' };
 
 // \mathbb{R} 之類的黑板粗體：單一拉丁字母映射到 Unicode 雙線字，其餘照字面輸出
 const BLACKBOARD = {
@@ -100,6 +115,100 @@ function customDelimiter(beg, end, inner) {
     ).root[0]);
     d.root.push(new MathMatrixCell([inner]));
     return d;
+}
+
+// ───────────────────────── 化學排版（〔stage5 WS-B〕）─────────────────────────
+//
+// 1. \mathrm{…} → OMML 正體：每個 m:r 前面補 <m:rPr><m:sty m:val="p"/></m:rPr>。
+//    化學式（\ce 轉出來的 \mathrm{H_{2}O}）與單位（\mathrm{m/s}）照規範都該是正體；
+//    階段 5 之前 \mathrm 與 \text 一樣只是拆殼，Word 會排成斜體的 H₂O。
+// 2. \xrightarrow{上}／\xrightarrow[下]{上}：上方文字用 m:groupChr（箭頭當「組字元」放在文字下方，
+//    vertJc=bot 讓箭頭落在基線上，這是 Word 內建「箭頭上方加文字」的結構）；下方文字再包一層 m:limLow。
+
+/** 一個新的 <m:rPr><m:sty m:val="p"/></m:rPr>（每個 m:r 各給一份，不共用實例） */
+function uprightRunProps() {
+    // fromXmlString 回傳的是 rootKey=undefined 的外殼，root[0] 才是 m:rPr 本體（見 customDelimiter 的註解）
+    return ImportedXmlComponent.fromXmlString('<m:rPr><m:sty m:val="p"/></m:rPr>').root[0];
+}
+
+/**
+ * 把一串數學元件裡所有的 m:r 設成正體（遞迴走訪；已經有 m:rPr 的 run 不動）。
+ * @param {Array<object>} nodes
+ * @returns {Array<object>} 同一個陣列（就地修改）
+ */
+function makeUpright(nodes) {
+    const visit = (node) => {
+        if (!node || typeof node !== 'object') return;
+        if (Array.isArray(node)) { node.forEach(visit); return; }
+        if (node.rootKey === 'm:r' && Array.isArray(node.root)) {
+            if (!node.root.some(c => c && c.rootKey === 'm:rPr')) node.root.unshift(uprightRunProps());
+            return;
+        }
+        if (Array.isArray(node.root)) node.root.forEach(visit);
+    };
+    visit(nodes);
+    return nodes;
+}
+
+class MathGroupChr extends XmlComponent {             // m:groupChr（字元在下、基線對齊字元）
+    constructor(chr, children) {
+        super('m:groupChr');
+        this.root.push(ImportedXmlComponent.fromXmlString(
+            `<m:groupChrPr><m:chr m:val="${chr}"/><m:vertJc m:val="bot"/></m:groupChrPr>`
+        ).root[0]);
+        this.root.push(new MathMatrixCell(children));   // m:e
+    }
+}
+
+class MathSlot extends XmlComponent {                 // 任意的 m:sub／m:sup／m:e 容器
+    constructor(key, children) {
+        super(key);
+        for (const c of children) this.root.push(c);
+    }
+}
+
+/**
+ * 前置上下標（同位素 ¹⁴₆C）→ m:sPre。不用 docx 的 MathPreSubSuperScript：
+ * 它把 m:e 排在 m:sub／m:sup 之前，ECMA-376 的 CT_SPre 規定的順序是 sPrePr、sub、sup、e。
+ */
+function preScript(sup, sub, body) {
+    const node = new MathSlot('m:sPre', [new MathSlot('m:sub', sub), new MathSlot('m:sup', sup), new MathSlot('m:e', body)]);
+    return node;
+}
+
+/**
+ * 可帶上下文字的箭頭。上下都沒有 → 單一箭頭字元。
+ * @param {string} chr 箭頭字元
+ * @param {Array<object>|null} above
+ * @param {Array<object>|null} below
+ */
+function arrowWithText(chr, above, below) {
+    const hasAbove = Array.isArray(above) && above.length > 0;
+    const hasBelow = Array.isArray(below) && below.length > 0;
+    if (!hasAbove && !hasBelow) return mr(chr);
+    const core = hasAbove ? new MathGroupChr(chr, above) : mr(chr);
+    return hasBelow ? new MathLimitLower({ children: [core], limit: below }) : core;
+}
+
+/**
+ * 解析器的 token 切片 → 原始字串（\ce{…} 的本體要先還原成字串才能交給 ceToLatex）。
+ * 反斜線逸出的 \{ \} 在 tokenize 時變成 char，這裡補回反斜線，大括號結構才不會亂掉。
+ */
+function tokensToSource(toks) {
+    return toks.map((t) => {
+        switch (t.type) {
+            case 'command': return `\\${t.value}`;
+            case 'lbrace': return '{';
+            case 'rbrace': return '}';
+            case 'sup': return '^';
+            case 'sub': return '_';
+            case 'space': return ' ';
+            case 'char':
+                if (t.value === '{' || t.value === '}' || t.value === '\\') return `\\${t.value}`;
+                return t.value;
+            default: return '';
+        }
+    }).join('');
 }
 
 // 環境名 → 把 m:m 包上對應括號。值是工廠函式：docx 的括號元件不能重複使用實例。
@@ -482,9 +591,55 @@ function createParser(tokens, stopCJK, diag = null) {
             }
             return null;
         }
-        if (name === 'text' || name === 'mathrm' || name === 'mathbf' ||
+        // 〔stage5 WS-B〕\mathrm 在 OMML 輸出為正體（docs/interfaces-stage5.md 第 4.2 條第 3 點）
+        if (name === 'mathrm') return makeUpright(parseArg());
+        if (name === 'text' || name === 'mathbf' ||
             name === 'mathit' || name === 'operatorname' || name === 'mbox') {
             return parseArg();
+        }
+        // 〔stage5 WS-B〕mhchem 的 \ce{…}：本體還原成字串 → ceToLatex 轉成一般 LaTeX → 同一個解析器。
+        // 子解析器的事件一律記在 \ce 這個指令的位置（使用者看得到的是 \ce，不是轉出來的中間字串）。
+        if (name === 'ce' && tokens[pos] && tokens[pos].type === 'lbrace') {
+            const body = tokensToSource(readGroupTokens());
+            const sub = diag ? [] : null;
+            const children = createParser(tokenize(ceToLatex(body)), false, sub).parseSequence();
+            if (sub) for (const e of sub) emit(diag, e.kind, at);
+            return children.length ? children : [mr(' ')];
+        }
+        // 〔stage5 WS-B〕\xrightarrow[下]{上} 一族
+        if (STRETCH_ARROWS[name]) {
+            let below = null;
+            if (tokens[pos] && tokens[pos].type === 'char' && tokens[pos].value === '[') {
+                pos++;
+                const belowToks = [];
+                let depth = 0;
+                while (tokens[pos] && !(depth === 0 && tokens[pos].type === 'char' && tokens[pos].value === ']')) {
+                    if (tokens[pos].type === 'lbrace') depth++;
+                    else if (tokens[pos].type === 'rbrace') depth--;
+                    belowToks.push(tokens[pos++]);
+                }
+                if (tokens[pos]) pos++;   // skip ]
+                below = createParser(belowToks, false, diag).parseSequence();
+            }
+            let above = null;
+            if (tokens[pos] && tokens[pos].type === 'lbrace') {
+                // 空群組 {} ＝沒有上方文字（parseArg 會回一個空白 run，這裡要分辨出來）
+                const empty = tokens[pos + 1] && tokens[pos + 1].type === 'rbrace';
+                const arg = parseArg();
+                above = empty ? null : arg;
+            }
+            return arrowWithText(STRETCH_ARROWS[name], above, below);
+        }
+        // 〔stage5 WS-B〕同位素前標：\prescript{上}{下}{本體}（ceToLatex 的 ^{14}_{6}C 會轉成這個）
+        if (name === 'prescript') {
+            // 空的上／下標群組（^{235}U 沒有原子序）給空的 m:sub，不留一個空白字元
+            const emptyAt = (k) => tokens[k] && tokens[k].type === 'lbrace' && tokens[k + 1] && tokens[k + 1].type === 'rbrace';
+            const supEmpty = emptyAt(pos);
+            const sup = parseArg();
+            const subEmpty = emptyAt(pos);
+            const sub = parseArg();
+            const body = parseArg();
+            return preScript(supEmpty ? [] : sup, subEmpty ? [] : sub, body);
         }
         if (name === 'mathbb' || name === 'mathcal' || name === 'mathfrak' || name === 'boldsymbol') {
             // 黑板粗體只對單一拉丁字母有 Unicode 對應（ℝ、ℕ…）；其餘（含 \mathcal 等）照字面輸出
@@ -523,6 +678,7 @@ function createParser(tokens, stopCJK, diag = null) {
         if (FUNCTIONS.has(name)) return mr(name);
         if (GREEK[name]) return mr(GREEK[name]);
         if (SYMBOLS[name]) return mr(SYMBOLS[name]);
+        if (EXTRA_SYMBOLS[name]) return mr(EXTRA_SYMBOLS[name]);   // 〔stage5 WS-B〕
         // 未知指令：去掉反斜線輸出名稱，避免破版
         emit(diag, 'unknown_command', at);
         return mr(name);
@@ -683,5 +839,7 @@ const STRICT_EVENT_KINDS = Object.freeze([
 module.exports = {
     buildParagraphComponents, xmlSafeClean, parseLatexToMath,
     parseLatexStrict, STRICT_EVENT_KINDS, foldDisplayMath,
-    GREEK, SYMBOLS, FUNCTIONS, ACCENTS, BLACKBOARD
+    GREEK, SYMBOLS, FUNCTIONS, ACCENTS, BLACKBOARD,
+    // 〔stage5 WS-B〕化學排版（只給 Word 匯出與測試用；embedText 不讀這兩張表）
+    EXTRA_SYMBOLS, STRETCH_ARROWS
 };

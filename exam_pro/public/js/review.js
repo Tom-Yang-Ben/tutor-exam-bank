@@ -512,6 +512,9 @@ function takeOverUpload(app) {
         // 來源註記（0007）：例「北一女 2024 段考」，同路徑沿用
         const srcDetail = document.getElementById('pdf_source_detail');
         if (srcDetail && srcDetail.value.trim()) formData.append('source_detail', srcDetail.value.trim());
+        // 〔stage5 WS-B〕卷別（docs/interfaces-stage5.md 第 4.2 條第 1 點）：化學卷走化學模板
+        const groupSel = document.getElementById('pdf_subject_group');
+        if (groupSel && groupSel.value) formData.append('subject_group', groupSel.value);
 
         try {
             const res = await request(app, '/api/jobs', { method: 'POST', body: formData });

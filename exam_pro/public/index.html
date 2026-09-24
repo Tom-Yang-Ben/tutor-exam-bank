@@ -218,9 +218,12 @@
 
     <script>
         window.MathJax = {
+            // 〔stage5 WS-B〕化學式 \ce{…}：明確載入 mhchem（不靠 autoload，docs/interfaces-stage5.md 第 4.2 條第 3 點）
+            loader: { load: ['[tex]/mhchem'] },
             tex: {
                 inlineMath: [['$', '$'], ['\\(', '\\)']],
-                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                packages: { '[+]': ['mhchem'] }
             }
         };
     </script>
@@ -386,6 +389,17 @@
                         <p class="text-xs text-slate-500 mb-4">AI 會先產生可編輯預覽，確認後才會寫入題庫。</p>
                         <input type="file" id="pdfFile" accept=".pdf"
                             class="block w-full text-sm text-slate-500 mx-auto file:mr-3 file:py-2.5 file:px-4 file:rounded-xl file:border file:border-indigo-100 file:text-sm file:font-bold file:bg-white file:text-indigo-700 hover:file:bg-indigo-50 file:cursor-pointer" />
+
+                        <!-- 〔stage5 WS-B〕卷別（jobs.subject_group）：化學卷走化學的拆題模板與章節白名單（ADR-010）。
+                             只有新版管線（FEATURE_PIPELINE）支援化學；舊版單呼叫拆題選化學會直接提示。 -->
+                        <div class="mt-4 text-left">
+                            <label class="block text-sm font-semibold text-slate-600 mb-1.5" for="pdf_subject_group">卷別</label>
+                            <select id="pdf_subject_group"
+                                class="field-control block w-full p-2.5 transition-all text-sm">
+                                <option value="math_physics" selected>數學／物理</option>
+                                <option value="chemistry">化學</option>
+                            </select>
+                        </div>
 
                         <!-- 題源標記（0006 著作權管理）：這份考卷入庫的所有題沿用同一個標記 -->
                         <div class="mt-4 text-left">
@@ -709,10 +723,34 @@
                 const res = await apiFetch('/api/chapter-volumes');
                 if (res.ok) {
                     chapterVolumes = await res.json();
+                    syncSubjectSelects();   // 〔stage5 WS-B〕科目下拉改由 API 決定（化學併入）
                     updateManualVolumeDropdown();
                     updatePaperVolumeDropdown();
                 }
             } catch (e) { console.error("載入分冊結構失敗:", e); }
+        }
+
+        // 〔stage5 WS-B〕科目清單不寫死（docs/interfaces-stage5.md 第 1.5 條）：三個科目下拉依
+        // /api/chapter-volumes 的鍵（唯一真相 config/chapters.js）重建。HTML 裡原本的選項只當「顯示名稱」
+        // 的來源（保留 📐 數學這類標籤）與 API 失敗時的退路；目前選取值與「全部學科」這種空值選項照留。
+        function subjectList() {
+            const keys = Object.keys(chapterVolumes || {});
+            return keys.length ? keys : Object.keys(chapterWhitelist || {});
+        }
+        function syncSubjectSelects() {
+            const subjects = subjectList();
+            if (!subjects.length) return;
+            ['subject', 'paper_subject', 'mgr_subject'].forEach(id => {
+                const sel = document.getElementById(id);
+                if (!sel) return;
+                const current = sel.value;
+                const labels = new Map(Array.from(sel.options).map(o => [o.value, o.textContent]));
+                const blank = Array.from(sel.options).filter(o => o.value === '');
+                sel.innerHTML = '';
+                blank.forEach(o => sel.appendChild(o));
+                subjects.forEach(s => sel.appendChild(el('option', null, { value: s, textContent: labels.get(s) || s })));
+                sel.value = subjects.includes(current) || current === '' ? current : sel.options[0].value;
+            });
         }
 
         function volsOf(subject) { return chapterVolumes[subject] || []; }
@@ -797,7 +835,10 @@
             const row = el('div', 'grid grid-cols-2 sm:grid-cols-4 gap-2');
 
             const subjSel = el('select', SELCLS);
-            ['數學', '物理'].forEach(s => { const o = el('option', null, { value: s, textContent: s }); if (q.subject === s) o.selected = true; subjSel.appendChild(o); });
+            // 〔stage5 WS-B〕科目清單讀 API（化學併入）；題目自帶的科目不在清單內時也留著，讓老師看得到
+            const editorSubjects = subjectList().slice();
+            if (q.subject && !editorSubjects.includes(q.subject)) editorSubjects.push(q.subject);
+            editorSubjects.forEach(s => { const o = el('option', null, { value: s, textContent: s }); if (q.subject === s) o.selected = true; subjSel.appendChild(o); });
             const chapSel = el('select', SELCLS);
             const typeSel = el('select', SELCLS);
             Q_TYPES.forEach(t => { const o = el('option', null, { value: t, textContent: t }); if ((q.question_type || '填空') === t) o.selected = true; typeSel.appendChild(o); });
@@ -853,7 +894,7 @@
             const sel = document.getElementById('mgr_chapter');
             sel.innerHTML = '<option value="">全部章節</option>';
             // 依冊分組（optgroup），跨科瀏覽時標籤帶科名
-            const subjects = subj ? [subj] : ['數學', '物理'];
+            const subjects = subj ? [subj] : subjectList();   // 〔stage5 WS-B〕科目清單讀 API
             for (const s of subjects) {
                 for (const v of volsOf(s)) {
                     const og = document.createElement('optgroup');
@@ -1176,6 +1217,11 @@
             const btn = document.getElementById('uploadPdfBtn');
 
             if (!fileInput.files || fileInput.files.length === 0) return showToast("請先選取 PDF 檔案", 'error');
+            // 〔stage5 WS-B〕舊版單呼叫拆題（/api/analyze-pdf）不支援化學卷（docs/chemistry.md）
+            const groupSel = document.getElementById('pdf_subject_group');
+            if (groupSel && groupSel.value === 'chemistry') {
+                return showToast('化學卷需要新版拆題管線（FEATURE_PIPELINE=true）；舊版單次拆題只支援數學／物理。', 'error');
+            }
 
             statusText.classList.remove('hidden', 'text-rose-600', 'text-emerald-600');
             statusText.className = "text-sm font-medium text-indigo-600 mt-3";

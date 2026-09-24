@@ -1,0 +1,435 @@
+{
+  "_notice": "本檔的題目與答案全部由本專案作者自行編寫（階段 5 WS-B），不取自任何考卷、題本或出版品（見 repo 根目錄 NOTICE 第 2 條）。",
+  "_status": "draft 2026-09-24 — AI 草擬的單位與化學式比對案例，待 Owner 抽查；比對器的行為以本檔為裁判（docs/interfaces-stage5.md 第 4.2 條第 4 點）。",
+  "_schema": "與 eval/golden/answer.json 相同（見該檔 _schema），另加一個選用欄位：\n  subject   string，選用；'化學' 時比對器會帶 subject（agents/verify.js 的化學路徑就是這樣呼叫）。\n呼叫方式：answerCompare({ question_type, claimed, model: { final_answer, answer_form }, subject })",
+  "version": 1,
+  "entries": [
+    {
+      "id": "unit-001",
+      "from": null,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "由 $v = \\frac{d}{t}$ 可得 $d = 5$ cm。",
+      "equivalents": [
+        "5 cm",
+        "$0.05\\ \\mathrm{m}$",
+        "50 mm"
+      ],
+      "wrong": [
+        "5 m",
+        "5 mm"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "第 4.2 條第 4 點的主案例：「5 cm」對「5 m」不得 agree。claimed 的單位寫在 $…$ 外面，換算後才比。",
+      "needs_human_confirm": false
+    },
+    {
+      "id": "unit-002",
+      "from": null,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$F = ma = 2 \\times 3 = 6$ N。",
+      "equivalents": [
+        "6 N",
+        "$6\\ \\mathrm{N}$",
+        "6 牛頓"
+      ],
+      "wrong": [
+        "6 J",
+        "6 kg"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "因次不同（力對能量、力對質量）直接 disagree；中文單位名「牛頓」等同 N。",
+      "needs_human_confirm": false
+    },
+    {
+      "id": "unit-003",
+      "from": null,
+      "question_type": "計算",
+      "answer_form": "number",
+      "claimed": "$t = \\sqrt{\\frac{2h}{g}} = 2$ 秒。",
+      "equivalents": [
+        "2 s",
+        "2 秒",
+        "$2\\,\\mathrm{s}$"
+      ],
+      "wrong": [
+        "2 min",
+        "2 m"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "2 分鐘換算後是 120 秒；2 m 是長度。",
+      "needs_human_confirm": false
+    },
+    {
+      "id": "unit-004",
+      "from": null,
+      "question_type": "計算",
+      "answer_form": "number",
+      "subject": "化學",
+      "claimed": "濃度 $C = \\frac{0.020}{0.20} = 0.10$ M。",
+      "equivalents": [
+        "0.10 M",
+        "0.1 mol/L",
+        "$0.10\\ \\mathrm{M}$"
+      ],
+      "wrong": [
+        "0.10 mol",
+        "1.0 M"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "化學的體積莫耳濃度：M 等同 mol/L；少了 /L 就是物質的量，因次不同。",
+      "needs_human_confirm": false
+    },
+    {
+      "id": "unit-005",
+      "from": null,
+      "question_type": "計算",
+      "answer_form": "number",
+      "subject": "化學",
+      "claimed": "$V = 0.50 \\times 22.4 = 11.2$ L。",
+      "equivalents": [
+        "11.2 L",
+        "11200 mL",
+        "$11.2\\ \\mathrm{L}$"
+      ],
+      "wrong": [
+        "11.2 mL",
+        "22.4 L"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "升與毫升換算。",
+      "needs_human_confirm": false
+    },
+    {
+      "id": "unit-006",
+      "from": null,
+      "question_type": "計算",
+      "answer_form": "expression",
+      "claimed": "$\\theta = 30^\\circ$",
+      "equivalents": [
+        "$30^\\circ$",
+        "30°",
+        "$\\frac{\\pi}{6}$ rad"
+      ],
+      "wrong": [
+        "$60^\\circ$",
+        "30 rad"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "expression 也要先比單位：stripDecoration 會把單位剝掉，不先比就只剩數字。",
+      "needs_human_confirm": false
+    },
+    {
+      "id": "unit-007",
+      "from": null,
+      "question_type": "填空",
+      "answer_form": "text",
+      "claimed": "$25\\text{ m}$",
+      "equivalents": [
+        "25 m",
+        "2500 cm",
+        "25 公尺"
+      ],
+      "wrong": [
+        "25 cm",
+        "25 s"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "uncertain"
+      },
+      "extraction_hazard": false,
+      "note": "text 永遠不回 disagree（裁決 S2-26），單位衝突落到 uncertain；換算後相等仍 agree。",
+      "needs_human_confirm": false
+    },
+    {
+      "id": "unit-008",
+      "from": null,
+      "question_type": "計算",
+      "answer_form": "number",
+      "subject": "化學",
+      "claimed": "$T = 27 + 273 = 300$ K。",
+      "equivalents": [
+        "300 K",
+        "$300\\ \\mathrm{K}$",
+        "26.85 °C"
+      ],
+      "wrong": [
+        "300 °C",
+        "27 K"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "攝氏換算克耳文要加 273.15（位移，不是倍率）。高中慣用的 273 也認，見 unit-009。",
+      "needs_human_confirm": false
+    },
+    {
+      "id": "unit-009",
+      "from": null,
+      "question_type": "計算",
+      "answer_form": "number",
+      "subject": "化學",
+      "claimed": "$T = 25 + 273 = 298$ K。",
+      "equivalents": [
+        "25 °C",
+        "$25\\ ^{\\circ}\\mathrm{C}$",
+        "$298\\ \\mathrm{K}$"
+      ],
+      "wrong": [
+        "26 °C",
+        "299 K"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "高中數理化以 0 ℃ = 273 K 換算：25 ℃ 對 298 K 是對的答案。℃ 對 K 時 273 與 273.15 兩種都認（utils/units.js 的 conversionVariants）；同是 ℃ 或同是 K 時沒有位移，照原本的數值容差比。第二種等價寫法是度的符號寫在 \\mathrm 前面（^{\\circ}\\mathrm{C}），不得讀成庫侖。",
+      "needs_human_confirm": false
+    },
+    {
+      "id": "chem-001",
+      "from": null,
+      "question_type": "填空",
+      "answer_form": "expression",
+      "subject": "化學",
+      "claimed": "$\\ce{H2SO4}$",
+      "equivalents": [
+        "$\\ce{H2SO4}$",
+        "H_2SO_4",
+        "H₂SO₄"
+      ],
+      "wrong": [
+        "$\\ce{H2SO3}$",
+        "$\\ce{HNO3}$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "三種寫法（mhchem、LaTeX 下標、Unicode 下標）正規化成同一個化學式。",
+      "needs_human_confirm": false
+    },
+    {
+      "id": "chem-002",
+      "from": null,
+      "question_type": "填空",
+      "answer_form": "expression",
+      "subject": "化學",
+      "claimed": "生成的白色沉澱為 $\\ce{AgCl}$。",
+      "equivalents": [
+        "$\\ce{AgCl}$",
+        "AgCl",
+        "$\\mathrm{AgCl}$"
+      ],
+      "wrong": [
+        "$\\ce{AgNO3}$",
+        "NaCl"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "claimed 是一句話：取其中的 \\ce{…} 來比。",
+      "needs_human_confirm": false
+    },
+    {
+      "id": "chem-003",
+      "from": null,
+      "question_type": "填空",
+      "answer_form": "expression",
+      "subject": "化學",
+      "claimed": "$\\ce{SO4^{2-}}$",
+      "equivalents": [
+        "$\\ce{SO4^2-}$",
+        "SO₄²⁻",
+        "$\\mathrm{SO_4^{2-}}$"
+      ],
+      "wrong": [
+        "$\\ce{SO3^{2-}}$",
+        "$\\ce{SO4^-}$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "離子電荷要一致：量值與正負號都比。",
+      "needs_human_confirm": false
+    },
+    {
+      "id": "chem-004",
+      "from": null,
+      "question_type": "計算",
+      "answer_form": "expression",
+      "subject": "化學",
+      "claimed": "$\\ce{2H2 + O2 -> 2H2O}$",
+      "equivalents": [
+        "$\\ce{O2 + 2H2 -> 2H2O}$",
+        "$\\ce{2H2(g) + O2(g) -> 2H2O(l)}$",
+        "2H_2 + O_2 \\rightarrow 2H_2O"
+      ],
+      "wrong": [
+        "$\\ce{H2 + O2 -> H2O}$",
+        "$\\ce{2H2 + O2 -> 2H2O2}$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "反應式：兩側的物種與係數都要相同；順序與物態不影響。係數沒平衡或產物不同 → disagree。",
+      "needs_human_confirm": false
+    },
+    {
+      "id": "chem-005",
+      "from": null,
+      "question_type": "填空",
+      "answer_form": "expression",
+      "subject": "化學",
+      "claimed": "$\\ce{Fe^{3+}}$",
+      "equivalents": [
+        "$\\ce{Fe^{3+}}$",
+        "Fe³⁺",
+        "$\\ce{Fe^{+3}}$"
+      ],
+      "wrong": [
+        "$\\ce{Fe^{2+}}$",
+        "$\\ce{Fe}$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "電荷寫在前或後（3+／+3）都認。",
+      "needs_human_confirm": false
+    },
+    {
+      "id": "chem-006",
+      "from": null,
+      "question_type": "填空",
+      "answer_form": "text",
+      "subject": "化學",
+      "claimed": "溶液中的離子為 $\\ce{Na+}$ 與 $\\ce{Cl-}$。",
+      "equivalents": [
+        "$\\ce{Na+}$、$\\ce{Cl-}$",
+        "$\\ce{Cl-}$ 與 $\\ce{Na+}$",
+        "Na⁺, Cl⁻"
+      ],
+      "wrong": [
+        "$\\ce{Na+}$",
+        "$\\ce{K+}$、$\\ce{Cl-}$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "物種清單：與順序無關；少一種或換一種 → disagree。化學式比對在 text 之前介入。",
+      "needs_human_confirm": false
+    },
+    {
+      "id": "chem-007",
+      "from": null,
+      "question_type": "填空",
+      "answer_form": "expression",
+      "subject": "化學",
+      "claimed": "$\\ce{CH3COOH}$",
+      "equivalents": [
+        "$\\ce{C2H4O2}$",
+        "C2H4O2",
+        "$\\ce{HC2H3O2}$"
+      ],
+      "wrong": [
+        "$\\ce{C2H6O}$",
+        "$\\ce{CH3CHO}$"
+      ],
+      "expect": {
+        "equivalent": "uncertain",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "元素組成相同、寫法不同（示性式對分子式）：判不出是不是同一個化合物，回 uncertain。",
+      "needs_human_confirm": false
+    },
+    {
+      "id": "chem-008",
+      "from": null,
+      "question_type": "計算",
+      "answer_form": "expression",
+      "subject": "化學",
+      "claimed": "$\\ce{Zn + Cu^{2+} -> Zn^{2+} + Cu}$",
+      "equivalents": [
+        "$\\ce{Cu^{2+} + Zn -> Cu + Zn^{2+}}$",
+        "$\\ce{Zn(s) + Cu^{2+}(aq) -> Zn^{2+}(aq) + Cu(s)}$",
+        "Zn + Cu²⁺ → Zn²⁺ + Cu"
+      ],
+      "wrong": [
+        "$\\ce{Zn + Cu^{+} -> Zn^{+} + Cu}$",
+        "$\\ce{Zn + Fe^{2+} -> Zn^{2+} + Fe}$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "離子反應式：Unicode 上標與箭頭也認。",
+      "needs_human_confirm": false
+    },
+    {
+      "id": "chem-009",
+      "from": null,
+      "question_type": "計算",
+      "answer_form": "expression",
+      "subject": "化學",
+      "claimed": "$\\ce{N2 + 3H2 <=> 2NH3}$",
+      "equivalents": [
+        "$\\ce{N2 + 3H2 <=> 2NH3}$",
+        "$\\ce{3H2 + N2 <=> 2NH3}$",
+        "$\\ce{N2(g) + 3H2(g) <=> 2NH3(g)}$"
+      ],
+      "wrong": [
+        "$\\ce{N2 + H2 <=> NH3}$",
+        "$\\ce{N2 + 3H2 <=> NH3}$"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "可逆反應。",
+      "needs_human_confirm": false
+    }
+  ]
+}
