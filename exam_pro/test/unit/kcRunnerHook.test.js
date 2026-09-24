@@ -7,6 +7,8 @@
 //   2. 真的 createRunner().runJobQuestion() 跑 save 節點（DB 用腳本化的假物件，不連 PG）：
 //      旗標關閉時 tagger 一次都沒被叫；開啟且 tagger 失敗時，job_questions 照樣推進到 saved、
 //      job_events 照樣寫 pass——**掛鉤失敗不影響 job 狀態**。
+//   3. 預算煞車：save 是零成本節點、預算用盡仍會跑，但標註要付錢——當日預算（DAILY_COST_BUDGET_USD）
+//      或該 job 的 budget_usd 用盡時不呼叫 tagger，題目照常入庫。
 //
 // 真 PostgreSQL 的版本在 test/integration/kcTagging.pg.test.js。
 // ─────────────────────────────────────────────────────────────
@@ -70,6 +72,53 @@ describe('runKcTagHook（純函式）', () => {
         assert.ok(log.lines.warn[0].error.includes('同步炸了'));
     });
 
+    test('budgetCheck 回略過原因 → tagger 不被呼叫，記一行 info（status skipped、reason），回 null', async () => {
+        for (const reason of ['daily_budget', 'job_budget']) {
+            const log = recordingLogger();
+            let called = 0;
+            const r = await runKcTagHook({
+                questionId: 5, enabled: true, logger: log, budgetCheck: async () => reason,
+                tagger: async () => { called++; return { status: 'tagged' }; }
+            });
+            assert.equal(r, null);
+            assert.equal(called, 0, reason);
+            assert.equal(log.lines.info.length, 1);
+            assert.equal(log.lines.info[0].status, 'skipped');
+            assert.equal(log.lines.info[0].reason, reason);
+            assert.equal(log.lines.warn.length, 0);
+        }
+    });
+
+    test('budgetCheck 回 null／沒給 → 照常呼叫 tagger', async () => {
+        for (const budgetCheck of [async () => null, () => null, undefined]) {
+            const seen = [];
+            await runKcTagHook({
+                questionId: 6, enabled: true, logger: recordingLogger(), budgetCheck,
+                tagger: async (id) => { seen.push(id); return { status: 'tagged' }; }
+            });
+            assert.deepEqual(seen, [6]);
+        }
+    });
+
+    test('budgetCheck 自己丟錯（查不到帳）→ 不花錢：tagger 不被呼叫，只記 warn，promise 仍然 resolve(null)', async () => {
+        const log = recordingLogger();
+        let called = 0;
+        const r = await runKcTagHook({
+            questionId: 8, enabled: true, logger: log,
+            budgetCheck: async () => { throw new Error('connection terminated'); },
+            tagger: async () => { called++; }
+        });
+        assert.equal(r, null);
+        assert.equal(called, 0);
+        assert.ok(log.lines.warn[0].error.includes('connection terminated'));
+    });
+
+    test('旗標關閉時連 budgetCheck 都不問', async () => {
+        let asked = 0;
+        await runKcTagHook({ questionId: 1, enabled: false, tagger: () => { }, budgetCheck: () => { asked++; return null; } });
+        assert.equal(asked, 0);
+    });
+
     test('tagger 回 rejected promise → 只記 warn，promise 仍然 resolve(null)', async () => {
         const log = recordingLogger();
         const r = await runKcTagHook({ questionId: 7, enabled: true, logger: log, tagger: async () => { throw new Error('LLM 掛了\n第二行不進 log'); } });
@@ -98,8 +147,11 @@ const JQ = {
     budget_usd: 0.5, cost_usd: 0
 };
 
-/** 腳本化的假 DB：只回 runJobQuestion 與 save 節點真的需要讀的列，其餘一律空結果 */
-function fakeDb() {
+/**
+ * 腳本化的假 DB：只回 runJobQuestion 與 save 節點真的需要讀的列，其餘一律空結果。
+ * @param {{jq?:object, dailySpent?:number}} [opts] jq 覆寫 JQ 的欄位；dailySpent 是當日 job_events 的花費
+ */
+function fakeDb({ jq = {}, dailySpent = 0 } = {}) {
     const log = [];
     const client = {
         async query(sql, params) {
@@ -114,18 +166,19 @@ function fakeDb() {
         pool: { connect: async () => client },
         async query(sql, params) {
             log.push({ sql, params });
-            if (/FROM job_questions q JOIN jobs j/.test(sql)) return { rows: [{ ...JQ }], rowCount: 1 };
+            if (/FROM job_questions q JOIN jobs j/.test(sql)) return { rows: [{ ...JQ, ...jq }], rowCount: 1 };
+            if (/SUM\(cost_usd\)[\s\S]*FROM job_events/.test(sql)) return { rows: [{ spent: dailySpent }], rowCount: 1 };
             return { rows: [], rowCount: 0 };
         }
     };
 }
 
-function makeRunner(db, logger, kcTagger) {
+function makeRunner(db, logger, kcTagger, config = {}) {
     return createRunner({
         db, llm: { async generateJson() { throw new Error('save 節點不該呼叫 LLM'); }, async embed() { return { vectors: [] }; } },
         logger, sleep: async () => { }, kcTagger,
         estimateCost: () => ({ cost_usd: 0, cost_estimated: false }),
-        config: { nodeTimeoutMs: 20000, leaseMs: 60000 }
+        config: { nodeTimeoutMs: 20000, leaseMs: 60000, dailyCostBudgetUsd: 5, ...config }
     });
 }
 
@@ -187,6 +240,39 @@ describe('createRunner 的 save 節點與掛鉤（假 DB）', () => {
             assert.equal(ev.params[12], 'pass');
             assert.ok(log.lines.warn.some(w => w.msg === '知識點自動標註失敗（不影響入庫）' && w.question_id === 77));
         }
+    });
+
+    test('當日花費已達 DAILY_COST_BUDGET_USD：save 照常入庫（零成本節點），但不呼叫 tagger', async () => {
+        process.env.FEATURE_KC_TAGGING = 'true';
+        const db = fakeDb({ dailySpent: 5 });
+        const log = recordingLogger();
+        let called = 0;
+        await makeRunner(db, log, async () => { called++; return { status: 'tagged' }; }, { dailyCostBudgetUsd: 5 }).runJobQuestion(JQ.id);
+        await settle();
+        assert.equal(called, 0);
+        assert.deepEqual(stateUpdates(db), ['saved']);
+        assert.ok(log.lines.info.some(l => l.question_id === 77 && l.status === 'skipped' && l.reason === 'daily_budget'));
+    });
+
+    test('該 job 的 budget_usd 已用盡：save 照常入庫，但不呼叫 tagger', async () => {
+        process.env.FEATURE_KC_TAGGING = 'true';
+        const db = fakeDb({ jq: { budget_usd: 0.5, cost_usd: 0.5 } });
+        const log = recordingLogger();
+        let called = 0;
+        await makeRunner(db, log, async () => { called++; return { status: 'tagged' }; }).runJobQuestion(JQ.id);
+        await settle();
+        assert.equal(called, 0);
+        assert.deepEqual(stateUpdates(db), ['saved']);
+        assert.ok(log.lines.info.some(l => l.question_id === 77 && l.status === 'skipped' && l.reason === 'job_budget'));
+    });
+
+    test('當日花費未達上限、job 預算還有：照常呼叫 tagger', async () => {
+        process.env.FEATURE_KC_TAGGING = 'true';
+        const db = fakeDb({ dailySpent: 4.99 });
+        const seen = [];
+        await makeRunner(db, recordingLogger(), async (id) => { seen.push(id); return { status: 'tagged' }; }, { dailyCostBudgetUsd: 5 }).runJobQuestion(JQ.id);
+        await settle();
+        assert.deepEqual(seen, [77]);
     });
 
     test('save 失敗（欄位不合法）時不會呼叫 tagger', async () => {

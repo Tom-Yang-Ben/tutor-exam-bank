@@ -289,28 +289,42 @@ function readFeatures() {
  *
  * 規則：
  *   - `enabled`（= FEATURE_KC_TAGGING）為假時**完全不呼叫** tagger，回 null。
- *   - 開啟時呼叫 tagger(questionId)；它同步丟錯、回傳 rejected promise 都一樣只記 warn，
+ *   - 開啟時先問 `budgetCheck()`：回傳非空字串（略過原因）就**不呼叫** tagger，記一行 info、回 null。
+ *     理由：save 在 FREE_NODES 內，當日成本觸頂（DAILY_COST_BUDGET_USD）或該 job 的 budget_usd 用盡時
+ *     仍會照跑；標註卻要付錢給 LLM，不在這裡擋就會繞過兩道煞車。budgetCheck 自己丟錯時同樣不呼叫
+ *     （查不到帳就不花錢），只記 warn。略過的題之後可用 `npm run kc:backfill` 補標。
+ *   - 呼叫 tagger(questionId)；它同步丟錯、回傳 rejected promise 都一樣只記 warn，
  *     回傳的 promise **永遠 resolve**——呼叫端不 await 也不會冒出 unhandledRejection，
  *     job 的狀態推進完全不受影響（與 scheduleEmbed 同一個原則）。
+ *   - 標註的費用**不寫進** jobs／job_events（那是拆題管線的帳），只留在 info log 的 cost_usd。
+ *     所以它不會讓當日花費變多、提早觸發煞車；煞車只會在管線本身觸頂後擋下後續的標註。
  *
- * @param {{questionId:number, enabled:boolean, tagger:(id:number)=>any, logger:{info:Function, warn:Function}}} opts
- * @returns {Promise<object|null>} tagger 的結果；沒呼叫或失敗時為 null
+ * @param {{questionId:number, enabled:boolean, tagger:(id:number)=>any, logger:{info:Function, warn:Function},
+ *          budgetCheck?:()=>(string|null|Promise<string|null>)}} opts
+ * @returns {Promise<object|null>} tagger 的結果；沒呼叫、被預算擋下或失敗時為 null
  */
-function runKcTagHook({ questionId, enabled, tagger, logger }) {
+function runKcTagHook({ questionId, enabled, tagger, logger, budgetCheck }) {
     if (!enabled) return Promise.resolve(null);
     const log = logger || makeLogger();
     return Promise.resolve()
-        .then(() => tagger(questionId))
-        .then((r) => {
-            log.info({
-                msg: '知識點自動標註', question_id: questionId, status: r && r.status,
-                ...(r && r.reason ? { reason: r.reason } : {}),
-                ...(r && Array.isArray(r.written) && r.written.length ? { kc_codes: r.written.map(w => w.code) } : {}),
-                // 標註的費用不進 jobs／job_events（那是拆題管線的帳），只留在這一行 log
-                ...(r && r.usage && r.usage.calls ? { cost_usd: r.usage.costUsd } : {})
+        .then(() => (typeof budgetCheck === 'function' ? budgetCheck() : null))
+        .then((blocked) => {
+            if (blocked) {
+                log.info({ msg: '知識點自動標註略過（預算已用盡，不呼叫 LLM）', question_id: questionId, status: 'skipped', reason: blocked });
+                return null;
+            }
+            return Promise.resolve(tagger(questionId)).then((r) => {
+                log.info({
+                    msg: '知識點自動標註', question_id: questionId, status: r && r.status,
+                    ...(r && r.reason ? { reason: r.reason } : {}),
+                    ...(r && Array.isArray(r.written) && r.written.length ? { kc_codes: r.written.map(w => w.code) } : {}),
+                    // 標註的費用不進 jobs／job_events（那是拆題管線的帳），只留在這一行 log
+                    ...(r && r.usage && r.usage.calls ? { cost_usd: r.usage.costUsd } : {})
+                });
+                return r ?? null;
             });
-            return r ?? null;
-        }, (err) => {
+        })
+        .catch((err) => {
             log.warn({ msg: '知識點自動標註失敗（不影響入庫）', question_id: questionId, error: String((err && err.message) || err).split('\n')[0] });
             return null;
         });
@@ -631,9 +645,15 @@ function createRunner(opts = {}) {
             scheduleEmbed(questionId, ctx.logger);
             // 〔stage5 WS-C〕save 成功（已 COMMIT）之後的唯一掛鉤：FEATURE_KC_TAGGING 關閉時完全不呼叫；
             // 開啟時 fire-and-forget，失敗只記 log，不影響 job 狀態（interfaces-stage5.md 第 4.3 條第 3 點）。
+            // save 是零成本節點、預算用盡仍會跑，標註卻要付錢：該 job 的預算或當日預算用盡就不標。
             runKcTagHook({
                 questionId, enabled: require('../config/features').FEATURE_KC_TAGGING,
-                tagger: kcTagger, logger: ctx.logger || logger
+                tagger: kcTagger, logger: ctx.logger || logger,
+                budgetCheck: async () => {
+                    const jobLeft = ctx?.config?.limits?.budgetLeft;
+                    if (typeof jobLeft === 'number' && jobLeft <= 0) return 'job_budget';
+                    return (await dailySpentUsd()) >= config.dailyCostBudgetUsd ? 'daily_budget' : null;
+                }
             });
             return {
                 kind: 'pass',

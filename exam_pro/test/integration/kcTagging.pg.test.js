@@ -319,6 +319,21 @@ function runSuite() {
             assert.equal(llm.calls.filter(c => c.agent === 'kc_tag').length, 1);
         });
 
+        test('當日花費已達 DAILY_COST_BUDGET_USD：入庫照常（save 是零成本節點），標註不呼叫 LLM', async () => {
+            process.env.FEATURE_KC_TAGGING = 'true';
+            const { jobId, jqId } = await seedDedupedJob('自製題：設 $\\vec a=(2,1)$，求 $\\vec a\\cdot\\vec a$。[[MATH.向量內積.02:0.9]]');
+            await query(
+                `INSERT INTO job_events (job_id, node, attempt, latency_ms, outcome, cost_usd)
+                 VALUES ($1, 'classify', 1, 10, 'pass', 2)`, [jobId]);
+            const llm = fakeLlm();
+            await makeRunner(llm, { config: { nodeTimeoutMs: 5000, leaseMs: 60000, dailyCostBudgetUsd: 1 } }).runJobQuestion(jqId);
+            await new Promise(r => setTimeout(r, 150));
+            const s = await stateOf(jqId, jobId);
+            assert.deepEqual([s.jq, s.job], ['saved', 'done']);
+            assert.equal(llm.calls.filter(c => c.agent === 'kc_tag').length, 0);
+            assert.deepEqual(await tagsOf(s.questionId), []);
+        });
+
         test('旗標開啟但標註失敗（LLM 丟錯／tagger 丟錯）：job 照樣 saved、done', async () => {
             process.env.FEATURE_KC_TAGGING = 'true';
             const a = await seedDedupedJob('自製題 A：[[MATH.向量內積.02:0.9]]');
