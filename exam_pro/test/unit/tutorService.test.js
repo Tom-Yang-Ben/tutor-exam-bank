@@ -377,6 +377,15 @@ describe('socratic／direct 的系統提示差異與模板註冊（第 1.2 條�
         }
     });
 
+    test('格式限制講清楚：表格、HTML 標籤、超連結一律不用（前端的受限 Markdown 不支援表格）', () => {
+        for (const mode of tutor.MODES) {
+            const s = tutor.SYSTEM[mode];
+            assert.match(s, /不要使用表格、HTML 標籤或超連結/);
+            // 舊句「不要用表格、標題以外的 HTML 與超連結」可以讀成「只准表格與標題兩種 HTML」
+            assert.ok(!s.includes('標題以外'), '歧義的舊句不得再出現');
+        }
+    });
+
     test('socratic：一次只給一步、學生嘗試前不給最終答案；direct 沒有這兩條、要給最終答案', () => {
         assert.match(tutor.SYSTEM.socratic, /一次只給一步/);
         assert.match(tutor.SYSTEM.socratic, /學生還沒有自己嘗試之前，不得給出最終答案/);
