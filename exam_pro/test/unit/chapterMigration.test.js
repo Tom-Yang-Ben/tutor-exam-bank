@@ -105,6 +105,36 @@ describe('config/chapterMigrationRules.js', () => {
         assert.equal(rules.findWideAngle('sin 30° + cos 60°'), null);
         assert.equal(rules.findWideAngle('長度 150 公分'), null);
     });
+
+    test('〔章節重整整合〕findNonCommonLogBase：底數不是 10 的對數才算；常用對數與不寫底數的 log 不算', () => {
+        assert.equal(rules.findNonCommonLogBase('求 $\\log_{2} 8$'), '\\log_{2}');
+        assert.equal(rules.findNonCommonLogBase('$\\log_3 27$ 之值'), '\\log_3');
+        assert.equal(rules.findNonCommonLogBase('設 log_a b = 2'), 'log_a');
+        assert.equal(rules.findNonCommonLogBase('$\\log_{\\frac{1}{2}} x > 1$') !== null, true);
+        assert.equal(rules.findNonCommonLogBase('$\\log_{10} 2 \\approx 0.3010$'), null);
+        assert.equal(rules.findNonCommonLogBase('$\\log 2 \\approx 0.3010$，求 $\\log 5$'), null);
+        assert.equal(rules.findNonCommonLogBase('$\\log_{10} 2$ 與 $\\log_{5} 2$'), '\\log_{5}', '常用對數之後的非常用底仍會命中');
+        assert.equal(rules.findNonCommonLogBase(''), null);
+        assert.equal(rules.findNonCommonLogBase(undefined), null);
+    });
+
+    test('〔章節重整整合〕指數與對數：換底、指數／對數方程式與不等式、非常用底 → 指數函數與對數函數；常用對數留原章', () => {
+        const targets = MIGRATION['數學']['指數與對數'].to;
+        const to = t => (rules.matchKeywordRule('數學', targets, [[t]]) || {}).to || null;
+        assert.equal(to('利用換底公式求 $\\log_2 3 \\cdot \\log_3 4$'), '指數函數與對數函數');
+        assert.equal(to('解指數方程式 $4^x - 3\\cdot 2^x + 2 = 0$'), '指數函數與對數函數');
+        assert.equal(to('解對數方程式'), '指數函數與對數函數');
+        assert.equal(to('解指數不等式 $2^{x+1} > 8$'), '指數函數與對數函數');
+        assert.equal(to('解對數不等式'), '指數函數與對數函數');
+        assert.equal(to('求 $\\log_{3} 81$'), '指數函數與對數函數');
+        assert.equal(to('已知 $\\log 2 \\approx 0.3010$，求 $2^{50}$ 的位數'), null, '常用對數題沒命中 → 由 proposeChapter 回到預設去處');
+    });
+
+    test('〔章節重整整合〕三次函數：根與係數、共軛 → 複數與多項式方程式', () => {
+        const targets = MIGRATION['數學']['三次函數'].to;
+        assert.equal(rules.matchKeywordRule('數學', targets, [['由根與係數關係求 $\\alpha^2+\\beta^2+\\gamma^2$']]).to, '複數與多項式方程式');
+        assert.equal(rules.matchKeywordRule('數學', targets, [['實係數方程式有一根 $1+i$，則其共軛也是根']]).to, '複數與多項式方程式');
+    });
 });
 
 describe('proposeChapter：依 MIGRATION 提議新章', () => {

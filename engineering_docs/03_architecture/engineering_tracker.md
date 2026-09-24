@@ -103,7 +103,7 @@
 | ADR-013-push-to-talk-teacher-confirm〔修訂 2026-09-24〕 | 口述數學式有結構歧義，逐字稿確認才送出；錄音不落地；先限桌機 |
 | ADR-014-remedial-paper-wilson-quota〔修訂 2026-09-24〕 | 小樣本不等於精熟（Wilson 下界）；補救卷與組卷共用同一段選題程式，不另寫會漂移的排除邏輯；草稿不寫庫 |
 | ADR-015-grading-detail-and-solution-provenance〔修訂 2026-09-24〕 | 錯因以 attempts 加欄＋伺服器端白名單記錄；詳解分來源標示可信度，以 verify 摘要零成本回填（原 WS-A 自取 014，整合改號，裁決 S5-1） |
-| ADR-016-chapter-whitelist-restructure〔修訂 2026-09-25〕 | 數學／物理白名單整份換成對齊 108 龍騰目錄的 52＋34 章（`config/chapterPlan.js`）；刻意讓數學／物理 cassette 失效、由 Owner 一次重錄；舊題以規則提議＋老師確認遷移（`npm run chapters:migrate`，不呼叫 LLM；新表 `chapter_migration_log`＝migration 0014，契約未預列、待主控核准） |
+| ADR-016-chapter-whitelist-restructure〔修訂 2026-09-25〕 | 數學／物理白名單整份換成對齊 108 龍騰目錄的 52＋34 章（`config/chapterPlan.js`）；刻意讓數學／物理 cassette 失效、由 Owner 一次重錄；舊題以規則提議＋老師確認遷移（`npm run chapters:migrate`，不呼叫 LLM；新表 `chapter_migration_log`＝migration 0014，契約未預列，主控已核准＝`docs/chapter-restructure.md` CR-3） |
 
 ## 4. 追溯
 

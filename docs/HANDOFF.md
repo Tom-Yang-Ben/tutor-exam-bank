@@ -4,11 +4,19 @@
 > 讀完本檔後，第一件事通常是執行 §6 的「看進度」流程。
 > 配套：`~/.claude/projects/.../memory/` 裡有 `roadmap-master-plan.md`、`stage1-status.md`、`stage2-status.md`、`stage3-status.md`（系統會自動載入索引）。
 >
-> 〔修訂 2026-09-24〕**最新狀態先看 §0（階段 5 交接）**；§1–§9 是 2026-08-24 階段 1–4 的交接快照，角色與流程仍適用，但其中的分支、數字與待辦已過時。
+> 〔修訂 2026-09-24〕**最新狀態先看 §0（階段 5 交接）**；〔修訂 2026-09-25〕章節重整的交接在 §0.0。§1–§9 是 2026-08-24 階段 1–4 的交接快照，角色與流程仍適用，但其中的分支、數字與待辦已過時。
 
 ---
 
 ## 0. 階段 5 交接（2026-09-24，最終審查後改寫）〔修訂 2026-09-24b〕
+
+### 0.0 章節重整（2026-09-25）〔修訂 2026-09-25 章節重整〕
+
+- **範圍**：數學 34→52 章、物理 32→34 章（刪「流體的壓力與浮力」「宇宙學簡介」，新增 4 章），對齊 108 課綱龍騰版目錄；化學章名不動（依龍騰版核對，知識點不需搬移）。契約 [`chapter-restructure.md`](chapter-restructure.md)（裁決 CR-1～CR-6 在第 8 條）、ADR-016。
+- **分支：`stage5/chapters`**，基底 `stage5/integration`（含 `7184f53`：DEC-014～019 與 DEC-003 例外條款依 Owner 對話指示登錄為已核准）。組成：`stage5/chapters-base`（介面凍結、`config/chapterPlan.js`）→ CH-A（白名單換新、`npm run chapters:migrate`、migration 0014）、CH-B（eval 素材改標、`npm run cassettes:rerecord`／`cassettes:prune`）、CH-C（數學 254 個知識點）、CH-D（物理 196 個、化學恆等對照）→ 整合（CR-1～CR-6）。
+- **狀態**：unit、check:html、migrate、integration 全綠；e2e 與五個 eval 的失敗**全部**是 replay miss 或缺 embedding fixture（白名單在 schema enum 裡，數學／物理 cassette 刻意失效）。依賴 cassette 的單元測試缺檔即略過（CR-4），重錄後恢復。
+- **合併順序**：先合 `stage5/integration`（階段 5 PR）→ Owner 在 `stage5/chapters` 上重錄（`chapter-restructure.md` 第 5 條，Owner 的 Windows 本機執行，金鑰不離開本機）→ 主控核對門檻（低於門檻另開裁決，不自動放寬）→ 開 `stage5/chapters` 的 PR。
+- **上線**多兩步（已寫進下方 0.2 第 7 項）：`migrate` 之後 `chapters:migrate`（提議檔 → 老師確認 → `--apply`）、`embed:backfill`。
 
 > 本節取代同日稍早版本（`129d941`）。那一版寫於「整合補測」與「最終審查」併入之前，§0.3 有多項已修好，§0.2 以「類型」分組、順序有依賴問題。本版依最終 HEAD `936a6b5` 的實況重寫。
 
@@ -18,7 +26,7 @@
 - **交付分支：`stage5/integration`**（HEAD `936a6b5`）。基底是 `cb47dbe`（`docs/sync-after-prs-30-33`，該分支尚未併入 main，因此對 main 開 PR 時會連帶這一個文件同步 commit）。
 - **組成**：`stage5/base`（契約、migrations 0010–0012、旗標與前端骨架）→ 五條程式 WS（`stage5/ws-a`～`ws-e`）＋三組知識點內容（`stage5/kc-math`／`kc-phys`／`kc-chem`）→ 整合補測（`stage5/int-code`）＋共用文件回填（`stage5/int-docs`）→ 最終審查修正（`stage5/int-fix`，含 migration 0013）。
 - **狀態**：完整 `ci.sh` 全綠——unit 2287、integration 485、e2e 11、五個 eval（replay）量測值與階段 5 之前相同，**沒有重錄任何 cassette**。從未呼叫真 Gemini；前端只以 miniDom 測過，未在真瀏覽器操作。
-- **migrations**：0010（批改細節、學生檔案）、0011（化學 CHECK、文字詳解、上傳卷別）、0012（知識點三表）、0013（老師修改標記：`questions.solution_cleared_at`、`knowledge_components.edited_at`）。全部只增不改，已在「只套到 0009、含舊資料」的庫上逐支驗證過。〔修訂 2026-09-25 章節重整〕數學／物理章節重整（[`chapter-restructure.md`](chapter-restructure.md)、ADR-016）另加 0014（`chapter_migration_log`：舊題搬章的處理紀錄；契約未預列，待主控核准）。
+- **migrations**：0010（批改細節、學生檔案）、0011（化學 CHECK、文字詳解、上傳卷別）、0012（知識點三表）、0013（老師修改標記：`questions.solution_cleared_at`、`knowledge_components.edited_at`）。全部只增不改，已在「只套到 0009、含舊資料」的庫上逐支驗證過。〔修訂 2026-09-25 章節重整〕數學／物理章節重整（[`chapter-restructure.md`](chapter-restructure.md)、ADR-016）另加 0014（`chapter_migration_log`：舊題搬章的處理紀錄；契約未預列，主控已核准，見 chapter-restructure.md CR-3）。
 - **功能文件**（權威）：[`grading-and-profile.md`](grading-and-profile.md)、[`chemistry.md`](chemistry.md)、[`knowledge-components.md`](knowledge-components.md)、[`remedial.md`](remedial.md)、[`tutor.md`](tutor.md)、`kc-review-{數學,物理,化學}.md`。上線步驟：`engineering_docs/06_ops/deployment_and_operations.md` §3.4。
 
 ### 0.2 Ben 待辦（建議順序，待 Owner 確認）
@@ -27,14 +35,15 @@
 
 **A. 交付與合併**
 
-1. 取得 `stage5/integration`（GitHub 上的分支，或主控放進本機 repo 的分支），對 main 開 PR，看過再合併；GitHub Actions 綠燈才算完成。
-2. 本機切分支前先 `git checkout -- engineering_docs/01_requirements/requirements_tracker.md`（那份未 commit 的修改已包含在分支內）。
+1. 取得 `stage5/integration`（GitHub 上的分支，或主控放進本機 repo 的分支），對 main 開 PR，看過再合併；GitHub Actions 綠燈才算完成。〔修訂 2026-09-25〕推送前確認含 `7184f53`（DEC 核准登錄）。
+2. ~~本機切分支前先 `git checkout -- engineering_docs/01_requirements/requirements_tracker.md`~~ 〔修訂 2026-09-25〕Owner 已完成。
+2a. 〔修訂 2026-09-25 章節重整〕切到 `stage5/chapters` 重錄 cassette（§0.0；步驟見 `chapter-restructure.md` 第 5 條），commit、push 後開 PR。
 
 **B. 上線前只做「會改代碼或章名」的決定（約半天）**
 
-3. 簽核 DEC-014～019 與 DEC-003 例外條款（`requirements_tracker.md` 核准欄，AI 不代填）；ADR-014、ADR-015 狀態為「提議」，一併審閱。
-4. 數學知識點章節切法（`kc-review-數學.md` 第 2 節，尤其第 1、2、6 點）——**第一次 `kc:load` 之前**決定，搬移知識點會改變 code。
-5. 化學章節表 `exam_pro/config/chemistryChapters.js`——**第一次上傳化學卷之前**定稿，入庫的題會記章名。
+3. ~~簽核 DEC-014～019 與 DEC-003 例外條款~~ 〔修訂 2026-09-25〕Owner 於對話中核准、由 AI 依指示登錄（`7184f53`）；DEC-013 仍待定。ADR-014、ADR-015、ADR-016 狀態為「提議」，請審閱。
+4. 數學知識點章節切法——〔修訂 2026-09-25〕章節已照草案重整（§0.0）；`kc-review-數學.md` 第 2 節仍待 Owner 決定的：邏輯（新章表無對應章）、空間向量、期望值與隨機變數重疊、`平面方程式.06` 指向後章的先備；另有數學歸納法、推移矩陣、複數所在冊別與「指數與對數依常用對數分冊」的前提。**第一次 `kc:load` 之前**決定。
+5. 化學章節表 `exam_pro/config/chemistryChapters.js`——**第一次上傳化學卷之前**定稿，入庫的題會記章名。〔修訂 2026-09-25〕教科書版本定為龍騰；知識點歸屬已依龍騰目錄核對（`kc-review-化學.md` 第 3 節），請 Owner 抽看。
 6. 物理「熱學另立章」**明確延後**：會改到數學／物理的章節清單（`LEGACY_CHAPTERS`），全部既有 cassette 都要重錄，另開裁決再議。〔修訂 2026-09-25 章節重整〕已由 2026-09-25 的章節重整一併處理（新章「理想氣體與氣體動力論」，見 [`chapter-restructure.md`](chapter-restructure.md)）；cassette 依該檔第 5 條由 Owner 重錄。
 
 **C. 上線（不呼叫 LLM、不花錢；§3.4）**
@@ -79,8 +88,9 @@
 
 ### 0.4 下一步（主控）
 
-1. 交付 `stage5/integration`：推上 GitHub（需把 repo 加入工作階段的授權來源），或放進 Owner 本機 repo 由 Owner 推送。
-2. 合併後依 Owner 回饋處理第 0.2 節 F、G。
+1. 交付 `stage5/integration`：推上 GitHub（需把 repo 加入工作階段的授權來源），或放進 Owner 本機 repo 由 Owner 推送。〔修訂 2026-09-25〕Owner 已推送；`7184f53` 待推。
+2. 〔修訂 2026-09-25〕`stage5/chapters` 以 git bundle 放進 Owner 本機 repo；Owner 重錄後，主控核對五個 eval 的量測值與門檻（`eval/thresholds.json`），確認 unit 的略過數歸零（CR-4），再開 PR。
+3. 合併後依 Owner 回饋處理第 0.2 節 F、G。
 
 ---
 

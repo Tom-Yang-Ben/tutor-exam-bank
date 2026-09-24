@@ -51,6 +51,22 @@ function findWideAngle(text) {
 }
 
 /**
+ * 〔章節重整整合〕底數不是 10 的對數：\log_{2}、\log_3、log_a、\log_{\frac12}… → 第三冊「指數函數與對數函數」。
+ * \log_{10} 與不寫底數的 log（常用對數）不算。
+ * @param {string} text
+ * @returns {string|null} 命中的原文
+ */
+function findNonCommonLogBase(text) {
+    const re = /\\?log_\s*(\{[^}]*\}|[A-Za-z0-9])/g;
+    let m;
+    while ((m = re.exec(String(text ?? ''))) !== null) {
+        const base = m[1].replace(/^\{|\}$/g, '').trim();
+        if (base && base !== '10') return m[0];
+    }
+    return null;
+}
+
+/**
  * 科目 → 有序的規則表。`to` 必須是 PLAN_CHAPTERS 裡的新章，而且出現在至少一個 split 舊章的 `to` 裡。
  * @type {Readonly<Record<string, ReadonlyArray<{to:string, keywords?:ReadonlyArray<string>,
  *                                              patterns?:ReadonlyArray<{name:string, find:(text:string)=>string|null}>}>>>}
@@ -68,7 +84,7 @@ const KEYWORD_RULES = deepFreeze({
         { to: '數列與遞迴關係', keywords: ['遞迴', '數學歸納'] },
         { to: '級數', keywords: ['Σ', '∑', '\\sum', '級數', '項的和', '項之和', '總和'] },
         // 三次函數 → 多項式函數的圖形／多項式不等式／複數與多項式方程式
-        { to: '複數與多項式方程式', keywords: ['複數', '虛數', '虛根', '代數基本定理'] },
+        { to: '複數與多項式方程式', keywords: ['複數', '虛數', '虛根', '代數基本定理', '根與係數', '共軛'] },
         { to: '多項式不等式', keywords: ['不等式'] },
         // 排列 → 排列／集合與計數原理
         { to: '集合與計數原理', keywords: ['集合', '排容', '文氏圖', '取捨原理'] },
@@ -85,7 +101,9 @@ const KEYWORD_RULES = deepFreeze({
         // 隨機變數 → 隨機變數／二項分布與幾何分布
         { to: '二項分布與幾何分布', keywords: ['二項分布', '二項分佈', '二項分配', '幾何分布', '幾何分佈', '幾何分配', '伯努利'] },
         // 指數與對數 → 指數與對數／指數函數與對數函數
-        { to: '指數函數與對數函數', keywords: ['指數函數', '對數函數'] }
+        // 〔章節重整整合〕CH-C 把一般底數的對數、換底公式、指數／對數方程式與不等式放在第三冊（常用對數留第一冊）
+        { to: '指數函數與對數函數', keywords: ['指數函數', '對數函數', '換底', '指數方程式', '對數方程式', '指數不等式', '對數不等式'] },
+        { to: '指數函數與對數函數', patterns: [{ name: 'nonCommonLogBase', find: findNonCommonLogBase }] }
     ],
     '物理': [
         // 動量與衝量／動量守恆與碰撞／剛體轉動與平衡 → 各自原章／質心與角動量
@@ -182,4 +200,4 @@ function validateRules(rules = KEYWORD_RULES) {
     return problems;
 }
 
-module.exports = { KEYWORD_RULES, matchKeywordRule, validateRules, normalizeForMatch, findWideAngle };
+module.exports = { KEYWORD_RULES, matchKeywordRule, validateRules, normalizeForMatch, findWideAngle, findNonCommonLogBase };
