@@ -33,8 +33,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const { isValidChapter, isValidSubject, isValidQuestionType } = require('../../config/chapters');
+const { isValidQuestionType } = require('../../config/chapters');
 const { CHAPTER_ALIASES } = require('../../config/chapterAliases');
+const { chapterGate } = require('./chapterGate');
 const { parseQuery } = require('../../utils/nlqHeuristics');
 const { loadFixture } = require('./fixtures');
 const { isPrivatePath } = require('./golden');
@@ -55,7 +56,9 @@ const RECALL_K = 10;
  * filters_exact 就永遠不可能是 1，而報表上看起來只是「解析很爛」。
  * @returns {string[]}
  */
-function validateNlqGolden(entries, fixtureById) {
+function validateNlqGolden(entries, fixtureById, opts = {}) {
+    // 〔章節重整 CH-B〕opts.chapters 可注入章節白名單（見 eval/lib/chapterGate.js）；未給時照舊用 config/chapters.js
+    const { isValidSubject, isValidChapter } = chapterGate(opts.chapters);
     const problems = [];
     if (!Array.isArray(entries) || entries.length === 0) return ['nlq golden 的 entries 必須是非空陣列'];
 
@@ -116,14 +119,15 @@ function validateNlqGolden(entries, fixtureById) {
 }
 
 /**
- * @param {{file?:string, fixtureById?:Map<number,object>}} [opts]
+ * @param {{file?:string, fixtureById?:Map<number,object>, chapters?:Record<string,string[]>}} [opts]
+ *        chapters：〔章節重整 CH-B〕注入章節白名單（同 validateNlqGolden）
  * @returns {{file:string, isPrivate:boolean, version:number, entries:Array<object>, pendingConfirm:number}}
  */
 function loadNlqGolden(opts = {}) {
     const target = path.resolve(opts.file || DEFAULT_GOLDEN);
     if (!fs.existsSync(target)) throw new Error(`找不到 nlq golden：${target}`);
     const raw = JSON.parse(fs.readFileSync(target, 'utf8'));
-    const problems = validateNlqGolden(raw.entries, opts.fixtureById);
+    const problems = validateNlqGolden(raw.entries, opts.fixtureById, { chapters: opts.chapters });
     if (problems.length > 0) {
         throw new Error(`nlq golden 未通過硬閘門（${target}）：\n  - ${problems.join('\n  - ')}`);
     }

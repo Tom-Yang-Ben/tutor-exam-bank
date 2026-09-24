@@ -42,6 +42,13 @@ const fixture = loadFixture();
 const golden = loadGolden({ fixtureById: fixture.byId });
 const emb = loadEmbeddings({ questions: fixture.questions, optional: true });
 if (!emb.available) missing.push(`向量 fixture 未錄製（${require('path').basename(emb.file)}；D-V0，需開發者本人的金鑰）`);
+// 〔章節重整 CH-B〕向量檔在、但有題查不到：fixture 改標後 embed_text 第一行的章名變了，那幾題要等 Owner 重錄
+// （npm run cassettes:rerecord，docs/chapter-restructure.md 第 5 條）。與「未錄製」同一條線：skip 並指名缺哪幾題，
+// 不拿缺向量的題去灌 PG（它們會以 embedding NULL 入庫，三欄的數字與 Jaccard 都不再是同一件事）。
+// 缺向量本身由 npm run eval -- --suite retrieval 以「查不到向量」紅燈擋住，不會因為這裡 skip 而被放過。
+else if (emb.missing.length) {
+    missing.push(`向量 fixture 缺 ${emb.missing.length} 題（id：${emb.missing.join(', ')}；章節重整改標後需重錄：npm run cassettes:rerecord）`);
+}
 if (!pgEngine.available()) missing.push(pgEngine.unavailableReason().split('\n')[0]);
 
 const SKIP = missing.length > 0;

@@ -1,11 +1,11 @@
 {
   "_notice": "全部 50 句查詢由本專案作者自行編寫，模擬家教老師平常會怎麼問；不取自任何考卷、題本、出版品或真實對話（見 repo 根目錄 NOTICE 第 2 條）。學生名一律是「小明／小華／小美／阿哲」這類代稱，不是任何真實學生。",
-  "_status": "confirmed 2026-08-24 — 開發者本人定案（50 句 expect／relevant 以 WS-C 草稿為準，於整合對話中拍板）；自製內容，不取自任何考卷。",
+  "_status": "confirmed 2026-08-24 — 開發者本人定案（50 句 expect／relevant 以 WS-C 草稿為準，於整合對話中拍板）；自製內容，不取自任何考卷。2026-09-25 章節重整（CH-B）：數學章名依 config/chapterPlan.js 改標（AI 依題意逐題判斷，逐題理由見 eval/CHAPTER_RELABEL-2026-09.md，待 Owner 抽查）",
   "_schema": "entries[]：\n  id                  string，唯一\n  query               string，1~200 字；送進 POST /api/questions/search-nl 的原句\n  expect              期望的 filters 七欄（subject／chapters／question_types／difficulty_min／difficulty_max／exclude_student_name／semantic_text）\n  expect_path         'rules'|'llm'；'rules' = 規則就該抓到章節（confident=true），'llm' = 規則抓不到、必須走 LLM 輔路徑\n  relevant            number[]；期望命中的 eval/fixtures/questions.public.json 題 id（Recall@10 的正樣本）\n  note                string|null；標註有爭議時寫給開發者看的一句話\n  needs_human_confirm boolean；true = 尚未人工定案，suite 只當骨架驗證用",
   "_annotations": {
     "涵蓋面（第 8.4 條）": "nlq-001~008 只有章節；009~017 章節+難度；018~025 章節+題型+學生；026~035 口語別名；036~043 完全沒章節只有概念詞（走 LLM）；044~050 模糊句。六類都有。",
     "expect.semantic_text": "凍結的預期值（第 8.4 條）：① 解析漂移時發警告；② recall10 改用它去 embed()，讓量到的是「檢索本身」而不是「這一輪解析剛好漂掉」。rules 路徑的值取自 utils/nlqHeuristics.js 目前的輸出，因此它同時是一條回歸線。",
-    "relevant": "rules 路徑由 expect 的四欄對 fixture 篩出來（章節＋難度＋題型全中的題）；llm 路徑逐句手挑最貼近的題。fixture 只涵蓋 8 個章節，所以 50 句刻意集中在這 8 章，不然 Recall@10 沒有正樣本可量。",
+    "relevant": "rules 路徑由 expect 的四欄對 fixture 篩出來（章節＋難度＋題型全中的題）；llm 路徑逐句手挑最貼近的題。fixture 只涵蓋 9 個章節（2026-09-25 章節重整前是 8 個），所以 50 句刻意集中在這幾章，不然 Recall@10 沒有正樣本可量。",
     "expect_path=llm 的 8 句": "這 8 句規則一定抓不到章節（句子裡沒有任何章節本名或別名），因此必然呼叫 generateJson。eval/cassettes/nlq/ 還沒有錄音，CI 會是 replay miss——WS-D 在 cassette 錄好之前不要把 --suite nlq 加進 CI（見 docs/questions3-wsC.md 第 4 題）。"
   },
   "version": 1,
@@ -54,13 +54,8 @@
       },
       "expect_path": "rules",
       "relevant": [
-        1,
-        2,
-        3,
-        4,
         5,
         6,
-        7,
         8
       ],
       "note": null,
@@ -68,17 +63,17 @@
     },
     {
       "id": "nlq-003",
-      "query": "三角函數的定義",
+      "query": "廣義角與極坐標",
       "expect": {
         "subject": "數學",
         "chapters": [
-          "三角函數的定義"
+          "廣義角與極坐標"
         ],
         "question_types": [],
         "difficulty_min": null,
         "difficulty_max": null,
         "exclude_student_name": null,
-        "semantic_text": "三角函數的定義"
+        "semantic_text": "廣義角與極坐標"
       },
       "expect_path": "rules",
       "relevant": [
@@ -268,10 +263,6 @@
       },
       "expect_path": "rules",
       "relevant": [
-        1,
-        2,
-        3,
-        4,
         8
       ],
       "note": null,
@@ -376,17 +367,17 @@
     },
     {
       "id": "nlq-015",
-      "query": "三角函數的定義難度 1",
+      "query": "廣義角與極坐標難度 1",
       "expect": {
         "subject": "數學",
         "chapters": [
-          "三角函數的定義"
+          "廣義角與極坐標"
         ],
         "question_types": [],
         "difficulty_min": 1,
         "difficulty_max": 1,
         "exclude_student_name": null,
-        "semantic_text": "三角函數的定義"
+        "semantic_text": "廣義角與極坐標"
       },
       "expect_path": "rules",
       "relevant": [
@@ -521,11 +512,11 @@
     },
     {
       "id": "nlq-021",
-      "query": "指數與對數的填空題，小美沒做過",
+      "query": "指數函數與對數函數的填空題，小美沒做過",
       "expect": {
         "subject": "數學",
         "chapters": [
-          "指數與對數"
+          "指數函數與對數函數"
         ],
         "question_types": [
           "填空"
@@ -533,7 +524,7 @@
         "difficulty_min": null,
         "difficulty_max": null,
         "exclude_student_name": "小美",
-        "semantic_text": "指數與對數"
+        "semantic_text": "指數函數與對數函數"
       },
       "expect_path": "rules",
       "relevant": [
@@ -598,11 +589,11 @@
     },
     {
       "id": "nlq-024",
-      "query": "三角函數的定義的填空題，小美沒寫過",
+      "query": "廣義角與極坐標的填空題，小美沒寫過",
       "expect": {
         "subject": "數學",
         "chapters": [
-          "三角函數的定義"
+          "廣義角與極坐標"
         ],
         "question_types": [
           "填空"
@@ -610,7 +601,7 @@
         "difficulty_min": null,
         "difficulty_max": null,
         "exclude_student_name": "小美",
-        "semantic_text": "三角函數的定義"
+        "semantic_text": "廣義角與極坐標"
       },
       "expect_path": "rules",
       "relevant": [
@@ -701,11 +692,11 @@
     },
     {
       "id": "nlq-028",
-      "query": "對數的填空題",
+      "query": "內積公式的填空題",
       "expect": {
         "subject": "數學",
         "chapters": [
-          "指數與對數"
+          "向量內積"
         ],
         "question_types": [
           "填空"
@@ -713,11 +704,12 @@
         "difficulty_min": null,
         "difficulty_max": null,
         "exclude_student_name": null,
-        "semantic_text": "對數"
+        "semantic_text": "內積公式"
       },
       "expect_path": "rules",
       "relevant": [
-        7
+        13,
+        14
       ],
       "note": null,
       "needs_human_confirm": false
@@ -805,7 +797,7 @@
       "expect": {
         "subject": "數學",
         "chapters": [
-          "三角函數的定義"
+          "廣義角與極坐標"
         ],
         "question_types": [
           "單選"
@@ -1016,7 +1008,7 @@
       "expect": {
         "subject": "數學",
         "chapters": [
-          "三角函數的定義"
+          "廣義角與極坐標"
         ],
         "question_types": [],
         "difficulty_min": null,
@@ -1157,11 +1149,11 @@
     },
     {
       "id": "nlq-047",
-      "query": "對數那邊小美一直卡住，來幾題填空",
+      "query": "向量投影那邊小美一直卡住，來幾題填空",
       "expect": {
         "subject": "數學",
         "chapters": [
-          "指數與對數"
+          "向量內積"
         ],
         "question_types": [
           "填空"
@@ -1169,28 +1161,29 @@
         "difficulty_min": null,
         "difficulty_max": null,
         "exclude_student_name": null,
-        "semantic_text": "對數 邊小美一直卡住"
+        "semantic_text": "向量投影 邊小美一直卡住"
       },
       "expect_path": "rules",
       "relevant": [
-        7
+        13,
+        14
       ],
       "note": null,
       "needs_human_confirm": false
     },
     {
       "id": "nlq-048",
-      "query": "隨便給我幾題三角函數",
+      "query": "隨便給我幾題廣義角與極坐標",
       "expect": {
         "subject": "數學",
         "chapters": [
-          "三角函數的定義"
+          "廣義角與極坐標"
         ],
         "question_types": [],
         "difficulty_min": null,
         "difficulty_max": null,
         "exclude_student_name": null,
-        "semantic_text": "隨便 三角函數"
+        "semantic_text": "隨便 廣義角與極坐標"
       },
       "expect_path": "rules",
       "relevant": [

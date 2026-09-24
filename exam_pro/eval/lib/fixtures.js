@@ -8,16 +8,20 @@
 
 const fs = require('fs');
 const path = require('path');
-const { isValidChapter, isValidSubject, isValidQuestionType, normalizeDifficulty } = require('../../config/chapters');
+const { isValidQuestionType, normalizeDifficulty } = require('../../config/chapters');
+const { chapterGate } = require('./chapterGate');
 
 const DEFAULT_PATH = path.resolve(__dirname, '..', 'fixtures', 'questions.public.json');
 
 /**
  * 逐題驗證，回傳「所有」問題（不是遇到第一個就停）——一次修完比修五輪省事。
  * @param {Array<object>} questions
+ * @param {{chapters?:Record<string,string[]>}} [opts] 〔章節重整 CH-B〕注入章節白名單（見 eval/lib/chapterGate.js）；
+ *        未給時照舊用 config/chapters.js
  * @returns {string[]} 問題描述；空陣列 = 全數通過
  */
-function validateQuestions(questions) {
+function validateQuestions(questions, opts = {}) {
+    const { isValidSubject, isValidChapter } = chapterGate(opts.chapters);
     const problems = [];
     const seen = new Set();
     if (!Array.isArray(questions) || questions.length === 0) {
@@ -43,14 +47,15 @@ function validateQuestions(questions) {
 /**
  * 載入公開 fixture。
  * @param {string} [file] 預設 eval/fixtures/questions.public.json
+ * @param {{chapters?:Record<string,string[]>}} [opts] 〔章節重整 CH-B〕同 validateQuestions
  * @returns {{file:string, version:number, needsHumanConfirm:boolean, questions:Array<object>, byId:Map<number,object>}}
  * @throws 任一題沒過閘門就丟錯（列出全部問題）
  */
-function loadFixture(file) {
+function loadFixture(file, opts = {}) {
     const target = path.resolve(file || DEFAULT_PATH);
     const raw = JSON.parse(fs.readFileSync(target, 'utf8'));
     const questions = raw.questions;
-    const problems = validateQuestions(questions);
+    const problems = validateQuestions(questions, opts);
     if (problems.length > 0) {
         throw new Error(`fixture 未通過章節／題型硬閘門（${target}）：\n  - ${problems.join('\n  - ')}`);
     }

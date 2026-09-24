@@ -15,7 +15,7 @@
       "no": 1,
       "fixture_id": 1,
       "subject": "數學",
-      "chapter": "指數與對數",
+      "chapter": "指數函數與對數函數",
       "question_type": "單選",
       "difficulty": 1,
       "question_text": "$\\log_{2} 8 + \\log_{2} 4$ 之值為何？\n(A) $5$　(B) $6$　(C) $7$　(D) $12$",
@@ -51,7 +51,7 @@
       "no": 4,
       "fixture_id": 25,
       "subject": "數學",
-      "chapter": "三角函數的定義",
+      "chapter": "廣義角與極坐標",
       "question_type": "單選",
       "difficulty": 1,
       "question_text": "$\\sin^2 40^\\circ + \\cos^2 40^\\circ$ 之值為何？\n(A) $1$　(B) $0$　(C) $\\frac{1}{2}$　(D) 需查表才能得知",
@@ -132,5 +132,5 @@
       "final_answer": "(A)(C)"
     }
   ],
-  "_status": "confirmed 2026-08-23 — 樣卷答案卷由開發者本人定案"
+  "_status": "confirmed 2026-08-23 — 樣卷答案卷由開發者本人定案；2026-09-25 章節重整（CH-B）：數學章名依 config/chapterPlan.js 改標（AI 依題意逐題判斷，逐題理由見 eval/CHAPTER_RELABEL-2026-09.md，待 Owner 抽查）"
 }

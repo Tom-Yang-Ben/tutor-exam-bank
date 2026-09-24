@@ -1,6 +1,6 @@
 {
   "_notice": "本檔 60 題全部由本專案作者自行編寫的常見教科書型例題，用於展示與評估系統流程，不取自任何特定考卷、題本或出版品（見 repo 根目錄 NOTICE 第 2 條）。",
-  "_status": "confirmed 2026-08-22 — 開發者本人逐題核對完成",
+  "_status": "confirmed 2026-08-22 — 開發者本人逐題核對完成；2026-09-25 章節重整（CH-B）：數學章名依 config/chapterPlan.js 改標（AI 依題意逐題判斷，逐題理由見 eval/CHAPTER_RELABEL-2026-09.md，待 Owner 抽查）",
   "_schema": "questions[]：subject / chapter / question_type / difficulty / question_text / answer_text 為必填，欄位語意同 docs/interfaces.md 第 1.2 條的 questions 表。載入時逐題過 config/chapters.js 的 isValidChapter / isValidQuestionType / normalizeDifficulty。",
   "_annotations": {
     "id": "fixture 內部編號（1..60），golden set 以此為 question_id；與正式資料庫的 questions.id 無關",
@@ -15,7 +15,7 @@
     {
       "id": 1,
       "subject": "數學",
-      "chapter": "指數與對數",
+      "chapter": "指數函數與對數函數",
       "question_type": "單選",
       "difficulty": 1,
       "question_text": "$\\log_{2} 8 + \\log_{2} 4$ 之值為何？\n(A) $5$　(B) $6$　(C) $7$　(D) $12$",
@@ -26,7 +26,7 @@
     {
       "id": 2,
       "subject": "數學",
-      "chapter": "指數與對數",
+      "chapter": "指數函數與對數函數",
       "question_type": "單選",
       "difficulty": 1,
       "question_text": "$\\log_{3} 27 + \\log_{3} 9$ 之值為何？\n(A) $3$　(B) $4$　(C) $5$　(D) $6$",
@@ -37,7 +37,7 @@
     {
       "id": 3,
       "subject": "數學",
-      "chapter": "指數與對數",
+      "chapter": "指數函數與對數函數",
       "question_type": "計算",
       "difficulty": 2,
       "question_text": "解方程式 $2^{x+1} = 32$。",
@@ -48,7 +48,7 @@
     {
       "id": 4,
       "subject": "數學",
-      "chapter": "指數與對數",
+      "chapter": "指數函數與對數函數",
       "question_type": "計算",
       "difficulty": 2,
       "question_text": "解方程式 $3^{x-1} = 81$。",
@@ -81,7 +81,7 @@
     {
       "id": 7,
       "subject": "數學",
-      "chapter": "指數與對數",
+      "chapter": "指數函數與對數函數",
       "question_type": "填空",
       "difficulty": 3,
       "question_text": "$\\log_{2} 3 \\times \\log_{3} 8$ 之值為何？",
@@ -288,7 +288,7 @@
     {
       "id": 25,
       "subject": "數學",
-      "chapter": "三角函數的定義",
+      "chapter": "廣義角與極坐標",
       "question_type": "單選",
       "difficulty": 1,
       "question_text": "$\\sin^2 40^\\circ + \\cos^2 40^\\circ$ 之值為何？\n(A) $1$　(B) $0$　(C) $\\frac{1}{2}$　(D) 需查表才能得知",
@@ -299,7 +299,7 @@
     {
       "id": 26,
       "subject": "數學",
-      "chapter": "三角函數的定義",
+      "chapter": "廣義角與極坐標",
       "question_type": "單選",
       "difficulty": 1,
       "question_text": "$\\sin^2 25^\\circ + \\cos^2 25^\\circ$ 之值為何？\n(A) $0$　(B) $\\frac{1}{2}$　(C) $1$　(D) 需查表才能得知",
@@ -310,7 +310,7 @@
     {
       "id": 27,
       "subject": "數學",
-      "chapter": "三角函數的定義",
+      "chapter": "廣義角與極坐標",
       "question_type": "填空",
       "difficulty": 2,
       "question_text": "$\\sin 150^\\circ$ 之值為何？",
@@ -321,7 +321,7 @@
     {
       "id": 28,
       "subject": "數學",
-      "chapter": "三角函數的定義",
+      "chapter": "廣義角與極坐標",
       "question_type": "填空",
       "difficulty": 2,
       "question_text": "$\\cos 120^\\circ$ 之值為何？",
@@ -332,7 +332,7 @@
     {
       "id": 29,
       "subject": "數學",
-      "chapter": "三角函數的定義",
+      "chapter": "廣義角與極坐標",
       "question_type": "單選",
       "difficulty": 2,
       "question_text": "與 $400^\\circ$ 同界的最小正角為何？\n(A) $20^\\circ$　(B) $40^\\circ$　(C) $60^\\circ$　(D) $340^\\circ$",
@@ -342,7 +342,7 @@
     {
       "id": 30,
       "subject": "數學",
-      "chapter": "三角函數的定義",
+      "chapter": "廣義角與極坐標",
       "question_type": "計算",
       "difficulty": 3,
       "question_text": "已知角 $\\theta$ 的終邊通過點 $P(-3, 4)$，試依定義 $\\sin \\theta = \\frac{y}{r$ 求 $\\sin \\theta$。",
@@ -354,7 +354,7 @@
     {
       "id": 31,
       "subject": "數學",
-      "chapter": "三角函數的定義",
+      "chapter": "廣義角與極坐標",
       "question_type": "單選",
       "difficulty": 2,
       "question_text": "若 $\\theta$ 落在第二象限，則 $\\tan \\theta$ 的正負為何？\n(A) 恆為正　(B) 恆為負　(C) 恆為零　(D) 無法判斷",
