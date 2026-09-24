@@ -100,6 +100,34 @@ for (const [subject, list] of Object.entries(CHAPTERS)) {
 /** 夾在 1~5 */
 const clampLevel = (n) => Math.min(5, Math.max(1, n));
 
+// ───────────────────────── 化學的科目線索（〔stage5 WS-B〕）─────────────────────────
+
+/**
+ * 「一看就是在問化學」的詞（docs/interfaces-stage5.md 第 4.2 條第 2 點）。
+ *
+ * 用途只有一個：規則一章都沒抓到（confident === false）時，決定**要不要跳過 LLM 輔路徑**。
+ * NLQ 的 LLM 輔路徑本階段不支援化學——nlq.v1 的 prompt 與 schema 凍結為數學／物理兩科
+ * （既有 cassette 不失效，第 1.1 條），送出去模型也只能在兩科裡硬挑一章。所以句子裡有
+ * 這些詞就只用規則的結果、subject 設成化學，讓檢索至少落在化學題裡。
+ *
+ * 挑選原則：只收數學／物理題幾乎不會出現的詞。「平衡」（受力平衡）、「反應」（反應時間）、
+ * 「離子」、「元素」（集合的元素）、「電位」這類跨科詞一律不收。
+ * 章節本名與別名不必列在這裡——它們會讓 confident 為真，本來就不會走 LLM。
+ */
+const CHEMISTRY_HINTS = Object.freeze([
+    '化學', '化合物', '反應式', '莫耳', '溶液', '濃度', '酸鹼', '氧化', '還原', '沉澱', '有機物', '週期表'
+]);
+
+/**
+ * 句子裡有沒有化學的科目線索。純函式。
+ * @param {string} text
+ * @returns {boolean}
+ */
+function mentionsChemistry(text) {
+    const s = String(text ?? '');
+    return CHEMISTRY_HINTS.some(w => s.includes(w));
+}
+
 /**
  * 在 marks 全是 FREE 的區段裡找 needle 的第一個位置。
  * 已經被吃掉的字元不得再參與比對，否則「摩擦力」會在「靜摩擦力」被吃掉之後又命中一次。
@@ -386,5 +414,8 @@ module.exports = {
     TYPE_ALIASES,
     STUDENT_RE,
     SUBJECT_OF_CHAPTER,
-    trimFiller
+    trimFiller,
+    // 〔stage5 WS-B〕化學只走規則路徑（nlqService.parseOnly）
+    CHEMISTRY_HINTS,
+    mentionsChemistry
 };

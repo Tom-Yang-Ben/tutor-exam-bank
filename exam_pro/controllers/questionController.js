@@ -1,5 +1,5 @@
 const { query, pool } = require('../config/db');
-const { CHAPTERS, isValidSubject, isValidChapter, isValidQuestionType, isValidSourceType, normalizeSourceDetail, normalizeDifficulty, QUESTION_TYPES, SOURCE_DETAIL_MAX } = require('../config/chapters');
+const { CHAPTERS, isValidSubject, isValidChapter, isValidQuestionType, isValidSourceType, normalizeSourceDetail, normalizeDifficulty, QUESTION_TYPES, SOURCE_DETAIL_MAX, subjectChoiceText } = require('../config/chapters');
 const { parseBool } = require('../config/features');
 
 // ─────────────────────────────────────────────────────────────
@@ -79,7 +79,7 @@ exports.createQuestion = async (req, res, next) => {
         return res.status(400).json({ message: '學科、章節、題目內容與答案皆為必填欄位！' });
     }
     if (!isValidSubject(subject)) {
-        return res.status(400).json({ message: '學科僅能為「數學」或「物理」！' });
+        return res.status(400).json({ message: `學科僅能為${subjectChoiceText()}！` });   // 〔stage5 WS-B〕
     }
     if (!isValidChapter(subject, chapter.trim())) {
         return res.status(400).json({ message: `章節「${chapter.trim()}」不在 ${subject} 的精細章節白名單中！` });

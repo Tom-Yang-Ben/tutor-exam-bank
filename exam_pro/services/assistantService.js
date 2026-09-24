@@ -31,6 +31,7 @@
 // （不連 DB、llm 由 deps 注入）底下載入——所以 db 延遲到**工具執行時**才 require。
 const query = (...args) => require('../config/db').query(...args);
 const weakness = require('./weaknessService');
+const { SUBJECTS } = require('../config/chapters');
 const { createPseudonymizer, loadPseudonymizer } = require('../utils/pseudonym');
 
 const TEMPLATE = 'assistant.v1';
@@ -71,7 +72,9 @@ const TOOLS = {
         validate(args) {
             if (!args || typeof args.student_name !== 'string' || !args.student_name.trim()) return 'student_name 必填';
             if (args.days !== undefined && !(Number.isInteger(args.days) && args.days >= 1 && args.days <= 365)) return 'days 要是 1~365 的整數';
-            if (args.subject !== undefined && !['數學', '物理'].includes(args.subject)) return 'subject 只接受 數學 或 物理';
+            // 〔stage5 WS-B〕科目清單改讀 config/chapters.js 的 SUBJECTS（化學併入後三科）；
+            // params 說明書是 SYSTEM 的一部分，刻意不動（docs/interfaces-stage5.md 第 4.2 條、docs/chemistry.md）
+            if (args.subject !== undefined && !SUBJECTS.includes(args.subject)) return `subject 只接受 ${SUBJECTS.join('、')}`;
             return null;
         },
         async run(args) {
@@ -137,7 +140,7 @@ const TOOLS = {
         params: '{ "student_name": "學生姓名（必填）", "subject": "數學|物理（必填）", "chapter": "精細章節名（必填）", "count": "題數 1~50（必填）" }',
         validate(args) {
             if (!args || typeof args.student_name !== 'string' || !args.student_name.trim()) return 'student_name 必填';
-            if (!['數學', '物理'].includes(args.subject)) return 'subject 只接受 數學 或 物理';
+            if (!SUBJECTS.includes(args.subject)) return `subject 只接受 ${SUBJECTS.join('、')}`;   // 〔stage5 WS-B〕
             if (typeof args.chapter !== 'string' || !args.chapter.trim()) return 'chapter 必填';
             if (!Number.isInteger(args.count) || args.count < 1 || args.count > 50) return 'count 要是 1~50 的整數';
             return null;

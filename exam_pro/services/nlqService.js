@@ -35,11 +35,11 @@
 const crypto = require('crypto');
 
 const {
-    CHAPTERS, SUBJECTS,
+    CHAPTERS, SUBJECTS, LEGACY_SUBJECTS,
     isValidSubject, isValidChapter, isValidQuestionType, normalizeDifficulty
 } = require('../config/chapters');
 const { CHAPTER_ALIASES, subjectOfChapter } = require('../config/chapterAliases');
-const { parseQuery } = require('../utils/nlqHeuristics');
+const { parseQuery, mentionsChemistry } = require('../utils/nlqHeuristics');
 const { registerTemplate } = require('./llm/templates');
 const { loadPseudonymizer, IDENTITY } = require('../utils/pseudonym');
 
@@ -90,9 +90,14 @@ const PROMPT_TEMPLATE = `老師想在題庫裡找題目，他說的是下面這�
 
 registerTemplate(TEMPLATE, PROMPT_TEMPLATE);
 
-/** 白名單區塊（不共用 agents/promptParts.js：那是 WS-B 的檔，這裡只需要兩行） */
+/**
+ * 白名單區塊（不共用 agents/promptParts.js：那是 WS-B 的檔，這裡只需要兩行）
+ *
+ * 〔stage5 WS-B〕只列數學與物理（LEGACY_SUBJECTS）：這段文字進的是 nlq.v1 的既有 prompt，
+ * nlq schema 的 enum 也維持兩科（agents/schemas/index.js）。化學只走規則路徑（parseOnly 的說明）。
+ */
 function chapterWhitelistText() {
-    const lines = SUBJECTS.map(subject => `${subject}：${CHAPTERS[subject].join('、')}`);
+    const lines = LEGACY_SUBJECTS.map(subject => `${subject}：${CHAPTERS[subject].join('、')}`);
     return `【精細章節白名單（chapters 只能從這裡面挑）】\n${lines.join('\n')}`;
 }
 
@@ -380,8 +385,15 @@ async function parseOnly(opts = {}) {
     let parsePath = 'rules';
     const warnings = [];
 
+    // 〔stage5 WS-B〕化學只走規則路徑（docs/interfaces-stage5.md 第 4.2 條第 2 點、docs/chemistry.md）：
+    // nlq.v1 的 prompt 與 schema 凍結為數學／物理兩科，化學句子送出去模型只能在兩科裡硬挑一章。
+    // 規則沒抓到章節、但句子有化學線索時，不呼叫 LLM，subject 設成化學讓檢索落在化學題。
+    // 抓到化學章節或別名的句子 confident 本來就是 true，不會走到這裡。
+    const chemistryOnly = !rules.confident && mentionsChemistry(query);
+    if (chemistryOnly && !filters.subject) filters = Object.assign({}, filters, { subject: '化學' });
+
     // 第 6.3 條：**只有在 confident === false 且 semantic_text 仍有實詞時才呼叫**
-    if (!rules.confident && hasContentWord(semanticText)) {
+    if (!rules.confident && !chemistryOnly && hasContentWord(semanticText)) {
         const llm = opts.llm || require('./llm');
         const data = await callLlm({ llm, query, logger: opts.logger, pseudonymizer: opts.pseudonymizer || IDENTITY });
         if (data) {

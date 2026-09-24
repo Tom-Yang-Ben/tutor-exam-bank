@@ -307,7 +307,9 @@ describe('防呆與錯誤處理', () => {
 
     test('藍本學科不合法 → fail(schema_invalid)，一次 LLM 都不呼叫', async () => {
         const f = fakeCtx();
-        const outcome = await agent.run(f.ctx, { ...INPUT, source: { ...SOURCE, subject: '化學' } });
+        // 〔stage5 WS-B〕化學自 DEC-019 起是合法科目（化學藍本的正向測試見 test/unit/chemistryAgents.test.js），
+        // 白名單外的科目改用「生物」驗證同一條拒絕路徑（docs/interfaces-stage5.md 第 1.6、4.2 條第 5 點）。
+        const outcome = await agent.run(f.ctx, { ...INPUT, source: { ...SOURCE, subject: '生物' } });
         assert.equal(outcome.reason, 'schema_invalid');
         assert.equal(f.calls.generateJson.length, 0);
     });

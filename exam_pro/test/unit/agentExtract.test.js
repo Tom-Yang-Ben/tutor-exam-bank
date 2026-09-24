@@ -9,7 +9,7 @@ const { PDFDocument } = require('pdf-lib');
 
 const extract = require('../../agents/extract');
 const { buildSchema, ENUM_SOURCES } = require('../../agents/schemas');
-const { CHAPTERS, SUBJECTS, QUESTION_TYPES } = require('../../config/chapters');
+const { CHAPTERS, SUBJECTS, QUESTION_TYPES, LEGACY_SUBJECTS } = require('../../config/chapters');
 
 /** 造一份 n 頁的空白 PDF（只測切塊，不需要內容） */
 async function makePdf(pages) {
@@ -58,7 +58,10 @@ describe('agents/schemas — buildSchema', () => {
         const s = buildSchema('extract');
         const props = s.properties.questions.items.properties;
         assert.equal(props.chapter['x-enum'], undefined);
-        assert.deepEqual(props.subject.enum, SUBJECTS);
+        // 〔stage5 WS-B〕化學併入 SUBJECTS 後，數學／物理的 schema 值域刻意凍結在 LEGACY_SUBJECTS
+        // （既有 cassette 的 schemaHash 不變，docs/interfaces-stage5.md 第 3.2 條）。內容逐字釘死。
+        assert.deepEqual(props.subject.enum, LEGACY_SUBJECTS);
+        assert.deepEqual(props.subject.enum, ['數學', '物理']);
         assert.deepEqual(props.question_type.enum, QUESTION_TYPES);
         assert.deepEqual(props.chapter.enum, [...CHAPTERS['數學'], ...CHAPTERS['物理']]);
         assert.equal(props.chapter.enum.length, 66);
@@ -88,7 +91,9 @@ describe('agents/schemas — buildSchema', () => {
 describe('extract 的 prompt', () => {
     test('章節白名單完全來自 CHAPTERS（WS-D 會斷言同一件事）', () => {
         const prompt = extract.buildPrompt();
-        for (const subject of SUBJECTS) {
+        // 〔stage5 WS-B〕數學／物理卷的 prompt 只列兩科（LEGACY_SUBJECTS）；化學卷的 prompt 另測
+        // （test/unit/chemistryAgents.test.js），並斷言這一份不含任何化學章節。
+        for (const subject of LEGACY_SUBJECTS) {
             for (const chapter of CHAPTERS[subject]) {
                 assert.ok(prompt.includes(chapter), `prompt 少了章節「${chapter}」`);
             }

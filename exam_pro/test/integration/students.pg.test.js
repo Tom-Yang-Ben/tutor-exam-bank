@@ -916,7 +916,9 @@ function runSuite() {
             test('subject 不在白名單回 400，days 超出 1~365 或非整數回 400（訊息逐字凍結）', async () => {
                 const studentId = fixture.students[0];
                 const bad = [
-                    ['?subject=化學', 'subject 不在白名單內。'],
+                    // 〔stage5 WS-B〕化學自 DEC-019 起是合法科目（下方「邊界值合法」補了 ?subject=化學 的正向斷言），
+                    // 白名單外的科目改用「生物」驗證同一條 400（docs/interfaces-stage5.md 第 1.6、4.2 條第 5 點）。
+                    ['?subject=生物', 'subject 不在白名單內。'],
                     ['?subject=math', 'subject 不在白名單內。'],
                     ['?days=0', 'days 必須是 1~365 的整數。'],
                     ['?days=366', 'days 必須是 1~365 的整數。'],
@@ -934,6 +936,10 @@ function runSuite() {
                     const res = await request(app).get(`/api/students/${studentId}/weakness${qs}`);
                     assert.equal(res.status, 200, `${qs} 應合法`);
                 }
+                // 〔stage5 WS-B〕化學現在合法：200，且這位學生沒有化學作答時各表都是空的
+                const chem = await request(app).get(`/api/students/${studentId}/weakness?subject=化學`);
+                assert.equal(chem.status, 200, '?subject=化學 應合法（DEC-019）');
+                assert.deepEqual(chem.body.by_chapter, []);
             });
 
             test('學生不存在或 :id 不是整數回 404 { message: 找不到該學生 }', async () => {
