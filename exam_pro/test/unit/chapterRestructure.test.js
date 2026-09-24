@@ -82,9 +82,9 @@ describe('MIGRATION 舊→新對照自洽', () => {
         for (const [s, list] of Object.entries(GONE)) for (const c of list) assert.ok(MIGRATION[s][c], c);
     });
 
-    test('純新增、沒有舊題會搬入的章：數學 5 章與契約第 2 條一致；物理 3 章', () => {
+    test('純新增、沒有舊題會搬入的章：數學 4 章（〔CR-8〕線性規劃改由直線方程式拆出）；物理 3 章', () => {
         const pureNew = s => PLAN_CHAPTERS[s].filter(c => !Object.values(MIGRATION[s]).some(m => m.to.includes(c)));
-        assert.deepEqual(pureNew('數學'), ['複數的幾何意涵', '拋物線', '橢圓', '雙曲線', '線性規劃']);
+        assert.deepEqual(pureNew('數學'), ['複數的幾何意涵', '拋物線', '橢圓', '雙曲線']);
         assert.deepEqual(pureNew('物理'), ['電與磁的統一', '測量與不確定度', '理想氣體與氣體動力論']);
     });
 });
@@ -93,18 +93,33 @@ describe('別名（第 3.1 條第 2 點）', () => {
     test('指向被拆分舊章的別名改指到正確的新章（契約舉的四個例子）', () => {
         assert.equal(aliases.CHAPTER_ALIASES['和角公式'], '和角與差角公式');
         assert.equal(aliases.CHAPTER_ALIASES['條件機率'], '條件機率與貝氏定理');
-        assert.equal(aliases.CHAPTER_ALIASES['複數'], '複數與多項式方程式');
+        // 〔CR-8〕「複數」會吞掉「複數平面」，改收較窄的詞；複數平面歸複數的幾何意涵
+        assert.equal(aliases.CHAPTER_ALIASES['虛數'], '複數與多項式方程式');
+        assert.equal(aliases.CHAPTER_ALIASES['複數平面'], '複數的幾何意涵');
         // 「二項式定理」已經是章名：不再是「組合」的別名，由 parseQuery 的章節本名表直接認得
         assert.equal(aliases.CHAPTER_ALIASES['二項式定理'], undefined);
         assert.deepEqual(parse('二項式定理的題目').filters.chapters, ['二項式定理']);
         assert.ok(!aliases.ALIASES_BY_CHAPTER['組合'].includes('二項式定理'));
     });
 
+    test('〔CR-8〕跨章別名依知識點歸屬：對數分冊、巴斯卡在組合、動能不吞分子平均動能', () => {
+        const expect = {
+            '常用對數': '指數與對數', '對數方程式': '指數函數與對數函數', '對數函數': '指數函數與對數函數',
+            '指數方程式': '指數函數與對數函數', '換底公式': '指數函數與對數函數',
+            '巴斯卡公式': '組合', '巴斯卡三角形': '組合', '分子平均動能': '理想氣體與氣體動力論',
+            '質能互換': '能量的形式與守恆', '空間柯西不等式': '空間向量內積'
+        };
+        for (const [a, c] of Object.entries(expect)) assert.equal(aliases.CHAPTER_ALIASES[a], c, a);
+        for (const gone of ['對數', 'log', '三角函數', '三角形面積', '複數', '動能']) {
+            assert.equal(aliases.CHAPTER_ALIASES[gone], undefined, `「${gone}」跨章，不應再是別名`);
+        }
+    });
+
     test('其他拆分後的別名去處', () => {
         const expect = {
             '倍角公式': '和角與差角公式', '疊合': '三角函數的疊合', '二項分布': '二項分布與幾何分布',
             '轉移矩陣': '矩陣的應用', '角動量': '質心與角動量', '有效數字': '測量與不確定度',
-            '象限角': '廣義角與極坐標', '弧度量': '三角函數的圖形', '三角函數': '三角函數的圖形',
+            '象限角': '廣義角與極坐標', '弧度量': '三角函數的圖形', '三角函數圖形': '三角函數的圖形',
             '級數求和': '級數', '等差數列': '數列與遞迴關係', '克拉瑪法則': '面積與行列式',
             '三元一次聯立方程式': '一次方程組', '二次不等式': '多項式不等式'
         };

@@ -422,7 +422,9 @@ async function runPipeline(opts) {
                             return runDedup0({ questionText: ex.question_text, dbHashes, jobHashes, idx: row.id });
                         case 'classify':
                             if (agents.classify) {
-                                return agents.classify.run(makeCtx(row), {
+                                // 〔CR-8〕裁決 S2-8：eval 時 classify 的 ctx.db 一律為 null——few-shot 只走 config 例句，
+                                // cassette 鍵的 fewShotIds 恆為 []，不會隨測試庫裡先前 suite 灌了什麼而改變（dedup 仍用真連線）。
+                                return agents.classify.run({ ...makeCtx(row), db: null }, {
                                     subject: ex.subject, chapter: ex.chapter,
                                     chapter_confidence: ex.chapter_confidence, question_text: ex.question_text
                                 });

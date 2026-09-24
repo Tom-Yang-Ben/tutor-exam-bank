@@ -67,6 +67,36 @@ function findNonCommonLogBase(text) {
 }
 
 /**
+ * 〔CR-8〕指數是變數的式子（$2^{x+1}$、$3^x$、$(\frac12)^{t}$）→ 第三冊「指數函數與對數函數」；$2^{50}$、$(x+1)^2$ 不算。
+ * @param {string} text
+ * @returns {string|null}
+ */
+function findVariableExponent(text) {
+    const m = String(text ?? '').match(/[\d)}]\s*\^\s*(?:\{[^}]*[xyt][^}]*\}|[xyt])/);
+    return m ? m[0] : null;
+}
+
+/**
+ * 〔CR-8〕「前 $n$ 項和」「前 20 項和」→ 級數（由 S_n 求一般項也在級數）；「第 3 項和第 5 項」不算。
+ * @param {string} text
+ * @returns {string|null}
+ */
+function findFirstNTermsSum(text) {
+    const m = String(text ?? '').match(/前\s*\$?[^$]{0,8}\$?\s*項和/);
+    return m ? m[0] : null;
+}
+
+/**
+ * 〔CR-8〕題幹有變數 z（如 $x+y+z=6$、$2x-y+3z=1$）→ 三元一次方程組。
+ * @param {string} text
+ * @returns {string|null}
+ */
+function findVariableZ(text) {
+    const m = String(text ?? '').match(/[+\-=]\s*\d*\s*z\b/);
+    return m ? m[0].trim() : null;
+}
+
+/**
  * 科目 → 有序的規則表。`to` 必須是 PLAN_CHAPTERS 裡的新章，而且出現在至少一個 split 舊章的 `to` 裡。
  * @type {Readonly<Record<string, ReadonlyArray<{to:string, keywords?:ReadonlyArray<string>,
  *                                              patterns?:ReadonlyArray<{name:string, find:(text:string)=>string|null}>}>>>}
@@ -77,33 +107,40 @@ const KEYWORD_RULES = deepFreeze({
         { to: '三角函數的疊合', keywords: ['疊合'] },
         { to: '和角與差角公式', keywords: ['和角', '差角', '倍角', '半角'] },
         // 古典機率 → 古典機率／條件機率與貝氏定理
-        { to: '條件機率與貝氏定理', keywords: ['條件機率', '貝氏', '獨立事件', '相互獨立'] },
+        { to: '條件機率與貝氏定理', keywords: ['條件機率', '貝氏', '獨立事件', '相互獨立', '互相獨立', '彼此獨立'] },
         // 組合 → 組合／二項式定理
-        { to: '二項式定理', keywords: ['二項式', '二項展開', '巴斯卡'] },
+        // 〔CR-8〕巴斯卡公式的知識點在「組合」（組合.02），不再以「巴斯卡」搬到二項式定理
+        { to: '二項式定理', keywords: ['二項式', '二項展開'] },
         // 數列與級數 → 數列與遞迴關係／級數
         { to: '數列與遞迴關係', keywords: ['遞迴', '數學歸納'] },
-        { to: '級數', keywords: ['Σ', '∑', '\\sum', '級數', '項的和', '項之和', '總和'] },
+        { to: '級數', keywords: ['Σ', '∑', '\\sum', '級數', '項的和', '項之和', '總和', 'S_n'] },
+        { to: '級數', patterns: [{ name: 'firstNTermsSum', find: findFirstNTermsSum }] },
         // 三次函數 → 多項式函數的圖形／多項式不等式／複數與多項式方程式
         { to: '複數與多項式方程式', keywords: ['複數', '虛數', '虛根', '代數基本定理', '根與係數', '共軛'] },
         { to: '多項式不等式', keywords: ['不等式'] },
         // 排列 → 排列／集合與計數原理
-        { to: '集合與計數原理', keywords: ['集合', '排容', '文氏圖', '取捨原理'] },
+        { to: '集合與計數原理', keywords: ['集合', '排容', '文氏圖', '取捨原理', '加法原理', '樹狀圖'] },
         // 矩陣的加減與乘法 → 矩陣的運算／矩陣的應用
-        { to: '矩陣的應用', keywords: ['轉移矩陣', '線性變換', '旋轉', '鏡射', '馬可夫'] },
+        { to: '矩陣的應用', keywords: ['轉移矩陣', '線性變換', '旋轉', '鏡射', '馬可夫', '解聯立', '伸縮', '推移', '穩定狀態'] },
         // 克拉瑪公式 → 一次方程組／面積與行列式（先後見檔頭說明）
         { to: '一次方程組', keywords: ['三元', '高斯消去'] },
+        // 〔CR-8〕題幹出現變數 z（三元）時，即使寫「克拉瑪」也歸一次方程組
+        { to: '一次方程組', patterns: [{ name: 'hasZ', find: findVariableZ }] },
         { to: '面積與行列式', keywords: ['二元一次', '克拉瑪'] },
         { to: '一次方程組', keywords: ['聯立'] },
         // 三角函數的定義 → 直角三角形的邊角關係／廣義角與極坐標／三角函數的圖形
-        { to: '廣義角與極坐標', keywords: ['廣義角', '標準位置', '極坐標', '極座標', '象限', '終邊', '同界角'] },
-        { to: '三角函數的圖形', keywords: ['圖形', '週期', '振幅', '弧度'] },
+        { to: '廣義角與極坐標', keywords: ['廣義角', '標準位置', '極坐標', '極座標', '象限', '終邊', '同界角', '參考角'] },
+        { to: '三角函數的圖形', keywords: ['圖形', '週期', '振幅', '弧度', '方程式', '扇形', '弧長', '\\pi'] },
         { to: '廣義角與極坐標', patterns: [{ name: 'wideAngle', find: findWideAngle }] },
         // 隨機變數 → 隨機變數／二項分布與幾何分布
         { to: '二項分布與幾何分布', keywords: ['二項分布', '二項分佈', '二項分配', '幾何分布', '幾何分佈', '幾何分配', '伯努利'] },
         // 指數與對數 → 指數與對數／指數函數與對數函數
         // 〔章節重整整合〕CH-C 把一般底數的對數、換底公式、指數／對數方程式與不等式放在第三冊（常用對數留第一冊）
         { to: '指數函數與對數函數', keywords: ['指數函數', '對數函數', '換底', '指數方程式', '對數方程式', '指數不等式', '對數不等式'] },
-        { to: '指數函數與對數函數', patterns: [{ name: 'nonCommonLogBase', find: findNonCommonLogBase }] }
+        { to: '指數函數與對數函數', keywords: ['複利', '半衰期'] },
+        { to: '指數函數與對數函數', patterns: [{ name: 'nonCommonLogBase', find: findNonCommonLogBase }, { name: 'variableExponent', find: findVariableExponent }] },
+        // 〔CR-8〕直線方程式 → 直線方程式／線性規劃（二元一次不等式的圖形已搬到線性規劃）
+        { to: '線性規劃', keywords: ['二元一次不等式', '半平面', '可行解', '目標函數', '線性規劃'] }
     ],
     '物理': [
         // 動量與衝量／動量守恆與碰撞／剛體轉動與平衡 → 各自原章／質心與角動量
@@ -200,4 +237,4 @@ function validateRules(rules = KEYWORD_RULES) {
     return problems;
 }
 
-module.exports = { KEYWORD_RULES, matchKeywordRule, validateRules, normalizeForMatch, findWideAngle, findNonCommonLogBase };
+module.exports = { KEYWORD_RULES, matchKeywordRule, validateRules, normalizeForMatch, findWideAngle, findNonCommonLogBase, findVariableExponent, findFirstNTermsSum, findVariableZ };

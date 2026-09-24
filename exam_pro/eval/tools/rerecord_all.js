@@ -177,17 +177,38 @@ function verifyReport(res) {
 }
 
 /** 印一段標題 */
+/**
+ * 〔CR-8〕測試庫是否已套 migration：以最早與最新兩張會用到的表為準（attempts：nlq 的 Recall@10；
+ * chapter_migration_log：0014，章節重整後最新的一支）。
+ * @returns {Promise<{ok:boolean, missing?:string[], error?:string}>}
+ */
+async function checkTestDbSchema() {
+    const { Client } = require('pg');
+    const client = new Client({ connectionString: process.env.TEST_DATABASE_URL });
+    try {
+        await client.connect();
+        const { rows } = await client.query(
+            "SELECT to_regclass('public.attempts') AS attempts, to_regclass('public.chapter_migration_log') AS chapter_migration_log");
+        const missing = Object.entries(rows[0] || {}).filter(([, v]) => !v).map(([k]) => k);
+        return { ok: missing.length === 0, missing };
+    } catch (err) {
+        return { ok: false, error: err.message };
+    } finally {
+        await client.end().catch(() => {});
+    }
+}
+
 function banner(text) {
     console.log(`\n══ ${text} ${'═'.repeat(Math.max(0, 60 - text.length))}`);
 }
 
 /**
  * @param {string[]} [argv]
- * @param {{askYes?:Function, analyze?:Function, runNode?:Function}} [io] 測試注入點（預設就是真的那三支）
+ * @param {{askYes?:Function, analyze?:Function, runNode?:Function, checkTestDbSchema?:Function}} [io] 測試注入點（預設就是真的那幾支）
  * @returns {Promise<number>} 結束碼
  */
 async function main(argv = process.argv.slice(2), io = {}) {
-    const deps = { askYes, analyze, runNode, ...io };
+    const deps = { askYes, analyze, runNode, checkTestDbSchema, ...io };
     const args = parseArgs(argv);
     if (args.help) { console.log(USAGE); return 0; }
 
@@ -230,6 +251,14 @@ async function main(argv = process.argv.slice(2), io = {}) {
     }
     if (!String(process.env.TEST_DATABASE_URL || '').trim()) {
         console.error('\n❌ 沒有 TEST_DATABASE_URL：nlq 的查詢句向量與 e2e 都要測試庫才錄得到。');
+        return 1;
+    }
+    // 〔CR-8〕測試庫是 tmpfs，每次啟動都是空的；沒套 migration 時 nlq 的 Recall@10 會是 n/a（CR-7 ④ 實際發生過），
+    // 錄了也量不齊——花錢之前先擋下來。
+    const schema = await deps.checkTestDbSchema();
+    if (!schema.ok) {
+        const why = schema.error ? `連不上測試庫（${schema.error}）` : `測試庫缺資料表：${(schema.missing || []).join('、')}`;
+        console.error(`\n❌ ${why}。請先 npm run db:up，再 npm run migrate:test，之後重跑本指令。`);
         return 1;
     }
 

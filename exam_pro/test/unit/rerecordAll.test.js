@@ -257,6 +257,7 @@ describe('yes 確認與驗證表', () => {
             const code = await rerecord.main(['--suites', 'classify'], {
                 analyze: async () => fakeAnalysis(),
                 askYes: async () => false,
+                checkTestDbSchema: async () => ({ ok: true }),
                 runNode: async (opts) => { calls.push(opts); return { exitCode: 0, ms: 1, tail: [], reportFiles: [] }; }
             });
             assert.equal(code, 0);
@@ -273,6 +274,7 @@ describe('yes 確認與驗證表', () => {
             const code = await rerecord.main(['--suites', 'classify,e2e', '--no-similar'], {
                 analyze: async () => { analyzed += 1; return fakeAnalysis(); },
                 askYes: async () => { asked += 1; return true; },
+                checkTestDbSchema: async () => ({ ok: true }),
                 runNode: async (opts) => { calls.push(opts); return { exitCode: 0, ms: 1, tail: [], reportFiles: [] }; }
             });
             assert.equal(code, 0);
@@ -293,6 +295,7 @@ describe('yes 確認與驗證表', () => {
         const deps = {
             analyze: async () => fakeAnalysis(),
             askYes: async () => { throw new Error('不該問'); },
+            checkTestDbSchema: async () => ({ ok: true }),
             runNode: async () => { throw new Error('不該錄'); }
         };
         await withEnv({ GEMINI_API_KEY: undefined, TEST_DATABASE_URL: 'postgres://x/y_test' }, async () => {
@@ -302,5 +305,22 @@ describe('yes 確認與驗證表', () => {
         await withEnv({ GEMINI_API_KEY: 'k', TEST_DATABASE_URL: undefined }, async () => {
             assert.equal(await rerecord.main(['--suites', 'classify'], deps), 1);
         });
+    });
+
+    test('〔CR-8〕main：測試庫沒套 migration（或連不上）時不問 yes 就停，結束碼 1', async (t) => {
+        t.mock.method(console, 'log', () => {});
+        const errors = [];
+        t.mock.method(console, 'error', (m) => errors.push(String(m)));
+        const base = {
+            analyze: async () => fakeAnalysis(),
+            askYes: async () => { throw new Error('不該問'); },
+            runNode: async () => { throw new Error('不該錄'); }
+        };
+        await withEnv({ GEMINI_API_KEY: 'k', TEST_DATABASE_URL: 'postgres://x/y_test' }, async () => {
+            assert.equal(await rerecord.main(['--suites', 'classify'], { ...base, checkTestDbSchema: async () => ({ ok: false, missing: ['attempts'] }) }), 1);
+            assert.equal(await rerecord.main(['--suites', 'classify'], { ...base, checkTestDbSchema: async () => ({ ok: false, error: 'ECONNREFUSED' }) }), 1);
+        });
+        assert.ok(errors.some(e => e.includes('attempts') && e.includes('migrate:test')), errors.join('\n'));
+        assert.ok(errors.some(e => e.includes('ECONNREFUSED')), errors.join('\n'));
     });
 });

@@ -130,6 +130,30 @@ describe('config/chapterMigrationRules.js', () => {
         assert.equal(to('已知 $\\log 2 \\approx 0.3010$，求 $2^{50}$ 的位數'), null, '常用對數題沒命中 → 由 proposeChapter 回到預設去處');
     });
 
+    test('〔CR-8〕樣式：變數指數、前 n 項和、三元（變數 z）', () => {
+        assert.equal(rules.findVariableExponent('解 $2^{x+1}=32$'), '2^{x+1}');
+        assert.equal(rules.findVariableExponent('$3^x=81$'), '3^x');
+        assert.equal(rules.findVariableExponent('求 $2^{50}$ 是幾位數'), null);
+        assert.equal(rules.findVariableExponent('展開 $(x+1)^2$'), null);
+        assert.equal(rules.findFirstNTermsSum('前 $n$ 項和為 $S_n=n^2$'), '前 $n$ 項和');
+        assert.equal(rules.findFirstNTermsSum('第 3 項和第 5 項的比'), null);
+        assert.equal(rules.findVariableZ('$x+y+z=6$'), '+z');
+        assert.equal(rules.findVariableZ('$2x+3y=7$、$x-y=1$'), null);
+    });
+
+    test('〔CR-8〕依知識點歸屬的搬章提議', () => {
+        const to = (old, t) => (rules.matchKeywordRule('數學', MIGRATION['數學'][old].to, [[t]]) || {}).to || null;
+        assert.equal(to('直線方程式', '畫出二元一次不等式 $x+2y\\le 4$ 的圖形'), '線性規劃');
+        assert.equal(to('直線方程式', '求過 $(1,2)$ 的直線方程式'), null);
+        assert.equal(to('克拉瑪公式', '以克拉瑪公式解 $x+y+z=6$、$x-y+z=2$、$2x+y-z=1$'), '一次方程組');
+        assert.equal(to('克拉瑪公式', '以克拉瑪公式解 $2x+3y=7$、$x-y=1$'), '面積與行列式');
+        assert.equal(to('指數與對數', '解 $2^{x+1}=32$'), '指數函數與對數函數');
+        assert.equal(to('組合', '利用巴斯卡公式化簡 $C^{7}_{3}+C^{7}_{4}$'), null, '巴斯卡公式屬組合，留原章');
+        assert.equal(to('數列與級數', '數列前 $n$ 項和為 $S_n=n^2+n$，求 $a_{10}$'), '級數');
+        assert.equal(to('古典機率', '事件 $A$、$B$ 互相獨立，求 $P(A\\cap B)$'), '條件機率與貝氏定理');
+        assert.equal(to('三角函數的定義', '解 $\\sin x=\\frac12$，$0\\le x<2\\pi$'), '三角函數的圖形');
+    });
+
     test('〔章節重整整合〕三次函數：根與係數、共軛 → 複數與多項式方程式', () => {
         const targets = MIGRATION['數學']['三次函數'].to;
         assert.equal(rules.matchKeywordRule('數學', targets, [['由根與係數關係求 $\\alpha^2+\\beta^2+\\gamma^2$']]).to, '複數與多項式方程式');
