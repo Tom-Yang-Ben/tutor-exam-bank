@@ -210,4 +210,23 @@ if (featuresS4.FEATURE_ASSISTANT) {
     }
 }
 
+// ── 階段 5 WS-C：知識點（docs/interfaces-stage5.md 第 4.3 條）──
+// FEATURE_KC 關閉時四條都不掛載（落到 Express 預設 404，與 FEATURE_ASSISTANT 同一種做法）。
+// 這四支都不呼叫 LLM（自動標註走管線掛鉤與 npm run kc:backfill），限流只是防呆：
+// 120/min 對「逐張審定口語版」的操作綽綽有餘，同時是獨立的桶，不吃其他 API 的額度。
+// 變數名帶 WsC5 後綴，理由同上方 featuresWs3A：合併後不會撞到別的區塊的 const。
+const featuresWsC5 = require('../config/features');
+if (featuresWsC5.FEATURE_KC) {
+    const kcController = require('../controllers/kcController');
+    const kcRateLimit = createRateLimiter({
+        windowMs: 60 * 1000,
+        max: 120,
+        message: '知識點請求過於頻繁，請稍候再試（每分鐘最多 120 次）。'
+    });
+    router.get('/kc', kcRateLimit, kcController.listKc);
+    router.patch('/kc/:id', kcRateLimit, kcController.patchKc);
+    router.get('/questions/:id/kcs', kcRateLimit, kcController.getQuestionKcs);
+    router.put('/questions/:id/kcs', kcRateLimit, kcController.putQuestionKcs);
+}
+
 module.exports = router;

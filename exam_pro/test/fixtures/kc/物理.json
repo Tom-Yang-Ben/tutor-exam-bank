@@ -1,0 +1,74 @@
+{
+  "subject": "物理",
+  "version": 1,
+  "generated_at": "2026-09-24",
+  "source_note": "WS-C 測試用的小型 fixture（只涵蓋兩章；載入時以 chapters 參數限定白名單）。內容為自撰草稿；「功的定義」的先備跨科指向數學「內積的意義」。",
+  "components": [
+    {
+      "code": "PHYS.功與動能.01",
+      "chapter": "功與動能",
+      "sort": 1,
+      "name": "功的定義",
+      "curriculum_code": null,
+      "description": "定力對物體所作的功等於力與位移的內積。",
+      "spoken_text": "功就是力乘上順著位移方向的那段距離：W 等於 F 乘 d 乘 cosθ，也就是力和位移的內積。力跟位移垂直時，這個力不作功。最常錯的是把整段路徑長度當成位移。",
+      "status": "draft",
+      "prereqs": ["MATH.向量內積.01"]
+    },
+    {
+      "code": "PHYS.功與動能.02",
+      "chapter": "功與動能",
+      "sort": 2,
+      "name": "功能定理",
+      "curriculum_code": null,
+      "description": "合力對物體所作的總功等於物體動能的變化量。",
+      "spoken_text": "合力對物體作的總功，等於物體動能的變化量。題目只問初速和末速、不在乎過程，就想到功能定理。記得要用合力的功，不是其中某一個力的功。",
+      "status": "draft",
+      "prereqs": ["PHYS.功與動能.01"]
+    },
+    {
+      "code": "PHYS.功與動能.03",
+      "chapter": "功與動能",
+      "sort": 3,
+      "name": "功率",
+      "curriculum_code": null,
+      "description": "功率為單位時間內所作的功；以定力等速移動時，功率等於力與速度的內積。",
+      "spoken_text": "功率是作功的快慢，就是功除以時間；等速移動時也可以寫成力乘上速率。看到「多久內作多少功」或「引擎輸出多大」就用它。單位是瓦特，別跟焦耳搞混。",
+      "status": "draft",
+      "prereqs": ["PHYS.功與動能.01"]
+    },
+    {
+      "code": "PHYS.位能與能量守恆.01",
+      "chapter": "位能與能量守恆",
+      "sort": 1,
+      "name": "重力位能",
+      "curriculum_code": null,
+      "description": "地表附近物體的重力位能為 mgh，h 為相對於所選零位面的高度。",
+      "spoken_text": "重力位能是 m 乘 g 乘 h，h 是相對於你選的零位面高度。零位面自己挑，但整題要用同一個。真正有物理意義的是位能差，跟零位面怎麼選無關。",
+      "status": "draft",
+      "prereqs": []
+    },
+    {
+      "code": "PHYS.位能與能量守恆.02",
+      "chapter": "位能與能量守恆",
+      "sort": 2,
+      "name": "力學能守恆",
+      "curriculum_code": null,
+      "description": "只有保守力作功時，系統的動能與位能總和保持不變。",
+      "spoken_text": "只有重力或彈力作功時，動能加位能的總和不變。題目說光滑、沒有摩擦，就想到力學能守恆，列出前後兩個狀態相等。有摩擦力作功時就不能直接用。",
+      "status": "draft",
+      "prereqs": ["PHYS.功與動能.02", "PHYS.位能與能量守恆.01"]
+    },
+    {
+      "code": "PHYS.位能與能量守恆.03",
+      "chapter": "位能與能量守恆",
+      "sort": 3,
+      "name": "彈力位能",
+      "curriculum_code": null,
+      "description": "彈簧形變量為 x 時儲存的彈力位能為二分之一 k 乘 x 平方。",
+      "spoken_text": "彈簧被拉長或壓縮 x，儲存的彈力位能是二分之一 k 乘 x²。不管拉長還是壓縮，位能都是正的。最常錯的是把 x 當成彈簧的總長，其實是伸長量。",
+      "status": "draft",
+      "prereqs": []
+    }
+  ]
+}

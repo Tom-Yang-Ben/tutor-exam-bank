@@ -1640,6 +1640,10 @@
             assistant: 'view-assistant'
         };
         const TOP_ANCHORS = ['top', 'create', 'paper', 'library', 'students', 'assistant'];
+        // 〔stage5 WS-C〕#kc → view-kc：骨架已有導覽連結與 <div id="view-kc">，但這張表沒有對應，
+        // 點「知識點」會落回預設的建立題目視圖。只加這兩行，不動上面兩個宣告。
+        VIEW_FOR_ANCHOR.kc = 'view-kc';
+        TOP_ANCHORS.push('kc');
 
         let activeViewId = null;   // 首次 routeFromHash 前為 null——初始載入不跑動效
 
