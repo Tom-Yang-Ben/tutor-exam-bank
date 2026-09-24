@@ -59,7 +59,7 @@
 ## 4. 後果
 
 - **正面**: WS-D 的知識點弱點與補救卷、WS-E 的家教口語版，都能只依資料表開發；Owner 的審定不會被重新載入蓋掉；老師的手動修正永遠有效；既有 cassette 全部不失效；標註可在管線中自動發生，也可離線批次回填並先看預估費用。
-- **負面**: 章名改動會讓 code 失效（要一次性遷移知識點、先備與標註）；「刻意不標」無法表達；自動標註的費用不進 `job_events`；只有經過管線 save 節點的新題會自動標，其他入口靠回填。
+- **負面**: 章名改動會讓 code 失效（要一次性遷移知識點、先備與標註）；「刻意不標」無法表達；自動標註的費用不進 `job_events`（因此不計入 `DAILY_COST_BUDGET_USD` 與 job 的 `budget_usd`；兩道煞車只做到「管線觸頂後不再標」）；只有經過管線 save 節點的新題會自動標，其他入口靠回填。
 - **影響範圍**: `exam_pro/utils/kcSeed.js`（新增逐欄檢查與匯出）、`exam_pro/services/kcService.js`、`exam_pro/services/kcTagService.js`、`exam_pro/agents/tagKc.js`、`exam_pro/controllers/kcController.js`、`exam_pro/routes/index.js`（檔尾區塊）、`exam_pro/workers/jobRunner.js`（save 之後的單一掛鉤）、`exam_pro/scripts/load_kc.js`、`exam_pro/scripts/backfill_kc.js`、`exam_pro/public/js/kc.js`、`exam_pro/public/index.html`（`#kc` 路由的最小掛鉤）。
 - **重新評估觸發**: 白名單章名需要改動（code 遷移）；老師反映「清空後又被標回去」；標註準確率 eval（待建）低於可接受水準，或人工修正率持續偏高；知識點數量或跨科先備複雜到需要圖資料庫等級的查詢。
 
