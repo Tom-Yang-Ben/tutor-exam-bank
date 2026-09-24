@@ -15,7 +15,7 @@
 > 🛠 **2026-09-15g 修訂**（feat/follow-up-paper-group，FR-019 PR2）：§1 新增 TC-019-8（組卷整組抽取，單元 19 項＋整合 8 項；審查修正後裝箱改子集和）。§2 全域執行證據數由主線合併時統一更新，本分支不動。修改處以〔修訂 2026-09-15g〕行內標記。
 > 🛠 **2026-09-16 修訂**（feat/follow-up-protect-badge，FR-019 PR3）：§1 新增 TC-019-6～7。②執行證據之全域測試數未改（由主線合併時統一更新）。修改處以〔修訂 2026-09-16〕行內標記。
 > 🛠 **2026-09-16b 修訂**（主線同步，PR #30–#33 合併後）：②執行證據同步為單元 1,613／整合 317／e2e 11（PR #30–#33 併入 main 後 CI 實測）。修改處以〔修訂 2026-09-16b〕行內標記。
-> 🛠 **2026-09-24 修訂**（階段 5 整合回填，分支 `stage5/int-docs`）：§1 新增 TC-021-1～TC-035-2（依各 WS 回報的測試檔整理，對應 FR-021～035）；§2.1 測試數寫為「整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中」，主控合併後更新；§2.2 補化學 classify eval（不進 CI、尚未錄製）；§3 追溯。狀態「通過（stage5/integration CI）」指整合分支 @ `6f8e671` 完整 `ci.sh` 全綠（主控實跑），尚未併入 main、尚未在 GitHub Actions 上跑。修改處以〔修訂 2026-09-24〕行內標記。
+> 🛠 **2026-09-24 修訂**（階段 5 整合回填，分支 `stage5/int-docs`）：§1 新增 TC-021-1～TC-035-2（依各 WS 回報的測試檔整理，對應 FR-021～035）；§2.1 測試數寫為「整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠」，主控合併後更新；§2.2 補化學 classify eval（不進 CI、尚未錄製）；§3 追溯。狀態「通過（stage5/integration CI）」指整合分支 @ `6f8e671` 完整 `ci.sh` 全綠（主控實跑），尚未併入 main、尚未在 GitHub Actions 上跑。修改處以〔修訂 2026-09-24〕行內標記。
 
 ## 目錄
 
@@ -109,7 +109,7 @@ TC 依 FR 分組（`TC-<FR 號>-<序>`）；層級：U=單元、I=整合、E=e2e
 | 整合 | 317 | exam_pro/test/integration/ | tmpfs 測試庫（5433，`_test` 後綴強制）〔修訂 2026-09-16b〕 |
 | e2e | 11 | exam_pro/test/e2e/ | HTTP 全路徑（上傳→部分入庫；組卷→Word 公式） |
 
-〔修訂 2026-09-24〕上表為 main（PR #30–#33 合併後）的數字。階段 5：**整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中**（主控合併後更新數字）。階段 5 新增 29 支單元測試檔與 10 支整合測試檔（清單見 §1 TC-021-*～TC-035-*）；e2e 未新增。
+〔修訂 2026-09-24〕上表為 main（PR #30–#33 合併後）的數字。階段 5：**整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠**（主控合併後更新數字）。階段 5 新增 29 支單元測試檔與 10 支整合測試檔（清單見 §1 TC-021-*～TC-035-*）；e2e 未新增。
 
 CI（`.github/workflows/ci.yml`）：unit（Node 22/24 矩陣）＋integration（pgvector service→migrations→整合→e2e→五個 eval suite）；全程零金鑰、零網路、零成本（cassette replay；replay miss 於 main 視為錯誤）。CI badge 見 repo 根 `README.md`；全綠 @ f8f6574（PR #7 merge）〔修訂 2026-08-29〕。
 

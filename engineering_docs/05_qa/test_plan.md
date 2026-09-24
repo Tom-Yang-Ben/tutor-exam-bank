@@ -12,7 +12,7 @@
 > 🛠 **2026-09-15f 修訂**（feat/source-check）：§1 範圍補 FR-017／018／020、測試層級 1,476／262／11→1,534／269／11、進入條件 migrations 補 0007、0009；§5.2 新增 TC-020-1 代表案例（公開樣卷 0 誤報）；§7 同步。修改處以〔修訂 2026-09-15f〕行內標記。
 > 🛠 **2026-09-15 合併同步**（feat/follow-up-links 併入 feat/source-check）：§1 範圍補 FR-019、測試層級 1,565（其後原卷比對審查修正補 2 項單元測試，現況 1,567）／297／11（合併後實跑）、進入條件 migrations 合為 0001–0009；§7 上游補 FR-019、DEC-012 與執行證據同步。上列兩分支修訂列所載之各分支實測數與範圍為當時紀錄，保留不改。合併重算處以〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕雙標記。
 > 🛠 **2026-09-16b 修訂**（主線同步，PR #30–#33 合併後）：§測試層級與案例證據列同步為 1,613／317／11（PR #30–#33 併入 main 後 CI 實測）。修改處以〔修訂 2026-09-16b〕行內標記。
-> 🛠 **2026-09-24 修訂**（階段 5 整合回填，分支 `stage5/int-docs`）：§1 範圍延伸至 FR-021～035 與 NFR-007～009、範圍外補真 Gemini／瀏覽器／Word 實機、測試數寫為「整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中」、進入條件 migrations 0001–0012；§2 補不進 CI 的化學 eval；§3 補 generateText 與新模板的 cassette 規則；§5.2 補階段 5 代表案例；§7 追溯。修改處以〔修訂 2026-09-24〕行內標記。
+> 🛠 **2026-09-24 修訂**（階段 5 整合回填，分支 `stage5/int-docs`）：§1 範圍延伸至 FR-021～035 與 NFR-007～009、範圍外補真 Gemini／瀏覽器／Word 實機、測試數寫為「整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠」、進入條件 migrations 0001–0012；§2 補不進 CI 的化學 eval；§3 補 generateText 與新模板的 cassette 規則；§5.2 補階段 5 代表案例；§7 追溯。修改處以〔修訂 2026-09-24〕行內標記。
 
 ## 目錄
 
@@ -30,7 +30,7 @@
 | :--- | :--- |
 | **範圍內** | FR-001～FR-020〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕全數；FR-021～FR-035〔修訂 2026-09-24〕；NFR-001（認證／CORS／SSRF）、NFR-003（純函式合約與 replay）、NFR-004（eval 門檻）、NFR-005（租約與重試）、NFR-006（同交易一致性）；NFR-007（家教／語音預算、標註預算煞車）、NFR-008（錄音不落地、姓名不出境）、NFR-009（既有 cassette 不失效）〔修訂 2026-09-24〕 |
 | **範圍外** | 真實 Gemini API 的線上品質（CI 零金鑰零網路，NFR-003）；私有題庫上的檢索表現（`eval/private/` 不進版控，由開發者本機另行記錄）；瀏覽器相容性矩陣（單人使用，僅開發用瀏覽器驗證）；〔修訂 2026-09-24〕階段 5 另有下列**尚未驗證**、不在自動化測試範圍的項目：AI 家教提示效果（socratic 是否洩答、是否真的用 code execution 驗算）、`kc_tag` 標註準確率、化學拆題與分類品質（沒有化學 cassette）、Gemini 是否接受瀏覽器錄的 audio/webm、真瀏覽器下的 MediaRecorder／speechSynthesis／MathJax mhchem 顯示、Microsoft Word 開啟化學式與詳解版——前端只以 miniDom 渲染測試驗證 |
-| **測試層級** | 三層：單元 **1,613** 項（`test/unit/`，node:test，無 I/O）／整合 **317** 項〔修訂 2026-09-16b〕（`test/integration/`，對 `_test` 後綴 PG）／e2e **11** 項（`test/e2e/`，經 HTTP 走真 runner）；另有五個 eval suite（§2）〔修訂 2026-08-29〕。〔修訂 2026-09-24〕以上為 main 的數字；整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中（主控合併後更新數字） |
+| **測試層級** | 三層：單元 **1,613** 項（`test/unit/`，node:test，無 I/O）／整合 **317** 項〔修訂 2026-09-16b〕（`test/integration/`，對 `_test` 後綴 PG）／e2e **11** 項（`test/e2e/`，經 HTTP 走真 runner）；另有五個 eval suite（§2）〔修訂 2026-08-29〕。〔修訂 2026-09-24〕以上為 main 的數字；整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠（主控合併後更新數字） |
 | **環境** | 測試 PG：`pgvector/pgvector:pg16`，本機 5433（tmpfs）、CI service container 5432；庫名必須以 `_test` 結尾，否則 `migrate.js` 與整合測試拒絕執行；`LLM_MODE=replay`、`EMBED_MODE=fixture` |
 | **進入條件** | `npm ci` 成功、`npm run migrate:test` 套用 0001–0009〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕、0010–0012〔修訂 2026-09-24〕、`eval/cassettes/` 與 fixture 就緒〔修訂 2026-08-29〕 |
 | **退出條件** | 三層全綠、五個 suite 均不低於 `eval/thresholds.json` 門檻、main 上零 replay miss |

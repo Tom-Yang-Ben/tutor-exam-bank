@@ -141,7 +141,7 @@ exam_pro/
 ├─ test/
 │   ├─ unit/                  #   1,613 項（main）：不連網、不連庫、零 secrets
 │   ├─ integration/           #   317 項（main）：對 tmpfs 測試庫（_test 後綴強制）
-│   │                         #   整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中
+│   │                         #   整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠
 │   └─ e2e/                   #   11 項：HTTP 全路徑（上傳→部分入庫；組卷→Word 公式）
 │
 ├─ scripts/                   # 維運：備份、向量回填、成本報表、公式健檢
@@ -388,13 +388,13 @@ Gemini 已回傳 JSON，為何不直接入庫？
 - **AI**：Google Gemini（`@google/genai`）——拆題／分類／變式 `gemini-3.5-flash`、獨立驗答 `gemini-3.1-pro-preview`、embedding `gemini-embedding-001`（768 維）；模型 ID 單一真相在 [`exam_pro/config/models.js`](./exam_pro/config/models.js)；階段 5 另用 code execution（AI 家教驗算）與音訊輸入（語音轉寫）〔修訂 2026-09-24〕
 - **文件**：`docx`（自製 LaTeX → OOXML 數學公式轉換）
 - **前端**：單頁 HTML + Tailwind（CDN）+ MathJax + 五個 ES module 分頁（零打包器）；階段 5 另加三個 module（知識點、補救卷與覆蓋率、AI 家教），MathJax 載入 mhchem〔修訂 2026-09-24〕
-- **測試／量測**：`node:test`（單元 1,613／整合 317／e2e 11；整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中〔修訂 2026-09-24〕）＋五個 eval suite（golden＋ratchet 門檻）＋ LLM record/replay cassette——CI 全程零金鑰、零網路、零成本
+- **測試／量測**：`node:test`（單元 1,613／整合 317／e2e 11；整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠〔修訂 2026-09-24〕）＋五個 eval suite（golden＋ratchet 門檻）＋ LLM record/replay cassette——CI 全程零金鑰、零網路、零成本
 
 ---
 
 ## 🧪 品質保證的三層（怎麼測一個 LLM 系統）
 
-1. **合約層單元測試**：agent 為純函式（依賴全數注入），1,613 項測試（main；整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中〔修訂 2026-09-24〕）不連網、不連庫、不需任何金鑰，clone 後執行 `npm test` 即可完整重現。
+1. **合約層單元測試**：agent 為純函式（依賴全數注入），1,613 項測試（main；整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠〔修訂 2026-09-24〕）不連網、不連庫、不需任何金鑰，clone 後執行 `npm test` 即可完整重現。
 2. **cassette record/replay**：真實呼叫錄製為 cassette（鍵含模型 ID、模板版本與輸入雜湊），CI 以 replay 模式確定性地重播完整管線；replay miss 於 main 分支視為錯誤——cassette 缺漏不得以綠燈掩蓋。
 3. **eval golden + ratchet**：五個 suite 對人工定案的 golden 量指標，門檻＝首測 −0.03、只升不降；任何改動讓指標掉到門檻下，CI 轉紅。
 
@@ -417,7 +417,7 @@ npm start                 # http://localhost:3000
 
 ## 階段 5：教學診斷平台——功能、旗標與給老師的快速開始
 
-> 〔修訂 2026-09-24〕狀態：五條程式 workstream 與三組知識點內容已完成開發並併入整合分支 `stage5/integration`（完整 CI 全綠），**尚未併入 main**；整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中（主控合併後更新數字）。需求決策 DEC-014～019 的核准欄仍待 Owner 簽核。
+> 〔修訂 2026-09-24〕狀態：五條程式 workstream 與三組知識點內容已完成開發並併入整合分支 `stage5/integration`（完整 CI 全綠），**尚未併入 main**；整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠（主控合併後更新數字）。需求決策 DEC-014～019 的核准欄仍待 Owner 簽核。
 
 從「出卷工具」轉成「教學診斷平台」（DEC-014）：不只出卷，還要看懂學生為什麼錯、把弱點直接變成下一份卷，並能用說的問三科問題。所有新功能預設關閉，逐一打開。
 

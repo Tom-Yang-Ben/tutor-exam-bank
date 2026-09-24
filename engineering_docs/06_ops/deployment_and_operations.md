@@ -49,7 +49,7 @@
 | :--- | :--- | :--- |
 | 單元層 | `npm audit --omit=dev --audit-level=high` ＋ `npm test`（1,613 項）＋ `npm run check:html`，Node 22.x／24.x 矩陣〔修訂 2026-09-16b〕 | 每次 push 與 PR（GitHub Actions） |
 | 整合層 | 起 `pgvector/pgvector:pg16` service → 整合 317 項〔修訂 2026-09-16b〕＋e2e 11 項＋五個 eval suite（ratchet 門檻）〔修訂 2026-08-29〕 | 同上，`integration` job |
-| 階段 5〔修訂 2026-09-24〕 | 整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中（主控合併後更新數字）；CI 步驟不變，未新增 eval suite（`eval:classify-chem` 不進 CI） | 併入 main 後由 GitHub Actions 跑 |
+| 階段 5〔修訂 2026-09-24〕 | 整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠（主控合併後更新數字）；CI 步驟不變，未新增 eval suite（`eval:classify-chem` 不進 CI） | 併入 main 後由 GitHub Actions 跑 |
 | 部署 | 無自動部署。本機依 §3 啟動程序手動升級 | 手動 |
 
 CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`EMBED_MODE=fixture`；eval 低於 ratchet 門檻或 main 上 replay miss 即轉紅（NFR-004）。

@@ -153,7 +153,7 @@ exam_pro/
 ├─ public/index.html + public/js/      # 單頁殼（7 個 hash 路由視圖）+ ES module（review/students/nlq/variants/assistant；階段 5：kc/remedial/tutor）
 ├─ migrations/ + migrate.js            # 只增不改的 SQL（0001~0012）＋執行器
 ├─ eval/                               # run.js（五個 suite）、lib/、golden/、cassettes/、fixtures/、thresholds.json
-├─ test/  unit(1,613) · integration(317) · e2e(11)（main）；整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中
+├─ test/  unit(1,613) · integration(317) · e2e(11)（main）；整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠
 ├─ scripts/ + *.bat                    # 備份、向量回填、成本報表、公式健檢（Windows 雙擊）
 └─ docker-compose.yml                  # PG16+pgvector：5442 開發（volume）／5433 測試（tmpfs）；皆只綁 127.0.0.1
 ```
@@ -428,7 +428,7 @@ npm run eval:baseline                                                           
 
 | # | 步驟 | 通過標準 |
 |---|------|----------|
-| 6 | `npm test` | **全數通過（2026-09-16 現況：1,613 passed / 0 failed）**；不連網、不連庫、零 secrets。CI 亦會在 push 後自動跑（badge 見本頁最上方）。〔修訂 2026-09-24〕整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中 |
+| 6 | `npm test` | **全數通過（2026-09-16 現況：1,613 passed / 0 failed）**；不連網、不連庫、零 secrets。CI 亦會在 push 後自動跑（badge 見本頁最上方）。〔修訂 2026-09-24〕整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠 |
 | 7 | 靜態檔完整性：確認 `public/index.html` 結尾為 `</script></body></html>`，且 `<div>`、`<script>` 開闔數相等 | 檔案未被截斷（詳見下方「截斷檔自檢」）|
 | 8 | `npm start` | 終端印出 `🚀 家教題庫後端系統已成功安全啟動：http://localhost:3000` |
 
@@ -566,7 +566,7 @@ fixture 擴 120 題、A-T16 新舊管線前後對照、A-T17 異家（Anthropic�
 
 ### 階段 5：教學診斷平台
 
-〔修訂 2026-09-24〕狀態：開發完成，併入整合分支 `stage5/integration`（完整 CI 全綠），**尚未併入 main**；整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中。
+〔修訂 2026-09-24〕狀態：開發完成，併入整合分支 `stage5/integration`（完整 CI 全綠），**尚未併入 main**；整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠。
 需求 DEC-014～019（核准欄待 Owner 簽核）→ 功能需求 FR-021～035；契約與裁決 [`docs/interfaces-stage5.md`](../docs/interfaces-stage5.md)；功能與旗標總表見[根 README 的階段 5 專節](../README.md#階段-5教學診斷平台功能旗標與給老師的快速開始)。
 
 **給老師的快速開始**（升級一次；步驟 1–5 不呼叫 AI、不花錢，完整說明見 [`engineering_docs/06_ops/deployment_and_operations.md`](../engineering_docs/06_ops/deployment_and_operations.md) §3.4）：

@@ -16,7 +16,7 @@
 > 🛠 **2026-09-15g 修訂**（feat/follow-up-paper-group，FR-019 PR2）：FR-019 列狀態補 PR2 組卷整組抽取、模組路徑補 utils/paperGroups.js 等、驗證補 paperGroups 單元與整合測試。NFR-003 全域測試數由主線合併時統一更新，本分支不動。修改處以〔修訂 2026-09-15g〕行內標記。
 > 🛠 **2026-09-16 修訂**（feat/follow-up-protect-badge，FR-019 PR3）：FR-019 列狀態補 PR3 已實作範圍。修改處以〔修訂 2026-09-16〕行內標記。
 > 🛠 **2026-09-16b 修訂**（主線同步，PR #30–#33 合併後）：NFR-003 單元測試數同步為 1,613（PR #30–#33 併入 main 後 CI 實測）。修改處以〔修訂 2026-09-16b〕行內標記。
-> 🛠 **2026-09-24 修訂**（階段 5 整合回填，分支 `stage5/int-docs`）：§1 新增 FR-021～035 共 15 列（狀態：已實作於整合分支 `stage5/integration`，待併入 main）；§2 NFR-002／003／006 更新、新增 NFR-007～009；NFR-003 測試數寫為「整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中」；§3 ADR 索引補 ADR-010～015；§4 追溯；§5.1 熱點補階段 5 衝突點、新增 §5.5 階段 5 平行開發實績。修改處以〔修訂 2026-09-24〕行內標記。
+> 🛠 **2026-09-24 修訂**（階段 5 整合回填，分支 `stage5/int-docs`）：§1 新增 FR-021～035 共 15 列（狀態：已實作於整合分支 `stage5/integration`，待併入 main）；§2 NFR-002／003／006 更新、新增 NFR-007～009；NFR-003 測試數寫為「整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠」；§3 ADR 索引補 ADR-010～015；§4 追溯；§5.1 熱點補階段 5 衝突點、新增 §5.5 階段 5 平行開發實績。修改處以〔修訂 2026-09-24〕行內標記。
 
 ## 目錄
 
@@ -74,7 +74,7 @@
 |---|---|---|---|---|---|
 | NFR-001 | 安全：x-api-key（timing-safe）、CORS 白名單、防 SSRF、正式環境不回傳錯誤細節 | 已實作 | exam_pro/middleware/、exam_pro/app.js、exam_pro/services/wordService.js（isSafeImageUrl） | ADR-005 | 單元 |
 | NFR-002 | 成本：限流、RPM 節流、逐 token 計費、單 job／每日成本上限；階段 5 另加 tutor／voice 10/min、知識點 API 120/min〔修訂 2026-09-24〕 | 已實作 | exam_pro/middleware/rateLimit.js、exam_pro/services/llm/throttle.js、exam_pro/config/pricing.js、exam_pro/routes/index.js（階段 5 區塊）〔修訂 2026-09-24〕 | ADR-003 | 單元＋job_events 成本紀錄；整合（kc.pg、tutor.pg 限流） |
-| NFR-003 | 可測試性：agent 純函式合約、cassette record/replay、CI 零金鑰零網路 | 已實作 | exam_pro/agents/、exam_pro/services/llm/、exam_pro/eval/cassettes/ | ADR-006 | 單元 1,613 項不連網不連庫（PR #30–#33 併入 main 後 CI 實測，2026-09-16〔修訂 2026-09-16b〕）；整合分支 stage5/integration 當下：unit 2253、integration 471、e2e 11，另有整合補測進行中（主控合併後更新數字）〔修訂 2026-09-24〕；CI replay |
+| NFR-003 | 可測試性：agent 純函式合約、cassette record/replay、CI 零金鑰零網路 | 已實作 | exam_pro/agents/、exam_pro/services/llm/、exam_pro/eval/cassettes/ | ADR-006 | 單元 1,613 項不連網不連庫（PR #30–#33 併入 main 後 CI 實測，2026-09-16〔修訂 2026-09-16b〕）；整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠（主控合併後更新數字）〔修訂 2026-09-24〕；CI replay |
 | NFR-004 | 品質門檻：eval golden＋ratchet（首測 −0.03、只升不降），低於門檻 CI 轉紅 | 已實作 | exam_pro/eval/run.js、exam_pro/eval/thresholds.json、exam_pro/eval/lib/ | ADR-006 | 五個 eval suite（[qa_tracker §2](../05_qa/qa_tracker.md)） |
 | NFR-005 | 可靠性：SKIP LOCKED＋租約認領、斷點續跑、逾時退避重試、重試預算 | 已實作 | exam_pro/workers/jobRunner.js、exam_pro/pipeline/stateMachine.js | ADR-003 | 整合＋e2e |
 | NFR-006 | 資料一致性：組卷與作答歷史同交易；migrations 只增不改（0001–0009〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕；0010–0012〔修訂 2026-09-24〕） | 已實作 | exam_pro/controllers/examController.js、exam_pro/migrations/、exam_pro/migrate.js | ADR-001 | 整合 |
