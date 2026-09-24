@@ -946,7 +946,8 @@
                 const card = el('article', 'question-card rounded-2xl p-4 sm:p-5 transition-all');
                 const head = el('div', 'flex flex-col-reverse sm:flex-row sm:justify-between sm:items-start gap-3 mb-3');
                 const meta = el('div', 'flex flex-wrap items-center gap-1.5 text-xs leading-relaxed');
-                meta.innerHTML = `<label class="grid place-items-center px-1 cursor-pointer"><input type="checkbox" class="mgr-pick w-4 h-4 accent-indigo-600 cursor-pointer" data-id="${q.id}" aria-label="選取題目 #${q.id}"></label><span class="rounded-md bg-slate-100 px-2 py-1 font-mono font-bold text-slate-500">#${q.id}</span>${followUpBadges(q)}<span class="rounded-md bg-indigo-50 px-2 py-1 font-bold text-indigo-700">${escapeHtml(q.subject)} · ${escapeHtml(q.chapter)}</span><span class="rounded-md bg-slate-50 px-2 py-1 font-semibold text-slate-500">${escapeHtml(q.question_type)}</span><span class="px-1 text-amber-500">${'★'.repeat(q.difficulty)}</span><span class="rounded-md px-2 py-1 font-semibold ${SOURCE_TYPE_BADGE[q.source_type] || SOURCE_TYPE_BADGE.unknown}">${SOURCE_TYPE_LABEL[q.source_type] || '未標記'}</span>${q.source_detail ? `<span class="rounded-md bg-slate-50 px-2 py-1 text-slate-500">${escapeHtml(q.source_detail)}</span>` : ''}`;
+                // 〔stage5 WS-A〕行尾多一個「有詳解」徽章（solution_text 非空時）
+                meta.innerHTML = `<label class="grid place-items-center px-1 cursor-pointer"><input type="checkbox" class="mgr-pick w-4 h-4 accent-indigo-600 cursor-pointer" data-id="${q.id}" aria-label="選取題目 #${q.id}"></label><span class="rounded-md bg-slate-100 px-2 py-1 font-mono font-bold text-slate-500">#${q.id}</span>${followUpBadges(q)}<span class="rounded-md bg-indigo-50 px-2 py-1 font-bold text-indigo-700">${escapeHtml(q.subject)} · ${escapeHtml(q.chapter)}</span><span class="rounded-md bg-slate-50 px-2 py-1 font-semibold text-slate-500">${escapeHtml(q.question_type)}</span><span class="px-1 text-amber-500">${'★'.repeat(q.difficulty)}</span><span class="rounded-md px-2 py-1 font-semibold ${SOURCE_TYPE_BADGE[q.source_type] || SOURCE_TYPE_BADGE.unknown}">${SOURCE_TYPE_LABEL[q.source_type] || '未標記'}</span>${q.source_detail ? `<span class="rounded-md bg-slate-50 px-2 py-1 text-slate-500">${escapeHtml(q.source_detail)}</span>` : ''}${q.solution_text ? '<span class="rounded-md bg-emerald-50 px-2 py-1 font-semibold text-emerald-700" title="這題有文字詳解，Word 詳解版會印出來">有詳解</span>' : ''}`;
                 const btns = el('div', 'flex gap-2 shrink-0');
                 const editBtn = el('button', 'text-xs px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100 cursor-pointer', { type: 'button', textContent: '✏️ 編輯' });
                 editBtn.addEventListener('click', () => openEditModal(q));
@@ -1048,7 +1049,36 @@
             detailRow.appendChild(detailInput);
             body.appendChild(detailRow);
 
+            // 〔stage5 WS-A〕文字詳解（docs/interfaces-stage5.md 第 4.1 條第 5、7 項）：同樣只掛在 modal。
+            // 只有老師真的改過這一欄才送 solution_text（saveEdit 看 __solutionDirty）——沒改就不送，
+            // 後端維持原值與原來源；清空欄位＝清掉詳解（兩欄同 NULL）。
+            body.appendChild(buildSolutionEditor(editingObj));
+
             document.getElementById('editModal').classList.remove('hidden');
+        }
+
+        // 〔stage5 WS-A〕詳解欄：textarea ＋ 來源標示 ＋ 即時預覽（MathJax）
+        const SOLUTION_SRC_TEXT = { verify: '管線驗算時由模型解出、與答案比對一致（未經人工審閱）', teacher: '老師撰寫', ai: 'AI 產生（未經人工審閱）' };
+        function buildSolutionEditor(obj) {
+            const wrap = el('div', 'mt-3 space-y-1.5');
+            const head = el('div', 'flex flex-wrap items-baseline justify-between gap-2');
+            head.appendChild(el('label', 'text-sm font-semibold text-slate-600', { textContent: '文字詳解', htmlFor: 'edit_solution' }));
+            head.appendChild(el('span', 'text-[11px] text-slate-400', {
+                textContent: obj.solution_text ? `來源：${SOLUTION_SRC_TEXT[obj.solution_src] || obj.solution_src || '未知'}（改寫後會標為老師撰寫）` : '尚無詳解（選填，4000 字內，公式用 $...$）'
+            }));
+            const ta = el('textarea', TACLS, { id: 'edit_solution', rows: 4, maxLength: 4000, value: obj.solution_text || '' });
+            ta.placeholder = '逐步詳解（公式用 $...$）；Word 匯出選「詳解版」時會接在答案後面';
+            const prev = el('div', 'p-3 bg-emerald-50/50 rounded-xl border border-emerald-100 text-sm text-slate-700 whitespace-pre-line');
+            let timer;
+            const sync = () => { prev.textContent = ta.value || '（無詳解）'; renderMath(prev); };
+            ta.addEventListener('input', () => {
+                obj.solution_text = ta.value;
+                obj.__solutionDirty = true;
+                clearTimeout(timer); timer = setTimeout(sync, 350);
+            });
+            sync();
+            wrap.append(head, ta, prev);
+            return wrap;
         }
         function closeEditModal() {
             document.getElementById('editModal').classList.add('hidden');
@@ -1058,11 +1088,16 @@
             if (!editingObj) return;
             const btn = document.getElementById('edit_save');
             btn.disabled = true;
+            // 〔stage5 WS-A〕詳解只在老師改過時才送（列表資料可能比回填腳本舊，沒改卻送會把新回填的詳解洗掉）
+            const payload = { ...editingObj };
+            if (!payload.__solutionDirty) delete payload.solution_text;
+            delete payload.__solutionDirty;
+            delete payload.solution_src;
             try {
                 const res = await apiFetch('/api/questions/' + editingObj.id, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(editingObj)
+                    body: JSON.stringify(payload)
                 });
                 const data = await res.json();
                 if (res.ok) { closeEditModal(); showToast('題目變更已儲存', 'success'); await fetchQuestions(mgrPage); await fetchChapters(); }
@@ -1503,6 +1538,11 @@
                     <button type="button" id="gradeNowBtn" class="hidden w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold py-2.5 px-4 rounded-xl shadow-lg shadow-emerald-600/15 transition-all cursor-pointer">
                         立即批改
                     </button>
+                    <select id="wordEdition" aria-label="Word 匯出版本" class="w-full sm:w-auto field-control min-h-0 py-2 px-3 text-xs font-bold">
+                        <option value="standard">標準版（卷末附答案）</option>
+                        <option value="student">學生版（不附答案）</option>
+                        <option value="solution">詳解版（答案＋詳解）</option>
+                    </select>
                     <button type="button" onclick="downloadWordFile()" class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold py-2.5 px-4 rounded-xl shadow-lg shadow-indigo-600/15 transition-all cursor-pointer">
                         下載 Word 考卷 (.docx)
                     </button>
@@ -1537,14 +1577,18 @@
         }
 
         // 5. 下載 Word 檔案
+        // 〔stage5 WS-A〕Word 匯出版本（POST /api/download-word 的 edition；檔名跟著加註版本）
+        const WORD_EDITION_SUFFIX = { standard: '', student: '（學生版）', solution: '（詳解版）' };
         async function downloadWordFile() {
             if (!currentPaperCache) return showToast("請先生成考卷", 'error');
+            const editionSel = document.getElementById('wordEdition');
+            const edition = editionSel && WORD_EDITION_SUFFIX[editionSel.value] !== undefined ? editionSel.value : 'standard';
 
             try {
                 const response = await apiFetch('/api/download-word?v=' + Date.now(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(currentPaperCache)
+                    body: JSON.stringify({ ...currentPaperCache, edition })
                 });
 
                 const contentType = response.headers.get('content-type');
@@ -1560,7 +1604,7 @@
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `${currentPaperCache.paper_title}.docx`;
+                a.download = `${currentPaperCache.paper_title}${WORD_EDITION_SUFFIX[edition]}.docx`;
                 document.body.appendChild(a);
                 a.click();
                 a.remove();
