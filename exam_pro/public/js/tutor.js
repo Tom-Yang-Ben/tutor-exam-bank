@@ -55,7 +55,8 @@ const HEADING_RE = /^\s*#{1,6}\s+(.*)$/;
  *   3. 區塊程式碼、數學式（$$…$$、\[…\]、$…$、\(…\)）、行內程式碼先換成佔位符，
  *      讓粗體與清單的規則碰不到它們（數學式原樣留給 MathJax）；
  *   4. 粗體、清單、標題、段落；
- *   5. 佔位符換回。
+ *   5. 佔位符換回——重複到沒有佔位符為止：slot 的內容本身可能又含佔位符
+ *      （行內程式碼裡的 $…$ 先被當成數學式收走），只換一輪會留下 NUL 與「I0」、原本的內容不見。
  * 唯一會出現的屬性是 <ol start="數字">（只由 \d 組成）。不支援連結與圖片：[文字](網址) 原樣當文字。
  *
  * @param {string} src 伺服器回來的 Markdown
@@ -73,8 +74,9 @@ export function renderMarkdown(src) {
     text = text.replace(/```[^\n`]*\n([\s\S]*?)(?:```|$)/g, (m, code) =>
         holdBlock(`<pre><code>${code.replace(/\n$/, '')}</code></pre>`));
     // 數學式：原樣保留給 MathJax（內容已 escape；MathJax 讀的是文字節點，&lt; 會還原成 <）
-    text = text.replace(/\$\$[\s\S]+?\$\$/g, m => holdInline(m));
-    text = text.replace(/\\\[[\s\S]+?\\\]/g, m => holdInline(m));
+    // 可跨行的兩種不得跨過區塊程式碼的佔位符（\u0000B）：LaTeX 裡不會有 ```，跨過去只會把程式碼區塊塞進段落裡
+    text = text.replace(/\$\$(?:(?!\u0000B)[\s\S])+?\$\$/g, m => holdInline(m));
+    text = text.replace(/\\\[(?:(?!\u0000B)[\s\S])+?\\\]/g, m => holdInline(m));
     text = text.replace(/\\\([^\n]+?\\\)/g, m => holdInline(m));
     text = text.replace(/\$[^$\n]+?\$/g, m => holdInline(m));
     // 行內程式碼
@@ -90,7 +92,13 @@ export function renderMarkdown(src) {
         html.push(renderBlock(trimmed));
     }
 
-    return html.join('\n').replace(/\u0000[BI](\d+)\u0000/g, (m, i) => slots[Number(i)] ?? '');
+    // 佔位符換回。slot i 只可能包含編號比它小的佔位符（內層先被收走），不會成環，最多 slots.length 輪就換完；
+    // 每個 slot 都是「已 escape 的字串＋固定標籤」，巢狀換回不會引入新的 HTML。
+    let out = html.join('\n');
+    for (let round = 0; round <= slots.length && /\u0000[BI]\d+\u0000/.test(out); round++) {
+        out = out.replace(/\u0000[BI](\d+)\u0000/g, (m, i) => slots[Number(i)] ?? '');
+    }
+    return out;
 }
 
 /** 一個區塊（不含空行）→ 段落、清單、標題的組合；段落內換行轉 <br>。 */
@@ -394,7 +402,7 @@ async function sendMessage(app, ui, text) {
     const message = String(text ?? '').trim();
     if (!message) return false;
     if (message.length > MAX_MESSAGE) { app.showToast(`一次最多 ${MAX_MESSAGE} 字（目前 ${message.length} 字）。`, 'error'); return false; }
-    if (state.busy) return false;
+    if (state.busy) { app.showToast('上一則還在等家教回覆，回覆之後再送出。', 'info'); return false; }
     const settings = readSettings(ui);
     if (Number.isNaN(settings.questionId)) { app.showToast('題目 ID 要是正整數（或留空）。', 'error'); return false; }
 
@@ -653,7 +661,7 @@ function buildReviewPanel(ui) {
     segmentsBox.appendChild(segments);
 
     const actions = el('div', 'mt-3 flex gap-2');
-    const confirm = el('button', 'rounded-xl bg-teal-600 px-4 py-2 text-sm font-extrabold text-white hover:bg-teal-700 cursor-pointer', {
+    const confirm = el('button', 'rounded-xl bg-teal-600 px-4 py-2 text-sm font-extrabold text-white hover:bg-teal-700 disabled:opacity-40 cursor-pointer', {
         type: 'button', id: 'tutorVoiceConfirm', textContent: '確認送出'
     });
     const cancel = el('button', 'rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 cursor-pointer', {
@@ -771,11 +779,19 @@ function mountVoice(app, ui) {
     const r = ui.review;
     r.text.addEventListener('input', () => refreshPreview(app, r.text, r.preview));
     r.cancel.addEventListener('click', () => closeReview(ui));
+    // 送出成功才收起面板、清掉逐字稿：上一則還在等回覆（busy）、題目 ID 不合法、伺服器回錯或連線失敗時，
+    // 老師確認過的逐字稿都要留著，按一次就能重送——不然只能重錄，又要再花一次語音費用。
     r.confirm.addEventListener('click', async () => {
         const text = String(r.text.value || '').trim();
         if (!text) return app.showToast('逐字稿是空的。', 'error');
-        closeReview(ui);
-        await sendMessage(app, ui, text);
+        if (r.confirm.disabled) return;
+        r.confirm.disabled = true;
+        try {
+            const ok = await sendMessage(app, ui, text);
+            if (ok) closeReview(ui);
+        } finally {
+            r.confirm.disabled = false;
+        }
     });
 }
 

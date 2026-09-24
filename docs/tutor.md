@@ -63,7 +63,7 @@ LLM 要能真的呼叫：`LLM_MODE=live`（或 `record`）且有 `GEMINI_API_KEY
 3. 放開後出現「語音逐字稿」面板：
    - 逐字稿可以直接改；公式在下方預覽。
    - 聽起來有兩種寫法的公式（例如「x 平方加一分之一」）會列成 chip，點你要的那一個，逐字稿會跟著換。
-4. 確認無誤按「**確認送出**」才會送給家教；按「取消」什麼都不送。
+4. 確認無誤按「**確認送出**」才會送給家教；按「取消」什麼都不送。送出成功後面板才收起；上一則還在等回覆、題目 ID 不合法、家教回錯或連線失敗時，**逐字稿會留著**，處理好再按一次「確認送出」就好，不用重錄（重錄會再花一次語音費用）。
 
 **錄音裡不要講學生全名。** 姓名遮罩只作用在文字上：錄音本身會原樣送到 Gemini 轉寫。轉寫出來的文字在送給家教之前會再遮罩一次。
 
@@ -217,7 +217,7 @@ const { text, codeRuns, finishReason, usage, latencyMs } = await require('./serv
 | 單元 | `test/unit/llmGenerateText.test.js` | `toContents` 既有三種逐字不變＋音訊／圖片；`parseTextResponse` 的配對；`readFinishReason`；`gemini.generateText` 送出的 config（假 client，含 `thinkingConfig`）與回傳的 `finishReason`；`generateJson` 的 config 形狀回歸；replay 命中／miss／壞檔；record → replay 一輪（音訊 base64 與 prompt 原文不進 cassette）；三個模型 getter |
 | 單元 | `test/unit/tutorService.test.js` | body 驗證（400 在查 DB、呼叫 LLM 之前）；脈絡組裝（題目、詳解 NULL、approved 優先與 draft 標註、退回同章、沒有知識點、學生前 5 與錯因、沒有資料時不帶）；**姓名不出現在 system／parts／cacheKeyParts**、回覆換回姓名；兩種模式的系統提示差異與模板註冊；驗算回傳；`thinkingBudget` 與 `maxOutputTokens` 成對送出；`MAX_TOKENS` 截斷提醒（含補結尾圍欄、空回覆的專屬說明、照樣記帳）；成本；每日預算 429 與隔日歸零；LLM 失敗 502、DB 錯誤不冒充 502 |
 | 單元 | `test/unit/voiceService.test.js` | 大小、mime（含 `;codecs=`）、科目；送出的 parts 與 cacheKeyParts；ajv 再驗、正規化；成本併入同一個預算；controller 的 multer 錯誤轉譯（含 multer 2 的非 `LIMIT_` 代碼與 busboy 的解析錯誤）、限流設定、buffer 清除 |
-| 單元 | `test/unit/tutorUi.test.js` | `renderMarkdown` 的 XSS 案例（`<img onerror>`、`javascript:` 連結、屬性跳脫、偽造佔位符、唯一屬性 `start`）與格式；麥克風可用性；歧義替換；miniDom 實跑：旗標關閉不渲染、麥克風不可用隱藏並說明、送出與回覆呈現、**錄音 → 逐字稿 → 點 chip → 按確認才送出**、取消不送 |
+| 單元 | `test/unit/tutorUi.test.js` | `renderMarkdown` 的 XSS 案例（`<img onerror>`、`javascript:` 連結、屬性跳脫、偽造佔位符、唯一屬性 `start`）與格式；巢狀佔位符（行內程式碼裡的 `$…$`、`$$` 跨過程式碼區塊）與「任何組合都不留下 NUL」；截斷提醒在 `<pre>` 外；麥克風可用性；歧義替換；miniDom 實跑：旗標關閉不渲染、麥克風不可用隱藏並說明、送出與回覆呈現、**錄音 → 逐字稿 → 點 chip → 按確認才送出**、取消不送；確認送出失敗（502、上一則還在等回覆、題目 ID 不合法）時逐字稿留著、可重送 |
 | 整合 | `test/integration/tutor.pg.test.js` | 旗標三種組合的 404；兩條 API 的 400／404／413（含 ID 超過 int4、multipart 壞掉）；**以 LLM_MODE=replay＋暫存 cassette 目錄跑通一輪**（鍵由 `prepareTutorRequest` 算出，與正式請求同一支函式；並斷言 DB 組出的 prompt 沒有姓名）；退回同章知識點；cassette 記錄 `MAX_TOKENS` 時回覆附截斷提醒；replay miss 502；預算 429；兩個限流 env；錄音不寫進 `uploads/` |
 
 **為什麼整合測試選 replay 而不是在 app 層注入 fake**：走的是正式程式路徑（routes → controller → service → `services/llm` → `fake.js`），app 與 controller 不必為了測試多開注入口；cassette 寫在 `os.tmpdir()`，不進 repo，CI 不需要任何新 cassette。

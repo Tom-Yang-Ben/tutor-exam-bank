@@ -102,6 +102,39 @@ describe('renderMarkdown — 先整段 escape，再轉換受限標記（XSS）',
         assert.equal(renderMarkdown(''), '');
         assert.equal(renderMarkdown(null), '');
     });
+
+    test('巢狀佔位符會還原：行內程式碼裡的 $…$ 原樣出現在 <code> 裡（不留下 NUL 與「I0」）', async () => {
+        const { renderMarkdown } = await load();
+        assert.equal(renderMarkdown('`$x$` code'), '<p><code>$x$</code> code</p>');
+        assert.equal(renderMarkdown('用 `$\\ce{H2O}$` 與 `**b**` 寫'), '<p>用 <code>$\\ce{H2O}$</code> 與 <code>**b**</code> 寫</p>');
+    });
+
+    test('$$…$$ 不跨過程式碼區塊：區塊獨立成 <pre>，內容都在、沒有 NUL', async () => {
+        const { renderMarkdown } = await load();
+        assert.equal(renderMarkdown('$$ x \n```\ncode\n```\n $$'), '<p>$$ x</p>\n<pre><code>code</code></pre>\n<p>$$</p>');
+        assert.equal(renderMarkdown('\\[ a \n```\nb\n```\n \\]'), '<p>\\[ a</p>\n<pre><code>b</code></pre>\n<p>\\]</p>');
+    });
+
+    test('任何組合都不留下佔位符（NUL）', async () => {
+        const { renderMarkdown } = await load();
+        const pieces = ['`$a$`', '$`b`$', '$$c$$', '```\nd\n```', '**e**', '`f`', '\\(g\\)', '\\[h\\]', '$', '`', '\n\n', '- i', '$$\n'];
+        for (let i = 0; i < pieces.length; i++) {
+            for (let j = 0; j < pieces.length; j++) {
+                for (let k = 0; k < pieces.length; k++) {
+                    const src = pieces[i] + ' ' + pieces[j] + pieces[k];
+                    const html = renderMarkdown(src);
+                    assert.ok(!html.includes('\u0000'), JSON.stringify(src) + ' → ' + JSON.stringify(html));
+                }
+            }
+        }
+    });
+
+    test('後端附上截斷提醒的回覆（停在沒有結尾的程式碼區塊裡）→ 提醒在 <pre> 外、是粗體段落', async () => {
+        const { renderMarkdown } = await load();
+        const tutor = require('../../services/tutorService');
+        const html = renderMarkdown(tutor.withTruncationNote('驗算：\n```python\nprint(1+'));
+        assert.ok(html.startsWith('<p>驗算：</p>\n<pre><code>print(1+</code></pre>\n<p><strong>⚠ 回覆因長度上限被截斷</strong>'), html);
+    });
 });
 
 describe('其他純函式', () => {
@@ -555,6 +588,111 @@ describe('按住說話：錄音 → 可編輯逐字稿 → 點歧義 chip → �
         byId('tutorVoiceCancel').click();
         assert.ok(byId('tutorVoiceReview').classList.contains('hidden'));
         assert.equal(apiFetch.calls.filter(c => c.url === '/api/tutor').length, 0);
+    });
+
+    /** 按住 → 放開（超過最短長度）→ 等上傳與逐字稿面板 */
+    async function holdAndRelease() {
+        const realNow = Date.now;
+        const t0 = realNow();
+        Date.now = () => t0;
+        try {
+            byId('tutorMic').dispatchEvent({ type: 'pointerdown', preventDefault() { } });
+            await flush();
+            Date.now = () => t0 + 1500;
+            byId('tutorMic').dispatchEvent({ type: 'pointerup' });
+            await flush(); await flush();
+        } finally { Date.now = realNow; }
+    }
+
+    const OK_REPLY = { reply: '好', mode: 'direct', verification: { used: false, runs: [] }, context: { kc_codes: [], student_context: false }, usage: {} };
+
+    test('按確認但家教回錯（502）→ 面板與逐字稿都留著，再按一次就能重送（不用重錄）', async () => {
+        let fail = true;
+        const apiFetch = routedFetch({
+            ...BASE_ROUTES,
+            '/api/voice/transcribe': () => jsonResponse({ text: '請問 $x^2$ 的導數', math_segments: [], ambiguities: [] }),
+            '/api/tutor': () => (fail ? jsonResponse({ message: 'AI 家教暫時無法回應：逾時' }, 502) : jsonResponse(OK_REPLY))
+        });
+        mount({ meta: { 'feature-voice': 'true' }, apiFetch, secure: true, mic: { stream, Recorder: FakeRecorder } });
+        const mod = await loadFresh();
+        await mod.init();
+        await flush();
+        await holdAndRelease();
+
+        byId('tutorVoiceConfirm').click();
+        await flush(); await flush();
+        assert.equal(apiFetch.calls.filter(c => c.url === '/api/tutor').length, 1);
+        assert.match(allText(), /⚠ AI 家教暫時無法回應：逾時/);
+        assert.ok(!byId('tutorVoiceReview').classList.contains('hidden'), '失敗時面板要留著');
+        assert.equal(byId('tutorVoiceText').value, '請問 $x^2$ 的導數', '逐字稿不能被清掉');
+        assert.equal(byId('tutorVoiceConfirm').disabled, false, '失敗後確認鈕要恢復可按');
+
+        fail = false;
+        byId('tutorVoiceConfirm').click();
+        await flush(); await flush();
+        const sent = apiFetch.calls.filter(c => c.url === '/api/tutor');
+        assert.equal(sent.length, 2);
+        assert.equal(sent[1].body.message, '請問 $x^2$ 的導數');
+        assert.ok(byId('tutorVoiceReview').classList.contains('hidden'), '成功後才收起');
+        assert.equal(byId('tutorVoiceText').value, '');
+        assert.equal(apiFetch.calls.filter(c => c.url === '/api/voice/transcribe').length, 1, '沒有重錄');
+    });
+
+    test('上一則打字送出的還在等回覆時按確認 → 提示稍候、面板與逐字稿留著；回覆後再按就送出', async () => {
+        let release = null;
+        const apiFetch = routedFetch({
+            ...BASE_ROUTES,
+            '/api/voice/transcribe': () => jsonResponse({ text: '第二個問題', math_segments: [], ambiguities: [] }),
+            '/api/tutor': (body) => (body.message === '第一個問題'
+                ? new Promise(resolve => { release = () => resolve(jsonResponse(OK_REPLY)); })
+                : jsonResponse(OK_REPLY))
+        });
+        mount({ meta: { 'feature-voice': 'true' }, apiFetch, secure: true, mic: { stream, Recorder: FakeRecorder } });
+        const mod = await loadFresh();
+        await mod.init();
+        await flush();
+
+        // 先錄好、面板開著（錄音開始時會檢查 busy，所以順序是先錄再打字）
+        await holdAndRelease();
+        assert.equal(byId('tutorVoiceText').value, '第二個問題');
+        byId('tutorInput').value = '第一個問題';
+        byId('tutorSend').click();                 // 還沒回來（busy）
+        await flush();
+
+        byId('tutorVoiceConfirm').click();
+        await flush(); await flush();
+        assert.equal(apiFetch.calls.filter(c => c.url === '/api/tutor').length, 1, 'busy 時不得送出第二則');
+        assert.ok(env.window.ExamApp.calls.toasts.some(t => /上一則還在等家教回覆/.test(t.message)), '要提示，不能默默吞掉');
+        assert.ok(!byId('tutorVoiceReview').classList.contains('hidden'));
+        assert.equal(byId('tutorVoiceText').value, '第二個問題');
+
+        release();
+        await flush(); await flush();
+        byId('tutorVoiceConfirm').click();
+        await flush(); await flush();
+        const sent = apiFetch.calls.filter(c => c.url === '/api/tutor');
+        assert.equal(sent.length, 2);
+        assert.equal(sent[1].body.message, '第二個問題');
+        assert.ok(byId('tutorVoiceReview').classList.contains('hidden'));
+    });
+
+    test('題目 ID 不合法時按確認 → 提示題目 ID、逐字稿留著', async () => {
+        const apiFetch = routedFetch({
+            ...BASE_ROUTES,
+            '/api/voice/transcribe': () => jsonResponse({ text: '這題怎麼算', math_segments: [], ambiguities: [] })
+        });
+        mount({ meta: { 'feature-voice': 'true' }, apiFetch, secure: true, mic: { stream, Recorder: FakeRecorder } });
+        const mod = await loadFresh();
+        await mod.init();
+        await flush();
+        await holdAndRelease();
+        byId('tutorQuestionId').value = 'abc';
+        byId('tutorVoiceConfirm').click();
+        await flush();
+        assert.equal(apiFetch.calls.filter(c => c.url === '/api/tutor').length, 0);
+        assert.ok(env.window.ExamApp.calls.toasts.some(t => /題目 ID/.test(t.message)));
+        assert.ok(!byId('tutorVoiceReview').classList.contains('hidden'));
+        assert.equal(byId('tutorVoiceText').value, '這題怎麼算');
     });
 
     test('錄太短（誤觸）→ 不上傳，提示按住再說', async () => {
