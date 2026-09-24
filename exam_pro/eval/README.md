@@ -284,6 +284,9 @@ npm run cassettes:prune -- --apply          # 確認清單後刪除
 
 - **子行程一律照 `.github/workflows/ci.yml` 的設定**（`MODEL_EXTRACT`／`MODEL_VERIFY`），`.env` 裡的 `MODEL_*`、`FEATURE_*`
   與其他設定不會帶進去（`eval/lib/suiteProcess.js`）。cassette 的鍵含模型 ID：照 `.env` 錄的鍵，CI 讀不到。
+  CI 沒設的變數在子行程裡設成空字串（擋住 dotenv 從 `.env` 補值）；例外是讀取端用 `??` 取預設值的變數，
+  空字串在那裡不等於「沒設」，改設成 CI 實際生效的值（`CI_EFFECTIVE_DEFAULTS`，目前只有 `JOB_COST_BUDGET_USD=0.5`；
+  設成空字串的話 pipeline 的預算是 0，錄製時一次暫時性錯誤就直接 needs_review、不重試，cassette 會錄不齊）。
 - **`LLM_MODE=record` 會把一個 suite 的每一次呼叫都真的打一次**，連原本還讀得到的也一樣——repo 沒有「只補缺的」LLM 錄製模式。
   所以 dry-run 的「錄製時 LLM 呼叫」是「命中＋缺」。下限是這一輪回放看得到的呼叫；
   上限再加上沒被讀到、也不是某次 miss 舊版的 cassette（被 miss 擋住的下游多半在這裡）。
@@ -291,6 +294,11 @@ npm run cassettes:prune -- --apply          # 確認清單後刪除
 - **清除要在重錄之後**：`--apply` 在還有 replay miss、只跑了部分 suite、或某個 suite 沒有任何回放紀錄時
   （最常見的原因是沒設 `TEST_DATABASE_URL`，e2e 整支跳過）拒絕刪除。
   重錄完、清除之前，`test/unit/sourceCheckSample.test.js` 會紅，因為它要求 extract.v2 的 cassette 恰好一份；清掉舊的那份就會轉綠。
+- **向量檔只增不減**：`record_embeddings.js` 寫檔是「併入」既有的 `embeddings.<model>.<dim>.json`（`--only-missing` 只送缺的；
+  沒加時全部重送，同一個鍵以新值為準）。原本整檔覆寫會洗掉 nlq／variant／e2e 另外補錄的向量，所以改成併入。
+  代價是改標前舊 embed_text 的向量（鍵是舊文字的 sha256）會一直留在檔裡：沒有任何 suite 會再讀到它們，
+  只是多佔空間，不影響任何數字。`cassettes:prune` 只清 cassette，**不清這些向量**；
+  要瘦身得另外處理（例如整檔重錄後手動補回 nlq／variant／e2e 的向量），目前不值得。
 
 怎麼知道「讀了哪些」：兩支工具以 `node --require eval/lib/cassetteProbe.js` 啟動各 suite 的**既有入口**。
 探針包住 `services/llm/fake.js`（回放）與 `services/llm/fixture.js`（向量）的查表點，記下每一次命中與 miss，行為一個字都不改。

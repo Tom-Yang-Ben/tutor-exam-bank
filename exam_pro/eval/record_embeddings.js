@@ -14,9 +14,11 @@
 // 這是「CI 仍零 secrets，任何人 fork 都跑得出同一張表」這條性質的來源。
 //
 // 〔章節重整 CH-B〕寫檔改成「併入」既有的向量檔（鍵依字典序，與 services/llm/fixture.js 的
-// saveToFixture 同一個格式）：這個檔裡除了 60 題 fixture，還有 nlq 查詢句、variant 生成題、
-// e2e 樣卷題的向量（各自由 EMBED_MODE=record 的 suite 補錄）。原本整檔覆寫只留 60 題，
+// saveToFixture 同一個格式）：這個檔裡除了 fixture 的題（61 題），還有 nlq 查詢句、variant 生成題、
+// e2e 樣卷題的向量（各自由 EMBED_MODE=record 的 suite 補錄）。原本整檔覆寫只留 fixture 的題，
 // 照錯誤訊息「請執行 npm run eval:record」重錄一次就會把那些向量全部洗掉。
+// 代價：併入只增不減，改標前舊 embed_text 的向量會留在檔裡、沒有任何 suite 會再讀到（只是多佔空間，
+// 不影響任何數字）。npm run cassettes:prune 只管 cassette，不清這些向量；見 eval/README.md 第 3f 節。
 //
 // 三個拒絕執行的情況，都是為了不產出一份「永遠對不上的向量檔」：
 //   1. utils/embedText.js 還是 eval stub —— 鍵是 sha256(buildEmbedText(q))，
@@ -106,6 +108,16 @@ function embedTargets(questions, table) {
 }
 
 /**
+ * 這一輪要送出的 embed_text。純函式。
+ * @param {Array<{hash:string, text:string, ids:number[], present:boolean}>} targets embedTargets() 的結果
+ * @param {boolean} onlyMissing --only-missing：只送向量檔裡還沒有的（present=false）；否則全部重送
+ * @returns {Array<{hash:string, text:string, ids:number[], present:boolean}>} 保持原順序
+ */
+function selectTargets(targets, onlyMissing) {
+    return onlyMissing ? targets.filter(t => !t.present) : targets.slice();
+}
+
+/**
  * 把新錄的向量併進既有的表，鍵依字典序排好（與 services/llm/fixture.js 的 saveToFixture 同一個格式）。純函式。
  * @param {Record<string, number[]>} table
  * @param {Record<string, number[]>} fresh
@@ -139,7 +151,7 @@ async function main() {
 
     // 同一段 embed_text 只送一次（fixture 內若有完全相同的題幹，重複送等於白花額度）
     // --only-missing：只送向量檔裡還沒有的那幾段（章節改標後 embed_text 第一行變了的題）
-    const todo = args.onlyMissing ? targets.filter(t => !t.present) : targets;
+    const todo = selectTargets(targets, args.onlyMissing);
     const unique = new Map(todo.map(t => [t.hash, t.text]));
 
     console.log(`fixture：${fixture.questions.length} 題 → ${targets.length} 段相異 embed_text` +
@@ -191,4 +203,4 @@ if (require.main === module) {
     main().catch(err => { console.error(`\n❌ ${err.message}`); process.exit(1); });
 }
 
-module.exports = { main, round6, parseArgs, embedTargets, mergeTable, readTable };
+module.exports = { main, round6, parseArgs, embedTargets, selectTargets, mergeTable, readTable };

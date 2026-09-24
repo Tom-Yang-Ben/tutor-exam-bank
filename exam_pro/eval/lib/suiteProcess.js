@@ -9,8 +9,10 @@
 // 所以子行程的環境一律照 .github/workflows/ci.yml 的 integration job：
 //   LLM_MODE／EMBED_MODE／MODEL_EXTRACT／MODEL_VERIFY 取 ci.yml 的值，
 //   其餘會影響鍵或流程的變數（MODEL_*、FEATURE_*、.env 裡的其他設定）一律設成空字串——
-//   設成空字串而不是刪掉，是因為 workers/jobRunner.js 會 require('dotenv').config()，
+//   設成空字串而不是刪掉，是因為子行程裡有程式會 require('dotenv').config()（例如 eval/record_embeddings.js），
 //   dotenv 不覆寫「已存在」的變數，空字串才擋得住 .env 把值補回來。
+//   例外：讀取端用 `??` 取預設值的變數，空字串**不等於**「沒設」（`'' ?? 0.5` 是 `''`）。
+//   這幾個改設成 CI 實際生效的值（CI_EFFECTIVE_DEFAULTS），同樣擋得住 dotenv，行為又與 CI 相同。
 // 只放行少數「不影響鍵」而且必要的變數：TEST_DATABASE_URL（pg engine 與 e2e）、
 // EVAL_CASSETTE_DIR／EMBED_FIXTURE_DIR（測試會指到暫存目錄）、錄製時的 GEMINI_API_KEY 與速率限制。
 //
@@ -43,6 +45,16 @@ const PASS_THROUGH = Object.freeze([
 ]);
 /** 只在錄製時放行 */
 const RECORD_PASS_THROUGH = Object.freeze(['GEMINI_API_KEY', 'GEMINI_RPM', 'EMBED_RPM', 'EMBED_BATCH']);
+
+/**
+ * 〔章節重整 CH-B〕CI 沒設、而讀取端以 `??` 取預設值的變數 → CI 實際生效的值（＝讀取端在「沒設」時用的預設值）。
+ * 這些變數不能設成空字串：
+ *   JOB_COST_BUDGET_USD  eval/lib/pipelineDriver.js 的 resolveBudgetUsd 是 `?? 0.5`，空字串會變成預算 0，
+ *                        錄製時任何一次 fail 或暫時性錯誤都直接進 needs_review(budget_exceeded)、不重試，
+ *                        cassette 錄不齊，驗證那一步只會看到 replay miss。（workers/jobRunner.js 的預設同為 0.5。）
+ * test/unit/rerecordAll.test.js 會掃描程式碼：以 `??` 讀環境變數、預設值不是空字串的，都必須列在這裡。
+ */
+const CI_EFFECTIVE_DEFAULTS = Object.freeze({ JOB_COST_BUDGET_USD: '0.5' });
 
 /**
  * 從 .github/workflows/ci.yml 讀 integration job 的 MODEL_EXTRACT／MODEL_VERIFY。
@@ -101,11 +113,14 @@ function ciEnv(opts = {}) {
     // 其他已知會改變流程或鍵、而 CI 沒有設的變數
     for (const k of ['JIEBA_DICT_BIG', 'EMBED_MODEL', 'EMBED_DIM', 'EVAL_FORK_PR', 'GEMINI_API_KEY', 'DATABASE_URL',
         'CLASSIFY_MIN_CONF', 'KNN_VOTE_SIM', 'VARIANT_SIM_MIN', 'VARIANT_RETRIEVE_SIM_MIN', 'VARIANT_OFFTOPIC_SIM_MIN',
-        'DEDUP_DUP_THRESHOLD', 'DEDUP_VARIANT_THRESHOLD', 'JOB_PDF_CHUNK_PAGES', 'GEMINI_INLINE_MAX_BYTES']) {
+        'DEDUP_DUP_THRESHOLD', 'DEDUP_VARIANT_THRESHOLD', 'JOB_PDF_CHUNK_PAGES', 'GEMINI_INLINE_MAX_BYTES',
+        ...Object.keys(CI_EFFECTIVE_DEFAULTS)]) {
         shield.add(k);
     }
     for (const k of shield) {
-        if (!allow.has(k)) env[k] = '';
+        if (allow.has(k)) continue;
+        // 〔章節重整 CH-B〕`??` 讀取的變數設成 CI 生效的值；其餘設成空字串（讀取端以 || 或 parse 失敗退回預設，與沒設相同）
+        env[k] = Object.prototype.hasOwnProperty.call(CI_EFFECTIVE_DEFAULTS, k) ? CI_EFFECTIVE_DEFAULTS[k] : '';
     }
     env.LLM_MODE = llmMode;
     env.EMBED_MODE = embedMode;
@@ -193,6 +208,6 @@ async function probeSuites({ suites, probeDir, echo = false, extraEnv = {}, onSt
 }
 
 module.exports = {
-    EVAL_SUITES, ALL_SUITES, PASS_THROUGH, RECORD_PASS_THROUGH, FALLBACK_CI_MODELS, APP_DIR, PROBE_PATH,
+    EVAL_SUITES, ALL_SUITES, PASS_THROUGH, RECORD_PASS_THROUGH, FALLBACK_CI_MODELS, CI_EFFECTIVE_DEFAULTS, APP_DIR, PROBE_PATH,
     readCiModels, dotenvKeys, ciEnv, suiteArgs, runNode, probeSuites
 };

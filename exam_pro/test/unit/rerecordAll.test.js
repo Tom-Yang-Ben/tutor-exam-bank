@@ -111,6 +111,55 @@ describe('ciEnv：子行程一律照 CI 的設定', () => {
         assert.equal(env.FEATURE_SIMILAR, 'true');
     });
 
+    test('〔章節重整 CH-B〕.env 照 .env.example 填好時，子行程裡 pipeline 的預算仍與 CI（變數沒設）相同', () => {
+        const { resolveBudgetUsd } = require('../../eval/lib/pipelineDriver');
+        const exampleFile = path.join(sp.APP_DIR, '.env.example');
+        const keys = sp.dotenvKeys(exampleFile);
+        assert.ok(keys.includes('JOB_COST_BUDGET_USD'), '.env.example 應該有 JOB_COST_BUDGET_USD（前提不成立時這一則要重寫）');
+        // rerecord_all.js 開頭會 dotenv.config() 把 .env 載進自己的 process.env，所以 base 也帶著這些值
+        const example = require('dotenv').parse(fs.readFileSync(exampleFile));
+        const ci = resolveBudgetUsd(undefined, {});
+        assert.equal(ci, 0.5, 'CI 沒設 JOB_COST_BUDGET_USD，pipelineDriver 退回 0.5');
+        for (const [llmMode, embedMode] of [['replay', 'fixture'], ['record', 'fixture'], ['record', 'record']]) {
+            const env = sp.ciEnv({ base: { ...base, ...example }, models: ciModels, envFileKeys: keys, llmMode, embedMode });
+            assert.equal(resolveBudgetUsd(undefined, env), ci, `${llmMode}/${embedMode}：子行程的預算必須與 CI 相同`);
+            assert.notEqual(env.JOB_COST_BUDGET_USD, '', '設成空字串會讓 `??` 讀到 0');
+        }
+        // 對照組：照舊設成空字串時預算是 0——這就是要擋的情況
+        assert.equal(resolveBudgetUsd(undefined, { JOB_COST_BUDGET_USD: '' }), 0);
+        // 不在 .env、只在 Owner 的 shell 設了別的值：同樣照 CI
+        const shellOnly = sp.ciEnv({ base: { ...base, JOB_COST_BUDGET_USD: '0.02' }, models: ciModels, envFileKeys: [] });
+        assert.equal(resolveBudgetUsd(undefined, shellOnly), ci);
+    });
+
+    test('〔章節重整 CH-B〕程式裡以 `??` 讀環境變數、預設值不是空字串的，全都登錄在 CI_EFFECTIVE_DEFAULTS', () => {
+        // `'' ?? x` 是 `''`：ciEnv 若把這種變數設成空字串，子行程的行為就與 CI（變數沒設）不同。
+        // 新增這種讀法時要一併登錄；`?? ''` 與 `||` 的讀法不受影響，不必登錄。
+        const DIRS = ['agents', 'config', 'controllers', 'eval', 'middleware', 'pipeline', 'queries', 'routes', 'services', 'utils', 'workers'];
+        const SKIP = new Set(['node_modules', 'cassettes', 'reports', 'private', 'fixtures', 'golden']);
+        const files = fs.readdirSync(sp.APP_DIR).filter(f => f.endsWith('.js')).map(f => path.join(sp.APP_DIR, f));
+        const walk = (dir) => {
+            for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+                if (ent.isDirectory()) { if (!SKIP.has(ent.name)) walk(path.join(dir, ent.name)); }
+                else if (ent.name.endsWith('.js')) files.push(path.join(dir, ent.name));
+            }
+        };
+        for (const d of DIRS) if (fs.existsSync(path.join(sp.APP_DIR, d))) walk(path.join(sp.APP_DIR, d));
+        const re = /(?:process\.env|\benv)\.([A-Z][A-Z0-9_]*)\s*\?\?(?!\s*(?:''|""))/g;
+        const found = new Map();
+        for (const f of files) {
+            for (const m of fs.readFileSync(f, 'utf8').matchAll(re)) {
+                found.set(m[1], path.relative(sp.APP_DIR, f).split(path.sep).join('/'));
+            }
+        }
+        assert.ok(found.has('JOB_COST_BUDGET_USD'), '掃描要找得到已知的那一處（證明掃描本身有效）');
+        const unlisted = [...found].filter(([k]) => !Object.prototype.hasOwnProperty.call(sp.CI_EFFECTIVE_DEFAULTS, k));
+        assert.deepEqual(unlisted, [], '這些變數以 `??` 讀取，請在 eval/lib/suiteProcess.js 的 CI_EFFECTIVE_DEFAULTS 登錄 CI 生效的值');
+        // 登錄的值就是讀取端「沒設」時的預設值
+        const { resolveBudgetUsd } = require('../../eval/lib/pipelineDriver');
+        assert.equal(Number(sp.CI_EFFECTIVE_DEFAULTS.JOB_COST_BUDGET_USD), resolveBudgetUsd(undefined, {}));
+    });
+
     test('readCiModels：repo 的 ci.yml 與 config/models.js 的預設一致；讀不到就退回預設', () => {
         const ci = sp.readCiModels();
         const saved = { e: process.env.MODEL_EXTRACT, v: process.env.MODEL_VERIFY };
