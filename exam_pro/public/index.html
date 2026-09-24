@@ -226,7 +226,10 @@
                 inlineMath: [['$', '$'], ['\\(', '\\)']],
                 displayMath: [['$$', '$$'], ['\\[', '\\]']],
                 packages: { '[+]': ['mhchem'] }
-            }
+            },
+            // 〔stage5 審查修正〕ui/safe 預設仍放行 http／https／file 的 \href：被 prompt injection 影響的題幹或家教回覆
+            // 可以在數學式裡夾帶可點擊的外部連結（家教的受限 Markdown 刻意不支援連結）。數學式本來就不需要連結，全部拿掉。
+            options: { safeOptions: { allow: { URLs: 'none' } } }
         };
     </script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>

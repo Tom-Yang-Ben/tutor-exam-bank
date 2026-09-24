@@ -264,7 +264,7 @@ sequenceDiagram
 | 日誌／指標 | `job_events` 逐步記成本、延遲、token；eval 報表含完整量測環境（模型 ID、cassette、golden） | 已實作 |
 | 安全 | x-api-key（timing-safe）、CORS 白名單、防 SSRF（isSafeImageUrl）、參數化 SQL、production 不外洩錯誤細節；API_KEY 注入前端，僅適用本機自用（NFR-001） | 已實作，能力邊界已文件化 |
 | 成本 | 模型路由（flash 拆題／pro 驗答）、閘門依成本排序、kNN 短路、單 job $0.50／每日 $5 上限（NFR-002）；階段 5：家教＋語音每日 $1（程序內）、標註遇管線預算觸頂即略過、`kc:backfill` 先印預估（NFR-007）〔修訂 2026-09-24〕 | 已實作；家教與語音的實際花費未實測（依價目表估算） |
-| 前端注入〔修訂 2026-09-24〕 | 家教回覆的受限 Markdown 先整段 escape 再轉換；伺服器文字一律 textContent。**已知風險**：MathJax 設定未載入 `ui/safe`，`$\href{javascript:…}{…}$` 有機會成為可點連結（全站既有、非階段 5 引入；受 LLM 影響的文字會進 `renderMath`） | 待處理（建議 `loader: { load: ['ui/safe'] }`，需瀏覽器實測；裁決 S5-35） |
+| 前端注入〔修訂 2026-09-24〕 | 家教回覆的受限 Markdown 先整段 escape 再轉換；伺服器文字一律 textContent。MathJax 載入 `ui/safe`（過濾 `\class`、`\style`、`\cssId`），並設 `safeOptions.allow.URLs = 'none'`：數學式裡不產生任何連結（受 LLM 影響的文字會進 `renderMath`） | 已處理，尚待瀏覽器實測（裁決 S5-35；URLs 為最終審查修正） |
 | 可測試性 | agent 純函式合約（ctx 注入）、cassette、五個 eval suite＋ratchet；replay miss 於 main 視為錯誤（NFR-003／004） | 已實作，CI 全綠 @ f8f6574〔修訂 2026-08-29〕 |
 
 ## 9. 風險與演進

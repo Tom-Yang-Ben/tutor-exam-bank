@@ -34,6 +34,8 @@ describe('public/ 的語法檢查（npm run check:html）', () => {
         assert.deepEqual(check.STAGE5_PAGES.find(p => p.id === 'remedial').sections, ['remedial', 'coverage']);
         assert.deepEqual(check.STAGE5_EXTRA_METAS.map(m => m.meta), ['feature-voice']);
         assert.deepEqual(check.MATHJAX_REQUIRED_LOADS, ['[tex]/mhchem', 'ui/safe']);
+        // 〔stage5 審查修正〕ui/safe 預設仍放行 http／https／file 連結，要明確關掉
+        assert.equal(check.MATHJAX_SAFE_URLS, "safeOptions: { allow: { URLs: 'none' } }");
         // checkContracts 讀的是真的 index.html：上面那一條「零問題」已經證明現況合格
     });
 

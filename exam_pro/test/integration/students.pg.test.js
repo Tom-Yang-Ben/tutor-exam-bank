@@ -497,7 +497,8 @@ function runSuite() {
             });
 
             test('試卷不存在或 :id 不是整數都回 404 { message: 找不到該試卷 }', async () => {
-                for (const bad of ['9999', 'abc', '0', '2.5']) {
+                // 〔stage5 審查修正〕3000000000 超過 int4 上限：以前是 PG out of range 的 500
+                for (const bad of ['9999', 'abc', '0', '2.5', '3000000000']) {
                     const res = await request(app).get(`/api/papers/${bad}`);
                     assert.equal(res.status, 404, `:id=${bad} 應回 404`);
                     assert.deepEqual(res.body, { message: '找不到該試卷' });

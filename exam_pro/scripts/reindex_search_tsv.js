@@ -115,8 +115,11 @@ async function reindexSearchTsv({ db, dryRun = false, limit = null, batchSize = 
         const client = await db.pool.connect();
         try {
             await client.query('BEGIN');
+            // 〔stage5 審查修正〕正式跑時鎖住這一批：讀題幹 → 算 token → 寫回之間，老師若剛好 PUT 改了題幹，
+            // 不鎖的話會用舊題幹的 token 蓋掉新的 search_tsv。PUT 會等這一批（一個小交易）結束再寫，
+            // 它自己會依新題幹重算 search_tsv。dry-run 不寫，不必鎖。
             const { rows } = await client.query(
-                `SELECT ${ROW_COLUMNS} FROM questions WHERE id = ANY($1::int[]) ORDER BY id`, [batchIds]);
+                `SELECT ${ROW_COLUMNS} FROM questions WHERE id = ANY($1::int[]) ORDER BY id${dryRun ? '' : ' FOR UPDATE'}`, [batchIds]);
             for (const row of rows) {
                 const { chapterTokens, keywordTokens, stemTokens } = buildTsvTokens(row);
                 const params = [row.id, chapterTokens, keywordTokens, stemTokens];

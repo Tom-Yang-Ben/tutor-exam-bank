@@ -48,9 +48,13 @@ const STUDENT_NOT_FOUND = '找不到該學生';
 function parseId(raw) {
     const s = String(raw ?? '').trim();
     const n = Number(s);
-    if (!Number.isInteger(n) || n < 1 || String(n) !== s) return null;
+    // 〔stage5 審查修正〕超過 int4 上限一律當不存在：交給 PG 會是 out of range 的 500
+    if (!Number.isInteger(n) || n < 1 || n > INT4_MAX || String(n) !== s) return null;
     return n;
 }
+
+/** PostgreSQL INT（int4）的上限；students／exam_papers／questions 的 id 都是 INT */
+const INT4_MAX = 2147483647;
 
 /**
  * `graded < WEAKNESS_MIN_N` 的門檻。每次請求即時讀，不在 require 當下固定住

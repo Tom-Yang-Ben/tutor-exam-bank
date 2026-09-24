@@ -126,7 +126,7 @@ view-assistant（:588） ─ #assistant 空錨點（:589）
 | SSOT | `exam_pro/public/index.html`（無 Figma 稿，程式碼即設計權威） |
 | Design Tokens | 同檔 `:root` CSS 變數（--ink／--brand／--mint 等）＋Tailwind CDN |
 | 元件對照 | `createQuestionEditor`／`showToast`／`apiFetch` 等經 `window.ExamApp` 供各分頁 module 共用 |
-| 已知限制 | Tailwind 與 MathJax 走 CDN，離線環境無樣式與公式渲染；〔修訂 2026-09-24〕MathJax 設定明確載入 mhchem（`\ce{…}` 化學式），但未載入 `ui/safe`（裁決 S5-35）；階段 5 的掛鉤只以 miniDom 與 `check:html` 驗證 |
+| 已知限制 | Tailwind 與 MathJax 走 CDN，離線環境無樣式與公式渲染；〔修訂 2026-09-24〕MathJax 設定明確載入 mhchem（`\ce{…}` 化學式），與 `ui/safe`，並關掉數學式裡的連結（裁決 S5-35，尚待瀏覽器實測）；階段 5 的掛鉤只以 miniDom 與 `check:html` 驗證 |
 
 ## 10. 追溯
 

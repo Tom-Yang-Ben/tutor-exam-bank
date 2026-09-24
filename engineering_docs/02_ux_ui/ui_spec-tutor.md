@@ -120,7 +120,7 @@
 | SSOT | `exam_pro/public/js/tutor.js`（骨架全由 JS 建立；`index.html` 僅空錨點與 `VIEW_FOR_ANCHOR.tutor` 一行掛鉤〔stage5 WS-E〕） |
 | 元件對照 | 經 `window.ExamApp` 橋接 `apiFetch`／`showToast`／`renderMath` |
 | 測試 | `test/unit/tutorUi.test.js`（renderMarkdown 的 XSS 與巢狀佔位符、麥克風可用性、歧義替換；miniDom 實跑：旗標關閉不渲染、送出與回覆呈現、錄音→逐字稿→chip→按確認才送出、取消不送、確認失敗保留逐字稿） |
-| 已知限制 | 只在 miniDom＋假 MediaRecorder 驗證，**未在真瀏覽器錄過音**；Gemini 是否接受 Chrome 錄的 audio/webm 未實機驗證（官方清單有列，退路是前端轉 16 kHz WAV）；對話不存 DB、重整即歸零；題目附圖不送給家教（prompt 提醒看不到圖）；MathJax 未載入 `ui/safe`，受 LLM 影響的數學式理論上可產生 `javascript:` 連結（全站既有風險，裁決 S5-35）；`docs/tutor.md` 操作說明寫「記得最近 8 輪對話」，實際是 8 則訊息（約 4 次問答） |
+| 已知限制 | 只在 miniDom＋假 MediaRecorder 驗證，**未在真瀏覽器錄過音**；Gemini 是否接受 Chrome 錄的 audio/webm 未實機驗證（官方清單有列，退路是前端轉 16 kHz WAV）；對話不存 DB、重整即歸零；題目附圖不送給家教（prompt 提醒看不到圖）；MathJax 已載入 `ui/safe` 並關掉數學式裡的連結（裁決 S5-35），尚待瀏覽器實測；`docs/tutor.md` 操作說明寫「記得最近 8 輪對話」，實際是 8 則訊息（約 4 次問答） |
 
 ## 10. 追溯
 

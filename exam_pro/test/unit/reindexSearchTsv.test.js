@@ -6,7 +6,7 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { parseArgs, lexemesOf, TSV_EXPR } = require('../../scripts/reindex_search_tsv');
+const { parseArgs, lexemesOf, TSV_EXPR, reindexSearchTsv } = require('../../scripts/reindex_search_tsv');
 
 describe('scripts/reindex_search_tsv.js', () => {
     test('參數：預設值、四個旗標；未知參數與不合法的 --limit 丟錯', () => {
@@ -31,5 +31,27 @@ describe('scripts/reindex_search_tsv.js', () => {
         assert.match(flat, /array_to_string\(\$2::text\[\], ' '\)\), 'A'\)/);
         assert.match(flat, /array_to_string\(\$3::text\[\], ' '\)\), 'A'\)/);
         assert.match(flat, /array_to_string\(\$4::text\[\], ' '\)\), 'B'\)/);
+    });
+
+    // 〔stage5 審查修正〕與老師同時編輯的競態
+    test('正式跑時每批 SELECT … FOR UPDATE 鎖列（讀題幹到寫回之間不讓 PUT 插進來）；dry-run 不鎖', async () => {
+        for (const dryRun of [false, true]) {
+            const sqls = [];
+            const client = {
+                async query(text) {
+                    sqls.push(text);
+                    if (/FROM questions WHERE id = ANY/.test(text)) return { rows: [] };
+                    return { rows: [] };
+                },
+                release() { }
+            };
+            const db = {
+                async query() { return { rows: [{ id: 1 }] }; },
+                pool: { async connect() { return client; } }
+            };
+            await reindexSearchTsv({ db, dryRun });
+            const select = sqls.find(t => /FROM questions WHERE id = ANY/.test(t));
+            assert.equal(/FOR UPDATE/.test(select), !dryRun, `dryRun=${dryRun}：${select}`);
+        }
     });
 });

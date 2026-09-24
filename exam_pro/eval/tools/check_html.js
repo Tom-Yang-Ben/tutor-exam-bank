@@ -178,6 +178,8 @@ const STAGE5_EXTRA_METAS = [
 //   ui/safe       過濾 \href{javascript:…}、\class、\style、\cssId——題幹來自上傳的 PDF、家教回覆來自模型，
 //                 全站的 renderMath 都會吃到（docs/tutor.md 第 5、8 節）。少了它沒有任何語法錯誤，只是防線悄悄消失。
 const MATHJAX_REQUIRED_LOADS = ['[tex]/mhchem', 'ui/safe'];
+// 〔stage5 審查修正〕ui/safe 預設放行 http／https／file 連結；數學式裡一律不產生連結
+const MATHJAX_SAFE_URLS = "safeOptions: { allow: { URLs: 'none' } }";
 
 // 第 7.1 條凍結的 window.ExamApp 鍵：階段 2 的五個 + 階段 3 的五個。
 const BRIDGE_KEYS = [
@@ -276,6 +278,10 @@ function checkContracts() {
             }
         }
     }
+    const mjConfig = html.match(/window\.MathJax\s*=\s*\{[\s\S]*?\n\s*\};/);
+    if (!mjConfig || !mjConfig[0].includes(MATHJAX_SAFE_URLS)) {
+        problems.push(`public/index.html 的 window.MathJax 少了 options.${MATHJAX_SAFE_URLS}（數學式裡不得產生連結）`);
+    }
 
     // 導覽列的「學生」（第 7.2 條第 2 列）
     if (!html.includes('<a href="#students"')) {
@@ -306,5 +312,5 @@ if (require.main === module) main();
 
 module.exports = {
     checkAll, checkContracts, extractInlineScripts, stripHtmlComments, checkSyntax, PUBLIC_DIR,
-    STAGE3_PAGES, STAGE4_PAGES, STAGE5_PAGES, STAGE3_EXTRA_METAS, STAGE5_EXTRA_METAS, MATHJAX_REQUIRED_LOADS, BRIDGE_KEYS
+    STAGE3_PAGES, STAGE4_PAGES, STAGE5_PAGES, STAGE3_EXTRA_METAS, STAGE5_EXTRA_METAS, MATHJAX_REQUIRED_LOADS, MATHJAX_SAFE_URLS, BRIDGE_KEYS
 };

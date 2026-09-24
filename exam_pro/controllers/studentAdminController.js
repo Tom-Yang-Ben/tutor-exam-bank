@@ -23,6 +23,9 @@
 const { pool, query } = require('../config/db');
 const { PROFILE_FIELDS, parseProfile, profileOptions } = require('../config/studentProfile');
 
+/** 〔stage5 審查修正〕PostgreSQL INT（int4）上限：超過的 id 在這裡擋成 400，不讓 PG 回 out of range 的 500 */
+const INT4_MAX = 2147483647;
+
 const STUDENT_NOT_FOUND = '找不到該學生';
 /** students.name 沒有長度 DDL 限制，這裡給一個防呆上限（貼 UI 而不是貼資料庫）。 */
 const MAX_NAME_LEN = 50;
@@ -75,7 +78,7 @@ exports.createStudent = async (req, res, next) => {
 // 匯出名維持 renameStudent（routes/index.js 核心區那一行不動），另掛 updateStudent 別名。
 exports.renameStudent = async (req, res, next) => {
     const id = Number.parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ message: '學生 id 無效。' });
+    if (!Number.isInteger(id) || id < 1 || id > INT4_MAX) return res.status(400).json({ message: '學生 id 無效。' });
     const body = req.body && typeof req.body === 'object' ? req.body : {};
     const hasName = Object.prototype.hasOwnProperty.call(body, 'name');
     const name = hasName ? validName(body.name) : null;
@@ -111,7 +114,7 @@ exports.renameStudent = async (req, res, next) => {
 // 反著刪會撞 FK）。不可逆——UI 端要二次確認，這裡不再多問。
 exports.deleteStudent = async (req, res, next) => {
     const id = Number.parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ message: '學生 id 無效。' });
+    if (!Number.isInteger(id) || id < 1 || id > INT4_MAX) return res.status(400).json({ message: '學生 id 無效。' });
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -139,8 +142,8 @@ exports.deleteStudent = async (req, res, next) => {
 exports.mergeStudent = async (req, res, next) => {
     const from = Number.parseInt(req.params.id, 10);
     const into = Number.parseInt(req.body?.into_id, 10);
-    if (!Number.isInteger(from) || from < 1) return res.status(400).json({ message: '學生 id 無效。' });
-    if (!Number.isInteger(into) || into < 1) return res.status(400).json({ message: 'into_id 無效。' });
+    if (!Number.isInteger(from) || from < 1 || from > INT4_MAX) return res.status(400).json({ message: '學生 id 無效。' });
+    if (!Number.isInteger(into) || into < 1 || into > INT4_MAX) return res.status(400).json({ message: 'into_id 無效。' });
     if (from === into) return res.status(400).json({ message: '不能把學生併入自己。' });
     const client = await pool.connect();
     try {

@@ -193,6 +193,9 @@ function runSuite() {
             test('404：:id 不是正整數或學生不存在；400：subject／days 不合法', async () => {
                 assert.equal((await request(app).get('/api/students/abc/weakness/kc')).status, 404);
                 assert.equal((await request(app).get('/api/students/999/weakness/kc')).status, 404);
+                // 〔stage5 審查修正〕超過 int4 上限：404（以前是 PG out of range 的 500）
+                assert.equal((await request(app).get('/api/students/3000000000/weakness/kc')).status, 404);
+                assert.equal((await request(app).post('/api/students/3000000000/remedial-paper').send({ subject: '數學' })).status, 404);
                 const s = await addStudent();
                 const bad1 = await request(app).get(`/api/students/${s.id}/weakness/kc?subject=生物`);
                 assert.equal(bad1.status, 400);
@@ -476,6 +479,7 @@ function runSuite() {
             test('404：:id 不合法或學生不存在；400：ids 不合法', async () => {
                 assert.equal((await items('abc', '1')).status, 404);
                 assert.equal((await items(999, '1')).status, 404);
+                assert.equal((await items(3000000000, '1')).status, 404, '〔審查修正〕超過 int4 上限');
                 const s = await addStudent();
                 for (const bad of ['', 'x', '0', '1,,2', '2147483648', Array.from({ length: 51 }, (_, i) => i + 1).join(',')]) {
                     const res = await items(s.id, bad);
@@ -663,6 +667,7 @@ function runSuite() {
             test('400／404', async () => {
                 assert.equal((await request(app).get('/api/coverage?subject=生物')).status, 400);
                 assert.equal((await request(app).get('/api/coverage?student_id=abc')).status, 400);
+                assert.equal((await request(app).get('/api/coverage?student_id=3000000000')).status, 400, '〔審查修正〕超過 int4 上限');
                 assert.equal((await request(app).get('/api/coverage?student_id=999')).status, 404);
             });
 
