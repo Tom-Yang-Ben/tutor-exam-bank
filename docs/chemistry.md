@@ -100,7 +100,9 @@ Word 端：`utils/chemFormula.js` 的 `ceToLatex` 先把 `\ce{…}` 轉成等價
 - 會進既有 LLM 呼叫的文字一律讀 `LEGACY_*`：`agents/schemas` 的 `ENUM_SOURCES`、`chapterWhitelistText()`（沒指定科目時）、`services/nlqService.chapterWhitelistText()`。
 - `config/chapterExamples.js`：化學 44 章各一句自撰例句（10–80 字，化學式用 `$\ce{…}$`）。只進化學題的 classify prompt。
 - `config/chapterAliases.js`：化學 44 章各 3–6 個別名（莫耳、平衡常數、Ksp、pH、勒沙特列、赫斯、氧化數、電解、酯化…），通過第 6.2 條三條硬規則。為了不改變數學／物理查詢的解析，**不收**會與數理別名互為子字串的詞（「標準還原電位」含「電位」、「電子排列」含「排列」、「碰撞學說」含「碰撞」），也不收「平衡」「反應」「電荷」這類泛詞。
-- `utils/tokenize.js`：自訂詞典補化學名詞；化學章節名經既有的 `expandChapterWords` 自動進詞典。**對 eval fixture 全文、golden 查詢與分詞測試字串（353 段）重切，逐字相同**，既有題目的 `search_tsv` 不必重建。
+- `utils/tokenize.js`：自訂詞典補化學名詞（`CHEMISTRY_TERMS`；原本的數理詞表改名 `MATH_PHYSICS_TERMS`、內容一字未動，合併後的詞典與先前相同）；化學章節名經既有的 `expandChapterWords` 自動進詞典。
+- **併入後既有題目的 `search_tsv` 必須重建**（`npm run search:reindex`，見下方）。`search_tsv` 是寫入當下切好存進 DB 的，查詢端每次用當下的詞典切；新詞會改變部分既有數理題幹的切法，例如「質量數為 238」由「質量／數為」變成「質量數」，「理想氣體」「週期表」「反應速率」由兩個詞變成一個詞（後三個同時來自化學章節名，只刪詞典項目也擋不住）。不重建的話，新的查詢「質量數」對不上舊題，hybrid 的關鍵字側就查不到這些題。eval fixture 語料、golden 查詢與分詞測試字串（353 段）剛好沒有這些詞，重切逐字相同，所以 CI 看不出來——先前本節寫「不必重建」是只對 fixture 驗證的錯誤結論，已更正。
+- `scripts/reindex_search_tsv.js`（`npm run search:reindex -- [--dry-run] [--limit N] [--test]`）：以目前的詞典重算**全部**題目（含已封存）的 `search_tsv`，只寫回有變的題、每批一個交易，印出會變／已寫回的題數與前 5 題的詞位差異。**不呼叫 LLM、不需金鑰、不動 embedding**（`backfill_embeddings.js` 只在 `embed_hash` 變了才重寫 `search_tsv`，分詞改了 `embed_hash` 不會變，而且它會打 embedding API）。token 由 `embedService.buildTsvTokens()` 產生；SQL 與題目 API 寫入端（POST 的 INSERT、PUT 的 `SEARCH_TSV_ASSIGN`）逐字等價，由 `test/integration/searchReindex.pg.test.js` 釘住。之後只要再改詞典或章節名，都要再跑一次。
 
 ### 4.4 驗證「數學／物理一個字都沒動」的方法
 
@@ -113,11 +115,14 @@ Word 端：`utils/chemFormula.js` 的 `ceToLatex` 先把 `\ce{…}` 轉成等價
 ### 5.1 單位（修「5 cm 對 5 m 判 agree」）
 
 - **只在兩邊都有「認得的」單位時介入**：因次不同 → `disagree`；因次相同 → 換算到 SI 再比（0.5 m 對 50 cm、0.25 M 對 0.25 mol/L、27 °C 對 300.15 K 都是 agree）。
+- 溫度：℃ 對 K 時，高中慣用的 0 ℃ = 273 K 與精確值 273.15 **兩種都認**（`utils/units.js` 的 `conversionVariants`）：25 ℃ 對 298 K、27 ℃ 對 300 K 都是 agree，25 ℃ 對 299 K 仍是 disagree。兩邊同是 ℃ 或同是 K 時沒有位移，照原本的數值容差（25 ℃ 對 25.15 ℃ 是 disagree）。
+- 度的符號寫在單位巨集前面（`27^{\circ}\mathrm{C}`、`27\,^\circ\text{C}`）讀成攝氏；先前只取 `\mathrm{C}`，會讀成庫侖、對上「27 °C」判 disagree。
+- 答案後面單一個大寫字母、緊接中文（「$2$ A 點」「C 處」「N 極」）是點名，不讀成單位（安培、庫侖、牛頓）；後面是標點或結尾（「$2$ A。」）才當單位。讀不到單位時照原規則只比數值。
 - 任何一邊沒有單位、或單位不在 `utils/units.js` 的表裡（「位數」「個」「度」）→ 照原規則只比數值。`eval/golden/answer.json` 的 250 個既有案例結果全部不變。
 - claimed 的單位常寫在 `$…$` 外面（`…＝ 25$ m。`）：先看抽出來的答案本身，沒有再讀該段 `$…$` 後面緊接的文字（`locateFinalAnswer` 的 `end`；抽取規則 S2-12 一個字都沒改）。
 - claimed 整段就是「數值＋單位」（`5 cm`，沒有 `$` 也沒有等號）時，只有模型答案也帶認得的單位才把整段當答案；其餘維持原本的 uncertain。
 - 等價寫法：`\mathrm{cm}`、`\text{ cm}`、`cm`、`公分` 視為同一個；指數寫法 `m/s^2`、`m/s²`、`\mathrm{m/s^2}` 相同。
-- **text 例外**：`answer_form = text` 時單位衝突只回 `uncertain`（裁決 S2-26「text 永遠不回 disagree」凍結）。契約第 4.2 條第 4 點的「應判 disagree」由 number 與 expression 兩種 answer_form 達成。
+- **text 例外（待裁決）**：`answer_form = text` 時單位衝突只回 `uncertain`（裁決 S2-26「text 永遠不回 disagree」凍結）。契約第 4.2 條第 4 點的「不得判 agree」三種 answer_form 都做到；「應判 disagree」只有 number 與 expression 做到。兩條凍結規則在 text 上互相衝突，請整合階段記一條裁決（S5-n）決定是否維持，見第 12 節。
 
 ### 5.2 化學式與反應式
 
@@ -125,7 +130,7 @@ Word 端：`utils/chemFormula.js` 的 `ceToLatex` 先把 `\ce{…}` 轉成等價
 - 物種：正規化式與係數相同 → agree；元素組成相同但寫法不同（CH₃COOH 對 C₂H₄O₂）→ uncertain；否則 disagree。三種寫法（`\ce{H2SO4}`、`H_2SO_4`、`H₂SO₄`）正規化成同一個式子，電荷寫在前或後（`3+`／`+3`）都認。
 - 反應式：兩側「物種→係數」都相同 → agree（順序與物態不影響）；左右對調或整條乘一個倍數 → uncertain；否則 disagree。一邊反應式、一邊單一物種 → uncertain。
 - 任何一邊解析不出化學式 → 不介入，照原本的 answer_form 規則比。
-- 新案例：`exam_pro/eval/golden/answer_chem.json`（17 筆 × 5 = 85 個案例，單位 8 筆、化學式 9 筆），`test/unit/answerCompareChem.test.js` 硬斷言。
+- 新案例：`exam_pro/eval/golden/answer_chem.json`（18 筆 × 5 = 90 個案例，單位 9 筆、化學式 9 筆），`test/unit/answerCompareChem.test.js` 硬斷言。
 
 ## 6. 化學 eval（不在 CI 清單內）
 
@@ -149,7 +154,10 @@ npm run eval:classify-chem
 ## 7. NLQ（自然語言查題）
 
 - 規則路徑辨識化學章節本名與別名：「緩衝溶液的計算題，難度 3 以上」「Ksp 跟勒沙特列的題目」都在規則層抓到章節，`subject` 由章節反推為化學，**不呼叫 LLM**。
-- **LLM 輔路徑本階段不支援化學**：`nlq.v1` 的 prompt 與 schema 凍結為數學／物理兩科（既有 cassette 不失效）。規則沒抓到章節、但句子有化學線索（`utils/nlqHeuristics.js` 的 `CHEMISTRY_HINTS`：化學、化合物、反應式、莫耳、溶液、濃度、酸鹼、氧化、還原、沉澱、有機物、週期表）時，直接跳過 LLM、`subject` 設成化學、`parse_path = 'rules'`，讓檢索至少落在化學題裡。
+- **LLM 輔路徑本階段不支援化學**：`nlq.v1` 的 prompt 與 schema 凍結為數學／物理兩科（既有 cassette 不失效）。規則沒抓到章節時：
+  - 句子有化學線索（`utils/nlqHeuristics.js` 的 `CHEMISTRY_HINTS`：化學、化合物、反應式、莫耳、溶液、濃度、酸鹼、氧化、還原、沉澱、有機物、週期表）**而且沒有任何數理線索** → 跳過 LLM、`subject` 設成化學、`parse_path = 'rules'`，讓檢索落在化學題裡。
+  - 有數理線索就**照舊走 LLM 輔路徑**（這個分支加進來之前數學／物理句子的行為），`subject` 由 LLM 讀：點名科目（數學、物理、數甲、數乙、數A、數B）；含化學線索字的數理用語（化學能、核反應、衰減）；或階段 5 之前的數理自訂詞典 `MATH_PHYSICS_TERMS`（密度、速率、體積……；比對前先挖掉化學線索詞，「週期表」不因「週期」算物理）。例：「物理 濃度梯度造成的擴散」「數學的溶液混合濃度應用題」「藥物濃度衰減的應用題」「核反應式的題目」都走 LLM，不會被鎖進化學。
+  - 取捨：拿不準就走 LLM。代價是「溶液的密度怎麼算」這類混了數理名詞的化學句子會交給只懂數理的 LLM，查得比較散（LLM 回空章節時 `subject` 為 null，三科都查）；反過來把數理句子鎖進化學則會整批查錯，所以選前者。
 - `subject` 全空時的檢索改成三科各跑一次（原本兩科）。
 - 已知限制：「碰撞學說」會被物理別名「碰撞」吃掉、「原子結構」會對到物理的「原子結構與光譜」——要查化學的這兩章請打完整章名（「碰撞學說與催化」「原子結構與週期表」）或用其他別名（催化劑、活化能、週期表、原子序）。
 
@@ -178,18 +186,20 @@ npm run eval:classify-chem
    - 下標直接寫數字：`$\ce{H2SO4}$`；離子電荷用 `^{}`：`$\ce{Fe^{3+}}$`、`$\ce{SO4^{2-}}$`（**不要**寫 `Fe3+`，會變成 Fe₃⁺）。
    - 反應式：`$\ce{2H2 + O2 -> 2H2O}$`，可逆用 `<=>`，條件寫 `->[催化劑][加熱]`；氣體 ` ^`、沉澱 ` v`（前後空一格）；結晶水 `$\ce{CuSO4.5H2O}$`。
    - 單位用 `\mathrm`：`$0.10\ \mathrm{M}$`。網頁預覽與 Word 匯出都會排成正體。
-4. **查化學題**：題庫管理、組卷、弱點面板的科目下拉都有「化學」。自然語言查題請用章名或常用簡稱（莫耳、Ksp、pH、勒沙特列、赫斯定律、氧化數、電解、酯化…）。
-5. **驗答結果**：驗證模型的答案與拆題答案的單位不同（5 cm 對 5 m）或化學式不同，會停在複核頁標「答案不一致」；只是寫法不同（CH₃COOH 對 C₂H₄O₂）會標「比不出來」，請人工確認。
+4. **查化學題**：題庫管理、組卷、弱點面板的科目下拉都有「化學」。自然語言查題請用章名或常用簡稱（莫耳、Ksp、pH、勒沙特列、赫斯定律、氧化數、電解、酯化…）。句子裡寫了「物理」「數學」時，系統會照數理的方式解析。
+5. **驗答結果**：驗證模型的答案與拆題答案的單位不同（5 cm 對 5 m）或化學式不同，會停在複核頁標「答案不一致」；只是寫法不同（CH₃COOH 對 C₂H₄O₂）會標「比不出來」，請人工確認。攝氏換克耳文用 273 或 273.15 都算一致（25 ℃ 對 298 K 不會被標不一致）。
+6. **升級後跑一次關鍵字索引重建**（只要一次，之後改章節表或詞典時再跑）：在 `exam_pro` 資料夾執行 `npm run search:reindex -- --dry-run` 看會變幾題，確認後再執行 `npm run search:reindex`。不花錢、不呼叫 AI、可以中斷重跑。沒跑的話，部分舊的數理題（例如題幹有「質量數」「理想氣體」的）用關鍵字查會查不到。
 
 ## 11. 測試
 
 | 檔案 | 內容 |
 | :--- | :--- |
-| `test/unit/chemistryConfig.test.js` | 白名單三科、LEGACY_*、SUBJECT_GROUPS、buildSchema 卷別、promptParts、別名／例句／分詞、NLQ 規則路徑與不走 LLM、subject_group 解析、助教工具與題目驗證訊息 |
+| `test/unit/chemistryConfig.test.js` | 白名單三科、LEGACY_*、SUBJECT_GROUPS、buildSchema 卷別、promptParts、別名／例句／分詞、NLQ 規則路徑與不走 LLM、點名數理或帶數理名詞的句子照舊走 LLM、subject_group 解析、助教工具與題目驗證訊息 |
 | `test/unit/chemistryAgents.test.js` | 五個 agent 的化學路徑（agent 名、模板、SYSTEM、schema）、化學模板註冊字串、數學／物理請求不變、source_check 的箭頭 |
 | `test/unit/chemFormula.test.js` | mhchem 子集每一種記法、ceToComparable、化學答案解析 |
 | `test/unit/textFormatterChem.test.js` | 每一種記法打包成 .docx 後的 OMML、`\mathrm` 正體、parseLatexStrict 無事件、formulaLint 放行 |
-| `test/unit/answerCompareChem.test.js` | `answer_chem.json` 85 個案例、單位與化學式的介入邊界、`utils/units.js` |
+| `test/unit/answerCompareChem.test.js` | `answer_chem.json` 90 個案例、單位與化學式的介入邊界（含 ℃／K 的 273 慣例、`^{\circ}\mathrm{C}`、「A 點」不是安培）、`utils/units.js` |
+| `test/unit/reindexSearchTsv.test.js`、`test/integration/searchReindex.pg.test.js` | `search:reindex` 的參數；舊詞典切的 `search_tsv` 查不到新 token、dry-run 不寫、重算後查得到、重跑 0 題、已封存與 NULL 也補、`--limit`；與 POST／PUT `/api/questions` 寫入的值逐字相同 |
 | `test/unit/evalClassifyChem.test.js` | classify_chem golden 硬閘門、沒有 cassette 略過、假 cassette 完整回放 accuracy 1、不完整回放 n/a |
 | `test/integration/chemistry.pg.test.js` | `POST /api/jobs` 的 subject_group（400、預設、冪等鍵）、化學卷走完真的 agents 入庫、verify 的單位與化學式比對、題庫列表與手動新增、NLQ、組卷→批改→弱點、Word 匯出、化學變式 |
 | 既有測試的修改（〔stage5 WS-B〕註記） | 「化學被拒」改用「生物」（agentClassify、agentGenerateVariant、students.pg）並補正向斷言；agentExtract 的 subject enum 改對 LEGACY_SUBJECTS 並逐字釘死 `['數學','物理']`；nlqAliases 的 66 章改為「66＋44」且 66 章逐章釘住；nlqService 的「兩科各跑一次」改為「每科各跑一次」；tokenize 的「每章切得出長詞」對「醇、酚、醚」改為「三個單字各自成 token」 |
@@ -199,5 +209,7 @@ npm run eval:classify-chem
 - API：`POST /api/jobs` 的 `subject_group`、`GET /api/jobs/:id` 的 `subject_group`（api_spec、openapi 回填）。
 - 資料：`jobs.subject_group` 的寫入者包含 `variantService.createVariantJob`；冪等鍵改為 `(pdf_sha256, subject_group)`（db_design 的說明回填）。
 - 需求：FR 編號由整合階段分配；DEC-019 的業務驗收項目＝章節表定稿、`eval:classify-chem` 錄製與分數。
-- 預期衝突：`workers/jobRunner.js`（WS-A 在 save 寫詳解、WS-C 在 save 後掛鉤；WS-B 只動三個 `ctx.job` 與兩句 SELECT）、`public/js/students.js`（WS-B 只換了科目下拉那四行）、`index.html` inline script、`package.json` scripts（WS-B 新增 `eval:classify-chem`）。
+- 預期衝突：`workers/jobRunner.js`（WS-A 在 save 寫詳解、WS-C 在 save 後掛鉤；WS-B 只動三個 `ctx.job` 與兩句 SELECT）、`public/js/students.js`（WS-B 只換了科目下拉那四行）、`index.html` inline script、`package.json` scripts（WS-B 新增 `eval:classify-chem`、`search:reindex`）、`controllers/questionController.js` 與 `utils/questionValidation.js`（不在 WS-B 的可擴充清單內；WS-B 各只改一行錯誤訊息，改成由 `subjectChoiceText()` 產生科目清單，無功能改動——請在 WS-A 之後合併、保留 WS-A 的版本再套這一行）。
+- **合併後的 Owner 動作**：在正式題庫跑一次 `npm run search:reindex`（先 `--dry-run`），理由見第 4.3 節。沒跑不會壞資料，但部分舊的數理題關鍵字檢索會查不到；共用文件（HANDOFF、README 的升級步驟）回填時請一併寫入。
+- **待裁決（建議記為 S5-n）**：`answer_form = text` 的單位衝突回 `uncertain`（依 S2-26），與契約第 4.2 條第 4 點「應判 disagree」不一致（見第 5.1 節）。WS-B 維持 S2-26，因為改成 disagree 會打破「text 永遠不回 disagree」的凍結取捨；若裁決要改，只動 `compareText` 的一行，`answer_chem.json` 的 unit-007 期望要一起改。
 - 化學跨 WS 行為（化學題標知識點、補救卷、AI 家教）由整合階段補測（第 7 條）。

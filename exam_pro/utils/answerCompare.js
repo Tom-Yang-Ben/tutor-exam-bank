@@ -19,7 +19,7 @@
 
 const { normalizeStem } = require('./normalizeStem');
 // 〔stage5 WS-B〕單位與化學式（docs/interfaces-stage5.md 第 4.2 條第 4 點）
-const { parseUnit, sameDims, toBase, unitTextOfAnswer, trailingUnitText } = require('./units');
+const { parseUnit, sameDims, toBase, conversionVariants, unitTextOfAnswer, trailingUnitText } = require('./units');
 const { findCe, parseChemAnswer } = require('./chemFormula');
 
 const OPTION_LETTERS = 'ABCDEFGH';
@@ -347,10 +347,14 @@ function unitPair(claimedUnit, modelUnit) {
     return claimedUnit && modelUnit ? { claimed: claimedUnit, model: modelUnit } : null;
 }
 
-/** 單位介入時的數值比對：因次不同 → disagree；相同 → 換算後比 */
+/**
+ * 單位介入時的數值比對：因次不同 → disagree；相同 → 換算後比。
+ * ℃ 對 K 另外試高中慣用的 0 ℃ = 273 K（utils/units.js 的 conversionVariants）：25 ℃ 對 298 K 是 agree。
+ */
 function compareWithUnits(na, nb, units) {
     if (!sameDims(units.claimed, units.model)) return 'disagree';
-    return nearlyEqual(toBase(na, units.claimed), toBase(nb, units.model)) ? 'agree' : 'disagree';
+    return conversionVariants(units.claimed, units.model)
+        .some(([uc, um]) => nearlyEqual(toBase(na, uc), toBase(nb, um))) ? 'agree' : 'disagree';
 }
 
 // ───────────────────────── 各 answer_form 的比法 ─────────────────────────
@@ -372,20 +376,23 @@ function compareNumber(claimedAnswer, modelAnswer, units = null) {
     if (a.list.length !== b.list.length) return 'uncertain';
 
     // 〔stage5 WS-B〕兩邊都有認得的單位：因次不同直接 disagree，相同就換算到 SI 再比
-    let la = a.list;
-    let lb = b.list;
-    if (units) {
-        if (!sameDims(units.claimed, units.model)) return 'disagree';
-        la = la.map(v => toBase(v, units.claimed));
-        lb = lb.map(v => toBase(v, units.model));
-    }
+    //（℃ 對 K 另外試高中慣用的 273，見 utils/units.js 的 conversionVariants）。沒有單位時照原規則比一次。
+    if (units && !sameDims(units.claimed, units.model)) return 'disagree';
+    const variants = units ? conversionVariants(units.claimed, units.model) : [[null, null]];
+    const same = variants.some(([uc, um]) => sameNumberLists(
+        uc ? a.list.map(v => toBase(v, uc)) : a.list,
+        um ? b.list.map(v => toBase(v, um)) : b.list,
+        a.plusMinus));
+    return same ? 'agree' : 'disagree';
+}
 
+/** 兩串數值排序後逐一相等（± 時比絕對值）。compareNumber 原本的比法，抽出來給單位的多種換算共用。 */
+function sameNumberLists(la, lb, plusMinus) {
     const sa = [...la].sort((x, y) => x - y);
     const sb = [...lb].sort((x, y) => x - y);
-    const same = a.plusMinus
+    return plusMinus
         ? sa.every((v, i) => nearlyEqual(Math.abs(v), Math.abs(sb[i])))
         : sa.every((v, i) => nearlyEqual(v, sb[i]));
-    return same ? 'agree' : 'disagree';
 }
 
 /**

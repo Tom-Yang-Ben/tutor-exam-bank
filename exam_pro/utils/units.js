@@ -174,6 +174,27 @@ function toBase(value, unit) {
     return value * unit.factor + unit.offset;
 }
 
+/** 高中課本慣用的 0 ℃ = 273 K（UNIT_TABLE 的 ℃ 用精確值 273.15） */
+const SCHOOL_CELSIUS_OFFSET = 273;
+
+/**
+ * 兩個同因次單位「可以怎麼換算」的候選組：通常只有 [a, b] 一組。
+ * 一邊帶溫度位移（℃）、另一邊沒有（K）時，另加「℃ 以 273 換算」的一組——高中數理化一律用 273，
+ * 25 ℃ 對 298 K、27 ℃ 對 300 K 都是對的答案，只認 273.15 會把它們判成不一致、丟進複核。
+ * 兩邊都是 ℃（或都是 K）時位移互相抵消，不另加：否則 25 ℃ 對 25.15 ℃ 會被當成一樣。
+ * @param {{offset:number}} a
+ * @param {{offset:number}} b
+ * @returns {Array<[object, object]>}
+ */
+function conversionVariants(a, b) {
+    const variants = [[a, b]];
+    if ((a.offset || 0) !== (b.offset || 0)) {
+        const school = (u) => (u.offset ? Object.assign({}, u, { offset: SCHOOL_CELSIUS_OFFSET }) : u);
+        variants.push([school(a), school(b)]);
+    }
+    return variants;
+}
+
 /** 數值前綴：正負號、整數／小數／分數、科學記號（e 或 ×10^n） */
 const NUM_PREFIX_RE = /^\s*[+\-−]?\s*(?:\\[dt]?frac\s*\{[^{}]*\}\s*\{[^{}]*\}|\d+(?:\.\d+)?(?:\s*\/\s*\d+(?:\.\d+)?)?)(?:[eE][+\-]?\d+)?(?:\s*(?:\\times|×|\*|\\cdot|·)\s*10\s*\^\s*(?:\{\s*[+\-−]?\d+\s*\}|[+\-−]?\d+))?/;
 
@@ -195,8 +216,11 @@ function unitTextOfAnswer(answer) {
     const macros = [...s.matchAll(/\\(?:mathrm|text|rm|mbox|operatorname)\s*\{([^{}]*)\}((?:\s*\^\s*(?:\{[^{}]*\}|\\circ|\d+))?)/g)];
     if (macros.length) {
         const last = macros[macros.length - 1];
-        if (!/\d/.test(s.slice(0, last.index))) return null;
-        return `${last[1]}${last[2] || ''}`;
+        const before = s.slice(0, last.index);
+        if (!/\d/.test(before)) return null;
+        // 「27^{\circ}\mathrm{C}」：度的符號寫在巨集前面，要一起帶走——只取 \mathrm{C} 會把攝氏讀成庫侖
+        const degree = /(?:\^\s*\{?\s*\\(?:circ|degree)\s*\}?|\\degree|°)\s*$/.test(before) ? '°' : '';
+        return `${degree}${last[1]}${last[2] || ''}`;
     }
     const m = NUM_PREFIX_RE.exec(s);
     if (!m) return null;
@@ -207,6 +231,8 @@ function unitTextOfAnswer(answer) {
 /**
  * 緊接在答案後面的單位原文（claimed「…＝ 25$ m。」的「 m」「 m/s$^2$」「 秒」）。
  * 只讀開頭：ASCII 單位讀到中文或標點為止；中文單位必須後面是標點、空白或結尾（「升高」不算「升」）。
+ * 單一個大寫字母後面緊接中文（「$2$ A 點」「C 處」「N 極」）是點名，不是單位 → null；
+ * 後面是標點或結尾（「$2$ A。」）才當單位。寧可漏讀單位（照原規則只比數值），不要憑空判 disagree。
  * @param {string} text
  * @returns {string|null}
  */
@@ -214,7 +240,10 @@ function trailingUnitText(text) {
     const t = String(text ?? '').replace(/^\s+/, '');
     if (!t) return null;
     const ascii = /^((?:\$?\^?\\?[A-Za-zΩμµ°℃Å][A-Za-z0-9Ωμµ°℃Å\/·\^\{\}\$\-]*)(?:\s*[·/]\s*[A-Za-z0-9Ωμµ°℃\^\{\}\$\-]+)*)(?![A-Za-z])/.exec(t);
-    if (ascii) return ascii[1];
+    if (ascii) {
+        if (/^[A-Z]$/.test(ascii[1]) && /^\s*\p{Script=Han}/u.test(t.slice(ascii[1].length))) return null;
+        return ascii[1];
+    }
     for (const u of CJK_UNITS) {
         if (t.startsWith(u) && (t.length === u.length || /^[\s，。、；;,.:：)）！!？?]/.test(t.slice(u.length)))) return u;
     }
@@ -222,6 +251,6 @@ function trailingUnitText(text) {
 }
 
 module.exports = {
-    UNIT_TABLE, DIMS,
-    normalizeUnitText, parseUnit, sameDims, toBase, unitTextOfAnswer, trailingUnitText
+    UNIT_TABLE, DIMS, SCHOOL_CELSIUS_OFFSET,
+    normalizeUnitText, parseUnit, sameDims, toBase, conversionVariants, unitTextOfAnswer, trailingUnitText
 };

@@ -1,7 +1,7 @@
 // utils/answerCompare.js 的單位與化學式比對（階段 5 WS-B；docs/interfaces-stage5.md 第 4.2 條第 4 點）
 //
 // 兩部分：
-//   1. eval/golden/answer_chem.json（17 筆 × 5 = 85 個案例）全部符合 expect——golden 是裁判；
+//   1. eval/golden/answer_chem.json（18 筆 × 5 = 90 個案例）全部符合 expect——golden 是裁判；
 //   2. 介入條件的邊界：數學題（沒有 \ce、沒有 subject）絕不走化學式比對；單位只在兩邊都認得時介入。
 // eval/golden/answer.json 的 250 個既有案例仍由 test/unit/answerGolden.test.js 硬斷言（結果不得改變）。
 // 執行：npm test
@@ -70,6 +70,32 @@ describe('單位（第 4.2 條第 4 點）', () => {
         assert.equal(cmp('5 cm', '5'), 'uncertain', '模型沒帶單位時維持原本的 uncertain');
     });
 
+    test('溫度：℃ 對 K 認高中慣用的 273，也認 273.15；同單位之間不經過位移', () => {
+        assert.equal(cmp('$25$ ℃', '298 K'), 'agree', '審查回報：25 ℃ 對 298 K 曾被判 disagree');
+        assert.equal(cmp('$27$ ℃', '300 K'), 'agree');
+        assert.equal(cmp('$27$ ℃', '300.15 K'), 'agree');
+        assert.equal(cmp('$T = 300$ K', '27 °C'), 'agree');
+        assert.equal(cmp('$25$ ℃', '299 K'), 'disagree');
+        assert.equal(cmp('$25$ ℃', '25.15 °C'), 'disagree', '兩邊都是 ℃：位移抵消，不能拿 0.15 當容差');
+        assert.equal(cmp('$T = 298$ K', '298.15 K'), 'disagree', '兩邊都是 K：照原本的數值容差');
+        assert.equal(cmp('$25$ ℃', '298 K', 'expression'), 'agree');
+        assert.equal(cmp('$25$ ℃', '298 K', 'text'), 'agree');
+    });
+
+    test('度的符號寫在 \\mathrm 前面（^{\\circ}\\mathrm{C}）是攝氏，不是庫侖', () => {
+        assert.equal(cmp('$T = 27^{\\circ}\\mathrm{C}$', '27 °C'), 'agree');
+        assert.equal(cmp('$T = 27^{\\circ}\\mathrm{C}$', '300 K'), 'agree');
+        assert.equal(cmp('$T = 27\\,^\\circ\\mathrm{C}$', '28 °C'), 'disagree');
+        assert.equal(cmp('$q = 2\\,\\mathrm{C}$', '2 C'), 'agree', '沒有度的符號時 C 仍是庫侖');
+    });
+
+    test('單一個大寫字母後面接中文是點名、不是單位（「$2$ A 點」不是 2 安培）', () => {
+        assert.equal(cmp('$2$ A 點', '2 m'), 'agree', '讀不到 claimed 的單位：照原規則只比數值');
+        assert.equal(cmp('位於 $x = 3$ C 處', '3 m'), 'agree');
+        assert.equal(cmp('$2$ A。', '2 m'), 'disagree', '後面是標點時仍是安培');
+        assert.equal(cmp('$2$ A。', '2 A'), 'agree');
+    });
+
     test('locateFinalAnswer 與 extractFinalAnswer 抽出同一個答案，end 指向該段 $ 之後', () => {
         const s = '由 $F = ma$，$a = 5$ m/s$^2$，方向向東。';
         const loc = locateFinalAnswer(s);
@@ -107,6 +133,34 @@ describe('utils/units.js', () => {
         assert.equal(units.trailingUnitText(' 秒。'), '秒');
         assert.equal(units.trailingUnitText(' 升高溫度'), null);
         assert.equal(units.trailingUnitText('，故選 A'), null);
+    });
+    test('trailingUnitText：單一大寫字母後面接中文 → null；小寫與多字母單位照讀', () => {
+        for (const s of [' A 點', ' A點', ' C 處', ' N 極']) assert.equal(units.trailingUnitText(s), null, s);
+        assert.equal(units.trailingUnitText(' A。'), 'A');
+        assert.equal(units.trailingUnitText(' A'), 'A');
+        assert.equal(units.trailingUnitText(' A，方向向右'), 'A');
+        assert.equal(units.trailingUnitText(' m 處'), 'm');
+        assert.equal(units.trailingUnitText(' mA 的電流'), 'mA');
+    });
+    test('conversionVariants：只有 ℃ 對 K 才多一組「273」的換算', () => {
+        const C = units.parseUnit('°C');
+        const K = units.parseUnit('K');
+        const m = units.parseUnit('m');
+        assert.equal(units.conversionVariants(m, units.parseUnit('cm')).length, 1);
+        assert.equal(units.conversionVariants(C, C).length, 1);
+        assert.equal(units.conversionVariants(K, K).length, 1);
+        const v = units.conversionVariants(C, K);
+        assert.equal(v.length, 2);
+        assert.equal(units.toBase(25, v[0][0]), 298.15);
+        assert.equal(units.toBase(25, v[1][0]), 25 + units.SCHOOL_CELSIUS_OFFSET);
+        assert.equal(units.SCHOOL_CELSIUS_OFFSET, 273);
+        assert.equal(C.offset, 273.15, '原本的單位物件不被改動');
+    });
+    test('unitTextOfAnswer：度的符號在單位巨集前面時一起帶走', () => {
+        assert.equal(units.unitTextOfAnswer('$27^{\\circ}\\mathrm{C}$'), '°C');
+        assert.equal(units.unitTextOfAnswer('27\\,^\\circ\\text{C}'), '°C');
+        assert.equal(units.unitTextOfAnswer('$2\\,\\mathrm{C}$'), 'C');
+        assert.deepEqual(units.parseUnit(units.unitTextOfAnswer('$27^{\\circ}\\mathrm{C}$')).dims, { K: 1 });
     });
 });
 

@@ -188,7 +188,31 @@
         "wrong": "disagree"
       },
       "extraction_hazard": false,
-      "note": "攝氏換算克耳文要加 273.15（位移，不是倍率）。",
+      "note": "攝氏換算克耳文要加 273.15（位移，不是倍率）。高中慣用的 273 也認，見 unit-009。",
+      "needs_human_confirm": false
+    },
+    {
+      "id": "unit-009",
+      "from": null,
+      "question_type": "計算",
+      "answer_form": "number",
+      "subject": "化學",
+      "claimed": "$T = 25 + 273 = 298$ K。",
+      "equivalents": [
+        "25 °C",
+        "$25\\ ^{\\circ}\\mathrm{C}$",
+        "$298\\ \\mathrm{K}$"
+      ],
+      "wrong": [
+        "26 °C",
+        "299 K"
+      ],
+      "expect": {
+        "equivalent": "agree",
+        "wrong": "disagree"
+      },
+      "extraction_hazard": false,
+      "note": "高中數理化以 0 ℃ = 273 K 換算：25 ℃ 對 298 K 是對的答案。℃ 對 K 時 273 與 273.15 兩種都認（utils/units.js 的 conversionVariants）；同是 ℃ 或同是 K 時沒有位移，照原本的數值容差比。第二種等價寫法是度的符號寫在 \\mathrm 前面（^{\\circ}\\mathrm{C}），不得讀成庫侖。",
       "needs_human_confirm": false
     },
     {

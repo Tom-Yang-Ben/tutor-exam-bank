@@ -17,8 +17,10 @@ const { buildSchema, ENUM_SOURCES, GROUP_ENUM_SOURCES } = require('../../agents/
 const { chapterWhitelistText, resolveSubjectGroup, CHEM_LATEX_RULES } = require('../../agents/promptParts');
 const aliases = require('../../config/chapterAliases');
 const { getChapterExample } = require('../../config/chapterExamples');
-const { tokenize } = require('../../utils/tokenize');
-const { parseQuery, mentionsChemistry, CHEMISTRY_HINTS } = require('../../utils/nlqHeuristics');
+const { tokenize, MATH_PHYSICS_TERMS } = require('../../utils/tokenize');
+const {
+    parseQuery, mentionsChemistry, mentionsMathPhysics, isChemistryOnlyQuery, CHEMISTRY_HINTS
+} = require('../../utils/nlqHeuristics');
 const nlq = require('../../services/nlqService');
 const { TOOLS } = require('../../services/assistantService');
 const { validateQuestionFields } = require('../../utils/questionValidation');
@@ -220,6 +222,62 @@ describe('NLQ：化學走規則路徑（第 4.2 條第 2 點）', () => {
         const r = await nlq.parseOnly({ query: '斜面上物體受力平衡的題目', llm, noCache: true });
         assert.equal(called, 1);
         assert.equal(r.parse_path, 'llm');
+    });
+
+    // 審查回報：句子有化學線索字、但老師點名物理／數學（或用的是數理名詞）時，曾被鎖成化學、不走 LLM。
+    // 這些句子必須維持化學分支加進來之前的行為：走 LLM 輔路徑，subject 由 LLM 決定（這裡的假 LLM 不給 → null）。
+    test('點名數學／物理、或帶數理名詞的句子：化學線索字不能把它鎖成化學，照舊走 LLM', async () => {
+        const queries = [
+            '物理 濃度梯度造成的擴散',        // 點名物理
+            '數學的溶液混合濃度應用題',        // 點名數學
+            '數甲 藥物濃度的題目',             // 考科簡稱
+            '藥物濃度衰減的應用題',            // 數學指數衰減（MATH_PHYSICS_COMPOUNDS）
+            '核反應式的題目',                  // 物理核反應（「反應式」是化學線索字）
+            '化學能轉換成電能',                // 物理能量形式（「化學」是化學線索字）
+            '溶液的密度怎麼算'                 // 數理名詞「密度」（MATH_PHYSICS_TERMS）
+        ];
+        for (const query of queries) {
+            let called = 0;
+            const llm = { generateJson: async () => { called += 1; return { data: { chapters: [], question_types: [], semantic_text: 'x', keywords: [] } }; } };
+            const r = await nlq.parseOnly({ query, llm, noCache: true });
+            assert.equal(called, 1, `${query}：應該走 LLM 輔路徑`);
+            assert.equal(r.parse_path, 'llm', query);
+            assert.equal(r.filters.subject, null, `${query}：subject 不得被鎖成化學`);
+        }
+    });
+
+    test('LLM 回了科目就用 LLM 的（點名物理的句子，subject 由 LLM 讀出物理）', async () => {
+        const llm = { generateJson: async () => ({ data: { subject: '物理', chapters: [], question_types: [], semantic_text: '濃度梯度 擴散', keywords: [] } }) };
+        const r = await nlq.parseOnly({ query: '物理 濃度梯度造成的擴散', llm, noCache: true });
+        assert.equal(r.parse_path, 'llm');
+        assert.equal(r.filters.subject, '物理');
+    });
+
+    test('沒有數理線索的化學句子仍只走規則（化合物、酸鹼、沉澱）', async () => {
+        for (const query of ['化合物的命名規則', '酸鹼的填充題', '哪些離子會產生沉澱']) {
+            let called = 0;
+            const llm = { generateJson: async () => { called += 1; return { data: {} }; } };
+            const r = await nlq.parseOnly({ query, llm, noCache: true });
+            assert.equal(called, 0, query);
+            assert.equal(r.parse_path, 'rules', query);
+            assert.equal(r.filters.subject, '化學', query);
+        }
+    });
+
+    test('mentionsMathPhysics／isChemistryOnlyQuery：科目名、數理複合詞、注入的數理名詞', () => {
+        const opts = { mathPhysicsTerms: MATH_PHYSICS_TERMS };
+        assert.equal(mentionsMathPhysics('物理 濃度梯度'), true);
+        assert.equal(mentionsMathPhysics('數學的溶液'), true);
+        assert.equal(mentionsMathPhysics('化學能'), true);
+        assert.equal(mentionsMathPhysics('溶液的密度'), false, '沒注入數理名詞表時只看科目名與複合詞');
+        assert.equal(mentionsMathPhysics('溶液的密度', { terms: MATH_PHYSICS_TERMS }), true);
+        // 化學線索詞先挖掉：「週期表」不因為含「週期」（物理名詞）就算數理
+        assert.ok(MATH_PHYSICS_TERMS.includes('週期'));
+        assert.equal(mentionsMathPhysics('週期表的趨勢', { terms: MATH_PHYSICS_TERMS }), false);
+        assert.equal(isChemistryOnlyQuery('有沒有化學的難題', opts), true);
+        assert.equal(isChemistryOnlyQuery('物理 濃度梯度造成的擴散', opts), false);
+        assert.equal(isChemistryOnlyQuery('數學的溶液混合濃度應用題', opts), false);
+        assert.equal(isChemistryOnlyQuery('斜面上物體受力平衡的題目', opts), false, '沒有化學線索');
     });
 
     test('送給 LLM 的章節白名單只列數學與物理（nlq.v1 的既有 prompt）', () => {
