@@ -60,6 +60,20 @@ describe('load_kc.js parseArgs', () => {
         assert.ok(!load.formatReport({ ...res, counts: { ...res.counts, protected: 0, orphans: 0 } }, { dryRun: false, force: false })
             .some(l => l.includes('--force')));
     });
+
+    // 〔stage5 審查修正 S5-43〕
+    test('formatReport：老師改過的草稿另列一類並逐條列出 code；--force 時改說「已覆寫」', () => {
+        const res = {
+            stats: {},
+            counts: { inserted: 0, updated: 1, unchanged: 5, protected: 1, edited: 2, prereqInserted: 0, prereqRemoved: 0, orphans: 0 },
+            editedCodes: ['CHEM.化學計量.02', 'CHEM.化學計量.03']
+        };
+        const lines = load.formatReport(res, { dryRun: false, force: false });
+        assert.ok(lines.some(l => l.includes('略過 8（內容相同 5、已審定受保護 1、老師改過的草稿受保護 2）')), lines.join('\n'));
+        assert.ok(lines.some(l => l.includes('老師在「知識點」分頁改過，沒有被覆寫：CHEM.化學計量.02、CHEM.化學計量.03')), lines.join('\n'));
+        const forced = load.formatReport({ ...res, counts: { ...res.counts, edited: 0, updated: 3 } }, { dryRun: false, force: true });
+        assert.ok(forced.some(l => l.startsWith('⚠️ --force') && l.includes('已用種子檔的內容覆寫：CHEM.化學計量.02、CHEM.化學計量.03')), forced.join('\n'));
+    });
 });
 
 describe('backfill_kc.js parseArgs', () => {

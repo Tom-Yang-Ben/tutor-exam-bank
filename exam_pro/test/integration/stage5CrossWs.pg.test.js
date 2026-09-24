@@ -171,8 +171,9 @@ function runSuite() {
 
             const r1 = await kcService.loadSeeds({ pool, query }, seeds);
             assert.equal(r1.ok, true, (r1.errors || []).join('\n'));
+            // 〔stage5 審查修正 S5-43〕counts 多一個 edited（老師改過而受保護的草稿）
             assert.deepEqual(r1.counts, {
-                inserted: total, updated: 0, unchanged: 0, protected: 0,
+                inserted: total, updated: 0, unchanged: 0, protected: 0, edited: 0,
                 prereqInserted: edgesInFiles.size, prereqRemoved: 0, orphans: 0
             });
 
@@ -203,7 +204,7 @@ function runSuite() {
             const r2 = await kcService.loadSeeds({ pool, query }, SUBJECT_FILES.map(readSeed));
             assert.equal(r2.ok, true, (r2.errors || []).join('\n'));
             assert.deepEqual(r2.counts, {
-                inserted: 0, updated: 0, unchanged: total, protected: 0,
+                inserted: 0, updated: 0, unchanged: total, protected: 0, edited: 0,
                 prereqInserted: 0, prereqRemoved: 0, orphans: 0
             });
             assert.equal(await count('knowledge_components'), total);

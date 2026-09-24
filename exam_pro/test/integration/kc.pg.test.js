@@ -313,6 +313,41 @@ function runSuite() {
             assert.equal(nf.body.message, '找不到該題目。');
         });
 
+        // ───────────── 〔stage5 審查修正 S5-42〕PUT /api/questions/:id 改科／改章 × 標註 ─────────────
+        test('題目改章（同科）：AI 標註刪掉、人工標註保留；改科：別科的標註連 human 一起刪；沒改章科：不動', async () => {
+            const body = (subject, chapter) => ({
+                subject, chapter, question_type: '計算', difficulty: 3,
+                question_text: '自製整合測試題（向量內積）', answer_text: '略'
+            });
+            const kcsOf = async id => (await query(
+                `SELECT kc.code, qk.src FROM question_kcs qk JOIN knowledge_components kc ON kc.id = qk.kc_id
+                  WHERE qk.question_id = $1 ORDER BY kc.code`, [id])).rows.map(r => `${r.code}:${r.src}`);
+
+            await tag(Q.vec, 'MATH.向量內積.02', 'ai');
+            await tag(Q.vec, 'MATH.向量的加減與係數積.01', 'human');
+
+            // 只改難度（章節、科目沒變）→ 標註一條都不動
+            let res = await request(app).put(`/api/questions/${Q.vec}`).send({ ...body('數學', '向量內積'), difficulty: 4 }).expect(200);
+            assert.equal(res.body.kcs_removed, undefined);
+            assert.deepEqual(await kcsOf(Q.vec), ['MATH.向量內積.02:ai', 'MATH.向量的加減與係數積.01:human']);
+
+            // 同科改章 → AI 從舊章挑的標註刪掉；老師自己標的保留
+            res = await request(app).put(`/api/questions/${Q.vec}`).send(body('數學', '向量的加減與係數積')).expect(200);
+            assert.equal(res.body.kcs_removed, 1);
+            assert.deepEqual(await kcsOf(Q.vec), ['MATH.向量的加減與係數積.01:human']);
+
+            // 改科 → 與新科目不同科的標註一律刪（含 human），題目變成未標註，kc:backfill 會重標
+            await tag(Q.vec, 'MATH.向量內積.03', 'ai');
+            res = await request(app).put(`/api/questions/${Q.vec}`).send(body('物理', '功與動能')).expect(200);
+            assert.equal(res.body.kcs_removed, 2);
+            assert.deepEqual(await kcsOf(Q.vec), []);
+            const { body: list } = await request(app).get('/api/kc?subject=數學').expect(200);
+            assert.equal(list.items.find(i => i.code === 'MATH.向量的加減與係數積.01').question_count, 0,
+                '改科之後不該再算進數學知識點的已標題數');
+            const { selectBackfillIds } = require(path.join(APP_DIR, 'services', 'kcTagService'));
+            assert.ok((await selectBackfillIds({ query }, { subject: '物理' })).includes(Q.vec), '改科後的題要能被 kc:backfill 挑中重標');
+        });
+
         test('限流桶是獨立的：知識點 API 不吃 /api/jobs 的額度，超過 120/min 回 429', async () => {
             app = loadApp('true');                         // 新的限流桶
             const agent = request(app);

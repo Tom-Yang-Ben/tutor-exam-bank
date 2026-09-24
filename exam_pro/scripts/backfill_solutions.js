@@ -18,6 +18,9 @@
 //   2. 題幹或答案在入庫之後被改過（複核時老師修正、或事後在編輯視窗改過）的題不回填：
 //      那份摘要解的是改之前的題目，貼上去可能是錯的詳解。這類題列為 edited，留給老師自己寫。
 //   3. 一題對到多列 job_questions（例如重跑）時，取 id 最小、且可用的那一列。
+//   4. 〔stage5 審查修正 S5-41〕老師在編輯視窗把既有詳解清空過的題（questions.solution_cleared_at
+//      非 NULL）不回填：清空就是老師決定「這題不要這段詳解」，重跑回填不能把它原樣寫回來。
+//      UPDATE 本身同樣帶 `solution_cleared_at IS NULL`。
 
 const fs = require('fs');
 const path = require('path');
@@ -103,7 +106,8 @@ function isEditedSinceSave(payload, current) {
  * 決定哪些題要回填（不碰 DB）。
  *
  * @param {Array<{question_id:number, jq_id:number, payload:object, question_text:string,
- *                answer_text:string, solution_text:string|null, solution_src:string|null}>} rows
+ *                answer_text:string, solution_text:string|null, solution_src:string|null,
+ *                solution_cleared_at?:Date|string|null}>} rows
  *        依 question_id、jq_id 遞增排好
  * @param {{limit?:number|null}} [opts]
  * @returns {{ scanned:number, updates:Array<{question_id:number, jq_id:number, solution_text:string}>,
@@ -118,7 +122,7 @@ function planBackfill(rows, { limit = null } = {}) {
     }
 
     const skipped = {
-        has_teacher: 0, has_verify: 0, has_ai: 0,
+        has_teacher: 0, has_verify: 0, has_ai: 0, cleared: 0,
         edited: 0, no_verify: 0, verify_skipped: 0, not_agree: 0, empty_steps: 0, too_long: 0
     };
     const updates = [];
@@ -129,6 +133,10 @@ function planBackfill(rows, { limit = null } = {}) {
         if (head.solution_text !== null && head.solution_text !== undefined) {
             const key = `has_${head.solution_src}`;
             skipped[key in skipped ? key : 'has_ai'] += 1;
+            continue;
+        }
+        if (head.solution_cleared_at !== null && head.solution_cleared_at !== undefined) {
+            skipped.cleared += 1;
             continue;
         }
 
@@ -168,7 +176,7 @@ async function backfill(db, { dryRun = false, limit = null } = {}) {
         await client.query('BEGIN');
         const { rows } = await client.query(
             `SELECT jq.question_id, jq.id AS jq_id, jq.payload,
-                    q.question_text, q.answer_text, q.solution_text, q.solution_src
+                    q.question_text, q.answer_text, q.solution_text, q.solution_src, q.solution_cleared_at
                FROM job_questions jq JOIN questions q ON q.id = jq.question_id
               WHERE jq.question_id IS NOT NULL
               ORDER BY jq.question_id, jq.id`);
@@ -178,7 +186,7 @@ async function backfill(db, { dryRun = false, limit = null } = {}) {
         for (const u of plan.updates) {
             const res = await client.query(
                 `UPDATE questions SET solution_text = $2, solution_src = 'verify'
-                  WHERE id = $1 AND solution_text IS NULL`,
+                  WHERE id = $1 AND solution_text IS NULL AND solution_cleared_at IS NULL`,
                 [u.question_id, u.solution_text]);
             if (res.rowCount === 1) written.push(u.question_id);
         }
@@ -200,6 +208,7 @@ const SKIP_LABELS = {
     has_teacher: '已有老師寫的詳解（不覆寫）',
     has_verify: '已有驗算詳解',
     has_ai: '已有 AI 詳解',
+    cleared: '老師清空過詳解（不寫回）',
     edited: '入庫後題幹或答案被改過',
     no_verify: '沒有 verify 結果',
     verify_skipped: 'verify 跳過（證明題）',
@@ -211,7 +220,7 @@ const SKIP_LABELS = {
 async function main() {
     const args = parseArgs(process.argv.slice(2));
     if (args.help) {
-        console.log(fs.readFileSync(__filename, 'utf8').split('\n').slice(0, 22).join('\n'));
+        console.log(fs.readFileSync(__filename, 'utf8').split('\n').slice(0, 23).join('\n'));
         return 0;
     }
 

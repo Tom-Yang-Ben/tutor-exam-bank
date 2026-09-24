@@ -86,6 +86,7 @@ const WINDOW_WHERE = `WHERE a.student_id = $1
  * 後兩欄給補救卷定難度區間用（services/remedialService.js），API 不輸出。
  *
  * 只列「時間窗內至少有一筆作答（含未批改）掛到它」的知識點；只指派未批改的知識點 graded = 0。
+ * 只算與題目**同科**的標註（〔stage5 審查修正 S5-42〕，理由見 SAME_SUBJECT_TAG）。
  * weight 是 REAL，先轉 float8 再算，避免 SUM(real) 的單精度誤差。
  *
  * @param {{ studentId:number, subject:string|null, days:number }} opts
@@ -93,7 +94,7 @@ const WINDOW_WHERE = `WHERE a.student_id = $1
  */
 function buildKcAggregate(opts) {
     const text = `WITH w AS (
-  SELECT a.question_id, q.difficulty::float8 AS difficulty,
+  SELECT a.question_id, q.subject AS q_subject, q.difficulty::float8 AS difficulty,
          (a.result IS NOT NULL) AS is_graded,
          COALESCE(a.score::float8, a.result::float8) AS correctness
     FROM attempts a JOIN questions q ON q.id = a.question_id
@@ -107,6 +108,7 @@ function buildKcAggregate(opts) {
          SUM(qk.weight::float8 * w.difficulty) FILTER (WHERE w.is_graded)
            / NULLIF(SUM(qk.weight::float8) FILTER (WHERE w.is_graded), 0)                   AS avg_graded_difficulty
     FROM w JOIN question_kcs qk ON qk.question_id = w.question_id
+           JOIN knowledge_components kx ON kx.id = qk.kc_id AND kx.subject = w.q_subject
    GROUP BY qk.kc_id
 )
 SELECT k.id AS kc_id, k.code, k.name, k.subject, k.chapter, k.sort,
@@ -116,7 +118,15 @@ SELECT k.id AS kc_id, k.code, k.name, k.subject, k.chapter, k.sort,
 }
 
 /**
- * 已批改題依「有沒有任何知識點標註」分兩堆計數。
+ * 「這一題有標到**同科**知識點」的子查詢（a、q 來自外層）。
+ * 〔stage5 審查修正 S5-42〕題目改科時 PUT /api/questions/:id 會刪掉別科的標註；這裡再守一道，
+ * 別科的標註（例如直接改 DB 寫進去的）不算數——否則 basis 會判成 kc，卻一個同科的知識點都排不出來。
+ */
+const SAME_SUBJECT_TAG = `SELECT 1 FROM question_kcs qk JOIN knowledge_components kx ON kx.id = qk.kc_id
+                  WHERE qk.question_id = a.question_id AND kx.subject = q.subject`;
+
+/**
+ * 已批改題依「有沒有任何（同科的）知識點標註」分兩堆計數。
  * tagged_graded 決定補救卷的 basis（≥ WEAKNESS_MIN_N 用 kc），untagged_graded 直接進 API 回應。
  *
  * @param {{ studentId:number, subject:string|null, days:number }} opts
@@ -124,8 +134,8 @@ SELECT k.id AS kc_id, k.code, k.name, k.subject, k.chapter, k.sort,
  */
 function buildGradedTagCounts(opts) {
     const text = `SELECT
-  COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM question_kcs qk WHERE qk.question_id = a.question_id))::int     AS tagged_graded,
-  COUNT(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM question_kcs qk WHERE qk.question_id = a.question_id))::int AS untagged_graded
+  COUNT(*) FILTER (WHERE EXISTS (${SAME_SUBJECT_TAG}))::int     AS tagged_graded,
+  COUNT(*) FILTER (WHERE NOT EXISTS (${SAME_SUBJECT_TAG}))::int AS untagged_graded
   FROM attempts a JOIN questions q ON q.id = a.question_id
  ${WINDOW_WHERE}
    AND a.result IS NOT NULL`;

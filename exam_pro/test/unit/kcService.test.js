@@ -213,6 +213,17 @@ describe('planSeedUpsert（npm run kc:load 的載入計畫）', () => {
         assert.equal(kc.planSeedUpsert({ ...seed, status: 'draft' }, { ...seed, status: 'approved' }), 'protected');
     });
 
+    // 〔stage5 審查修正 S5-43〕
+    test('DB 是草稿但老師改過（edited_at 非 NULL）、內容不同 → edited；--force 才 update；內容相同仍是 unchanged', () => {
+        const draftSeed = { ...seed, status: 'draft' };
+        const dbRow = { ...draftSeed, spoken_text: `${SPOKEN}（老師改過）`, edited_at: new Date() };
+        assert.equal(kc.planSeedUpsert(draftSeed, dbRow), 'edited');
+        assert.equal(kc.planSeedUpsert(draftSeed, dbRow, { force: true }), 'update');
+        assert.equal(kc.planSeedUpsert(draftSeed, { ...draftSeed, edited_at: new Date() }), 'unchanged');
+        assert.equal(kc.planSeedUpsert(draftSeed, { ...dbRow, edited_at: null }), 'update', '沒改過的草稿照舊更新');
+        assert.equal(kc.planSeedUpsert(draftSeed, { ...dbRow, status: 'approved' }), 'protected', '已審定優先');
+    });
+
     test('比對的欄位就是內容欄位（code／subject／chapter 由 code 決定，不列入）', () => {
         assert.deepEqual(kc.CONTENT_FIELDS, ['name', 'curriculum_code', 'description', 'spoken_text', 'status', 'sort']);
     });
@@ -239,8 +250,17 @@ describe('findCycle（先備關係不得成環）', () => {
 describe('buildPatchSql', () => {
     test('只 SET 有給的欄位，順序固定，並更新 updated_at', () => {
         const { text, values } = kc.buildPatchSql(9, { status: 'approved', name: '正射影' });
-        assert.equal(text, 'UPDATE knowledge_components SET name = $2, status = $3, updated_at = now() WHERE id = $1 RETURNING id');
+        // 〔stage5 審查修正 S5-43〕內容欄位真的變了才記 edited_at（只看 status 以外的欄位）
+        assert.equal(text, 'UPDATE knowledge_components SET name = $2, status = $3, updated_at = now(), '
+            + 'edited_at = CASE WHEN (name) IS DISTINCT FROM ($2) THEN now() ELSE edited_at END WHERE id = $1 RETURNING id');
         assert.deepEqual(values, [9, '正射影', 'approved']);
+    });
+
+    test('〔S5-43〕只改 status（審定、改回草稿）不碰 edited_at；多個內容欄位一起比', () => {
+        assert.equal(kc.buildPatchSql(3, { status: 'draft' }).text,
+            'UPDATE knowledge_components SET status = $2, updated_at = now() WHERE id = $1 RETURNING id');
+        const { text } = kc.buildPatchSql(3, { spoken_text: '口語', description: '說明', status: 'approved' });
+        assert.ok(text.includes('edited_at = CASE WHEN (description, spoken_text) IS DISTINCT FROM ($2, $3) THEN now() ELSE edited_at END'), text);
     });
 
     test('curriculum_code: null 也要真的 SET（清空）', () => {

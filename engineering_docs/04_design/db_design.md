@@ -77,6 +77,7 @@ erDiagram
 | `follows_src` | TEXT | 可 NULL, CHECK IN ('pipeline','review','backfill','human')；CHECK `questions_follows_src_pair_check`（與 follows_question_id 同為 NULL 或同非 NULL） | 0008 追加（FR-019）：綁定來源——runner 終態後重算／人工複核後重算／回填腳本／人工指定；自動流程一律不覆寫 'human'（寫入端 `services/followUpLinker.js`）〔修訂 2026-09-15e〕 |
 | `solution_text` | TEXT | 可 NULL, CHECK char_length ≤ 4000 | 0011 追加（FR-024）〔修訂 2026-09-24〕：文字詳解（公式用 `$…$`）。**寫入者**：管線 save 節點（`workers/jobRunner.js` buildSolutionFields：`payload.verify.compare = 'agree'` 且 `steps_summary` trim 後非空、≤4000 字才寫；超長不截斷）、`POST`／`PUT /api/questions`（`controllers/questionController.js`，老師）、`scripts/backfill_solutions.js`（只補 `IS NULL` 的題、略過入庫後題幹或答案被改過者）。複核 approve 與 batch-save 不寫。舊欄 `solution_img` 保留不動 |
 | `solution_src` | TEXT | 可 NULL, CHECK IN ('verify','teacher','ai')；CHECK `questions_solution_pair_check`（與 solution_text 同為 NULL 或同非 NULL） | 0011 追加（FR-024）〔修訂 2026-09-24〕：詳解來源——verify＝管線驗算摘要（未經人工審閱）、teacher＝老師撰寫或修改、ai＝保留給之後的 AI 生成（目前無寫入者）。PUT 帶與現值 trim 後相同的文字時保留原來源 |
+| `solution_cleared_at` | TIMESTAMPTZ | 可 NULL | 0013 追加（最終審查修正，裁決 S5-41）：老師在 PUT 清空**既有**詳解的時間；之後又寫了詳解時清回 NULL。`scripts/backfill_solutions.js` 看到非 NULL 就不寫回 |
 
 ### 2.2 `students`、`exam_papers`、`attempts`（0001）
 
@@ -148,6 +149,7 @@ erDiagram
 | `knowledge_components.spoken_text` | TEXT | 可 NULL, CHECK ≤ 600 | 同上 | 口語版；應用層 40–300 字、不得含 LaTeX（`LATEX_RE`） |
 | `knowledge_components.status` | TEXT | NOT NULL DEFAULT 'draft', CHECK IN ('draft','approved') | 載入腳本（AI 草稿一律 draft）；`PATCH /api/kc/:id`（Owner 審定） | approved 列載入腳本不覆寫內容（`--force` 除外）；讀現有列時 `SELECT … ORDER BY id FOR UPDATE`，避免與審定 PATCH 交錯 |
 | `knowledge_components.sort` / `created_at` / `updated_at` | SMALLINT / TIMESTAMPTZ ×2 | sort NOT NULL DEFAULT 0 | 同上（PATCH 更新 updated_at） | sort＝章內教學順序（從 1 起） |
+| `knowledge_components.edited_at` | TIMESTAMPTZ | 可 NULL（0013，最終審查修正，裁決 S5-43） | `PATCH /api/kc/:id` 改了名稱、說明、口語版或課綱代碼（值真的變了）時寫入；`kc:load --force` 覆寫後清回 NULL | 非 NULL 的草稿 `kc:load` 不覆寫（與已審定列同樣受保護） |
 | `question_kcs.question_id` | INT | NOT NULL, FK → questions **ON DELETE CASCADE**；PK (question_id, kc_id) | — | 題目刪除時標註一起刪（`attempts` 仍 RESTRICT） |
 | `question_kcs.kc_id` | INT | NOT NULL, FK → knowledge_components ON DELETE CASCADE | — | |
 | `question_kcs.weight` | REAL | NOT NULL DEFAULT 1, CHECK 0 < weight ≤ 1 | `PUT /api/questions/:id/kcs`（人工，未指定＝1）；`services/kcTagService.tagQuestion`（AI 一律 1） | 「這題有多少成分在考這個知識點」；WS-D 的知識點弱點以它加權 |
@@ -195,7 +197,7 @@ erDiagram
 
 | 項目 | 政策 |
 | :--- | :--- |
-| **Migration 策略** | 只增不改（NFR-006）：0001–0009 逐一凍結〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕，任何欄位變更一律新開 migration 檔；ENUM 一律以 TEXT+CHECK 實作（改值域走 DROP/ADD CONSTRAINT，如 0004）；0006_source_type.sql（2026-08-28 核准）為 questions／jobs 追加 source_type〔修訂 2026-08-29〕；0007_source_detail.sql（2026-08-29 核准）為兩表追加 source_detail〔修訂 2026-08-29b〕；0008_follow_up.sql（2026-09-15 核准）為 questions 追加 follows_question_id／follows_src 與兩條具名 CHECK、部分索引〔修訂 2026-09-15e〕；0009_source_check.sql 以 DROP／ADD 重建 job_questions.state、review_reason 與 job_events.error_class 三條 CHECK（約束名以 pg_constraint 查證；0008 與 0009 由兩條分支平行開發、編號開工前預先分配，migrate.js 依檔名排序逐支判斷，先套過 0009 的環境補上 0008 亦照常套用；之後再改這三條約束須以含 0009 新值的完整值域重建）〔修訂 2026-09-15f〕；〔修訂 2026-09-24〕階段 5 三支由 `stage5/base` 預建並凍結（五條 WS 平行開發只讀 schema、不改這三支）：`0010_attempt_detail_student_profile.sql`（attempts 四欄＋部分 GIN 索引、students 五欄）、`0011_chemistry_solution_subject_group.sql`（`questions_subject_check` DROP／ADD 加化學、solution 兩欄＋`questions_solution_pair_check`、jobs.subject_group）、`0012_knowledge_components.sql`（三表＋三索引）；預留給 WS-A～E 的 `0013`–`0017` 皆未使用。錯因、學生檔案選項與知識點代碼格式的合法值刻意不寫 CHECK，由 `config/` 白名單在伺服器端驗證（改值域不需 migration） |
+| **Migration 策略** | 只增不改（NFR-006）：0001–0009 逐一凍結〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕，任何欄位變更一律新開 migration 檔；ENUM 一律以 TEXT+CHECK 實作（改值域走 DROP/ADD CONSTRAINT，如 0004）；0006_source_type.sql（2026-08-28 核准）為 questions／jobs 追加 source_type〔修訂 2026-08-29〕；0007_source_detail.sql（2026-08-29 核准）為兩表追加 source_detail〔修訂 2026-08-29b〕；0008_follow_up.sql（2026-09-15 核准）為 questions 追加 follows_question_id／follows_src 與兩條具名 CHECK、部分索引〔修訂 2026-09-15e〕；0009_source_check.sql 以 DROP／ADD 重建 job_questions.state、review_reason 與 job_events.error_class 三條 CHECK（約束名以 pg_constraint 查證；0008 與 0009 由兩條分支平行開發、編號開工前預先分配，migrate.js 依檔名排序逐支判斷，先套過 0009 的環境補上 0008 亦照常套用；之後再改這三條約束須以含 0009 新值的完整值域重建）〔修訂 2026-09-15f〕；〔修訂 2026-09-24〕階段 5 三支由 `stage5/base` 預建並凍結（五條 WS 平行開發只讀 schema、不改這三支）：`0010_attempt_detail_student_profile.sql`（attempts 四欄＋部分 GIN 索引、students 五欄）、`0011_chemistry_solution_subject_group.sql`（`questions_subject_check` DROP／ADD 加化學、solution 兩欄＋`questions_solution_pair_check`、jobs.subject_group）、`0012_knowledge_components.sql`（三表＋三索引）；預留給 WS-A～E 的 `0013`–`0017` 皆未使用。〔最終審查修正〕整合後新增 `0013_teacher_edit_markers.sql`（`questions.solution_cleared_at`、`knowledge_components.edited_at`，兩欄可 NULL、無預設，既有資料視為「老師沒動過」），之後依序從 0014 編號。錯因、學生檔案選項與知識點代碼格式的合法值刻意不寫 CHECK，由 `config/` 白名單在伺服器端驗證（改值域不需 migration） |
 | **唯一約束沿革（0005）** | 0003 先建非唯一 `idx_questions_text_hash`（舊題回填必有碰撞）→ scripts/backfill_text_hash.js 印碰撞清單 → 2026-08-23 人工確認 #2/#3、#5/#38 為真重複，attempts 併到保留題、#3/#38 封存 → 0005 建部分唯一索引（封存題與 NULL 不受限）（裁決 S2-30） |
 | **刪除策略** | 題目軟刪除（archived_at）；attempts ON DELETE RESTRICT；jobs 子表 CASCADE；job_events 只追加不更新 |
 | **保留期限** | 單人自用系統，無法規要求；PDF 原檔於拆題完成後刪除（pdf_path 清成 NULL），其餘資料無限期保留 |
@@ -205,5 +207,5 @@ erDiagram
 ## 6. 追溯
 
 - 上游：DEC-003、DEC-004、DEC-009、DEC-012〔修訂 2026-09-15e〕、DEC-013〔修訂 2026-09-15f〕、DEC-015、DEC-017、DEC-019〔修訂 2026-09-24〕；FR-001、FR-002、FR-005、FR-006、FR-007、FR-008、FR-010、FR-011、FR-013、FR-014、FR-015、FR-017〔修訂 2026-08-29〕、FR-019〔修訂 2026-09-15e〕、FR-020〔修訂 2026-09-15f〕、FR-021～FR-031、FR-033〔修訂 2026-09-24〕；NFR-002、NFR-005、NFR-006；ADR-001、ADR-002、ADR-008、ADR-009〔修訂 2026-09-15f〕、ADR-010、ADR-011、ADR-015〔修訂 2026-09-24〕
-- 實作真相：`exam_pro/migrations/0001_init.sql`–`0009_source_check.sql`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕、`0010_attempt_detail_student_profile.sql`–`0012_knowledge_components.sql`〔修訂 2026-09-24〕
+- 實作真相：`exam_pro/migrations/0001_init.sql`–`0009_source_check.sql`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕、`0010_attempt_detail_student_profile.sql`–`0013_teacher_edit_markers.sql`〔修訂 2026-09-24〕
 - 下游：[api_spec.md](./api_spec.md)（欄位命名對齊）、[lld.md](./lld.md)（jobs/job_questions 狀態機轉移）、[../03_architecture/engineering_tracker.md](../03_architecture/engineering_tracker.md)、[../06_ops/runbook-job-stuck.md](../06_ops/runbook-job-stuck.md)（locked_until 租約）

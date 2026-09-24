@@ -153,6 +153,17 @@ describe('scripts/backfill_solutions.js — planBackfill', () => {
             { no_verify: 1, verify_skipped: 1, not_agree: 2, empty_steps: 1, too_long: 1 });
     });
 
+    // 〔stage5 審查修正 S5-41〕
+    test('老師清空過詳解（solution_cleared_at 非 NULL）→ cleared，不回填', () => {
+        const plan = planBackfill([
+            row(1, 1, { current: { solution_cleared_at: new Date('2026-09-24T10:00:00Z') } }),
+            row(2, 2, { current: { solution_cleared_at: null } }),
+            row(3, 3)
+        ]);
+        assert.deepEqual(plan.updates.map(u => u.question_id), [2, 3]);
+        assert.equal(plan.skipped.cleared, 1);
+    });
+
     test('入庫後題幹或答案被改過 → edited，不回填（那份摘要解的是改之前的題）', () => {
         const plan = planBackfill([
             row(1, 1, { current: { question_text: '老師修正過的題幹' } }),

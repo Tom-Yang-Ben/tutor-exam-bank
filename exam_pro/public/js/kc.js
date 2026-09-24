@@ -651,7 +651,7 @@ function mountKcSection(app, section) {
         el('p', 'eyebrow text-emerald-600', { textContent: 'Knowledge Components' }),
         el('h2', 'mt-1 text-xl font-extrabold tracking-tight text-slate-900', { textContent: '知識點' }),
         el('p', 'mt-1 text-xs sm:text-sm text-slate-500', {
-            textContent: '比章節更細的診斷單位。逐張讀口語版（可按「朗讀」聽聽看），改到順口再按「審定通過」；審定過的內容，重新載入種子檔也不會被蓋掉。'
+            textContent: '比章節更細的診斷單位。逐張讀口語版（可按「朗讀」聽聽看），改到順口再按「審定通過」。審定過的、或按過「儲存修改」的內容，重新載入種子檔都不會被蓋掉（除非載入時加 --force）。'
         })
     );
     head.append(el('span', 'section-icon bg-emerald-50 text-emerald-700', { textContent: '點' }), titleBox);

@@ -4,14 +4,15 @@
 //   npm run kc:load                                  載入 config/kc/ 底下全部 *.json（先備跨檔解析）
 //   npm run kc:load -- --file config/kc/數學.json    只載入指定檔（可重複 --file）
 //   npm run kc:load -- --dry-run                     全部照做、最後回滾：只看會新增／更新／略過幾個
-//   npm run kc:load -- --force                       連 DB 裡已審定（approved）的也用種子檔覆寫
+//   npm run kc:load -- --force                       連 DB 裡已審定、或老師改過的草稿也用種子檔覆寫
 //   npm run kc:load -- --test                        改打 TEST_DATABASE_URL（庫名必須以 _test 結尾）
 //
 // 行為：
 //   1. 先跑 utils/kcSeed.js 的 validateSeeds（第 3.4 條）；有任何 error 就整批拒絕，一列都不寫。
-//   2. 以 code upsert；DB 中已是 approved 的列不覆寫內容（除非 --force）。
+//   2. 以 code upsert；DB 中已是 approved 的列、老師在「知識點」分頁改過的草稿不覆寫內容（除非 --force）。
 //   3. 先備關係以 src='ai' upsert；code 在本批與 DB 都解析不到就整批回滾。
-//   4. 整批一個交易。印出新增、更新、略過（內容相同／已審定受保護）的數量。
+//   4. 整批一個交易。印出新增、更新、略過（內容相同／已審定受保護／老師改過的草稿受保護）的數量，
+//      並逐條列出老師改過的草稿（--force 時列的是被覆寫的那些）。
 // 有 error 時 exit code 1。不呼叫 LLM。
 //
 // dotenv 只在「直接執行」時載入（檔尾）：單元測試 require 本檔測 parseArgs 時不該把 .env 讀進行程。
@@ -73,10 +74,19 @@ function formatReport(res, args) {
     for (const [subject, s] of Object.entries(res.stats || {})) {
         lines.push(`${subject}：種子檔 ${s.components} 個知識點、${s.chapters} 章、標記已審定 ${s.approved} 個`);
     }
-    lines.push(`${args.dryRun ? '（dry-run，已回滾）' : ''}新增 ${c.inserted}、更新 ${c.updated}、略過 ${c.unchanged + c.protected}` +
-        `（內容相同 ${c.unchanged}、已審定受保護 ${c.protected}）`);
+    const edited = Number(c.edited) || 0;
+    lines.push(`${args.dryRun ? '（dry-run，已回滾）' : ''}新增 ${c.inserted}、更新 ${c.updated}、略過 ${c.unchanged + c.protected + edited}` +
+        `（內容相同 ${c.unchanged}、已審定受保護 ${c.protected}${edited ? `、老師改過的草稿受保護 ${edited}` : ''}）`);
     lines.push(`先備關係：新增 ${c.prereqInserted}、移除過時的 AI 先備 ${c.prereqRemoved}`);
     if (c.protected > 0 && !args.force) lines.push('ℹ️ 已審定的知識點沒有被覆寫；確定要用種子檔蓋過去請加 --force。');
+    // 〔stage5 審查修正 S5-43〕老師改過、還沒審定的草稿逐條列出
+    const codes = Array.isArray(res.editedCodes) ? res.editedCodes : [];
+    if (codes.length) {
+        const list = codes.slice(0, 50).join('、') + (codes.length > 50 ? `…等 ${codes.length} 個` : '');
+        lines.push(args.force
+            ? `⚠️ --force：以下 ${codes.length} 個老師在「知識點」分頁改過的草稿，已用種子檔的內容覆寫：${list}`
+            : `ℹ️ 以下 ${codes.length} 個草稿老師在「知識點」分頁改過，沒有被覆寫：${list}。確定要用種子檔蓋過去請加 --force。`);
+    }
     if (c.orphans > 0) lines.push(`⚠️ 資料庫裡有 ${c.orphans} 個知識點不在這次的種子檔中（沒有刪除，可能已有題目標到它們）。`);
     return lines;
 }

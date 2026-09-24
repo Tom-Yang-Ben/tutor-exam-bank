@@ -173,17 +173,26 @@ function seedRowOf(component, subject) {
 const CONTENT_FIELDS = ['name', 'curriculum_code', 'description', 'spoken_text', 'status', 'sort'];
 
 /**
- * 載入計畫：一個知識點要新增、更新、不變，還是因為已審定而保護起來（第 4.3 條第 1 點）。
+ * 載入計畫：一個知識點要新增、更新、不變，還是因為老師動過而保護起來（第 4.3 條第 1 點）。
+ *
+ *   protected  DB 已審定（approved）
+ *   edited     〔stage5 審查修正 S5-43〕DB 還是草稿，但老師在「知識點」分頁改過內容（edited_at 非 NULL）。
+ *              卡片上的「儲存修改」與「審定通過」是兩顆按鈕，637 個知識點也不可能一次審完——
+ *              「改了、還沒審定」是正常會停留的狀態，重載種子檔不能把它默默蓋回去。
+ * 兩者都要 --force 才覆寫。
+ *
  * @param {object} seedRow seedRowOf() 的輸出
- * @param {object|undefined} dbRow DB 現有的列（沒有就 undefined）
+ * @param {object|undefined} dbRow DB 現有的列（沒有就 undefined；edited_at 可省略＝沒改過）
  * @param {{force?:boolean}} [opts]
- * @returns {'insert'|'update'|'unchanged'|'protected'}
+ * @returns {'insert'|'update'|'unchanged'|'protected'|'edited'}
  */
 function planSeedUpsert(seedRow, dbRow, { force = false } = {}) {
     if (!dbRow) return 'insert';
     const same = CONTENT_FIELDS.every(f => (dbRow[f] ?? null) === (seedRow[f] ?? null));
     if (same) return 'unchanged';
-    if (dbRow.status === 'approved' && !force) return 'protected';
+    if (force) return 'update';
+    if (dbRow.status === 'approved') return 'protected';
+    if (dbRow.edited_at !== null && dbRow.edited_at !== undefined) return 'edited';
     return 'update';
 }
 
@@ -265,6 +274,11 @@ SELECT kc.id, kc.code, kc.subject, kc.chapter, kc.name, kc.curriculum_code, kc.d
 
 /**
  * PATCH 的 UPDATE 句（純函式）：只 SET 有給的欄位，並更新 updated_at。
+ *
+ * 〔stage5 審查修正 S5-43〕有送內容欄位（status 以外）而且值真的變了 → edited_at = now()，
+ * npm run kc:load 據此不覆寫老師改過、還沒審定的草稿。SET 的運算式看的是舊值，所以
+ * `(舊值…) IS DISTINCT FROM ($n…)` 比的正是「改之前 vs. 送來的」。只改 status（審定、改回草稿）不算改過。
+ *
  * @param {number} id
  * @param {object} fields validateKcPatch() 的 fields
  * @returns {{text:string, values:any[]}}
@@ -272,12 +286,18 @@ SELECT kc.id, kc.code, kc.subject, kc.chapter, kc.name, kc.curriculum_code, kc.d
 function buildPatchSql(id, fields) {
     const sets = [];
     const values = [id];
+    const content = [];
     for (const key of EDITABLE_FIELDS) {
         if (!Object.prototype.hasOwnProperty.call(fields, key)) continue;
         values.push(fields[key]);
         sets.push(`${key} = $${values.length}`);
+        if (key !== 'status') content.push([key, `$${values.length}`]);
     }
     sets.push('updated_at = now()');
+    if (content.length) {
+        sets.push(`edited_at = CASE WHEN (${content.map(c => c[0]).join(', ')}) IS DISTINCT FROM (${content.map(c => c[1]).join(', ')})`
+            + ' THEN now() ELSE edited_at END');
+    }
     return {
         text: `UPDATE knowledge_components SET ${sets.join(', ')} WHERE id = $1 RETURNING id`,
         values
@@ -429,7 +449,8 @@ async function replaceQuestionKcs(db, questionId, items) {
  *
  * 步驟：
  *   1. validateSeeds（第 3.4 條）有 error → 整批拒絕，一列都不寫。
- *   2. 以 code upsert。已審定的列不覆寫內容（除非 force）。
+ *   2. 以 code upsert。已審定的列、以及老師在「知識點」分頁改過的草稿（edited_at 非 NULL，S5-43）
+ *      不覆寫內容（除非 force；force 覆寫後 edited_at 清回 NULL）。
  *      更新分兩段：先把要改的列 name 換成暫名、再寫真值——同章知識點互換名稱或整排位移時，
  *      逐列 UPDATE 會先撞到 UNIQUE (subject, chapter, name)。新增排在更新之後，理由相同。
  *   3. 先備關係以 src='ai' upsert；code 先在本批找、再到 DB 找，都找不到就整批回滾。
@@ -441,7 +462,7 @@ async function replaceQuestionKcs(db, questionId, items) {
  * 併發：讀現有列時 `FOR UPDATE`（依 id 排序上鎖）。載入計畫（更新／受保護）是依這份快照決定的，
  * 若不鎖，老師在載入途中按「審定通過」（PATCH），剛審定的內容會被當成草稿覆寫掉；鎖住之後
  * PATCH 會排隊到載入結束才生效。
- * 撞名：新名稱與「這次不會改到的列」（已審定受保護的列，或種子檔已沒有的舊列）同章同名時，
+ * 撞名：新名稱與「這次不會改到的列」（受保護的已審定列或老師改過的草稿，或種子檔已沒有的舊列）同章同名時，
  * UNIQUE (subject, chapter, name) 會擋下；這裡把 PG 的 23505 翻成指出是哪一個知識點、撞到誰的
  * error，整批回滾（不再只丟出一行看不懂的 duplicate key）。
  *
@@ -449,7 +470,10 @@ async function replaceQuestionKcs(db, questionId, items) {
  * @param {object[]} seeds 已 JSON.parse 的種子檔
  * @param {{force?:boolean, dryRun?:boolean, chapters?:Record<string,string[]>}} [opts]
  *        chapters 只給測試用（小型 fixture 不必涵蓋每一章）；CLI 一律用完整白名單。
- * @returns {Promise<{ok:boolean, errors:string[], warnings:string[], stats:object, counts?:object}>}
+ * @returns {Promise<{ok:boolean, errors:string[], warnings:string[], stats:object, counts?:object,
+ *                    editedCodes?:string[]}>}
+ *          editedCodes：老師在「知識點」分頁改過、還沒審定的草稿中，內容與種子檔不同的 code——
+ *          沒有 force 時是「受保護、沒覆寫」的清單，有 force 時是「被覆寫」的清單。
  */
 async function loadSeeds(db, seeds, opts = {}) {
     const force = Boolean(opts.force);
@@ -461,17 +485,19 @@ async function loadSeeds(db, seeds, opts = {}) {
     const codes = rows.map(r => r.seed.code);
     const subjects = seeds.map(s => s.subject);
     const counts = {
-        inserted: 0, updated: 0, unchanged: 0, protected: 0,
+        inserted: 0, updated: 0, unchanged: 0, protected: 0, edited: 0,
         prereqInserted: 0, prereqRemoved: 0, orphans: 0
     };
-    const fail = (msgs) => ({ ok: false, errors: msgs, warnings, stats, counts });
+    // 〔S5-43〕老師改過、還沒審定的草稿：沒加 --force 時列出被保護的 code，加了則列出被覆寫的 code
+    const editedCodes = [];
+    const fail = (msgs) => ({ ok: false, errors: msgs, warnings, stats, counts, editedCodes });
 
     const client = await db.pool.connect();
     try {
         await client.query('BEGIN');
 
         const { rows: existing } = await client.query(
-            `SELECT id, code, name, curriculum_code, description, spoken_text, status, sort
+            `SELECT id, code, name, curriculum_code, description, spoken_text, status, sort, edited_at
                FROM knowledge_components WHERE code = ANY($1::text[])
               ORDER BY id FOR UPDATE`, [codes]);
         const dbByCode = new Map(existing.map(r => [r.code, r]));
@@ -494,16 +520,22 @@ async function loadSeeds(db, seeds, opts = {}) {
                 await client.query(
                     `UPDATE knowledge_components
                         SET name = $2, curriculum_code = $3, description = $4, spoken_text = $5,
-                            status = $6, sort = $7, updated_at = now()
+                            status = $6, sort = $7, updated_at = now(), edited_at = NULL
                       WHERE id = $1`,
                     [idByCode.get(s.code), s.name, s.curriculum_code, s.description, s.spoken_text, s.status, s.sort])
                     .catch(tagSeedRow(s));
                 counts.updated++;
+                const prev = dbByCode.get(s.code);
+                if (prev.edited_at !== null && prev.edited_at !== undefined && prev.status !== 'approved') editedCodes.push(s.code);
             } else if (p.plan === 'unchanged') {
                 counts.unchanged++;
             } else if (p.plan === 'protected') {
                 counts.protected++;
                 protectedCodes.add(p.seed.code);
+            } else if (p.plan === 'edited') {
+                counts.edited++;
+                protectedCodes.add(p.seed.code);
+                editedCodes.push(p.seed.code);
             }
         }
         // 2c. 新增
@@ -580,7 +612,7 @@ async function loadSeeds(db, seeds, opts = {}) {
     } finally {
         client.release();
     }
-    return { ok: true, errors: [], warnings, stats, counts };
+    return { ok: true, errors: [], warnings, stats, counts, editedCodes };
 }
 
 /** 寫入知識點失敗時，把「正在寫哪一列」掛在例外上，讓 loadSeeds 的 catch 能指名道姓（原例外照樣往上丟） */
@@ -612,7 +644,7 @@ async function describeUniqueConflict(client, s, err, { force, codes }) {
     let holder = null;
     try {
         const { rows } = await client.query(
-            `SELECT code, status FROM knowledge_components
+            `SELECT code, status, (edited_at IS NOT NULL) AS edited FROM knowledge_components
               WHERE subject = $1 AND chapter = $2 AND name = $3 AND code <> $4
               ORDER BY id LIMIT 1`, [s.subject, s.chapter, s.name, s.code]);
         holder = rows[0] || null;
@@ -623,9 +655,9 @@ async function describeUniqueConflict(client, s, err, { force, codes }) {
         return `${head}另一個知識點撞名（同一章的名稱不可重複），整批回滾。請改種子檔的名稱，或先在「知識點」分頁把資料庫裡那一條改名。`;
     }
     const inSeed = codes.includes(holder.code);
-    const state = holder.status === 'approved' ? '已審定' : '草稿';
-    const hint = inSeed && holder.status === 'approved' && !force
-        ? `${holder.code} 是已審定的列，載入不覆寫它，資料庫裡保留的是它目前的名稱。要以種子檔為準覆寫它請加 --force；否則請改 ${s.code} 在種子檔裡的名稱。`
+    const state = holder.status === 'approved' ? '已審定' : holder.edited ? '老師改過的草稿' : '草稿';
+    const hint = inSeed && (holder.status === 'approved' || holder.edited) && !force
+        ? `${holder.code} 是${state}，載入不覆寫它，資料庫裡保留的是它目前的名稱。要以種子檔為準覆寫它請加 --force；否則請改 ${s.code} 在種子檔裡的名稱。`
         : inSeed
             ? `請檢查種子檔裡 ${holder.code} 與 ${s.code} 的名稱。`
             : `${holder.code} 已不在這次的種子檔中（載入不會刪除它）。請先在「知識點」分頁把它改名，或改 ${s.code} 在種子檔裡的名稱。`;

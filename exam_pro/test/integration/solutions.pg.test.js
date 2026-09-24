@@ -258,6 +258,13 @@ function runSuite() {
                 const missing = await request(app).get('/api/questions/999999');
                 assert.equal(missing.status, 404);
                 assert.deepEqual(missing.body, { message: '找不到該題目' });
+                // 〔stage5 審查修正〕超過 int4 上限：404，不是 PG out of range 的 500
+                for (const [method, body] of [['get'], ['put', { subject: SUBJECT, chapter: CHAPTER, question_type: '計算', difficulty: 3, question_text: 'x', answer_text: '1' }], ['delete']]) {
+                    const r = await request(app)[method]('/api/questions/3000000000').send(body);
+                    assert.equal(r.status, 404, method);
+                    assert.deepEqual(r.body, { message: '找不到該題目' });
+                }
+                assert.equal((await request(app).patch('/api/students/3000000000').send({ name: 'x' })).status, 400);
                 for (const bad of ['abc', '0', '1.5', '-2']) {
                     const r = await request(app).get(`/api/questions/${bad}`);
                     assert.equal(r.status, 400, bad);
@@ -337,6 +344,47 @@ function runSuite() {
                 const again = await backfill(db, {});
                 assert.equal(again.updated, 0, '重跑是 no-op');
                 assert.equal(again.skipped.has_verify, 2);
+            });
+
+            // 〔stage5 審查修正 S5-41〕老師清空的詳解，重跑回填不得寫回
+            test('老師在編輯視窗清空回填的詳解 → 重跑回填維持 NULL（列為 cleared）；之後老師再寫 → 標記清掉', async () => {
+                const id = await legacySaved(1, { verify: verified({ steps_summary: '驗算步驟：1+6=7' }) });
+                const other = await legacySaved(2, { verify: verified({ steps_summary: '另一題的摘要' }) });
+                const db = { pool, query };
+                const first = await backfill(db, {});
+                assert.deepEqual(first.question_ids, [id, other]);
+                assert.deepEqual(await solutionOf(id), { solution_text: '驗算步驟：1+6=7', solution_src: 'verify' });
+
+                const { rows: [cur] } = await query('SELECT question_text, answer_text FROM questions WHERE id = $1', [id]);
+                const put = body => request(app).put(`/api/questions/${id}`).send({
+                    subject: SUBJECT, chapter: CHAPTER, question_type: '計算', difficulty: 3,
+                    question_text: cur.question_text, answer_text: cur.answer_text, ...body
+                });
+                assert.equal((await put({ solution_text: null })).status, 200);
+                assert.deepEqual(await solutionOf(id), { solution_text: null, solution_src: null });
+                const marked = (await query('SELECT solution_cleared_at FROM questions WHERE id = $1', [id])).rows[0];
+                assert.ok(marked.solution_cleared_at, '清空既有詳解要留下標記');
+
+                const again = await backfill(db, {});
+                assert.equal(again.updated, 0, '清空過的詳解不得寫回');
+                assert.deepEqual(again.question_ids, []);
+                assert.equal(again.skipped.cleared, 1);
+                assert.deepEqual(await solutionOf(id), { solution_text: null, solution_src: null });
+
+                // 沒有既有詳解時送 null（例如老師在空白欄位打了字又刪掉）不算「清空」，回填照補
+                const never = await legacySaved(3, { verify: verified({ steps_summary: '第三題' }) });
+                const { rows: [cur3] } = await query('SELECT question_text, answer_text FROM questions WHERE id = $1', [never]);
+                assert.equal((await request(app).put(`/api/questions/${never}`).send({
+                    subject: SUBJECT, chapter: CHAPTER, question_type: '計算', difficulty: 3,
+                    question_text: cur3.question_text, answer_text: cur3.answer_text, solution_text: ''
+                })).status, 200);
+                assert.equal((await query('SELECT solution_cleared_at FROM questions WHERE id = $1', [never])).rows[0].solution_cleared_at, null);
+                assert.deepEqual((await backfill(db, {})).question_ids, [never]);
+
+                // 老師之後自己寫了詳解 → 標記清掉（有詳解就不需要它）
+                assert.equal((await put({ solution_text: '老師後來寫的' })).status, 200);
+                const after = (await query('SELECT solution_text, solution_src, solution_cleared_at FROM questions WHERE id = $1', [id])).rows[0];
+                assert.deepEqual(after, { solution_text: '老師後來寫的', solution_src: 'teacher', solution_cleared_at: null });
             });
 
             test('--limit：一輪只寫 N 題，其餘列為 remaining', async () => {

@@ -2,7 +2,7 @@
 
 > 版本 v1.0 | 2026-09-24 | 分支 `stage5/ws-a` | 對應：`docs/interfaces-stage5.md` 第 4.1 條（WS-A）、缺口 G03／G05／G09、DEC-015、DEC-017、ADR-015
 > 本檔是 WS-A 三項功能的權威文件：API、資料、設計取捨與給老師的操作說明。共用文件（`engineering_docs/**` 的 api_spec、openapi、db_design、各 tracker，`README.md`，`docs/HANDOFF.md`）由整合階段依本檔回填，WS-A 沒有動。
-> migrations 沒有新增：用的是 `stage5/base` 已建好的 `0010`（attempts 批改細節、students 檔案欄位）與 `0011`（questions 文字詳解）。WS-A 也沒有新的環境變數與功能旗標（第 1.3 條：WS-A 屬既有核心流程的延伸）。
+> WS-A 開發時沒有新增 migration：用的是 `stage5/base` 已建好的 `0010`（attempts 批改細節、students 檔案欄位）與 `0011`（questions 文字詳解）。〔最終審查修正〕整合後另加 `0013_teacher_edit_markers.sql` 的 `questions.solution_cleared_at`（老師清空過詳解的標記，裁決 S5-41）。WS-A 沒有新的環境變數與功能旗標（第 1.3 條：WS-A 屬既有核心流程的延伸）。
 
 ## 目錄
 
@@ -62,8 +62,8 @@
   npm run solution:backfill                   # 全部補
   ```
 
-  可以重複跑：已經有詳解的題（尤其是你寫的）一律不動；入庫之後你改過題幹或答案的題不會補（那份摘要解的是改之前的題目）。從複核佇列核准入庫的題也要靠這支補。
-- **自己寫或修改**：題庫管理 → 題目的「✏️ 編輯」→ 最下面的「文字詳解」，公式照樣用 `$...$`，下方有即時預覽。改寫之後來源會變成「老師撰寫」；清空就是刪掉詳解。只改別的欄位、沒動詳解時，詳解與來源都不會變——**例外**：詳解來源是「驗算」而你改了題幹或答案，那段驗算摘要會一併清掉（它解的是改之前的題目）；需要的話請在同一個視窗重寫詳解。題庫列表上有詳解的題會多一個「有詳解」標籤。
+  可以重複跑：已經有詳解的題（尤其是你寫的）一律不動；入庫之後你改過題幹或答案的題不會補（那份摘要解的是改之前的題目）；**你在編輯視窗清空過詳解的題也不會補回來**。從複核佇列核准入庫的題也要靠這支補。
+- **自己寫或修改**：題庫管理 → 題目的「✏️ 編輯」→ 最下面的「文字詳解」，公式照樣用 `$...$`，下方有即時預覽。改寫之後來源會變成「老師撰寫」；清空就是刪掉詳解，而且系統會記住「這題不要驗算詳解」，之後重跑回填也不會把它放回去（想要回來就自己在同一欄寫）。只改別的欄位、沒動詳解時，詳解與來源都不會變——**例外**：詳解來源是「驗算」而你改了題幹或答案，那段驗算摘要會一併清掉（它解的是改之前的題目）；需要的話請在同一個視窗重寫詳解。題庫列表上有詳解的題會多一個「有詳解」標籤。
 
 > 驗算摘要是模型寫的，限 400 字、偏精簡，而且**沒有經過人工審閱**。發給學生之前，建議先在編輯視窗讀過一遍。
 
@@ -152,9 +152,11 @@
 ### 3.6 文字詳解
 
 - `GET /api/questions`（列表）每題多 `solution_text`、`solution_src`。
-- `GET /api/questions/:id`（新增，核心區）：題目詳情，含詳解；**已封存的題也查得到**（帶 `archived_at`）。不回 `embedding`、`search_tsv`。`:id` 不是正整數回 400 `無效的題目 ID`，不存在回 404 `找不到該題目`。
+- `GET /api/questions/:id`（新增，核心區）：題目詳情，含詳解；**已封存的題也查得到**（帶 `archived_at`）。不回 `embedding`、`search_tsv`。`:id` 不是正整數回 400 `無效的題目 ID`，不存在回 404 `找不到該題目`（〔最終審查修正〕超過 int4 上限也是 404，原本是 500；PUT／DELETE 同）。
 - `POST /api/questions`：可帶 `solution_text`（≤4000 字或 null）。非空 → `solution_src = 'teacher'`；沒帶或空白 → 兩欄 NULL。
 - `PUT /api/questions/:id`：**沒帶 `solution_text` 鍵＝不動**，唯一的例外見下一點。帶了：null 或空白 → 兩欄 NULL；與現值（trim 後）逐字相同 → 保留原來源；其他 → 寫入並標 `teacher`。
+- 〔最終審查修正 S5-41〕帶了 null 或空白、**而且原本有詳解** → 另記 `solution_cleared_at = now()`，回填腳本看到就略過這題；之後又帶了非空的詳解 → 清回 NULL。原本就沒有詳解時送 null 不記（沒有東西被刪）；下一點「系統自動清空」也不記（回填會以 `edited` 略過那一題）。
+- 〔最終審查修正 S5-42〕`subject` 或 `chapter` 真的改了（與舊值比）→ 同一筆交易裡刪掉這題已不適用的知識點標註：`src = 'ai'` 的全刪（AI 是從舊章的知識點裡挑的）、與新科目不同科的全刪（含 `human`）。同科改章時老師自己標的保留。有刪到時回應多一個 `kcs_removed`（筆數）；刪光之後 `npm run kc:backfill` 會依新章節重標（`docs/knowledge-components.md` 第 6.4 條）。
 - 〔整合階段新增〕**沒帶 `solution_text`、現有詳解的來源是 `verify`，而 `question_text` 或 `answer_text` 真的改了**（與舊值比較；送來的值先 trim，`answer_text` 空白照舊存成「略」）→ 兩欄一併清成 NULL。那份驗算摘要解的是改之前的題目、比對的是改之前的答案，留著會讓批改卡與 Word 詳解版把舊解法接在新答案後面（與回填腳本略過 `edited` 同一個理由，第 5.5 條）。`teacher` 來源不動（老師自己決定要不要改詳解）；有帶 `solution_text` 時照上一點的規則走。
 - 400：`詳解最多 4000 字。`、`詳解必須是文字或 null。`（驗證在開交易之前）。
 
@@ -175,6 +177,7 @@ body 多一個 `edition`：沒送（或 null）＝`standard`（現行行為）�
 | `attempts.response`、`teacher_note` | PATCH results | 各 ≤500 字 |
 | `students.grade`、`track`、`target_exams`、`school`、`textbook_version`、`note` | POST／PATCH students | 全部可為 NULL（`target_exams` 為空陣列）；既有學生不必回填 |
 | `questions.solution_text`、`solution_src` | save 節點（verify）、POST／PUT（teacher）、回填腳本（verify） | 兩欄同 NULL 或同非 NULL（`questions_solution_pair_check`）；`ai` 保留給之後 |
+| `questions.solution_cleared_at` TIMESTAMPTZ（`0013`） | PUT（老師清空既有詳解時寫入、之後寫了新詳解時清回 NULL） | 非 NULL＝老師刪過詳解，回填腳本不寫回（裁決 S5-41） |
 
 給其他 WS 讀的語意（第 2 條）：
 
@@ -204,7 +207,7 @@ body 多一個 `edition`：沒送（或 null）＝`standard`（現行行為）�
 
 - 來源三種：`verify`（管線驗算、與答案比對一致的摘要）、`teacher`（老師寫或改）、`ai`（保留）。老師 PUT 的文字與現值相同時保留原來源：在編輯視窗改了別的欄位按儲存，不該讓一段模型寫的詳解被標成「老師寫的」。前端也只在老師真的動過詳解欄時才送 `solution_text`（列表資料可能比回填舊，沒改卻送會把新回填的詳解洗掉）。
 - save 節點與回填腳本共用 `workers/jobRunner.js` 的 `buildSolutionFields`：`payload.verify.compare === 'agree'` 且 `steps_summary` trim 後非空、≤4000 字。判定看 `compare` 不看 outcome（payload 只留得下 data）。超長不截斷：截一半的詳解比沒有更會誤導。
-- 回填只補 `solution_text IS NULL` 的題（UPDATE 本身也帶這個條件，與老師同時存檔不會互蓋）；**題幹或答案在入庫後被改過**的題不補——摘要解的是改之前的題目。一題對到多列 `job_questions` 時取 id 最小且可用的一列。整批一個交易，`--dry-run` 在交易內真的跑完再 ROLLBACK，報的數字包含上述閘門的效果。
+- 回填只補 `solution_text IS NULL` 的題（UPDATE 本身也帶這個條件，與老師同時存檔不會互蓋）；**題幹或答案在入庫後被改過**的題不補——摘要解的是改之前的題目；〔最終審查修正 S5-41〕**老師清空過詳解**（`solution_cleared_at` 非 NULL，列為 `cleared`）的題不補——`solution_text IS NULL` 分不出「本來就沒有」與「老師刪掉了」，沒有這個標記的話，核准入庫後例行重跑回填會把老師刪掉的（可能是錯的）摘要原樣放回去、再印進 Word 詳解版。一題對到多列 `job_questions` 時取 id 最小且可用的一列。整批一個交易，`--dry-run` 在交易內真的跑完再 ROLLBACK，報的數字包含上述閘門的效果。
 - 複核佇列核准入庫（`reviewController.approve`）不寫詳解：契約只授權 save 節點（第 4.1 條「僅 save 時寫詳解」），核准入庫的題靠回填腳本補（腳本對「核准時改過題幹或答案」的題同樣會略過）。
 
 ### 5.6 Word 版本
@@ -231,6 +234,8 @@ body 多一個 `edition`：沒送（或 null）＝`standard`（現行行為）�
 | 10 | 〔整合階段〕PUT 改了題幹或答案、沒帶詳解、來源是 `verify` | 兩欄清成 NULL（第 3.6 條） | WS-A 審查 low：舊摘要解的是舊題目。`test/integration/solutions.pg.test.js` 原本斷言「改題幹、沒帶詳解 → verify 維持」的那一條因此改寫（標〔stage5 整合〕），「題幹與答案沒變 → 不動」照舊斷言 |
 | 11 | 〔整合階段〕批改卡把結果在對／錯之間切換 | 部分給分一併清空（送 `score: null`），老師重新填了就送新值 | WS-A 審查 low：錯時填的 0% 在改成對之後留著，`COALESCE(score, result)` 會把這題算成全錯（第 2.1 條） |
 | 12 | 〔整合階段〕Word 詳解版的來源標示 | `solution_src` 為 `verify` 或 `ai` 的詳解，在「詳解：」後面加註「（AI 驗算摘要，未經老師審閱）」 | WS-A 審查 low：印出來的詳解看不出是模型寫的，老師可能直接發給學生（第 2.5 條） |
+| 13 | 〔最終審查〕老師清空的詳解 | 記 `solution_cleared_at`，回填不寫回（新 migration `0013`） | 審查 high：清空後重跑回填會把詳解原樣寫回（裁決 S5-41） |
+| 14 | 〔最終審查〕PUT 改科／改章 | 同一交易刪掉不適用的知識點標註，回應多 `kcs_removed` | 審查 medium：舊標註指著舊章或別科的知識點，弱點、補救卷與家教都會算錯（裁決 S5-42） |
 
 ## 7. 測試
 

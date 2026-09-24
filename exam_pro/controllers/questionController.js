@@ -50,6 +50,34 @@ function scheduleEmbed(id) {
         });
 }
 
+/**
+ * 〔stage5 審查修正 S5-42〕題目改科或改章之後，清掉已經不適用的知識點標註（與題目 UPDATE 同一筆交易）。
+ *
+ *   - 改科：與新科目不同科的標註全部刪（含 human）。「知識點必須與題目同科」是 PUT /kcs 守的不變量，
+ *     留著的話知識點弱點、補救卷與 AI 家教都會拿別科的知識點來算這一題。
+ *   - 改科或改章：src = 'ai' 的標註全部刪。AI 是從**舊章**的知識點清單裡挑的，換章之後多半不對；
+ *     刪光之後這題沒有標註，下次 npm run kc:backfill 會依新章節重標。
+ *   - 同科改章時 human 的標註保留：PUT /kcs 本來就允許標到同科別章的知識點，那是老師自己的判斷。
+ *
+ * @param {{query:Function}} client 交易中的連線
+ * @param {number} id
+ * @param {{subject:string, chapter:string}} prev 改動前的科目與章節
+ * @param {{subject:string, chapter:string}} next 改動後的科目與章節
+ * @returns {Promise<number>} 刪掉的標註數
+ */
+async function pruneQuestionKcsAfterMove(client, id, prev, next) {
+    const subjectChanged = prev.subject !== next.subject;
+    const chapterChanged = prev.chapter !== next.chapter;
+    if (!subjectChanged && !chapterChanged) return 0;
+    const { rowCount } = await client.query(
+        `DELETE FROM question_kcs qk
+          USING knowledge_components kc
+          WHERE qk.question_id = $1 AND kc.id = qk.kc_id
+            AND (qk.src = 'ai' OR kc.subject <> $2)`,
+        [id, next.subject]);
+    return rowCount || 0;
+}
+
 // 提供前端手動錄入時的章節下拉選單來源
 exports.getChapterWhitelist = (req, res) => {
     res.json(CHAPTERS);
@@ -280,6 +308,8 @@ exports.getQuestion = async (req, res, next) => {
     if (!Number.isInteger(id) || id < 1 || String(id) !== raw) {
         return res.status(400).json({ message: '無效的題目 ID' });
     }
+    // 〔stage5 審查修正〕格式正確但超過 int4 上限：不可能存在的題，回 404（交給 PG 會是 out of range 的 500）
+    if (id > INT4_MAX) return res.status(404).json({ message: '找不到該題目' });
     try {
         const { rows } = await query(
             `SELECT id, subject, chapter, question_type, difficulty, question_text, question_img, answer_text,
@@ -297,6 +327,7 @@ exports.getQuestion = async (req, res, next) => {
 exports.updateQuestion = async (req, res, next) => {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ message: '無效的題目 ID' });
+    if (id < 1 || id > INT4_MAX) return res.status(404).json({ message: '找不到該題目' });
     const v = validateQuestionFields(req.body);
     if (!v.ok) return res.status(400).json({ message: v.error });
     // 來源註記（0007）：COALESCE 分不出「沒帶」與「清空」，因此帶欄位與否用 $9 布林傳；
@@ -316,6 +347,15 @@ exports.updateQuestion = async (req, res, next) => {
         const { subject, chapter, question_type, difficulty, question_text, answer_text } = v.value;
         await client.query('BEGIN');
 
+        // 〔stage5 審查修正 S5-42〕先鎖列讀舊的科目與章節：改科／改章時要一併處理知識點標註（見下方）。
+        // 與 PUT /api/questions/:id/kcs、自動標註用同一把鎖（題目列 FOR UPDATE），三者排隊寫。
+        const { rows: before } = await client.query(
+            'SELECT subject, chapter FROM questions WHERE id = $1 AND archived_at IS NULL FOR UPDATE', [id]);
+        if (before.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: '找不到該題目' });
+        }
+
         // UPDATE 的 SET 運算式一律看**舊值**，所以兩個 CASE 裡的 chapter 與五個比較欄
         // 都是改動前的內容：
         //   chapter_src  老師手動改過章節 ⇒ 章節來源不再是 AI，標記 'human'（規劃 §4.3.1）
@@ -325,6 +365,9 @@ exports.updateQuestion = async (req, res, next) => {
         //   solution_*   〔stage5 整合〕沒帶 solution_text、現有詳解來源是 verify，而題幹或答案真的改了
         //                ⇒ 兩欄一併清成 NULL：那份驗算摘要解的是改之前的題目（與回填腳本略過 edited
         //                同一個理由，docs/grading-and-profile.md 第 3.6 條）。老師寫的（teacher）不動。
+        //   solution_cleared_at 〔stage5 審查修正 S5-41〕老師明確清空**既有**詳解 ⇒ 記下時間，回填腳本
+        //                看到就不再把驗算摘要寫回來；老師又寫了新詳解 ⇒ 清回 NULL。上一點的自動清空不記
+        //                （回填會以「入庫後被改過」略過那一題）。
         // 題源標記（0006）：body 有帶合法值才更新，沒帶維持原值（COALESCE(NULL, …)）
         const sourceType = isValidSourceType(req.body.source_type) ? req.body.source_type : null;
         const { rows } = await client.query(
@@ -342,6 +385,9 @@ exports.updateQuestion = async (req, res, next) => {
                                          WHEN $12::text IS NULL THEN NULL
                                          WHEN $12::text = solution_text THEN solution_src
                                          ELSE 'teacher' END,
+                    solution_cleared_at = CASE WHEN $11 AND $12::text IS NULL AND solution_text IS NOT NULL THEN now()
+                                               WHEN $11 AND $12::text IS NOT NULL THEN NULL
+                                               ELSE solution_cleared_at END,
                     chapter_src = CASE WHEN chapter IS DISTINCT FROM $2 THEN 'human' ELSE chapter_src END,
                     embed_hash  = CASE WHEN (subject, chapter, question_type, difficulty, question_text)
                                        IS DISTINCT FROM ($1, $2, $3, $4::smallint, $5)
@@ -359,9 +405,10 @@ exports.updateQuestion = async (req, res, next) => {
         // 用 RETURNING 回來的權威值重算 search_tsv（keywords／concept_summary 只有 DB 知道），
         // 與題目本體同一筆交易：不會出現「內容已改、tsv 還是舊的」的中間狀態。
         await writeSearchTsv(client, rows[0]);
+        const kcsRemoved = await pruneQuestionKcsAfterMove(client, id, before[0], { subject, chapter });
         await client.query('COMMIT');
 
-        res.json({ message: '題目已更新！', id });
+        res.json({ message: '題目已更新！', id, ...(kcsRemoved > 0 ? { kcs_removed: kcsRemoved } : {}) });
         scheduleEmbed(id);
     } catch (err) {
         try { await client.query('ROLLBACK'); } catch (e) { /* 回滾失敗不覆蓋原始錯誤 */ }
@@ -388,6 +435,7 @@ exports.updateQuestion = async (req, res, next) => {
 exports.deleteQuestion = async (req, res, next) => {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ message: '無效的題目 ID' });
+    if (id < 1 || id > INT4_MAX) return res.status(404).json({ message: '找不到該題目' });
     if (parseBool(req.query.group)) return deleteQuestionGroup(id, res, next);
 
     const client = await pool.connect();
@@ -452,6 +500,9 @@ exports.deleteQuestion = async (req, res, next) => {
         client.release();
     }
 };
+
+/** PostgreSQL INT（int4）上限：questions.id 是 INT，超過的 id 不可能存在 */
+const INT4_MAX = 2147483647;
 
 /** PG foreign_key_violation */
 const FOREIGN_KEY_VIOLATION = '23503';

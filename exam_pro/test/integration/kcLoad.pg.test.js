@@ -60,7 +60,8 @@ function runSuite() {
         test('第一次載入：全部新增，先備以 src=ai 寫入；第二次：全部「內容相同」', async () => {
             const r1 = await load([readSeed('數學'), readSeed('物理')]);
             assert.equal(r1.ok, true, r1.errors.join('\n'));
-            assert.deepEqual(r1.counts, { inserted: 15, updated: 0, unchanged: 0, protected: 0, prereqInserted: 13, prereqRemoved: 0, orphans: 0 });
+            // 〔stage5 審查修正 S5-43〕counts 多一個 edited（老師改過而受保護的草稿）
+            assert.deepEqual(r1.counts, { inserted: 15, updated: 0, unchanged: 0, protected: 0, edited: 0, prereqInserted: 13, prereqRemoved: 0, orphans: 0 });
             assert.equal(await count('knowledge_components'), 15);
             const e = await edges();
             assert.equal(e.length, 13);
@@ -72,7 +73,7 @@ function runSuite() {
             assert.equal(r.sort, 2);
 
             const r2 = await load([readSeed('數學'), readSeed('物理')]);
-            assert.deepEqual(r2.counts, { inserted: 0, updated: 0, unchanged: 15, protected: 0, prereqInserted: 0, prereqRemoved: 0, orphans: 0 });
+            assert.deepEqual(r2.counts, { inserted: 0, updated: 0, unchanged: 15, protected: 0, edited: 0, prereqInserted: 0, prereqRemoved: 0, orphans: 0 });
         });
 
         test('草稿列：種子檔改了就更新（updated_at 前進）', async () => {
@@ -104,6 +105,48 @@ function runSuite() {
             assert.equal(forced.counts.updated, 2);
             assert.equal((await row('MATH.向量內積.02')).spoken_text, component(readSeed('數學'), 'MATH.向量內積.02').spoken_text);
             assert.equal((await row('MATH.向量內積.03')).status, 'draft');
+        });
+
+        // 〔stage5 審查修正 S5-43〕
+        test('老師在知識點分頁改過、還沒審定的草稿：重載同一份種子檔不覆寫（列為 edited）；--force 才覆寫並清掉標記', async () => {
+            await load([readSeed('數學')]);
+            const id = (await row('MATH.向量內積.01')).id;
+            const teacherText = '老師親手改過的口語版：兩個向量內積，就是一個的長度乘另一個在它方向上的影子長，算出來是數字。';
+
+            // 只改 status（審定再改回草稿）不算改過
+            assert.equal((await kc.patchKc(db, id, { status: 'approved' })).status, 200);
+            assert.equal((await kc.patchKc(db, id, { status: 'draft' })).status, 200);
+            assert.equal((await row('MATH.向量內積.01')).edited_at, null);
+            // 送了跟現值一樣的內容也不算
+            assert.equal((await kc.patchKc(db, id, { name: (await row('MATH.向量內積.01')).name })).status, 200);
+            assert.equal((await row('MATH.向量內積.01')).edited_at, null);
+
+            const res = await kc.patchKc(db, id, { spoken_text: teacherText });
+            assert.equal(res.status, 200);
+            assert.equal(res.item.status, 'draft');
+            assert.ok((await row('MATH.向量內積.01')).edited_at, '改了內容要留下 edited_at');
+
+            const r = await load([readSeed('數學')]);
+            assert.equal(r.ok, true, r.errors.join('\n'));
+            assert.equal(r.counts.edited, 1);
+            assert.equal(r.counts.updated, 0);
+            assert.deepEqual(r.editedCodes, ['MATH.向量內積.01']);
+            assert.equal((await row('MATH.向量內積.01')).spoken_text, teacherText, '老師的修改不得被種子檔蓋回去');
+
+            const forced = await load([readSeed('數學')], { force: true });
+            assert.equal(forced.counts.updated, 1);
+            assert.deepEqual(forced.editedCodes, ['MATH.向量內積.01'], '--force 時列出被覆寫的是哪些');
+            const after = await row('MATH.向量內積.01');
+            assert.equal(after.spoken_text, component(readSeed('數學'), 'MATH.向量內積.01').spoken_text);
+            assert.equal(after.edited_at, null, '覆寫後內容回到種子檔版本，標記清掉');
+
+            // 已審定的列按「改回草稿」再修改，同樣受保護
+            const approvedId = (await row('MATH.向量內積.02')).id;
+            assert.equal((await kc.patchKc(db, approvedId, { status: 'draft' })).status, 200);
+            assert.equal((await kc.patchKc(db, approvedId, { description: '老師改寫的說明。' })).status, 200);
+            const r2 = await load([readSeed('數學')]);
+            assert.equal(r2.counts.edited, 1);
+            assert.equal((await row('MATH.向量內積.02')).description, '老師改寫的說明。');
         });
 
         test('validateSeeds 有 error → 整批拒絕，一列都不寫', async () => {
