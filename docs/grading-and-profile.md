@@ -75,7 +75,7 @@
 | :--- | :--- | :--- |
 | 標準版（預設，與以前相同） | 題目＋卷末參考答案 | `卷名.docx` |
 | 學生版 | 只有題目，不附答案 | `卷名（學生版）.docx` |
-| 詳解版 | 題目＋卷末每題答案，答案後面接詳解；詳解裡的公式同樣是 Word 原生方程式。沒有詳解的題標「（本題尚無文字詳解）」 | `卷名（詳解版）.docx` |
+| 詳解版 | 題目＋卷末每題答案，答案後面接詳解；詳解裡的公式同樣是 Word 原生方程式。沒有詳解的題標「（本題尚無文字詳解）」。來源是驗算（或之後的 AI 生成）的詳解，「詳解：」後面會多一行灰色小字「（AI 驗算摘要，未經老師審閱）」，你自己寫的不會〔整合階段新增〕 | `卷名（詳解版）.docx` |
 
 ## 3. API
 
@@ -209,7 +209,7 @@ body 多一個 `edition`：沒送（或 null）＝`standard`（現行行為）�
 
 ### 5.6 Word 版本
 
-`standard` 走原本的產生路徑（逐位元相同的段落序列）；`student` 連分頁帶答案區一起不產生；`solution` 在每題答案後接詳解，詳解走同一支 `buildParagraphComponents`，公式轉 OMML。版本名以白名單驗證，controller 回 400、`generateExamPaperDocx` 再丟一次錯（第二道）。訂正卷（只收該生錯題）不在本階段範圍（缺口表 TEACH-11 的 correction 版本），沒有做。
+`standard` 走原本的產生路徑（逐位元相同的段落序列）；`student` 連分頁帶答案區一起不產生；`solution` 在每題答案後接詳解，詳解走同一支 `buildParagraphComponents`，公式轉 OMML；`solution_src` 為 `verify`／`ai` 時在「詳解：」後加註「（AI 驗算摘要，未經老師審閱）」（整合階段依 WS-A 審查補上，`wordController` 因此多查 `solution_src`）。版本名以白名單驗證，controller 回 400、`generateExamPaperDocx` 再丟一次錯（第二道）。訂正卷（只收該生錯題）不在本階段範圍（缺口表 TEACH-11 的 correction 版本），沒有做。
 
 ### 5.7 學生檔案：PATCH 從「改名」變成「部分更新」
 
@@ -230,6 +230,7 @@ body 多一個 `edition`：沒送（或 null）＝`standard`（現行行為）�
 | 9 | 既有測試的修改 | `test/integration/students.pg.test.js` 四處形狀斷言加上新欄位（標〔stage5 WS-A〕） | 契約刻意擴充了 `GET /api/students` 每列、`recent_wrong` 每列與 weakness 的頂層鍵；斷言仍是逐欄 deepEqual，另外多釘了既有欄位的順序，沒有放寬 |
 | 10 | 〔整合階段〕PUT 改了題幹或答案、沒帶詳解、來源是 `verify` | 兩欄清成 NULL（第 3.6 條） | WS-A 審查 low：舊摘要解的是舊題目。`test/integration/solutions.pg.test.js` 原本斷言「改題幹、沒帶詳解 → verify 維持」的那一條因此改寫（標〔stage5 整合〕），「題幹與答案沒變 → 不動」照舊斷言 |
 | 11 | 〔整合階段〕批改卡把結果在對／錯之間切換 | 部分給分一併清空（送 `score: null`），老師重新填了就送新值 | WS-A 審查 low：錯時填的 0% 在改成對之後留著，`COALESCE(score, result)` 會把這題算成全錯（第 2.1 條） |
+| 12 | 〔整合階段〕Word 詳解版的來源標示 | `solution_src` 為 `verify` 或 `ai` 的詳解，在「詳解：」後面加註「（AI 驗算摘要，未經老師審閱）」 | WS-A 審查 low：印出來的詳解看不出是模型寫的，老師可能直接發給學生（第 2.5 條） |
 
 ## 7. 測試
 

@@ -403,6 +403,19 @@ function runSuite() {
                 assert.ok(xmlSol.includes('（本題尚無文字詳解）'));
             });
 
+            // 〔stage5 整合〕controller 要多查 solution_src，詳解版才分得出哪些是模型寫、沒人看過的
+            test('solution：verify 來源的詳解加註「（AI 驗算摘要，未經老師審閱）」，teacher 的不加', async () => {
+                const byVerify = await seedQuestion({ solution: '驗算寫的摘要', src: 'verify' });
+                const byTeacher = await seedQuestion({ solution: '老師寫的詳解', src: 'teacher' });
+                const res = await download({ paper_title: '來源標示卷', student_name: '學生', question_ids: [byVerify, byTeacher], edition: 'solution' });
+                assert.equal(res.status, 200);
+                const xml = documentXml(res.body);
+                const note = '（AI 驗算摘要，未經老師審閱）';
+                assert.equal(xml.split(note).length - 1, 1);
+                assert.ok(xml.indexOf(note) < xml.indexOf('驗算寫的摘要'));
+                assert.ok(!xml.slice(xml.indexOf('第 2 題答案：'), xml.indexOf('老師寫的詳解')).includes(note));
+            });
+
             test('其他 edition 值回 400；既有的 question_ids 檢查仍然優先', async () => {
                 const id = await seedQuestion();
                 for (const edition of ['teacher', '', 'SOLUTION', 1]) {
