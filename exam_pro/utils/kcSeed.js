@@ -137,4 +137,68 @@ function validateSeeds(seeds, opts = {}) {
     return { errors, warnings, stats };
 }
 
-module.exports = { validateSeeds, SUBJECT_PREFIX, CODE_RE, LIMITS, STATUSES };
+// ── 階段 5 WS-C 新增（docs/interfaces-stage5.md 第 4.3 條；只新增，上面的規則一個字都沒動）──
+//
+// 單一欄位的檢查：PATCH /api/kc/:id 要套「長度規則同第 3.4 條」，但它一次只改幾個欄位，
+// 不能整份種子檔丟進 validateSeeds。這裡把第 3.4 條的欄位規則拆成逐欄的函式，
+// 數字一律讀上面同一份 LIMITS／STATUSES（不另抄一份）。
+// LaTeX 偵測的 regex 與 validateSeeds 內的那一條逐字相同；test/unit/kcService.test.js
+// 拿同一組樣本同時餵兩邊，確認兩者判定一致（不會出現「種子檔擋、API 放」的落差）。
+
+/** spoken_text 不可含 LaTeX（與 validateSeeds 內的 regex 逐字相同） */
+const LATEX_RE = /\$|\\[a-zA-Z]+/;
+
+/** PATCH 可以改的欄位（第 4.3 條第 2 點） */
+const EDITABLE_FIELDS = ['name', 'description', 'spoken_text', 'curriculum_code', 'status'];
+
+/**
+ * 檢查單一欄位是否符合第 3.4 條。字串會先 trim 再量長度（與 validateSeeds 相同）。
+ * @param {'name'|'description'|'spoken_text'|'curriculum_code'|'status'} field
+ * @param {any} value
+ * @returns {string|null} 違規時回錯誤訊息（繁中），合法回 null
+ */
+function checkKcField(field, value) {
+    const str = typeof value === 'string' ? value.trim() : null;
+    switch (field) {
+        case 'name':
+            if (str === null || !str || str.length > LIMITS.nameMax) return `name 必須是 1–${LIMITS.nameMax} 字`;
+            return null;
+        case 'description':
+            if (str === null || !str || str.length > LIMITS.descriptionMax) return `description 必須是 1–${LIMITS.descriptionMax} 字`;
+            return null;
+        case 'spoken_text':
+            if (str === null || str.length < LIMITS.spokenMin || str.length > LIMITS.spokenMax) {
+                return `spoken_text 必須是 ${LIMITS.spokenMin}–${LIMITS.spokenMax} 字（目前 ${str === null ? 0 : str.length}）`;
+            }
+            if (LATEX_RE.test(str)) return 'spoken_text 不可含 LaTeX（要能直接唸出來）';
+            return null;
+        case 'curriculum_code':
+            if (value === null) return null;
+            if (str === null || !str || value.length > LIMITS.curriculumCodeMax) {
+                return `curriculum_code 必須是 null 或 1–${LIMITS.curriculumCodeMax} 字字串`;
+            }
+            return null;
+        case 'status':
+            return STATUSES.includes(value) ? null : 'status 必須是 draft 或 approved';
+        default:
+            return `不認得的欄位 ${field}`;
+    }
+}
+
+/**
+ * 由 code 推回科目與章名（code 格式不合時回 null）。
+ * 跨科先備解析、前端標示「跨科」都用這支，不各自切字串。
+ * @param {string} code
+ * @returns {{subject:string, chapter:string, seq:number}|null}
+ */
+function parseKcCode(code) {
+    const m = CODE_RE.exec(String(code ?? ''));
+    if (!m) return null;
+    return { subject: PREFIX_SUBJECT[m[1]], chapter: m[2], seq: Number(m[3]) };
+}
+
+module.exports = {
+    validateSeeds, SUBJECT_PREFIX, CODE_RE, LIMITS, STATUSES,
+    // 階段 5 WS-C 新增的匯出
+    defaultChapters, LATEX_RE, EDITABLE_FIELDS, checkKcField, parseKcCode
+};
