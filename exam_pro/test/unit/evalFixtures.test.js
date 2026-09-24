@@ -1,7 +1,7 @@
 // 公開 fixture 與檢索 golden 的硬閘門測試
 //
 // 這一支同時是**資料**的測試，不只是程式的測試：它每次 CI 都會把
-// eval/fixtures/questions.public.json 的 60 題與 eval/golden/retrieval.json 的 40 筆
+// eval/fixtures/questions.public.json 的 61 題與 eval/golden/retrieval.json 的 40 筆
 // 重新過一次章節白名單與交叉參照。
 //
 // 為什麼值得：fixture 是純檔案，沒有 DB 的 CHECK 幫忙擋。一個手滑改錯的章節名、
@@ -19,8 +19,11 @@ const fixture = loadFixture();          // 載入本身就會跑硬閘門，不�
 const golden = loadGolden({ fixtureById: fixture.byId });
 
 describe('公開 fixture 的結構（D-E1 的驗收條件）', () => {
-    test('共 60 題', () => {
-        assert.equal(fixture.questions.length, 60);
+    test('共 61 題', () => {
+        // 〔章節重整 CH-B〕60 → 61：#25、#26（平方關係）依題意改標到「直角三角形的邊角關係」後，
+        // 那一章有換數字配對卻沒有干擾題，下面 D-E1 那一則會擋；因此新增自製干擾題 #61
+        // （eval/CHAPTER_RELABEL-2026-09.md 第 2.1 節）。仍是精確值。
+        assert.equal(fixture.questions.length, 61);
     });
 
     test('每一題的章節都在 config/chapters.js 的白名單內', () => {

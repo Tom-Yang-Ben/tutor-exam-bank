@@ -165,7 +165,7 @@ npm test                                                # 確認回放正常
 | agent | 素材 |
 |---|---|
 | `extract` | `eval/fixtures/sample_exam.pdf` —— **WS-D 的樣卷**（10 題，`node eval/fixtures/make_sample_pdf.js` 從 `questions.public.json` 挑題排版）。裁決 S2-15 定它為唯一的樣卷，WS-B 原本的 `scripts/make_sample_exam_pdf.js` 已退場 |
-| `classify` | `eval/fixtures/questions.public.json`（60 題公開 fixture） |
+| `classify` | `eval/fixtures/questions.public.json`（61 題公開 fixture） |
 
 真實考卷、私有題庫的回應一律走 `eval/private/cassettes`（`.gitignore` 內），由 `eval/run.js` 在 `--golden` 落在 `eval/private/` 時自動切換（裁決 25）。
 
@@ -173,7 +173,7 @@ npm test                                                # 確認回放正常
 
 ```powershell
 node scripts/record_cassettes.js --agent all                       # extract 1 次 + classify 8 題
-LLM_MODE=record GEMINI_RPM=5 node eval/run.js --suite classify     # 90 筆 golden，約 18 分鐘
+LLM_MODE=record GEMINI_RPM=5 node eval/run.js --suite classify     # 91 筆 golden，約 18 分鐘
 LLM_MODE=record GEMINI_RPM=5 node eval/run.js --suite pipeline     # 樣卷 10 題走 extract/classify/lint/verify
 ```
 

@@ -1,9 +1,9 @@
 // 階段 2 三份 golden（classify／answer／dedup）的硬閘門測試（A-T6）
 //
 // 與 evalFixtures.test.js 同一個用意：這一支測的是**資料**，不只是程式。
-// 每次 CI 都把 90 筆分類標籤、250 個答案比對案例、30 組重複判定重新過一次閘門。
+// 每次 CI 都把 91 筆分類標籤、250 個答案比對案例、30 組重複判定重新過一次閘門。
 // golden 是純檔案，沒有 DB 的 CHECK 幫忙擋；一個手滑改錯的章節名不會讓任何東西壞掉，
-// 只會讓 accuracy 安靜地少 1/90，看起來像模型退步。
+// 只會讓 accuracy 安靜地少 1/91，看起來像模型退步。
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
@@ -21,9 +21,11 @@ const answer = g2.loadAnswerGolden();
 const dedup = g2.loadDedupGolden({ fixtureById: fixture.byId });
 
 describe('classify golden（章節分類）', () => {
-    test('共 90 筆＝ 60 題 fixture + 30 筆漂移變體', () => {
-        assert.equal(classify.entries.length, 90);
-        assert.equal(classify.entries.filter(e => e.source === 'fixture').length, 60);
+    test('共 91 筆＝ 61 題 fixture + 30 筆漂移變體', () => {
+        // 〔章節重整 CH-B〕90／60 → 91／61：fixture 新增自製干擾題 #61，fixture 段照「標籤沿用 fixture」補上
+        // cls-fx-061（eval/CHAPTER_RELABEL-2026-09.md 第 2.1 節）。漂移段不變。仍是精確值。
+        assert.equal(classify.entries.length, 91);
+        assert.equal(classify.entries.filter(e => e.source === 'fixture').length, 61);
         assert.equal(classify.entries.filter(e => e.source === 'drift').length, 30);
     });
 
@@ -214,7 +216,7 @@ describe('normalizeStem 轉接層與 scripts/backfill_text_hash.js 的參考實�
         return s.replace(/\$/g, '').replace(/\s+/g, '').toLowerCase();
     }
 
-    test('對 fixture 60 題與 dedup golden 的 60 段文字產出逐位元相同的雜湊', () => {
+    test('對 fixture 61 題與 dedup golden 的 60 段文字產出逐位元相同的雜湊', () => {
         const texts = [
             ...fixture.questions.map(q => q.question_text),
             ...dedup.entries.flatMap(e => [e.a.text, e.b.text])

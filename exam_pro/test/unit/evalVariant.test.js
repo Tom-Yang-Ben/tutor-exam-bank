@@ -30,14 +30,14 @@ describe('eval/golden/variant.json 的硬閘門（第 8.4 條）', () => {
         }
     });
 
-    test('涵蓋兩科 8 章與五種題型（證明題的 verify 會 skipped，那條路徑必須量得到）', () => {
+    test('涵蓋兩科 10 章與五種題型（證明題的 verify 會 skipped，那條路徑必須量得到）', () => {
         const golden = suite.loadVariantGolden({ fixtureById: fixture.byId });
         const chapters = new Set(golden.entries.map(e => `${e.subject}/${e.chapter}`));
         const types = new Set(golden.entries.map(e => e.question_type));
-        // 〔章節重整 CH-B〕8 → 9 章：藍本照 fixture 改標後，「指數與對數」拆成「指數與對數」與
-        // 「指數函數與對數函數」，「三角函數的定義」改為「廣義角與極坐標」（eval/CHAPTER_RELABEL-2026-09.md）。
-        // 仍是精確值，不是放寬成 ≥。
-        assert.equal(chapters.size, 9);
+        // 〔章節重整 CH-B〕8 → 10 章：藍本照 fixture 改標後，「指數與對數」拆成「指數與對數」與
+        // 「指數函數與對數函數」，「三角函數的定義」拆成「直角三角形的邊角關係」（var-013，藍本 #25）與
+        // 「廣義角與極坐標」（var-014～016）（eval/CHAPTER_RELABEL-2026-09.md）。仍是精確值，不是放寬成 ≥。
+        assert.equal(chapters.size, 10);
         assert.deepEqual([...types].sort(), ['single', '單選', '多選', '填空', '計算', '證明'].filter(t => types.has(t)).sort());
         assert.ok(types.has('證明'), 'golden 要有證明題');
         assert.ok(types.has('多選'), 'golden 要有多選題');

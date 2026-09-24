@@ -5,7 +5,7 @@
   "_annotations": {
     "涵蓋面（第 8.4 條）": "nlq-001~008 只有章節；009~017 章節+難度；018~025 章節+題型+學生；026~035 口語別名；036~043 完全沒章節只有概念詞（走 LLM）；044~050 模糊句。六類都有。",
     "expect.semantic_text": "凍結的預期值（第 8.4 條）：① 解析漂移時發警告；② recall10 改用它去 embed()，讓量到的是「檢索本身」而不是「這一輪解析剛好漂掉」。rules 路徑的值取自 utils/nlqHeuristics.js 目前的輸出，因此它同時是一條回歸線。",
-    "relevant": "rules 路徑由 expect 的四欄對 fixture 篩出來（章節＋難度＋題型全中的題）；llm 路徑逐句手挑最貼近的題。fixture 只涵蓋 9 個章節（2026-09-25 章節重整前是 8 個），所以 50 句刻意集中在這幾章，不然 Recall@10 沒有正樣本可量。",
+    "relevant": "rules 路徑由 expect 的四欄對 fixture 篩出來（章節＋難度＋題型全中的題）；llm 路徑逐句手挑最貼近的題。fixture 只涵蓋 10 個章節（2026-09-25 章節重整前是 8 個），所以 50 句刻意集中在這幾章，不然 Recall@10 沒有正樣本可量。",
     "expect_path=llm 的 8 句": "這 8 句規則一定抓不到章節（句子裡沒有任何章節本名或別名），因此必然呼叫 generateJson。eval/cassettes/nlq/ 還沒有錄音，CI 會是 replay miss——WS-D 在 cassette 錄好之前不要把 --suite nlq 加進 CI（見 docs/questions3-wsC.md 第 4 題）。"
   },
   "version": 1,
@@ -77,8 +77,6 @@
       },
       "expect_path": "rules",
       "relevant": [
-        25,
-        26,
         27,
         28,
         29,
@@ -367,17 +365,17 @@
     },
     {
       "id": "nlq-015",
-      "query": "廣義角與極坐標難度 1",
+      "query": "直角三角形的邊角關係難度 1",
       "expect": {
         "subject": "數學",
         "chapters": [
-          "廣義角與極坐標"
+          "直角三角形的邊角關係"
         ],
         "question_types": [],
         "difficulty_min": 1,
         "difficulty_max": 1,
         "exclude_student_name": null,
-        "semantic_text": "廣義角與極坐標"
+        "semantic_text": "直角三角形的邊角關係"
       },
       "expect_path": "rules",
       "relevant": [
@@ -809,8 +807,6 @@
       },
       "expect_path": "rules",
       "relevant": [
-        25,
-        26,
         29,
         31
       ],
@@ -1187,8 +1183,6 @@
       },
       "expect_path": "rules",
       "relevant": [
-        25,
-        26,
         27,
         28,
         29,

@@ -6,7 +6,7 @@
 //      CH-A 合入前本分支的 config/chapters.js 還是舊白名單，既有測試會用它檢查而紅，這一支不會。
 //   2. 沒有任何一筆還標著重整後不存在的章名。
 //   3. 各份 golden 抄下來的章名與 fixture 一致；nlq rules 路徑的 relevant 就是 expect 四欄篩出來的題。
-//   4. eval/CHAPTER_RELABEL-2026-09.md 的表格逐列與檔案內容相符，而且沒有漏列。
+//   4. eval/CHAPTER_RELABEL-2026-09.md 的表格逐列與檔案內容相符，而且沒有漏列（含第 2.1 節新增的題）。
 //   5. nlq 改寫過的查詢句，在新白名單下的規則解析結果就是 golden 的期望值（子行程以 preload 模擬 CH-A 合入後）。
 // ─────────────────────────────────────────────────────────────
 
@@ -110,17 +110,17 @@ describe('改標後的素材以新清單（PLAN_CHAPTERS＋化學）過得了全
         assert.equal(chapterGate().source, 'config/chapters.js');
     });
 
-    test('fixture 60 題', () => {
+    test('fixture 61 題（新增自製干擾題 #61，改標清單第 2.1 節）', () => {
         const fixture = loadFixture(undefined, { chapters: CHAPTERS });
-        assert.equal(fixture.questions.length, 60);
+        assert.equal(fixture.questions.length, 61);
         // 注入新清單時，舊章名會被同一套閘門擋下（證明注入真的生效，不是全部放行）
         const bad = validateQuestions([{ ...fixture.questions[0], chapter: '三角函數的定義' }], { chapters: CHAPTERS });
         assert.ok(bad.some(p => p.includes('三角函數的定義')), bad.join('\n'));
     });
 
-    test('classify 90 筆、nlq 50 句、variant 30 個藍本、樣卷答案卷 10 題', () => {
+    test('classify 91 筆（fixture 段 61＋漂移段 30）、nlq 50 句、variant 30 個藍本、樣卷答案卷 10 題', () => {
         const fixture = loadFixture(undefined, { chapters: CHAPTERS });
-        assert.equal(loadClassifyGolden({ fixtureById: fixture.byId, chapters: CHAPTERS }).entries.length, 90);
+        assert.equal(loadClassifyGolden({ fixtureById: fixture.byId, chapters: CHAPTERS }).entries.length, 91);
         assert.equal(loadNlqGolden({ fixtureById: fixture.byId, chapters: CHAPTERS }).entries.length, 50);
         assert.equal(loadVariantGolden({ fixtureById: fixture.byId, chapters: CHAPTERS }).entries.length, 30);
         assert.equal(loadSheet({ pdfPath: SAMPLE_PDF, chapters: CHAPTERS }).doc.questions.length, 10);
@@ -173,6 +173,7 @@ describe('eval/CHAPTER_RELABEL-2026-09.md 與檔案內容相符', () => {
     const rewrites = readTable('| 題號 | 舊查詢 | 新查詢 | 舊章 | 新章 | 理由 |');
     const relevantOnly = readTable('| 題號 | 查詢 | 舊 relevant | 新 relevant |');
     const kept = readTable('| 檔案 | 題號 | 章 | 理由 |');
+    const added = readTable('| 檔案 | 題號 | 新增到的章 | 理由 |');
 
     test('改標清單逐列：檔案裡現在的章名就是「新章」，而且照 MIGRATION 的去處改', () => {
         assert.ok(relabel.length >= 40, `改標清單只有 ${relabel.length} 列`);
@@ -208,10 +209,33 @@ describe('eval/CHAPTER_RELABEL-2026-09.md 與檔案內容相符', () => {
         }
     });
 
-    test('沒有漏列：標著新設章名的每一筆都在改標清單或改寫表裡', () => {
+    test('新增的題（第 2.1 節）：章名與表上相同；fixture 的新題是自製干擾題，classify 的 fixture 段逐字沿用它', () => {
+        assert.ok(added.length >= 2, `新增表只有 ${added.length} 列`);
+        for (const [file, id, chapter, why] of added) {
+            const item = lookup(file, id);
+            assert.ok(item, `${file} ${id} 找不到`);
+            assert.equal(item.chapter, chapter, `${file} ${id}`);
+            assert.ok(PLAN_CHAPTERS[item.subject].includes(chapter), `${chapter} 不在新清單`);
+            assert.ok(why && why.length >= 4, `${file} ${id} 沒寫理由`);
+            if (file === 'questions.public.json') {
+                const q = FIXTURE_BY_ID.get(Number(id));
+                assert.equal(q.role, 'distractor', `#${id} 是為了滿足 D-E1 而新增的干擾題`);
+                assert.ok(!q.variant_group && !q.latex_broken, `#${id} 不該加入換數字家族，也不是刻意寫壞的題`);
+            }
+            if (file === 'classify.json') {
+                const e = RAW.classify.entries.find(x => x.id === id);
+                assert.equal(e.source, 'fixture', id);
+                assert.equal(e.question_text, FIXTURE_BY_ID.get(e.from).question_text, `${id} 的題幹要逐字沿用 fixture`);
+                assert.ok(added.some(([f, qid]) => f === 'questions.public.json' && Number(qid) === e.from), `${id} 的來源題也要列在新增表`);
+            }
+        }
+    });
+
+    test('沒有漏列：標著新設章名的每一筆都在改標清單、改寫表或新增表裡', () => {
         const listed = new Set([
             ...relabel.map(([file, id]) => `${file}#${id}`),
-            ...rewrites.map(([id]) => `nlq.json#${id}`)
+            ...rewrites.map(([id]) => `nlq.json#${id}`),
+            ...added.map(([file, id]) => `${file}#${id}`)
         ]);
         const unlisted = allLabels()
             .filter(l => (NEW_ONLY[l.subject] || []).includes(l.chapter))
