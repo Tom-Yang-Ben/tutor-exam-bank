@@ -19,7 +19,7 @@ const {
 const aliases = require('../../config/chapterAliases');
 const { CHAPTER_EXAMPLES, getChapterExample } = require('../../config/chapterExamples');
 const { tokenize, MATH_PHYSICS_TERMS } = require('../../utils/tokenize');
-const { parseQuery } = require('../../utils/nlqHeuristics');
+const { parseQuery, isChemistryOnlyQuery } = require('../../utils/nlqHeuristics');
 const { chapterWhitelistText } = require('../../agents/promptParts');
 const nlq = require('../../services/nlqService');
 const { buildSchema } = require('../../agents/schemas');
@@ -131,7 +131,7 @@ describe('別名（第 3.1 條第 2 點）', () => {
         const expect = {
             '拋物線的準線': '拋物線', '雙曲線的漸近線': '雙曲線', '線性規劃的目標函數': '線性規劃',
             '棣美弗定理': '複數的幾何意涵', '貝氏定理': '條件機率與貝氏定理', '文氏圖': '集合與計數原理',
-            '高斯消去法': '一次方程組', '電磁波': '電與磁的統一', '因次分析': '測量與不確定度',
+            '高斯消去法': '一次方程組', '馬克士威': '電與磁的統一', '因次分析': '測量與不確定度',
             '氣體動力論': '理想氣體與氣體動力論', '質心運動': '質心與角動量'
         };
         for (const [text, chapter] of Object.entries(expect)) {
@@ -180,8 +180,25 @@ describe('分詞詞典（第 3.1 條第 4 點）', () => {
     });
 
     test('只收數理專用詞：化學也常用的詞不進 MATH_PHYSICS_TERMS（NLQ 的科目判斷）', () => {
-        for (const w of ['理想氣體', '絕對溫度', '有效數字']) assert.ok(!MATH_PHYSICS_TERMS.includes(w), w);
+        for (const w of ['理想氣體', '絕對溫度', '有效數字', '電磁波', '方均根速率']) assert.ok(!MATH_PHYSICS_TERMS.includes(w), w);
         assert.equal(new Set(MATH_PHYSICS_TERMS).size, MATH_PHYSICS_TERMS.length, 'MATH_PHYSICS_TERMS 有重複詞');
+        // 跨科詞仍然進詞典（切得出來），只是不算數理線索
+        const toks = tokenize('電磁波與方均根速率');
+        assert.ok(toks.includes('電磁波') && toks.includes('方均根速率'), JSON.stringify(toks));
+    });
+
+    test('跨科詞不收成物理別名：明寫化學的查詢不會被改判成物理（與重整前相同）', () => {
+        const opts = { mathPhysicsTerms: MATH_PHYSICS_TERMS };
+        for (const a of ['電磁波', '電磁波譜', '方均根速率']) assert.equal(aliases.CHAPTER_ALIASES[a], undefined, a);
+        const r1 = parse('化學 電磁波的計算');
+        assert.deepEqual(r1.filters.chapters, []);
+        assert.equal(isChemistryOnlyQuery('化學 電磁波的計算', opts), true);
+        const r2 = parse('光譜與電磁波 莫耳');
+        assert.deepEqual(r2.filters.chapters, ['原子量與莫耳']);
+        assert.equal(r2.filters.subject, '化學');
+        assert.deepEqual(parse('方均根速率 化學').filters.chapters, []);
+        // 物理的講法照樣走規則路徑
+        assert.deepEqual(parse('馬克士威預測了電磁波').filters.chapters, ['電與磁的統一']);
     });
 });
 
