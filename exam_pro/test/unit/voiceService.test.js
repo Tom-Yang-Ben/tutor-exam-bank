@@ -171,6 +171,12 @@ describe('transcribe — 輸出（ajv 再驗一次＋正規化）', () => {
         });
     });
 
+    test('LLM 呼叫失敗（含 SDK 自帶 status 的錯）→ 502「語音轉寫暫時無法使用：原因」', async () => {
+        const llm = { async generateJson() { throw Object.assign(new Error('Unsupported MIME type'), { status: 400 }); } };
+        await assert.rejects(() => voice.transcribe({ file: file() }, { llm, budget: budget() }),
+            (e) => e.status === 502 && e.message === '語音轉寫暫時無法使用：Unsupported MIME type');
+    });
+
     test('錄音沒有語音 → text 為空字串照樣回（前端提示再錄一次），不當成錯誤', async () => {
         const out = await voice.transcribe({ file: file() }, { llm: fakeLlm({ text: '', math_segments: [], ambiguities: [] }), budget: budget() });
         assert.equal(out.text, '');
@@ -254,8 +260,23 @@ describe('tutorController — multer 錯誤轉譯與限流設定', () => {
         // 走到 voiceService 的驗證就會失敗（mime 不對），但 finally 一樣要清
         const req = { file: { buffer: Buffer.from('x'), mimetype: 'text/plain' }, body: {} };
         const res = mockRes();
-        await controller.transcribe(req, res);
+        await controller.transcribe(req, res, () => assert.fail('400 不該交給全域錯誤處理'));
         assert.equal(res.statusCode, 400);
         assert.equal(req.file.buffer, null);
+    });
+
+    test('沒有 status 的錯誤（例如 DB）交給 next → 全域錯誤中樞回 500', async () => {
+        const original = tutor.runTutor;
+        const boom = new Error('relation "students" does not exist');
+        tutor.runTutor = async () => { throw boom; };
+        try {
+            let passed = null;
+            const res = mockRes();
+            await controller.chat({ body: {} }, res, (e) => { passed = e; });
+            assert.equal(passed, boom);
+            assert.equal(res.statusCode, null, '不該自己回應');
+        } finally {
+            tutor.runTutor = original;
+        }
     });
 });

@@ -538,7 +538,8 @@ async function prepareTutorRequest(input, deps = {}) {
  *           verification:{used:boolean, runs:Array<{code:string,outcome:string|null,output:string}>},
  *           context:{question_id?:number, kc_codes:string[], student_context:boolean},
  *           usage:{tokenIn:number, tokenOut:number, costUsd:number}}>}
- * @throws status 400（參數）、404（題目／學生不存在）、429（今日預算用完）；其餘錯誤沒有 status（controller 轉 502）
+ * @throws status 400（參數）、404（題目／學生不存在）、429（今日預算用完）、502（LLM 呼叫失敗）；
+ *         其餘（例如 DB 錯誤）沒有 status，controller 交給全域錯誤處理（500）
  */
 async function runTutor(body, deps = {}) {
     const parsed = validateTutorInput(body);
@@ -551,7 +552,14 @@ async function runTutor(body, deps = {}) {
     const { llmOpts, context, pseudo, modelId } = await prepareTutorRequest(input, deps);
 
     const llm = deps.llm || require('./llm');
-    const res = await llm.generateText(llmOpts);
+    let res;
+    try {
+        res = await llm.generateText(llmOpts);
+    } catch (err) {
+        // 供應商失敗、replay miss、逾時：一律 502（SDK 的錯誤可能自帶 400／429 之類的 status，
+        // 不能讓它冒充成「你的參數錯了」或「今日預算用完」）。DB 錯誤不在這裡，會以 500 往上丟。
+        throw Object.assign(httpError(502, `AI 家教暫時無法回應：${err.message}`), { cause: err });
+    }
 
     const usage = res.usage || {};
     const costUsd = estimateUsd(modelId, usage);

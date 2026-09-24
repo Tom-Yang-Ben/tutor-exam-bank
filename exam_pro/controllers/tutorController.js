@@ -7,7 +7,8 @@
 // 這裡只做 HTTP 轉譯：
 //   400 參數不合法（{ message }）       404 題目或學生不存在
 //   413 錄音超過 5 MB                   429 今日預算用完（每分鐘限流的 429 由 middleware/rateLimit 回）
-//   502 其餘（供應商失敗、replay miss、模型輸出格式不符）——對前端來說都是「家教暫時無法回應」
+//   502 LLM 端失敗（供應商錯誤、replay miss、逾時、模型輸出格式不符）——「家教暫時無法回應」
+//   其餘（DB 錯誤等）交給 app.js 的全域錯誤中樞（500），不冒充成供應商的問題
 //
 // 兩條路由只在旗標開啟時掛載（routes/index.js 檔尾的 WS-E 區塊）：
 //   FEATURE_TUTOR                     → POST /api/tutor
@@ -16,12 +17,12 @@
 const tutorService = require('../services/tutorService');
 const voiceService = require('../services/voiceService');
 
-const PASS_THROUGH = new Set([400, 404, 413, 429]);
+/** service 層以 httpError 標好的狀態碼；其餘錯誤沒有這個標記 */
+const PASS_THROUGH = new Set([400, 404, 413, 429, 502]);
 
-function sendError(res, err, prefix) {
-    if (PASS_THROUGH.has(err.status)) return res.status(err.status).json({ message: err.message });
-    if (err.status === 502) return res.status(502).json({ message: err.message });
-    return res.status(502).json({ message: `${prefix}：${err.message}` });
+function sendError(req, res, next, err) {
+    if (err && PASS_THROUGH.has(err.status)) return res.status(err.status).json({ message: err.message });
+    return next(err);
 }
 
 /**
@@ -29,6 +30,7 @@ function sendError(res, err, prefix) {
  * routes/index.js 掛載時讀一次；非正整數一律退回預設。
  * @param {string} name 環境變數名
  * @param {number} [fallback=10]
+ * @param {object} [env=process.env]
  * @returns {number}
  */
 function rateLimitPerMin(name, fallback = 10, env = process.env) {
@@ -39,22 +41,22 @@ function rateLimitPerMin(name, fallback = 10, env = process.env) {
 }
 
 /** POST /api/tutor */
-exports.chat = async (req, res) => {
+exports.chat = async (req, res, next) => {
     try {
         const out = await tutorService.runTutor(req.body || {});
         res.status(200).json(out);
     } catch (err) {
-        sendError(res, err, 'AI 家教暫時無法回應');
+        sendError(req, res, next, err);
     }
 };
 
 /** POST /api/voice/transcribe（multer memoryStorage 之後；req.file.buffer 只活在這一次請求） */
-exports.transcribe = async (req, res) => {
+exports.transcribe = async (req, res, next) => {
     try {
         const out = await voiceService.transcribe({ file: req.file, subject: (req.body || {}).subject });
         res.status(200).json(out);
     } catch (err) {
-        sendError(res, err, '語音轉寫暫時無法使用');
+        sendError(req, res, next, err);
     } finally {
         // 音訊不落地，也不要比這個請求活得更久（ADR-013）
         if (req.file) req.file.buffer = null;

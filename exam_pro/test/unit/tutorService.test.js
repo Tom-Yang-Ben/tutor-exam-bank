@@ -479,11 +479,24 @@ describe('驗算結果、成本與每日預算', () => {
         assert.equal(tutor.estimateUsd('gemini-3.5-flash', {}), 0);
     });
 
-    test('LLM 丟錯 → 原樣往上丟（沒有 status，controller 轉 502），預算不記帳', async () => {
+    test('LLM 丟錯 → 502「AI 家教暫時無法回應：原因」，預算不記帳', async () => {
         const budget = freshBudget();
         const llm = { async generateText() { throw new Error('LLM_MODE=replay 找不到 cassette（agent=tutor key=x）。'); } };
-        await assert.rejects(() => tutor.runTutor(base(), { llm, db: fakeDb(), budget }), (err) => err.status === undefined);
+        await assert.rejects(() => tutor.runTutor(base(), { llm, db: fakeDb(), budget }),
+            (err) => err.status === 502 && err.message.startsWith('AI 家教暫時無法回應：LLM_MODE=replay 找不到 cassette') && !!err.cause);
         assert.equal(budget.spent(), 0);
+    });
+
+    test('供應商的錯誤自帶 status（例如 SDK 的 429／400）→ 仍然是 502，不冒充成預算或參數錯誤', async () => {
+        const llm = { async generateText() { throw Object.assign(new Error('RESOURCE_EXHAUSTED'), { status: 429 }); } };
+        await assert.rejects(() => tutor.runTutor(base(), { llm, db: fakeDb(), budget: freshBudget() }),
+            (err) => err.status === 502 && /RESOURCE_EXHAUSTED/.test(err.message));
+    });
+
+    test('DB 錯誤（沒有 status）原樣往上丟，controller 交給全域錯誤處理（500）', async () => {
+        const db = fakeDb({ listStudents: () => { throw new Error('relation "students" does not exist'); } });
+        await assert.rejects(() => tutor.runTutor(base(), { llm: fakeLlm(), db, budget: freshBudget() }),
+            (err) => err.status === undefined && /does not exist/.test(err.message));
     });
 });
 

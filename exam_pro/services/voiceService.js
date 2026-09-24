@@ -142,7 +142,7 @@ function normalizeTranscript(data) {
  * @param {{llm?:object, budget?:object}} [deps]
  * @returns {Promise<{text:string, math_segments:Array<{spoken,latex}>, ambiguities:Array<{spoken,options:string[]}>,
  *                    usage:{tokenIn:number, tokenOut:number, costUsd:number}}>}
- * @throws status 400／413（輸入）、429（今日預算用完）、502（模型輸出不合格式）；其餘錯誤沒有 status
+ * @throws status 400／413（輸入）、429（今日預算用完）、502（LLM 呼叫失敗或輸出不合格式）；其餘錯誤沒有 status
  */
 async function transcribe(input, deps = {}) {
     const checked = validateVoiceInput(input);
@@ -157,20 +157,26 @@ async function transcribe(input, deps = {}) {
     const llm = deps.llm || require('./llm');
 
     const audioSha256 = crypto.createHash('sha256').update(buffer).digest('hex');
-    const res = await llm.generateJson({
-        model: models.MODEL_VOICE,
-        system: SYSTEM,
-        parts: [
-            { text: PROMPT_TEMPLATE.replace('{{subject}}', () => subject || '未指定（數學、物理或化學）') },
-            { audioBase64: buffer.toString('base64'), mimeType }
-        ],
-        schema: SCHEMA,
-        maxOutputTokens: 4096,
-        agent: AGENT,
-        template: TEMPLATE,
-        // 鍵只用錄音的雜湊：錄音內容與逐字稿都不進 cassette 的 request 區
-        cacheKeyParts: { audio_sha256: audioSha256, mime: mimeType, subject }
-    });
+    let res;
+    try {
+        res = await llm.generateJson({
+            model: models.MODEL_VOICE,
+            system: SYSTEM,
+            parts: [
+                { text: PROMPT_TEMPLATE.replace('{{subject}}', () => subject || '未指定（數學、物理或化學）') },
+                { audioBase64: buffer.toString('base64'), mimeType }
+            ],
+            schema: SCHEMA,
+            maxOutputTokens: 4096,
+            agent: AGENT,
+            template: TEMPLATE,
+            // 鍵只用錄音的雜湊：錄音內容與逐字稿都不進 cassette 的 request 區
+            cacheKeyParts: { audio_sha256: audioSha256, mime: mimeType, subject }
+        });
+    } catch (err) {
+        // 同 tutorService：LLM 端的失敗一律 502，不讓 SDK 自帶的 status 冒充成參數錯誤
+        throw Object.assign(tutor.httpError(502, `語音轉寫暫時無法使用：${err.message}`), { cause: err });
+    }
 
     // 成本先記：就算輸出格式不合，這次呼叫的錢也已經花掉了
     const usage = res.usage || {};
