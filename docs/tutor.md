@@ -52,6 +52,7 @@ LLM 要能真的呼叫：`LLM_MODE=live`（或 `record`）且有 `GEMINI_API_KEY
   沒有跑任何程式的回覆會顯示「⚠ 這則回覆沒有執行程式驗算，數值請自行核對」。
 - **依據**：這一則用了哪一題、哪些知識點、有沒有帶學生資料。
 - 每則都有「AI 產生，請自行判斷」與這一次的估計花費。
+- 回覆最後出現「**⚠ 回覆因長度上限被截斷**」時，表示這一則寫到一半就碰到輸出上限（模型的思考與驗算程式也算在同一個額度內），**最後的「驗算」結論可能不見了**。可以接著打「接著說」，或把題目拆成小題再問。這一次的花費照樣計入每日預算。
 
 **驗算不等於正確。** 程式只能保證「程式算出來的數字」對；題意理解錯、列錯式子、單位看錯，程式照樣會算出一個錯的答案。引導式模式下，家教也可能被學生說服。拿去教學生之前，請把「驗算」那一段和標準答案對一下。
 
@@ -116,6 +117,8 @@ LLM 要能真的呼叫：`LLM_MODE=live`（或 `record`）且有 `GEMINI_API_KEY
 - `verification.used` = 這一輪有沒有執行任何程式；`runs[].outcome` 是 Gemini 的 `OUTCOME_OK`／`OUTCOME_FAILED`／`OUTCOME_DEADLINE_EXCEEDED`（沒有回報結果時為 `null`）。
 - `context.question_id` 只在有題目時出現；`kc_codes` 依送進 prompt 的順序（approved 在前）；`student_context` = 學生弱點摘要有沒有真的放進 prompt（學生沒有批改資料時為 false）。
 - `usage.tokenIn` 含 code execution 結果回灌的 `toolUsePromptTokenCount`；`tokenOut` 含 thinking（計費同價，裁決 S0-6）；`costUsd` 見第 2.5 節。
+- **截斷**：`generateText` 回 `finishReason = 'MAX_TOKENS'` 時，`reply` 後面附上一段「**⚠ 回覆因長度上限被截斷**：…」（停在沒有結尾圍欄的程式碼區塊裡時，先補上結尾圍欄）；截斷前沒有任何文字時，`reply` 改成「家教這次的輸出額度在寫出回覆之前就用完了…」。回應形狀不變（仍是上面五個欄位），所以任何前端都看得到提醒；費用照樣記帳。
+- 送出的參數：`maxOutputTokens = 8192` 與 `thinkingBudget = 2048` **成對設定**（同 `agents/verify.js` 的教訓：`MODEL_VERIFY` 是 thinking 模型，思考計入輸出額度，不限思考時難題會把額度吃光）。`thinkingBudget` 不在 cassette 鍵內。
 
 **錯誤**：`400 { message }` 參數不合法；`404` 題目或學生不存在；`429` 每分鐘限流或今日預算用完（訊息不同）；`502` LLM 端失敗（供應商錯誤、replay miss、逾時；訊息以「AI 家教暫時無法回應：」開頭）；DB 錯誤走全域錯誤處理（500）。
 
@@ -149,16 +152,18 @@ LLM 要能真的呼叫：`LLM_MODE=live`（或 `record`）且有 `GEMINI_API_KEY
 ### 3.3 `services/llm.generateText`（給其他 WS 用；第 5.1 條）
 
 ```js
-const { text, codeRuns, usage, latencyMs } = await require('./services/llm').generateText({
+const { text, codeRuns, finishReason, usage, latencyMs } = await require('./services/llm').generateText({
   model, system, parts,                  // parts: {text}|{pdfBase64}|{fileUri}|{audioBase64,mimeType}|{imageBase64,mimeType}
   tools: { codeExecution: true },        // → config.tools = [{ codeExecution: {} }]
   maxOutputTokens, thinkingBudget, signal,
   agent, template, cacheKeyParts         // record/replay 與 generateJson 相同規則
 });
 // codeRuns: [{ language, code, outcome, output }]
+// finishReason: candidates[0].finishReason 原樣（'STOP'、'MAX_TOKENS'、'SAFETY'…），沒有時為 null
 ```
 
-- 鍵公式與 `generateJson` 完全相同（schema 欄恆為空字串的雜湊）；cassette 的 `response` 存 `{ text, codeRuns, usage, latencyMs }`。replay miss 的訊息與 `generateJson` 同一串（`eval/lib/replayMiss.js` 認得）。
+- 鍵公式與 `generateJson` 完全相同（schema 欄恆為空字串的雜湊）；cassette 的 `response` 存 `{ text, codeRuns, finishReason, usage, latencyMs }`。`finishReason` 是第 5.1 條之外**多加**的回傳欄位（不在鍵內；舊 cassette 沒有這一欄時回放為 `null`），讓呼叫端知道自由文字被截斷了——自由文字不像 JSON 會「解析失敗」，沒有這個欄位就無從得知。replay miss 的訊息與 `generateJson` 同一串（`eval/lib/replayMiss.js` 認得）。
+- 用 thinking 模型時請把 `maxOutputTokens` 與 `thinkingBudget` 成對設定（`agents/verify.js`、`agents/lint.js` 的註解有事故紀錄）。
 - `gemini.parseTextResponse` 把 `candidates[0].content.parts` 拆成 text（跳過 `thought: true`）與 codeRuns：`executableCode {language, code}` 開一筆，後面的 `codeExecutionResult {outcome, output}` 填回最近一筆沒有結果的（有 `id` 時以 `id` 對應）。欄位名依 `node_modules/@google/genai/dist/genai.d.ts`（SDK 2.22.0）。
 - `toContents` 新增的兩種 part 走 `inlineData {mimeType, data}`，`mimeType` 必填（不猜）；既有三種 part 的輸出逐字不變（`test/unit/llmGenerateText.test.js` 釘住）。
 - cassette 的 request 摘要對音訊／圖片只存 `{ kind, mimeType, bytes, sha256 }`。
@@ -195,6 +200,7 @@ const { text, codeRuns, usage, latencyMs } = await require('./services/llm').gen
 | 家教與助教分開 | 新的 `tutorService`，不改 `assistantService` | 助教的底線是「只根據工具結果、不准靠模型知識」；家教正好相反。兩者系統提示、輸出形狀（受限 JSON vs Markdown）、模型都不同，硬合在一起只會讓兩邊的提示互相妥協（ADR-012） |
 | 驗算工具 | Gemini 內建 code execution（Python＋sympy） | 不用自架 SymPy 服務、不加 npm 依賴；代價是綁 Gemini，換供應商要重做，而且驗算是**模型自己決定要跑什麼程式**，不是伺服器端獨立驗證（ADR-012 第 4 節） |
 | 輸出 | 自由文字 Markdown（`generateText`），不是受限 JSON | 講解本來就是長文；JSON 包長文容易在跳脫字元上出錯。驗算結果由 SDK 的 parts 結構化提供，不靠模型自己回報 |
+| 輸出上限 | 家教 `maxOutputTokens 8192`＋`thinkingBudget 2048`；語音 `4096`＋`1024`；兩組都成對設定 | thinking 模型的思考吃同一個額度（`agents/verify.js` 2026-08-27 job #4、`agents/lint.js` job #5 的事故）。家教要規劃講法與驗算程式，思考給得比 verify 多；語音只轉寫 ≤ 60 秒的錄音，輸出的 JSON 只有幾百 tokens。家教仍被截斷時附提醒（第 3.1 節）；語音的 JSON 被截斷會解析失敗、回 502 請老師重錄。**兩組數字都沒有實測過**，Owner 用 live 試幾題難題後再調 |
 | 預算 | 程序內、按本地日期、重啟歸零 | 單機單人使用的系統；要跨重啟累計得新增資料表（WS-E 預留 `0017_*`，本階段不需要）。已知：最後一次呼叫可能略超過上限 |
 | 題目附圖 | 不送圖，prompt 提醒「看不到圖」 | `generateText` 已支援圖片 part，但附圖路徑、大小與成本控管需要另外設計；列為後續 |
 | 家教對話記錄 | 只在頁面裡（最近 8 輪），不存 DB | 本階段沒有「老師回看學生對話」的需求；也避免把對話內容寫進庫 |
@@ -208,11 +214,11 @@ const { text, codeRuns, usage, latencyMs } = await require('./services/llm').gen
 
 | 層 | 檔案 | 驗什麼 |
 |---|---|---|
-| 單元 | `test/unit/llmGenerateText.test.js` | `toContents` 既有三種逐字不變＋音訊／圖片；`parseTextResponse` 的配對；`gemini.generateText` 送出的 config（假 client）；`generateJson` 的 config 形狀回歸；replay 命中／miss／壞檔；record → replay 一輪（音訊 base64 與 prompt 原文不進 cassette）；三個模型 getter |
-| 單元 | `test/unit/tutorService.test.js` | body 驗證（400 在查 DB、呼叫 LLM 之前）；脈絡組裝（題目、詳解 NULL、approved 優先與 draft 標註、退回同章、沒有知識點、學生前 5 與錯因、沒有資料時不帶）；**姓名不出現在 system／parts／cacheKeyParts**、回覆換回姓名；兩種模式的系統提示差異與模板註冊；驗算回傳；成本；每日預算 429 與隔日歸零；LLM 失敗 502、DB 錯誤不冒充 502 |
+| 單元 | `test/unit/llmGenerateText.test.js` | `toContents` 既有三種逐字不變＋音訊／圖片；`parseTextResponse` 的配對；`readFinishReason`；`gemini.generateText` 送出的 config（假 client，含 `thinkingConfig`）與回傳的 `finishReason`；`generateJson` 的 config 形狀回歸；replay 命中／miss／壞檔；record → replay 一輪（音訊 base64 與 prompt 原文不進 cassette）；三個模型 getter |
+| 單元 | `test/unit/tutorService.test.js` | body 驗證（400 在查 DB、呼叫 LLM 之前）；脈絡組裝（題目、詳解 NULL、approved 優先與 draft 標註、退回同章、沒有知識點、學生前 5 與錯因、沒有資料時不帶）；**姓名不出現在 system／parts／cacheKeyParts**、回覆換回姓名；兩種模式的系統提示差異與模板註冊；驗算回傳；`thinkingBudget` 與 `maxOutputTokens` 成對送出；`MAX_TOKENS` 截斷提醒（含補結尾圍欄、空回覆的專屬說明、照樣記帳）；成本；每日預算 429 與隔日歸零；LLM 失敗 502、DB 錯誤不冒充 502 |
 | 單元 | `test/unit/voiceService.test.js` | 大小、mime（含 `;codecs=`）、科目；送出的 parts 與 cacheKeyParts；ajv 再驗、正規化；成本併入同一個預算；controller 的 multer 錯誤轉譯、限流設定、buffer 清除 |
 | 單元 | `test/unit/tutorUi.test.js` | `renderMarkdown` 的 XSS 案例（`<img onerror>`、`javascript:` 連結、屬性跳脫、偽造佔位符、唯一屬性 `start`）與格式；麥克風可用性；歧義替換；miniDom 實跑：旗標關閉不渲染、麥克風不可用隱藏並說明、送出與回覆呈現、**錄音 → 逐字稿 → 點 chip → 按確認才送出**、取消不送 |
-| 整合 | `test/integration/tutor.pg.test.js` | 旗標三種組合的 404；兩條 API 的 400／404／413；**以 LLM_MODE=replay＋暫存 cassette 目錄跑通一輪**（鍵由 `prepareTutorRequest` 算出，與正式請求同一支函式；並斷言 DB 組出的 prompt 沒有姓名）；退回同章知識點；replay miss 502；預算 429；兩個限流 env；錄音不寫進 `uploads/` |
+| 整合 | `test/integration/tutor.pg.test.js` | 旗標三種組合的 404；兩條 API 的 400／404／413；**以 LLM_MODE=replay＋暫存 cassette 目錄跑通一輪**（鍵由 `prepareTutorRequest` 算出，與正式請求同一支函式；並斷言 DB 組出的 prompt 沒有姓名）；退回同章知識點；cassette 記錄 `MAX_TOKENS` 時回覆附截斷提醒；replay miss 502；預算 429；兩個限流 env；錄音不寫進 `uploads/` |
 
 **為什麼整合測試選 replay 而不是在 app 層注入 fake**：走的是正式程式路徑（routes → controller → service → `services/llm` → `fake.js`），app 與 controller 不必為了測試多開注入口；cassette 寫在 `os.tmpdir()`，不進 repo，CI 不需要任何新 cassette。
 

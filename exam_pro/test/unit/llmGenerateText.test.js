@@ -172,6 +172,15 @@ describe('gemini.parseTextResponse — text 與 code execution 的 parts 拆解'
         assert.deepEqual(gemini.parseTextResponse({}), { text: '', codeRuns: [] });
         assert.deepEqual(gemini.parseTextResponse(null), { text: '', codeRuns: [] });
     });
+
+    test('readFinishReason：candidates[0].finishReason 原樣回傳（MAX_TOKENS＝被截斷）；沒有時回 null', () => {
+        assert.equal(gemini.readFinishReason({ candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [] } }] }), 'MAX_TOKENS');
+        assert.equal(gemini.readFinishReason({ candidates: [{ finishReason: 'STOP' }] }), 'STOP');
+        assert.equal(gemini.readFinishReason({ candidates: [{}] }), null);
+        assert.equal(gemini.readFinishReason({ candidates: [] }), null);
+        assert.equal(gemini.readFinishReason({}), null);
+        assert.equal(gemini.readFinishReason(null), null);
+    });
 });
 
 // ───────────────────────── gemini.generateText／generateJson（假 client）─────────────────────────
@@ -200,6 +209,35 @@ describe('gemini.generateText — 送出的 config（假 client）', () => {
         assert.equal(out.text, '好');
         // code execution 的結果回灌（toolUsePromptTokenCount）以 input 計價，要算進 tokenIn
         assert.deepEqual(out.usage, { tokenIn: 130, tokenOut: 20, tokenThinking: 5, tokenCached: 0 });
+    });
+
+    test('thinkingBudget → config.thinkingConfig；回傳 finishReason（被截斷時是 MAX_TOKENS，截斷前的文字照樣回）', async () => {
+        const client = fakeClient({
+            candidates: [{
+                finishReason: 'MAX_TOKENS',
+                content: { parts: [{ text: '（思考）', thought: true }, { text: '先列式：$1\\times3' }] }
+            }],
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 6000, thoughtsTokenCount: 2048 }
+        });
+        gemini._setClientForTest(client);
+        const out = await gemini.generateText({
+            model: 'gemini-3.1-pro-preview', parts: [{ text: 'q' }], maxOutputTokens: 8192, thinkingBudget: 2048
+        });
+        assert.deepEqual(client.calls[0].config.thinkingConfig, { thinkingBudget: 2048 });
+        assert.equal(client.calls[0].config.maxOutputTokens, 8192);
+        assert.equal(out.finishReason, 'MAX_TOKENS');
+        assert.equal(out.text, '先列式：$1\\times3');
+    });
+
+    test('正常結束 → finishReason=STOP；回應沒有這一欄 → null；沒給 thinkingBudget → 不帶 thinkingConfig', async () => {
+        let client = fakeClient({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: '好' }] } }] });
+        gemini._setClientForTest(client);
+        assert.equal((await gemini.generateText({ model: 'm', parts: [{ text: 'q' }] })).finishReason, 'STOP');
+        assert.equal(client.calls[0].config.thinkingConfig, undefined);
+
+        client = fakeClient({ candidates: [{ content: { parts: [{ text: '好' }] } }] });
+        gemini._setClientForTest(client);
+        assert.equal((await gemini.generateText({ model: 'm', parts: [{ text: 'q' }] })).finishReason, null);
     });
 
     test('沒開 codeExecution → 不帶 tools', async () => {
@@ -262,6 +300,16 @@ describe('LLM_MODE=replay 的 generateText（services/llm/fake.js）', () => {
         assert.deepEqual(out.codeRuns, []);
     });
 
+    test('finishReason：cassette 有就原樣回放（重現「被截斷」）；沒有這一欄（舊格式）→ null', async () => {
+        writeTextCassette({
+            agent: 'gentext_trunc', modelId: 'm1', cacheKeyParts: {},
+            response: { text: '寫到一半', finishReason: 'MAX_TOKENS' }
+        });
+        assert.equal(fake.generateText({ model: 'm1', agent: 'gentext_trunc', cacheKeyParts: {} }).finishReason, 'MAX_TOKENS');
+        writeTextCassette({ agent: 'gentext_nofr', modelId: 'm1', cacheKeyParts: {}, response: { text: 'hi' } });
+        assert.equal(fake.generateText({ model: 'm1', agent: 'gentext_nofr', cacheKeyParts: {} }).finishReason, null);
+    });
+
     test('miss：丟錯，訊息開頭與 generateJson 的 miss 同一串（eval/lib/replayMiss 認得出來）', () => {
         const rm = require('../../eval/lib/replayMiss');
         let err = null;
@@ -294,6 +342,7 @@ describe('LLM_MODE=record 的 generateText：寫 cassette、之後 replay 讀得
             assert.equal(opts.model, 'gemini-3.5-flash', 'vendor 前綴要先剝掉');
             return {
                 text: '錄到了', codeRuns: [{ language: 'PYTHON', code: 'print(2)', outcome: 'OUTCOME_OK', output: '2' }],
+                finishReason: 'MAX_TOKENS',
                 usage: { tokenIn: 3, tokenOut: 4, tokenThinking: 0, tokenCached: 0 }, latencyMs: 12, raw: {}
             };
         };
@@ -318,6 +367,7 @@ describe('LLM_MODE=record 的 generateText：寫 cassette、之後 replay 讀得
         assert.equal(saved.response.text, '錄到了');
         assert.equal(saved.response.codeRuns.length, 1);
         assert.deepEqual(saved.request.tools, { codeExecution: true });
+        assert.equal(saved.response.finishReason, 'MAX_TOKENS', 'finishReason 要進 cassette，回放才重現得出截斷');
         const raw = JSON.stringify(saved);
         assert.ok(!raw.includes('題幹全文不該進 cassette'), 'request 不得存 prompt 原文');
         assert.ok(!raw.includes(audio.toString('base64')), 'request 不得存音訊 base64');
@@ -331,6 +381,7 @@ describe('LLM_MODE=record 的 generateText：寫 cassette、之後 replay 讀得
         const replayed = await llm.generateText(opts);
         assert.equal(replayed.text, '錄到了');
         assert.equal(replayed.codeRuns[0].output, '2');
+        assert.equal(replayed.finishReason, 'MAX_TOKENS');
     });
 });
 

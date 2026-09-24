@@ -111,6 +111,14 @@ describe('transcribe — 送出的參數', () => {
         });
     });
 
+    test('thinkingBudget 與 maxOutputTokens 成對送出（MODEL_EXTRACT 是 thinking 模型；同 agents/lint.js 的教訓）', async () => {
+        const llm = fakeLlm();
+        await voice.transcribe({ file: file() }, { llm, budget: budget() });
+        assert.equal(llm.calls[0].maxOutputTokens, voice.MAX_OUTPUT_TOKENS);
+        assert.equal(llm.calls[0].thinkingBudget, voice.THINKING_BUDGET);
+        assert.ok(voice.THINKING_BUDGET * 2 <= voice.MAX_OUTPUT_TOKENS);
+    });
+
     test('模板註冊字串＝SYSTEM＋\\n---\\n＋PROMPT_TEMPLATE（第 1.2 條）', () => {
         assert.equal(templates.getTemplate(voice.TEMPLATE), `${voice.SYSTEM}\n---\n${voice.PROMPT_TEMPLATE}`);
     });

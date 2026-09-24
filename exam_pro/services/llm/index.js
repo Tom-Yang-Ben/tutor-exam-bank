@@ -14,8 +14,9 @@
 // 階段 5（WS-E，docs/interfaces-stage5.md 第 5.1 條）新增：
 //   generateText({ model, system, parts, tools:{codeExecution?}, maxOutputTokens, thinkingBudget, signal,
 //                  agent, template, cacheKeyParts })
-//     → { text, codeRuns: [{ language, code, outcome, output }], usage, latencyMs }
-//   record／replay 規則與 generateJson 相同（同一條鍵公式，schema 欄恆為空）；cassette 存 { text, codeRuns, usage }。
+//     → { text, codeRuns: [{ language, code, outcome, output }], finishReason, usage, latencyMs }
+//   record／replay 規則與 generateJson 相同（同一條鍵公式，schema 欄恆為空）；
+//   cassette 存 { text, codeRuns, finishReason, usage }（finishReason 不在鍵內；舊 cassette 沒有這欄時回放為 null）。
 //   generateJson 的行為與簽名一個字都沒改。
 
 const DEFAULT_MODEL = 'gemini-embedding-001';
@@ -155,14 +156,14 @@ async function generateJson(opts = {}) {
  *
  * 三個模式與 generateJson 相同；replay miss 的訊息也是同一串（services/llm/fake.js）。
  * record 模式的 cassette：request 只存 parts 摘要（音訊只留位元組數與 sha256），
- * response 存 { text, codeRuns, usage, latencyMs }。
+ * response 存 { text, codeRuns, finishReason, usage, latencyMs }（finishReason 讓回放也重現「被截斷」）。
  *
  * @param {{model?:string, system?:string, parts:Array<object>, tools?:{codeExecution?:boolean},
  *          maxOutputTokens?:number, thinkingBudget?:number, signal?:AbortSignal,
  *          agent?:string, template?:string, cacheKeyParts?:object}} opts
  *        record／replay 模式下 agent 必填（同 generateJson）。
  * @returns {Promise<{text:string, codeRuns:Array<{language:string,code:string,outcome:string|null,output:string}>,
- *                    usage:{tokenIn,tokenOut,tokenThinking,tokenCached}, latencyMs:number}>}
+ *                    finishReason:string|null, usage:{tokenIn,tokenOut,tokenThinking,tokenCached}, latencyMs:number}>}
  */
 async function generateText(opts = {}) {
     const mode = llmMode();
@@ -204,7 +205,10 @@ async function generateText(opts = {}) {
                 tools: { codeExecution: !!(opts.tools && opts.tools.codeExecution) },
                 cacheKeyParts: opts.cacheKeyParts ?? {}
             },
-            response: { text: res.text, codeRuns: res.codeRuns, usage: res.usage, latencyMs: res.latencyMs }
+            response: {
+                text: res.text, codeRuns: res.codeRuns, finishReason: res.finishReason ?? null,
+                usage: res.usage, latencyMs: res.latencyMs
+            }
         });
         console.log(`[llm:record] ${overwritten ? '覆寫' : '寫入'} cassette → ${file}`);
     }

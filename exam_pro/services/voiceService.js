@@ -31,6 +31,11 @@ const MAX_AUDIO_BYTES = 5 * 1024 * 1024;   // 第 4.5 條：≤ 5 MB
 /** 第 4.5 條凍結的五種；比對前先剝掉參數（瀏覽器會送 audio/webm;codecs=opus） */
 const ALLOWED_AUDIO_MIME = ['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg', 'audio/wav'];
 const MAX_OPTIONS = 4;
+// 兩個數字是一組的，不要單獨調（同 agents/lint.js 的教訓：MODEL_EXTRACT 是 thinking 模型，思考 token 計入
+// maxOutputTokens 的額度；不限思考時 JSON 可能寫到一半被截斷，這裡就只能回 502 請老師重錄）。
+// 轉寫一段 ≤ 60 秒的錄音用不到長思考；輸出的 JSON 通常只有幾百 tokens。
+const MAX_OUTPUT_TOKENS = 4096;
+const THINKING_BUDGET = 1024;
 
 const SYSTEM = [
     '你是台灣高中數學、物理、化學家教系統的語音轉寫員。你會收到一段老師或學生口述的提問錄音。',
@@ -167,7 +172,8 @@ async function transcribe(input, deps = {}) {
                 { audioBase64: buffer.toString('base64'), mimeType }
             ],
             schema: SCHEMA,
-            maxOutputTokens: 4096,
+            maxOutputTokens: MAX_OUTPUT_TOKENS,
+            thinkingBudget: THINKING_BUDGET,               // 不在 cassette 鍵內
             agent: AGENT,
             template: TEMPLATE,
             // 鍵只用錄音的雜湊：錄音內容與逐字稿都不進 cassette 的 request 區
@@ -200,5 +206,6 @@ async function transcribe(input, deps = {}) {
 
 module.exports = {
     transcribe, validateVoiceInput, normalizeTranscript, normalizeMime, validate,
-    SYSTEM, PROMPT_TEMPLATE, TEMPLATE, SCHEMA, AGENT, ALLOWED_AUDIO_MIME, MAX_AUDIO_BYTES
+    SYSTEM, PROMPT_TEMPLATE, TEMPLATE, SCHEMA, AGENT, ALLOWED_AUDIO_MIME, MAX_AUDIO_BYTES,
+    MAX_OUTPUT_TOKENS, THINKING_BUDGET
 };

@@ -28,6 +28,9 @@
 //   3. 出口配額、退避、abort 與 generateJson 共用 callOnce，一個字都沒改
 //   4. usage 的 tokenIn 另外加上 toolUsePromptTokenCount（code execution 的結果回灌給模型的
 //      那一段是以 input 計價；漏算會低估成本）
+//   5. 回傳 candidates[0].finishReason（STOP／MAX_TOKENS／SAFETY…；沒有時為 null）：
+//      thinking 模型的思考計入 maxOutputTokens，回覆可能寫到一半就被切掉，
+//      自由文字不像 JSON 會「解析失敗」，呼叫端只能靠這個欄位知道被截斷了
 //
 // toContents 在階段 5 多收兩種 part：{audioBase64, mimeType}、{imageBase64, mimeType}
 // → inlineData {mimeType, data}。既有三種 part 的輸出逐字不變（第 5.1 條）。
@@ -371,12 +374,24 @@ function parseTextResponse(res) {
 }
 
 /**
+ * 讀 candidates[0].finishReason（純函式）。
+ * SDK 的 FinishReason 列舉值就是字串（'STOP'、'MAX_TOKENS'、'SAFETY'…），原樣回傳；沒有時回 null。
+ * @param {object} res  SDK 的 GenerateContentResponse（或同形狀的物件）
+ * @returns {string|null}
+ */
+function readFinishReason(res) {
+    const r = res?.candidates?.[0]?.finishReason;
+    return r === undefined || r === null || r === '' ? null : String(r);
+}
+
+/**
  * 自由文字生成，可選 code execution（第 5.1 條）。
  * @param {{model:string, system?:string, parts:Array<object>, tools?:{codeExecution?:boolean},
  *          maxOutputTokens?:number, thinkingBudget?:number, signal?:AbortSignal}} opts
  *        model 必須是**裸 ID**（vendor 前綴由 services/llm/index.js 剝掉）
- * @returns {Promise<{text:string, codeRuns:Array<{language,code,outcome,output}>,
+ * @returns {Promise<{text:string, codeRuns:Array<{language,code,outcome,output}>, finishReason:string|null,
  *                    usage:{tokenIn,tokenOut,tokenThinking,tokenCached}, latencyMs:number, raw:any}>}
+ *          finishReason = 'MAX_TOKENS' 表示回覆在輸出上限處被截斷（thinking 也吃這個額度）
  */
 async function generateText({ model, system, parts, tools, maxOutputTokens, thinkingBudget, signal }) {
     const ai = getClient();
@@ -397,6 +412,7 @@ async function generateText({ model, system, parts, tools, maxOutputTokens, thin
     return {
         text,
         codeRuns,
+        finishReason: readFinishReason(res),
         usage: {
             // code execution 的結果回灌給模型那一段（toolUsePromptTokenCount）以 input 計價
             tokenIn: (usageMeta.promptTokenCount ?? 0) + (usageMeta.toolUsePromptTokenCount ?? 0),
@@ -417,5 +433,5 @@ function _setClientForTest(fakeClient) {
 module.exports = {
     embed, generateJson, stripEnums, classifyError, isSchemaRejection,
     // 階段 5 WS-E
-    generateText, parseTextResponse, toContents, _setClientForTest
+    generateText, parseTextResponse, readFinishReason, toContents, _setClientForTest
 };

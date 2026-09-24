@@ -430,6 +430,60 @@ describe('驗算結果、成本與每日預算', () => {
         assert.match(out.reply, /沒有給出回覆/);
     });
 
+    test('thinkingBudget 與 maxOutputTokens 成對送出（thinking 模型的思考吃同一個額度；同 agents/verify.js 的教訓）', async () => {
+        const llm = fakeLlm();
+        await tutor.runTutor(base(), { llm, db: fakeDb(), budget: freshBudget() });
+        assert.equal(llm.calls[0].maxOutputTokens, tutor.MAX_OUTPUT_TOKENS);
+        assert.equal(llm.calls[0].thinkingBudget, tutor.THINKING_BUDGET);
+        assert.ok(Number.isInteger(tutor.THINKING_BUDGET) && tutor.THINKING_BUDGET > 0);
+        assert.ok(tutor.THINKING_BUDGET * 2 <= tutor.MAX_OUTPUT_TOKENS, '思考不能吃掉一半以上的額度，否則講解沒有空間');
+        // thinkingBudget 不進 cassette 鍵（cacheKeyParts 只有模式與 prompt 雜湊）
+        assert.deepEqual(Object.keys(llm.calls[0].cacheKeyParts), ['mode', 'prompt']);
+    });
+
+    test('finishReason=MAX_TOKENS → 回覆後面附上「被截斷、驗算結論可能不完整」的提醒；照樣記帳', async () => {
+        const budget = freshBudget('100');
+        const llm = fakeLlm({
+            text: '王小明，先列式：$1\\times3+2\\times4$，接著',
+            finishReason: 'MAX_TOKENS',
+            usage: { tokenIn: 1000, tokenOut: 4000, tokenThinking: 2048, tokenCached: 0 }
+        });
+        const out = await tutor.runTutor(base({ student_id: 3 }), { llm, db: fakeDb(), budget });
+        assert.ok(out.reply.startsWith('王小明，先列式：$1\\times3+2\\times4$，接著\n\n'), out.reply);
+        assert.ok(out.reply.endsWith(tutor.TRUNCATED_NOTE));
+        assert.match(tutor.TRUNCATED_NOTE, /截斷/);
+        assert.match(tutor.TRUNCATED_NOTE, /驗算/);
+        assert.ok(out.usage.costUsd > 0);
+        assert.equal(budget.spent(), out.usage.costUsd, '錢已經花掉了，照樣記帳');
+        // 回應形狀不變（第 4.5 條凍結的五個欄位）
+        assert.deepEqual(Object.keys(out).sort(), ['context', 'mode', 'reply', 'usage', 'verification']);
+    });
+
+    test('finishReason=MAX_TOKENS 且沒有任何文字 → 明講額度在寫出回覆前就用完了（不是泛泛的「沒有給出回覆」）', async () => {
+        const out = await tutor.runTutor(base(), {
+            llm: fakeLlm({ text: '', finishReason: 'MAX_TOKENS' }), db: fakeDb(), budget: freshBudget()
+        });
+        assert.equal(out.reply, tutor.EMPTY_TRUNCATED_REPLY);
+        assert.match(out.reply, /額度/);
+        assert.match(out.reply, /拆小/);
+    });
+
+    test('finishReason=STOP 或沒有 finishReason（舊 cassette）→ 不附提醒', async () => {
+        for (const finishReason of ['STOP', null, undefined]) {
+            const out = await tutor.runTutor(base(), {
+                llm: fakeLlm({ text: '答案是 $11$。', finishReason }), db: fakeDb(), budget: freshBudget()
+            });
+            assert.equal(out.reply, '答案是 $11$。', String(finishReason));
+        }
+    });
+
+    test('withTruncationNote：停在沒有結尾的 ``` 區塊裡 → 先補結尾圍欄，提醒才不會被當成程式碼', () => {
+        const inCode = tutor.withTruncationNote('驗算：\n```python\nprint(1+');
+        assert.equal(inCode, `驗算：\n\`\`\`python\nprint(1+\n\`\`\`\n\n${tutor.TRUNCATED_NOTE}`);
+        const closed = tutor.withTruncationNote('```\na\n```\n說明到一半');
+        assert.equal(closed, `\`\`\`\na\n\`\`\`\n說明到一半\n\n${tutor.TRUNCATED_NOTE}`);
+    });
+
     test('usage：tokenOut 含 thinking；costUsd 依 config/pricing.js（gemini-3.1-pro-preview：in 2、out 12 USD/1M）', async () => {
         const llm = fakeLlm({ usage: { tokenIn: 1_000_000, tokenOut: 100_000, tokenThinking: 50_000, tokenCached: 0 } });
         const out = await tutor.runTutor(base(), { llm, db: fakeDb(), budget: freshBudget('100') });

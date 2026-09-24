@@ -65,13 +65,14 @@ function generateJson({ model, schema, agent, cacheKeyParts, template }) {
 /**
  * 回放一次 generateText（階段 5 WS-E，docs/interfaces-stage5.md 第 5.1 條）。
  *
- * 鍵與 generateJson 同一條公式（schema 欄恆為空）；cassette 的 response 存 { text, codeRuns, usage }。
+ * 鍵與 generateJson 同一條公式（schema 欄恆為空）；cassette 的 response 存 { text, codeRuns, finishReason, usage }
+ *（finishReason 是後加的欄位，沒有時回 null——舊 cassette 照樣回放）。
  * miss 的訊息與 generateJson **同一串**（eval/lib/replayMiss.js 靠前綴辨識，不得分叉）。
  *
  * @param {{model:string, agent:string, cacheKeyParts?:object, template?:string}} opts
  *        model 必須是**裸 ID**
  * @returns {{text:string, codeRuns:Array<{language:string,code:string,outcome:string|null,output:string}>,
- *           usage:{tokenIn:number,tokenOut:number,tokenThinking:number,tokenCached:number},
+ *           finishReason:string|null, usage:{tokenIn:number,tokenOut:number,tokenThinking:number,tokenCached:number},
  *           latencyMs:number, raw:null, replayed:true, cassetteKey:string}}
  */
 function generateText({ model, agent, cacheKeyParts, template }) {
@@ -100,6 +101,8 @@ function generateText({ model, agent, cacheKeyParts, template }) {
             outcome: r?.outcome === undefined || r?.outcome === null ? null : String(r.outcome),
             output: String(r?.output ?? '')
         })),
+        finishReason: response.finishReason === undefined || response.finishReason === null
+            ? null : String(response.finishReason),
         usage: {
             tokenIn: usage.tokenIn ?? 0,
             tokenOut: usage.tokenOut ?? 0,

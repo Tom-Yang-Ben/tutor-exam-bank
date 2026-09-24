@@ -42,8 +42,21 @@ const HISTORY_ROLES = ['user', 'tutor'];
 const STUDENT_WINDOW_DAYS = 365;       // 學生弱點摘要的時間窗
 const TOP_CHAPTERS = 5;                // 第 4.5 條：章節錯誤率前 5
 const MAX_KCS = 6;                     // 放進 prompt 的知識點上限（同章最多 8 個，取前 6）
-const MAX_OUTPUT_TOKENS = 8192;        // thinking 也吃這個額度；太小會把講解截在半路
+// 兩個數字是一組的，不要單獨調（同 agents/verify.js 的教訓，2026-08-27 job #4）：
+// MODEL_TUTOR 預設沿用 MODEL_VERIFY（thinking 模型），思考 token 計入 maxOutputTokens 的額度。
+// 不限思考時，難題的思考會把額度吃光，講解寫到一半就被切掉——而契約要求的「驗算」結論在最後一段，
+// 會最先被切掉。家教要規劃講法與驗算程式，思考給得比 verify（1024）多；留給回覆與程式碼約 6,000 tokens。
+// 仍然被截斷時（finishReason = MAX_TOKENS），runTutor 在回覆後面附上提醒（見 withTruncationNote）。
+const MAX_OUTPUT_TOKENS = 8192;
+const THINKING_BUDGET = 2048;
 const DEFAULT_DAILY_BUDGET_USD = 1.0;
+
+/** 空回覆時給使用者的說明 */
+const EMPTY_REPLY = '（家教沒有給出回覆，請換個說法再問一次。）';
+/** 空回覆且 finishReason = MAX_TOKENS：額度在寫出回覆之前就用完了（思考與驗算程式都算在額度內） */
+const EMPTY_TRUNCATED_REPLY = '（家教這次的輸出額度在寫出回覆之前就用完了，思考與驗算程式也算在額度內。請把問題拆小一點再問，例如一次只問一小題。）';
+/** 回覆被截斷時附在最後的提醒 */
+const TRUNCATED_NOTE = '**⚠ 回覆因長度上限被截斷**：後面的內容（包括最後的「驗算」結論）可能不完整。可以請家教「接著說」，或把問題拆小一點再問。';
 
 // ───────────────────────── 系統提示與模板 ─────────────────────────
 
@@ -445,6 +458,21 @@ function estimateUsd(modelId, usage = {}) {
     return Number(cost.toFixed(6));
 }
 
+// ───────────────────────── 截斷提醒（純函式）─────────────────────────
+
+/**
+ * 被截斷的回覆（finishReason = MAX_TOKENS）後面附上提醒。
+ * 回覆若停在沒有結尾圍欄的 ``` 區塊裡，先補上結尾圍欄——前端的受限 Markdown 對沒有結尾的區塊會「吃到文末」，
+ * 不補的話提醒會被當成程式碼的一部分。數學式不必補：提醒自成一段，MathJax 不會跨段落配對分隔符。
+ * @param {string} reply 已 trim、已換回姓名的回覆（非空）
+ * @returns {string}
+ */
+function withTruncationNote(reply) {
+    const fences = (String(reply).match(/```/g) || []).length;
+    const closed = fences % 2 === 1 ? `${reply}\n\`\`\`` : String(reply);
+    return `${closed}\n\n${TRUNCATED_NOTE}`;
+}
+
 // ───────────────────────── 主流程 ─────────────────────────
 
 /**
@@ -518,6 +546,7 @@ async function prepareTutorRequest(input, deps = {}) {
         parts: [{ text: prompt }],
         tools: { codeExecution: true },
         maxOutputTokens: MAX_OUTPUT_TOKENS,
+        thinkingBudget: THINKING_BUDGET,                // 與 MAX_OUTPUT_TOKENS 成對；不在 cassette 鍵內
         agent: AGENT,
         template: TEMPLATES[input.mode],
         // 只放雜湊：cassette 的 request.cacheKeyParts 會原樣進檔，題幹與學生資料不得進版控
@@ -534,6 +563,8 @@ async function prepareTutorRequest(input, deps = {}) {
  * 跑一輪 AI 家教。
  * @param {object} body POST /api/tutor 的 body（未驗證）
  * @param {{llm?:object, db?:object, budget?:ReturnType<typeof createBudget>}} [deps]
+ * 回覆在輸出上限處被截斷（generateText 回 finishReason = 'MAX_TOKENS'）時，reply 後面會附上 TRUNCATED_NOTE
+ *（回應形狀維持第 4.5 條凍結的五個欄位，任何前端都看得到提醒）。
  * @returns {Promise<{reply:string, mode:string,
  *           verification:{used:boolean, runs:Array<{code:string,outcome:string|null,output:string}>},
  *           context:{question_id?:number, kc_codes:string[], student_context:boolean},
@@ -570,7 +601,12 @@ async function runTutor(body, deps = {}) {
         outcome: r.outcome === undefined ? null : r.outcome,
         output: String(r.output ?? '')
     }));
-    const reply = pseudo.unmask(String(res.text ?? '').trim()) || '（家教沒有給出回覆，請換個說法再問一次。）';
+    // 被截斷時照樣記帳（上面的 budget.add）：這一次的錢已經花掉了，只是回覆不完整
+    const truncated = res.finishReason === 'MAX_TOKENS';
+    const text = pseudo.unmask(String(res.text ?? '').trim());
+    let reply;
+    if (truncated) reply = text ? withTruncationNote(text) : EMPTY_TRUNCATED_REPLY;
+    else reply = text || EMPTY_REPLY;
 
     return {
         reply,
@@ -600,8 +636,9 @@ async function runTutor(body, deps = {}) {
 module.exports = {
     runTutor, prepareTutorRequest, validateTutorInput, buildPrompt, orderKcs,
     questionBlock, kcBlock, studentBlock, historyBlock, errorTypeLabel,
-    createBudget, sharedBudget, readDailyBudget, estimateUsd, httpError,
+    createBudget, sharedBudget, readDailyBudget, estimateUsd, httpError, withTruncationNote,
     SYSTEM, PROMPT_TEMPLATE, TEMPLATES, AGENT, MODES,
+    MAX_OUTPUT_TOKENS, THINKING_BUDGET, EMPTY_REPLY, EMPTY_TRUNCATED_REPLY, TRUNCATED_NOTE,
     MAX_MESSAGE_LEN, MAX_HISTORY, MAX_HISTORY_TEXT_LEN, MAX_KCS, TOP_CHAPTERS, STUDENT_WINDOW_DAYS,
     DEFAULT_DAILY_BUDGET_USD
 };

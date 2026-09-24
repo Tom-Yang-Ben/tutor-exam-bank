@@ -282,6 +282,23 @@ function runSuite() {
                 assert.deepEqual(res.body.context, { kc_codes: [], student_context: false });
             });
 
+            test('cassette 記錄 finishReason=MAX_TOKENS（回覆被截斷）→ 200，回覆後面附上截斷提醒、仍然計費', async () => {
+                const body = { message: '截斷測試：請完整推導', mode: 'direct', question_id: 1 };
+                const prepared = await recordTutorCassette(body, {
+                    text: '先列式：$1\\times3+2\\times4$，再來',
+                    codeRuns: [],
+                    finishReason: 'MAX_TOKENS',
+                    usage: { tokenIn: 1000, tokenOut: 4000, tokenThinking: 2048, tokenCached: 0 }
+                });
+                assert.equal(prepared.llmOpts.thinkingBudget, tutorService.THINKING_BUDGET, '正式請求要帶 thinkingBudget');
+                const res = await request(app).post('/api/tutor').send(body);
+                assert.equal(res.status, 200, JSON.stringify(res.body));
+                assert.deepEqual(Object.keys(res.body).sort(), ['context', 'mode', 'reply', 'usage', 'verification']);
+                assert.ok(res.body.reply.startsWith('先列式：'), res.body.reply);
+                assert.ok(res.body.reply.endsWith(tutorService.TRUNCATED_NOTE), res.body.reply);
+                assert.ok(res.body.usage.costUsd > 0);
+            });
+
             test('沒有 cassette（replay miss）→ 502，訊息帶原因', async () => {
                 const res = await request(app).post('/api/tutor').send({ message: '沒有錄過的問題', mode: 'direct' });
                 assert.equal(res.status, 502);
