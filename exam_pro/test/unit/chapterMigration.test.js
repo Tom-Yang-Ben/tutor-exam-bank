@@ -29,13 +29,15 @@ describe('config/chapterMigrationRules.js', () => {
                 { to: '拋物線', keywords: ['焦點'] },             // 純新增章，沒有舊章會拆過去
                 { to: '級數', keywords: [] },
                 { to: '二項式定理', keywords: ['二項'] },
-                { to: '組合', keywords: ['二項'] }
+                { to: '組合', keywords: ['二項'] },
+                { to: '廣義角與極坐標', patterns: [{ name: 'x' }] }
             ]
         });
         assert.ok(bad.some(p => p.includes('不存在的章')), bad.join('\n'));
         assert.ok(bad.some(p => p.includes('拋物線') && p.includes('用不到')), bad.join('\n'));
         assert.ok(bad.some(p => p.includes('沒有關鍵字')), bad.join('\n'));
         assert.ok(bad.some(p => p.includes('「二項」同時指向')), bad.join('\n'));
+        assert.ok(bad.some(p => p.includes('patterns 每一項都要有 name 與 find 函式')), bad.join('\n'));
     });
 
     test('契約第 3.1 條第 7 點列舉的每一組關鍵字都指向指定的新章', () => {
@@ -58,10 +60,10 @@ describe('config/chapterMigrationRules.js', () => {
             [['指數函數', '對數函數'], '指數函數與對數函數']
         ];
         const owner = new Map();
-        for (const r of rules.KEYWORD_RULES['數學']) for (const k of r.keywords) owner.set(k, r.to);
+        for (const r of rules.KEYWORD_RULES['數學']) for (const k of r.keywords || []) owner.set(k, r.to);
         for (const [kws, to] of expected) for (const k of kws) assert.equal(owner.get(k), to, `「${k}」`);
         const phys = new Map();
-        for (const r of rules.KEYWORD_RULES['物理']) for (const k of r.keywords) phys.set(k, r.to);
+        for (const r of rules.KEYWORD_RULES['物理']) for (const k of r.keywords || []) phys.set(k, r.to);
         assert.equal(phys.get('質心'), '質心與角動量');
         assert.equal(phys.get('角動量'), '質心與角動量');
     });
@@ -86,6 +88,22 @@ describe('config/chapterMigrationRules.js', () => {
         assert.deepEqual(rules.matchKeywordRule('數學', targets, [['Σ 的性質']]), { to: '級數', keyword: 'Σ', pass: 0 });
         assert.deepEqual(rules.matchKeywordRule('數學', targets, [['求 ＼ｓｕｍ k']]), { to: '級數', keyword: '\\sum', pass: 0 });
         assert.equal(rules.normalizeForMatch('（Ａ）'), '(A)');
+        // 連加符號 U+2211 經 NFKC 不會變成希臘字母 Σ（U+03A3），要另外收
+        assert.equal('∑'.normalize('NFKC'), '∑');
+        assert.deepEqual(rules.matchKeywordRule('數學', targets, [['求 ∑_{k=1}^{10} k^2']]), { to: '級數', keyword: '∑', pass: 0 });
+    });
+
+    test('findWideAngle：大於 90° 或負的角度（°、^\\circ、^{\\circ}、度）；正好 90°、減號、銳角不算', () => {
+        assert.equal(rules.findWideAngle('求 sin 150° 之值'), '150°');
+        assert.equal(rules.findWideAngle('cos 120^\\circ'), '120^\\circ');
+        assert.equal(rules.findWideAngle('$\\tan 225^{\\circ}$'), '225^{\\circ}');
+        assert.equal(rules.findWideAngle('轉了 400 度'), '400 度');
+        assert.equal(rules.findWideAngle('求 $\\sin(-30^\\circ)$'), '-30^\\circ');
+        assert.equal(rules.findWideAngle('角 −60° 的三角比'), '−60°');
+        assert.equal(rules.findWideAngle('直角三角形 ABC 中 ∠C=90°'), null);
+        assert.equal(rules.findWideAngle('sin(x-30°) 的最大值'), null, '前面是字母的減號不是負角');
+        assert.equal(rules.findWideAngle('sin 30° + cos 60°'), null);
+        assert.equal(rules.findWideAngle('長度 150 公分'), null);
     });
 });
 
@@ -104,6 +122,23 @@ describe('proposeChapter：依 MIGRATION 提議新章', () => {
             { chapter: '直角三角形的邊角關係', basis: 'default' });
         assert.deepEqual(mig.proposeChapter(q('物理', '剛體轉動與平衡', '求系統的質心位置')),
             { chapter: '質心與角動量', basis: 'keyword:質心' });
+    });
+
+    test('三角函數的定義：廣義角字眼 > 圖形 > 大於 90° 或負的角度 > 預設直角三角形', () => {
+        const p = (text) => mig.proposeChapter(q('數學', '三角函數的定義', text));
+        assert.deepEqual(p('求 $\\sin 150^\\circ$、$\\cos 120^\\circ$、$\\tan 225^\\circ$ 之值'),
+            { chapter: '廣義角與極坐標', basis: 'keyword:150^\\circ' });
+        assert.deepEqual(p('若 $\\theta=-45^\\circ$，求 $\\tan\\theta$'), { chapter: '廣義角與極坐標', basis: 'keyword:-45^\\circ' });
+        assert.deepEqual(p('角 θ 在第二象限且 sin θ = 3/5'), { chapter: '廣義角與極坐標', basis: 'keyword:象限' });
+        assert.deepEqual(p('畫出 y = sin(x + 120°) 的圖形'), { chapter: '三角函數的圖形', basis: 'keyword:圖形' });
+        assert.deepEqual(p('直角三角形 ABC 中 ∠C = 90°，AB = 5、BC = 3，求 sin A'), { chapter: '直角三角形的邊角關係', basis: 'default' });
+    });
+
+    test('二項分布：「分配」的寫法也認得（二項分配、幾何分配）', () => {
+        assert.deepEqual(mig.proposeChapter(q('數學', '隨機變數', 'X 服從二項分配 B(10, 0.3)，求 P(X=2)')),
+            { chapter: '二項分布與幾何分布', basis: 'keyword:二項分配' });
+        assert.deepEqual(mig.proposeChapter(q('數學', '隨機變數', 'X 服從成功機率 0.2 的幾何分配，求 E(X)')),
+            { chapter: '二項分布與幾何分布', basis: 'keyword:幾何分配' });
     });
 
     test('split：題幹沒有關鍵字時改用 keywords／concept_summary', () => {
