@@ -29,6 +29,14 @@ describe('public/ 的語法檢查（npm run check:html）', () => {
         assert.equal(problems.length, 0, problems.join('\n'));
     });
 
+    test('〔stage5 整合〕逐頁契約涵蓋階段 5 的三支 module，MathJax 必須載入 mhchem 與 ui/safe', () => {
+        assert.deepEqual(check.STAGE5_PAGES.map(p => p.id), ['kc', 'remedial', 'tutor']);
+        assert.deepEqual(check.STAGE5_PAGES.find(p => p.id === 'remedial').sections, ['remedial', 'coverage']);
+        assert.deepEqual(check.STAGE5_EXTRA_METAS.map(m => m.meta), ['feature-voice']);
+        assert.deepEqual(check.MATHJAX_REQUIRED_LOADS, ['[tex]/mhchem', 'ui/safe']);
+        // checkContracts 讀的是真的 index.html：上面那一條「零問題」已經證明現況合格
+    });
+
     test('HTML 註解會先被挖空（註解裡的 <script> 不該被當成程式碼）', () => {
         // 實際踩過：註解裡寫「只插一行 <script type="module">」會讓抽取器把註解送去 parse。
         const html = '<!-- 說明：只插一行 <script type="module">。 -->\n<script>var a = 1;</script>';

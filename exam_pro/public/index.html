@@ -219,7 +219,9 @@
     <script>
         window.MathJax = {
             // 〔stage5 WS-B〕化學式 \ce{…}：明確載入 mhchem（不靠 autoload，docs/interfaces-stage5.md 第 4.2 條第 3 點）
-            loader: { load: ['[tex]/mhchem'] },
+            // 〔stage5 整合〕ui/safe：題幹、家教回覆、語音逐字稿都可能帶著模型或 PDF 來的文字進 renderMath，
+            // \href{javascript:…}、\class、\style、\cssId 一律過濾（連結只放行 http／https／file）。docs/tutor.md 第 5、8 節
+            loader: { load: ['[tex]/mhchem', 'ui/safe'] },
             tex: {
                 inlineMath: [['$', '$'], ['\\(', '\\)']],
                 displayMath: [['$$', '$$'], ['\\[', '\\]']],

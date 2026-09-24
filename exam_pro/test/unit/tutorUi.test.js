@@ -223,7 +223,10 @@ describe('tutor.js 的檔案層級契約', () => {
     test('旗標從 <meta name="feature-tutor"> 與 feature-voice 讀，沒有寫死', () => {
         assert.ok(SRC.includes("featureOn('tutor')"));
         assert.ok(SRC.includes("featureOn('voice')"));
-        assert.ok(SRC.includes('meta[name="feature-${name}"]'));
+        // 〔stage5 整合〕選擇器改成逐字寫出（原本是 `meta[name="feature-${name}"]` 拼字串）：
+        // eval/tools/check_html.js 的逐頁契約以字面比對確認旗標從注入點讀，行為不變、檢查更嚴
+        assert.ok(SRC.includes('meta[name="feature-tutor"]'));
+        assert.ok(SRC.includes('meta[name="feature-voice"]'));
         assert.ok(!/FEATURE_(TUTOR|VOICE)\s*=\s*true/i.test(SRC));
     });
 
