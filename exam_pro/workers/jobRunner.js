@@ -699,7 +699,7 @@ function createRunner(opts = {}) {
         try {
             const { rows } = await db.query(
                 `SELECT q.id, q.job_id, q.idx, q.state, q.payload, q.retries,
-                        j.kind, j.pdf_sha256, j.source_type, j.source_detail,
+                        j.kind, j.pdf_sha256, j.source_type, j.source_detail, j.subject_group,
                         j.budget_usd::float8 AS budget_usd, j.cost_usd::float8 AS cost_usd
                    FROM job_questions q JOIN jobs j ON j.id = q.job_id
                   WHERE q.id = $1`, [jqId]);
@@ -757,6 +757,8 @@ function createRunner(opts = {}) {
                     job: {
                         id: jq.job_id, kind: jq.kind, pdf_sha256: jq.pdf_sha256 ?? null,
                         source_type: jq.source_type ?? null, source_detail: jq.source_detail ?? null,
+                        // 〔stage5 WS-B〕上傳時的卷別（agents/promptParts.js 的 resolveSubjectGroup 讀它；附加鍵）
+                        subject_group: jq.subject_group ?? 'math_physics',
                         budget_usd: Number(jq.budget_usd), cost_usd: Number(jq.cost_usd)
                     },
                     jq: { id: jq.id, idx: jq.idx, payload: jq.payload, retries: jq.retries },
@@ -846,7 +848,7 @@ function createRunner(opts = {}) {
         const stopRenew = startRenew('jobs', jobId);
         try {
             const { rows } = await db.query(
-                `SELECT id, pdf_path, pdf_sha256, page_count,
+                `SELECT id, pdf_path, pdf_sha256, page_count, subject_group,
                         budget_usd::float8 AS budget_usd, cost_usd::float8 AS cost_usd
                    FROM jobs WHERE id = $1`, [jobId]);
             if (rows.length === 0) return;
@@ -901,6 +903,8 @@ function createRunner(opts = {}) {
                 db,
                 job: {
                     id: job.id, kind: 'pdf', pdf_sha256: job.pdf_sha256 ?? null,
+                    // 〔stage5 WS-B〕化學卷的 extract 走化學模板與 schema（agents/extract.js 的 VARIANTS）
+                    subject_group: job.subject_group ?? 'math_physics',
                     budget_usd: Number(job.budget_usd), cost_usd: Number(rows[0]?.cost_usd ?? 0)
                 },
                 jq: null, logger, models: loadModels(), limits: { ...DEFAULT_LIMITS, budgetLeft }
@@ -1052,7 +1056,7 @@ function createRunner(opts = {}) {
             const variantService = require('../services/variantService');
 
             const { rows } = await db.query(
-                `SELECT id, source_question_id, budget_usd::float8 AS budget_usd, cost_usd::float8 AS cost_usd
+                `SELECT id, source_question_id, subject_group, budget_usd::float8 AS budget_usd, cost_usd::float8 AS cost_usd
                    FROM jobs WHERE id = $1`, [jobId]);
             if (rows.length === 0) return;
             const job = rows[0];
@@ -1117,6 +1121,8 @@ function createRunner(opts = {}) {
                 db,
                 job: {
                     id: job.id, kind: 'variant', pdf_sha256: null,
+                    // 〔stage5 WS-B〕變式 job 的卷別（建立時依藍本科目寫入；agent 另以藍本科目為準）
+                    subject_group: job.subject_group ?? 'math_physics',
                     budget_usd: Number(job.budget_usd), cost_usd: spent
                 },
                 jq: null, logger, models: loadModels(), limits: { ...DEFAULT_LIMITS, budgetLeft }
