@@ -24,15 +24,37 @@ const { cassetteKey, cassettePath } = require('../../services/llm/cassette');
 const models = require('../../config/models');
 
 const SAMPLE_PDF = path.resolve(__dirname, '..', '..', 'eval', 'fixtures', 'sample_exam.pdf');
-const CASSETTE_DIR = path.resolve(__dirname, '..', '..', 'eval', 'cassettes');
 const FIXTURE = path.resolve(__dirname, '..', '..', 'eval', 'fixtures', 'questions.public.json');
 
-function hasCassettes(agent) {
+// 〔章節重整 CH-B〕classify 組改回放 fixture #9（數學／向量內積）。原本用 #1，#1 已改標為「指數函數與對數函數」，
+// 是「指數與對數」拆章後兩章都說得通的邊界題（eval/CHAPTER_RELABEL-2026-09.md）；本組驗的是「錄→放」往返，
+// 不是分類正確率（那是 npm run eval:classify 的事，同 extract 組「不該讓模型少抓一題就把單元測試變紅」的原則）。
+const CLASSIFY_FIXTURE_ID = 9;
+
+/**
+ * 〔章節重整 CH-B〕fixture #9 的 classify cassette 在不在（與 extractCassetteReady 同一個做法）。
+ *
+ * 原本只看「classify/ 目錄底下有沒有檔案」。章節白名單一換，schemaHash 就變、舊 cassette 全部讀不到，
+ * 但目錄底下仍然有檔——那會給出一個假的綠燈條件，然後在斷言那一行以 replay miss 紅掉。
+ * 改成依現行 schema 算出預期的鍵再檢查檔案：重錄完（npm run cassettes:rerecord）就自動恢復執行。
+ */
+function classifyCassetteReady() {
+    let q;
     try {
-        return fs.readdirSync(path.join(CASSETTE_DIR, agent)).some(f => f.endsWith('.json'));
+        q = JSON.parse(fs.readFileSync(FIXTURE, 'utf8')).questions.find(x => x.id === CLASSIFY_FIXTURE_ID);
     } catch (err) {
         return false;
     }
+    if (!q) return false;
+    const key = cassetteKey({
+        agent: 'classify',
+        modelId: models.parseModel(models.MODEL_EXTRACT).id,
+        template: classifyAgent.TEMPLATE,
+        schema: buildSchema('classify'),
+        // agents/classify.js 第二層的 cacheKeyParts；ctx.db = null 時 few-shot 全來自自製例句，fewShotIds 是 []
+        cacheKeyParts: { template: classifyAgent.TEMPLATE, questionText: String(q.question_text).trim(), fewShotIds: [] }
+    });
+    return fs.existsSync(cassettePath('classify', key));
 }
 
 /**
@@ -56,36 +78,6 @@ function extractCassetteReady() {
 }
 
 const READY = extractCassetteReady();
-
-/**
- * 〔章節重整 CH-A〕公開 fixture 第 1 題的 classify cassette 在不在（算法與 extractCassetteReady 相同）。
- *
- * 原本 classify 這組只看「classify/ 目錄底下有沒有檔案」。2026-09-25 數學／物理章節重整刻意改了
- * classify schema 的 enum（docs/chapter-restructure.md 第 1 條），schemaHash 一變鍵就全變：目錄裡有檔，
- * 卻沒有一個對得上，測試就在斷言那一行以「找不到 cassette」紅掉——正是上面 extractCassetteReady
- * 註解說的那種難懂的紅燈。改成算出這一題實際要用的鍵：Owner 依第 5 條重錄之後，這組照原樣恢復執行，
- * 斷言一條都沒有改。鍵的組法逐項對照 agents/classify.js 第二層的 generateJson 呼叫
- * （few-shot 在 db=null 時是空陣列）。
- */
-function classifyCassetteReady() {
-    let q;
-    try {
-        q = JSON.parse(fs.readFileSync(FIXTURE, 'utf8')).questions.find(x => x.id === 1);
-    } catch (err) {
-        return false;
-    }
-    if (!q) return false;
-    const key = cassetteKey({
-        agent: 'classify',
-        modelId: models.parseModel(models.MODEL_EXTRACT).id,
-        template: classifyAgent.TEMPLATE,
-        schema: buildSchema('classify'),
-        cacheKeyParts: { template: classifyAgent.TEMPLATE, questionText: String(q.question_text ?? '').trim(), fewShotIds: [] }
-    });
-    return fs.existsSync(cassettePath('classify', key));
-}
-
-const CLASSIFY_READY = classifyCassetteReady();
 
 const envBackup = {};
 const ENV_KEYS = ['LLM_MODE', 'EVAL_CASSETTE_DIR', 'MODEL_EXTRACT'];
@@ -171,15 +163,13 @@ describe('cassette 回放 — extract（LLM_MODE=replay，不連外）', { skip:
 // classify 的 cassette 與樣卷無關（鍵是 questionText + fewShotIds），
 // 所以樣卷換掉時它仍然有效——兩組獨立 skip，不要互相拖累。
 describe('cassette 回放 — classify（LLM_MODE=replay，不連外）', {
-    // 〔章節重整 CH-A〕多一個條件：這一題在現行 schema 下的 cassette 要真的在（見 classifyCassetteReady）
-    skip: !hasCassettes('classify') ? '尚未錄製 classify cassette（需要金鑰，見 docs/llm.md）'
-        : !CLASSIFY_READY ? '現行 classify schema 下沒有公開 fixture 第 1 題的 cassette——2026-09-25 章節重整改了 enum，'
-            + '等 Owner 依 docs/chapter-restructure.md 第 5 條重錄（npm run cassettes:rerecord）'
-            : false
+    skip: classifyCassetteReady() ? false
+        : `fixture #${CLASSIFY_FIXTURE_ID} 的 classify cassette 不在（還沒錄，或章節白名單改過、schemaHash 變了）——` +
+          '需要金鑰重錄：npm run cassettes:rerecord（docs/chapter-restructure.md 第 5 條）'
 }, () => {
     test('classify：回放公開 fixture 的題目，輸出通過 isValidChapter', async () => {
         const fixture = JSON.parse(fs.readFileSync(FIXTURE, 'utf8'));
-        const q = fixture.questions.find(x => x.id === 1);
+        const q = fixture.questions.find(x => x.id === CLASSIFY_FIXTURE_ID);
 
         const outcome = await classifyAgent.run(replayCtx(), {
             subject: q.subject,
@@ -195,7 +185,11 @@ describe('cassette 回放 — classify（LLM_MODE=replay，不連外）', {
         assert.ok(outcome.data.rationale.length > 0);
         assert.ok(outcome.data.rationale.length <= 200);
     });
+});
 
+// 〔章節重整 CH-A〕零成本閘門這條本身不讀 cassette，原本放在上面那組裡、跟著 cassette 的有無一起略過；
+// 移出來無條件執行——cassette 失效（等重錄）的期間，閘門照樣有測試守著。斷言一字未改。
+describe('classify 零成本閘門（LLM_MODE=replay，不需要 cassette）', () => {
     test('classify：零成本閘門不需要 cassette（回放時也不該打到 cassette）', async () => {
         const outcome = await classifyAgent.run(replayCtx(), {
             subject: '數學', chapter: '向量內積', chapter_confidence: 0.95, question_text: '求 $\\vec{a}\\cdot\\vec{b}$'
