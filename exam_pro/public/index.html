@@ -1596,6 +1596,9 @@
             assistant: 'view-assistant'
         };
         const TOP_ANCHORS = ['top', 'create', 'paper', 'library', 'students', 'assistant'];
+        // 〔stage5 WS-E〕base 的骨架加了 nav 連結與 #view-tutor，但這兩張表沒有 tutor，
+        // 點「AI 家教」會落回建立題目視圖。最小掛鉤：只補這一行（WS-C／WS-D 的分頁同理各補一行）。
+        VIEW_FOR_ANCHOR.tutor = 'view-tutor'; TOP_ANCHORS.push('tutor');
 
         let activeViewId = null;   // 首次 routeFromHash 前為 null——初始載入不跑動效
 
