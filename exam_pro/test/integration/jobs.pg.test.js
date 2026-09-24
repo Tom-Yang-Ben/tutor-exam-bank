@@ -720,6 +720,76 @@ function runSuite() {
                 const { rows: after } = await query('SELECT state FROM job_questions WHERE job_id = $1', [jobId]);
                 assert.equal(after[0].state, 'saved');
             });
+
+            // 〔整合〕偶發失敗的根因（「三題全過」「供應商錯誤：退避三次」「兩題並行、子題先入庫」在 CPU 忙時
+            // 會多出一筆同節點事件）：工作單位寫回狀態時已放掉租約，這一列可能在它收尾前就被下一輪認領；
+            // 舊版的收尾（finally）再無條件清一次租約、inFlight 又以列 id 當鍵，於是同一列被兩個單位同時推進。
+            // 下面兩個案例用 db 包裝把那個交錯**排定**出來（靠 await 的先後，不靠時間）。
+            const WRITE_BACK = /UPDATE job_questions SET state = \$2/;
+            function runnerWithDb(db) {
+                return createRunner({
+                    db, llm: fakeLlm, agentsDir: FAKE_AGENTS_DIR,
+                    logger: { info() { }, warn() { }, error() { } },
+                    sleep: async () => { },
+                    estimateCost: fakeEstimateCost,
+                    config: { nodeTimeoutMs: 2000, leaseMs: 60000, concurrency: 2 }
+                });
+            }
+
+            test('租約：寫回狀態後被別的槽認領 → 前一個單位收尾時不得清掉對方的租約', async () => {
+                const { jqIds } = await seedJob([extractPayload(1)]);
+                let claimedByOther = false;
+                const runner = runnerWithDb({
+                    pool,
+                    async query(text, params) {
+                        const res = await query(text, params);
+                        if (!claimedByOther && WRITE_BACK.test(text)) {
+                            claimedByOther = true;   // 狀態剛寫回（租約已放）：另一個槽立刻認領這一列
+                            await query(`UPDATE job_questions SET locked_until = now() + interval '5 minutes' WHERE id = $1`, [jqIds[0]]);
+                        }
+                        return res;
+                    }
+                });
+                await runner.runJobQuestion(jqIds[0]);
+
+                const { rows } = await query('SELECT state, locked_until > now() AS held FROM job_questions WHERE id = $1', [jqIds[0]]);
+                assert.equal(claimedByOther, true, '前提：有寫回狀態');
+                assert.equal(rows[0].state, 'hashed', '推進了一格');
+                assert.equal(rows[0].held, true, '別的槽的租約被清掉了：這一列會被兩個單位同時推進');
+            });
+
+            test('inFlight 以工作單位計：同一列在前一個單位收尾前被下一輪認領，兩個都要算，且每個節點只跑一次', async () => {
+                const { jobId, jqIds } = await seedJob([extractPayload(1)]);
+                let runner = null, outer = null, reticked = false, observed = null, markInner;
+                const innerDone = new Promise(r => { markInner = r; });
+                runner = runnerWithDb({
+                    pool,
+                    async query(text, params) {
+                        const first = !reticked && WRITE_BACK.test(text);
+                        if (first) { reticked = true; await outer; }     // 外層 tick 的認領迴圈先結束（它看到的列還鎖著）
+                        const res = await query(text, params);
+                        if (first) {
+                            await runner.tick();                         // 租約剛放：這一輪會認領同一列（第二個單位）
+                            observed = runner.inFlight;
+                            markInner();
+                        }
+                        return res;
+                    }
+                });
+                outer = runner.tick();
+                await outer;
+                await innerDone;                                         // drain 的 tick 不得與上面那一輪重疊
+                await drain(runner);
+
+                assert.equal(observed, 2, '前一個單位還沒結束、第二個單位已開跑：在途應是 2');
+                const { rows } = await query('SELECT state FROM job_questions WHERE id = $1', [jqIds[0]]);
+                assert.equal(rows[0].state, 'saved');
+                const { rows: ev } = await query(
+                    `SELECT node, COUNT(*)::int AS n FROM job_events WHERE job_id = $1 GROUP BY node ORDER BY node`, [jobId]);
+                assert.deepEqual(ev.map(e => [e.node, e.n]), [
+                    ['classify', 1], ['dedup0', 1], ['dedup1', 1], ['lint', 1], ['save', 1], ['source_check', 1], ['verify', 1]
+                ], '同一列的同一個節點被跑了兩次');
+            });
         });
 
         // ─────────────────── runner：extract ───────────────────

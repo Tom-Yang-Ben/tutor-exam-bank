@@ -400,7 +400,12 @@ function createRunner(opts = {}) {
         || ((questionId) => require('../services/kcTagService').tagQuestion(questionId, { db, llm, logger }));
 
     const agentCache = new Map();
-    const inFlight = new Set();      // 'jq:12' / 'job:3'
+    // 在途的工作單位。成員是每次 spawn 各自一個的 token（'jq:12#7'），不是列 id：
+    // 同一列可能在前一個單位收尾時就被下一輪認領（前一個單位寫回狀態時已放掉租約），
+    // 以列 id 當鍵會讓兩個單位疊成一個，先結束的那個一 delete，inFlight 就少算一個——
+    // tick 以為有空槽而多認領，drain 也會在還有單位在跑時以為已經閒下來（整合階段查到的偶發失敗）。
+    const inFlight = new Set();
+    let spawnSeq = 0;
     let timer = null;
     let ticking = false;
     let dailyWarned = false;
@@ -533,10 +538,15 @@ function createRunner(opts = {}) {
         }
     }
 
-    /** 租約續期：呼叫進行中每 30 秒延一次，避免另一個槽重新認領仍在付費的列。 */
+    /**
+     * 租約續期：呼叫進行中每 30 秒延一次，避免另一個槽重新認領仍在付費的列。
+     * 只延「還鎖著」的列：工作單位寫回狀態時已放掉租約（locked_until = NULL），
+     * 之後才觸發的續期（例如退避睡眠期間）不該把它重新鎖上——那一列會卡到租約過期才有人接手。
+     */
     function startRenew(table, id) {
         const h = setInterval(() => {
-            db.query(`UPDATE ${table} SET locked_until = now() + ($1 || ' milliseconds')::interval WHERE id = $2`,
+            db.query(`UPDATE ${table} SET locked_until = now() + ($1 || ' milliseconds')::interval
+                       WHERE id = $2 AND locked_until IS NOT NULL`,
                 [String(config.leaseMs), id])
                 .catch(err => logger.warn({ msg: '續租失敗', table, id, error: err.message }));
         }, RENEW_INTERVAL_MS);
@@ -793,6 +803,11 @@ function createRunner(opts = {}) {
     // ── 工作單位 B：推進一列 job_questions ────────────────────
     async function runJobQuestion(jqId) {
         const stopRenew = startRenew('job_questions', jqId);
+        // 寫回狀態的那一句 UPDATE 已經順手放掉租約（locked_until = NULL）；從那一刻起這一列
+        // 就可能被下一輪（或另一個 runner）認領。finally 若再無條件清一次，會把**別人剛拿到的**
+        // 租約清掉，同一列於是被兩個單位同時推進（同一節點跑兩次、多一筆事件、多付一次錢）。
+        // 所以只在「還沒寫回就結束」（提早 return 或例外）時才由 finally 放租約。
+        let released = false;
         try {
             const { rows } = await db.query(
                 `SELECT q.id, q.job_id, q.idx, q.state, q.payload, q.retries,
@@ -830,6 +845,7 @@ function createRunner(opts = {}) {
                 await db.query(
                     `UPDATE job_questions SET state = 'needs_review', review_reason = 'awaiting_approval',
                             locked_until = NULL, updated_at = now() WHERE id = $1`, [jq.id]);
+                released = true;
                 logger.info({
                     job_id: jq.job_id, jq_id: jq.id, node: 'save', attempt: attemptNo(jq.retries, 'save'),
                     outcome: 'skipped', latency_ms: 0, state: 'needs_review', review_reason: 'awaiting_approval'
@@ -896,6 +912,7 @@ function createRunner(opts = {}) {
                 `UPDATE job_questions SET state = $2, retries = $3::jsonb, review_reason = $4,
                         payload = $5::jsonb, locked_until = NULL, updated_at = now() WHERE id = $1`,
                 [jq.id, next.state, JSON.stringify(next.retries), next.review_reason, JSON.stringify(payload)]);
+            released = true;
 
             logger.info({
                 job_id: jq.job_id, jq_id: jq.id, node, attempt: attemptNo(jq.retries, node),
@@ -917,7 +934,9 @@ function createRunner(opts = {}) {
             }
         } finally {
             stopRenew();
-            await db.query('UPDATE job_questions SET locked_until = NULL WHERE id = $1', [jqId]).catch(() => { });
+            if (!released) {
+                await db.query('UPDATE job_questions SET locked_until = NULL WHERE id = $1', [jqId]).catch(() => { });
+            }
         }
     }
 
@@ -1387,11 +1406,12 @@ function createRunner(opts = {}) {
     }
 
     function spawn(key, fn) {
-        inFlight.add(key);
+        const token = `${key}#${++spawnSeq}`;
+        inFlight.add(token);
         Promise.resolve()
             .then(fn)
             .catch(err => logger.error({ msg: '工作單位異常結束', unit: key, error: err.message, stack: err.stack }))
-            .finally(() => inFlight.delete(key));
+            .finally(() => inFlight.delete(token));
     }
 
     function start() {
