@@ -28,6 +28,13 @@
 //   - `low_sample` 一律標「樣本不足」，包含 `graded = 0` 的那一列。
 //   - `trend_weekly` **只有有資料的週**（後端不補零）。中間跳過的週在圖上畫成虛線，
 //      而不是把兩個點直接連起來假裝那幾週是連續的。
+//
+// 〔stage5 WS-A〕docs/interfaces-stage5.md 第 4.1 條第 7 項（DEC-015、DEC-017）：
+//   - 批改卡：按「錯」展開錯因 chip（可複選，清單讀 GET /api/error-types，不在前端另抄一份）；
+//     計算題與證明題可填部分給分；可記學生答案與老師註記；可展開標準答案與詳解。
+//   - 弱點面板多一張「錯因分布」表（by_error_type），最近錯題列出錯因與部分給分。
+//   - 學生管理可編輯檔案欄位（選項讀 GET /api/student-profile-options）。
+//   diffResults 仍然「只送改過的題」；四個新鍵只在真的改過時才出現在那一題裡。
 // ─────────────────────────────────────────────────────────────
 
 const DEFAULT_DAYS = 365;                    // 裁決 S4-4：家教是長期視角，預設一年（伺服器端第 1.5 條的 90 不動，本檔恆帶參數）
@@ -166,23 +173,118 @@ export function resultLabel(v) {
     return '未批';
 }
 
+/** 〔stage5 WS-A〕批改細節的四個可選鍵（第 4.1 條第 1 項）。 */
+export const DETAIL_KEYS = ['score', 'error_types', 'response', 'note'];
+
+/** 兩個批改細節值是否相同：陣列逐項比、其他以 null 收斂 undefined 後嚴格相等。 */
+function sameDetail(a, b) {
+    if (Array.isArray(a) || Array.isArray(b)) {
+        const x = Array.isArray(a) ? a : [];
+        const y = Array.isArray(b) ? b : [];
+        return x.length === y.length && x.every((v, i) => v === y[i]);
+    }
+    return (a ?? null) === (b ?? null);
+}
+
 /**
  * 算出要送給 `PATCH /api/papers/:id/results` 的最小 payload。
  *
  * 只送「改過的」有兩個理由：① 第 1.4 條的 100 筆上限；② `updated` 回傳的是實際
  * UPDATE 到的列數，全送會讓「我到底改了幾題」這件事對不起來。
  *
+ * 〔stage5 WS-A〕列上有 score／error_types／response／note 時一起比：只有改過的鍵會出現，
+ * 而且只要其中任何一個改了，那一題就要送（連同目前的 result——API 的 result 是必填）。
+ * 列上**沒有**這些鍵（舊的呼叫方式）時，輸出與原本逐位元相同。
+ *
  * @param {Array<{question_id:number, result:0|1|null}>} original 進來時的狀態（GET /api/papers/:id）
  * @param {Array<{question_id:number, result:0|1|null}>} current  使用者按完之後的狀態
  * @returns {Array<{question_id:number, result:0|1|null}>} 依 current 的順序
  */
 export function diffResults(original, current) {
-    const before = new Map((original || []).map(r => [r.question_id, r.result ?? null]));
+    const before = new Map((original || []).map(r => [r.question_id, r]));
     const out = [];
     for (const row of current || []) {
+        const prev = before.get(row.question_id) || {};
         const now = row.result ?? null;
-        if ((before.get(row.question_id) ?? null) !== now) {
-            out.push({ question_id: row.question_id, result: now });
+        const entry = { question_id: row.question_id, result: now };
+        let changed = (prev.result ?? null) !== now;
+        for (const k of DETAIL_KEYS) {
+            if (!(k in row)) continue;
+            if (!sameDetail(prev[k], row[k])) {
+                entry[k] = Array.isArray(row[k]) ? [...row[k]] : (row[k] ?? null);
+                changed = true;
+            }
+        }
+        if (changed) out.push(entry);
+    }
+    return out;
+}
+
+/**
+ * 〔stage5 WS-A〕這一科能用的錯因（subjects 為 null＝全部科目；chem_equation 只給化學）。
+ * @param {Array<{code:string, label:string, subjects:string[]|null}>} types GET /api/error-types 的 items
+ * @param {string} subject 題目的科目
+ * @returns {Array<{code:string, label:string, subjects:string[]|null}>}
+ */
+export function applicableErrorTypes(types, subject) {
+    return (types || []).filter(t => t && (t.subjects === null || t.subjects === undefined
+        || (Array.isArray(t.subjects) && t.subjects.includes(subject))));
+}
+
+/** 〔stage5 WS-A〕哪些題型可以部分給分（第 4.1 條第 7 項：計算題與證明題）。 */
+export const PARTIAL_SCORE_TYPES = ['計算', '證明'];
+
+/**
+ * 〔stage5 WS-A〕部分給分的輸入框是百分比（0～100 的整數），API 存的是 0～1、兩位小數。
+ * @param {any} raw 輸入框的字串
+ * @returns {number|null|undefined} 空字串＝null（不給分）；不合法＝undefined
+ */
+export function scoreFromPercent(raw) {
+    const s = String(raw ?? '').trim();
+    if (s === '') return null;
+    const n = Number(s);
+    if (!Number.isInteger(n) || n < 0 || n > 100 || String(n) !== s) return undefined;
+    return n / 100;
+}
+
+/**
+ * 〔stage5 WS-A〕API 的 score（0～1）→ 輸入框顯示的百分比字串；null 顯示空白。
+ * @param {number|null|undefined} score
+ * @returns {string}
+ */
+export function percentOfScore(score) {
+    if (score === null || score === undefined || Number.isNaN(Number(score))) return '';
+    return String(Math.round(Number(score) * 100));
+}
+
+/**
+ * 〔stage5 WS-A〕學生檔案的一行摘要（管理面板用）。沒填的欄位略過；全部沒填回空字串。
+ * @param {{grade?:number|null, track?:string|null, target_exams?:string[], school?:string|null, textbook_version?:string|null}} st
+ * @returns {string}
+ */
+export function profileSummary(st) {
+    const GRADE_LABEL = { 10: '高一', 11: '高二', 12: '高三' };
+    const parts = [];
+    if (st && GRADE_LABEL[st.grade]) parts.push(GRADE_LABEL[st.grade]);
+    if (st && st.track) parts.push(st.track);
+    if (st && Array.isArray(st.target_exams) && st.target_exams.length) parts.push(st.target_exams.join('／'));
+    if (st && st.school) parts.push(st.school);
+    if (st && st.textbook_version) parts.push(`${st.textbook_version}版`);
+    return parts.join('・');
+}
+
+/**
+ * 〔stage5 WS-A〕學生檔案表單：只送改過的欄位（PATCH 沒送的欄位不動）。
+ * @param {object} original GET /api/students 的一列
+ * @param {object} edited   表單目前的值（六個檔案欄位）
+ * @returns {object} 改過的欄位；沒有改動時是空物件
+ */
+export function diffProfile(original, edited) {
+    const out = {};
+    for (const k of ['grade', 'track', 'target_exams', 'school', 'textbook_version', 'note']) {
+        if (!(k in (edited || {}))) continue;
+        if (!sameDetail((original || {})[k], edited[k])) {
+            out[k] = Array.isArray(edited[k]) ? [...edited[k]] : (edited[k] ?? null);
         }
     }
     return out;
@@ -234,9 +336,10 @@ export function weekPoints(trend) {
 const MOCK = {
     students: {
         items: [
-            { id: 3, name: '示範學生 A', papers: 4, graded_ratio: 0.625 },
-            { id: 4, name: '示範學生 B', papers: 1, graded_ratio: 0 },
-            { id: 5, name: '示範學生 C', papers: 0, graded_ratio: 0 }
+            // 〔stage5 WS-A〕後六欄是學生檔案（第 4.1 條第 4 項）；B、C 示範「還沒填檔案」
+            { id: 3, name: '示範學生 A', papers: 4, graded_ratio: 0.625, grade: 11, track: '自然組', target_exams: ['學測', '分科'], school: '示範高中', textbook_version: '龍騰', note: null },
+            { id: 4, name: '示範學生 B', papers: 1, graded_ratio: 0, grade: null, track: null, target_exams: [], school: null, textbook_version: null, note: null },
+            { id: 5, name: '示範學生 C', papers: 0, graded_ratio: 0, grade: null, track: null, target_exams: [], school: null, textbook_version: null, note: null }
         ]
     },
     papers: {
@@ -249,11 +352,20 @@ const MOCK = {
         41: {
             id: 41, title: '示範學生 A-向量內積特訓卷(2026_8_21)', student_id: 3,
             created_at: '2026-08-21T09:12:33.412Z',
+            // 〔stage5 WS-A〕第 4.1 條第 2 項多帶的欄位：科目、章節、標準答案、詳解與批改細節
             questions: [
-                { question_id: 12, question_text: '設 $\\vec{a}=(1,2)$、$\\vec{b}=(3,k)$ 互相垂直，求 $k$。', question_type: '填空', difficulty: 3, result: 1 },
-                { question_id: 87, question_text: '求 $\\vec{a}=(6,8)$ 在 $\\vec{b}=(1,0)$ 上的投影長。', question_type: '計算', difficulty: 3, result: 0 },
-                { question_id: 91, question_text: '試證：$|\\vec{a}\\cdot\\vec{b}| \\leq |\\vec{a}||\\vec{b}|$。', question_type: '證明', difficulty: 5, result: null },
-                { question_id: 103, question_text: '兩向量夾角為 $60^\\circ$，$|\\vec{a}|=2$、$|\\vec{b}|=3$，求 $\\vec{a}\\cdot\\vec{b}$。', question_type: '計算', difficulty: 2, result: 0 }
+                { question_id: 12, question_text: '設 $\\vec{a}=(1,2)$、$\\vec{b}=(3,k)$ 互相垂直，求 $k$。', question_type: '填空', difficulty: 3, result: 1,
+                    subject: '數學', chapter: '向量內積', answer_text: '$k=-\\frac{3}{2}$', solution_text: '垂直則內積為 0：$3+2k=0$，得 $k=-\\frac{3}{2}$。（示範文字）', solution_src: 'verify',
+                    score: null, error_types: [], response: null, teacher_note: null },
+                { question_id: 87, question_text: '求 $\\vec{a}=(6,8)$ 在 $\\vec{b}=(1,0)$ 上的投影長。', question_type: '計算', difficulty: 3, result: 0,
+                    subject: '數學', chapter: '向量內積', answer_text: '$6$', solution_text: null, solution_src: null,
+                    score: 0.5, error_types: ['calc'], response: '8', teacher_note: '方向看反了' },
+                { question_id: 91, question_text: '試證：$|\\vec{a}\\cdot\\vec{b}| \\leq |\\vec{a}||\\vec{b}|$。', question_type: '證明', difficulty: 5, result: null,
+                    subject: '數學', chapter: '向量內積', answer_text: '（證明題）', solution_text: null, solution_src: null,
+                    score: null, error_types: [], response: null, teacher_note: null },
+                { question_id: 103, question_text: '兩向量夾角為 $60^\\circ$，$|\\vec{a}|=2$、$|\\vec{b}|=3$，求 $\\vec{a}\\cdot\\vec{b}$。', question_type: '計算', difficulty: 2, result: 0,
+                    subject: '數學', chapter: '向量內積', answer_text: '$3$', solution_text: null, solution_src: null,
+                    score: null, error_types: [], response: null, teacher_note: null }
             ]
         },
         38: {
@@ -290,10 +402,30 @@ const MOCK = {
             { week_start: '2026-08-17', graded: 12, wrong: 5 }
         ],
         recent_wrong: [
-            { question_id: 87, chapter: '向量內積', question_text: '求 $\\vec{a}=(6,8)$ 在 $\\vec{b}=(1,0)$ 上的投影長。', assigned_at: '2026-08-21' },
-            { question_id: 103, chapter: '向量內積', question_text: '兩向量夾角為 $60^\\circ$，$|\\vec{a}|=2$、$|\\vec{b}|=3$，求 $\\vec{a}\\cdot\\vec{b}$。', assigned_at: '2026-08-21' },
-            { question_id: 131, chapter: '摩擦力與向心力', question_text: '斜面傾角 $30^\\circ$、摩擦係數 $0.2$，求加速度。', assigned_at: '2026-08-10' }
+            { question_id: 87, chapter: '向量內積', question_text: '求 $\\vec{a}=(6,8)$ 在 $\\vec{b}=(1,0)$ 上的投影長。', assigned_at: '2026-08-21', error_types: ['calc'], score: 0.5 },
+            { question_id: 103, chapter: '向量內積', question_text: '兩向量夾角為 $60^\\circ$，$|\\vec{a}|=2$、$|\\vec{b}|=3$，求 $\\vec{a}\\cdot\\vec{b}$。', assigned_at: '2026-08-21', error_types: [], score: null },
+            { question_id: 131, chapter: '摩擦力與向心力', question_text: '斜面傾角 $30^\\circ$、摩擦係數 $0.2$，求加速度。', assigned_at: '2026-08-10', error_types: ['concept', 'calc'], score: null }
+        ],
+        // 〔stage5 WS-A〕錯因分布（share 的分母是錯題數，一題可多選，所以加總可能超過 100%）
+        by_error_type: [
+            { error_type: 'calc', label: '計算錯誤', count: 2, share: 0.6667 },
+            { error_type: 'concept', label: '觀念不清', count: 1, share: 0.3333 }
         ]
+    },
+    // 〔stage5 WS-A〕只給 ?mock=1 排版用的**節錄**：正式路徑一律讀 GET /api/error-types 與
+    // GET /api/student-profile-options（唯一真相在 config/errorTypes.js、config/studentProfile.js）
+    errorTypes: {
+        items: [
+            { code: 'concept', label: '觀念不清', subjects: null },
+            { code: 'calc', label: '計算錯誤', subjects: null },
+            { code: 'blank', label: '未作答', subjects: null },
+            { code: 'chem_equation', label: '化學式或係數', subjects: ['化學'] }
+        ],
+        max_per_attempt: 5
+    },
+    profileOptions: {
+        grades: [10, 11, 12], tracks: ['自然組', '社會組'], target_exams: ['學測', '分科'],
+        textbook_versions: ['龍騰', '翰林'], school_max_length: 50, note_max_length: 500
     }
 };
 
@@ -331,6 +463,14 @@ function request(app, url, options) {
     if (method === 'PATCH' && /^\/api\/papers\/\d+\/results$/.test(path)) {
         const sent = JSON.parse((options && options.body) || '{"results":[]}');
         return mockResponse({ updated: sent.results.length });
+    }
+    // 〔stage5 WS-A〕
+    if (method === 'GET' && path === '/api/error-types') return mockResponse(MOCK.errorTypes);
+    if (method === 'GET' && path === '/api/student-profile-options') return mockResponse(MOCK.profileOptions);
+    if (method === 'PATCH' && /^\/api\/students\/\d+$/.test(path)) {
+        const sent = JSON.parse((options && options.body) || '{}');
+        const base = MOCK.students.items.find(st => st.id === Number(path.split('/').pop())) || {};
+        return mockResponse({ ...base, ...sent });
     }
     return mockResponse({ message: `mock 沒有覆蓋 ${method} ${url}` }, 501);
 }
@@ -488,6 +628,103 @@ function weaknessTable(app, spec, rows) {
     return box;
 }
 
+// ───────────────────────── 〔stage5 WS-A〕錯因分布 ─────────────────────────
+
+/**
+ * 錯因分布表（by_error_type，第 4.1 條第 3 項）。與上面三張表同一種純 CSS 橫條。
+ * share 的分母是「這段期間的錯題數」，一題可以標多個錯因，所以加總可能超過 100%——要寫在提示裡。
+ * @param {Array<{error_type:string, label:string|null, count:number, share:number|null}>} rows
+ * @returns {HTMLElement}
+ */
+function errorTypeTable(rows) {
+    const box = el('div', 'mt-4 rounded-2xl border border-slate-200 bg-white p-4', { 'data-weakness': 'by_error_type' });
+    box.append(
+        el('p', 'eyebrow text-rose-400', { textContent: '錯因分布' }),
+        el('p', 'mt-1 mb-3 text-xs text-slate-400', {
+            textContent: '比例＝標了這個錯因的錯題 ÷ 這段期間的錯題數；一題可以標多個錯因，所以加總可能超過 100%。'
+        })
+    );
+    if (!rows || rows.length === 0) {
+        box.appendChild(el('p', 'text-sm text-slate-400', {
+            textContent: '這段時間窗內的錯題還沒有標錯因。批改時按「錯」就能點選錯因，之後這裡會告訴你他最常錯在哪一類。'
+        }));
+        return box;
+    }
+    const list = el('div', 'space-y-2.5');
+    for (const row of rows) {
+        const line = el('div', '');
+        const head = el('div', 'flex items-baseline justify-between gap-2 text-xs');
+        head.append(
+            // label 為 null＝資料庫裡有白名單外的代碼：原樣顯示代碼，讓老師看得到
+            el('span', 'font-bold text-slate-700 truncate', { textContent: row.label || row.error_type }),
+            el('span', 'shrink-0 font-mono text-slate-500', { textContent: `${formatPercent(row.share)}　(${row.count} 題)` })
+        );
+        const track = el('div', 'mt-1 h-2.5 w-full overflow-hidden rounded-full bg-slate-100');
+        const fill = el('div', 'h-full rounded-full bg-amber-400');
+        fill.style.width = `${barPercent(row.share)}%`;
+        track.appendChild(fill);
+        line.append(head, track);
+        list.appendChild(line);
+    }
+    box.appendChild(list);
+    return box;
+}
+
+// 錯因白名單與學生檔案選項：各打一次後端、快取在模組裡（兩者都是設定，不會在一次瀏覽中改變）。
+// 失敗時不快取，下一次需要時再試；呼叫端拿到 null 就退回「只記對錯」「不能編輯檔案」。
+let errorTypesPromise = null;
+let profileOptionsPromise = null;
+
+/**
+ * GET /api/error-types（〔stage5 WS-A〕）。
+ * @param {object} app
+ * @returns {Promise<{items:Array<{code:string,label:string,subjects:string[]|null}>, max:number}|null>}
+ */
+function loadErrorTypes(app) {
+    if (!errorTypesPromise) {
+        errorTypesPromise = request(app, '/api/error-types')
+            .then(async res => {
+                if (!res.ok) return null;
+                const body = await res.json();
+                return {
+                    items: Array.isArray(body.items) ? body.items : [],
+                    max: Number.isInteger(body.max_per_attempt) ? body.max_per_attempt : 5
+                };
+            })
+            .catch(() => null)
+            .then(v => { if (v === null) errorTypesPromise = null; return v; });
+    }
+    return errorTypesPromise;
+}
+
+/**
+ * GET /api/student-profile-options（〔stage5 WS-A〕，核心區）。
+ * @param {object} app
+ * @returns {Promise<object|null>}
+ */
+function loadProfileOptions(app) {
+    if (!profileOptionsPromise) {
+        profileOptionsPromise = request(app, '/api/student-profile-options')
+            .then(res => (res.ok ? res.json() : null))
+            .catch(() => null)
+            .then(v => { if (v === null) profileOptionsPromise = null; return v; });
+    }
+    return profileOptionsPromise;
+}
+
+/**
+ * 錯因代碼 → 標籤。先用白名單，其次用這次弱點回應裡 by_error_type 帶的標籤，都沒有就原樣顯示代碼。
+ * @param {{items:Array<{code:string,label:string}>}|null} types
+ * @param {Array<{error_type:string,label:string|null}>} [byErrorType]
+ * @returns {(code:string) => string}
+ */
+function errorLabeler(types, byErrorType) {
+    const map = new Map();
+    for (const r of byErrorType || []) if (r && r.label) map.set(r.error_type, r.label);
+    for (const t of (types && types.items) || []) map.set(t.code, t.label);
+    return code => map.get(code) || code;
+}
+
 // ───────────────────────── 最近錯題 ─────────────────────────
 
 /**
@@ -498,7 +735,7 @@ function weaknessTable(app, spec, rows) {
  * @param {() => number|null} studentIdOf
  * @returns {HTMLElement}
  */
-function recentWrongList(app, rows, studentIdOf) {
+function recentWrongList(app, rows, studentIdOf, labelOf = code => code) {
     const box = el('div', 'rounded-2xl border border-slate-200 bg-white p-4');
     box.append(
         el('p', 'eyebrow text-rose-400', { textContent: '最近錯題' }),
@@ -529,6 +766,17 @@ function recentWrongList(app, rows, studentIdOf) {
         stem.textContent = row.question_text || '';
         card.appendChild(stem);
         app.renderMath(stem);
+
+        // 〔stage5 WS-A〕批改時標的錯因與部分給分（第 4.1 條第 3 項：recent_wrong 多 error_types、score）
+        const tags = Array.isArray(row.error_types) ? row.error_types : [];
+        if (tags.length > 0 || (row.score !== null && row.score !== undefined)) {
+            const bits = [];
+            if (tags.length > 0) bits.push(`錯因：${tags.map(labelOf).join('、')}`);
+            if (row.score !== null && row.score !== undefined) bits.push(`部分給分 ${percentOfScore(row.score)}%`);
+            card.appendChild(el('p', 'mt-1 text-[11px] font-bold text-amber-700', {
+                textContent: bits.join('　·　'), 'data-recent-detail': String(row.question_id)
+            }));
+        }
 
         if (buttons.length) {
             const actions = el('div', 'mt-2 flex flex-wrap gap-2');
@@ -600,10 +848,14 @@ function paperCard(app, paper, onGraded) {
         loaded = true;
         body.textContent = '載入中…';
         try {
-            const res = await request(app, `/api/papers/${paper.paper_id}`);
+            // 〔stage5 WS-A〕錯因白名單與試卷一起取（loadErrorTypes 有快取、失敗回 null 不丟錯）
+            const [res, errorTypes] = await Promise.all([
+                request(app, `/api/papers/${paper.paper_id}`),
+                loadErrorTypes(app)
+            ]);
             if (!res.ok) { body.textContent = await messageOf(res); loaded = false; return; }
             body.innerHTML = '';
-            body.appendChild(gradingForm(app, await res.json(), badge, onGraded));
+            body.appendChild(gradingForm(app, await res.json(), badge, onGraded, errorTypes));
         } catch {
             body.textContent = '連線失敗，請稍後再試。';
             loaded = false;
@@ -620,16 +872,36 @@ function paperCard(app, paper, onGraded) {
  * 「未批」是真的要送出去的值（`result: null` = 取消批改，第 1.4 條），
  * 不是「不送這一題」——老師按錯之後要有辦法退回未批狀態。
  *
+ * 〔stage5 WS-A〕每題另外有（docs/interfaces-stage5.md 第 4.1 條第 7 項）：
+ *   - 按「錯」才出現的錯因 chip（可複選，最多 max_per_attempt 個；只列這一科能用的）
+ *   - 計算題與證明題的部分給分（百分比輸入，存成 0～1）
+ *   - 學生答案與老師註記（收在「學生答案與註記」裡，已有內容時預設展開）
+ *   - 「看答案與詳解」：展開標準答案與文字詳解（標示詳解來源）
+ *   狀態規則與伺服器同一條：改成「對」或「未批」時錯因清空；改成「未批」時部分給分也清空。
+ *
  * @param {object} app
  * @param {object} detail GET /api/papers/:id 的回應
  * @param {HTMLElement} badge 卡片右上角的狀態標籤（存檔後要更新）
  * @param {() => void} onGraded
+ * @param {{items:Array<{code:string,label:string,subjects:string[]|null}>, max:number}|null} [errorTypes]
+ *        GET /api/error-types；null（載入失敗）時不畫錯因 chip，只能記對錯
  * @returns {HTMLElement}
  */
-function gradingForm(app, detail, badge, onGraded) {
+function gradingForm(app, detail, badge, onGraded, errorTypes = null) {
     const wrap = el('div', '');
-    const original = detail.questions.map(q => ({ question_id: q.question_id, result: q.result ?? null }));
-    const current = original.map(r => ({ ...r }));
+    const toRow = q => ({
+        question_id: q.question_id,
+        result: q.result ?? null,
+        score: q.score ?? null,
+        error_types: Array.isArray(q.error_types) ? [...q.error_types] : [],
+        response: q.response ?? null,
+        note: q.teacher_note ?? null
+    });
+    const copyRow = r => ({ ...r, error_types: [...r.error_types] });
+    const original = detail.questions.map(toRow);
+    const current = original.map(copyRow);
+    const allTypes = errorTypes && Array.isArray(errorTypes.items) ? errorTypes.items : [];
+    const maxTypes = errorTypes && Number.isInteger(errorTypes.max) ? errorTypes.max : 5;
 
     const list = el('div', 'space-y-2');
     const repaints = [];   // W1-3：每列的重畫函式，「未批全對」批次改值後整批重畫
@@ -647,6 +919,7 @@ function gradingForm(app, detail, badge, onGraded) {
             role: 'radiogroup', 'aria-label': `第 ${i + 1} 題的批改結果`
         });
         const buttons = [];
+        const detailUi = gradingDetail(app, q, current[i], { allTypes, maxTypes });
         const paint = () => {
             for (const b of buttons) {
                 const on = (current[i].result ?? null) === b.__value;
@@ -654,18 +927,27 @@ function gradingForm(app, detail, badge, onGraded) {
                     (on ? b.__onClass : 'bg-white text-slate-500 hover:bg-slate-50');
                 b.setAttribute('aria-checked', String(on));
             }
+            detailUi.paint();
         };
+        detailUi.onChange = paint;
         for (const [value, onClass] of [[1, 'bg-emerald-500 text-white'], [0, 'bg-rose-500 text-white'], [null, 'bg-slate-400 text-white']]) {
             const btn = el('button', '', { type: 'button', textContent: resultLabel(value), role: 'radio' });
             btn.__value = value;
             btn.__onClass = onClass;
-            btn.addEventListener('click', () => { current[i].result = value; paint(); });
+            btn.addEventListener('click', () => {
+                current[i].result = value;
+                // 〔stage5 WS-A〕與伺服器同一條規則：只有答錯的題有錯因；取消批改連部分給分一起清
+                if (value !== 0) current[i].error_types = [];
+                if (value === null) current[i].score = null;
+                paint();
+            });
             buttons.push(btn);
             group.appendChild(btn);
         }
+        row.appendChild(group);
+        row.appendChild(detailUi.node);
         paint();
         repaints.push(paint);
-        row.appendChild(group);
         list.appendChild(row);
     });
 
@@ -678,7 +960,7 @@ function gradingForm(app, detail, badge, onGraded) {
     markRestCorrect.addEventListener('click', () => {
         let changed = 0;
         for (const row of current) {
-            if ((row.result ?? null) === null) { row.result = 1; changed += 1; }
+            if ((row.result ?? null) === null) { row.result = 1; row.error_types = []; changed += 1; }
         }
         for (const paint of repaints) paint();
         app.showToast(changed > 0 ? `已把 ${changed} 題標為「對」，記得按「儲存批改」。` : '沒有未批的題目。', changed > 0 ? 'success' : 'info');
@@ -687,7 +969,9 @@ function gradingForm(app, detail, badge, onGraded) {
     const save = el('button', 'mt-4 w-full rounded-xl bg-emerald-600 p-3 font-extrabold text-white transition-all hover:bg-emerald-700 cursor-pointer', {
         type: 'button', textContent: '儲存批改'
     });
-    const note = el('p', 'mt-2 text-xs text-slate-400', { textContent: '只會送出改過的題目（單一交易，全有全無）。' });
+    const note = el('p', 'mt-2 text-xs text-slate-400', {
+        textContent: '只會送出改過的題目（單一交易，全有全無）。學生空白沒寫的題，請按「錯」並點「未作答」，不要用上面那顆全部標對。'
+    });
 
     save.addEventListener('click', async () => {
         const results = diffResults(original, current);
@@ -707,7 +991,7 @@ function gradingForm(app, detail, badge, onGraded) {
             if (!res.ok) { app.showToast(await messageOf(res), 'error'); return; }
             const body = await res.json();
             app.showToast(`已儲存 ${body.updated} 題的批改結果。`, 'success');
-            for (let i = 0; i < current.length; i++) original[i].result = current[i].result;
+            for (let i = 0; i < current.length; i++) original[i] = copyRow(current[i]);
             const graded = current.filter(r => r.result !== null).length;
             badge.textContent = graded >= current.length ? '已批完' : '待批改';
             badge.className = `shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${graded >= current.length ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`;
@@ -721,6 +1005,162 @@ function gradingForm(app, detail, badge, onGraded) {
 
     wrap.append(list, markRestCorrect, save, note);
     return wrap;
+}
+
+/** 詳解來源的說明（questions.solution_src）。 */
+const SOLUTION_SRC_LABEL = {
+    verify: '管線驗算時由模型獨立解出、且與答案比對一致的摘要（未經人工審閱）',
+    teacher: '老師撰寫',
+    ai: 'AI 產生（未經人工審閱）'
+};
+
+/**
+ * 〔stage5 WS-A〕一題的批改細節區塊：錯因 chip、部分給分、學生答案與註記、答案與詳解。
+ *
+ * 直接改傳進來的 state（gradingForm 的 current[i]），改完呼叫 `onChange` 讓整列重畫；
+ * `paint()` 依 state 決定各區塊顯示與否（錯因只在「錯」時、部分給分只在已批改的計算／證明題）。
+ *
+ * @param {object} app
+ * @param {object} q     GET /api/papers/:id 的一題
+ * @param {object} state { result, score, error_types, response, note }
+ * @param {{allTypes:Array<object>, maxTypes:number}} opts
+ * @returns {{ node:HTMLElement, paint:() => void, onChange:() => void }}
+ */
+function gradingDetail(app, q, state, { allTypes, maxTypes }) {
+    const ui = { node: el('div', ''), paint: () => { }, onChange: () => { } };
+    const changed = () => ui.onChange();
+
+    // ── 錯因 chip（按「錯」才出現）──
+    const chipsBox = el('div', 'mt-2 hidden', {
+        role: 'group', 'aria-label': `第 ${q.question_id} 題的錯因`, 'data-error-chips': String(q.question_id)
+    });
+    chipsBox.appendChild(el('p', 'mb-1 text-[11px] font-bold text-rose-500', {
+        textContent: `錯因（可複選，最多 ${maxTypes} 個）`
+    }));
+    const chipRow = el('div', 'flex flex-wrap gap-1.5');
+    chipsBox.appendChild(chipRow);
+    const applicable = applicableErrorTypes(allTypes, q.subject);
+    // 已存的代碼若不在這一科的清單內（舊資料），也畫出來讓老師能取消
+    const extra = state.error_types.filter(c => !applicable.some(t => t.code === c)).map(c => ({ code: c, label: c }));
+    const chipTypes = [...applicable, ...extra];
+    const order = chipTypes.map(t => t.code);
+    const chips = [];
+    if (allTypes.length === 0) {
+        chipRow.appendChild(el('span', 'text-[11px] text-slate-400', {
+            textContent: '錯因清單載入失敗（GET /api/error-types），這次只能記對錯。'
+        }));
+    }
+    for (const t of chipTypes) {
+        const chip = el('button', '', {
+            type: 'button', textContent: t.label, 'data-error-type': t.code, 'aria-pressed': 'false'
+        });
+        chip.addEventListener('click', () => {
+            const on = state.error_types.includes(t.code);
+            if (!on && state.error_types.length >= maxTypes) {
+                app.showToast(`一題最多標 ${maxTypes} 個錯因。`, 'error');
+                return;
+            }
+            const next = on ? state.error_types.filter(c => c !== t.code) : [...state.error_types, t.code];
+            state.error_types = order.filter(c => next.includes(c));   // 固定照白名單順序
+            changed();
+        });
+        chips.push(chip);
+        chipRow.appendChild(chip);
+    }
+    ui.node.appendChild(chipsBox);
+
+    // ── 部分給分（計算題與證明題）──
+    let scoreBox = null, scoreInput = null;
+    if (PARTIAL_SCORE_TYPES.includes(q.question_type)) {
+        scoreBox = el('label', 'mt-2 hidden items-center gap-2 text-xs text-slate-600', { 'data-score-box': String(q.question_id) });
+        scoreInput = el('input', 'field-control min-h-0 w-20 p-1.5 text-xs', {
+            type: 'number', min: 0, max: 100, step: 5, placeholder: '—',
+            value: percentOfScore(state.score), 'aria-label': `第 ${q.question_id} 題的部分給分（%）`
+        });
+        scoreInput.addEventListener('change', () => {
+            const v = scoreFromPercent(scoreInput.value);
+            if (v === undefined) {
+                app.showToast('部分給分請填 0～100 的整數（%），或留空表示不給分。', 'error');
+                scoreInput.value = percentOfScore(state.score);
+                return;
+            }
+            state.score = v;
+            changed();
+        });
+        scoreBox.append(
+            el('span', 'font-bold', { textContent: '部分給分' }), scoreInput, el('span', '', { textContent: '%' }),
+            el('span', 'text-[11px] text-slate-400', { textContent: '留空＝不給分，只看對錯' })
+        );
+        ui.node.appendChild(scoreBox);
+    }
+
+    // ── 學生答案與註記 ──
+    const hasNotes = Boolean(state.response || state.note);
+    const notesBtn = el('button', 'mt-2 mr-2 text-[11px] font-bold px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 cursor-pointer', {
+        type: 'button', textContent: '學生答案與註記', 'aria-expanded': String(hasNotes)
+    });
+    const notesBox = el('div', `mt-2 space-y-1.5 ${hasNotes ? '' : 'hidden'}`, { 'data-notes-box': String(q.question_id) });
+    const responseIn = el('input', 'field-control block w-full min-h-0 p-2 text-xs', {
+        type: 'text', maxLength: 500, value: state.response || '',
+        placeholder: '學生實際寫的答案或選的選項（選填，500 字內）', 'aria-label': `第 ${q.question_id} 題的學生答案`
+    });
+    responseIn.addEventListener('input', () => { state.response = responseIn.value.trim() || null; });
+    const noteIn = el('textarea', 'field-control block w-full min-h-0 p-2 text-xs resize-y', {
+        rows: 2, maxLength: 500, value: state.note || '',
+        placeholder: '老師註記（選填，500 字內）：例如「移項忘了變號」', 'aria-label': `第 ${q.question_id} 題的老師註記`
+    });
+    noteIn.addEventListener('input', () => { state.note = noteIn.value.trim() || null; });
+    notesBox.append(responseIn, noteIn);
+    notesBtn.addEventListener('click', () => {
+        const open = notesBox.classList.contains('hidden');
+        notesBox.classList.toggle('hidden', !open);
+        notesBtn.setAttribute('aria-expanded', String(open));
+    });
+
+    // ── 標準答案與詳解 ──
+    const answerBtn = el('button', 'mt-2 text-[11px] font-bold px-2.5 py-1 rounded-lg border border-indigo-200 bg-white text-indigo-600 hover:bg-indigo-50 cursor-pointer', {
+        type: 'button', textContent: '看答案與詳解', 'aria-expanded': 'false'
+    });
+    const answerBox = el('div', 'mt-2 hidden rounded-lg border border-indigo-100 bg-indigo-50/40 p-2.5 text-xs text-slate-700 space-y-1', {
+        'data-answer-box': String(q.question_id)
+    });
+    const answerLine = el('p', 'font-bold text-emerald-700');
+    answerLine.textContent = `標準答案：${q.answer_text ?? '（無）'}`;
+    const solutionLine = el('p', 'whitespace-pre-line');
+    solutionLine.textContent = q.solution_text ? `詳解：${q.solution_text}` : '這題還沒有文字詳解（可在題庫的編輯視窗補上）。';
+    answerBox.append(answerLine, solutionLine);
+    if (q.solution_text && SOLUTION_SRC_LABEL[q.solution_src]) {
+        answerBox.appendChild(el('p', 'text-[11px] text-slate-400', { textContent: `詳解來源：${SOLUTION_SRC_LABEL[q.solution_src]}` }));
+    }
+    let typeset = false;
+    answerBtn.addEventListener('click', () => {
+        const open = answerBox.classList.contains('hidden');
+        answerBox.classList.toggle('hidden', !open);
+        answerBtn.setAttribute('aria-expanded', String(open));
+        if (open && !typeset) { typeset = true; app.renderMath(answerBox); }
+    });
+
+    const actions = el('div', '');
+    actions.append(notesBtn, answerBtn);
+    ui.node.append(actions, notesBox, answerBox);
+
+    ui.paint = () => {
+        const wrong = state.result === 0;
+        chipsBox.classList.toggle('hidden', !wrong);
+        for (const chip of chips) {
+            const on = state.error_types.includes(chip.getAttribute('data-error-type'));
+            chip.className = 'text-[11px] font-bold px-2.5 py-1 rounded-full border cursor-pointer transition-colors ' +
+                (on ? 'border-rose-400 bg-rose-500 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-rose-50');
+            chip.setAttribute('aria-pressed', String(on));
+        }
+        if (scoreBox) {
+            const graded = state.result !== null;
+            scoreBox.classList.toggle('hidden', !graded);
+            scoreBox.classList.toggle('flex', graded);
+            if (scoreInput.value !== percentOfScore(state.score)) scoreInput.value = percentOfScore(state.score);
+        }
+    };
+    return ui;
 }
 
 // ───────────────────────── 版面組裝 ─────────────────────────
@@ -772,6 +1212,10 @@ async function renderManagePanel(app, box) {
         const row = el('div', 'flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2.5');
         row.appendChild(el('span', 'min-w-24 text-sm font-bold text-slate-700', { textContent: st.name }));
         row.appendChild(el('span', 'text-[11px] text-slate-400', { textContent: `${st.papers} 張卷` }));
+        // 〔stage5 WS-A〕學生檔案摘要與編輯（第 4.1 條第 4、7 項）
+        row.appendChild(el('span', 'text-[11px] text-slate-500', {
+            textContent: profileSummary(st) || '（未填檔案）', 'data-profile-summary': String(st.id)
+        }));
 
         const nameIn = el('input', 'field-control min-h-0 w-32 p-1.5 text-xs', { value: st.name, 'aria-label': `${st.name} 的新名字` });
         const renameBtn = el('button', 'text-[11px] font-bold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 cursor-pointer', {
@@ -823,11 +1267,120 @@ async function renderManagePanel(app, box) {
             loadStudentView(app).catch(() => {});
         });
 
-        row.append(nameIn, renameBtn, mergeSel, mergeBtn, delBtn);
+        // 〔stage5 WS-A〕「檔案」：展開這位學生的檔案表單（年級、類組、目標考試、學校、教材版本、備註）
+        const profileBtn = el('button', 'text-[11px] font-bold px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 cursor-pointer', {
+            type: 'button', textContent: '檔案', 'aria-expanded': 'false'
+        });
+        const profileBox = el('div', 'hidden rounded-xl border border-emerald-100 bg-emerald-50/40 p-3', { 'data-profile-editor': String(st.id) });
+        profileBtn.addEventListener('click', async () => {
+            const open = profileBox.classList.contains('hidden');
+            profileBox.classList.toggle('hidden', !open);
+            profileBtn.setAttribute('aria-expanded', String(open));
+            if (!open || profileBox.childElementCount > 0) return;
+            const options = await loadProfileOptions(app);
+            if (!options) {
+                profileBox.appendChild(el('p', 'text-xs text-rose-500', { textContent: '學生檔案選項載入失敗（GET /api/student-profile-options），請重新整理。' }));
+                return;
+            }
+            profileBox.appendChild(profileEditor(app, st, options, () => renderManagePanel(app, box)));
+        });
+
+        row.append(nameIn, renameBtn, mergeSel, mergeBtn, delBtn, profileBtn);
         rowsBox.appendChild(row);
+        rowsBox.appendChild(profileBox);
     }
     card.appendChild(rowsBox);
     box.appendChild(card);
+}
+
+/**
+ * 〔stage5 WS-A〕學生檔案表單。選項全部來自 GET /api/student-profile-options（不在前端寫死）；
+ * 儲存時只送改過的欄位（diffProfile），PATCH 沒送的欄位後端不動。
+ *
+ * @param {object} app
+ * @param {object} st       GET /api/students 的一列
+ * @param {object} options  GET /api/student-profile-options
+ * @param {() => void} onSaved
+ * @returns {HTMLElement}
+ */
+function profileEditor(app, st, options, onSaved) {
+    const GRADE_LABEL = { 10: '高一', 11: '高二', 12: '高三' };
+    const form = el('div', 'grid gap-2 sm:grid-cols-2');
+    const field = (label, control) => {
+        const wrap = el('label', 'flex flex-col gap-1 text-[11px] font-bold text-slate-600');
+        wrap.append(el('span', '', { textContent: label }), control);
+        return wrap;
+    };
+    /** 下拉：第一個選項是「未填」；目前值不在選項內（白名單改過）時也保留，避免一存就被洗掉 */
+    const select = (values, current, labelOf = v => String(v)) => {
+        const sel = el('select', 'field-control min-h-0 p-1.5 text-xs');
+        sel.appendChild(el('option', '', { value: '', textContent: '（未填）' }));
+        const all = current !== null && current !== undefined && !values.includes(current) ? [...values, current] : values;
+        for (const v of all) sel.appendChild(el('option', '', { value: String(v), textContent: labelOf(v) }));
+        sel.value = current === null || current === undefined ? '' : String(current);
+        return sel;
+    };
+
+    const gradeSel = select(options.grades || [], st.grade ?? null, v => GRADE_LABEL[v] || String(v));
+    const trackSel = select(options.tracks || [], st.track ?? null);
+    const bookSel = select(options.textbook_versions || [], st.textbook_version ?? null);
+    const schoolIn = el('input', 'field-control min-h-0 p-1.5 text-xs', {
+        type: 'text', maxLength: options.school_max_length || 50, value: st.school || '', placeholder: '學校（選填）'
+    });
+    const noteIn = el('textarea', 'field-control min-h-0 p-1.5 text-xs resize-y', {
+        rows: 2, maxLength: options.note_max_length || 500, value: st.note || '', placeholder: '備註（選填）：例如「數A、週三上課」'
+    });
+    const examsBox = el('div', 'flex flex-wrap gap-2 font-normal', { role: 'group', 'aria-label': `${st.name} 的目標考試` });
+    const examBoxes = [];
+    const currentExams = Array.isArray(st.target_exams) ? st.target_exams : [];
+    const examValues = [...(options.target_exams || [])];
+    for (const v of currentExams) if (!examValues.includes(v)) examValues.push(v);
+    for (const v of examValues) {
+        const lab = el('label', 'inline-flex items-center gap-1 text-xs text-slate-700');
+        const cb = el('input', 'accent-emerald-600', { type: 'checkbox', checked: currentExams.includes(v), 'data-exam': v });
+        examBoxes.push(cb);
+        lab.append(cb, el('span', '', { textContent: v }));
+        examsBox.appendChild(lab);
+    }
+
+    form.append(
+        field('年級', gradeSel), field('類組', trackSel),
+        field('教材版本', bookSel), field('學校', schoolIn)
+    );
+    const examsField = field('目標考試（可複選）', examsBox);
+    const noteField = field('備註', noteIn);
+    const save = el('button', 'mt-2 text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer', {
+        type: 'button', textContent: '儲存檔案'
+    });
+    save.addEventListener('click', async () => {
+        const edited = {
+            grade: gradeSel.value === '' ? null : Number(gradeSel.value),
+            track: trackSel.value || null,
+            target_exams: examBoxes.filter(cb => cb.checked).map(cb => cb.getAttribute('data-exam')),
+            school: schoolIn.value.trim() || null,
+            textbook_version: bookSel.value || null,
+            note: noteIn.value.trim() || null
+        };
+        const changes = diffProfile(st, edited);
+        if (Object.keys(changes).length === 0) { app.showToast('沒有任何改動。', 'info'); return; }
+        save.disabled = true;
+        try {
+            const res = await request(app, `/api/students/${st.id}`, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changes)
+            });
+            if (!res.ok) { app.showToast(await messageOf(res), 'error'); return; }
+            app.showToast(`已更新「${st.name}」的檔案。`, 'success');
+            onSaved();
+        } catch {
+            app.showToast('連線失敗，請稍後再試', 'error');
+        } finally {
+            save.disabled = false;
+        }
+    });
+
+    const wrap = el('div', '');
+    wrap.append(form, examsField, noteField, save);
+    return wrap;
 }
 
 /**
@@ -1003,6 +1556,8 @@ async function loadStudentView(app) {
     const grid = el('div', 'grid gap-4 lg:grid-cols-3');
     for (const spec of TABLE_SPECS) grid.appendChild(weaknessTable(app, spec, weakness[spec.key]));
     weaknessBox.append(el('p', 'eyebrow mb-2 text-rose-400', { textContent: '弱點（錯誤率由高到低）' }), grid);
+    // 〔stage5 WS-A〕錯因分布（第 4.1 條第 3、7 項）。舊後端沒有這個鍵時不畫，不假裝是空的。
+    if (Array.isArray(weakness.by_error_type)) weaknessBox.appendChild(errorTypeTable(weakness.by_error_type));
 
     const trendBox = el('div', 'mt-4 rounded-2xl border border-slate-200 bg-white p-4');
     trendBox.append(
@@ -1014,8 +1569,10 @@ async function loadStudentView(app) {
     );
     weaknessBox.appendChild(trendBox);
 
+    // 〔stage5 WS-A〕最近錯題的錯因要顯示中文標籤：白名單（有快取）優先，其次用 by_error_type 帶的標籤
+    const labelOf = errorLabeler(await loadErrorTypes(app), weakness.by_error_type);
     weaknessBox.appendChild(el('div', 'mt-4', {})).appendChild(
-        recentWrongList(app, weakness.recent_wrong, currentStudentId)
+        recentWrongList(app, weakness.recent_wrong, currentStudentId, labelOf)
     );
 
     // 深連結：組卷後按「立即批改」進來時，把那一張卷直接展開。
@@ -1089,6 +1646,7 @@ export async function init() {
 
     mountStudentsSection(app, section);
     document.addEventListener(GRADE_EVENT, () => { handleGradeRequest(app).catch(() => {}); });
+    loadErrorTypes(app);   // 〔stage5 WS-A〕先暖快取：展開試卷時錯因 chip 不必再等一次來回
 
     if (await loadStudents(app)) await loadStudentView(app);
 }
