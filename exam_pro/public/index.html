@@ -31,12 +31,18 @@
     <meta name="feature-remedial" content="__FEATURE_REMEDIAL__">
     <meta name="feature-tutor" content="__FEATURE_TUTOR__">
     <meta name="feature-voice" content="__FEATURE_VOICE__">
+    <!-- 本機模式 L3（docs/local-mode.md 第 3 條第 9 點、第 5 條第 4 點）：POST /api/voice/transcribe 實際上有沒有掛。
+         不是旗標：app.js 看路由表後注入 mounted／none。feature-voice 開著、這裡卻是 none＝本機模式不提供語音，
+         public/js/tutor.js 據此不放「按住說話」並說明原因。 -->
+    <meta name="voice-route" content="__VOICE_ROUTE__">
     <title>家教專用數學物理題庫系統</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;600;700;800&display=swap"
-        rel="stylesheet">
+    <!-- 本機模式 L3（docs/local-mode.md 第 5 條）：第三方程式庫與字型全部由 app.js 從本機 npm 套件供應（/vendor/…），
+         執行期不連任何 CDN。版本：@tailwindcss/browser 4、gsap 3.13.0、mathjax 3、Manrope 與 Noto Sans TC（可變字重）。
+         test/unit/publicOffline.test.js 鎖住：public/ 底下不得再出現外部資源網址，而且這裡引用的每個本機檔都要回 200。 -->
+    <script src="/vendor/tailwindcss/index.global.js"></script>
+    <script src="/vendor/gsap/gsap.min.js"></script>
+    <link rel="stylesheet" href="/vendor/fonts/manrope/index.css">
+    <link rel="stylesheet" href="/vendor/fonts/noto-sans-tc/index.css">
 
     <style>
         :root {
@@ -57,7 +63,9 @@
         }
 
         body {
-            font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+            /* 本機模式 L3：@fontsource-variable 的字族名帶 Variable 後綴（同一套字型的可變字重版，涵蓋 400–800）。
+               本機字型載不到時退回系統的中文字型（Windows 微軟正黑體、macOS 蘋方）。 */
+            font-family: 'Manrope Variable', 'Noto Sans TC Variable', 'Microsoft JhengHei', 'PingFang TC', sans-serif;
             color: var(--ink);
             background:
                 radial-gradient(circle at 8% 4%, rgba(55, 88, 232, 0.10), transparent 23rem),
@@ -232,7 +240,10 @@
             options: { safeOptions: { allow: { URLs: 'none' } } }
         };
     </script>
-    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <!-- 本機模式 L3：MathJax 從 /vendor/mathjax 載入。上面的設定逐字不動——loader 以這支腳本的網址推出根目錄，
+         mhchem、ui/safe 與 CHTML 字型都從同一個本機目錄相對載入（app.js 的 VENDOR_ASSETS 說明）。
+         id 必須維持 MathJax-script：document.currentScript 拿不到時，MathJax 靠這個 id 找自己的網址。 -->
+    <script id="MathJax-script" async src="/vendor/mathjax/tex-mml-chtml.js"></script>
 </head>
 
 <body class="min-h-screen antialiased">
@@ -1705,7 +1716,7 @@
 
         let activeViewId = null;   // 首次 routeFromHash 前為 null——初始載入不跑動效
 
-        // 動效總開關：gsap 走 CDN，離線載不到就一律硬切；prefers-reduced-motion 同樣硬切。
+        // 動效總開關：gsap 從本機 /vendor/gsap 載入（本機模式 L3），載不到就一律硬切；prefers-reduced-motion 同樣硬切。
         // 裝飾性動畫都必須過這一關，功能不依賴動畫存在。
         function motionOn() {
             return typeof gsap !== 'undefined'

@@ -9,6 +9,8 @@
 //
 // 慣例沿用階段 3／4 的 module：
 //   - FEATURE_TUTOR 關閉時**整段不渲染**（不是隱藏）；FEATURE_VOICE 關閉時不渲染按住說話。
+//     旗標開著、但伺服器沒有掛語音路由（本機模式，<meta name="voice-route"> 是 none）時也不渲染按鈕，
+//     改顯示「本機模式不提供語音」（docs/local-mode.md 第 3 條第 9 點、第 5 條第 4 點）。
 //   - 透過 window.ExamApp 橋接 apiFetch／showToast／renderMath。
 //   - 伺服器回來的文字一律 textContent。唯一例外是家教回覆的 Markdown：
 //     **先把整段 escape，再轉換受限的標記**（段落、清單、粗體、行內與區塊程式碼；標題轉成粗體段落），
@@ -177,6 +179,23 @@ export function pickRecorderMime(isTypeSupported) {
     return '';
 }
 
+/** 本機模式不提供語音時，取代「按住說話」的說明（docs/local-mode.md 第 5 條第 4 點） */
+export const LOCAL_VOICE_NOTE = '本機模式不提供語音：伺服器沒有掛載語音轉寫，請直接打字提問。';
+
+/**
+ * 按住說話要怎麼呈現（本機模式 L3；docs/local-mode.md 第 3 條第 9 點、第 5 條第 4 點）。
+ * 只有伺服器**明講**沒掛（'none'）才算本機模式；讀不到路由狀態（沒有這個 meta、佔位字串沒被換掉）時
+ * 維持本機模式之前的行為——serveIndex 一定同時換掉 feature-voice 與 voice-route，
+ * 佔位字串還在就代表 feature-voice 也沒換、已經判成關閉，不會走到這裡。
+ * @param {boolean} featureVoice  <meta name="feature-voice"> 的解讀結果
+ * @param {string|null|undefined} routeContent  <meta name="voice-route"> 的 content（app.js 注入 mounted／none）
+ * @returns {'off'|'on'|'local'} off＝旗標關閉、不渲染；on＝渲染按住說話；local＝不放按鈕，顯示 LOCAL_VOICE_NOTE
+ */
+export function voiceMode(featureVoice, routeContent) {
+    if (!featureVoice) return 'off';
+    return String(routeContent ?? '').trim().toLowerCase() === 'none' ? 'local' : 'on';
+}
+
 /** 'audio/webm;codecs=opus' → 'webm'（上傳檔名用；後端只看 mime） */
 export function extensionFor(mime) {
     const base = String(mime || '').split(';')[0].trim().toLowerCase();
@@ -253,6 +272,14 @@ const FEATURE_META = {
 function featureOn(name) {
     const meta = FEATURE_META[name] ? document.querySelector(FEATURE_META[name]) : null;
     return parseBool(meta ? meta.content : '');
+}
+
+// 本機模式 L3：語音路由實際上有沒有掛（app.js 看路由表後注入；不是旗標，所以不走 parseBool）
+const VOICE_ROUTE_META = 'meta[name="voice-route"]';
+
+function voiceRouteContent() {
+    const meta = document.querySelector(VOICE_ROUTE_META);
+    return meta ? meta.content : null;
 }
 
 function bridge() {
@@ -417,7 +444,9 @@ async function sendMessage(app, ui, text) {
     ui.send.disabled = true;
     ui.log.appendChild(userBubble(message));
     const thinking = el('p', 'ml-1 text-[11px] text-slate-400', {
-        textContent: state.mode === 'socratic' ? '家教正在想下一步要怎麼引導…' : '家教正在解題並用程式驗算（可能需要十幾秒）…'
+        // 不預告「會用程式驗算」：本機模式沒有 code execution（docs/local-mode.md 第 3 條第 10 點），
+        // 有沒有驗算以回覆下方的「計算驗證」為準。本機的 CPU 模型一則可能要好幾分鐘。
+        textContent: state.mode === 'socratic' ? '家教正在想下一步要怎麼引導…' : '家教正在解題（雲端模型約十幾秒；本機模型可能要幾分鐘）…'
     });
     ui.log.appendChild(thinking);
     ui.log.scrollTop = ui.log.scrollHeight;
@@ -681,7 +710,7 @@ function buildReviewPanel(ui) {
     return panel;
 }
 
-function mountTutorSection(app, section, { voice }) {
+function mountTutorSection(app, section, { voice, voiceNote = '' }) {
     section.className = 'manager-shell mt-7 rounded-[1.65rem] p-5 sm:p-7 scroll-mt-24';
     section.innerHTML = '';
 
@@ -691,7 +720,7 @@ function mountTutorSection(app, section, { voice }) {
         el('p', 'eyebrow text-teal-600', { textContent: 'AI Tutor' }),
         el('h2', 'mt-1 text-xl font-extrabold tracking-tight text-slate-900', { textContent: 'AI 家教' }),
         el('p', 'mt-1 text-xs sm:text-sm text-slate-500', {
-            textContent: '問高中數學、物理、化學的題目或觀念。填了題目 ID 會帶入題幹、答案與詳解；選了學生會帶入他的弱點（代號化）。訊息裡的學生全名與三字姓名的名字（例如「小明」）會自動換成代號，單字名、暱稱遮不到，請改用「這位學生」稱呼。數值與代數結果由程式驗算，但仍請自行判斷。'
+            textContent: '問高中數學、物理、化學的題目或觀念。填了題目 ID 會帶入題幹、答案與詳解；選了學生會帶入他的弱點（代號化）。訊息裡的學生全名與三字姓名的名字（例如「小明」）會自動換成代號，單字名、暱稱遮不到，請改用「這位學生」稱呼。有用程式驗算的回覆會附上程式與輸出，沒有驗算的會標明；不論哪一種都請自行判斷。'
         })
     );
     head.append(el('span', 'section-icon bg-teal-50 text-teal-700', { textContent: '教' }), titleBox);
@@ -725,7 +754,14 @@ function mountTutorSection(app, section, { voice }) {
     ui.send = el('button', 'ml-auto shrink-0 rounded-xl bg-teal-600 px-5 py-2.5 font-extrabold text-white transition-colors hover:bg-teal-700 disabled:opacity-40 cursor-pointer', {
         id: 'tutorSend', type: 'button', textContent: '送出'
     });
-    if (voice) actions.append(ui.mic, ui.micNote);
+    if (voice) {
+        actions.append(ui.mic, ui.micNote);
+    } else if (voiceNote) {
+        // 本機模式：按鈕不渲染（不是隱藏），只留一行說明，老師才知道為什麼這裡沒有按住說話
+        ui.micNote.textContent = voiceNote;
+        ui.micNote.className = 'text-[11px] font-bold text-amber-600';
+        actions.append(ui.micNote);
+    }
     actions.append(ui.clear, ui.counter, ui.send);
 
     section.append(head, settings, ui.log, el('div', 'mt-4'), ui.input, ui.preview, actions);
@@ -829,7 +865,10 @@ async function loadStudents(app, select) {
 
 // ───────────────────────── 進入點 ─────────────────────────
 
-/** 掛載。FEATURE_TUTOR 關閉時**整段不渲染**；FEATURE_VOICE 另外決定要不要有按住說話。 */
+/**
+ * 掛載。FEATURE_TUTOR 關閉時**整段不渲染**；FEATURE_VOICE 與伺服器的語音路由另外決定要不要有按住說話
+ * （voiceMode：off 不渲染、on 渲染、local 不渲染按鈕並說明本機模式不提供語音）。
+ */
 export async function init() {
     const section = document.getElementById('tutor');
     if (!section) return;
@@ -839,7 +878,12 @@ export async function init() {
     }
     const app = bridge();
     if (!app) return;
-    const ui = mountTutorSection(app, section, { voice: featureOn('voice') });
+    const voice = voiceMode(featureOn('voice'), voiceRouteContent());
+    if (voice === 'local') console.info('[tutor] 伺服器沒有掛載語音轉寫（本機模式）：不渲染按住說話。');
+    const ui = mountTutorSection(app, section, {
+        voice: voice === 'on',
+        voiceNote: voice === 'local' ? LOCAL_VOICE_NOTE : ''
+    });
     await Promise.all([loadSubjects(app, ui.subject), loadStudents(app, ui.student)]);
     return ui;
 }
