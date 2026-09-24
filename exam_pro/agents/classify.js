@@ -17,7 +17,7 @@
 //     B. 題庫各章各取 2 題
 //     C. config/chapterExamples.js 的自製例句（補上 A/B 取不到的章；永遠執行）
 //   取材失敗一律降級，不算節點失敗。
-//   輸出**再過一次** isValidChapter：schema 的 enum 是兩科合併的 66 個，
+//   輸出**再過一次** isValidChapter：schema 的 enum 是兩科合併的 86 個（〔章節重整 CH-A〕原 66 個），
 //   模型可能給出「物理題配到數學章節」這種跨科錯配，只有伺服器端擋得住。
 //
 //   ── 階段 3（interfaces-stage3.md 第 5 條，P-14）──

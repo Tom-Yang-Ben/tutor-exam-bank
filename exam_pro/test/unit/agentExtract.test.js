@@ -64,7 +64,9 @@ describe('agents/schemas — buildSchema', () => {
         assert.deepEqual(props.subject.enum, ['數學', '物理']);
         assert.deepEqual(props.question_type.enum, QUESTION_TYPES);
         assert.deepEqual(props.chapter.enum, [...CHAPTERS['數學'], ...CHAPTERS['物理']]);
-        assert.equal(props.chapter.enum.length, 66);
+        // 〔章節重整 CH-A〕66 → 86（數學 52＋物理 34）：Owner 2026-09-25 定案、刻意讓 schema enum 改變
+        // （docs/chapter-restructure.md 第 1 條）。enum 內容仍逐字等於兩科攤平，斷言沒有放寬。
+        assert.equal(props.chapter.enum.length, 86);
     });
 
     test('chapter 是兩科合併（Gemini 的 schema 沒辦法依 subject 切 enum）', () => {

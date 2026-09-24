@@ -15,6 +15,11 @@
 //     化學卷一律明確傳 '化學'。
 //   - CHEM_LATEX_RULES：化學卷專用的化學式寫法（mhchem 的 \ce{…}），只進化學模板。
 //   - resolveSubjectGroup()：各 agent 決定走數學／物理路徑還是化學路徑的唯一判準（ADR-010）。
+//
+// 〔章節重整 CH-A〕2026-09-25（docs/chapter-restructure.md 第 3.1 條第 5 點）：數學／物理的白名單
+// 換成 config/chapterPlan.js 定案的 52＋34 章。本檔一直是從 CHAPTERS 動態產生白名單文字，所以不必改程式：
+// chapterWhitelistText() 沒指定科目時就列出新的兩科清單（「共 52 章」「共 34 章」）。
+// 這段文字進的是 extract.v2／classify.v1 等既有 prompt，對應的 cassette 本來就要依第 5 條重錄。
 
 const { CHAPTERS, QUESTION_TYPES, LEGACY_SUBJECTS, subjectGroupOf, isValidSubject } = require('../config/chapters');
 

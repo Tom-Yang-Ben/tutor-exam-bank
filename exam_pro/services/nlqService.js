@@ -95,6 +95,9 @@ registerTemplate(TEMPLATE, PROMPT_TEMPLATE);
  *
  * 〔stage5 WS-B〕只列數學與物理（LEGACY_SUBJECTS）：這段文字進的是 nlq.v1 的既有 prompt，
  * nlq schema 的 enum 也維持兩科（agents/schemas/index.js）。化學只走規則路徑（parseOnly 的說明）。
+ *
+ * 〔章節重整 CH-A〕2026-09-25 起兩科是重整後的 52＋34 章（config/chapterPlan.js；docs/chapter-restructure.md
+ * 第 3.1 條第 5 點）。清單照舊由 CHAPTERS 動態產生；nlq.v1 的 cassette 因此失效，由 Owner 依該檔第 5 條重錄。
  */
 function chapterWhitelistText() {
     const lines = LEGACY_SUBJECTS.map(subject => `${subject}：${CHAPTERS[subject].join('、')}`);
