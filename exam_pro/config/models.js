@@ -8,11 +8,26 @@
 //
 // MODEL_EXTRACT / MODEL_VERIFY 是 getter 而不是快照：測試會改 process.env 再讀，
 // 若在 require 當下就取值，改了環境變數也不會生效。
+//
+// 〔本機模式 L1，docs/local-mode.md 第 2、3 條〕預設改走本機 Ollama（Owner 2026-09-25 裁決：預設本機、Gemini 保留）：
+//   - VENDORS 加 'ollama'；Ollama 的模型名本身就有冒號（qwen3:8b），parseModel 只切**第一個**冒號。
+//   - 沒設 MODEL_EXTRACT／MODEL_VERIFY／EMBED_MODEL 時一律是本機模型；要用 Gemini 就在 .env 明寫 gemini:…。
+//     舊的 Gemini 預設（gemini:gemini-3.5-flash、gemini:gemini-3.1-pro-preview）留在 GEMINI_DEFAULTS 給文件與測試對照。
+//   - CI 沒有 .env：cassette 的鍵含模型 ID，CI 用哪個模型寫在 .github/workflows/ci.yml（由 L4 改成本機預設）。
 
-const VENDORS = ['gemini', 'anthropic', 'openai'];
+const VENDORS = ['gemini', 'anthropic', 'openai', 'ollama'];
 
-const DEFAULT_EXTRACT = 'gemini:gemini-3.5-flash';   // 裁決 S0-5
-const DEFAULT_VERIFY = 'gemini:gemini-3.1-pro-preview';   // 裁決 S2-29（付費後改 Pro；S0-5 的條件成立）。CI 沒有 .env，cassette 是對這個預設錄的
+const DEFAULT_EXTRACT = 'ollama:qwen3-vl:8b';   // 本機模式第 2 條：視覺＋文字（拆題看頁面圖片）
+const DEFAULT_VERIFY = 'ollama:qwen3:8b';       // 本機模式第 2 條：純文字（驗算、出變式、OCR 結構化）
+// embedding：有 vendor 前綴才走該供應商；沒有前綴的舊值（gemini-embedding-001）一律視為 Gemini（第 2 條）
+const DEFAULT_EMBED = 'ollama:qwen3-embedding:0.6b';
+
+/** 切回 Gemini 時的建議值（.env 範例與文件用；程式不會自己退回它們） */
+const GEMINI_DEFAULTS = Object.freeze({
+    MODEL_EXTRACT: 'gemini:gemini-3.5-flash',       // 裁決 S0-5
+    MODEL_VERIFY: 'gemini:gemini-3.1-pro-preview',  // 裁決 S2-29
+    EMBED_MODEL: 'gemini-embedding-001'
+});
 
 // ── 階段 3（docs/interfaces-stage3.md 第 9 條，擁有者：WS-B）──
 // MODEL_VARIANT 是變式生成用的模型，**未設時退回 MODEL_VERIFY**（推理強、與拆題不同家）。
@@ -23,9 +38,10 @@ const DEFAULT_VERIFY = 'gemini:gemini-3.1-pro-preview';   // 裁決 S2-29（付�
 
 /**
  * 解析 'vendor:model-id'；沒有冒號時 vendor 預設 'gemini'。
+ * 只切第一個冒號：'ollama:qwen3:8b' → { vendor:'ollama', id:'qwen3:8b' }。
  * @param {string} spec
  * @returns {{vendor:string, id:string, spec:string}}
- * @throws  vendor 不在 ('gemini','anthropic','openai') 內、或 id 為空時丟錯
+ * @throws  vendor 不在 VENDORS（gemini／anthropic／openai／ollama）內、或 id 為空時丟錯
  */
 function parseModel(spec) {
     const raw = String(spec ?? '').trim();
@@ -66,7 +82,11 @@ function warnIfSameModel() {
     return false;
 }
 
-module.exports = { parseModel, warnIfSameModel, VENDORS };
+module.exports = {
+    parseModel, warnIfSameModel, VENDORS,
+    // 本機模式 L1：預設值本身也匯出（eval／腳本要顯示「沒設時用哪個」時讀這裡，不要自己再寫一份字串）
+    DEFAULT_EXTRACT, DEFAULT_VERIFY, DEFAULT_EMBED, GEMINI_DEFAULTS
+};
 
 // 兩個 getter：即時讀 process.env，語法上仍是 models.MODEL_EXTRACT 的屬性存取（第 5.4 條的匯出形狀）
 Object.defineProperty(module.exports, 'MODEL_EXTRACT', {
@@ -110,4 +130,17 @@ Object.defineProperty(module.exports, 'MODEL_VOICE', {
 Object.defineProperty(module.exports, 'MODEL_KC_TAG', {
     enumerable: true,
     get: () => envOr('MODEL_KC_TAG', () => module.exports.MODEL_EXTRACT)
+});
+
+// ── 本機模式（docs/local-mode.md 第 2 條，擁有者：L1）──
+// 把 PaddleOCR 的文字整理成拆題 JSON 的模型（L2 的 agents/extract.js 本機路徑讀）：未設時＝MODEL_VERIFY
+Object.defineProperty(module.exports, 'MODEL_OCR_STRUCTURE', {
+    enumerable: true,
+    get: () => envOr('MODEL_OCR_STRUCTURE', () => module.exports.MODEL_VERIFY)
+});
+// embedding 模型：未設時是本機預設。services/llm 與 services/embedService 都讀這裡（單一真相）。
+// 值原樣回傳（不補前綴）：questions.embedding_model 存的就是這個字串，換值＝全部重算（embedService 的 model_changed）。
+Object.defineProperty(module.exports, 'EMBED_MODEL', {
+    enumerable: true,
+    get: () => envOr('EMBED_MODEL', () => DEFAULT_EMBED)
 });

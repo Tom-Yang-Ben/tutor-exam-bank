@@ -18,7 +18,8 @@ const { buildEmbedText } = require('../utils/embedText');
 const { tokenize } = require('../utils/tokenize');
 const llm = require('./llm');
 
-const DEFAULT_MODEL = 'gemini-embedding-001';
+// 〔本機模式 L1〕沒設 EMBED_MODEL 時的預設改由 config/models.js 的 EMBED_MODEL getter 決定（本機 ollama:qwen3-embedding:0.6b），
+// 本檔不再自己寫一份 'gemini-embedding-001'——兩份預設遲早會走鐘，而走鐘的結果是 embedding_model 對不上、整庫重算。
 const DEFAULT_DIM = 768;
 const DEFAULT_BATCH = 32;
 
@@ -110,7 +111,7 @@ function resolveDb(injected) {
  */
 async function embedByIds(ids, opts = {}) {
     const db = resolveDb(opts.db);
-    const model = opts.model || process.env.EMBED_MODEL || DEFAULT_MODEL;
+    const model = opts.model || require('../config/models').EMBED_MODEL;
     const dim = Number.parseInt(opts.dim || process.env.EMBED_DIM || DEFAULT_DIM, 10);
     const batchSize = Number.parseInt(opts.batchSize || process.env.EMBED_BATCH || DEFAULT_BATCH, 10);
     const force = Boolean(opts.force);

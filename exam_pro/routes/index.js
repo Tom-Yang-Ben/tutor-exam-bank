@@ -258,7 +258,11 @@ if (featuresS5E.FEATURE_TUTOR) {
     });
     router.post('/tutor', tutorRateLimit, tutorController.chat);
 
-    if (featuresS5E.FEATURE_VOICE) {
+    // 〔本機模式 L1，docs/local-mode.md 第 3 條第 9 點〕MODEL_VOICE 不是 gemini 時，FEATURE_VOICE=true 也不掛載
+    // （本機模型不收音訊），啟動時印一行警告。判斷只有 voiceService.voiceStatus() 一份，前端的 meta 也該讀它。
+    const voiceStatusS5E = require('../services/voiceService').voiceStatus();
+    if (voiceStatusS5E.status === 'local') console.warn(`[voice] ${voiceStatusS5E.message}`);
+    if (voiceStatusS5E.available) {
         const voicePerMin = tutorController.rateLimitPerMin('VOICE_RATE_LIMIT_PER_MIN', 10);
         const voiceRateLimit = createRateLimiter({
             windowMs: 60 * 1000,

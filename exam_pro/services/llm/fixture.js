@@ -15,12 +15,23 @@ function sha256Hex(text) {
     return crypto.createHash('sha256').update(String(text), 'utf8').digest('hex');
 }
 
-/** eval/fixtures/embeddings.<model>.<dim>.json 的絕對路徑（EMBED_FIXTURE_DIR 可覆寫） */
+/**
+ * 檔名裡的 <model>：把 `:`、`/`、`\` 換成 `-`（本機模式第 3 條第 6 點）。
+ * Windows 檔名不能有冒號，而 Ollama 的模型名一定有（'ollama:qwen3-embedding:0.6b' → 'ollama-qwen3-embedding-0.6b'）。
+ * 沒有這三個字元的值（'gemini-embedding-001'）原樣回傳——既有 fixture 的檔名一個字都不變。
+ * @param {string} model EMBED_MODEL 的值（含 vendor 前綴就連前綴一起）
+ * @returns {string}
+ */
+function fixtureModelSlug(model) {
+    return String(model).replace(/[:/\\]/g, '-');
+}
+
+/** eval/fixtures/embeddings.<model>.<dim>.json 的絕對路徑（EMBED_FIXTURE_DIR 可覆寫；<model> 見 fixtureModelSlug） */
 function fixturePath(model, dim) {
     const dir = process.env.EMBED_FIXTURE_DIR
         ? path.resolve(process.env.EMBED_FIXTURE_DIR)
         : path.resolve(__dirname, '..', '..', 'eval', 'fixtures');
-    return path.join(dir, `embeddings.${model}.${dim}.json`);
+    return path.join(dir, `embeddings.${fixtureModelSlug(model)}.${dim}.json`);
 }
 
 // 同一支檔案在一次程序生命週期內只讀一次（eval 會連續查上百次）
@@ -97,4 +108,4 @@ function saveToFixture({ model, dim, entries }) {
     return file;
 }
 
-module.exports = { embedFromFixture, saveToFixture, fixturePath, sha256Hex };
+module.exports = { embedFromFixture, saveToFixture, fixturePath, fixtureModelSlug, sha256Hex };

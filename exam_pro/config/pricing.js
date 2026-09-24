@@ -20,6 +20,12 @@
 //   2. gemini-3.7-flash 與 3.6-flash 是促銷價（2026-12-31 止；2027-01-01 起 input 1.50／
 //      output 7.50／cached 0.15）——到期後要回來改，verified_on 就是提醒。
 //   context caching 的**儲存費**（$/1M tokens/hour）不在 token 計價模型內，本表不含。
+//
+// 〔本機模式 L1，docs/local-mode.md 第 3 條第 7 點〕Ollama（本機推論）的**任何**模型單價一律 0，
+// 回 { cost_usd: 0, cost_estimated: true }——價格是「已知為零」，不是「查不到」：
+// 不得因為表上沒有那個模型就記成 cost_estimated=false（報表會標成「沒有價格」），
+// 也不得讓 services/tutorService.js 的 estimateUsd 以「表上最貴的單價」高估（本機家教會被每日預算誤擋）。
+// 怎麼認出 ollama 的模型見 isOllamaModel()；本表不為 ollama 模型逐一列價。
 
 /** @type {Record<string, {input:number, output:number, cached:number, verified_on:string|null}>} */
 const PRICING = {
@@ -38,14 +44,72 @@ const PRICING = {
 
 const PER_MILLION = 1_000_000;
 
+/** 雲端供應商的前綴：'gemini:…' 這類字串不是 Ollama 的 name:tag */
+const CLOUD_VENDORS = ['gemini', 'anthropic', 'openai'];
+
+/** 目前設定裡指向 ollama 的模型裸 ID（MODEL_* 與 EMBED_MODEL，含未設時的本機預設） */
+function configuredOllamaIds() {
+    const ids = new Set();
+    let models;
+    try {
+        models = require('./models');
+    } catch (err) {
+        return ids;
+    }
+    const specs = [
+        models.MODEL_EXTRACT, models.MODEL_VERIFY, models.MODEL_VARIANT, models.MODEL_TUTOR,
+        models.MODEL_VOICE, models.MODEL_KC_TAG, models.MODEL_OCR_STRUCTURE, models.EMBED_MODEL,
+        process.env.MODEL_NLQ, process.env.MODEL_ASSISTANT
+    ];
+    for (const spec of specs) {
+        if (!spec) continue;
+        try {
+            const { vendor, id } = models.parseModel(spec);
+            if (vendor === 'ollama') ids.add(id);
+        } catch (err) {
+            // 設定寫錯是 config/models.js 的事，這裡只是估價，不丟錯
+        }
+    }
+    return ids;
+}
+
+/**
+ * 這個模型是不是 Ollama（本機、免費）？
+ * 依序判斷：
+ *   1. 呼叫端明給 vendor → 以它為準
+ *   2. 'ollama:…' 這種帶前綴的字串
+ *   3. 價目表上有的 → 不是
+ *   4. 'gemini:…'／'anthropic:…'／'openai:…' → 不是（維持查不到＝0/false 的舊語意）
+ *   5. 裸 ID 裡有冒號 → 是：Ollama 的模型名是 name:tag（qwen3:8b），雲端三家的模型 ID 都沒有冒號
+ *   6. 目前設定裡有哪個 ollama 模型的裸 ID 正好是它 → 是（沒帶 tag 的 ollama 模型，例如 ollama:gemma3）
+ * @param {string} modelId
+ * @param {string} [vendor]
+ * @returns {boolean}
+ */
+function isOllamaModel(modelId, vendor) {
+    if (vendor !== undefined && vendor !== null && String(vendor).trim() !== '') {
+        return String(vendor).trim().toLowerCase() === 'ollama';
+    }
+    const s = String(modelId || '').trim();
+    if (!s) return false;
+    if (/^ollama:/i.test(s)) return true;
+    if (Object.prototype.hasOwnProperty.call(PRICING, s)) return false;
+    const sep = s.indexOf(':');
+    if (sep !== -1) return !CLOUD_VENDORS.includes(s.slice(0, sep).trim().toLowerCase());
+    return configuredOllamaIds().has(s);
+}
+
 /**
  * 估算單次呼叫的成本。
- * @param {{modelId:string, tokenIn?:number, tokenOut?:number, tokenThinking?:number, tokenCached?:number}} opts
+ * @param {{modelId:string, vendor?:string, tokenIn?:number, tokenOut?:number, tokenThinking?:number, tokenCached?:number}} opts
  *        modelId 必須是**裸 ID**（不含 vendor 前綴），與 job_events.model 去前綴後一致。
+ *        vendor 為選用（本機模式 L1 新增）：給 'ollama' 就直接回 0；'ollama:…' 的完整字串也認得。
  * @returns {{cost_usd:number, cost_estimated:boolean}}
+ *          ollama 的任何模型 → { cost_usd: 0, cost_estimated: true }（已知為零）
  *          查不到模型或 verified_on 為 null → { cost_usd: 0, cost_estimated: false }
  */
-function estimateCost({ modelId, tokenIn = 0, tokenOut = 0, tokenThinking = 0, tokenCached = 0 } = {}) {
+function estimateCost({ modelId, vendor, tokenIn = 0, tokenOut = 0, tokenThinking = 0, tokenCached = 0 } = {}) {
+    if (isOllamaModel(modelId, vendor)) return { cost_usd: 0, cost_estimated: true };
     const row = PRICING[String(modelId || '').trim()];
     if (!row || !row.verified_on) return { cost_usd: 0, cost_estimated: false };
 
@@ -66,5 +130,5 @@ function num(v) {
 }
 
 // 第 5.5 條寫的匯出形狀是「一個模型一個鍵」，另外掛上 PRICING 與 estimateCost：
-// 要走訪價目表請用 PRICING，不要 Object.keys(module.exports)（會混進兩個非模型的鍵）。
-module.exports = { ...PRICING, PRICING, estimateCost };
+// 要走訪價目表請用 PRICING，不要 Object.keys(module.exports)（會混進 PRICING／estimateCost／isOllamaModel 這些非模型的鍵）。
+module.exports = { ...PRICING, PRICING, estimateCost, isOllamaModel };

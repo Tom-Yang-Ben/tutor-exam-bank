@@ -18,9 +18,43 @@
 //   record／replay 規則與 generateJson 相同（同一條鍵公式，schema 欄恆為空）；
 //   cassette 存 { text, codeRuns, finishReason, usage }（finishReason 不在鍵內；舊 cassette 沒有這欄時回放為 null）。
 //   generateJson 的行為與簽名一個字都沒改。
+//
+// 〔本機模式 L1，docs/local-mode.md 第 3 條第 5 點〕新增 ollama 供應商（services/llm/ollama.js）：
+//   - generateJson／generateText 依 vendor 分派：gemini → gemini.js、ollama → ollama.js、其他照舊丟錯
+//   - embed 依 EMBED_MODEL 分派：有 vendor 前綴才走該供應商；沒有前綴的舊值（gemini-embedding-001）一律是 Gemini；
+//     未設時是本機預設 ollama:qwen3-embedding:0.6b（config/models.js 的 EMBED_MODEL getter）
+//   - record／replay 分支、cassette 鍵、meta 一律不變（modelId 就是 qwen3:8b 這種裸 ID）
+//   - Gemini 路徑送出的內容逐位元不變：分派前後呼叫 gemini.js 的參數與之前完全相同
+//   - 模組載入時檢查一次 OLLAMA_HOST（非本機就警告；伺服器與 worker 啟動時都會載入本檔）
 
-const DEFAULT_MODEL = 'gemini-embedding-001';
 const DEFAULT_DIM = 768;
+
+// 啟動檢查（第 2 條 OLLAMA_HOST：只允許 localhost／127.0.0.1／::1，其他主機名啟動時警告）
+require('./ollama').warnIfRemoteHost();
+
+/**
+ * 依 vendor 取 adapter（generateJson／generateText 用）。
+ * @param {string} vendor
+ * @returns {object}
+ */
+function adapterFor(vendor) {
+    if (vendor === 'gemini') return require('./gemini');
+    if (vendor === 'ollama') return require('./ollama');
+    throw new Error(`services/llm：目前只有 gemini 與 ollama adapter，收到 vendor=「${vendor}」（anthropic／openai 留給 A-T17）。`);
+}
+
+/**
+ * 這個模型支援哪些輸入與工具（本機模式第 3 條第 9、10 點：語音與家教據此決定要不要開）。
+ * 只看 vendor：gemini adapter 支援 code execution、音訊與 PDF；ollama 三者都不支援。
+ * @param {string} spec 'vendor:id' 或裸 ID（裸 ID 視為 gemini，同 parseModel）
+ * @returns {{vendor:string, codeExecution:boolean, audioInput:boolean, pdfInput:boolean}}
+ * @throws  spec 無法解析時（同 parseModel）
+ */
+function capabilitiesOf(spec) {
+    const { vendor } = require('../../config/models').parseModel(spec);
+    const cloud = vendor === 'gemini';
+    return { vendor, codeExecution: cloud, audioInput: cloud, pdfInput: cloud };
+}
 
 /** 讀取模式；未設定時走最安全的那一個（不會產生費用、不需金鑰） */
 function embedMode() {
@@ -58,7 +92,7 @@ function l2Normalize(vec) {
  * @returns {Promise<{vectors:number[][], usage:{tokenIn:number}}>}
  */
 async function embed({ model, texts, dim, taskType } = {}) {
-    const useModel = model || process.env.EMBED_MODEL || DEFAULT_MODEL;
+    const useModel = model || require('../../config/models').EMBED_MODEL;
     const useDim = Number.parseInt(dim || process.env.EMBED_DIM || DEFAULT_DIM, 10);
 
     if (!Array.isArray(texts)) throw new Error('embed({ texts }) 的 texts 必須是字串陣列。');
@@ -68,13 +102,23 @@ async function embed({ model, texts, dim, taskType } = {}) {
     const mode = embedMode();
 
     if (mode === 'fixture') {
+        // fixture 檔名用 EMBED_MODEL 原字串（冒號等字元由 fixture.js 換成 '-'），不分 vendor
         const { embedFromFixture } = require('./fixture');
         const res = embedFromFixture({ model: useModel, texts, dim: useDim });
         return { vectors: res.vectors.map(l2Normalize), usage: res.usage };
     }
 
-    const gemini = require('./gemini');
-    const res = await gemini.embed({ model: useModel, texts, dim: useDim, taskType });
+    // 前綴規則（第 2 條）：沒有前綴＝Gemini（舊 .env 不必改）；'ollama:…' → Ollama。
+    // 舊值 'gemini-embedding-001' 解析出來的 id 就是它自己，送給 gemini.embed 的參數與之前逐位元相同。
+    const { vendor, id } = require('../../config/models').parseModel(useModel);
+    let res;
+    if (vendor === 'gemini') {
+        res = await require('./gemini').embed({ model: id, texts, dim: useDim, taskType });
+    } else if (vendor === 'ollama') {
+        res = await require('./ollama').embed({ model: id, texts, dim: useDim });
+    } else {
+        throw new Error(`services/llm：embed 目前只支援 gemini 與 ollama，收到 EMBED_MODEL=「${useModel}」。`);
+    }
     const vectors = res.vectors.map(l2Normalize);
 
     if (mode === 'record') {
@@ -115,12 +159,7 @@ async function generateJson(opts = {}) {
         return fake.generateJson({ ...opts, model: id });
     }
 
-    if (vendor !== 'gemini') {
-        throw new Error(`services/llm：第一版只有 gemini adapter，收到 vendor=「${vendor}」（anthropic／openai 留給 A-T17）。`);
-    }
-
-    const gemini = require('./gemini');
-    const res = await gemini.generateJson({ ...opts, model: id });
+    const res = await adapterFor(vendor).generateJson({ ...opts, model: id });
 
     if (mode === 'record') {
         const cassette = require('./cassette');
@@ -176,12 +215,7 @@ async function generateText(opts = {}) {
         return fake.generateText({ ...opts, model: id });
     }
 
-    if (vendor !== 'gemini') {
-        throw new Error(`services/llm：第一版只有 gemini adapter，收到 vendor=「${vendor}」（anthropic／openai 留給 A-T17）。`);
-    }
-
-    const gemini = require('./gemini');
-    const res = await gemini.generateText({ ...opts, model: id });
+    const res = await adapterFor(vendor).generateText({ ...opts, model: id });
 
     if (mode === 'record') {
         const cassette = require('./cassette');
@@ -216,4 +250,4 @@ async function generateText(opts = {}) {
     return res;
 }
 
-module.exports = { embed, generateJson, generateText, l2Normalize, embedMode, llmMode };
+module.exports = { embed, generateJson, generateText, l2Normalize, embedMode, llmMode, capabilitiesOf };
