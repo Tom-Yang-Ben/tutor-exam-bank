@@ -4,7 +4,7 @@
 // ⚠ 只錄公開素材（NOTICE 第 4 條）：
 //      extract  → eval/fixtures/sample_exam.pdf（**WS-D 的樣卷**，10 題，由 eval/fixtures/make_sample_pdf.js
 //                 從 questions.public.json 挑題排版而成；裁決 S2-15 定它為唯一的樣卷）
-//      classify → eval/fixtures/questions.public.json（自製 61 題）
+//      classify → eval/fixtures/questions.public.json（自製 62 題）
 //    私有題庫、真實考卷一律不得從這裡錄；那些要走 eval/private/（gitignore）。
 //
 // ⚠ 樣卷的位元組一變，pdfSha256 就變，extract 的 cassette 鍵全部失效（第 5.2 條）。

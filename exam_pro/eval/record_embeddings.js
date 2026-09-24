@@ -14,7 +14,7 @@
 // 這是「CI 仍零 secrets，任何人 fork 都跑得出同一張表」這條性質的來源。
 //
 // 〔章節重整 CH-B〕寫檔改成「併入」既有的向量檔（鍵依字典序，與 services/llm/fixture.js 的
-// saveToFixture 同一個格式）：這個檔裡除了 fixture 的題（61 題），還有 nlq 查詢句、variant 生成題、
+// saveToFixture 同一個格式）：這個檔裡除了 fixture 的題（62 題），還有 nlq 查詢句、variant 生成題、
 // e2e 樣卷題的向量（各自由 EMBED_MODE=record 的 suite 補錄）。原本整檔覆寫只留 fixture 的題，
 // 照錯誤訊息「請執行 npm run eval:record」重錄一次就會把那些向量全部洗掉。
 // 代價：併入只增不減，改標前舊 embed_text 的向量會留在檔裡、沒有任何 suite 會再讀到（只是多佔空間，

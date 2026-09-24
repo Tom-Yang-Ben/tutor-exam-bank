@@ -6,7 +6,8 @@
 //      CH-A 合入前本分支的 config/chapters.js 還是舊白名單，既有測試會用它檢查而紅，這一支不會。
 //   2. 沒有任何一筆還標著重整後不存在的章名。
 //   3. 各份 golden 抄下來的章名與 fixture 一致；nlq rules 路徑的 relevant 就是 expect 四欄篩出來的題。
-//   4. eval/CHAPTER_RELABEL-2026-09.md 的表格逐列與檔案內容相符，而且沒有漏列（含第 2.1 節新增的題）。
+//   4. eval/CHAPTER_RELABEL-2026-09.md 的表格逐列與檔案內容相符，而且沒有漏列（含第 2.1 節新增的題、
+//      第 8 節 CR-8 之二的物理改標與 nlq 逐句）。
 //   5. nlq 改寫過的查詢句，在新白名單下的規則解析結果就是 golden 的期望值（子行程以 preload 模擬 CH-A 合入後）。
 // ─────────────────────────────────────────────────────────────
 
@@ -82,6 +83,30 @@ function readTable(header) {
     return rows;
 }
 
+/** 第 8 節（CR-8 之二，Owner 2026-09-25 裁決的物理改標）的兩張表 */
+const CR8_RELABEL_HEADER = '| 檔案 | 題號 | 原章 | 改標後 | 理由 |';
+const CR8_NLQ_HEADER = '| 題號 | 查詢（改後） | 期望章（改後） | 舊 relevant | 新 relevant | 改了什麼 |';
+
+/**
+ * 在子行程裡用規則解析查詢句（以 preload 模擬 CH-A 合入後的 config/chapters.js；合入後等於沒做事）。
+ * @param {string[]} queries
+ * @returns {Array<object>} parseQuery 的結果，順序與 queries 相同
+ */
+function parseInChild(queries) {
+    const script = `
+        const { parseQuery } = require(${JSON.stringify(path.join(APP_DIR, 'utils', 'nlqHeuristics'))});
+        const { CHAPTER_ALIASES } = require(${JSON.stringify(path.join(APP_DIR, 'config', 'chapterAliases'))});
+        const queries = JSON.parse(process.argv[1]);
+        process.stdout.write(JSON.stringify(queries.map(q => parseQuery(q, { aliases: CHAPTER_ALIASES }))));
+    `;
+    const res = spawnSync(process.execPath, [
+        '--require', path.join(APP_DIR, 'test', 'fixtures', 'planChapters.preload.js'),
+        '-e', script, JSON.stringify(queries)
+    ], { cwd: APP_DIR, encoding: 'utf8' });
+    assert.equal(res.status, 0, res.stderr);
+    return JSON.parse(res.stdout);
+}
+
 /** 表格的「檔案＋題號」→ 素材裡的那一筆 */
 function lookup(file, id) {
     switch (file) {
@@ -110,17 +135,17 @@ describe('改標後的素材以新清單（PLAN_CHAPTERS＋化學）過得了全
         assert.equal(chapterGate().source, 'config/chapters.js');
     });
 
-    test('fixture 61 題（新增自製干擾題 #61，改標清單第 2.1 節）', () => {
+    test('fixture 62 題（新增自製干擾題 #61、#62，改標清單第 2.1 節、第 8 節）', () => {
         const fixture = loadFixture(undefined, { chapters: CHAPTERS });
-        assert.equal(fixture.questions.length, 61);
+        assert.equal(fixture.questions.length, 62);
         // 注入新清單時，舊章名會被同一套閘門擋下（證明注入真的生效，不是全部放行）
         const bad = validateQuestions([{ ...fixture.questions[0], chapter: '三角函數的定義' }], { chapters: CHAPTERS });
         assert.ok(bad.some(p => p.includes('三角函數的定義')), bad.join('\n'));
     });
 
-    test('classify 91 筆（fixture 段 61＋漂移段 30）、nlq 50 句、variant 30 個藍本、樣卷答案卷 10 題', () => {
+    test('classify 92 筆（fixture 段 62＋漂移段 30）、nlq 50 句、variant 30 個藍本、樣卷答案卷 10 題', () => {
         const fixture = loadFixture(undefined, { chapters: CHAPTERS });
-        assert.equal(loadClassifyGolden({ fixtureById: fixture.byId, chapters: CHAPTERS }).entries.length, 91);
+        assert.equal(loadClassifyGolden({ fixtureById: fixture.byId, chapters: CHAPTERS }).entries.length, 92);
         assert.equal(loadNlqGolden({ fixtureById: fixture.byId, chapters: CHAPTERS }).entries.length, 50);
         assert.equal(loadVariantGolden({ fixtureById: fixture.byId, chapters: CHAPTERS }).entries.length, 30);
         assert.equal(loadSheet({ pdfPath: SAMPLE_PDF, chapters: CHAPTERS }).doc.questions.length, 10);
@@ -259,6 +284,48 @@ describe('eval/CHAPTER_RELABEL-2026-09.md 與檔案內容相符', () => {
         const missing = splitOld.filter(l => !keptIds.has(`${l.file}#${l.id}`));
         assert.deepEqual(missing, [], JSON.stringify(missing.slice(0, 5)));
     });
+
+    // 〔CR-8 之二〕物理 5 題依知識點歸屬改標（Owner 2026-09-25 裁決）。舊章、新章都是 MIGRATION 的 same，
+    // 所以不能列進上面那張照 MIGRATION 檢查去處的改標清單，另開第 8 節的表。
+    const cr8 = readTable(CR8_RELABEL_HEADER);
+    const cr8Nlq = readTable(CR8_NLQ_HEADER);
+
+    test('〔CR-8 之二〕物理改標清單逐列：現在的章名就是「改標後」，改標題在各份 golden 的衍生項一筆不漏', () => {
+        assert.ok(cr8.length >= 16, `第 8 節的改標清單只有 ${cr8.length} 列`);
+        for (const [file, id, from, to, why] of cr8) {
+            const item = lookup(file, id);
+            assert.ok(item, `${file} ${id} 找不到`);
+            assert.equal(item.subject, '物理', `${file} ${id}`);
+            assert.equal(item.chapter, to, `${file} ${id} 現在是「${item.chapter}」，表上寫「${to}」`);
+            assert.ok(PLAN_CHAPTERS['物理'].includes(from), `${from} 不在新清單`);
+            assert.ok(PLAN_CHAPTERS['物理'].includes(to), `${to} 不在新清單`);
+            assert.notEqual(from, to, `${file} ${id}`);
+            assert.ok(why && why.length >= 4, `${file} ${id} 沒寫理由`);
+        }
+        // 表上列的 fixture 題 → classify（含漂移段）、variant、樣卷答案卷裡由它衍生的每一筆都要列
+        const ids = new Set(cr8.filter(([file]) => file === 'questions.public.json').map(([, id]) => Number(id)));
+        const derived = [
+            ...[...ids].map(id => `questions.public.json#${id}`),
+            ...RAW.classify.entries.filter(e => ids.has(e.from)).map(e => `classify.json#${e.id}`),
+            ...RAW.variant.entries.filter(e => ids.has(e.source_question_id)).map(e => `variant.json#${e.id}`),
+            ...RAW.pdf.questions.filter(q => ids.has(q.fixture_id)).map(q => `pdf_sample#${q.no}`)
+        ];
+        const listed = new Set(cr8.map(([file, id]) => `${file}#${id}`));
+        assert.deepEqual(derived.filter(k => !listed.has(k)), []);
+        assert.equal(listed.size, derived.length, '表上不該有與改標題無關的列');
+    });
+
+    test('〔CR-8 之二〕nlq 逐句：查詢句、期望章與 relevant 就是表上寫的', () => {
+        assert.ok(cr8Nlq.length >= 15, `第 8 節的 nlq 表只有 ${cr8Nlq.length} 列`);
+        for (const [id, query, chapters, , now, why] of cr8Nlq) {
+            const e = RAW.nlq.entries.find(x => x.id === id);
+            assert.ok(e, id);
+            assert.equal(e.query, query, id);
+            assert.deepEqual(e.expect.chapters, chapters.split('、').map(s => s.trim()), id);
+            assert.deepEqual(e.relevant, now.split(',').map(s => Number(s.trim())), id);
+            assert.ok(why && why.length >= 4, `${id} 沒寫理由`);
+        }
+    });
 });
 
 describe('nlq 改寫的查詢句在新白名單下的規則解析（子行程模擬 CH-A 合入後）', () => {
@@ -266,22 +333,35 @@ describe('nlq 改寫的查詢句在新白名單下的規則解析（子行程模
         const rewrites = readTable('| 題號 | 舊查詢 | 新查詢 | 舊章 | 新章 | 理由 |').map(r => r[0]);
         const entries = RAW.nlq.entries.filter(e => rewrites.includes(e.id));
         assert.equal(entries.length, rewrites.length);
-        const script = `
-            const { parseQuery } = require(${JSON.stringify(path.join(APP_DIR, 'utils', 'nlqHeuristics'))});
-            const { CHAPTER_ALIASES } = require(${JSON.stringify(path.join(APP_DIR, 'config', 'chapterAliases'))});
-            const queries = JSON.parse(process.argv[1]);
-            process.stdout.write(JSON.stringify(queries.map(q => parseQuery(q, { aliases: CHAPTER_ALIASES }))));
-        `;
-        const res = spawnSync(process.execPath, [
-            '--require', path.join(APP_DIR, 'test', 'fixtures', 'planChapters.preload.js'),
-            '-e', script, JSON.stringify(entries.map(e => e.query))
-        ], { cwd: APP_DIR, encoding: 'utf8' });
-        assert.equal(res.status, 0, res.stderr);
-        const parsed = JSON.parse(res.stdout);
+        const parsed = parseInChild(entries.map(e => e.query));
         entries.forEach((e, i) => {
             const got = parsed[i];
             assert.equal(got.confident, true, `${e.id} 規則應該抓得到章節`);
             assert.equal(e.expect_path, 'rules', e.id);
+            assert.deepEqual(got.filters.chapters, e.expect.chapters, e.id);
+            assert.equal(got.filters.subject, e.expect.subject, e.id);
+            assert.deepEqual(got.filters.question_types, e.expect.question_types, e.id);
+            assert.equal(got.filters.difficulty_min, e.expect.difficulty_min, e.id);
+            assert.equal(got.filters.difficulty_max, e.expect.difficulty_max, e.id);
+            assert.equal(got.filters.exclude_student_name, e.expect.exclude_student_name, e.id);
+            assert.equal(got.semantic_text, e.expect.semantic_text, e.id);
+        });
+    });
+
+    test('〔CR-8 之二〕第 8 節表上的句子：rules 路徑的解析結果等於 golden；llm 路徑的規則仍抓不到章節', () => {
+        const ids = readTable(CR8_NLQ_HEADER).map(r => r[0]);
+        const entries = RAW.nlq.entries.filter(e => ids.includes(e.id));
+        assert.equal(entries.length, ids.length);
+        const parsed = parseInChild(entries.map(e => e.query));
+        entries.forEach((e, i) => {
+            const got = parsed[i];
+            if (e.expect_path === 'llm') {
+                // 改寫（nlq-042）或放寬期望章（nlq-036）之後，仍然必須走 LLM 輔路徑
+                assert.equal(got.confident, false, `${e.id} 標成 llm，規則卻抓到章節〔${got.filters.chapters}〕`);
+                return;
+            }
+            assert.equal(e.expect_path, 'rules', e.id);
+            assert.equal(got.confident, true, `${e.id} 規則應該抓得到章節`);
             assert.deepEqual(got.filters.chapters, e.expect.chapters, e.id);
             assert.equal(got.filters.subject, e.expect.subject, e.id);
             assert.deepEqual(got.filters.question_types, e.expect.question_types, e.id);

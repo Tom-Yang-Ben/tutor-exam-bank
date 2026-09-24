@@ -81,7 +81,7 @@ describe('formulaFix — 逐條確定性規則（與 fix_formulas.js 的 transfo
         }
     });
 
-    test('對公開 fixture 不會誤改（61 題全部零套用）', () => {
+    test('對公開 fixture 不會誤改（62 題全部零套用）', () => {
         for (const q of fixture.questions) {
             assert.deepEqual(formulaFix(q.question_text).applied, [], `#${q.id} 題幹被動到了`);
         }

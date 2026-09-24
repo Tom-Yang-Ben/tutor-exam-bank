@@ -223,7 +223,7 @@ describe('parseLatexStrict — 對 eval/fixtures/questions.public.json', () => {
         }
     });
 
-    test('其餘 51 題（含 m/s$^2$ 這種寫法）一個事件都不該有', () => {
+    test('其餘 52 題（含 m/s$^2$ 這種寫法）一個事件都不該有', () => {
         for (const q of clean) {
             const r = parseLatexStrict(q.question_text);
             assert.deepEqual(r.events, [], `#${q.id} 不該有事件：${q.question_text.slice(0, 60)}`);

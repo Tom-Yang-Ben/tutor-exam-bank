@@ -4,7 +4,8 @@
 > 範圍：`eval/fixtures/questions.public.json` 與所有含數學／物理章名的 golden。
 > 狀態：**AI 依題意逐題判斷，待 Owner 抽查**。最沒把握的幾題列在第 6 節。
 > 2026-09-25 審查後修正：#25、#26（平方關係）改歸「直角三角形的邊角關係」，並新增自製干擾題 #61（第 2.1 節、第 6 節第 3 項）。
-> 驗證：`test/unit/evalChapterRelabel.test.js` 用 `PLAN_CHAPTERS`＋化學章節跑一遍所有硬閘門，並逐列核對本檔第 2～4 節的表格與檔案內容。
+> 2026-09-25 Owner 裁決（CR-8 之二）：物理 5 題（#46、#51、#53、#54、#55）依知識點歸屬改標，新增自製干擾題 #62，nlq 4 句改寫或改期望（第 8 節）。
+> 驗證：`test/unit/evalChapterRelabel.test.js` 用 `PLAN_CHAPTERS`＋化學章節跑一遍所有硬閘門，並逐列核對本檔第 2～4、8 節的表格與檔案內容。
 
 ## 0. 判斷原則
 
@@ -16,17 +17,20 @@
 - **直角三角形的邊角關係（第二冊）**：銳角三角比、特殊角、平方／商數／餘角關係。題目只用到銳角時歸這一章——即使答案寫「與角度無關」。
 - **廣義角與極坐標（第二冊）**：廣義角與同界角、以坐標定義的三角比、參考角與象限正負號、極坐標。
 - **三角函數的圖形（第三冊）**：弧度、圖形、週期與振幅。
-- 物理 29 題（fixture #32–#60）的章名都屬 `MIGRATION` 的 `same`，題意也不屬於新增的四章，全部維持原章。
+- 物理 29 題（fixture #32–#60）的章名都屬 `MIGRATION` 的 `same`，題意也不屬於新增的四章，CH-B 全部維持原章。
+  這一條只看了 `MIGRATION`，沒有逐題對知識點；Owner 2026-09-25 依知識點歸屬裁決改標其中 5 題（#46、#51、#53、#54、#55），分界原則與逐題理由見第 8 節。
 
 ## 1. 總覽
 
 | 檔案 | 改標 | 檢視後維持原章 | 備註 |
 |---|---:|---:|---|
-| `eval/fixtures/questions.public.json` | 12 | 3 | 61 題（新增 #61，第 2.1 節）；改標後涵蓋 10 章（原 8 章） |
-| `eval/golden/classify.json` | 19 | 5 | fixture 段 12 筆與 fixture 一致；漂移段 7 筆；另新增 cls-fx-061（共 91 筆） |
+| `eval/fixtures/questions.public.json` | 12 | 3 | 62 題（新增 #61、#62，第 2.1 節）；CH-B 改標後涵蓋 10 章（原 8 章），CR-8 之二後 13 章 |
+| `eval/golden/classify.json` | 19 | 5 | fixture 段 12 筆與 fixture 一致；漂移段 7 筆；另新增 cls-fx-061、cls-fx-062（共 92 筆） |
 | `eval/golden/variant.json` | 7 | 1 | 閘門要求藍本章名與 fixture 相同 |
 | `eval/golden/pdf_sample/f1a15d77….json` | 2 | 1 | 樣卷 PDF 不印章名，sha256 不變，檔名不變 |
 | `eval/golden/nlq.json` | 9 | — | 7 句改寫查詢、2 句改期望章節（nlq-032 的 relevant 也跟著變）；另有 2 句只調 relevant（第 4 節） |
+
+表中的數字只算 CH-B。CR-8 之二（第 8 節）另改：fixture 5 題、classify 6 筆、variant 4 筆、樣卷答案卷 1 題，nlq 15 句（3 句改寫查詢、1 句放寬期望章、11 句只調 relevant）。
 
 **被刪的物理章**（流體的壓力與浮力、宇宙學簡介）：fixture 與 golden 都沒有題目標在這兩章，不需要移除任何題。
 
@@ -36,6 +40,7 @@
   新章唯一的干擾題 #61 沒有列入。這些負樣本與 query 不同 variant_group，仍然是負樣本，所以 relevant／hard_negatives 都不動。
   `_suggestion.basis` 的「hard_negatives = 同章干擾題」**刻意保留、已過期**：它記的是 2026-08-22 建稿時的依據，loader 會忽略 `_` 開頭的鍵。
   要不要把 #61 加進 R017、R018 的 hard_negatives，留給 Owner 決定（第 6 節第 6 項）。
+  CR-8 之二之後同樣的情形還有 R031～R034（hard_negatives 的 #51）與 R035、R036（hard_negatives 的 #59；靜電學的干擾題是新增的 #62），同樣不動（第 8.6 節第 4 項）。
 - `answer.json`、`dedup.json`、`formula.json`：沒有章名欄位（題幹與 note 裡的「直線運動」「向量內積」等是內文）。
 - `answer_chem.json`、`classify_chem.json`：化學不在本次範圍。
 
@@ -90,13 +95,16 @@
 
 #25、#26 依題意改歸「直角三角形的邊角關係」後，這一章有換數字配對（trig-pyth）卻沒有同章干擾題，
 fixture 的結構規則 D-E1（`test/unit/evalFixtures.test.js`「每個有配對的章節都至少有一題」）不成立，所以新增一題自製干擾題。
+CR-8 之二把 #54、#55（coulomb 配對）改標到「靜電學」後同理，新增 #62（第 8.2 節）。
 
 | 檔案 | 題號 | 新增到的章 | 理由 |
 |---|---|---|---|
 | questions.public.json | 61 | 直角三角形的邊角關係 | 自製干擾題（單選、難度 2、role=distractor）：直角三角形已知兩股求 sin A，考銳角三角比的定義；與 #25、#26（平方關係）同章不同概念。答案由 AI 撰寫，待 Owner 核對 |
 | classify.json | cls-fx-061 | 直角三角形的邊角關係 | fixture 段逐字沿用 fixture #61 的題幹與標籤（規劃 §5.3.2「標籤沿用 fixture」） |
+| questions.public.json | 62 | 靜電學 | 〔CR-8 之二〕自製干擾題（單選、難度 2、role=distractor）：帶電棒靠近金屬球、接地後先拆接地線再移走帶電棒，問球的帶電情形，考靜電感應與感應起電（知識點 靜電學.03）；與 #54、#55（庫侖力計算）同章不同概念。答案由 AI 撰寫，待 Owner 核對 |
+| classify.json | cls-fx-062 | 靜電學 | 〔CR-8 之二〕fixture 段逐字沿用 fixture #62 的題幹與標籤（規劃 §5.3.2「標籤沿用 fixture」） |
 
-牽動的固定數字與檔案（測試照改並加註〔章節重整 CH-B〕，都仍是精確值）：
+牽動的固定數字與檔案（測試照改並加註〔章節重整 CH-B〕，都仍是精確值；CR-8 之二的 #62 牽動的數字見第 8.4 節）：
 
 - fixture 60 → 61 題、classify 90 → 91 筆（fixture 段 60 → 61，漂移段仍是 30）、variant golden 涵蓋的章 9 → 10、nlq 檔頭註記的 fixture 章數 9 → 10。
   測試：`evalFixtures`、`evalGolden2`、`evalVariant`、`evalChapterRelabel`；`normalizeStem`、`formulaGate`、`textFormatterStrict` 只改測試名稱裡的題數
@@ -167,7 +175,11 @@ fixture 的結構規則 D-E1（`test/unit/evalFixtures.test.js`「每個有配�
    | 對數 | 指數與對數 | （CH-A 決定） | 是新章名與可能新別名的子字串；nlq-028、nlq-047 已改寫避開 |
    | 指數律 | 指數與對數 | 指數與對數 | 第一冊；不受拆分影響 |
 
+8. **CR-8 之二（物理改標與 #62）**：要請 Owner 看的項目另列在第 8.6 節。
+
 ## 7. 對 eval 與 CI 的影響（Owner 重錄前）
+
+> 本節是 CH-B 當時的紀錄。CR-8 之二之後的數字（fixture 缺向量 18 題、nlq 查詢句缺 9 段、classify 92 筆 replay miss）見第 8.5 節。
 
 - **向量**：embed_text 第一行含章名。改標的 12 題（#1–4、#7、#25–31）與新增的 #61，共 13 題在 `eval/fixtures/embeddings.gemini-embedding-001.768.json` 裡查不到；
   nlq 改寫後的查詢句有 6 段 semantic_text 查不到（廣義角與極坐標、隨便 廣義角與極坐標、直角三角形的邊角關係、指數函數與對數函數、內積公式、向量投影 邊小美一直卡住）。
@@ -211,3 +223,114 @@ preload 只換了 `config/chapters.js`，沒有換 CH-A 要改的別名表、例
   另外新增一則，確認 suite 是以「查不到向量」拒絕執行。`retrieveInMemory` 四則只餵有向量的題，向量齊全時與原本逐字相同。
 - `test/unit/evalStage3.test.js`：variant 缺向量時，確認它以「查不到向量」停下。nlq 的 llm 欄是 null 時，只接受「全部都是 replay miss」這一種理由。
 - `test/integration/retrievalEval.test.js`：向量檔在、但有題查不到時，與「未錄製」同樣 skip 並指名缺哪幾題。
+
+## 8. 物理依知識點歸屬改標，新增 #62（CR-8 之二，Owner 2026-09-25 裁決）
+
+> 依據：Owner（Ben）2026-09-25 在對話中核准。刻意在重錄 Gemini cassette **之前**做：fixture 的章名會進 `embed_text` 與 classify／nlq 的 prompt，重錄後再改就要再錄一次。
+> 起因：`docs/chapter-restructure.md` CR-7 ①——第一次重錄時物理錯的 9 題集中在三組相鄰章（直線運動↔物體的運動、電場與電位↔靜電學、摩擦力與向心力↔平面運動）。
+> 逐題對照 `config/kc/物理.json` 的知識點，有 5 題是 golden 本身標錯：CH-B 第 0 節只看了 `MIGRATION`（物理全是 same），沒有逐題對知識點。
+> 狀態：改標依 Owner 裁決；新增的 #62 由 AI 撰寫，**題目與答案待 Owner 核對**。驗證：`test/unit/evalChapterRelabel.test.js` 逐列核對本節兩張表，並確認改標題的衍生項沒有漏列。
+
+### 8.0 分界原則（Owner 裁決）
+
+| 相鄰的兩章 | 歸前一章 | 歸後一章 |
+|---|---|---|
+| 靜電學／電場與電位 | 求兩電荷之間的力（知識點 PHYS.靜電學.04 庫侖定律；「電場與電位」沒有「兩電荷間的力」的知識點） | 求電場、電位、電位能或作功 |
+| 平面運動／摩擦力與向心力 | 只問速率、速度方向、向心加速度或週期（PHYS.平面運動.06 等速圓周運動的運動學） | 需要求向心力、張力或摩擦 |
+| 物體的運動（速度與加速度）（必修）／直線運動 | 只需定義、名詞辨析、圖形意義或定性說明就能作答 | 需要代入等加速度公式，或從圖求數值 |
+
+依這三條把物理 29 題（#32–#60）與衍生項逐筆看過，要改的只有下表 5 題及其衍生項，其餘維持原章。
+classify 漂移段逐筆看過 `from`：指向這 5 題的只有 cls-dr-014（from 54）。其他物理漂移條目依同一原則仍是原章：
+cls-dr-012、cls-dr-026（from 42，求張力／向心力）、cls-dr-013（from 47）、cls-dr-028（from 49，代公式求落地時間）、
+cls-dr-015（from 58，求作功）、cls-dr-029（from 56，求電場，decoy「庫侖定律」）、cls-dr-030（from 59，等位面與電場線）。
+
+### 8.1 改標清單
+
+| 檔案 | 題號 | 原章 | 改標後 | 理由 |
+|---|---|---|---|---|
+| questions.public.json | 46 | 摩擦力與向心力 | 平面運動 | 等速圓周運動的敘述（複選）：四個選項只問速率、速度、加速度方向與合力是否為零，是運動學（PHYS.平面運動.06），不必求向心力、張力或摩擦 |
+| questions.public.json | 51 | 直線運動 | 物體的運動（速度與加速度） | v-t 圖與時間軸所圍面積的意義：只問圖形意義，不必代公式或從圖求數值 |
+| questions.public.json | 53 | 直線運動 | 物體的運動（速度與加速度） | 速度計顯示什麼：瞬時速率與平均速度、平均速率的名詞辨析 |
+| questions.public.json | 54 | 電場與電位 | 靜電學 | 求兩點電荷間的庫侖力：PHYS.靜電學.04 庫侖定律；電場與電位沒有「兩電荷間的力」的知識點 |
+| questions.public.json | 55 | 電場與電位 | 靜電學 | 同 #54，換數字（coulomb 配對） |
+| classify.json | cls-fx-046 | 摩擦力與向心力 | 平面運動 | 與 fixture #46 一致 |
+| classify.json | cls-fx-051 | 直線運動 | 物體的運動（速度與加速度） | 與 fixture #51 一致 |
+| classify.json | cls-fx-053 | 直線運動 | 物體的運動（速度與加速度） | 與 fixture #53 一致 |
+| classify.json | cls-fx-054 | 電場與電位 | 靜電學 | 與 fixture #54 一致 |
+| classify.json | cls-fx-055 | 電場與電位 | 靜電學 | 與 fixture #55 一致 |
+| classify.json | cls-dr-014 | 電場與電位 | 靜電學 | 改寫自 #54，求兩個點電荷之間的庫侖力，理由同 #54。decoy 由「靜電學」改為「電場與電位」（與正解對調，兩者都在白名單內） |
+| variant.json | var-023 | 摩擦力與向心力 | 平面運動 | 藍本 #46，與 fixture 一致 |
+| variant.json | var-026 | 直線運動 | 物體的運動（速度與加速度） | 藍本 #51，與 fixture 一致 |
+| variant.json | var-027 | 直線運動 | 物體的運動（速度與加速度） | 藍本 #53，與 fixture 一致 |
+| variant.json | var-028 | 電場與電位 | 靜電學 | 藍本 #55，與 fixture 一致（#54 不是藍本） |
+| pdf_sample | 10 | 摩擦力與向心力 | 平面運動 | 樣卷第 10 題＝fixture #46。樣卷 PDF 不印章名，sha256 與檔名不變 |
+
+### 8.2 新增的題：#62（靜電學的自製干擾題）
+
+#54、#55（coulomb 配對）改到「靜電學」後，這一章有換數字配對卻沒有同章干擾題，D-E1 不成立。比照 #61（第 2.1 節）新增一題，classify 的 fixture 段補 cls-fx-062（兩列都登在第 2.1 節的表上）。
+
+- 題目（AI 自撰，不取自任何考卷、題本或出版品）：將一根帶正電的玻璃棒靠近一顆原本不帶電、放在絕緣支架上的金屬球（兩者不接觸）。玻璃棒保持不動，先用導線將金屬球接地，再拆掉導線，最後才移走玻璃棒。此時金屬球的帶電情形為何？(A) 帶正電　(B) 帶負電　(C) 不帶電　(D) 一側帶正電、另一側帶負電，淨電量為零
+- 答案：(B)。玻璃棒的正電吸引電子：接地時，大地的電子經導線流入金屬球；先拆掉導線，多出來的電子就留在球上，移走玻璃棒後均勻分布在球的表面，故金屬球帶負電（感應起電，所帶的電與玻璃棒相反）。(D) 是玻璃棒靠近、未接地時的靜電感應情形，淨電量為零。
+- 考的是 PHYS.靜電學.03 靜電感應與感應起電，與 #54、#55（庫侖力計算）同章不同概念；物理、單選、難度 2、role=distractor，不屬於任何 variant_group。
+- 題幹與答案都沒有 LaTeX：`parseLatexStrict` 零事件、`formulaFix` 零套用（`textFormatterStrict`、`formulaGate` 逐題驗）。
+- 刻意選單選、難度 2：nlq 沒有任何一句以「靜電學」篩題，也不改變 `answerCompare` 的「填空／計算 45 題」統計；不在樣卷上，retrieval、variant、樣卷的 golden 不需要新增項目。
+
+### 8.3 nlq 逐句
+
+rules 路徑的 relevant 依檔頭定義（expect 四欄對 fixture 篩出來的題）由程式重掃全部 42 句重算，變動的就是下表只調 relevant 的 11 句，沒有其他句子受影響。
+nlq 的 suite 灌 fixture 時清空 `students`／`attempts`，不灌任何作答紀錄，`excludeStudentId` 恆為 null（`eval/lib/pgEngine.js` 的 `seedFixture`、`eval/lib/suiteNlq.js`），
+所以「某某沒寫過」不影響 relevant——nlq-020 的 #46 阿哲確實沒寫過（eval 裡沒有任何學生寫過任何題）。
+
+| 題號 | 查詢（改後） | 期望章（改後） | 舊 relevant | 新 relevant | 改了什麼 |
+|---|---|---|---|---|---|
+| nlq-005 | 摩擦力與向心力 | 摩擦力與向心力 | 40–46 | 40, 41, 42, 43, 44, 45 | 只調 relevant：#46 改標到平面運動 |
+| nlq-006 | 直線運動 | 直線運動 | 47–53 | 47, 48, 49, 50, 52 | 只調 relevant：#51、#53 改標到物體的運動（速度與加速度） |
+| nlq-007 | 電場與電位 | 電場與電位 | 54–60 | 56, 57, 58, 59, 60 | 只調 relevant：#54、#55 改標到靜電學 |
+| nlq-013 | 直線運動難度 2 | 直線運動 | 47–51 | 47, 48, 49, 50 | 只調 relevant：#51 改標（#53 難度 1 本來就不在內） |
+| nlq-014 | 電場與電位難度 3 以上 | 電場與電位 | 54, 55, 58, 60 | 58, 60 | 只調 relevant：#54、#55 改標 |
+| nlq-023 | 電場與電位的計算題，小華沒寫過 | 電場與電位 | 54–58, 60 | 56, 57, 58, 60 | 只調 relevant：#54、#55 改標 |
+| nlq-027 | 摩擦力的題目 | 摩擦力與向心力 | 40–46 | 40, 41, 42, 43, 44, 45 | 只調 relevant：#46 改標 |
+| nlq-030 | 電位差難度 3 以上 | 電場與電位 | 54, 55, 58, 60 | 58, 60 | 只調 relevant：#54、#55 改標 |
+| nlq-044 | 最近上到摩擦力，出幾題來練習 | 摩擦力與向心力 | 40–46 | 40, 41, 42, 43, 44, 45 | 只調 relevant：#46 改標 |
+| nlq-045 | 電場與電位那一章有沒有難一點的 | 電場與電位 | 54–60 | 56, 57, 58, 59, 60 | 只調 relevant：#54、#55 改標 |
+| nlq-046 | 想找跟自由落體有關的，難度不要太高 | 直線運動 | 47–53 | 47, 48, 49, 50, 52 | 只調 relevant：#51、#53 改標 |
+| nlq-020 | 平面運動的多選題，阿哲沒寫 | 平面運動 | 46 | 46 | 改寫查詢（原「摩擦力與向心力的多選題，阿哲沒寫」）：摩擦力與向心力唯一的多選題 #46 改標後，原句篩不出任何題；改問平面運動，semantic_text 改為規則輸出「平面運動」，其餘欄位不變 |
+| nlq-036 | 斜面上物體受力平衡的題目 | 摩擦力與向心力、牛頓運動定律 | 40, 41 | 40, 41 | Owner 裁決放寬期望章（原〔摩擦力與向心力〕）：斜面受力平衡同時是牛頓運動定律（力的平衡）與摩擦力與向心力（斜面上的受力分析）的題材；仍走 LLM，其餘不變 |
+| nlq-042 | 平面上兩個向量互相垂直時，座標裡的未知數是多少 | 向量內積 | 13, 14 | 13, 14 | 改寫查詢（原「兩個向量互相垂直時座標裡的未知數是多少」）：原句沒講平面或空間，重錄時 LLM 回〔向量內積, 空間向量內積〕（CR-7 ③）；semantic_text 照 llm 句的慣例同查詢句；仍走 LLM |
+| nlq-049 | 有沒有那種考速度與加速度觀念的單選 | 物體的運動（速度與加速度） | 51, 53 | 51, 53 | 改寫查詢（原「有沒有那種考直線運動觀念的單選」）：#51、#53 改標到必修章，改用該章的別名「速度與加速度」（`config/chapterAliases.js`）；semantic_text 改為規則輸出「種考 速度與加速度 觀念」 |
+
+nlq-036 的期望章照 Owner 裁決的順序（原期望章在前）；`filtersExact` 比對前會先排序，順序不影響分數。
+改寫的兩句 rules 句與 nlq-042 以現行 `parseQuery`＋`CHAPTER_ALIASES` 驗過：nlq-020、nlq-049 的七欄與 semantic_text 都等於 golden；nlq-042 規則仍抓不到章節（confident=false），照舊走 LLM。
+
+### 8.4 牽動的固定數字與檔案
+
+測試照改並加註〔CR-8 之二〕，都仍是精確值，沒有放寬任何斷言：
+
+- fixture 61 → 62 題、classify 91 → 92 筆（fixture 段 61 → 62，漂移段仍是 30）、variant golden 涵蓋的章 10 → 13（多了平面運動、物體的運動（速度與加速度）、靜電學）、nlq 檔頭註記的 fixture 章數 10 → 13。
+  測試：`evalFixtures`、`evalGolden2`、`evalVariant`、`evalChapterRelabel`（另新增本節兩張表的逐列核對，以及表上句子的規則解析）；
+  `normalizeStem`、`formulaGate`、`textFormatterStrict` 只改測試名稱裡的題數（`textFormatterStrict` 的「其餘 51 題」→ 52）。
+- 文件與註解裡的題數：`eval/README.md`、`docs/llm.md`、`scripts/record_cassettes.js`、`eval/record_embeddings.js`。`eval/run.js` 的警告早已改用實際題數，不用改。
+- 檔頭註記：fixture 的 `_notice`（62 題）、`_annotations.id`（1..62）與 `_status`；classify、variant、nlq 的 `_status`；classify 的 `_annotations`（fixture 段 62 筆）；nlq 的 `_annotations.relevant`（13 個章節）。
+- `exam_pro/README.md` 的種子題分佈表是 `seed_questions.js` 的 30 題（牛頓運動定律、動量守恆與碰撞），與 fixture 無關，不用改。
+
+### 8.5 對重錄的影響（2026-09-25 本分支實測）
+
+- **向量**：fixture 查不到向量的由 13 題變 18 題（多了改標的 #51、#53、#54、#55 與新題 #62；#46 改標後的 `embed_text` 向量檔裡已經有）。
+  nlq 查詢句的 semantic_text 缺 9 段（10 句）：原本 6 段，加上「平面運動」（nlq-020）、「種考 速度與加速度 觀念」（nlq-049）與 nlq-042 的新句子。
+  `npm run cassettes:rerecord -- --dry-run`：向量缺 27 段；錄製時 LLM 呼叫 101～216 次、費用約 $0.75～$2.82（未含向量）。
+- **replay**：`eval:classify` 92 筆 replay miss（cls-fx-062 是新題，沒有舊 cassette），沒有其他錯誤；`eval:retrieval`、`eval:variant` 停在「18 題查不到向量」。
+  `eval:nlq`：rules 欄 filters_exact 1、rule_coverage 0.84（與改前相同），llm 欄 8 句 replay miss。
+- 重錄步驟不變：`npm run cassettes:rerecord` 的第 1 步補 fixture 向量，第 3 步（nlq）補查詢句向量。
+
+### 8.6 請 Owner 核對
+
+1. **#62 的題目與答案**（第 8.2 節）。
+2. **nlq-036 的「放寬」在指標上的實際意思**：`filtersExact` 比的是整組章節（排序後逐字相同），不是「命中其中一章就算對」。
+   期望改成〔摩擦力與向心力, 牛頓運動定律〕之後，LLM 要**兩章都回、而且只回這兩章**才算對；只回〔摩擦力與向心力〕在改前算對、改後算錯。
+   第一次重錄時 LLM 回的是〔牛頓運動定律, 剛體轉動與平衡〕，改前改後都不對。如果本意是「回其中任一章都算對」，現行指標表達不了，要另開裁決改 `filtersExact`。
+3. **#52（甲乙兩車的相對速度，填空）仍標直線運動**：它要計算，依第 8.0 節第三條不歸必修章；但知識點 PHYS.平面運動.03 是「相對運動」，別名「相對運動」也指向平面運動。
+   第 8.0 節沒有涵蓋直線運動／平面運動的分界，本次不改，請 Owner 決定。
+   注意：#51、#53 改標後，#52 是直線運動僅剩的干擾題；若 #52 也改標，直線運動（有 kinematics-disp、free-fall 兩組配對）要再補一題干擾題，D-E1 才成立。
+4. **retrieval 的 R031～R034、R035、R036**：hard_negatives 分別是 #51、#52 與 #59；#51 已改到物體的運動、#59 在電場與電位（query #54、#55 已改到靜電學），
+   仍是不同 variant_group 的負樣本，本次不動（同第 6 節第 6 項）。要不要把 #62 加進 R035、R036 的 hard_negatives，請 Owner 決定。
+5. **cls-dr-030 的 note**（「靜電學與電場與電位都在白名單內，本題屬邊界案例，請開發者裁決」）：依第 8.0 節第一條，等位面與電場線歸電場與電位，標籤不用改；note 沒有動。

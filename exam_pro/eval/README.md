@@ -23,7 +23,7 @@
 | | 公開層 | 私有層 |
 |---|---|---|
 | 位置 | `eval/fixtures/`、`eval/golden/` | `eval/private/`（`.gitignore` 排除） |
-| 內容 | **自行編寫**的 61 題教科書型例題、自製樣卷 `sample_exam.pdf`，以及四份 golden（檢索 40／分類 91／答案 50／重複 30） | 對真實題庫與真實考卷的人工標註 |
+| 內容 | **自行編寫**的 62 題教科書型例題、自製樣卷 `sample_exam.pdf`，以及四份 golden（檢索 40／分類 92／答案 50／重複 30） | 對真實題庫與真實考卷的人工標註 |
 | 進版控 | ✅ | ❌ 永不 |
 | 進 CI | ✅ 守「不退步」 | ❌ 只在本機跑 |
 | 數字的意義 | 相對比較（這次 vs 上次） | 真實表現，手動抄進 README |
@@ -141,7 +141,7 @@ npm run eval:pipeline     # = npm run eval -- --suite pipeline
 這個約定已由**裁決 S2-13 寫進 `interfaces-stage2.md` 第 3.3 條**，不再是 WS-D 的單方決定。
 suite 仍保留「`source='gate'` 應為 0」的斷言——那是這條約定有沒有真的生效的唯一訊號。
 
-輸出：accuracy、macro-F1、Top-5 混淆對，另外分段報「fixture 61 題」與「漂移變體 30 筆」
+輸出：accuracy、macro-F1、Top-5 混淆對，另外分段報「fixture 62 題」與「漂移變體 30 筆」
 （再細分同題幹改寫／章節名同義詞）——漂移那一段掉得特別多，就是 prompt 該補的地方。
 
 ### `--suite pipeline`——對自製樣卷跑完整條管線
@@ -372,7 +372,7 @@ npm run cassettes:prune -- --apply          # 確認清單後刪除
 
 | 項目 | 狀態 | 誰做 |
 |---|---|---|
-| `eval/fixtures/questions.public.json` 的 61 題答案 | #1–#60 ✅ 2026-08-22 已逐題核對；#61（2026-09-25 章節重整新增的干擾題）待核對 | 開發者本人 |
+| `eval/fixtures/questions.public.json` 的 62 題答案 | #1–#60 ✅ 2026-08-22 已逐題核對；#61、#62（2026-09-25 章節重整與 CR-8 之二新增的干擾題，見 `eval/CHAPTER_RELABEL-2026-09.md` 第 2.1、8.2 節）待核對 | 開發者本人 |
 | `eval/golden/retrieval.json` 的 40 筆相關性判定 | ✅ 已逐筆定案 | — |
 | `eval/golden/classify.json` 的 90 筆章節標籤 | 90/90 `needs_human_confirm` | 開發者本人 |
 | `eval/golden/answer.json` 的 50 題 | 50/50 `needs_human_confirm` | 開發者本人 |
@@ -381,8 +381,8 @@ npm run cassettes:prune -- --apply          # 確認清單後刪除
 
 ### 階段 2 三份 golden 具體要看哪些欄位
 
-**`classify.json`（91 筆）——只有 30 筆需要真的花時間。**
-前 61 筆（`cls-fx-*`）的標籤直接沿用已定案的 fixture，有測試守著兩邊一致，**掃過即可**。
+**`classify.json`（92 筆）——只有 30 筆需要真的花時間。**
+前 62 筆（`cls-fx-*`）的標籤直接沿用已定案的 fixture，有測試守著兩邊一致，**掃過即可**。
 後 30 筆（`cls-dr-*`）是手寫改寫，要看的是：
 
 | 欄位 | 要判斷什麼 |
@@ -440,13 +440,13 @@ eval/
   .env.replay               LLM_MODE=replay / EMBED_MODE=fixture（無金鑰，進版控）
   compare_pipeline.js       E-X12a：新舊對照（--method legacy|pipeline），不進 CI
   fixtures/
-    questions.public.json   61 題自製 fixture
+    questions.public.json   62 題自製 fixture
     embeddings.<model>.768.json   由 record_embeddings.js 產生
     sample_exam.pdf         自製樣卷（10 題），--suite pipeline 與 E-X12a 的輸入
     make_sample_pdf.js      樣卷產生器（只在本機跑）
   golden/
     retrieval.json          40 筆檢索 golden
-    classify.json           91 筆分類 golden（61 fixture + 30 漂移變體）
+    classify.json           92 筆分類 golden（62 fixture + 30 漂移變體）
     answer.json             50 題答案 golden（各 3 等價 + 2 錯答 = 250 案例）
     dedup.json              30 組重複判定 golden
     formula.json            公式 golden（**WS-C 產出**，走 node --test 不走本入口）

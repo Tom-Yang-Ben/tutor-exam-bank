@@ -1,9 +1,9 @@
 {
-  "_notice": "本檔 61 題全部由本專案作者自行編寫的常見教科書型例題，用於展示與評估系統流程，不取自任何特定考卷、題本或出版品（見 repo 根目錄 NOTICE 第 2 條）。",
-  "_status": "confirmed 2026-08-22 — 開發者本人逐題核對完成；2026-09-25 章節重整（CH-B）：數學章名依 config/chapterPlan.js 改標（AI 依題意逐題判斷，逐題理由見 eval/CHAPTER_RELABEL-2026-09.md，待 Owner 抽查）；同日新增 #61（「直角三角形的邊角關係」的自製干擾題，AI 撰寫，答案待 Owner 核對；理由見 eval/CHAPTER_RELABEL-2026-09.md 第 2.1 節）",
+  "_notice": "本檔 62 題全部由本專案作者自行編寫的常見教科書型例題，用於展示與評估系統流程，不取自任何特定考卷、題本或出版品（見 repo 根目錄 NOTICE 第 2 條）。",
+  "_status": "confirmed 2026-08-22 — 開發者本人逐題核對完成；2026-09-25 章節重整（CH-B）：數學章名依 config/chapterPlan.js 改標（AI 依題意逐題判斷，逐題理由見 eval/CHAPTER_RELABEL-2026-09.md，待 Owner 抽查）；同日新增 #61（「直角三角形的邊角關係」的自製干擾題，AI 撰寫，答案待 Owner 核對；理由見 eval/CHAPTER_RELABEL-2026-09.md 第 2.1 節）；同日 Owner 裁決（CR-8 之二）：物理 5 題依知識點歸屬改標——#46 → 平面運動、#51、#53 → 物體的運動（速度與加速度）、#54、#55 → 靜電學，並新增 #62（「靜電學」的自製干擾題，AI 撰寫，答案待 Owner 核對）；逐題理由與分界原則見 eval/CHAPTER_RELABEL-2026-09.md 第 8 節",
   "_schema": "questions[]：subject / chapter / question_type / difficulty / question_text / answer_text 為必填，欄位語意同 docs/interfaces.md 第 1.2 條的 questions 表。載入時逐題過 config/chapters.js 的 isValidChapter / isValidQuestionType / normalizeDifficulty。",
   "_annotations": {
-    "id": "fixture 內部編號（1..61），golden set 以此為 question_id；與正式資料庫的 questions.id 無關",
+    "id": "fixture 內部編號（1..62），golden set 以此為 question_id；與正式資料庫的 questions.id 無關",
     "variant_group": "「換數字的同一題」家族代號；同 group 的題互為檢索 golden 的正樣本",
     "role": "base | numeric_variant | distractor | lookalike，說明該題在 fixture 結構中的角色",
     "lookalike_of": "跨章字面相近的對照組（例如「向量內積」vs「空間向量內積」）",
@@ -520,7 +520,7 @@
     {
       "id": 46,
       "subject": "物理",
-      "chapter": "摩擦力與向心力",
+      "chapter": "平面運動",
       "question_type": "多選",
       "difficulty": 2,
       "question_text": "關於等速圓周運動，下列敘述何者正確？（複選）\n(A) 速率不變　(B) 速度不變　(C) 加速度指向圓心　(D) 合力為零",
@@ -574,7 +574,7 @@
     {
       "id": 51,
       "subject": "物理",
-      "chapter": "直線運動",
+      "chapter": "物體的運動（速度與加速度）",
       "question_type": "單選",
       "difficulty": 2,
       "question_text": "速度—時間圖中，圖形與時間軸所圍成的面積代表下列何者？\n(A) 加速度　(B) 位移　(C) 速率　(D) 力",
@@ -596,7 +596,7 @@
     {
       "id": 53,
       "subject": "物理",
-      "chapter": "直線運動",
+      "chapter": "物體的運動（速度與加速度）",
       "question_type": "單選",
       "difficulty": 1,
       "question_text": "汽車儀表板上的速度計所顯示的數值，是下列何者？\n(A) 平均速度　(B) 平均速率　(C) 瞬時速率　(D) 位移",
@@ -606,7 +606,7 @@
     {
       "id": 54,
       "subject": "物理",
-      "chapter": "電場與電位",
+      "chapter": "靜電學",
       "question_type": "計算",
       "difficulty": 3,
       "question_text": "兩點電荷 $q_1 = 2 \\times 10^{-6}$ C 與 $q_2 = 3 \\times 10^{-6}$ C 相距 $0.3$ m，求兩者間的靜電力（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）。",
@@ -617,7 +617,7 @@
     {
       "id": 55,
       "subject": "物理",
-      "chapter": "電場與電位",
+      "chapter": "靜電學",
       "question_type": "計算",
       "difficulty": 3,
       "question_text": "兩點電荷 $q_1 = 4 \\times 10^{-6}$ C 與 $q_2 = 3 \\times 10^{-6}$ C 相距 $0.6$ m，求兩者間的靜電力（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）。",
@@ -689,6 +689,16 @@
       "difficulty": 2,
       "question_text": "直角三角形 $ABC$ 中，$\\angle C = 90^\\circ$，$\\overline{AC} = 12$、$\\overline{BC} = 5$，則 $\\sin A$ 之值為何？\n(A) $\\frac{5}{13}$　(B) $\\frac{12}{13}$　(C) $\\frac{5}{12}$　(D) $\\frac{12}{5}$",
       "answer_text": "(A)。由畢氏定理，斜邊 $\\overline{AB} = \\sqrt{12^2 + 5^2} = 13$；$\\sin A$ 是 $\\angle A$ 的對邊比斜邊，$\\angle A$ 的對邊為 $\\overline{BC} = 5$，故 $\\sin A = \\frac{5}{13}$。",
+      "role": "distractor"
+    },
+    {
+      "id": 62,
+      "subject": "物理",
+      "chapter": "靜電學",
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "將一根帶正電的玻璃棒靠近一顆原本不帶電、放在絕緣支架上的金屬球（兩者不接觸）。玻璃棒保持不動，先用導線將金屬球接地，再拆掉導線，最後才移走玻璃棒。此時金屬球的帶電情形為何？\n(A) 帶正電　(B) 帶負電　(C) 不帶電　(D) 一側帶正電、另一側帶負電，淨電量為零",
+      "answer_text": "(B)。玻璃棒的正電吸引電子：接地時，大地的電子經導線流入金屬球；先拆掉導線，多出來的電子就留在球上，移走玻璃棒後均勻分布在球的表面，故金屬球帶負電（感應起電，所帶的電與玻璃棒相反）。(D) 是玻璃棒靠近、未接地時的靜電感應情形，淨電量為零。",
       "role": "distractor"
     }
   ]
