@@ -353,7 +353,7 @@ function statsOf({ agent, model, vendor, items }) {
             secPerPage: sum(withPages.map(e => e.latencyMs)) / pageCount / 1000,
             p90SecPerPage: percentile(perPage, 90) / 1000,
             maxSecPerPage: Math.max(...perPage) / 1000,
-            // 每頁 token（輸入＋輸出；含固定的 system／白名單，所以偏保守）：OLLAMA_NUM_CTX 放不放得下
+            // 每頁 token（輸入＋輸出；含固定的 system／白名單，只有推到比錄製時多的頁數才偏保守，推到較少頁數會低估）：OLLAMA_NUM_CTX 放不放得下
             tokensPerPage: tokenPageCount > 0
                 ? sum(tokenPages.map(e => e.usage.tokenIn + e.usage.tokenOut + e.usage.tokenThinking)) / tokenPageCount
                 : null
