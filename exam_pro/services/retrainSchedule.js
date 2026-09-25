@@ -14,6 +14,8 @@
 // 規則（〔R*〕＝Owner 決策單 2026-09-26 第三輪的題號）：
 //   〔R1 選 2〕項目是老師勾「要重練」（或在清單上手動加入）才有的；本檔不決定「進不進清單」，
 //             只從起算日（entered_on）算排程。新題（第一次）那一次作答的對錯**不影響**排程。
+//   〔R11 選 3〕以前的題由老師手動加入：起算日之前、還沒批改的新題派題不算「已派出」
+//             （countsAsInFlight），否則批改不了的舊紀錄會讓項目永遠不到期。
 //   〔R2 選 1〕只有全對才算對：COALESCE(score, result) ≥ 1（沒給部分分且按「對」，或給 100%）。
 //   〔R3 選 2〕第 1 關＝下一份卷（派題日＋1 天）、第 2 關 7 天、第 3 關 14 天；連對 3 次＝練到會。
 //   〔R4 選 1〕重練或回測又錯 → 回第 1 關、連對歸零、錯的次數＋1；錯的次數 ≥ 3 標「卡關」，
@@ -151,6 +153,31 @@ function assertParams(params) {
 // ───────────────────────── 排程 ─────────────────────────
 
 /**
+ * 一筆**還沒批改**的派題算不算「已派出、還沒批改」（in_flight，不變量 I6；設計稿第 4.4 節）：
+ *   - 重練／回測派題：一律算（不論哪一輪）。它一定在某張卷上，批改卡批得到。
+ *   - 新題（第一次）派題：只有派題日 ≥ 起算日才算。
+ *       · 批改卡勾「要重練」：起算日＝那一筆的派題日，取消批改後算已派出，批改完才到期。
+ *       · 手動加入以前的題（R11 選 3）：那一筆早於起算日，不算。那一筆可能永遠批改不了：
+ *         MySQL 時期匯入的舊紀錄 result 都是 NULL，對不上卷的 paper_id 也是 NULL，
+ *         而批改只能經 PATCH /api/papers/:id/results。算進去的話項目永遠不到期、出卷 409、
+ *         「超過 14 天未批改」一加入就提醒。
+ * 呼叫端（PR-2 的 I/O 層：API-1 的 in_flight_paper_id、API-7 的 409 檢查）要用同一個判斷。
+ *
+ * @param {{purpose:string, assigned_at:string}} entry 還沒批改的一筆派題
+ * @param {string} enteredOn 起算日 'YYYY-MM-DD'
+ * @returns {boolean}
+ */
+function countsAsInFlight(entry, enteredOn) {
+    if (!entry || typeof entry !== 'object') throw new TypeError('retrainSchedule：countsAsInFlight 的派題必須是物件。');
+    if (!PURPOSES.includes(entry.purpose)) {
+        throw new TypeError(`retrainSchedule：purpose 只能是 new 或 retrain，收到 ${JSON.stringify(entry.purpose)}。`);
+    }
+    assertDate(entry.assigned_at, 'countsAsInFlight 的 assigned_at');
+    assertDate(enteredOn, 'countsAsInFlight 的 entered_on');
+    return entry.purpose === 'retrain' || entry.assigned_at >= enteredOn;
+}
+
+/**
  * @typedef {object} HistoryEntry  這位學生這一題的一筆派題（含作答）
  * @property {number} assignment_id 派題編號（同一天多筆時依它排先後）
  * @property {string} assigned_at   派題日 'YYYY-MM-DD'
@@ -168,8 +195,9 @@ function assertParams(params) {
  * @property {number} lapses        錯的次數（全部已批改的重練／回測派題中答錯的筆數，重新加入也不歸零）
  * @property {string|null} last_attempt_on 最後一筆已批改的重練／回測派題的派題日
  * @property {string|null} mastered_on     練到會的那一次派題日，或老師判定已會的日期
- * @property {boolean} in_flight    這一題有派題還沒批改（不算到期、不再派，不變量 I6）
- * @property {string|null} in_flight_since 最早一筆還沒批改的派題日（超過 14 天未批改另外提醒用）
+ * @property {boolean} in_flight    已派出、還沒批改（不算到期、不再派，不變量 I6）：有重練派題還沒批改，
+ *                                  或起算日當天以後的新題派題還沒批改（見 countsAsInFlight）
+ * @property {string|null} in_flight_since 最早一筆「算已派出」的派題日（超過 14 天未批改另外提醒用）
  * @property {boolean} stuck        卡關：進行中而且錯的次數 ≥ stuckLapses（只提醒）
  */
 
@@ -181,7 +209,10 @@ function assertParams(params) {
  *      起算日：批改卡勾「要重練」＝那一筆新題派題的派題日；承上組同組題＝同那一題；
  *      清單上手動加入、重新加入＝加入當天（由呼叫端決定，本函式只收日期）。
  *   2. history 依（派題日, 派題編號）排序後逐筆看；輸入的順序不影響結果。
- *   3. 還沒批改的派題（不論新題或重練）→ in_flight；跳過，不影響關卡。
+ *   3. 還沒批改的派題跳過，不影響關卡；其中「算已派出」的（countsAsInFlight：重練派題一律算，
+ *      新題派題只有派題日 ≥ entered_on 才算）→ in_flight。起算日之前、還沒批改的新題派題不算：
+ *      手動加入以前的題時（R11 選 3），那一筆可能永遠批改不了（例如 MySQL 時期匯入、paper_id 為
+ *      NULL、result 為 NULL 的舊紀錄），算進去會讓項目永遠不到期。
  *   4. 新題（第一次）的作答不影響關卡：進不進清單是老師勾的（R1 選 2）。
  *   5. 重練／回測派題：
  *        - 答錯一律讓錯的次數＋1（包含重新加入之前那一輪的，錯的次數不歸零）。
@@ -242,7 +273,7 @@ function computeRetrainState(input, params = DEFAULTS) {
 
     for (const e of sorted) {
         if (!isGraded(e)) {
-            if (inFlightSince === null) inFlightSince = e.assigned_at;
+            if (inFlightSince === null && countsAsInFlight(e, enteredOn)) inFlightSince = e.assigned_at;
             continue;
         }
         if (e.purpose !== 'retrain') continue;   // 新題那一次不影響排程（R1 選 2）
@@ -351,6 +382,7 @@ function capForAttach(newCount, ratio = DEFAULTS.attachRatio, { maxTotal = MAX_P
 
 module.exports = {
     computeRetrainState,
+    countsAsInFlight,
     isGraded,
     isCorrect,
     correctnessOf,
