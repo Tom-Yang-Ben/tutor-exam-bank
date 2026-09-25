@@ -2,7 +2,7 @@
 
 > 版本 v1.0 | 2026-09-24 | 分支 `stage5/ws-b` | 對應：`docs/interfaces-stage5.md` 第 3.2、3.3、4.2 條、ADR-010、DEC-019、缺口 G01
 > 本檔是化學支援的功能文件：API、資料、排版子集、答案比對、eval 與給老師的操作說明。共用文件（api_spec、openapi、db_design、srs、各 tracker）由整合階段依本檔回填（第 1.7 條）。
-> 章節表（`exam_pro/config/chemistryChapters.js`，44 章）是 **AI 草擬、待 Owner 對照教科書定稿**；本檔所有例句、golden 與別名同樣是 AI 自撰，不取自任何出版社教材或考卷。
+> 章節表（`exam_pro/config/chemistryChapters.js`，44 章）是 ~~**AI 草擬、待 Owner 對照教科書定稿**~~ 〔修訂 2026-09-26 決策單 A11〕**Owner 2026-09-25 定稿**（決策單：照目前草案定稿，依龍騰；章名一字未改）；本檔所有例句、golden 與別名同樣是 AI 自撰，不取自任何出版社教材或考卷（這些仍是 AI 草擬，待 Owner 抽查）。
 
 ## 1. 一句話
 
@@ -176,7 +176,7 @@ npm run eval:classify-chem
 | 助教（`services/assistantService.js`） | 工具驗證接受化學；**工具說明書仍寫「數學\|物理」** | 說明書是 SYSTEM 的一部分，契約規定不動 SYSTEM／TEMPLATE／DECISION_SCHEMA。主控模型可能不知道可以查化學，整合階段若要改需另開裁決 |
 | embedding 文本（`utils/embedText.js`） | 未改 | `\ce{H2O}` 會轉成「ce H2O」這類字樣；改規則會讓全部向量作廢（該檔檔頭警告） |
 | 化學的 extract／verify／變式 cassette 與 eval | 尚未錄製 | 需要真 LLM；見第 6 節 |
-| 章節表、例句、別名、golden | AI 草擬 | 待 Owner 對照教科書定稿；章名一改，知識點代碼與已標註資料要跟著遷移 |
+| 章節表、例句、別名、golden | AI 草擬（〔修訂 2026-09-26 決策單 A11〕章節表已由 Owner 2026-09-25 定稿） | 待 Owner 對照教科書定稿；章名一改，知識點代碼與已標註資料要跟著遷移。〔修訂 2026-09-26 決策單〕章節表照草案定稿、依龍騰（A11）；例句、別名、golden 仍待 Owner 抽查；別名優先維持（B17）；`classify_chem.json` 的 eval 只當參考（B13） |
 
 ## 10. 給老師的操作說明
 
@@ -216,5 +216,5 @@ npm run eval:classify-chem
 - 需求：FR 編號由整合階段分配；DEC-019 的業務驗收項目＝章節表定稿、`eval:classify-chem` 錄製與分數。
 - 預期衝突：`workers/jobRunner.js`（WS-A 在 save 寫詳解、WS-C 在 save 後掛鉤；WS-B 只動三個 `ctx.job` 與兩句 SELECT）、`public/js/students.js`（WS-B 只換了科目下拉那四行）、`index.html` inline script、`package.json` scripts（WS-B 新增 `eval:classify-chem`、`search:reindex`）、`controllers/questionController.js` 與 `utils/questionValidation.js`（不在 WS-B 的可擴充清單內；WS-B 各只改一行錯誤訊息，改成由 `subjectChoiceText()` 產生科目清單，無功能改動——請在 WS-A 之後合併、保留 WS-A 的版本再套這一行）。
 - **合併後的 Owner 動作**：在正式題庫跑一次 `npm run search:reindex`（先 `--dry-run`），理由見第 4.3 節。沒跑不會壞資料，但部分舊的數理題關鍵字檢索會查不到；共用文件（HANDOFF、README 的升級步驟）回填時請一併寫入。
-- **待裁決（建議記為 S5-n）**：`answer_form = text` 的單位衝突回 `uncertain`（依 S2-26），與契約第 4.2 條第 4 點「應判 disagree」不一致（見第 5.1 節）。WS-B 維持 S2-26，因為改成 disagree 會打破「text 永遠不回 disagree」的凍結取捨；若裁決要改，只動 `compareText` 的一行，`answer_chem.json` 的 unit-007 期望要一起改。
+- **待裁決（建議記為 S5-n）**：`answer_form = text` 的單位衝突回 `uncertain`（依 S2-26），與契約第 4.2 條第 4 點「應判 disagree」不一致（見第 5.1 節）。WS-B 維持 S2-26，因為改成 disagree 會打破「text 永遠不回 disagree」的凍結取捨；若裁決要改，只動 `compareText` 的一行，`answer_chem.json` 的 unit-007 期望要一起改。〔修訂 2026-09-26 決策單 B4〕已記為 S5-11；Owner 2026-09-25 決策單選「維持送複核」，`compareText` 與 unit-007 不改。
 - 化學跨 WS 行為（化學題標知識點、補救卷、AI 家教）由整合階段補測（第 7 條）。

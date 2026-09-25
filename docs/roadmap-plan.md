@@ -1832,16 +1832,19 @@ agent 管線、RAG 檢索、NLQ、變式、複核佇列、eval 與門檻——�
 ---
 
 **以下 13–24 項為 2026-09-15 收斂的已知問題與待決策清單**〔修訂 2026-09-15g〕。
+〔修訂 2026-09-26 決策單〕Owner 2026-09-25「出題系統決策單」第一輪已答第 13（B1，核准欄仍待簽核）、14（B10）、19（B20）、20（B21）項，就地加註；總表見 [`HANDOFF.md`](HANDOFF.md) §0.00。
 狀態用語：**待決策**＝需要 owner 拍板；**進行中**＝已有分支或 PR、尚未合併；**暫緩**＝有觸發條件、條件未成立前不做；
 **已知限制**＝目前刻意不處理，記錄以免誤判為缺陷。
 
 13. **待決策：DEC-012（承上題綁定）與 DEC-013（原卷比對，預設 enforce）核准欄簽核**。
    兩項皆已實作並上線，`engineering_docs/01_requirements/requirements_tracker.md` 的核准欄仍為「待 Owner 簽核／覆核」。
    做法：owner 確認後把核准欄改為核准日期；若不同意 enforce 預設，改 `.env` 的 `SOURCE_CHECK_MODE=shadow` 並重啟即可，無需改程式。
-14. **待決策：組卷時整組承上題放不下的處理**（第 11 項②；PR #33 已以選項 A 上線，owner 未改即維持）〔修訂 2026-09-16b〕。
+   〔修訂 2026-09-26 決策單 B1〕Owner 2026-09-25 決策單選「維持：擋下」——DEC-013 的 enforce 預設不變，`SOURCE_CHECK_MODE` 不改。決策單的措辭是維持行為、不是簽核，所以 DEC-013 的核准欄**仍待 Owner 明示簽核**，本項維持待決策（DEC-012 的核准欄沿用 2026-09-15 的登錄，未在決策單中處理）。
+14. ~~**待決策：組卷時整組承上題放不下的處理**~~ → **已決策（2026-09-25 Owner 決策單 B10）：改為選項 B**〔修訂 2026-09-26 決策單〕（第 11 項②；PR #33 已以選項 A 上線，owner 未改即維持）〔修訂 2026-09-16b〕。
    選項 A（實作預設）：少出題並在回應附註實際題數與原因；選項 B：回 400 請老師調整題數。
    選 A 的理由：老師要的是一份能用的考卷，少一兩題比整份出不來好；選 B 的理由：題數是老師明確指定的數字。
    做法：PR #33 已把選項做成單一切換點（`FOLLOW_UP_SHORTFALL_POLICY`），owner 拍板後改一行。
+   〔修訂 2026-09-26 決策單 B10〕Owner 選 B：承上題湊不滿時直接報錯、請老師改題數。由分支 `dec/b10-shortfall-error` 實作（`FOLLOW_UP_SHORTFALL_POLICY` 改為 B；依裁決 S5-29 這個開關也管跨章配額 blueprint），合併之前程式仍是選項 A。
 15. ~~刪除被當作變式題藍本的題回 500~~ → **已修（2026-09-16，PR #32 併入 main `27f56ab`）**〔修訂 2026-09-16b〕。
    `jobs.source_question_id` 外鍵衝突改比照 `job_questions` 回 409 並帶 `job_ids`，提示改用封存。
 16. ~~預算用盡時零成本節點的失敗原因被改寫~~ → **已修（2026-09-16，PR #31 併入 main `ef787d4`）**〔修訂 2026-09-16b〕。
@@ -1853,11 +1856,15 @@ agent 管線、RAG 檢索、NLQ、變式、複核佇列、eval 與門檻——�
    未以真實原卷實測；PR #31（已合併）以單元測試釘住現況並寫入 `docs/source-check.md` 限制段。
 18. ~~Word 匯出不含本機裁切的附圖~~ → **已執行（2026-09-16，PR #30 併入 main `fa0b8da`）**〔修訂 2026-09-16b〕。
    題幹後插入圖片、依頁寬縮放、缺圖不讓整份匯出失敗、路徑限制在附圖目錄內（`services/wordService.js`）。
-19. **待決策：舊題不自動補附圖**（附圖裁切 PR #3 的已知未做）。附圖只在新拆題時裁切；
+19. ~~**待決策：舊題不自動補附圖**~~ → **已決策（2026-09-25 Owner 決策單 B20）：做**〔修訂 2026-09-26 決策單〕（附圖裁切 PR #3 的已知未做）。附圖只在新拆題時裁切；
    2026-08-27 前入庫的題沒有圖。可行做法是以 `Desktop/各校考卷` 原卷重跑裁圖並比對題目，但會寫入正式庫，
    且需逐題人工確認對應；估 1 人日。待 owner 決定是否值得做、以及做哪幾份卷。
-20. **待決策：`/analyze-pdf` 舊流程不裁附圖**。新流程（`POST /api/jobs` 管線）已涵蓋上傳拆題；
+   〔修訂 2026-09-26 決策單 B20〕Owner 選「做」。補圖工具由分支 `dec/b20-backfill-figures-tool` 實作（仍需逐題人工確認對應、寫正式庫前先備份）；
+   **做哪幾份卷在第二輪 X2 待答**，答覆之前不對正式庫執行。
+20. ~~**待決策：`/analyze-pdf` 舊流程不裁附圖**~~ → **已決策（2026-09-25 Owner 決策單 B21）：選項 B，保留並補裁圖**〔修訂 2026-09-26 決策單〕。新流程（`POST /api/jobs` 管線）已涵蓋上傳拆題；
    選項 A：退役舊端點（前端改走新流程後移除），選項 B：舊流程補裁圖。建議 A——兩條拆題路徑長期並存會重複維護。
+   〔修訂 2026-09-26 決策單 B21〕Owner 選 B（不採上面的建議 A）：`/analyze-pdf` 保留，補上附圖裁切；由分支 `dec/b21-legacy-analyze-pdf-figures` 實作。
+   代價照原分析：兩條拆題路徑並存、要重複維護。
 21. **已知限制（操作）：本機以 `npm run dev`（nodemon）執行時的升級順序**。2026-09-15 `git pull` 帶入
    0008／0009 時 nodemon 先以新程式重啟、當下 schema 尚未更新；當時無進行中的拆題工作，未造成影響。
    規則：含新 migration 的版本要先停服務或先 `npm run migrate`，再拉程式／重啟。
@@ -1878,4 +1885,4 @@ agent 管線、RAG 檢索、NLQ、變式、複核佇列、eval 與門檻——�
 
 ## §7 階段 5（2026-09-24）〔修訂 2026-09-24〕
 
-階段 5 把系統從出卷工具轉成教學診斷平台（DEC-014～019：錯因與部分給分、學生檔案、文字詳解、化學、知識點與口語版、依弱點出補救卷、題庫覆蓋率、經程式驗算的 AI 家教與按住說話），由五條程式 workstream 與三組知識點內容依凍結契約平行施工；契約、分工與裁決 S5-1～S5-39 見 [`interfaces-stage5.md`](interfaces-stage5.md)，各功能見 [`grading-and-profile.md`](grading-and-profile.md)、[`chemistry.md`](chemistry.md)、[`knowledge-components.md`](knowledge-components.md)、[`remedial.md`](remedial.md)、[`tutor.md`](tutor.md)，交接與 Owner 待辦見 [`HANDOFF.md`](HANDOFF.md)。
+階段 5 把系統從出卷工具轉成教學診斷平台（DEC-014～019：錯因與部分給分、學生檔案、文字詳解、化學、知識點與口語版、依弱點出補救卷、題庫覆蓋率、經程式驗算的 AI 家教與按住說話），由五條程式 workstream 與三組知識點內容依凍結契約平行施工；契約、分工與裁決 S5-1～S5-39 見 [`interfaces-stage5.md`](interfaces-stage5.md)，各功能見 [`grading-and-profile.md`](grading-and-profile.md)、[`chemistry.md`](chemistry.md)、[`knowledge-components.md`](knowledge-components.md)、[`remedial.md`](remedial.md)、[`tutor.md`](tutor.md)，交接與 Owner 待辦見 [`HANDOFF.md`](HANDOFF.md)。〔修訂 2026-09-26 決策單〕Owner 2026-09-25 決策單第一輪的結果（含階段 5 的待確認裁決與下一輪開發順序）見 [`HANDOFF.md`](HANDOFF.md) §0.00。
