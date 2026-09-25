@@ -21,7 +21,7 @@
 
 ### 0.0a 本機模式（2026-09-25）〔修訂 2026-09-25 本機模式〕
 
-- **範圍**：Owner 要求「所有步驟、功能都純地端、不連出去、不產生額外費用」。預設改成本機 Ollama（`qwen3-vl:8b` 拆題／分類／lint、`qwen3:8b` 驗算／變式／OCR 結果整理、`qwen3-embedding:0.6b` 向量）＋ PaddleOCR；PDF 拆題由 OCR 與視覺模型交叉驗證，不一致的題一律停在人工複核；語音關閉；Gemini 保留，改 `.env` 五行即可切回。契約與使用說明 [`local-mode.md`](local-mode.md)（使用說明在第 10 條）、ADR-017（狀態：提議）。
+- **範圍**：Owner 要求「所有步驟、功能都純地端、不連出去、不產生額外費用」。預設改成本機 Ollama（`qwen3-vl:8b` 只負責看頁面拆題；`qwen3:8b` 驗算／變式／OCR 結果整理，以及分類／lint／知識點標註／主控助教（`MODEL_TEXT`，LM-15：16 GB 的電腦不必在兩個模型之間換載）；`qwen3-embedding:0.6b` 向量）＋ PaddleOCR；PDF 拆題由 OCR 與視覺模型交叉驗證，不一致的題一律停在人工複核；語音關閉；Gemini 保留，改 `.env` 五行即可切回。契約與使用說明 [`local-mode.md`](local-mode.md)（使用說明在第 10 條）、ADR-017（狀態：提議）。
 - **分支：`local/base`**（基底 `stage5/chapters` 的 522f81c）→ L1（Ollama 轉接層）、L2（本機 OCR 與交叉驗證）、L3（前端離線化）、L4（eval、CI、Windows 腳本、文件）→ 主控整合。
 - **CI**：`.github/workflows/ci.yml` 的 `MODEL_EXTRACT`／`MODEL_VERIFY`／`EMBED_MODEL`／`MODEL_NLQ` 改成本機模型；CI 仍是 replay＋fixture，不裝 Ollama、不裝 Python。Owner 以本機模型重錄之前，e2e 與五個 eval 只會因缺 cassette／缺向量紅燈（契約第 8 條）。**若本機模式先合入，§0.0 的章節重整重錄就改用本機模型做，不必補 Gemini 額度**（仍照 `cassettes:rerecord`，只是不花錢、慢很多）。
 - **Owner 待辦（依序；步驟細節見 `local-mode.md` 第 10 條）**：

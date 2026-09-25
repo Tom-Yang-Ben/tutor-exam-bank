@@ -239,7 +239,8 @@ function maxSteps(env = process.env) {
 async function runAssistant({ message, history = [], deps = {} }) {
     const llm = deps.llm || require('./llm');
     const models = require('../config/models');
-    const model = (process.env.MODEL_ASSISTANT || '').trim() || models.MODEL_EXTRACT;
+    // 〔LM-15〕主控助教只處理文字與工具呼叫：未設 MODEL_ASSISTANT 時用 MODEL_TEXT（Gemini 模式下＝MODEL_EXTRACT，行為不變）
+    const model = (process.env.MODEL_ASSISTANT || '').trim() || models.MODEL_TEXT || models.MODEL_EXTRACT;
 
     const text = String(message ?? '').trim();
     if (!text) throw Object.assign(new Error('message 必填'), { status: 400 });

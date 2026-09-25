@@ -56,11 +56,13 @@ describe('config/models.js：ollama 供應商與本機預設', () => {
         assert.equal(models.DEFAULT_EMBED, 'ollama:qwen3-embedding:0.6b');
     });
 
-    test('fallback 規則不變，只是終點變成本機：TUTOR／OCR_STRUCTURE → MODEL_VERIFY；VOICE／KC_TAG → MODEL_EXTRACT', () => {
+    // 〔LM-15，Owner 2026-09-25 方案 A〕KC_TAG 改沿用 MODEL_TEXT：本機＝MODEL_VERIFY（純文字，不必換載視覺模型）；
+    // Gemini 模式仍＝MODEL_EXTRACT（textModelLm15.test.js 驗）
+    test('fallback 規則，終點是本機：TUTOR／OCR_STRUCTURE → MODEL_VERIFY；VOICE → MODEL_EXTRACT；KC_TAG → MODEL_TEXT（本機＝MODEL_VERIFY）', () => {
         assert.equal(models.MODEL_TUTOR, 'ollama:qwen3:8b');
         assert.equal(models.MODEL_OCR_STRUCTURE, 'ollama:qwen3:8b');
         assert.equal(models.MODEL_VOICE, 'ollama:qwen3-vl:8b');
-        assert.equal(models.MODEL_KC_TAG, 'ollama:qwen3-vl:8b');
+        assert.equal(models.MODEL_KC_TAG, 'ollama:qwen3:8b');
         process.env.MODEL_VERIFY = 'ollama:gemma3:12b';
         assert.equal(models.MODEL_OCR_STRUCTURE, 'ollama:gemma3:12b', '即時跟著 MODEL_VERIFY');
         process.env.MODEL_OCR_STRUCTURE = ' ollama:qwen3:4b ';

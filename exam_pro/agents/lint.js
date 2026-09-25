@@ -9,7 +9,7 @@
 // 三層，一層比一層貴：
 //   ① utils/formulaFix.js    確定性修復，零成本
 //   ② utils/formulaLint.js   硬閘門，零成本
-//   ③ 仍有 error 才呼叫 LLM 重寫（MODEL_EXTRACT），改完再跑一次 ①②
+//   ③ 仍有 error 才呼叫 LLM 重寫（MODEL_TEXT；Gemini 模式＝MODEL_EXTRACT，docs/local-mode.md LM-15），改完再跑一次 ①②
 //
 // 為什麼第三層放最後：階段 1 的題庫健檢顯示，絕大多數壞公式都是舊轉換器的殘留標記
 // 與錯位的 $——這些用規則就能修好，沒有理由為它們付錢給模型。
@@ -186,7 +186,7 @@ async function run(ctx, input) {
     let res;
     try {
         res = await ctx.llm.generateJson({
-            model: ctx.config.models.extract,
+            model: ctx.config.models.text || ctx.config.models.extract,   // 〔LM-15〕重寫只看文字：MODEL_TEXT，沒給退回 extract
             system: v.system,
             parts: [{ text: renderPrompt({
                 questionText: first.questionText,

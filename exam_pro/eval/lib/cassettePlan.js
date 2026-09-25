@@ -127,7 +127,7 @@ function formatSummary(res, opts = {}) {
     const isLocal = local.isLocalRun(models);
     const time = isLocal ? local.estimateLocalTime(summary, { env }) : null;
     const lines = [];
-    const optional = ['EMBED_MODEL', 'MODEL_NLQ', 'OCR_ENGINE', 'OCR_DPI'].filter(k => models[k]).map(k => `、${k}=${models[k]}`).join('');
+    const optional = ['EMBED_MODEL', 'MODEL_NLQ', 'MODEL_TEXT', 'OCR_ENGINE', 'OCR_DPI'].filter(k => models[k]).map(k => `、${k}=${models[k]}`).join('');
     lines.push(`CI 的設定：MODEL_EXTRACT=${models.MODEL_EXTRACT}、MODEL_VERIFY=${models.MODEL_VERIFY}${optional}（取自 ${models.source}）；LLM_MODE=replay、EMBED_MODE=fixture`);
     lines.push(`cassette 目錄：${audit.displayPath(inventory.dir)}`);
     lines.push('');

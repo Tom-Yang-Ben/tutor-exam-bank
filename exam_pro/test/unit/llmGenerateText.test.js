@@ -427,7 +427,8 @@ describe('config/models.js — MODEL_TUTOR／MODEL_VOICE／MODEL_KC_TAG（第 5.
         process.env.MODEL_KC_TAG = '   ';
         assert.equal(models.MODEL_TUTOR, 'gemini:tutor-a');
         assert.equal(models.MODEL_VOICE, 'gemini:voice-b');
-        assert.equal(models.MODEL_KC_TAG, models.MODEL_EXTRACT);
+        // 〔LM-15〕空白＝未設 → 退回 MODEL_TEXT（Gemini 模式＝MODEL_EXTRACT；這裡沒設 MODEL_EXTRACT，是本機預設＝MODEL_VERIFY）
+        assert.equal(models.MODEL_KC_TAG, models.MODEL_TEXT);
     });
 
     test('既有 getter 行為不變（MODEL_VARIANT 未設仍回 null）', () => {

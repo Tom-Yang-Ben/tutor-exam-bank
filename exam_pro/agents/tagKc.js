@@ -9,7 +9,7 @@
 //            {kind:'error', errorClass, message}
 //
 // 與既有 agent 同一份合約（interfaces-stage2.md 第 3.1 條）：
-//   - 不碰 DB、不讀 process.env；模型走 ctx.config.models.kcTag（沒給退回 extract），
+//   - 不碰 DB、不讀 process.env；模型走 ctx.config.models.kcTag（沒給退回 text、再退回 extract），
 //     LLM 走 ctx.llm.generateJson。不 throw。
 //   - 同一份 schema 同時餵給模型的 structured output 與伺服器端的 ajv（裁決 S0-1）。
 //
@@ -213,12 +213,12 @@ function normalizeCodes(list) {
 }
 
 /**
- * 模型：`ctx.config.models.kcTag`，沒給退回 `ctx.config.models.extract`（第 5.2 條：MODEL_KC_TAG 預設沿用
- * MODEL_EXTRACT）。解析 env 的那一步在 services/kcTagService.js（agent 不得讀 process.env）。
+ * 模型：`ctx.config.models.kcTag`，沒給退回 `text`、再退回 `extract`（第 5.2 條：MODEL_KC_TAG 預設沿用
+ * MODEL_EXTRACT；〔LM-15〕本機模式改沿用純文字的 MODEL_TEXT）。解析 env 的那一步在 services/kcTagService.js（agent 不得讀 process.env）。
  */
 function modelOf(ctx) {
     const m = (ctx && ctx.config && ctx.config.models) || {};
-    return m.kcTag || m.extract || undefined;
+    return m.kcTag || m.text || m.extract || undefined;
 }
 
 // ───────────────────────── 節點主體 ─────────────────────────

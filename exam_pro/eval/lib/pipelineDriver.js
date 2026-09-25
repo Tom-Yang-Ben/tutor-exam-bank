@@ -329,7 +329,8 @@ async function runPipeline(opts) {
                     // 〔本機模式整合〕extract 也改讀 config/models.js（未設＝本機預設），不再寫死 Gemini
                     extract: require('../../config/models').MODEL_EXTRACT,
                     verify: require('../../config/models').MODEL_VERIFY,   // 單一真相：config/models.js（裁決 S2-29）
-                    ocrStructure: String(process.env.MODEL_OCR_STRUCTURE || '').trim() || require('../../config/models').MODEL_VERIFY
+                    ocrStructure: String(process.env.MODEL_OCR_STRUCTURE || '').trim() || require('../../config/models').MODEL_VERIFY,
+                    text: require('../../config/models').MODEL_TEXT   // 〔LM-15〕分類、公式重寫（與 runner 相同）
                 },
                 limits: sm.tables().DEFAULT_LIMITS,
                 thresholds,

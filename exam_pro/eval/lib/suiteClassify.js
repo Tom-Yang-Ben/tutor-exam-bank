@@ -85,7 +85,8 @@ async function runClassifySuite(args) {
                 jq: { id: 0, idx: 0, payload: {}, retries: {} },
                 logger: { info() {}, warn() {}, error() {} },
                 config: {
-                    models: { extract: require('../../config/models').MODEL_EXTRACT, verify: require('../../config/models').MODEL_VERIFY },   // 單一真相：config/models.js（裁決 S2-29）
+                    // 單一真相：config/models.js（裁決 S2-29）；〔LM-15〕text＝分類實際用的模型（Gemini 模式＝extract）
+                    models: { extract: require('../../config/models').MODEL_EXTRACT, verify: require('../../config/models').MODEL_VERIFY, text: require('../../config/models').MODEL_TEXT },
                     limits: sm.tables().DEFAULT_LIMITS,
                     thresholds: { classifyMinConf: minConf },
                     // 第 3.1 條（裁決 S2-8）：features 由 runner 組。similar 關掉，

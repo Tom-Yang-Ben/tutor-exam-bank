@@ -49,10 +49,10 @@ const FALLBACK_CI_MODELS = Object.freeze({
 
 /**
  * 〔本機模式 L4〕ci.yml 的 integration env 有寫才照它、沒寫就交給程式預設的變數。
- * 都會改變 cassette 的鍵或錄製的流程：EMBED_MODEL（向量檔名）、MODEL_NLQ（nlq 的鍵）、
+ * 都會改變 cassette 的鍵或錄製的流程：EMBED_MODEL（向量檔名）、MODEL_NLQ（nlq 的鍵）、MODEL_TEXT（分類／lint 的鍵，LM-15）、
  * OCR_ENGINE（要不要跑 OCR）、OCR_DPI（OCR cassette 的鍵）。
  */
-const CI_OPTIONAL_KEYS = Object.freeze(['EMBED_MODEL', 'MODEL_NLQ', 'OCR_ENGINE', 'OCR_DPI']);
+const CI_OPTIONAL_KEYS = Object.freeze(['EMBED_MODEL', 'MODEL_NLQ', 'MODEL_TEXT', 'OCR_ENGINE', 'OCR_DPI']);
 
 /** 放行到子行程的變數（不影響 cassette 的鍵，而且是跑起來必要的） */
 const PASS_THROUGH = Object.freeze([

@@ -86,7 +86,7 @@ function buildCtx() {
             error: (o) => console.error(JSON.stringify(o))
         },
         config: {
-            models: { extract: models.MODEL_EXTRACT, verify: models.MODEL_VERIFY },
+            models: { extract: models.MODEL_EXTRACT, verify: models.MODEL_VERIFY, text: models.MODEL_TEXT },   // 〔LM-15〕
             thresholds: {
                 classifyMinConf: Number(process.env.CLASSIFY_MIN_CONF || 0.8),
                 pdfChunkPages: chunkPages(process.env, models.MODEL_EXTRACT),
@@ -173,7 +173,7 @@ async function main() {
 
     if (!args.dryRun) {
         // 〔本機模式 L4〕只有真的有模型走 Gemini 才要金鑰
-        const usesGemini = [models.MODEL_EXTRACT, models.MODEL_VERIFY].some(m => vendorOf(m) === 'gemini');
+        const usesGemini = [models.MODEL_EXTRACT, models.MODEL_VERIFY, models.MODEL_TEXT].some(m => vendorOf(m) === 'gemini');
         if (usesGemini && (!process.env.GEMINI_API_KEY || !process.env.GEMINI_API_KEY.trim())) {
             throw new Error('缺少 GEMINI_API_KEY：MODEL_EXTRACT／MODEL_VERIFY 走 Gemini，錄製 cassette 必須真的呼叫模型（CI 請維持 LLM_MODE=replay）。');
         }
@@ -187,7 +187,7 @@ async function main() {
     }
 
     console.log(`模式：${process.env.LLM_MODE}`);
-    console.log(`模型：MODEL_EXTRACT=${models.MODEL_EXTRACT}`);
+    console.log(`模型：MODEL_EXTRACT=${models.MODEL_EXTRACT}、MODEL_TEXT=${models.MODEL_TEXT}（分類、公式重寫）`);
     console.log(`輸出：${cassetteDir()}`);
     models.warnIfSameModel();
 

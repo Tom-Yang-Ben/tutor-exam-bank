@@ -18,8 +18,8 @@
 //
 // 環境變數只在這一層讀（agent 不得讀 process.env）：
 //   KC_TAG_MIN_CONFIDENCE  預設 0.6，非法值退回預設
-//   MODEL_KC_TAG           預設沿用 MODEL_EXTRACT（第 5.2 條；config/models.js 的 getter 由 WS-E 統一加，
-//                          這裡先讀 env，整合後 getter 存在也接得上）
+//   MODEL_KC_TAG           預設沿用 MODEL_TEXT（Gemini 模式下＝MODEL_EXTRACT，第 5.2 條；本機模式＝MODEL_VERIFY，
+//                          docs/local-mode.md LM-15）。config/models.js 的 getter 已含這條退回，這裡先讀 env 再讀 getter
 //
 // 權重：AI 寫入的每一列 weight 一律是 1（與 DB 預設、人工標註未給 weight 時相同）。
 // 信心另存在 confidence 欄，不拿來當比重——「模型多有把握」與「這題有多少成分在考這個觀念」是兩回事。
@@ -50,7 +50,7 @@ function loadTagConfig(env = process.env) {
 }
 
 /**
- * MODEL_KC_TAG → config/models 的 getter（WS-E 整合後才有）→ MODEL_EXTRACT。
+ * MODEL_KC_TAG → config/models 的 getter → MODEL_TEXT → MODEL_EXTRACT（〔LM-15〕文字工作模型）。
  * @param {object} [env]
  * @returns {string}
  */
@@ -58,7 +58,7 @@ function resolveModel(env = process.env) {
     const explicit = String(env.MODEL_KC_TAG || '').trim();
     if (explicit) return explicit;
     const models = require('../config/models');
-    return models.MODEL_KC_TAG || models.MODEL_EXTRACT;
+    return models.MODEL_KC_TAG || models.MODEL_TEXT || models.MODEL_EXTRACT;
 }
 
 /**

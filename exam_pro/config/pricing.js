@@ -58,7 +58,7 @@ function configuredOllamaIds() {
     }
     const specs = [
         models.MODEL_EXTRACT, models.MODEL_VERIFY, models.MODEL_VARIANT, models.MODEL_TUTOR,
-        models.MODEL_VOICE, models.MODEL_KC_TAG, models.MODEL_OCR_STRUCTURE, models.EMBED_MODEL,
+        models.MODEL_VOICE, models.MODEL_KC_TAG, models.MODEL_OCR_STRUCTURE, models.MODEL_TEXT, models.EMBED_MODEL,
         process.env.MODEL_NLQ, process.env.MODEL_ASSISTANT
     ];
     for (const spec of specs) {

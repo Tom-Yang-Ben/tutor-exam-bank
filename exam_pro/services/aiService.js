@@ -34,7 +34,7 @@ function buildCtx() {
         jq: null,
         logger: console,
         config: {
-            models: { extract: models.MODEL_EXTRACT, verify: models.MODEL_VERIFY },
+            models: { extract: models.MODEL_EXTRACT, verify: models.MODEL_VERIFY, text: models.MODEL_TEXT },   // 〔LM-15〕
             thresholds: {
                 pdfChunkPages: intFromEnv('JOB_PDF_CHUNK_PAGES', DEFAULT_CHUNK_PAGES),
                 inlineMaxBytes: intFromEnv('GEMINI_INLINE_MAX_BYTES', DEFAULT_INLINE_MAX_BYTES)

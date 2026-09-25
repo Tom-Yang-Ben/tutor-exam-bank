@@ -625,7 +625,8 @@ function makeCtx({ llm, models, offtopicSimMin }) {
             models: {
                 extract: models.MODEL_EXTRACT,
                 verify: models.MODEL_VERIFY,
-                variant: models.MODEL_VARIANT || models.MODEL_VERIFY
+                variant: models.MODEL_VARIANT || models.MODEL_VERIFY,
+                text: models.MODEL_TEXT   // 〔LM-15〕變式的分類／lint 用的純文字模型（與 runner 相同）
             },
             limits: {},
             thresholds: {

@@ -88,12 +88,16 @@ function embedModelFromEnv(env = process.env) {
 /**
  * CI 的設定（readCiModels() 的回傳）補上「CI 沒設時程式實際生效的值」。
  * @param {Record<string,string>} [ci]
- * @returns {{MODEL_EXTRACT:string, MODEL_VERIFY:string, EMBED_MODEL:string, MODEL_NLQ:string, OCR_ENGINE:string}}
+ * MODEL_TEXT（〔LM-15〕分類、公式重寫）沒設時照 config/models.js 的 getter：拆題模型是 ollama → MODEL_VERIFY，否則 MODEL_EXTRACT。
+ * @returns {{MODEL_EXTRACT:string, MODEL_VERIFY:string, MODEL_TEXT:string, EMBED_MODEL:string, MODEL_NLQ:string, OCR_ENGINE:string}}
  */
 function effectiveModels(ci = {}) {
+    const extract = ci.MODEL_EXTRACT || LOCAL_DEFAULTS.MODEL_EXTRACT;
+    const verify = ci.MODEL_VERIFY || LOCAL_DEFAULTS.MODEL_VERIFY;
     return {
-        MODEL_EXTRACT: ci.MODEL_EXTRACT || LOCAL_DEFAULTS.MODEL_EXTRACT,
-        MODEL_VERIFY: ci.MODEL_VERIFY || LOCAL_DEFAULTS.MODEL_VERIFY,
+        MODEL_EXTRACT: extract,
+        MODEL_VERIFY: verify,
+        MODEL_TEXT: ci.MODEL_TEXT || (vendorOf(extract) === 'ollama' ? verify : extract),
         EMBED_MODEL: ci.EMBED_MODEL || LOCAL_DEFAULTS.EMBED_MODEL,
         MODEL_NLQ: ci.MODEL_NLQ || NLQ_CODE_DEFAULT,
         OCR_ENGINE: String(ci.OCR_ENGINE || LOCAL_DEFAULTS.OCR_ENGINE).trim().toLowerCase()
@@ -118,6 +122,11 @@ function recordingPlan({ models = {}, suites, withSimilar = true }) {
     if (LLM_SUITES.some(s => want.has(s))) {
         uses.push({ key: 'MODEL_EXTRACT', spec: eff.MODEL_EXTRACT });
         uses.push({ key: 'MODEL_VERIFY', spec: eff.MODEL_VERIFY });
+        // 〔LM-15〕分類、公式重寫走 MODEL_TEXT。預設它就是上面兩個之一（本機＝VERIFY、Gemini＝EXTRACT），
+        // 只有明寫成第三個模型時才另列一列（要多下載一個模型、或多一家要金鑰）
+        if (eff.MODEL_TEXT !== eff.MODEL_EXTRACT && eff.MODEL_TEXT !== eff.MODEL_VERIFY) {
+            uses.push({ key: 'MODEL_TEXT', spec: eff.MODEL_TEXT });
+        }
     }
     if (want.has('nlq')) uses.push({ key: 'MODEL_NLQ', spec: eff.MODEL_NLQ });
     const embedSuites = EMBED_SUITES.filter(s => s !== 'e2e' || withSimilar);
@@ -132,13 +141,13 @@ function recordingPlan({ models = {}, suites, withSimilar = true }) {
 }
 
 /**
- * 拆題或驗算走本機（決定盤點表印時間還是費用）。
+ * 拆題、驗算或文字工作（MODEL_TEXT，LM-15）走本機（決定盤點表印時間還是費用）。
  * @param {Record<string,string>} [models] readCiModels() 的回傳
  * @returns {boolean}
  */
 function isLocalRun(models = {}) {
     const eff = effectiveModels(models);
-    return vendorOf(eff.MODEL_EXTRACT) === 'ollama' || vendorOf(eff.MODEL_VERIFY) === 'ollama';
+    return [eff.MODEL_EXTRACT, eff.MODEL_VERIFY, eff.MODEL_TEXT].some(s => vendorOf(s) === 'ollama');
 }
 
 /**
@@ -150,7 +159,7 @@ function localRecordEnv(plan) {
     const out = {};
     if (!plan || !plan.local) return out;
     const m = plan.models;
-    if (vendorOf(m.MODEL_EXTRACT) === 'ollama' || vendorOf(m.MODEL_VERIFY) === 'ollama') {
+    if ([m.MODEL_EXTRACT, m.MODEL_VERIFY, m.MODEL_TEXT].some(s => vendorOf(s) === 'ollama')) {
         out.JOB_NODE_TIMEOUT_MS = String(LOCAL_NODE_TIMEOUT_MS);
     }
     if (vendorOf(m.MODEL_NLQ) === 'ollama') out.NLQ_TIMEOUT_MS = String(LOCAL_NLQ_TIMEOUT_MS);

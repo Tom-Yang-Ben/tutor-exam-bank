@@ -457,7 +457,8 @@ async function run(ctx, input = {}) {
             .replace('{{QUESTION}}', questionText);
 
         const res = await ctx.llm.generateJson({
-            model: (ctx.config && ctx.config.models && ctx.config.models.extract) || undefined,
+            // 〔LM-15〕分類只讀題目文字：用 models.text（runner 由 MODEL_TEXT 組；Gemini 模式＝extract），沒給退回 extract
+            model: (ctx.config && ctx.config.models && (ctx.config.models.text || ctx.config.models.extract)) || undefined,
             system: v.system,
             parts: [{ text: prompt }],
             schema: buildSchema('classify', v.schemaOpts),

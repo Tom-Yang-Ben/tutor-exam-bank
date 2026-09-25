@@ -1476,16 +1476,22 @@ function createRunner(opts = {}) {
                 extract: m.MODEL_EXTRACT, verify: m.MODEL_VERIFY, variant: m.MODEL_VARIANT || m.MODEL_VERIFY,
                 // 〔本機模式 L2〕第四個鍵（附加）：OCR 結果結構化的模型，未設＝MODEL_VERIFY（docs/local-mode.md 第 2 條）。
                 // 與 MODEL_VARIANT 同一個理由在這裡退回：agent 不得自己讀 process.env，config/models.js 歸 L1。
-                ocrStructure: String(process.env.MODEL_OCR_STRUCTURE || '').trim() || m.MODEL_VERIFY
+                ocrStructure: String(process.env.MODEL_OCR_STRUCTURE || '').trim() || m.MODEL_VERIFY,
+                // 〔LM-15〕第五個鍵（附加）：分類、公式重寫、知識點標註等純文字節點的模型。
+                // 退回規則在 config/models.js 的 MODEL_TEXT getter（本機＝MODEL_VERIFY；Gemini＝MODEL_EXTRACT，行為不變）。
+                text: m.MODEL_TEXT || m.MODEL_EXTRACT
             };
         } catch (err) {
             if (err.code !== 'MODULE_NOT_FOUND') throw err;
             const verify = process.env.MODEL_VERIFY || 'ollama:qwen3:8b';   // 〔本機模式整合〕與 config/models.js 的 DEFAULT_VERIFY 一致
+            const extract = process.env.MODEL_EXTRACT || 'ollama:qwen3-vl:8b';
             modelsCache = {
-                extract: process.env.MODEL_EXTRACT || 'ollama:qwen3-vl:8b',
+                extract,
                 verify,
                 variant: process.env.MODEL_VARIANT || verify,
-                ocrStructure: String(process.env.MODEL_OCR_STRUCTURE || '').trim() || verify
+                ocrStructure: String(process.env.MODEL_OCR_STRUCTURE || '').trim() || verify,
+                // 〔LM-15〕與 config/models.js 的 MODEL_TEXT getter 同一條規則
+                text: String(process.env.MODEL_TEXT || '').trim() || (/^ollama:/i.test(extract.trim()) ? verify : extract)
             };
         }
         return modelsCache;

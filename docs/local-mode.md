@@ -25,8 +25,9 @@
 
 | 變數 | 本機模式預設 | 說明 |
 |---|---|---|
-| `MODEL_EXTRACT` | `ollama:qwen3-vl:8b` | 視覺＋文字模型。拆題（看頁面圖片）、分類、lint 等沿用「extract 模型」的節點 |
+| `MODEL_EXTRACT` | `ollama:qwen3-vl:8b` | 視覺＋文字模型。拆題（看頁面圖片）；語音沿用它（本機模式不提供語音） |
 | `MODEL_VERIFY` | `ollama:qwen3:8b` | 純文字模型。驗算、出變式（沿用 verify 的 fallback）、**OCR 結果結構化** |
+| `MODEL_TEXT` | 拆題模型是 `ollama` 時＝`MODEL_VERIFY`；否則＝`MODEL_EXTRACT` | 〔LM-15〕純文字工作：章節分類、公式重寫（lint）、知識點標註（`MODEL_KC_TAG` 未設時）、主控助教（`MODEL_ASSISTANT` 未設時）。Gemini 模式下與加這個設定之前完全相同 |
 | `MODEL_OCR_STRUCTURE` | 未設時＝`MODEL_VERIFY` | 把 PaddleOCR 的文字整理成拆題 JSON 的模型 |
 | `MODEL_TUTOR`、`MODEL_VOICE`、`MODEL_VARIANT` 等 | 沿用現有 fallback 規則 | 規則本身不改，只是 fallback 的終點變成本機預設 |
 | `EMBED_MODEL` | `ollama:qwen3-embedding:0.6b` | 有 `vendor:` 前綴才走該供應商；**沒有前綴的舊值（如 `gemini-embedding-001`）一律視為 Gemini**，舊 `.env` 不必改就維持原行為 |
@@ -152,6 +153,7 @@
 | LM-12 | 已知限制（不在這一輪處理） | ①一塊 2 頁會切到跨頁的題，兩個引擎看到同一個被切斷的題可能「一致」而自動入庫——之後可加一頁前瞻；②45 分鐘節點逾時在 i5-8265U 上可能不夠（`JOB_NODE_TIMEOUT_MS` 可調大）；③相似度門檻 0.85 會讓複核比例偏高，本機重錄後再校準；④PaddleOCR 在含中文的 Windows 路徑可能載不到模型，`OCR_MODEL_HOME` 設成純英文路徑；⑤舊的同步 `/analyze-pdf` 在本機模式不實用；⑥PaddleOCR 還沒在實機跑過（雲端 container 下載不到模型），第一次在 Owner 電腦上執行 `setup_local_ai.bat` 才算驗證 |
 | LM-13 | Windows 腳本的行尾；L3 的離線檢查沒進 `check:html` | `.gitattributes` 加 `exam_pro/scripts/windows/*.bat -text`（CRLF 原樣進出，不受 autocrlf 影響）；`check:html` 串上 `scripts/check_html_offline.js`（`evalStage3.test.js` 的 scripts 斷言同步） |
 | LM-14 | 門檻與 cassette 清理 | `eval/thresholds.json` 的數字不動；本機重錄後若低於門檻，由 Owner 另行裁決（多半依本機模型重建基準）。本機重錄後 `cassettes:prune` 會把 Gemini 的 cassette 列為過期：確定不切回 Gemini 之前不要 `--apply` |
+| LM-15 | 16 GB 的電腦同時只放得下一個 8B 模型；分類、lint、知識點標註、主控助教原本沿用「extract 模型」（視覺的 qwen3-vl），一份考卷的流程會在 qwen3-vl 與 qwen3:8b 之間來回換載（每次 1～2 分鐘） | Owner 2026-09-25 選方案 A：新增 `MODEL_TEXT`（`config/models.js` 的 getter），拆題模型是 `ollama` 時預設＝`MODEL_VERIFY`，否則＝`MODEL_EXTRACT`。`agents/classify.js`、`agents/lint.js` 讀 `ctx.config.models.text`（沒給退回 `extract`）；`tagKc` 的退回順序 `kcTag → text → extract`；`MODEL_KC_TAG`、`MODEL_ASSISTANT` 未設時沿用 `MODEL_TEXT`。runner、eval 的 ctx 都帶 `text`。Gemini 模式下 `MODEL_TEXT`＝`MODEL_EXTRACT`，cassette 的鍵與費用一字不差；本機的分類／lint cassette 反正要重錄（LM-14），這時改不浪費任何錄製。`MODEL_VOICE` 維持沿用 `MODEL_EXTRACT`（語音要聽音訊，且只在 Gemini 可用）。代價：分類與驗算同一個模型——分類不是驗算的獨立檢查，不影響「拆題 ≠ 驗算」的異級驗證 |
 
 ---
 
@@ -174,7 +176,7 @@
 | 功能 | 本機模式下 |
 |---|---|
 | PDF 拆題 | PaddleOCR（文字＋公式）與 `qwen3-vl:8b`（看頁面圖片）各拆一次、交叉比對；一次 2 頁 |
-| 分類、lint | `qwen3-vl:8b`（沿用 `MODEL_EXTRACT`） |
+| 分類、lint、知識點標註、主控助教 | `qwen3:8b`（`MODEL_TEXT`，未設時＝`MODEL_VERIFY`；LM-15） |
 | 驗算、出變式、OCR 結果整理 | `qwen3:8b`（`MODEL_VERIFY`） |
 | 找相似、hybrid 檢索的向量 | `qwen3-embedding:0.6b`（768 維，與資料庫的 `vector(768)` 相同） |
 | 自然語言查題 | 實際上只用規則：本機模型在 4 秒的逾時內回不來（要用 LLM 輔路徑見 10.3 的 `NLQ_TIMEOUT_MS`） |
@@ -261,6 +263,7 @@ JOB_CONCURRENCY=2                    # 選填
 - `JOB_PDF_CHUNK_PAGES`、`JOB_NODE_TIMEOUT_MS` 保持不寫，拆題模型是 Gemini 時自動回到 20 頁、2 分鐘。`OLLAMA_*`、`OCR_*` 在 Gemini 模式下不會被讀到，留著無妨。
 - **換 embedding 模型（不論哪個方向）都要重算全部題目的向量**：照 10.6 的步驟再跑一次。只換 `MODEL_*`、不換 `EMBED_MODEL` 則不必。
 - 也可以只把某一個節點切回 Gemini（例如只改 `MODEL_VERIFY`），那一個節點就會連外、花錢，其餘仍在本機。
+- `MODEL_TEXT`（分類、公式重寫等純文字工作）不寫時自動跟著走：拆題模型改回 Gemini 就等於 `MODEL_EXTRACT`。若 `.env` 裡明寫了 `MODEL_TEXT=ollama:…`，要一併刪掉或改掉，否則這幾個節點仍在本機。
 - 語音提問只在 `MODEL_VOICE`（未設時沿用 `MODEL_EXTRACT`）是 `gemini:` 時可用。
 - **CI 讀哪一組回放檔不看 `.env`**，看 `.github/workflows/ci.yml` 的 `MODEL_EXTRACT`／`MODEL_VERIFY`／`EMBED_MODEL`／`MODEL_NLQ`。要讓 CI 也回到 Gemini，改那四行並用 Gemini 重錄（會花錢）；舊的 Gemini 回放檔若還沒被 `cassettes:prune` 刪掉，可以直接沿用（見 10.7）。
 
@@ -273,7 +276,7 @@ JOB_CONCURRENCY=2                    # 選填
 | PaddleOCR 辨識一塊（2 頁，含公式） | 2～5 分鐘 |
 | 視覺模型拆一塊（2 頁） | 15～30 分鐘 |
 | OCR 結果整理成題目 | 10～20 分鐘 |
-| 每一題的分類／lint／驗算 | 各幾分鐘；驗算開思考，最久 |
+| 每一題的分類／lint／驗算 | 各幾分鐘；驗算開思考，最久。三者都用 `qwen3:8b`（LM-15），拆完題之後不必再換載模型 |
 | **一份 4 頁、20 題的考卷，上傳到全部處理完** | **數小時**；建議晚上上傳、隔天看複核佇列 |
 | 一段文字的向量 | 約 1 秒；既有題庫 1,000 題換向量約 20～40 分鐘 |
 | 整套重錄 CI 回放檔（10.7） | 可能要一整天（20～30 小時），可以分次錄 |

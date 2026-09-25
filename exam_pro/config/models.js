@@ -126,10 +126,25 @@ Object.defineProperty(module.exports, 'MODEL_VOICE', {
     enumerable: true,
     get: () => envOr('MODEL_VOICE', () => module.exports.MODEL_EXTRACT)
 });
-// 知識點自動標註（WS-C 的 agents/tagKc.js 讀）：預設沿用 MODEL_EXTRACT
+// 〔本機模式 LM-15〕純文字工作（分類、公式重寫、知識點標註、主控助教）用的模型。
+// 這些節點都不看圖片：
+//   - MODEL_EXTRACT 是 ollama（本機）→ 預設＝MODEL_VERIFY（純文字的 qwen3:8b）。16 GB 的電腦同時只放得下一個 8B 模型，
+//     分類若沿用視覺模型 qwen3-vl，一份考卷的流程會在兩個模型之間來回換載；文字工作交給 qwen3:8b 就不必換。
+//   - 其他（gemini 等）→ 預設＝MODEL_EXTRACT，與加這個設定之前一字不差（cassette 的鍵、費用都不變）。
+// 明寫 MODEL_TEXT 就照它。
+Object.defineProperty(module.exports, 'MODEL_TEXT', {
+    enumerable: true,
+    get: () => envOr('MODEL_TEXT', () => {
+        const extract = module.exports.MODEL_EXTRACT;
+        let vendor = null;
+        try { vendor = parseModel(extract).vendor; } catch (err) { vendor = null; }
+        return vendor === 'ollama' ? module.exports.MODEL_VERIFY : extract;
+    })
+});
+// 知識點自動標註（WS-C 的 agents/tagKc.js 讀）：預設沿用 MODEL_TEXT（Gemini 模式下＝MODEL_EXTRACT，第 5.2 條；本機 LM-15）
 Object.defineProperty(module.exports, 'MODEL_KC_TAG', {
     enumerable: true,
-    get: () => envOr('MODEL_KC_TAG', () => module.exports.MODEL_EXTRACT)
+    get: () => envOr('MODEL_KC_TAG', () => module.exports.MODEL_TEXT)
 });
 
 // ── 本機模式（docs/local-mode.md 第 2 條，擁有者：L1）──
