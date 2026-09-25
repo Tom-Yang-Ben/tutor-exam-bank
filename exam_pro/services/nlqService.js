@@ -39,7 +39,10 @@ const {
     isValidSubject, isValidChapter, isValidQuestionType, normalizeDifficulty
 } = require('../config/chapters');
 const { CHAPTER_ALIASES, subjectOfChapter } = require('../config/chapterAliases');
-const { parseQuery, mentionsChemistry, chemistrySubjectPrior } = require('../utils/nlqHeuristics');
+const {
+    parseQuery, mentionsChemistry, chemistrySubjectPrior,
+    mentionsQuestionType, mentionsDifficulty, alignChapterDimension
+} = require('../utils/nlqHeuristics');
 const { joinChapters } = require('../agents/promptParts');
 const { registerTemplate } = require('./llm/templates');
 const { loadPseudonymizer, IDENTITY } = require('../utils/pseudonym');
@@ -77,6 +80,16 @@ const WARN = {
 // SYSTEM、模板、白名單（三科）與 schema（agents/schemas/nlq.json 的 subject_all／chapter_all）一起改，
 // 識別名升版讓 nlq.v1 的 cassette 自然失效（鍵的 promptTemplateHash 與 schemaHash 都變），不會被誤讀。
 // 註冊字串依階段 5 的慣例改為 SYSTEM + '\n---\n' + 模板（docs/interfaces-stage5.md 第 1.2 條）：之後 SYSTEM 一改鍵就變。
+//
+// 〔dec/x-nlq-improve〕2026-09-26 在同一個尚未發布的 nlq.v2 內再改模板與 schema（不另升版；B5 已升 v2、兩者一起重錄），
+// 依據是 2026-09-25 本機模型（ollama:qwen3:8b）重錄 nlq suite 的逐句報表（docs/retrieval.md 第 9 條）：
+//   - 規則 4 補「求…／是多少／怎麼算不是題型」：8 句裡 2 句句子沒講題型，模型回了「計算」；
+//   - 規則 5 改成與規則路徑相同的 semantic_text 寫法（裁決 S3-R17：保留原話、拿掉贅字與條件詞），
+//     原本「只留概念詞與名詞」讓 8 句裡 7 句被改寫成關鍵字清單；
+//   - 新增規則 6（章數：通常一章）與【容易混淆的章】：報表裡的章節錯誤都落在重整後相鄰的章之間
+//     （平面／空間向量、運動學／受力），界線取自 config/kc 的知識點與 config/chapterAliases.js 的別名歸屬；
+//   - 新增三個【範例】：題材刻意避開 eval/golden/nlq.json 的 50 句（單元測試釘住不得含 golden 原句）。
+// 伺服器端另有兩道不依賴模型的檢查（mergeLlm）：句子沒提到的題型／難度／學生不採用、明講平面或空間時換成同名的另一章。
 const TEMPLATE = 'nlq.v2';
 
 const SYSTEM = '你是一位台灣高中數學、物理與化學家教老師的題庫助理。你的工作是把老師隨口說的一句查題需求，翻成題庫看得懂的檢索條件。你只輸出 JSON，不輸出任何其他文字。';
@@ -89,8 +102,24 @@ const PROMPT_TEMPLATE = `老師想在題庫裡找題目，他說的是下面這�
 1. chapter 必須「完全等於」白名單裡的某一個字串，一個字都不能差，也不得自創新詞。化學的章名在白名單裡以「」框起（有一章叫「醇、酚、醚」，章名本身含頓號）；輸出時不要帶「」。
 2. 判斷依據是「解這一題需要用到哪一章的觀念」，不是句子裡出現了哪些名詞。同一個詞可能出現在不同學科（例如「濃度」「速率」「平衡」「能量」），要看整句話在問哪一科的觀念。
 3. 想不到任何一章就回空陣列。硬填一章會讓候選集整個跑錯地方，比誠實回空陣列糟得多。
-4. 老師沒提到的條件（學科、難度、題型、學生）就整個欄位不要輸出，不要猜。
-5. semantic_text 只留概念詞與名詞，把「幫我」「有沒有」「題目」這類贅字拿掉。
+4. 老師沒說出口的條件不要猜：沒講學科、難度、學生，就整個欄位不要輸出；沒講題型，question_types 就回空陣列。句子裡的「求…」「…是多少」「…怎麼算」是題目本身在問的東西，不是老師指定的題型。
+5. semantic_text 保留老師描述題目內容的原話與語序，只拿掉「幫我」「有沒有」「題目」這類贅字，以及已經放進其他欄位的條件（難度、題型、學生）；不要改寫成關鍵字清單，也不要加上句子裡沒有的術語。
+6. chapters 依相關性排序，第一個放解題最主要用到的那一章。通常一章就夠；只有另一章的觀念也同樣是解題主角時才列第二、三章，不要把沾得上邊的章都列進來——多列一章，檢索就多混進一整章不相干的題。
+
+【容易混淆的章】
+- 數學的向量分平面、空間兩組。平面：向量的加減與係數積（加減、係數積、平行、線性組合）、向量內積（夾角、垂直、投影、長度）、面積與行列式。空間：空間概念與座標系、空間向量內積、外積、平面方程式、空間直線方程式。句子寫「平面上」、只有兩個坐標分量、或沒提到空間時用平面那一組；寫了「空間」「三維」或有三個坐標分量才用空間那一組。
+- 數學的指數與對數：「指數與對數」是指數律、常用對數、位數與首數尾數；「指數函數與對數函數」是一般底數、函數圖形、指數或對數方程式與不等式、換底公式。
+- 數學的三角：「直角三角形的邊角關係」只談銳角與直角三角形；角可以是任意角（象限、終邊、負角、大於 90 度）時是「廣義角與極坐標」。
+- 物理的力學：只問位置、速度、加速度怎麼隨時間變、不談力，是「直線運動」「平面運動」；談到受力、合力、張力、正向力、力的平衡或連體，是「牛頓運動定律」；有摩擦力、斜面上的受力或圓周運動的向心力，是「摩擦力與向心力」；有力矩或轉動才是「剛體轉動與平衡」。
+- 物理的電學：電荷之間的庫侖力、起電與感應是「靜電學」；電場、電位、電位差與電位能是「電場與電位」。
+
+【範例】（只示範寫法；範例的題材與要翻的句子無關，欄位順序以輸出格式為準）
+老師說：球從桌邊水平滾出去，落地點離桌腳多遠
+→ {"keywords":["桌邊","水平","落地點"],"subject":"物理","chapters":["平面運動"],"question_types":[],"semantic_text":"球從桌邊水平滾出去，落地點離桌腳多遠"}
+老師說：空間中兩條直線是不是歪斜線，出填充題，小安沒寫過的
+→ {"keywords":["空間","直線","歪斜線"],"subject":"數學","chapters":["空間直線方程式"],"question_types":["填空"],"exclude_student_name":"小安","semantic_text":"空間中兩條直線是不是歪斜線"}
+老師說：鐵釘放進硫酸銅溶液裡，表面為什麼會變紅
+→ {"keywords":["鐵釘","硫酸銅","溶液"],"subject":"化學","chapters":["氧化還原反應"],"question_types":[],"semantic_text":"鐵釘放進硫酸銅溶液裡，表面為什麼會變紅"}
 
 【老師說的話】
 {{QUERY}}`;
@@ -292,23 +321,62 @@ async function resolveStudent(db, name) {
  * 規則抓到的東西優先：難度、題型、學生名都是正規表達式**精確**比對出來的，
  * 沒有理由讓一個機率模型覆寫它們。章節與 subject 則以 LLM 為準——會走到這裡
  * 就是因為規則一章都沒抓到（confident === false）。
+ *
+ * 〔dec/x-nlq-improve〕給了 opts.query（老師的原句）時，規則沒抓到的條件也不是 LLM 說了算，
+ * 而是**句子裡要找得到證據**（docs/retrieval.md 第 9 條）：
+ *   - 題型：句子要有題型字眼（utils/nlqHeuristics.js 的 mentionsQuestionType），否則 LLM 的題型不採用；
+ *   - 難度：句子要有難度字眼（mentionsDifficulty），否則 LLM 的難度不採用；
+ *   - 學生：LLM 給的名字要逐字出現在句子裡，否則不採用（名字不在句子裡＝模型編的）；
+ *   - 章節：句子明講「平面上」或「空間」時，挑錯維度的章換成同名的另一章（alignChapterDimension）。
+ * 模板規則 4 本來就要求「沒提到的條件不要輸出」；這一層讓規則不必仰賴模型照做。被擋下或換掉的項目記在
+ * adjustments（parseOnly 寫進 log 與解析結果，不進 200 回應的凍結形狀）。沒給 opts.query 時行為與改版前相同。
+ *
+ * @param {object} rulesFilters parseQuery 的 filters
+ * @param {string} rulesSemantic parseQuery 的 semantic_text
+ * @param {object|null} data LLM 的 data
+ * @param {{query?:string}} [opts]
+ * @returns {{filters:object, semantic_text:string, adjustments:string[]}}
  */
-function mergeLlm(rulesFilters, rulesSemantic, data) {
+function mergeLlm(rulesFilters, rulesSemantic, data, opts = {}) {
     const out = Object.assign({}, rulesFilters);
     const d = data || {};
+    const query = typeof opts.query === 'string' ? opts.query : null;
+    const adjustments = [];
 
-    if (Array.isArray(d.chapters) && d.chapters.length) out.chapters = d.chapters.slice();
+    if (Array.isArray(d.chapters) && d.chapters.length) {
+        if (query !== null) {
+            const aligned = alignChapterDimension(d.chapters, query);
+            for (const c of aligned.changes) adjustments.push(`章節「${c.from}」→「${c.to}」（句子明講了平面或空間）`);
+            out.chapters = aligned.chapters;
+        } else {
+            out.chapters = d.chapters.slice();
+        }
+    }
     if (typeof d.subject === 'string' && d.subject) out.subject = d.subject;
 
-    if (!out.question_types.length && Array.isArray(d.question_types)) {
-        out.question_types = d.question_types.slice();
+    if (!out.question_types.length && Array.isArray(d.question_types) && d.question_types.length) {
+        if (query === null || mentionsQuestionType(query)) {
+            out.question_types = d.question_types.slice();
+        } else {
+            adjustments.push(`題型 ${d.question_types.join('、')} 不採用（句子沒有提到題型）`);
+        }
     }
-    if (out.difficulty_min === null && out.difficulty_max === null) {
-        if (Number.isFinite(d.difficulty_min)) out.difficulty_min = d.difficulty_min;
-        if (Number.isFinite(d.difficulty_max)) out.difficulty_max = d.difficulty_max;
+    if (out.difficulty_min === null && out.difficulty_max === null
+        && (Number.isFinite(d.difficulty_min) || Number.isFinite(d.difficulty_max))) {
+        if (query === null || mentionsDifficulty(query)) {
+            if (Number.isFinite(d.difficulty_min)) out.difficulty_min = d.difficulty_min;
+            if (Number.isFinite(d.difficulty_max)) out.difficulty_max = d.difficulty_max;
+        } else {
+            adjustments.push(`難度 ${d.difficulty_min ?? ''}~${d.difficulty_max ?? ''} 不採用（句子沒有提到難度）`);
+        }
     }
     if (!out.exclude_student_name && typeof d.exclude_student_name === 'string' && d.exclude_student_name.trim()) {
-        out.exclude_student_name = d.exclude_student_name.trim();
+        const name = d.exclude_student_name.trim();
+        if (query === null || query.includes(name)) {
+            out.exclude_student_name = name;
+        } else {
+            adjustments.push(`學生「${name}」不採用（句子裡沒有這個名字）`);
+        }
     }
 
     const keywords = out.keywords.slice();
@@ -322,7 +390,7 @@ function mergeLlm(rulesFilters, rulesSemantic, data) {
         ? d.semantic_text.trim()
         : rulesSemantic;
 
-    return { filters: out, semantic_text: semantic };
+    return { filters: out, semantic_text: semantic, adjustments };
 }
 
 function modelNlq() {
@@ -389,7 +457,8 @@ function mathPhysicsTerms() {
  * @param {{query:string, llm?:object, logger?:object, noCache?:boolean, pseudonymizer?:object}} opts
  *   pseudonymizer：utils/pseudonym.js 的替換器；未給時為恆等（eval 走這條）
  * @returns {Promise<{filters:object, parse_path:'rules'|'llm'|'llm_failed',
- *                    semantic_text:string, warnings:string[], confident:boolean, cacheHit:boolean}>}
+ *                    semantic_text:string, warnings:string[], confident:boolean,
+ *                    adjustments:string[], cacheHit:boolean}>}
  */
 async function parseOnly(opts = {}) {
     const query = String(opts.query ?? '').trim();
@@ -405,6 +474,7 @@ async function parseOnly(opts = {}) {
     let semanticText = rules.semantic_text;
     let parsePath = 'rules';
     const warnings = [];
+    let adjustments = [];
 
     // 〔Owner 決策單 2026-09-25 B5〕LLM 輔路徑（nlq.v2）認得化學，化學句子不再跳過 LLM。
     // 原本（〔stage5 WS-B〕docs/interfaces-stage5.md 第 4.2 條第 2 點）nlq.v1 凍結為數學／物理兩科，
@@ -424,10 +494,15 @@ async function parseOnly(opts = {}) {
         const llm = opts.llm || require('./llm');
         const data = await callLlm({ llm, query, logger: opts.logger, pseudonymizer: opts.pseudonymizer || IDENTITY });
         if (data) {
-            const merged = mergeLlm(filters, semanticText, data);
+            // 〔dec/x-nlq-improve〕帶原句：句子裡找不到證據的條件不採用、明講的平面／空間以句子為準（mergeLlm 的註解）
+            const merged = mergeLlm(filters, semanticText, data, { query });
             filters = merged.filters;
             semanticText = merged.semantic_text;
+            adjustments = merged.adjustments;
             parsePath = 'llm';
+            if (adjustments.length) {
+                opts.logger?.info?.({ node: 'nlq', msg: `LLM 結果經證據檢查調整：${adjustments.join('；')}` });
+            }
         } else {
             parsePath = 'llm_failed';
             warnings.push(WARN.llmFailed);
@@ -444,7 +519,9 @@ async function parseOnly(opts = {}) {
         parse_path: parsePath,
         semantic_text: semanticText,
         warnings: warnings.concat(validated.warnings),
-        confident: rules.confident
+        confident: rules.confident,
+        // 〔dec/x-nlq-improve〕mergeLlm 擋下或換掉的 LLM 條件（除錯用；searchNl 的 200 回應不帶，第 6 條形狀不變）
+        adjustments
     };
 
     if (!opts.noCache) cacheSet(key, value);
