@@ -157,7 +157,7 @@ Claude-Session: https://claude.ai/code/session_01ACd8V6VMkYrSWR3QAig6dq
 | 選修化學四 | 氧化數與氧化還原滴定、電化電池、電解與電鍍、常見的非金屬與金屬、先進材料 |
 | 選修化學五 | 有機化合物的組成與結構、烴與有機鹵化物、醇、酚、醚、醛與酮、羧酸與酯、胺與醯胺、聚合物、化學與永續 |
 
-（「醇、酚、醚」是一章。）來源：108 課綱高中化學，章名以龍騰版為主，並參照升學王各版本對照表。**狀態：AI 草擬，待 Owner 對照教科書定稿**。
+（「醇、酚、醚」是一章。）來源：108 課綱高中化學，章名以龍騰版為主，並參照升學王各版本對照表。~~**狀態：AI 草擬，待 Owner 對照教科書定稿**。~~ 〔修訂 2026-09-26 決策單 A11〕**狀態：Owner 2026-09-25 定稿**（決策單：照目前草案定稿，依龍騰；章名一字未改）。
 
 ### 3.4 知識點種子檔 `config/kc/<科目>.json`（KC 內容組產出；WS-C 載入）
 
@@ -444,7 +444,7 @@ generateText({
 
 ## 9. 裁決紀錄
 
-〔修訂 2026-09-24〕整合階段依各 WS 回報的「與契約不同之處」、審查後保留（未修）的決定，以及主控在整合時的決定整理成 S5-1～S5-39。以下裁決**優先於上文對應條文**（條文不逐句回改，以本節為準）。「決定」欄標**待 Owner 確認**者，程式目前照該行為運作，Owner 可推翻；推翻時依「理由」欄所述的影響範圍改。各項細節以對應功能文件為準：WS-A [`grading-and-profile.md`](grading-and-profile.md)、WS-B [`chemistry.md`](chemistry.md)、WS-C [`knowledge-components.md`](knowledge-components.md)、WS-D [`remedial.md`](remedial.md)、WS-E [`tutor.md`](tutor.md)。
+〔修訂 2026-09-24〕整合階段依各 WS 回報的「與契約不同之處」、審查後保留（未修）的決定，以及主控在整合時的決定整理成 S5-1～S5-39。以下裁決**優先於上文對應條文**（條文不逐句回改，以本節為準）。「決定」欄標**待 Owner 確認**者，程式目前照該行為運作，Owner 可推翻；推翻時依「理由」欄所述的影響範圍改。〔修訂 2026-09-26 決策單〕S5-7、S5-11、S5-13、S5-26、S5-28、S5-30、S5-40（以及牽動的 S5-29、S5-38）已加註 Owner 2026-09-25「出題系統決策單」第一輪的結果：S5-13、S5-28 改為要實作（由括號內的分支實作，合併前程式仍照原決定），其餘維持；總表見 `docs/HANDOFF.md` §0.00。各項細節以對應功能文件為準：WS-A [`grading-and-profile.md`](grading-and-profile.md)、WS-B [`chemistry.md`](chemistry.md)、WS-C [`knowledge-components.md`](knowledge-components.md)、WS-D [`remedial.md`](remedial.md)、WS-E [`tutor.md`](tutor.md)。
 
 ### 9.1 整合（主控）
 
@@ -461,7 +461,7 @@ generateText({
 
 | 編號 | 主題 | 決定 | 理由 | 影響的 WS |
 |---|---|---|---|---|
-| S5-7 | 錯改對時的錯因 | `result ≠ 0` 時 `error_types` 一律清空，**即使沒送 `error_types`**；`score`、`response`、`note` 仍照「沒送不動」；錯因分布 SQL 另加 `result = 0` 作第二道檢查 | 第 4.1 條「沒送不動」與「只能在 result = 0 時非空」在「只送 `result: 1`」時衝突；不變量優先，否則錯因分布會算進答對的題 | WS-A（讀者 WS-D、WS-E） |
+| S5-7 | 錯改對時的錯因 | `result ≠ 0` 時 `error_types` 一律清空，**即使沒送 `error_types`**；`score`、`response`、`note` 仍照「沒送不動」；錯因分布 SQL 另加 `result = 0` 作第二道檢查。〔修訂 2026-09-26 決策單 B8〕Owner 2026-09-25 決策單：**維持** | 第 4.1 條「沒送不動」與「只能在 result = 0 時非空」在「只送 `result: 1`」時衝突；不變量優先，否則錯因分布會算進答對的題 | WS-A（讀者 WS-D、WS-E） |
 | S5-8 | 契約外的唯讀端點與回應欄位 | 接受新增 `GET /api/questions/:id`（核心區，封存題也查得到）、`GET /api/student-profile-options`（核心區）、`GET /api/error-types`（`FEATURE_STUDENTS`）；`GET /api/papers/:id` 多回 `solution_src`；`POST`／`PATCH /api/students` 回完整一列；PATCH 空 body 的訊息改為「至少要提供一個要修改的欄位（…）」。`/questions/:id` 未限定數字路徑：之後新增同前綴的字面路徑須註冊在它之前 | 前端需要題目詳情、選項與錯因清單，不另抄白名單；回應只增不減；`name` 已非必填，只送 `name` 的行為與訊息不變 | WS-A |
 | S5-9 | 詳解來源與回填規則 | PUT 帶與現值 trim 後相同的詳解時保留原來源（前端也只在老師動過詳解欄時才送）；回填略過入庫後題幹或答案被改過的題（`edited`）；`--limit N`＝這一輪最多寫 N 題；整批一交易、`--dry-run` 在交易內跑完再 ROLLBACK；複核 approve 不寫詳解（靠回填補） | 避免把驗算摘要誤標成老師寫的、避免把舊題目的解法貼到新題目；契約只授權 save 節點寫詳解 | WS-A |
 | S5-10 | `recent_wrong` 的批改細節 | 凍結的 `buildRecentWrong` 不動，`error_types`、`score` 由 controller 以 `(student_id, question_id)` 另查一次補上 | 契約只允許在 `weaknessService.js` 檔尾新增 `buildByErrorType` | WS-A |
@@ -470,9 +470,9 @@ generateText({
 
 | 編號 | 主題 | 決定 | 理由 | 影響的 WS |
 |---|---|---|---|---|
-| S5-11 | 文字型答案的單位衝突 | 維持**裁決 S2-26**：`answer_form = text` 時單位衝突回 `uncertain`；「5 cm 對 5 m」的 disagree 由 number 與 expression 兩種形式達成，三種形式都不會判 agree。**待 Owner 確認**；若要改，只動 `compareText` 一行並改 `answer_chem.json` 的 unit-007 | S2-26「text 永遠不回 disagree」與第 4.2 條第 4 點在 text 上互相衝突；uncertain 會進人工複核，不會讓錯答案入庫 | WS-B |
+| S5-11 | 文字型答案的單位衝突 | 維持**裁決 S2-26**：`answer_form = text` 時單位衝突回 `uncertain`；「5 cm 對 5 m」的 disagree 由 number 與 expression 兩種形式達成，三種形式都不會判 agree。~~**待 Owner 確認**；若要改，只動 `compareText` 一行並改 `answer_chem.json` 的 unit-007~~ 〔修訂 2026-09-26 決策單 B4〕Owner 2026-09-25 決策單：**維持送複核**（text 型單位衝突照舊回 uncertain），`compareText` 與 unit-007 不改 | S2-26「text 永遠不回 disagree」與第 4.2 條第 4 點在 text 上互相衝突；uncertain 會進人工複核，不會讓錯答案入庫 | WS-B |
 | S5-12 | jobs 冪等鍵 | `POST /api/jobs` 的冪等鍵由 `pdf_sha256` 改為 `(pdf_sha256, subject_group)`：同卷別重傳回既有 job，換卷別重傳建新 job | 老師選錯卷別時不必用 `?force=1`；既有流程兩次都是 `math_physics`，行為不變 | WS-B |
-| S5-13 | 助教與 NLQ 的化學支援 | 助教只改工具驗證的科目清單（讀 `SUBJECTS`），工具說明書（SYSTEM 的一部分）仍寫「數學\|物理」；NLQ 的 LLM 輔路徑本階段不支援化學。要支援需另開裁決並重錄兩者的 cassette | 第 1.1 條：既有 agent 的 SYSTEM、模板、schema 一個字都不能改 | WS-B |
+| S5-13 | 助教與 NLQ 的化學支援 | 助教只改工具驗證的科目清單（讀 `SUBJECTS`），工具說明書（SYSTEM 的一部分）仍寫「數學\|物理」；NLQ 的 LLM 輔路徑本階段不支援化學。要支援需另開裁決並重錄兩者的 cassette。〔修訂 2026-09-26 決策單 B5〕Owner 2026-09-25 決策單：**改為支援化學**（助教工具說明書與 NLQ 的 LLM 輔路徑都要能處理化學，兩者的 cassette 需重錄）；由 `dec/b5-chem-assistant-nlq` 實作，合併前程式仍照本列原決定運作 | 第 1.1 條：既有 agent 的 SYSTEM、模板、schema 一個字都不能改 | WS-B |
 | S5-14 | `\mathrm` 正體 | `\mathrm{…}` 在 OMML 一律輸出正體（每個 `m:r` 補 `m:sty p`），影響所有科目（數學／物理的 `\mathrm{m/s}` 也變正體） | 契約要求，排版規範本來就該正體；凍結對照語料沒有 `\mathrm`，逐位元對照測試仍通過 | WS-B |
 | S5-15 | 化學的新程式路徑 | 接受新增共用模組 `utils/chemFormula.js`、`utils/units.js` 與 `config/chapters.js` 的額外匯出（`SUBJECT_GROUP_KEYS`、`normalizeSubjectGroup`、`subjectGroupOf`、`subjectChoiceText` 等）；新箭頭符號放 `EXTRA_SYMBOLS`、不併入 `SYMBOLS`；`utils/embedText.js` 不改；化學 extract 用 `CHEM_LATEX_RULES`（不放數學版 `LATEX_RULES`），化學章名在 prompt 內加「」；source_check 的化學分支先把 `\ce` 換成可比對文字 | `SYMBOLS` 同時給 embedText 用，併入會讓既有題目的 embed_text 改變、向量被判過期；改 embedText 會讓全部向量作廢；「醇、酚、醚」本身含頓號 | WS-B |
 | S5-16 | 可擴充清單外的一行修改 | 接受 WS-B 修改 `controllers/questionController.js` 與 `utils/questionValidation.js`（各一行，科目錯誤訊息改由 `SUBJECTS` 產生；兩科時與原字串逐字相同）；合併時保留 WS-A 的版本再套這一行 | 訊息寫死兩科，化學併入後會誤導；無功能改動 | WS-B、WS-A |
@@ -495,11 +495,11 @@ generateText({
 
 | 編號 | 主題 | 決定 | 理由 | 影響的 WS |
 |---|---|---|---|---|
-| S5-26 | 「加入補救卷」掛鉤位置 | 按鈕掛在 `public/js/variants.js` 的 `findSimilar` 結果列（加註〔stage5 WS-D〕），`students.js` 不改；`?remedial=1` 保留為本機驗收開關（API 仍依旗標）。**待 Owner 確認** | 「找相似」的結果列是 variants.js 畫的；放在 students.js 只能掛在錯題本身，而錯題學生已寫過、confirm-paper 必定 409 | WS-D |
+| S5-26 | 「加入補救卷」掛鉤位置 | 按鈕掛在 `public/js/variants.js` 的 `findSimilar` 結果列（加註〔stage5 WS-D〕），`students.js` 不改；`?remedial=1` 保留為本機驗收開關（API 仍依旗標）。~~**待 Owner 確認**~~ 〔修訂 2026-09-26 決策單 B6〕Owner 2026-09-25 決策單：**維持** | 「找相似」的結果列是 variants.js 畫的；放在 students.js 只能掛在錯題本身，而錯題學生已寫過、confirm-paper 必定 409 | WS-D |
 | S5-27 | 補救卷的契約外回應與端點 | 接受 `remedial-paper` 的 `blueprint[]` 多 `difficulty_min`／`difficulty_max`／`rationale`，`items[]` 多 `follows_question_id`／`group_ids`；新增只讀的 `GET /api/students/:id/remedial-paper/items?ids=`（`FEATURE_REMEDIAL`） | 前端要顯示選題理由、要整組刪與整組加；手動加題只有 id，既有 API 無法得知題目是否為承上題、是否封存或已寫過（審查 medium，已修） | WS-D |
-| S5-28 | confirm-paper 不驗承上組 | 維持第 4.4 條「沿用既有 confirm-paper（不改）」：伺服器不重驗承上組是否完整，把關在前端（整組刪、整組加、確認前擋缺前題的承上題）；直接呼叫 API 仍可出半組。**待 Owner 確認**是否另開伺服器端檢查 | 契約凍結 confirm-paper，既有程式刻意「照給的題出卷」 | WS-D |
-| S5-29 | 跨章配額（blueprint）規則 | 不掛旗標（核心組卷的延伸、不呼叫 LLM）；至少抽到一題就 200 並逐列回報不足，全部列都抽不到才 400；`FOLLOW_UP_SHORTFALL_POLICY` 延伸到 blueprint（`'error'` 時承上組不足的列回 400）；單章路徑把 `chapter` 先過 pg `prepareValue` 再包成一元素陣列，非字串輸入維持原本的 400 | 契約只寫「逐列回報不足量」；單點政策開關應同時管兩條組卷路徑；候選池改為 `= ANY($2::text[])` 後直接包陣列，陣列輸入會變成多章卷或 500（審查 low，已修） | WS-D |
-| S5-30 | 補救卷選題參數 | remedial 取最弱 k = min(3, ⌈n/2⌉) 個單位、難度 ≤ ⌊答錯題平均難度＋1⌋；先備取同科直接先備最多 3 個、難度 ≤3；延伸取其餘 `mastery_lb` 最高的最多 3 個、難度 ≥ ⌊平均⌋＋1；無先備或無可延伸單位時配額併回 remedial 並寫 notes；跨科先備不納入；不足量不自動拿別的單位補；`WEAKNESS_MIN_N = 0` 時仍至少要 1 題有標註才用知識點基底。**待 Owner 於 DEC-016 簽核時確認** | 契約未規定；屬經驗法則，需實際使用後調整 | WS-D |
+| S5-28 | confirm-paper 不驗承上組 | 維持第 4.4 條「沿用既有 confirm-paper（不改）」：伺服器不重驗承上組是否完整，把關在前端（整組刪、整組加、確認前擋缺前題的承上題）；直接呼叫 API 仍可出半組。~~**待 Owner 確認**是否另開伺服器端檢查~~ 〔修訂 2026-09-26 決策單 B7〕Owner 2026-09-25 決策單：**改為伺服器端也檢查承上題整組**（直接呼叫 API 送半組也要擋）；由 `dec/b7-followup-server-check` 實作，合併前程式仍照本列原決定運作 | 契約凍結 confirm-paper，既有程式刻意「照給的題出卷」 | WS-D |
+| S5-29 | 跨章配額（blueprint）規則 | 不掛旗標（核心組卷的延伸、不呼叫 LLM）；至少抽到一題就 200 並逐列回報不足，全部列都抽不到才 400；`FOLLOW_UP_SHORTFALL_POLICY` 延伸到 blueprint（`'error'` 時承上組不足的列回 400；〔修訂 2026-09-26 決策單 B10〕Owner 2026-09-25 決策單把承上題湊不滿的政策改為選項 B「直接報錯請老師改題數」，由 `dec/b10-shortfall-error` 實作，blueprint 的實際行為以該分支合併後為準）；單章路徑把 `chapter` 先過 pg `prepareValue` 再包成一元素陣列，非字串輸入維持原本的 400 | 契約只寫「逐列回報不足量」；單點政策開關應同時管兩條組卷路徑；候選池改為 `= ANY($2::text[])` 後直接包陣列，陣列輸入會變成多章卷或 500（審查 low，已修） | WS-D |
+| S5-30 | 補救卷選題參數 | remedial 取最弱 k = min(3, ⌈n/2⌉) 個單位、難度 ≤ ⌊答錯題平均難度＋1⌋；先備取同科直接先備最多 3 個、難度 ≤3；延伸取其餘 `mastery_lb` 最高的最多 3 個、難度 ≥ ⌊平均⌋＋1；無先備或無可延伸單位時配額併回 remedial 並寫 notes；跨科先備不納入；不足量不自動拿別的單位補；`WEAKNESS_MIN_N = 0` 時仍至少要 1 題有標註才用知識點基底。~~**待 Owner 於 DEC-016 簽核時確認**~~ 〔修訂 2026-09-26 決策單 B3〕Owner 2026-09-25 決策單：**維持** | 契約未規定；屬經驗法則，需實際使用後調整 | WS-D |
 
 ### 9.6 WS-E AI 家教
 
@@ -517,9 +517,9 @@ generateText({
 | 編號 | 主題 | 決定 | 理由 | 影響的 WS |
 |---|---|---|---|---|
 | S5-37 | 知識點內容的產出規則 | 三科 `curriculum_code` 全部填 null；除第 3.5 條的 4 條外全部 `draft`；KC 內容組沒有測試庫，只跑 `validate_kc_seed`、unit 與 `check:html`，未跑完整 `ci.sh`；產生 JSON 的腳本留在 scratchpad、不進版控，之後以 JSON 本身為唯一來源 | 第 3.4 條「不得編造」；內容組只交資料檔與抽查紀錄；整合分支的完整 CI 已涵蓋種子檔驗證（`kcSeed.test.js`） | KC-M、KC-P、KC-C |
-| S5-38 | 白名單外的內容與跨科先備 | 物理不另立「熱學」章（改 `LEGACY_CHAPTERS` 會讓全部 cassette 失效），只在「能量的形式與守恆」放一條概念性知識點，待 Owner 決定；化學建議的 5 條跨科先備暫不寫入（等對方 code 定稿）；物理引用數學 5 章的 6 處跨科先備，整合時以不帶參數的 `validate_kc_seed` 三科一起驗證：637 個知識點、110 章、0 error（2026-09-24 文件整合時實跑） | 第 1.1 條；跨科代碼在單檔驗證時只給 warning，三科齊了才驗得了 | KC-P、KC-C、KC-M |
+| S5-38 | 白名單外的內容與跨科先備 | 物理不另立「熱學」章（改 `LEGACY_CHAPTERS` 會讓全部 cassette 失效），只在「能量的形式與守恆」放一條概念性知識點，待 Owner 決定（〔修訂 2026-09-26 決策單 A6〕Owner 2026-09-25 決策單：白名單外內容——數學邏輯、空間向量加減、物理熱學——放進既有章當知識點，不新增章；放哪一章、寫哪幾條在第二輪知識點審定單待答）；化學建議的 5 條跨科先備暫不寫入（等對方 code 定稿）；物理引用數學 5 章的 6 處跨科先備，整合時以不帶參數的 `validate_kc_seed` 三科一起驗證：637 個知識點、110 章、0 error（2026-09-24 文件整合時實跑） | 第 1.1 條；跨科代碼在單檔驗證時只給 warning，三科齊了才驗得了 | KC-P、KC-C、KC-M |
 | S5-39 | FR 編號分配 | 階段 5 功能需求由整合階段分配為 FR-021～035：021 批改細節、022 錯因分布、023 學生檔案、024 文字詳解、025 Word 版本、026 化學卷拆題入庫、027 化學排版與答案比對、028 知識點、029 題目知識點標註、030 知識點弱點、031 補救卷、032 跨章配額組卷、033 題庫覆蓋率、034 AI 家教、035 按住說話；另立 NFR-007（成本）、NFR-008（隱私）、NFR-009（相容性）。未實作的驗收項（錯題重練、間隔複習、訂正卷、學習路徑、學習報告）不先占號 | 第 8 條；一個 FR 對一個可觀察的功能與一組 API，ACPT→TC 才追溯得清楚（對照表見 `engineering_docs/01_requirements/requirements_tracker.md` §4） | 全部（文件整合） |
-| S5-40 | runner 租約競態 | 整合補測時追到既有偶發失敗的根因：`workers/jobRunner.js` 收尾時無條件清租約，會清掉下一輪剛認領的租約；`inFlight` 以列 id 為鍵，同一列前後兩個工作單位會疊成一個。改為只在尚未寫回時放租約、續租只延長仍鎖著的列、`inFlight` 以工作單位計（commit 5171783），並加兩個以 await 先後排出交錯的確定性回歸測試（舊版紅、新版綠） | 這是階段 2 起就存在的競態，並非階段 5 引入；修正改動核心管線，已由完整 CI 與 eval 驗證行為不變。另發現「error 退避期間該列已解鎖、可被別的槽立刻重跑」的既有設計問題，會改變管線行為，未修，列 Owner 待決 | 整合 |
+| S5-40 | runner 租約競態 | 整合補測時追到既有偶發失敗的根因：`workers/jobRunner.js` 收尾時無條件清租約，會清掉下一輪剛認領的租約；`inFlight` 以列 id 為鍵，同一列前後兩個工作單位會疊成一個。改為只在尚未寫回時放租約、續租只延長仍鎖著的列、`inFlight` 以工作單位計（commit 5171783），並加兩個以 await 先後排出交錯的確定性回歸測試（舊版紅、新版綠） | 這是階段 2 起就存在的競態，並非階段 5 引入；修正改動核心管線，已由完整 CI 與 eval 驗證行為不變。另發現「error 退避期間該列已解鎖、可被別的槽立刻重跑」的既有設計問題，會改變管線行為，未修，列 Owner 待決。〔修訂 2026-09-26 決策單 B9〕Owner 2026-09-25 決策單：**維持**，不修 | 整合 |
 
 ### 9.8 最終審查修正（2026-09-24）
 
