@@ -445,7 +445,7 @@ function runSuite() {
                 assert.ok(!ids.includes(burnt[1]), '前題已作答的承上題不得單獨出現');
                 for (const id of singles) assert.ok(ids.includes(id));
 
-                // items 帶承上組資訊：前端據此標「承上 #x」並整組刪（confirm-paper 不驗組是否完整）
+                // items 帶承上組資訊：前端據此標「承上 #x」並整組刪（confirm-paper 另有伺服器端整組檢查，〔Owner 決策單 2026-09-25 B7〕）
                 const byId = Object.fromEntries(body.items.map(i => [i.question_id, i]));
                 assert.deepEqual([byId[chain[0]].follows_question_id, byId[chain[0]].group_ids], [null, chain]);
                 assert.deepEqual([byId[chain[1]].follows_question_id, byId[chain[1]].group_ids], [chain[0], chain]);

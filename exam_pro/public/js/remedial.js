@@ -9,7 +9,7 @@
 //                          → 提供既有的 Word 下載（POST /api/download-word）。
 //                          承上題（follows_question_id）一律整組處理：草稿標「承上 #x」、刪除鈕變「刪這組」且整組刪；
 //                          手動加題先查 GET /api/students/:id/remedial-paper/items，連同前題／承上題整組加入，
-//                          組內有封存或已寫過的題就不加。confirm-paper 不重驗組是否完整，所以把關在這一端。
+//                          組內有封存或已寫過的題就不加。confirm-paper 伺服器端也會整組檢查（〔Owner 決策單 2026-09-25 B7〕），這一端先擋、訊息貼近草稿操作。
 //                          另列「知識點掌握度」（GET /api/students/:id/weakness/kc），讓老師看得到草稿為什麼這樣選。
 //   #coverage（題庫視圖）  GET /api/coverage：章 × 難度的熱度表；選了學生改看「還沒寫過」的題數；
 //                          另列每個知識點掛了幾題。
@@ -294,7 +294,7 @@ export function groupMembers(draft, questionId) {
 
 /**
  * 從草稿刪題（純函式）：刪的是**整個承上組**——只刪前題會留下學生寫不了的承上題，
- * 而 confirm-paper 照給的題出卷、不重驗組是否完整。沒有綁定的題就只刪它自己。
+ * confirm-paper 也會以 400 擋下半組（〔Owner 決策單 2026-09-25 B7〕）。沒有綁定的題就只刪它自己。
  * @param {object} draft
  * @param {number} questionId
  * @returns {object}
@@ -766,7 +766,7 @@ async function confirmDraft(app, ui, btn) {
     const ids = draftQuestionIds(draft);
     if (ids.length === 0) return app.showToast('草稿是空的。', 'error');
     if (ids.length > MAX_PAPER) return app.showToast(`一張卷最多 ${MAX_PAPER} 題，請先刪掉一些。`, 'error');
-    // 最後一道：confirm-paper 照給的題出卷、不驗承上組是否完整；缺前題的承上題學生寫不了
+    // 送出前先擋缺前題的承上題（學生寫不了）；confirm-paper 伺服器端也會整組檢查（〔Owner 決策單 2026-09-25 B7〕），這裡先擋、訊息較好懂
     const orphans = orphanFollowUps(draft);
     if (orphans.length) {
         return app.showToast(`承上題不能沒有前題：${orphans.map(o => `#${o.question_id}（承上 #${o.follows_question_id}）`).join('、')}。`

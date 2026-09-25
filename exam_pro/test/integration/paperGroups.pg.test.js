@@ -3,7 +3,8 @@
 //
 // 防線與 controllers.pg.test.js 一致：只讀 TEST_DATABASE_URL、庫名必須以 _test 結尾、
 // require config/db 之前覆寫 DATABASE_URL。題幹全為自製內容。
-// 涵蓋 POST /api/generate-paper（dry_run 與真出卷）、POST /api/confirm-paper 的排序、
+// 涵蓋 POST /api/generate-paper（dry_run 與真出卷）、POST /api/confirm-paper 的排序與
+// 伺服器端承上題整組檢查（〔Owner 決策單 2026-09-25 B7〕）、
 // selectPaperQuestions 的少出題政策切換，以及助教工具 preview_paper 走同一段選題。
 // ─────────────────────────────────────────────────────────────
 const { test, describe, before, after, beforeEach } = require('node:test');
@@ -235,6 +236,143 @@ function runSuite() {
             assert.equal(res.status, 200, JSON.stringify(res.body));
             assert.deepEqual(res.body.question_ids, [single, chain[0], chain[1]]);
             assert.equal(res.body.questions[2].follows_question_id, chain[0]);
+        });
+
+        // ── 〔Owner 決策單 2026-09-25 B7〕confirm-paper 伺服器端也檢查承上題是否整組（裁決 S5-28 原本只靠前端） ──
+
+        const confirm = (studentId, questionIds) => request(app).post('/api/confirm-paper')
+            .send({ student_id: studentId, question_ids: questionIds });
+        const countRows = async (table) => (await query(`SELECT COUNT(*)::int AS n FROM ${table}`)).rows[0].n;
+        const CONFIRM_KEYS = ['message', 'paper_id', 'paper_title', 'question_ids', 'questions'];
+
+        test('confirm-paper 整組檢查：預覽→確認的正常流程整組都在，照常 200（鏈＋分岔＋單題）', async () => {
+            await createStudent();
+            const chain = await addChain(2);                                   // 前題 ← 承上 ← 承上
+            const fork = [await addQ({ text: '自製分岔前題：設 $y=3$。' })];
+            fork.push(await addQ({ follows: fork[0], text: '承上題，自製分岔甲。' }));
+            fork.push(await addQ({ follows: fork[0], text: '承上題，自製分岔乙。' }));
+            await addSingles(2);
+
+            const dry = await gen({ count: 8, dry_run: true });
+            assert.equal(dry.status, 200, JSON.stringify(dry.body));
+            assert.equal(dry.body.question_ids.length, 8);
+
+            const ok = await confirm(dry.body.student_id, dry.body.question_ids);
+            assert.equal(ok.status, 200, JSON.stringify(ok.body));
+            assert.deepEqual(Object.keys(ok.body).sort(), CONFIRM_KEYS, '回應形狀不變（不多 incomplete_groups）');
+            assert.deepEqual(ok.body.question_ids, dry.body.question_ids, '確認後的出題順序同預覽');
+            assert.ok(assertChainIntact(ok.body.question_ids, chain));
+            assert.ok(assertChainIntact(ok.body.question_ids, fork), '分岔組依承接順序（同一前題的承上題依 id）相鄰');
+            assert.equal(await countRows('attempts'), 8);
+        });
+
+        test('confirm-paper 整組檢查：缺一題（缺鏈尾、缺前題）→ 400 列出哪一組缺哪幾題，不寫卷、不寫 attempts、不含學生姓名', async () => {
+            const studentId = await createStudent();
+            const chain = await addChain(2);
+            const [single] = await addSingles(1);
+            const groupLabel = `承上題組（#${chain[0]}、#${chain[1]}、#${chain[2]}）`;
+
+            const noTail = await confirm(studentId, [chain[0], chain[1], single]);
+            assert.equal(noTail.status, 400, JSON.stringify(noTail.body));
+            assert.equal(noTail.body.message,
+                `承上題必須與前題整組出卷，以下題組不完整：${groupLabel}缺 #${chain[2]}。請把缺的題加回卷裡，或把整組刪掉後再確認。`);
+            assert.deepEqual(noTail.body.incomplete_groups,
+                [{ group_ids: chain, missing: [{ question_id: chain[2], reason: 'not_in_paper' }] }]);
+            assert.ok(!noTail.body.message.includes(STUDENT), '訊息不得含學生姓名');
+
+            // 孤兒承上題（前題不在卷裡）：前端 orphanFollowUps 擋的那一種，伺服器現在也擋
+            const orphan = await confirm(studentId, [chain[2], chain[1]]);
+            assert.equal(orphan.status, 400, JSON.stringify(orphan.body));
+            assert.equal(orphan.body.message,
+                `承上題必須與前題整組出卷，以下題組不完整：${groupLabel}缺 #${chain[0]}。請把缺的題加回卷裡，或把整組刪掉後再確認。`);
+
+            assert.equal(await countRows('exam_papers'), 0, '400 不得留下半張卷');
+            assert.equal(await countRows('attempts'), 0, '400 不得燒題');
+
+            // 補齊之後同一批題照常出卷
+            const fixed = await confirm(studentId, [chain[0], chain[1], single, chain[2]]);
+            assert.equal(fixed.status, 200, JSON.stringify(fixed.body));
+            assert.ok(assertChainIntact(fixed.body.question_ids, chain));
+        });
+
+        test('confirm-paper 整組檢查：分岔組只放一個承上題、多組同時不完整 → 逐組列出（依組首 id）', async () => {
+            const studentId = await createStudent();
+            const chain = await addChain(1);
+            const fork = [await addQ({ text: '自製分岔前題：設 $z=5$。' })];
+            fork.push(await addQ({ follows: fork[0], text: '承上題，自製分岔甲。' }));
+            fork.push(await addQ({ follows: fork[0], text: '承上題，自製分岔乙。' }));
+
+            const res = await confirm(studentId, [fork[2], fork[0], chain[1]]);
+            assert.equal(res.status, 400, JSON.stringify(res.body));
+            assert.deepEqual(res.body.incomplete_groups, [
+                { group_ids: chain, missing: [{ question_id: chain[0], reason: 'not_in_paper' }] },
+                { group_ids: fork, missing: [{ question_id: fork[1], reason: 'not_in_paper' }] }
+            ]);
+            assert.equal(res.body.message, '承上題必須與前題整組出卷，以下題組不完整：'
+                + `承上題組（#${chain[0]}、#${chain[1]}）缺 #${chain[0]}；`
+                + `承上題組（#${fork[0]}、#${fork[1]}、#${fork[2]}）缺 #${fork[1]}。`
+                + '請把缺的題加回卷裡，或把整組刪掉後再確認。');
+            assert.equal(await countRows('exam_papers'), 0);
+        });
+
+        test('confirm-paper 整組檢查：組內有題已封存或該生已寫過 → 比照前端整組不能出，400 標原因', async () => {
+            const studentId = await createStudent();
+            // ① 承上題已封存：前題單獨確認也不行（前端 planManualAdd：組內有封存的題就不加）
+            const archivedChain = await addChain(1);
+            await query('UPDATE questions SET archived_at = now() WHERE id = $1', [archivedChain[1]]);
+            // ② 前題該生已寫過：承上題單獨確認也不行（pickPaperUnits：前題已作答整組不抽）
+            const answeredChain = await addChain(1);
+            await query(`INSERT INTO attempts (student_id, question_id, assigned_at) VALUES ($1, $2, CURRENT_DATE)`,
+                [studentId, answeredChain[0]]);
+
+            const res = await confirm(studentId, [archivedChain[0], answeredChain[1]]);
+            assert.equal(res.status, 400, JSON.stringify(res.body));
+            assert.deepEqual(res.body.incomplete_groups, [
+                { group_ids: archivedChain, missing: [{ question_id: archivedChain[1], reason: 'archived' }] },
+                { group_ids: answeredChain, missing: [{ question_id: answeredChain[0], reason: 'answered' }] }
+            ]);
+            assert.equal(res.body.message, '承上題必須與前題整組出卷，以下題組不完整：'
+                + `承上題組（#${archivedChain[0]}、#${archivedChain[1]}）缺 #${archivedChain[1]}（已封存）；`
+                + `承上題組（#${answeredChain[0]}、#${answeredChain[1]}）缺 #${answeredChain[0]}（該生已寫過）。`
+                + '請把缺的題加回卷裡，或把整組刪掉後再確認；已封存或該生已寫過的題不能出，含這種題的組只能整組刪。');
+            assert.ok(!res.body.message.includes(STUDENT), '訊息不得含學生姓名');
+            assert.equal(await countRows('attempts'), 1, '只有事先寫入的那一筆');
+
+            // 卷內本身有封存題：沿用既有訊息（封存檢查在整組檢查之前，逐字不變）
+            const inPaper = await confirm(studentId, [archivedChain[0], archivedChain[1]]);
+            assert.equal(inPaper.status, 400);
+            assert.equal(inPaper.body.message, '部分題目已不存在或已封存，請重新預覽。');
+        });
+
+        test('confirm-paper 整組檢查：順序被拆開不擋——伺服器一律重排成相鄰且依承接順序', async () => {
+            // 〔Owner 決策單 2026-09-25 B7〕規則是「整組都在卷裡」；出題順序由伺服器的 sortForPaper 決定，
+            // 呼叫端給的順序本來就不影響結果（上面「不論呼叫端給的順序」那一題、補救卷草稿送的是草稿順序），
+            // 所以整組都在但被拆開、倒序的 payload 照常 200，寫進 exam_papers 的是排好的順序。
+            const studentId = await createStudent();
+            const chain = [await addQ({ type: '計算', text: '自製前題（計算）：設 $w=4$。' })];
+            chain.push(await addQ({ type: '單選', follows: chain[0], text: '承上題，自製單選小題。' }));
+            chain.push(await addQ({ type: '證明', follows: chain[1], text: '承上一題，自製證明小題。' }));
+            const [s1, s2] = await addSingles(2, { type: '填空' });
+
+            const res = await confirm(studentId, [chain[2], s1, chain[0], s2, chain[1]]);
+            assert.equal(res.status, 200, JSON.stringify(res.body));
+            assert.deepEqual(res.body.question_ids.slice(0, 2).sort((a, b) => a - b), [s1, s2], '填空單題排在計算組首之前');
+            assert.deepEqual(res.body.question_ids.slice(2), chain, '整組相鄰、依承接順序，題型權重不拆組');
+            const { rows: [paper] } = await query('SELECT question_ids FROM exam_papers WHERE id = $1', [res.body.paper_id]);
+            assert.deepEqual(paper.question_ids, res.body.question_ids);
+        });
+
+        test('confirm-paper 整組檢查：沒有承上題的卷不受影響（含題幹寫「承上題」但沒有綁定的舊題）', async () => {
+            const studentId = await createStudent();
+            const singles = await addSingles(3);
+            // 缺前題的舊題：follows_question_id 為 NULL，自成一組（同 pickPaperUnits），伺服器不從題幹猜前題
+            const legacy = await addQ({ text: '承上題，自製未綁定的舊題。' });
+
+            const res = await confirm(studentId, [...singles, legacy]);
+            assert.equal(res.status, 200, JSON.stringify(res.body));
+            assert.deepEqual(Object.keys(res.body).sort(), CONFIRM_KEYS);
+            assert.deepEqual([...res.body.question_ids].sort((a, b) => a - b), [...singles, legacy]);
+            assert.equal(await countRows('attempts'), 4);
         });
 
         test('助教 preview_paper 走同一段選題：整組相鄰、少出題時附註與 shortfall，且不寫庫', async () => {
