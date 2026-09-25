@@ -42,6 +42,8 @@ function runSuite() {
     const request = require('supertest');
     const app = require(path.join(APP_DIR, 'app'));
     const { query, pool } = require(path.join(APP_DIR, 'config', 'db'));
+    // 〔retrain PR-1〕attempts 是唯讀檢視（migrations/0016），夾具改用 helper 寫派題＋作答
+    const { insertAttempts } = require(path.join(APP_DIR, 'test', 'helpers', 'attempts'));
     const { documentXml, listEntries } = require('./lib/docx');
     const fs = require('node:fs');
     const sharp = require('sharp');
@@ -55,7 +57,8 @@ function runSuite() {
 
     /** 清掉本檔造出來的學生、試卷與作答（attempts 先走，questions 是 ON DELETE RESTRICT）。 */
     async function cleanStudents() {
-        await query(`DELETE FROM attempts WHERE student_id IN (SELECT id FROM students WHERE name = ANY($1::text[]))`, [STUDENTS]);
+        // 〔retrain PR-1〕刪派題，作答跟著 ON DELETE CASCADE（attempts 是唯讀檢視）
+        await query(`DELETE FROM assignments WHERE student_id IN (SELECT id FROM students WHERE name = ANY($1::text[]))`, [STUDENTS]);
         await query(`DELETE FROM exam_papers WHERE student_id IN (SELECT id FROM students WHERE name = ANY($1::text[]))`, [STUDENTS]);
         await query(`DELETE FROM students WHERE name = ANY($1::text[])`, [STUDENTS]);
     }
@@ -146,14 +149,13 @@ function runSuite() {
                 const { rows: [student] } = await query(
                     `INSERT INTO students (name) VALUES ($1)
                      ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id`, [name]);
-                await query(
-                    `INSERT INTO attempts (student_id, question_id, assigned_at)
-                     SELECT $1::int, q.id, CURRENT_DATE
-                       FROM questions q
-                      WHERE q.subject = $2 AND q.chapter = $3 AND q.archived_at IS NULL
-                        AND NOT (q.id = ANY($4::int[]))
-                     ON CONFLICT (student_id, question_id) DO NOTHING`,
-                    [student.id, SUBJECT, CHAPTER, questionIds]);
+                const { rows: others } = await query(
+                    `SELECT q.id FROM questions q
+                      WHERE q.subject = $1 AND q.chapter = $2 AND q.archived_at IS NULL
+                        AND NOT (q.id = ANY($3::int[]))`,
+                    [SUBJECT, CHAPTER, questionIds]);
+                await insertAttempts(query, others.map(r => ({ student_id: student.id, question_id: r.id })),
+                    { skipExisting: true });
             }
         });
 

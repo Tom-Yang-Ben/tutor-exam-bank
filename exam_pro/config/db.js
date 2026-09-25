@@ -12,7 +12,7 @@
 const { Pool, types } = require('pg');
 
 // INT8（OID 20）：pg 預設回字串，因為 BIGINT 可能超出 Number.MAX_SAFE_INTEGER。
-// 但本專案的 BIGINT 只有 attempts.id 與各種 COUNT(*)，都遠在安全範圍內；
+// 但本專案的 BIGINT 只有 assignments.id／attempt_records.id（0016 之前是 attempts.id）與各種 COUNT(*)，都遠在安全範圍內；
 // 不轉的話 listQuestions 的 total 會變成 "30" 這種字串，前端算分頁就會出錯。
 types.setTypeParser(20, v => (v === null ? null : parseInt(v, 10)));
 // DATE（OID 1082）：預設會轉成「本地午夜」的 Date 物件，序列化成 JSON 時變 UTC，

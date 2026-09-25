@@ -130,7 +130,7 @@ function runSuite() {
         for (let i = 1; ; i++) {
             try {
                 await query(`TRUNCATE question_kcs, kc_prerequisites, knowledge_components,
-                                      attempts, exam_papers, students, questions RESTART IDENTITY CASCADE`);
+                                      attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE`);
                 return;
             } catch (err) {
                 if ((err.code !== '40P01' && err.code !== '55P03') || i >= attempts) throw err;

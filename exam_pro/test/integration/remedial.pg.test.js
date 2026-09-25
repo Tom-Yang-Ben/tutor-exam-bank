@@ -62,6 +62,8 @@ function runSuite() {
     const appDisabled = loadApp('false');
     const app = loadApp('true');
     const { query, pool } = require(path.join(APP_DIR, 'config', 'db'));
+    // 〔retrain PR-1〕attempts 是唯讀檢視（migrations/0016），夾具改用 helper 寫派題＋作答
+    const { insertAttempts } = require(path.join(APP_DIR, 'test', 'helpers', 'attempts'));
     const { wilsonLowerBound, round4 } = require(path.join(APP_DIR, 'services', 'kcWeaknessService'));
     const { CHAPTERS, SUBJECTS } = require(path.join(APP_DIR, 'config', 'chapters'));
 
@@ -112,11 +114,10 @@ function runSuite() {
 
     /** 直接寫一筆作答（paper_id 為 NULL；assigned_at = 今天往前 daysAgo 天）。 */
     async function attempt(studentId, questionId, { result = null, score = null, daysAgo = 0 } = {}) {
-        await query(
-            `INSERT INTO attempts (student_id, question_id, assigned_at, result, score, graded_at)
-             VALUES ($1, $2, CURRENT_DATE - $3::int, $4, $5, CASE WHEN $4::smallint IS NULL THEN NULL ELSE now() END)`,
-            [studentId, questionId, daysAgo, result, score]
-        );
+        await insertAttempts(query, [{
+            student_id: studentId, question_id: questionId, days_ago: daysAgo,
+            result, score, graded_at: result === null ? null : 'now'
+        }]);
     }
 
     async function count(table) {
@@ -154,12 +155,12 @@ function runSuite() {
         });
 
         beforeEach(async () => {
-            await query('TRUNCATE attempts, exam_papers, students, questions, knowledge_components RESTART IDENTITY CASCADE');
+            await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions, knowledge_components RESTART IDENTITY CASCADE');
         });
 
         after(async () => {
             // 不把知識點 fixture 留給後面的測試檔（它們只 TRUNCATE 自己的表）
-            await query('TRUNCATE attempts, exam_papers, students, questions, knowledge_components RESTART IDENTITY CASCADE');
+            await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions, knowledge_components RESTART IDENTITY CASCADE');
             await pool.end();
         });
 

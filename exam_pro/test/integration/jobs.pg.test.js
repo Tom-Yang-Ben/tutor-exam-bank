@@ -163,7 +163,7 @@ function runSuite() {
         for (let i = 1; ; i++) {
             try {
                 await query('TRUNCATE job_events, job_questions, jobs CASCADE');
-                await query('TRUNCATE attempts, exam_papers, students, questions CASCADE');
+                await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions CASCADE');
                 return;
             } catch (err) {
                 // 40P01 死結、55P03 拿不到鎖；其餘錯誤是真問題，直接往上丟

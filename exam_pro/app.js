@@ -117,6 +117,7 @@ const VOICE_ROUTE = hasRoute(routes, 'post', '/voice/transcribe') ? 'mounted' : 
 //                         「找相似」歸 feature-similar、「出變式」歸 feature-variants——
 //                         兩顆按鈕在同一列，但背後是兩條各自獨立的路由。
 //    __VOICE_ROUTE__      POST /api/voice/transcribe 實際上有沒有掛（本機模式 L3；不是旗標，是路由表的結果）
+//    __FEATURE_RETRAIN__  錯題重練與間隔複習的畫面（docs/retrain-and-review.md 第 5.1 節；預設關）
 function serveIndex(req, res, next) {
     fs.readFile(path.join(PUBLIC_DIR, 'index.html'), 'utf8', (err, html) => {
         if (err) return next(err);
@@ -140,6 +141,8 @@ function serveIndex(req, res, next) {
                 .replaceAll('__FEATURE_REMEDIAL__', process.env.FEATURE_REMEDIAL || 'false')
                 .replaceAll('__FEATURE_TUTOR__', process.env.FEATURE_TUTOR || 'false')
                 .replaceAll('__FEATURE_VOICE__', process.env.FEATURE_VOICE || 'false')
+                // 錯題重練與間隔複習（docs/retrain-and-review.md 第 5.1 節）：畫面由第四階段的 public/js/retrain.js 讀
+                .replaceAll('__FEATURE_RETRAIN__', process.env.FEATURE_RETRAIN || 'false')
                 // 本機模式 L3：語音路由實際上有沒有掛（見上方 VOICE_ROUTE）
                 .replaceAll('__VOICE_ROUTE__', VOICE_ROUTE));
     });

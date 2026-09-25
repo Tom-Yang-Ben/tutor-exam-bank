@@ -31,6 +31,9 @@
     <meta name="feature-remedial" content="__FEATURE_REMEDIAL__">
     <meta name="feature-tutor" content="__FEATURE_TUTOR__">
     <meta name="feature-voice" content="__FEATURE_VOICE__">
+    <!-- 錯題重練與間隔複習（docs/retrain-and-review.md 第 5.1 節）：讀法同上，預設關。
+         第一階段只做資料層，還沒有任何畫面讀它；錯題重練卡等畫面由之後的 public/js/retrain.js 讀。 -->
+    <meta name="feature-retrain" content="__FEATURE_RETRAIN__">
     <!-- 本機模式 L3（docs/local-mode.md 第 3 條第 9 點、第 5 條第 4 點）：POST /api/voice/transcribe 實際上有沒有掛。
          不是旗標：app.js 看路由表後注入 mounted／none。feature-voice 開著、這裡卻是 none＝本機模式不提供語音，
          public/js/tutor.js 據此不放「按住說話」並說明原因。 -->

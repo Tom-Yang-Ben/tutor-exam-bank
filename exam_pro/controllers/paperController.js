@@ -4,7 +4,7 @@
 // 形狀與錯誤訊息**逐字**凍結於 docs/interfaces-stage3.md 第 1.3、1.4 條。
 //
 //   GET   /api/papers/:id            出題順序 + 每題目前的批改結果
-//   PATCH /api/papers/:id/results    單一交易、全有全無地寫回 attempts
+//   PATCH /api/papers/:id/results    單一交易、全有全無地寫回作答
 //
 // 階段 5 WS-A（docs/interfaces-stage5.md 第 4.1 條第 1、2 項；DEC-015、缺口 G03）：
 //   results[i] 另外接受 score／error_types／response／note 四個**可選**鍵（沒送就不動該欄），
@@ -20,6 +20,13 @@
 //     半套用的批改比完全沒批更難發現——老師以為存好了，面板卻只算到一半。
 //     取消批改（result: null）要把 graded_at 一起清掉，否則面板會看到
 //     「批改過但沒有結果」這種不存在的狀態。
+//
+// 〔retrain PR-1〕migrations/0016 把 attempts 拆成 assignments（派題）與 attempt_records（作答）。
+// 這兩支是「卷層」讀寫（設計稿 docs/retrain-and-review.md 第 2.3 節 C 類）：要的是這張卷上**所有**派題，
+// 含日後的重練派題，所以 GET 改讀檢視 assignment_attempts、PATCH 改寫 attempt_records（經 assignments
+// 以（卷, 題）對應，assignments_paper_question_key 保證一張卷同一題至多一筆派題）。
+// 沒有重練資料時兩者讀寫到的列與拆表前的 attempts 完全相同：回應形狀、400 訊息、檢查順序、
+// 全有全無與 { updated } 的語意都沒有變。
 // ─────────────────────────────────────────────────────────────
 const { query, pool } = require('../config/db');
 const { ERROR_TYPE_CODES, MAX_ERROR_TYPES, isValidErrorType, labelOf } = require('../config/errorTypes');
@@ -121,7 +128,7 @@ function charLength(s) {
 }
 
 /**
- * score 的值域：0～1、最多兩位小數（attempts.score 是 NUMERIC(3,2)）。
+ * score 的值域：0～1、最多兩位小數（attempt_records.score 是 NUMERIC(3,2)）。
  *
  * 「最多兩位小數」不用 toFixed 比字串：0.29 * 100 = 28.999999999999996，
  * 用容差比對整數化後的差才不會把合法值擋掉。
@@ -265,14 +272,15 @@ exports.getPaper = async (req, res, next) => {
         // 所以用 unnest(...) WITH ORDINALITY 帶出序號再 ORDER BY 它。
         // 直接 `WHERE id = ANY($1)` 會拿到資料庫喜歡的順序，那不是出題順序。
         //
-        // attempts 用 LEFT JOIN：查不到對應列時 result 是 null（第 1.3 條），
+        // 派題與作答用 LEFT JOIN：查不到對應列時 result 是 null（第 1.3 條），
         // 不是「這題不存在」。questions 用 INNER JOIN 是安全的——
-        // 這張卷上的每一題都有 attempts 列，而 attempts.question_id 的
-        // ON DELETE RESTRICT 保證那些題目刪不掉（0001_init.sql）。
+        // 這張卷上的每一題都有派題，而 assignments.question_id 的
+        // ON DELETE RESTRICT 保證那些題目刪不掉（0001_init.sql、0016）。
+        // 〔retrain PR-1〕讀 assignment_attempts（全部派題，含重練），不是只含新題派題的檢視 attempts。
         //
         // 〔stage5 WS-A〕第 4.1 條第 2 項：多帶題目的科目、章節、標準答案、詳解與批改細節，
         // 批改卡才能「展開答案與詳解」、錯因 chip 才能依科目過濾。score 是 NUMERIC，
-        // pg 預設回字串，這裡轉 float8；沒有 attempts 列時 error_types 回 []（不是 null）。
+        // pg 預設回字串，這裡轉 float8；沒有派題列時 error_types 回 []（不是 null）。
         // solution_src 是契約以外多帶的一欄：批改卡要標示詳解是驗算模型產生還是老師寫的。
         const { rows: questions } = await query(
             `SELECT q.id AS question_id, q.question_text, q.question_type, q.difficulty, a.result,
@@ -281,7 +289,7 @@ exports.getPaper = async (req, res, next) => {
                     a.response, a.teacher_note
                FROM unnest($2::int[]) WITH ORDINALITY AS u(qid, ord)
                JOIN questions q ON q.id = u.qid
-               LEFT JOIN attempts a ON a.paper_id = $1 AND a.question_id = u.qid
+               LEFT JOIN assignment_attempts a ON a.paper_id = $1 AND a.question_id = u.qid
               ORDER BY u.ord`,
             [paperId, paper.question_ids || []]
         );
@@ -359,8 +367,12 @@ exports.patchResults = async (req, res, next) => {
         //   error_types  result ≠ 0 時一律清空（只有答錯的題有錯因——改判成對時不清掉，
         //                面板會把「對的題」算進錯因分布）；result = 0 時有送就覆寫、沒送不動
         //   response／teacher_note  有送就覆寫（null＝清空），沒送不動；取消批改也保留
+        //
+        // 〔retrain PR-1〕寫的是作答表 attempt_records（別名仍是 a，SET 右邊的 a.* 照舊是舊值），
+        // 經派題表 s 以（卷, 題）對應。每一筆派題在建立時就有一筆作答（writePaper、0016 的搬資料），
+        // 題號在卷上卻沒有派題時照舊只是沒 UPDATE 到（updated 較少）。
         const updated = await client.query(
-            `UPDATE attempts a
+            `UPDATE attempt_records a
                 SET result       = r.result,
                     graded_at    = CASE WHEN r.result IS NULL THEN NULL ELSE now() END,
                     score        = CASE WHEN r.result IS NULL THEN NULL
@@ -375,13 +387,14 @@ exports.patchResults = async (req, res, next) => {
                                         ELSE a.error_types END,
                     response     = CASE WHEN r.has_response THEN r.response ELSE a.response END,
                     teacher_note = CASE WHEN r.has_note THEN r.note ELSE a.teacher_note END
-               FROM jsonb_to_recordset($2::jsonb) AS r(
+               FROM assignments s,
+                    jsonb_to_recordset($2::jsonb) AS r(
                         question_id int, result smallint,
                         has_score boolean, score numeric,
                         has_error_types boolean, error_types jsonb,
                         has_response boolean, response text,
                         has_note boolean, note text)
-              WHERE a.paper_id = $1 AND a.question_id = r.question_id`,
+              WHERE s.id = a.assignment_id AND s.paper_id = $1 AND s.question_id = r.question_id`,
             [paperId, JSON.stringify(toRecordset(items))]
         );
 

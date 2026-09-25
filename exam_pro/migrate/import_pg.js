@@ -1,6 +1,11 @@
 // ─────────────────────────────────────────────────────────────
 // migrate/import_pg.js — 把 export_mysql.js 的 JSONL 匯入 PostgreSQL（D-D5，規劃 §5.3.6 步驟 3）
 //
+// ⚠ 〔retrain PR-1〕只適用於 migrations/0016_assignment_attempt_split.sql 之前的 schema：
+//   0016 把 attempts 拆成 assignments（派題）＋attempt_records（作答），attempts 改成唯讀檢視。
+//   這支是 2026-08-21 MySQL 切換用的一次性工具（已完成），寫的是舊的 attempts 表，不另外改寫
+//   （docs/retrain-and-review.md 第 3.6 節第 6 點）。
+//
 // 用法（在 exam_pro 資料夾內）：
 //   node migrate/import_pg.js                    ← 預設 --dry-run：全部跑完但 ROLLBACK
 //   node migrate/import_pg.js --apply            ← 真的寫入（COMMIT）

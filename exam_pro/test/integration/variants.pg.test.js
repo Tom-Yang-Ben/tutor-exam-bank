@@ -50,6 +50,8 @@ function runSuite() {
 
     const request = require('supertest');
     const { query, pool } = require(path.join(APP_DIR, 'config', 'db'));
+    // 〔retrain PR-1〕attempts 是唯讀檢視（migrations/0016），夾具改用 helper 寫派題＋作答
+    const { insertAttempts } = require(path.join(APP_DIR, 'test', 'helpers', 'attempts'));
     const { createRunner } = require(path.join(APP_DIR, 'workers', 'jobRunner'));
     const variantService = require(path.join(APP_DIR, 'services', 'variantService'));
     const dedup = require(path.join(APP_DIR, 'agents', 'dedup'));
@@ -137,7 +139,7 @@ function runSuite() {
     async function truncateAll() {
         for (let attempt = 0; ; attempt++) {
             try {
-                await query('TRUNCATE job_events, job_questions, jobs, attempts, exam_papers, students, questions CASCADE');
+                await query('TRUNCATE job_events, job_questions, jobs, attempt_records, assignments, exam_papers, students, questions CASCADE');
                 return;
             } catch (err) {
                 if (err.code !== '40P01' || attempt >= 4) throw err;
@@ -295,9 +297,7 @@ function runSuite() {
             const { rows: paper } = await query(
                 `INSERT INTO exam_papers (title, student_id, question_ids) VALUES ('測試卷', $1, $2::int[]) RETURNING id`,
                 [studentId, [near]]);
-            await query(
-                `INSERT INTO attempts (student_id, question_id, paper_id, assigned_at) VALUES ($1, $2, $3, CURRENT_DATE)`,
-                [studentId, near, paper[0].id]);
+            await insertAttempts(query, [{ student_id: studentId, question_id: near, paper_id: paper[0].id }]);
 
             const app = freshApp();
             const withStudent = await request(app).post(`/api/questions/${source}/variants`).send({ count: 1, student_id: studentId });

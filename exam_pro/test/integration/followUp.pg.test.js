@@ -33,6 +33,8 @@ function runSuite() {
     const request = require('supertest');
     const app = require(path.join(APP_DIR, 'app'));
     const { query, pool } = require(path.join(APP_DIR, 'config', 'db'));
+    // 〔retrain PR-1〕attempts 是唯讀檢視（migrations/0016），夾具改用 helper 寫派題＋作答
+    const { insertAttempts } = require(path.join(APP_DIR, 'test', 'helpers', 'attempts'));
     const { createRunner } = require(path.join(APP_DIR, 'workers', 'jobRunner'));
     const { linkJob } = require(path.join(APP_DIR, 'services', 'followUpLinker'));
     const { backfill } = require(path.join(APP_DIR, 'scripts', 'backfill_follow_ups'));
@@ -133,7 +135,7 @@ function runSuite() {
         for (let i = 1; ; i++) {
             try {
                 await query('TRUNCATE job_events, job_questions, jobs CASCADE');
-                await query('TRUNCATE attempts, exam_papers, students, questions CASCADE');
+                await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions CASCADE');
                 return;
             } catch (err) {
                 if ((err.code !== '40P01' && err.code !== '55P03') || i >= attempts) throw err;
@@ -536,7 +538,7 @@ function runSuite() {
             async function addAttempt(questionId) {
                 const { rows: s } = await query(`INSERT INTO students (name) VALUES ($1) RETURNING id`,
                     [`整組測試學生-${questionId}`]);
-                await query('INSERT INTO attempts (student_id, question_id) VALUES ($1, $2)', [s[0].id, questionId]);
+                await insertAttempts(query, [{ student_id: s[0].id, question_id: questionId }]);
             }
 
             async function seedVariantJob(sourceId, state = 'done') {

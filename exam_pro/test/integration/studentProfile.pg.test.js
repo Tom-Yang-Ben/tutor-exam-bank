@@ -70,7 +70,7 @@ function runSuite() {
         });
 
         beforeEach(async () => {
-            await query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE');
+            await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE');
         });
 
         after(async () => {
