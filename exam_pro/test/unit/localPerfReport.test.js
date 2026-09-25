@@ -3,8 +3,10 @@
 //
 // 在暫存目錄（路徑含中文）造幾支假 cassette 與一段假 record log，驗證：
 //   1. 參數；2. 讀 cassette、供應商判斷、--since、頁數（圖片張數；extract_ocr 對同一塊）；
-//   3. 分組、百分位數（nearest-rank）、輸出速度（Σtoken ÷ Σ秒）；4. record log 的段落與耗時；
-//   5. 建議的規則（逾時安全值、節點相加、RERECORD_TIME_SCALE、每塊頁數）；6. 報告與 --out；
+//   3. 分組、百分位數（nearest-rank）與「樣本少」的門檻（n < 10 時 p90＝max）、輸出速度（Σtoken ÷ Σ秒）；
+//   4. record log 的段落與耗時；
+//   5. 建議的規則（逾時安全值、節點相加、RERECORD_TIME_SCALE、每塊頁數：外推到比錄製時少的頁數會低估、
+//      1 頁也不夠時列出實際錄到的每塊最長）；6. 報告與 --out；
 //   7. 本工具抄的預設值、步驟標籤與原始程式一致。
 // 不呼叫模型、不連網、不讀 exam_pro/.env（env 一律注入）。
 // ─────────────────────────────────────────────────────────────
@@ -255,6 +257,24 @@ describe('統計：百分位數、分組、速度', () => {
         assert.equal(perf.percentile([3, NaN, 1], 90), 3);
     });
 
+    test('「樣本少」的門檻：nearest-rank 下 n < MIN_SAMPLES 時 p90 一定等於 max，n＝MIN_SAMPLES 起才不是', () => {
+        assert.equal(perf.RULES.MIN_SAMPLES, 10);
+        const upTo = (n) => Array.from({ length: n }, (_, i) => i + 1);
+        for (let n = 1; n < perf.RULES.MIN_SAMPLES; n++) {
+            assert.equal(perf.percentile(upTo(n), 90), n, `n=${n}：p90 應該就是最大值`);
+        }
+        assert.ok(perf.percentile(upTo(perf.RULES.MIN_SAMPLES), 90) < perf.RULES.MIN_SAMPLES, 'n=10：p90 是第 9 支，不是最大值');
+        assert.equal(perf.LOW_SAMPLE_LABEL, '樣本少：p90 等於最大值');
+    });
+
+    test('statsOf 記下最慢那一次的頁數（maxCallPages）；不知道頁數時是 null', () => {
+        const e = (latSec, pages) => ({ agent: 'extract_vision', model: 'm', vendor: 'ollama', latencyMs: latSec * SEC, usage: null, pages });
+        const s = perf.statsOf({ agent: 'extract_vision', model: 'm', vendor: 'ollama', items: [e(100, 1), e(300, 3), e(200, 2)] });
+        assert.deepEqual([s.maxMs, s.maxCallPages], [300 * SEC, 3]);
+        const noPages = perf.statsOf({ agent: 'classify', model: 'm', vendor: 'ollama', items: [e(10, null), e(20, null)] });
+        assert.deepEqual([noPages.maxMs, noPages.maxCallPages], [20 * SEC, null]);
+    });
+
     test('依 agent＋模型分組；p50／p90／max；輸出速度＝Σ(tokenOut＋tokenThinking)÷Σ秒；每頁秒數', () => {
         const { entries } = perf.readCassettes(cassetteDir);
         const groups = perf.summarizeGroups(perf.selectEntries(entries).selected);
@@ -385,7 +405,8 @@ describe('建議的規則', () => {
         assert.equal(cand.variant, 780 * SEC, '250 秒：max(750, 500) 進位到 13 分');
         assert.equal(rec.nodeTimeout.node, '拆題一塊（ocr＋extract_vision＋extract_ocr）');
         assert.equal(rec.nodeTimeout.needMs, 4380 * SEC);
-        assert.deepEqual(rec.lowSample.sort(), ['extract_ocr', 'extract_vision', 'ocr', 'variant']);
+        assert.deepEqual(rec.lowSample.sort(), ['extract_ocr', 'extract_vision', 'ocr', 'variant', 'verify'],
+            '少於 10 支的都算（verify 5 支也是）；classify 剛好 10 支不算');
     });
 
     test('RERECORD_TIME_SCALE＝實測秒數合計 ÷ SEC_PER_CALL 合計；倍率相差超過 2 倍時改建議個別的每次秒數', () => {
@@ -429,13 +450,36 @@ describe('建議的規則', () => {
         assert.equal(def.pages, 1);
         assert.equal(def.binding.name, 'JOB_NODE_TIMEOUT_MS');
         assert.equal(def.current, 2);
+        assert.equal(def.recordedAvgPages, 2);
+        // 實際錄到的每塊最長：各步最慢的那一次與它的頁數（extract_ocr 的頁數來自同一塊的 extract_vision）
+        assert.deepEqual(def.recorded.steps, [
+            { agent: 'ocr', maxMs: 140 * SEC, pages: 2 },
+            { agent: 'extract_vision', maxMs: 900 * SEC, pages: 2 },
+            { agent: 'extract_ocr', maxMs: 420 * SEC, pages: 2 }
+        ]);
+        assert.equal(def.recorded.sumMaxMs, 1460 * SEC);
+        assert.deepEqual(def.belowRecorded, { pages: 1, recordedAvgPages: 2 }, '建議 1 頁＜錄製時的 2 頁：線性外推會低估');
 
         const roomy = perf.recommend(stats(), perf.currentSettings({ JOB_NODE_TIMEOUT_MS: '9000000', OLLAMA_TIMEOUT_MS: '5400000' })).chunkPages;
         assert.equal(roomy.pages, 4);
+        assert.equal(roomy.belowRecorded, null, '維持 2 頁、最多 4 頁：都不少於錄製時的 2 頁，外推偏保守');
+
+        const oneNow = perf.recommend(stats(), perf.currentSettings({
+            JOB_NODE_TIMEOUT_MS: '9000000', OLLAMA_TIMEOUT_MS: '5400000', JOB_PDF_CHUNK_PAGES: '1'
+        })).chunkPages;
+        assert.deepEqual([oneNow.pages, oneNow.current], [4, 1]);
+        assert.deepEqual(oneNow.belowRecorded, { pages: 1, recordedAvgPages: 2 }, '「目前 1 頁夠用」這個結論也是往少的方向外推');
 
         const tight = perf.recommend(stats(), perf.currentSettings({ JOB_NODE_TIMEOUT_MS: '1000000' })).chunkPages;
         assert.equal(tight.pages, 0);
         assert.equal(tight.binding.name, 'JOB_NODE_TIMEOUT_MS');
+        assert.deepEqual(tight.belowRecorded, { pages: 1, recordedAvgPages: 2 }, '建議 0 頁時，結論講的是 1 頁');
+
+        const ctx = perf.recommend(stats(), perf.currentSettings({
+            JOB_NODE_TIMEOUT_MS: '900000000', OLLAMA_TIMEOUT_MS: '900000000', OCR_TIMEOUT_MS: '900000000', OLLAMA_NUM_CTX: '3000'
+        })).chunkPages;
+        assert.equal(ctx.pages, 0);
+        assert.equal(ctx.binding.name, 'OLLAMA_NUM_CTX', '3000 ÷ 3250 token');
 
         const huge = perf.recommend(stats(), perf.currentSettings({
             JOB_NODE_TIMEOUT_MS: '900000000', OLLAMA_TIMEOUT_MS: '900000000', OCR_TIMEOUT_MS: '900000000', OLLAMA_NUM_CTX: '900000'
@@ -466,7 +510,9 @@ describe('報告與 main', () => {
         assert.match(markdown, /壞掉的 JSON 1 支/);
         assert.match(markdown, /其中 1 支沒有 recorded_at，用檔案修改時間/);
         assert.match(markdown, /\| `classify` \| `qwen3:8b` \| 10 \| 50 秒 \| 1 分 30 秒 \| 1 分 40 秒 \| 55 秒 \| 2\.7 \| 2,000 \| 150 \| — \|/);
-        assert.match(markdown, /\| `extract_vision` \| `qwen3-vl:8b` \| 2（樣本少） \| 10 分 \| 15 分 \| 15 分 \| 12 分 30 秒 \| 2\.0 \| 5,000 \| 1,500 \| 6 分 15 秒（4 頁） \|/);
+        assert.match(markdown, /\| `extract_vision` \| `qwen3-vl:8b` \| 2（樣本少：p90 等於最大值） \| 10 分 \| 15 分 \| 15 分 \| 12 分 30 秒 \| 2\.0 \| 5,000 \| 1,500 \| 6 分 15 秒（4 頁） \|/);
+        assert.match(markdown, /\| `verify` \| `qwen3:8b` \| 5（樣本少：p90 等於最大值） \|/, '5 支也是 p90＝max');
+        assert.match(markdown, /「樣本少：p90 等於最大值」＝少於 10 支：百分位數用 nearest-rank，n ≤ 9 時/);
         assert.match(markdown, /\| 2\/3 classify suite \| classify \| 1 \| 57 分 36 秒 \|/);
         assert.match(markdown, /\| 2\/2 nlq suite（含查詢句向量） \| nlq \| （沒有結束紀錄：中斷或還在跑） \| — \|/);
         assert.match(markdown, /log 裡有 2 行逾時訊息/);
@@ -476,7 +522,15 @@ describe('報告與 main', () => {
         assert.match(markdown, new RegExp(`RERECORD_TIME_SCALE=${data.recommendations.timeScale.scale}\``));
         assert.match(markdown, /RERECORD_SEC_PER_CALL_CLASSIFY=55/);
         assert.match(markdown, /建議：`JOB_PDF_CHUNK_PAGES=1`（目前 2 頁，受限於 `JOB_NODE_TIMEOUT_MS`）/);
-        assert.match(markdown, /樣本少於 5 支的 agent：/);
+        assert.match(markdown, /樣本少於 10 支的 agent（p90 等於最大值，逾時的安全值因此就是 3 × max）：`ocr`/);
+        // 3.3：外推方向的說明、各步錄到的最長、建議少於錄製頁數時的提醒
+        assert.match(markdown, /推到比 2 頁多時估得偏保守；\*\*推到比 2 頁少時會低估\*\*（固定開銷不會跟著頁數減半）/);
+        assert.match(markdown, /\| 步驟 \| 每頁平均 \| 每頁 p90 \| 每頁安全秒數 \| 頁數來源 \| 錄到的每塊最長 \|/);
+        assert.match(markdown, /\| `extract_vision` \| 6 分 15 秒 \| 7 分 30 秒 \| 22 分 30 秒 \| 實際頁數 \| 15 分（2 頁） \|/);
+        assert.match(markdown, /\| `extract_ocr` \| 3 分 \| 3 分 30 秒 \| 10 分 30 秒 \| 實際頁數 \| 7 分（2 頁） \|/);
+        assert.match(markdown, /注意：上面的結論推到每塊 1 頁，少於錄製時平均的 2 頁。線性外推在這個方向會\*\*低估\*\*/);
+        assert.ok(!/與每塊頁數成正比/.test(markdown), '3.1 不再說一塊的時間與頁數成正比');
+        assert.match(markdown, /頁數調小時不能直接按比例縮小/);
         assert.match(markdown, /重錄（`cassettes:rerecord`）時固定帶 2700000/, '節點建議超過重錄寫死的 45 分時要講明');
         assert.ok(!/\n{3,}/.test(markdown), '不要有連續空行');
         assert.ok(markdown.endsWith('\n'));
@@ -489,7 +543,7 @@ describe('報告與 main', () => {
         assert.match(markdown, /沒有本機模型錄的 cassette/);
         assert.match(markdown, /無法建議逾時、倍率與頁數/);
         const all = perf.buildReport(perf.parseArgs(['--cassettes', dir, '--vendor', 'all']), { env: {} }).markdown;
-        assert.match(all, /\| `classify` \| `gemini-3\.5-flash` \| 1（樣本少） \|/);
+        assert.match(all, /\| `classify` \| `gemini-3\.5-flash` \| 1（樣本少：p90 等於最大值） \|/);
         assert.match(all, /無法建議逾時、倍率與頁數/, 'Gemini 的速度不拿來建議本機的逾時');
     });
 
@@ -498,6 +552,23 @@ describe('報告與 main', () => {
         const { markdown } = perf.buildReport(args, { env: { JOB_NODE_TIMEOUT_MS: '9000000', OLLAMA_TIMEOUT_MS: '5400000' } });
         assert.match(markdown, /`OLLAMA_TIMEOUT_MS`（單次 Ollama 呼叫） \| 5400000（1 小時 30 分），\.env \|.*夠用/);
         assert.match(markdown, /目前的 2 頁在安全範圍內；在目前的設定下最多可到 4 頁/);
+        assert.ok(!/線性外推在這個方向會/.test(markdown), '結論都不少於錄製時的 2 頁：不必提醒低估');
+    });
+
+    test('每塊 1 頁也不夠時：講「達不到安全餘裕」（不是「會超過」），並列出實際錄到的每塊最長', () => {
+        const args = perf.parseArgs(['--cassettes', cassetteDir]);
+        const { markdown } = perf.buildReport(args, { env: { JOB_NODE_TIMEOUT_MS: '1000000' } });
+        assert.ok(!/可能超過/.test(markdown), '舊的說法「即使每塊 1 頁也可能超過」已拿掉');
+        assert.match(markdown, /建議：\*\*每塊 1 頁也達不到 max\(3 × p90, 2 × max\) 的安全餘裕\*\*。受限於 `JOB_NODE_TIMEOUT_MS`＝1000000（16 分 40 秒）：一塊（ocr＋extract_vision＋extract_ocr）每頁的安全秒數合計 2190 秒。請先照 3\.1 調高逾時/);
+        assert.match(markdown, /實際錄到的每塊最長（成功留下回放檔的呼叫）：`ocr` 2 分 20 秒（2 頁）、`extract_vision` 15 分（2 頁）、`extract_ocr` 7 分（2 頁）；各步最長相加 24 分 20 秒（同一塊不一定每步都最慢，所以是上限）。/);
+        assert.match(markdown, /注意：上面的結論推到每塊 1 頁，少於錄製時平均的 2 頁/);
+
+        const ctx = perf.buildReport(args, { env: {
+            JOB_NODE_TIMEOUT_MS: '900000000', OLLAMA_TIMEOUT_MS: '900000000', OCR_TIMEOUT_MS: '900000000', OLLAMA_NUM_CTX: '3000'
+        } }).markdown;
+        assert.match(ctx, /建議：\*\*每塊 1 頁，估計的 token 數也超過 `OLLAMA_NUM_CTX`＝3,000\*\*。extract_vision 每頁約 3,250 token（輸入＋輸出；固定的提示詞也按頁攤）。請先調高 `OLLAMA_NUM_CTX`/);
+        assert.ok(!/安全餘裕\*\*/.test(ctx), 'token 放不下不是逾時的安全餘裕問題');
+        assert.match(ctx, /實際錄到的每塊最長（成功留下回放檔的呼叫）：`ocr` 2 分 20 秒（2 頁）/);
     });
 
     test('main：印出報告；--out 另存（中文路徑、自動建目錄）；--help；log 不存在時照實寫', () => {

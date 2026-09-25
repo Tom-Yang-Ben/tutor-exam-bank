@@ -37,6 +37,9 @@
 //     各 agent 的倍率相差超過 2 倍時，改建議 RERECORD_SEC_PER_CALL_<AGENT>＝實測平均秒數。
 //   - 每塊頁數（JOB_PDF_CHUNK_PAGES）：依每頁秒數（extract_vision 看圖片張數；ocr 看頁數；extract_ocr 對同一塊的
 //     extract_vision）線性外推，在「目前的」逾時與 OLLAMA_NUM_CTX 之下，一塊的安全值都放得下的最大頁數（上限 10）。
+//     固定開銷（模型載入、系統提示詞）也按頁攤：推到比錄製時多的頁數偏保守，推到比錄製時少的頁數會低估
+//     （固定開銷不會跟著頁數減半）——報告在這種情況另外提醒；建議 0 頁時列出實際錄到的每塊最長時間。
+//   - 「樣本少」＝少於 RULES.MIN_SAMPLES（10）支：nearest-rank 下 n ≤ 9 時 p90 就是最大值。
 // ─────────────────────────────────────────────────────────────
 
 const fs = require('fs');
@@ -53,12 +56,15 @@ const RULES = Object.freeze({
     P90_FACTOR: 3,              // 逾時至少是 p90 的 3 倍
     MAX_FACTOR: 2,              // 也至少是 max 的 2 倍
     ROUND_MS: 60_000,           // 無條件進位到整分鐘
-    MIN_SAMPLES: 5,             // 少於 5 支時 p90 幾乎就是 max，標「樣本少」
+    MIN_SAMPLES: 10,            // nearest-rank 下 n ≤ 9 時 ceil(0.9n)＝n，p90 就是 max；少於 10 支標「樣本少：p90 等於最大值」
     MAX_CHUNK_PAGES: 10,        // 每塊頁數的建議上限
     VERIFY_MAX_SAMPLES: 2,      // agents/verify.js 的 MAX_SAMPLES：uncertain 時同一個節點再採樣一次
     SCALE_SPREAD: 2,            // 各 agent 的「實測／粗估」相差超過這個倍數，改建議個別的 RERECORD_SEC_PER_CALL_<AGENT>
     OVERLAP_TOLERANCE_MS: 1_000 // 兩支 cassette 的呼叫時間重疊超過 1 秒才算並行
 });
+
+/** 支數少於 RULES.MIN_SAMPLES 時標在支數旁邊的字 */
+const LOW_SAMPLE_LABEL = '樣本少：p90 等於最大值';
 
 /**
  * 拆題模型是 ollama 時這幾個設定的程式預設（docs/local-mode.md 第 2 條）。
@@ -323,11 +329,13 @@ const sum = (xs) => xs.reduce((a, b) => a + b, 0);
  * 一組 cassette（同一個 agent，或同一個 agent＋模型）的統計。純函式。
  * 輸出速度＝Σ(tokenOut＋tokenThinking) ÷ Σ秒數（以時間加權；只算有 usage 的呼叫）。
  * 每頁秒數＝Σ秒數 ÷ Σ頁數（只算知道頁數的呼叫）；p90 用「每次呼叫的秒數 ÷ 該次頁數」。
+ * maxCallPages＝最慢的那一次（maxMs）處理了幾頁（不知道頁數時 null）：報告的「實際錄到的每塊最長」。
  * @param {{agent:string, model:string|null, vendor:string, items:ReturnType<typeof toEntry>[]}} group
  */
 function statsOf({ agent, model, vendor, items }) {
     const lat = items.map(e => e.latencyMs);
     const totalMs = sum(lat);
+    const slowest = items.reduce((w, e) => (!w || e.latencyMs > w.latencyMs ? e : w), null);
     const withUsage = items.filter(e => e.usage);
     const outTokens = sum(withUsage.map(e => e.usage.tokenOut + e.usage.tokenThinking));
     const usageMs = sum(withUsage.map(e => e.latencyMs));
@@ -359,6 +367,7 @@ function statsOf({ agent, model, vendor, items }) {
         p50Ms: percentile(lat, 50),
         p90Ms: percentile(lat, 90),
         maxMs: Math.max(...lat),
+        maxCallPages: slowest && Number.isInteger(slowest.pages) && slowest.pages > 0 ? slowest.pages : null,
         meanMs: totalMs / items.length,
         totalMs,
         tokensPerSec: withUsage.length && usageMs > 0 && outTokens > 0 ? outTokens / (usageMs / 1000) : null,
@@ -589,7 +598,8 @@ function recommend(agentStats, settings) {
         };
     }
 
-    // 5. 每塊頁數：線性外推每頁秒數，在目前的逾時與 num_ctx 下放得下的最大頁數
+    // 5. 每塊頁數：線性外推每頁秒數，在目前的逾時與 num_ctx 下放得下的最大頁數。
+    //    固定開銷也按頁攤，所以只有「推到不少於錄製時的頁數」才偏保守；推到比錄製時少的頁數會低估（belowRecorded）。
     let chunkPages = null;
     const vision = by.get('extract_vision');
     if (vision && vision.pages) {
@@ -621,11 +631,25 @@ function recommend(agentStats, settings) {
         for (const a of ['extract_vision', 'extract_ocr']) {
             const s = by.get(a);
             const tpp = s && s.pages && s.pages.tokensPerPage;
-            if (tpp) cap('OLLAMA_NUM_CTX', settings.OLLAMA_NUM_CTX.value, tpp, `${a} 每頁約 ${fmtInt(tpp)} token（輸入＋輸出，含固定的提示詞，偏保守）`);
+            if (tpp) cap('OLLAMA_NUM_CTX', settings.OLLAMA_NUM_CTX.value, tpp, `${a} 每頁約 ${fmtInt(tpp)} token（輸入＋輸出；固定的提示詞也按頁攤）`);
         }
         const binding = limits.reduce((w, l) => (!w || l.maxPages < w.maxPages ? l : w), null);
         const pages = Math.max(0, Math.min(RULES.MAX_CHUNK_PAGES, binding ? binding.maxPages : RULES.MAX_CHUNK_PAGES));
-        chunkPages = { pages, current: settings.JOB_PDF_CHUNK_PAGES.value, perPage, limits, binding, recordedAvgPages: vision.pages.avgPages };
+        const current = settings.JOB_PDF_CHUNK_PAGES.value;
+        const recordedAvgPages = vision.pages.avgPages;
+        // 實際錄到的每塊最長：各步最慢的那一次（一次呼叫處理一塊）與它的頁數。
+        // 各步相加是上限：同一塊不一定每步都最慢（ocr 的 cassette 沒有塊號，無法逐塊對齊）。
+        const recordedSteps = EXTRACT_CHAIN.filter(a => by.has(a)).map(a => {
+            const s = by.get(a);
+            return { agent: a, maxMs: s.maxMs, pages: Number.isInteger(s.maxCallPages) ? s.maxCallPages : null };
+        });
+        // 報告下結論用到的最少頁數：建議 0 頁時是「1 頁」；調小時是建議值；維持時是目前值
+        const lowest = pages === 0 ? 1 : Math.min(pages, current);
+        chunkPages = {
+            pages, current, perPage, limits, binding, recordedAvgPages,
+            recorded: { steps: recordedSteps, sumMaxMs: sum(recordedSteps.map(r => r.maxMs)) },
+            belowRecorded: lowest < recordedAvgPages ? { pages: lowest, recordedAvgPages } : null
+        };
     }
 
     return { ollamaTimeout, ocrTimeout, nodeTimeout, timeScale, chunkPages, lowSample };
@@ -744,7 +768,7 @@ function buildReport(args, { env = {}, now = new Date(), readFile = (p) => fs.re
             groups.map(g => [
                 `\`${g.agent}\``,
                 g.model ? `\`${g.model}\`` : '—',
-                `${g.n}${g.n < RULES.MIN_SAMPLES ? '（樣本少）' : ''}`,
+                `${g.n}${g.n < RULES.MIN_SAMPLES ? `（${LOW_SAMPLE_LABEL}）` : ''}`,
                 fmtDur(g.p50Ms), fmtDur(g.p90Ms), fmtDur(g.maxMs), fmtDur(g.meanMs),
                 g.tokensPerSec == null ? '—' : g.tokensPerSec.toFixed(1),
                 fmtInt(g.avgTokenIn), fmtInt(g.avgTokenOut),
@@ -753,7 +777,8 @@ function buildReport(args, { env = {}, now = new Date(), readFile = (p) => fs.re
         ));
         L.push('');
         L.push(`合計 ${selected.length} 次呼叫、延遲加總 ${fmtDur(sum(selected.map(e => e.latencyMs)))}。` +
-            `「樣本少」＝少於 ${RULES.MIN_SAMPLES} 支，p90 幾乎就是 max，只能參考。`);
+            `「${LOW_SAMPLE_LABEL}」＝少於 ${RULES.MIN_SAMPLES} 支：百分位數用 nearest-rank，` +
+            `n ≤ ${RULES.MIN_SAMPLES - 1} 時第 ceil(0.9 × n) 支就是最慢的那一支，p90 沒有比 max 多出資訊，只能參考。`);
     }
     L.push('');
 
@@ -807,7 +832,8 @@ function buildReport(args, { env = {}, now = new Date(), readFile = (p) => fs.re
         L.push('');
     } else {
         if (rec.lowSample.length) {
-            L.push(`樣本少於 ${RULES.MIN_SAMPLES} 支的 agent：${rec.lowSample.map(a => `\`${a}\``).join('、')}——相關的數字只能參考，多錄幾份卷再看。`);
+            L.push(`樣本少於 ${RULES.MIN_SAMPLES} 支的 agent（p90 等於最大值，逾時的安全值因此就是 ${Math.max(RULES.P90_FACTOR, RULES.MAX_FACTOR)} × max）：` +
+                `${rec.lowSample.map(a => `\`${a}\``).join('、')}——相關的數字只能參考，多錄幾份卷再看。`);
             L.push('');
         }
         L.push('### 3.1 逾時');
@@ -845,7 +871,8 @@ function buildReport(args, { env = {}, now = new Date(), readFile = (p) => fs.re
                 c.node, fmtDur(c.p90Ms), fmtDur(c.maxMs), fmtDur(c.needMs), c.note
             ])));
             L.push('');
-            L.push('拆題一塊的時間與每塊頁數成正比：若照 3.3 改了 `JOB_PDF_CHUNK_PAGES`，這一列要照新頁數重估（每頁秒數 × 頁數）。');
+            L.push('拆題一塊的時間大致隨每塊頁數增減：若照 3.3 改了 `JOB_PDF_CHUNK_PAGES`，這一列要照新頁數重估。' +
+                '頁數調小時不能直接按比例縮小——模型載入、系統提示詞等固定開銷不會跟著頁數減少。');
             L.push('');
             if (rec.nodeTimeout.needMs > local.LOCAL_NODE_TIMEOUT_MS) {
                 L.push(`注意：\`.env\` 的 \`JOB_NODE_TIMEOUT_MS\` 只影響正式上傳。重錄（\`cassettes:rerecord\`）時固定帶 ${local.LOCAL_NODE_TIMEOUT_MS}` +
@@ -891,11 +918,15 @@ function buildReport(args, { env = {}, now = new Date(), readFile = (p) => fs.re
             L.push('沒有 `extract_vision` 的 cassette（或看不出頁數），無法建議每塊頁數。');
         } else {
             const c = rec.chunkPages;
-            L.push(`規則：每頁秒數線性外推（錄製時平均每塊 ${round1(c.recordedAvgPages)} 頁；固定開銷也按頁攤，所以頁數加多時估得偏保守），` +
-                `每頁的安全秒數＝max(${RULES.P90_FACTOR} × 每頁 p90, ${RULES.MAX_FACTOR} × 每頁 max)；在目前的逾時與 \`OLLAMA_NUM_CTX\` 之下，一塊都放得下的最大頁數（上限 ${RULES.MAX_CHUNK_PAGES}）。`);
+            const avg = round1(c.recordedAvgPages);
+            L.push(`規則：每頁秒數線性外推（錄製時平均每塊 ${avg} 頁），` +
+                `每頁的安全秒數＝max(${RULES.P90_FACTOR} × 每頁 p90, ${RULES.MAX_FACTOR} × 每頁 max)；在目前的逾時與 \`OLLAMA_NUM_CTX\` 之下，一塊都放得下的最大頁數（上限 ${RULES.MAX_CHUNK_PAGES}）。` +
+                `模型載入、系統提示詞等固定開銷也按頁攤：推到比 ${avg} 頁多時估得偏保守；**推到比 ${avg} 頁少時會低估**（固定開銷不會跟著頁數減半）。`);
             L.push('');
-            L.push(table(['步驟', '每頁平均', '每頁 p90', '每頁安全秒數', '頁數來源'], Object.entries(c.perPage).map(([a, p]) => [
-                `\`${a}\``, fmtDur(p.meanSec * 1000), fmtDur(p.p90Sec * 1000), fmtDur(p.safeSec * 1000), p.from
+            const recordedBy = new Map(c.recorded.steps.map(r => [r.agent, r]));
+            const longest = (r) => (r ? `${fmtDur(r.maxMs)}（${r.pages == null ? '頁數不明' : `${r.pages} 頁`}）` : '—');
+            L.push(table(['步驟', '每頁平均', '每頁 p90', '每頁安全秒數', '頁數來源', '錄到的每塊最長'], Object.entries(c.perPage).map(([a, p]) => [
+                `\`${a}\``, fmtDur(p.meanSec * 1000), fmtDur(p.p90Sec * 1000), fmtDur(p.safeSec * 1000), p.from, longest(recordedBy.get(a))
             ])));
             L.push('');
             if (c.limits.length) {
@@ -905,13 +936,30 @@ function buildReport(args, { env = {}, now = new Date(), readFile = (p) => fs.re
                 L.push('');
             }
             if (c.pages === 0) {
-                L.push(`建議：**即使每塊 1 頁也可能超過 \`${c.binding.name}\`**——請先照 3.1 調高逾時（或 \`OLLAMA_NUM_CTX\`），再重跑本工具。`);
+                const b = c.binding;
+                const limitText = `\`${b.name}\`＝${b.name === 'OLLAMA_NUM_CTX' ? fmtInt(settings[b.name].value) : fmtSetting(settings[b.name].value)}`;
+                L.push(b.name === 'OLLAMA_NUM_CTX'
+                    ? `建議：**每塊 1 頁，估計的 token 數也超過 ${limitText}**。${b.why}。請先調高 \`OLLAMA_NUM_CTX\`（記憶體要夠），再重跑本工具。`
+                    : `建議：**每塊 1 頁也達不到 max(${RULES.P90_FACTOR} × p90, ${RULES.MAX_FACTOR} × max) 的安全餘裕**。` +
+                      `受限於 ${limitText}：${b.why}。請先照 3.1 調高逾時，再重跑本工具。`);
+                const steps = c.recorded.steps;
+                if (steps.length) {
+                    L.push('');
+                    L.push(`實際錄到的每塊最長（成功留下回放檔的呼叫）：${steps.map(r => `\`${r.agent}\` ${longest(r)}`).join('、')}` +
+                        (steps.length > 1 ? `；各步最長相加 ${fmtDur(c.recorded.sumMaxMs)}（同一塊不一定每步都最慢，所以是上限）` : '') + '。');
+                }
             } else if (c.pages < c.current) {
                 L.push(`建議：\`JOB_PDF_CHUNK_PAGES=${c.pages}\`（目前 ${c.current} 頁，受限於 \`${c.binding.name}\`）；或照 3.1 調高逾時後維持 ${c.current} 頁。`);
             } else {
                 L.push(`建議：目前的 ${c.current} 頁在安全範圍內；在目前的設定下最多可到 ${c.pages} 頁` +
                     `${c.binding ? `（受限於 \`${c.binding.name}\`）` : ''}。頁數多，跨頁的題比較不會被切開（LM-12 ①），` +
                     `但一塊更久、失敗時要重跑的也多；不確定就維持 ${c.current} 頁。`);
+            }
+            if (c.belowRecorded) {
+                L.push('');
+                L.push(`注意：上面的結論推到每塊 ${c.belowRecorded.pages} 頁，少於錄製時平均的 ${avg} 頁。線性外推在這個方向會**低估**一塊的時間與 token` +
+                    '（模型載入、系統提示詞等固定開銷不會跟著頁數減半），實際的安全餘裕比上表算的小。' +
+                    '改了頁數之後，上傳幾份卷再用 `npm run report:jobs -- --since=7d` 看 extract 節點實際花多久。');
             }
             L.push('');
             L.push('這個設定只影響正式上傳（`exam_pro/.env`）；重錄 CI 回放檔時一律照 CI 的設定（本機 2 頁），不受影響。');
@@ -970,5 +1018,5 @@ module.exports = {
     stepNameOf, parseRecordLog,
     safeMs, currentSettings, recommend,
     fmtDur,
-    RULES, SETTING_DEFAULTS, STEP_LABEL_PREFIXES, LOCAL_VENDORS, VENDOR_CHOICES, DEFAULT_CASSETTE_DIR, USAGE
+    RULES, LOW_SAMPLE_LABEL, SETTING_DEFAULTS, STEP_LABEL_PREFIXES, LOCAL_VENDORS, VENDOR_CHOICES, DEFAULT_CASSETTE_DIR, USAGE
 };
