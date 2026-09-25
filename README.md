@@ -20,7 +20,7 @@
 | 向量 | `qwen3-embedding:0.6b`，輸出 768 維，資料表的 `vector(768)` 不改 |
 | 切回雲端 | Gemini 保留：改 `.env` 幾行即可整個切回，也可以只切某一個節點 |
 
-代價：CPU 上很慢（一份考卷粗估要數小時，尚未實測）、品質預期低於 Gemini（目前量到的兩項都未達門檻，見[怎麼驗證品質](#-怎麼驗證品質)）、語音提問關閉、AI 家教不做程式驗算。CI 不裝任何模型，只讀錄好的回放檔（cassette）。
+代價：CPU 上很慢（一份考卷粗估要數小時，尚未實測）、品質預期低於 Gemini（已重錄的 classify 與 nlq 中，classify 的 accuracy 與 macro-F1、nlq LLM 輔路徑的 filters_exact 與 recall@10 都未達門檻，nlq 規則路徑全數達標；見[怎麼驗證品質](#-怎麼驗證品質)）、語音提問關閉、AI 家教不做程式驗算。CI 不裝任何模型，只讀錄好的回放檔（cassette）。
 
 ```mermaid
 flowchart TD
@@ -30,7 +30,7 @@ flowchart TD
     ocr --> ocrq["qwen3:8b<br/>把 OCR 文字整理成題目 JSON"]
     ocrq --> xc{"交叉驗證<br/>逐題對齊、比對題幹"}
     vlm --> xc
-    xc --> nodes["逐題檢查<br/>雜湊去重 → 分類 → 公式 lint → 原卷文字層比對 → 驗算 → 向量去重<br/>（qwen3:8b；雜湊與原卷比對是純程式）"]
+    xc --> nodes["逐題檢查<br/>雜湊去重 → 分類 → 公式 lint → 原卷文字層比對 → 驗算 → 向量去重<br/>（分類、公式 lint、驗算用 qwen3:8b；向量去重用 qwen3-embedding:0.6b；雜湊與原卷比對是純程式）"]
     nodes -->|"閘門全過且兩版一致"| db[("PostgreSQL 16 + pgvector<br/>題目＋qwen3-embedding:0.6b 向量（768 維）")]
     nodes -->|"閘門不過或兩版不一致"| review["人工複核佇列"]
     review -->|"老師核准"| db
@@ -175,7 +175,7 @@ exam_pro/
 │   ├─ fixtures/              #   60 題自製 fixture、樣卷 PDF、embedding 向量
 │   └─ thresholds.json        #   門檻（首測 −0.03、只升不降）
 │
-├─ test/                      # 項數為 2026-09-26 在 local/integration（7b7065c）實跑
+├─ test/                      # 項數為 2026-09-26 在 local/integration 實跑，是 7b7065c 當時的數字（合併後由整合者更新）
 │   ├─ unit/                  #   2,716 項：不連網、不連庫、零 secrets
 │   ├─ integration/           #   503 項：對 tmpfs 測試庫（_test 後綴強制）
 │   └─ e2e/                   #   11 項：HTTP 全路徑（上傳→部分入庫；組卷→Word 公式）
@@ -434,7 +434,7 @@ Gemini 已回傳 JSON，為何不直接入庫？
 - **AI（可切回：Gemini）**：`@google/genai`——拆題／分類／變式 `gemini-3.5-flash`、獨立驗答 `gemini-3.1-pro-preview`、embedding `gemini-embedding-001`（768 維）；階段 5 另用 code execution（AI 家教驗算）與音訊輸入（語音轉寫），這兩項只在 Gemini 模式可用。模型 ID 單一真相在 [`exam_pro/config/models.js`](./exam_pro/config/models.js)（`vendor:model-id`）。
 - **文件**：`docx`（自製 LaTeX → OOXML 數學公式轉換）
 - **前端**：單頁 HTML + Tailwind + MathJax（〔修訂 2026-09-25 本機模式〕兩者與字型、GSAP 都改從本機 `/vendor/` 載入，見 `docs/local-mode.md`） + 五個 ES module 分頁（零打包器）；階段 5 另加三個 module（知識點、補救卷與覆蓋率、AI 家教），MathJax 載入 mhchem〔修訂 2026-09-24〕
-- **測試／量測**：`node:test`（unit 2,716／integration 503／e2e 11，2026-09-26 於 `local/integration` 實跑）＋五個 eval suite（golden＋ratchet 門檻）＋ LLM 與 OCR 的 record/replay cassette——CI 全程零金鑰、零網路、零成本
+- **測試／量測**：`node:test`（unit 2,716／integration 503／e2e 11，2026-09-26 於 `local/integration` 實跑，是 `7b7065c` 當時的數字，合併後由整合者更新）＋五個 eval suite（golden＋ratchet 門檻）＋ LLM 與 OCR 的 record/replay cassette——CI 全程零金鑰、零網路、零成本
 
 ---
 
@@ -446,20 +446,22 @@ LLM 的輸出每次都可能不同，所以品質靠三層固定下來。CI 全�
 2. **record／replay cassette**：真實的模型回應只在 Owner 的電腦上錄一次，存成 cassette（鍵含模型 ID、模板版本與輸入雜湊；本機 OCR 也走同一套，鍵含 PaddleOCR 版本）。CI 以 `LLM_MODE=replay`、`EMBED_MODE=fixture` 重播，**找不到 cassette 就失敗**，不會改打模型，也不會回假資料。換模型等於換鍵、必須重錄，所以舊模型量到的數字不會混進新報表。CI 讀哪一組 cassette，由 [`ci.yml`](./.github/workflows/ci.yml) 裡明寫的模型名決定。
 3. **五個 eval suite＋ratchet 門檻**：對人工定案的 golden 量指標，門檻寫在 [`exam_pro/eval/thresholds.json`](./exam_pro/eval/thresholds.json)（第一次量測 −0.03，之後只升不降），低於門檻 CI 轉紅。
 
-| suite | 量什麼 | 門檻（`thresholds.json`） | Gemini 時期（2026-08-24，章節重整前） | 本機模型重錄（2026-09-25） |
+| suite | 量什麼 | 門檻（`thresholds.json`） | Gemini 時期（2026-08-22～24，章節重整前） | 本機模型重錄（2026-09-25，`ollama:qwen3:8b`） |
 |---|---|---|---|---|
-| `retrieval` | 相似題檢索（golden 40 筆） | hybrid Recall@5 ≥ 0.97 | hybrid Recall@5 1.000 | 待補 |
-| `classify` | 章節分類 | accuracy ≥ 0.87、macro-F1 ≥ 0.8956 | 0.9000／0.9256 | accuracy **0.837（未達）**；macro-F1 待補 |
+| `retrieval` | 相似題檢索（golden 40 筆） | hybrid Recall@5 ≥ 0.97 | hybrid Recall@5 1.000（2026-08-22，`a02f7e4`） | 待補 |
+| `classify` | 章節分類 | accuracy ≥ 0.87、macro-F1 ≥ 0.8956 | 0.9000／0.9256 | accuracy **0.8370**（77/92，未達）、macro-F1 **0.7419**（未達） |
 | `pipeline` | 自製樣卷走完整條拆題管線 | saved_rate ≥ 0.87、gate_pass_rate ≥ 0.97、answer_agree_rate ≥ 0.87 | 0.90／1.00／0.90 | 待補 |
-| `nlq` | 50 句自然語言查題（規則路徑與 LLM 輔路徑分開算） | 規則：coverage ≥ 0.81、filters_exact ≥ 0.97、recall@10 ≥ 0.97；LLM：filters_exact ≥ 0.72、recall@10 ≥ 0.845 | 規則 0.84／1.000／1.000；LLM 0.75／0.875 | LLM 路徑 filters_exact **0.625（未達）**；其餘待補 |
+| `nlq` | 50 句自然語言查題（規則路徑與 LLM 輔路徑分開算） | 規則：coverage ≥ 0.81、filters_exact ≥ 0.97、recall@10 ≥ 0.97；LLM：filters_exact ≥ 0.72、recall@10 ≥ 0.845 | 規則 0.84／1.000／1.000；LLM 0.75／0.875 | 規則 0.84／1.000／1.000（達標）；LLM filters_exact **0.6250**（未達）、recall@10 **0.7500**（未達） |
 | `variant` | 30 個藍本的變式題（先檢索、再生成） | retrieved_coverage ≥ 0.8367、gate_pass_rate ≥ 0.22 | 0.8667／0.25 | 待補 |
 
 **目前狀態**：
 
-- 本機欄的兩個數字是 2026-09-25 在 Owner 電腦上以本機模型重錄後量到的；其他 suite 還在錄或待重錄，一律寫「待補」。
-- 兩項都**低於門檻**。Owner 的決定是**門檻不放寬**，之後改善再量。
-- 兩欄的條件不同：中間同時換了模型（Gemini → 本機 8B）與章節白名單（數學 34→52 章、物理 32→34 章，golden 隨之改標，ADR-016），所以差距不能全算在模型上。
-- 本機模型的 cassette 與向量檔還沒進版控，CI 目前重現不了本機欄的數字。2026-09-26 在 `local/integration`（`7b7065c`）上實跑：unit 2,716 項（2,714 過、2 略過）、`check:html`、migrate、integration 503 項全綠；e2e 11 項中 3 項與五個 eval 紅燈，原因全是缺本機回放檔或向量檔（[`docs/local-mode.md`](./docs/local-mode.md) 第 8 條的預期）。等回放檔進版控後，上面兩項未達門檻會讓 CI 的 eval 步驟維持紅燈，直到改善為止。
+- Gemini 欄：retrieval 是 2026-08-22（`a02f7e4`）量的，其餘四個 suite 是 2026-08-24（`f4a15ca`）。
+- 本機欄是 2026-09-25 在 Owner 電腦上以本機模型（`ollama:qwen3:8b`）重錄 classify 與 nlq 後的實測，報表是 `eval/reports/classify-2026-09-25-7b7065c.json` 與 `eval/reports/nlq-2026-09-25-7b7065c.json`（留在 Owner 電腦，不在 repo）。其他三個 suite 還在錄或待重錄，一律寫「待補」。
+- 低於門檻的有四項：classify 的 accuracy 與 macro-F1，以及 nlq LLM 輔路徑的 filters_exact 與 recall@10。nlq 規則路徑的三項都達標。Owner 的決定是**門檻不放寬**，之後改善再量。
+- 之後會依 CR-9（classify 的分冊界線修正，裁決表在 [`docs/chapter-restructure.md`](./docs/chapter-restructure.md)）與 NLQ LLM 輔路徑的改善重錄，本欄數字屆時更新。
+- 兩欄的條件不同：中間同時換了模型（Gemini → 本機 8B）與章節白名單（數學 34→52 章、物理 32→34 章，golden 隨之改標，ADR-016；classify golden 由 90 筆變為 92 筆），所以差距不能全算在模型上。
+- 本機模型的 cassette 與向量檔還沒進版控，CI 目前重現不了本機欄的數字。2026-09-26 在 `local/integration`（`7b7065c`）上實跑（以下是 `7b7065c` 當時的數字，合併後由整合者更新）：unit 2,716 項（2,714 過、2 略過）、`check:html`、migrate、integration 503 項全綠；e2e 11 項中 3 項與五個 eval 紅燈，原因全是缺本機回放檔或向量檔（[`docs/local-mode.md`](./docs/local-mode.md) 第 8 條的預期）。等回放檔進版控後，上面未達門檻的四項會讓 CI 的 eval 步驟維持紅燈，直到改善為止。
 - Gemini 時期每個功能的「問題 → 決策 → 數字」逐條對照（含量測日期、模型 ID、commit、重跑指令）在 [`exam_pro/README.md`](./exam_pro/README.md) 的「問題 → 決策 → 數字」章。
 
 ---

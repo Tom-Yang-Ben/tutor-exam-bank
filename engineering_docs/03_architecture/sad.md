@@ -277,7 +277,7 @@ sequenceDiagram
 | 環境 | Deployment 模式 | 資料庫 | 備份／監控 |
 | :--- | :--- | :--- | :--- |
 | 開發（唯一運行環境） | 本機 `npm start`＋`docker compose up` | postgres :5442（volume 持久化） | `exam_pro/scripts/` 備份腳本；`npm run report:jobs` 成本報表 |
-| 測試（本機） | 同機，另指 TEST_DATABASE_URL | postgres_test :5433（tmpfs，`_test` 後綴強制） | 整合 317〔修訂 2026-09-16b〕／e2e 11，`--test-concurrency=1`；整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠（主控合併後更新數字）〔修訂 2026-09-24〕；`local/integration`（`7b7065c`）2026-09-26 實跑：unit 2716（2 略過）、integration 503 全綠，e2e 11 項中 3 項與五個 eval 因缺本機模型的回放檔／向量檔紅燈（契約第 8 條的預期）〔修訂 2026-09-26 本機模式〕 |
+| 測試（本機） | 同機，另指 TEST_DATABASE_URL | postgres_test :5433（tmpfs，`_test` 後綴強制） | 整合 317〔修訂 2026-09-16b〕／e2e 11，`--test-concurrency=1`；整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠（主控合併後更新數字）〔修訂 2026-09-24〕；`local/integration`（`7b7065c`）2026-09-26 實跑：unit 2716（2 略過）、integration 503 全綠，e2e 11 項中 3 項與五個 eval 因缺本機模型的回放檔／向量檔紅燈（契約第 8 條的預期）；這些是 `7b7065c` 當時的數字，合併後由整合者更新〔修訂 2026-09-26 本機模式〕 |
 | CI（GitHub Actions） | workflow 起 pg16 service | 臨時容器 | `LLM_MODE=replay`＋`EMBED_MODE=fixture`，零金鑰零網路；〔修訂 2026-09-26 本機模式〕`ci.yml` 明寫本機模型名（決定讀哪一組 cassette），不裝 Ollama、不裝 Python |
 
 - 開發埠取 5442 而非 5432：開發機原生 PostgreSQL 17 服務占用 5432，同埠並存會產生誤導性的驗證失敗（`exam_pro/README.md` 安裝節）。
@@ -352,7 +352,7 @@ sequenceDiagram
 | 分詞詞典改變使既有 `search_tsv` 過期〔修訂 2026-09-24〕 | 已發生（化學詞彙） | 部分既有數理題的關鍵字檢索查不到 | 上線步驟必跑 `npm run search:reindex`（不呼叫 LLM）；之後改詞典或章名都要再跑 |
 | 家教每日預算只在程序內〔修訂 2026-09-24〕 | 中 | 重啟歸零、多實例不共享；最後一次呼叫可能略超 | 單機單人可接受；要跨重啟累計需新表（預留 0017 未用） |
 | 知識點與口語版為 AI 草擬〔修訂 2026-09-24〕 | 已存在 | 內容錯誤會直接進家教講法 | 審查已修正一輪數理化錯誤；draft 在 prompt 內標明「僅供參考」；Owner 逐章審定 |
-| 本機模型的量測低於門檻〔修訂 2026-09-26 本機模式〕 | 已發生 | 2026-09-25 本機重錄後 classify accuracy 0.837（門檻 0.87）、nlq LLM 路徑 filters_exact 0.625（門檻 0.72）；其餘 suite 待補。本機回放檔進版控後，CI 的 eval 會因此維持紅燈 | `thresholds.json` 的數字不動（LM-14），Owner 決定不放寬門檻、改善後重量。注意這兩個數字與 Gemini 時期的差距同時包含換模型與章節重整（ADR-016）兩個因素 |
+| 本機模型的量測低於門檻〔修訂 2026-09-26 本機模式〕 | 已發生 | 2026-09-25 在 Owner 電腦上以本機模型（`ollama:qwen3:8b`）重錄 classify 與 nlq（報表 `eval/reports/classify-2026-09-25-7b7065c.json`、`nlq-2026-09-25-7b7065c.json`，不在 repo）：classify accuracy 0.8370（77/92，門檻 0.87）、macro-F1 0.7419（門檻 0.8956），兩項未達；nlq LLM 輔路徑 filters_exact 0.6250（門檻 0.72）、recall@10 0.7500（門檻 0.845），兩項未達；nlq 規則路徑 rule_coverage 0.84、filters_exact 1、recall@10 1，都達標。retrieval、pipeline、variant 待補。本機回放檔進版控後，CI 的 eval 會因這四項維持紅燈 | `thresholds.json` 的數字不動（LM-14），Owner 決定不放寬門檻、改善後重量；之後會依 CR-9（`docs/chapter-restructure.md`）與 NLQ LLM 輔路徑的改善重錄，數字會更新。注意這些數字與 Gemini 時期的差距同時包含換模型與章節重整（ADR-016）兩個因素 |
 | CPU 推論速度未實測〔修訂 2026-09-26 本機模式〕 | 中 | 一份考卷可能超過一夜、長節點逾時 | 逾時與租約依供應商調整、`JOB_NODE_TIMEOUT_MS`／`OLLAMA_TIMEOUT_MS` 可調（LM-12 ②）；Owner 實測後更新使用說明，若無法接受即觸發 ADR-017 的重新評估 |
 | 交叉驗證的門檻與盲點〔修訂 2026-09-26 本機模式〕 | 已存在 | 0.85 未校準，複核比例可能偏高；跨頁題可能兩版一致地殘缺而自動入庫 | 本機重錄後依實測校準（LM-12 ③）；複核時留意跨頁題，之後可加一頁前瞻（LM-12 ①） |
 | PaddlePaddle／PaddleOCR 上游版本問題〔修訂 2026-09-26 本機模式〕 | 已發生（LM-16） | 安裝後辨識第一頁即失敗 | 版本全部釘死、錯誤訊息附處理方式；升級 PaddleOCR＝OCR cassette 失效要重錄 |
