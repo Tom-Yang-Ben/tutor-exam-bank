@@ -290,6 +290,8 @@ if (featuresRetrain.FEATURE_RETRAIN) {
     router.post('/students/:id/retrain-items', retrainController.addItems);
     router.patch('/students/:id/retrain-items/:itemId', retrainController.patchItem);
     router.get('/retrain/summary', retrainController.summary);
+    // 〔retrain PR-4〕API-13 重練成效（第 5.2 節；R10 選 1）。同一個旗標、同一種掛法。
+    router.get('/students/:id/retrain-stats', retrainController.stats);
 }
 
 module.exports = router;

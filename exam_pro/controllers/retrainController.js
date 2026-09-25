@@ -5,6 +5,7 @@
 //   API-2  POST  /api/students/:id/retrain-items                            以題號手動加入
 //   API-3  PATCH /api/students/:id/retrain-items/:itemId                    移出／判定已會／重新加入
 //   API-4  GET   /api/retrain/summary?as_of=                                學生清單的到期徽章
+//   API-13 GET   /api/students/:id/retrain-stats?days=&subject=             重練成效（〔retrain PR-4〕）
 //
 // 只在 FEATURE_RETRAIN 開啟時掛載（routes/index.js 檔尾的錯題重練區塊；關閉時落到 Express 預設 404）。
 // 全部不呼叫 LLM，不套限流（同裁決 S5-25 對 WS-D 四支端點的處理）。回應不含學生姓名（API-4 以 id 對應既有學生清單）。
@@ -14,6 +15,7 @@
 // ─────────────────────────────────────────────────────────────
 const v = require('../utils/retrainValidation');
 const retrain = require('../services/retrainService');
+const retrainStats = require('../services/retrainStatsService');   // 〔retrain PR-4〕API-13
 
 // config/db 缺 DATABASE_URL 就在 require 當下丟錯；延遲到第一次查詢才載入（同 kcController 的做法）
 const db = {
@@ -110,6 +112,25 @@ exports.summary = async (req, res, next) => {
     if (parsed.error) return res.status(400).json({ message: parsed.error });
     try {
         res.status(200).json(await retrain.summary(db.query, { asOf: parsed.asOf, today }));
+    } catch (err) {
+        next(err);
+    }
+};
+
+/**
+ * 〔retrain PR-4〕API-13 GET /api/students/:id/retrain-stats?days=&subject=（重練成效；R10 選 1）。
+ * 回應形狀與各欄的語意在 services/retrainStatsService.js 檔頭。只讀、不寫庫。
+ */
+exports.stats = async (req, res, next) => {
+    const studentId = v.parseStudentId(req.params.id);
+    if (studentId === null) return res.status(404).json({ message: STUDENT_NOT_FOUND });
+    const parsed = v.parseStatsQuery(req.query);
+    if (parsed.error) return res.status(400).json({ message: parsed.error });
+    try {
+        const out = await retrainStats.stats(db.query, studentId,
+            { days: parsed.days, subject: parsed.subject, today: retrain.todayLocal() });
+        if (!out) return res.status(404).json({ message: STUDENT_NOT_FOUND });
+        res.status(200).json(out);
     } catch (err) {
         next(err);
     }
