@@ -78,7 +78,7 @@ describe('config/models.js — parseModel', () => {
         process.env.MODEL_EXTRACT = 'gemini:custom-a';
         assert.equal(models.MODEL_EXTRACT, 'gemini:custom-a');
         delete process.env.MODEL_EXTRACT;
-        assert.equal(models.MODEL_EXTRACT, 'gemini:gemini-3.5-flash');   // 裁決 S0-5 的預設
+        assert.equal(models.MODEL_EXTRACT, 'ollama:qwen3-vl:8b');   // 本機模式預設（docs/local-mode.md 第 2 條；原為裁決 S0-5 的 gemini:gemini-3.5-flash）
     });
 });
 
