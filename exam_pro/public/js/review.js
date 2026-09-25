@@ -43,7 +43,9 @@ const REASON_LABEL = {
     schema_invalid: '欄位不合格',
     budget_exceeded: '超出成本上限',
     provider_error: '供應商錯誤',
-    awaiting_approval: '等待人工確認'
+    awaiting_approval: '等待人工確認',
+    // 〔本機模式 L2〕0015：本機拆題（PaddleOCR 與視覺模型）兩版不一致或只有一版（docs/local-mode.md 第 4 條）
+    extract_disagree: '拆題交叉驗證不一致'
 };
 
 const REASON_TONE = {
@@ -55,7 +57,8 @@ const REASON_TONE = {
     schema_invalid: 'rose',
     budget_exceeded: 'slate',
     provider_error: 'slate',
-    awaiting_approval: 'indigo'
+    awaiting_approval: 'indigo',
+    extract_disagree: 'amber'
 };
 
 const TONE_CLASS = {
@@ -333,6 +336,23 @@ export function reasonSentence(reason, payload) {
             return '供應商連續錯誤（逾時或配額），重試次數已用盡。這一題沒有被判定為壞題，重跑通常就會過。';
         case 'awaiting_approval':
             return '沒有任何閘門判定它壞掉，但流程需要人點頭。';
+        case 'extract_disagree': {
+            // 〔本機模式 L2〕cross_check 由 agents/extractCrossCheck.js 寫進 payload.extract
+            const cc = (p.extract && p.extract.cross_check) || {};
+            const used = cc.picked === 'ocr' ? 'OCR 版' : '視覺版';
+            const alt = typeof cc.alt_question_text === 'string' && cc.alt_question_text.trim()
+                ? cc.alt_question_text.trim() : '';
+            const altShort = alt.length > 160 ? `${alt.slice(0, 160)}…` : alt;
+            if (cc.status === 'vision_only') {
+                return '只有視覺模型拆出這一題，OCR 版沒有對應的題（或 OCR 未啟用），無法交叉驗證。請對照原卷確認題幹與選項。';
+            }
+            if (cc.status === 'ocr_only') {
+                return '只有 OCR 版拆出這一題，視覺模型沒有對應的題。請對照原卷確認題幹、選項與附圖。';
+            }
+            const sim = typeof cc.similarity === 'number' ? `（相似度 ${cc.similarity.toFixed(2)}）` : '';
+            return `視覺模型與 OCR 讀出的題幹不一致${sim}，目前採用${used}。` +
+                (altShort ? `另一版題幹：「${altShort}」。` : '') + '請對照原卷確認。';
+        }
         default:
             return `複核原因：${reason}`;
     }

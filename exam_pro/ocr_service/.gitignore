@@ -1,0 +1,5 @@
+# 本機 OCR 的虛擬環境與模型（ocr_pdf.py --warmup 下載到 models/，數百 MB 到數 GB）不進版控
+.venv/
+models/
+__pycache__/
+*.pyc

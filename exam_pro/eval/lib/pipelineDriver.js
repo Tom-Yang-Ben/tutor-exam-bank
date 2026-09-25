@@ -409,6 +409,22 @@ async function runPipeline(opts) {
             const node = NODE_FOR_STATE[row.state];
             limits.budgetLeft = budgetUsd - costUsd;
 
+            // 〔本機模式 L2〕與 runner 相同的政策停等：本機拆題兩版不一致（cross_check.status ≠ 'agree'）的題
+            // 走到 save 時停在 needs_review('extract_disagree')，eval 的入庫數才與正式管線一致。
+            // Gemini 路徑的題沒有 cross_check，這一段不會觸發。
+            const stopReason = node === 'save' ? require('../../workers/jobRunner').crossCheckStopReason(row.payload) : null;
+            if (stopReason) {
+                events.push({
+                    jq_id: row.id, node: 'save', attempt: 1, model: null,
+                    token_in: null, token_out: null, token_thinking: null, token_cached: null,
+                    cost_usd: 0, cost_estimated: false, latency_ms: 0, outcome: 'skipped', error_class: null,
+                    detail: { reason: stopReason }
+                });
+                row.state = 'needs_review';
+                row.review_reason = stopReason;
+                break;
+            }
+
             const ex = row.payload.extract;
             const lintText = row.payload.lint || {};
             const outcome = await callNode({

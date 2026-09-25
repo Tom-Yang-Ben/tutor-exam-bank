@@ -23,10 +23,13 @@ async function followsOf(client, questionId) {
     return rows.length ? rows[0].follows_question_id : null;
 }
 
-/** DDL CHECK 的九個 review_reason，順序 = 介面第 2 條（0009 追加 transcription_mismatch）。 */
+/**
+ * DDL CHECK 的十個 review_reason，順序 = 介面第 2 條（0009 追加 transcription_mismatch；
+ * 〔本機模式 L2〕0015 追加 extract_disagree——本機拆題的兩版不一致，docs/local-mode.md 第 4 條第 4 點）。
+ */
 const REVIEW_REASONS = ['chapter_invalid', 'formula_unparsable', 'answer_mismatch',
     'duplicate', 'budget_exceeded', 'provider_error', 'schema_invalid', 'awaiting_approval',
-    'transcription_mismatch'];
+    'transcription_mismatch', 'extract_disagree'];
 
 const NOT_FOUND = '找不到該待複核題目';
 const ALREADY_DONE = '該題目已處理完畢，不能重複複核。';

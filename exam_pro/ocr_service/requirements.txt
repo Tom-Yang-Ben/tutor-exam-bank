@@ -1,0 +1,22 @@
+# exam_pro/ocr_service/requirements.txt — 本機 OCR 的 Python 套件（docs/local-mode.md 第 4 條）
+#
+# 安裝（Windows，Python 3.10～3.13，64 位元；在 exam_pro\ocr_service 底下）：
+#   py -3.12 -m venv .venv
+#   .venv\Scripts\python.exe -m pip install -r requirements.txt
+#   .venv\Scripts\python.exe ocr_pdf.py --warmup      ← 下載模型（只做一次，需要網路）
+#   .venv\Scripts\python.exe ocr_pdf.py --selftest    ← 不連網確認可用
+#
+# 全部是 CPU 版，版本全部固定：
+#   - paddlepaddle：PyPI 上的 paddlepaddle 就是 CPU 版（GPU 版叫 paddlepaddle-gpu）；
+#     3.3.1 有 Windows／Linux／macOS 的 cp39～cp313 wheel。
+#   - paddleocr[doc-parser]：PP-StructureV3（版面分析＋文字＋表格＋公式）需要 doc-parser 這組 extra。
+#   - paddlex：paddleocr 3.7.0 要求 paddlex>=3.7.0,<3.8.0，這裡釘死實測過的 3.7.2，
+#     ocr_pdf.py 的離線護欄用到它的內部結構。
+#   - pymupdf：PDF → PNG。
+#
+# ⚠ services/ocr/index.js 從這個檔讀 paddleocr 的版本號，拼成 cassette 鍵的 modelId（paddleocr@<版本>）。
+#   升級 PaddleOCR 時改下面那一行，既有的 ocr cassette 會自動失效，要重錄。
+paddlepaddle==3.3.1
+paddleocr[doc-parser]==3.7.0
+paddlex==3.7.2
+pymupdf==1.28.2
