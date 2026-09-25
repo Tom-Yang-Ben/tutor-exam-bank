@@ -224,7 +224,7 @@ describe('extract 本機路徑', () => {
             assert.equal(ocr.calls[0].pdfBytes, pdf, '整份 PDF＋頁碼範圍（ocr_pdf.py 自己取頁）');
         });
 
-        test('視覺版的請求：模板文字＋本塊每頁一張 PNG（inlineData image/png，用 OCR 轉好的那幾張）', async () => {
+        test('視覺版的請求：模板文字＋本塊每頁一張 PNG（imageBase64＋mimeType image/png，LM-4；用 OCR 轉好的那幾張）', async () => {
             const ocr = fakeOcr();
             useDeps({ ocr });
             const { ctx, calls } = fakeCtx();
@@ -239,8 +239,8 @@ describe('extract 本機路徑', () => {
             assert.equal(v.maxOutputTokens, extract.LOCAL_MAX_OUTPUT_TOKENS);
             assert.equal(v.parts.length, 3);
             assert.equal(v.parts[0].text, extract.buildLocalPrompt('math_physics', 'vision', { fromPage: 3, toPage: 4 }));
-            assert.deepEqual(v.parts[1], { inlineData: { mimeType: 'image/png', data: PNG1.toString('base64') } });
-            assert.deepEqual(v.parts[2], { inlineData: { mimeType: 'image/png', data: PNG2.toString('base64') } });
+            assert.deepEqual(v.parts[1], { imageBase64: PNG1.toString('base64'), mimeType: 'image/png' });
+            assert.deepEqual(v.parts[2], { imageBase64: PNG2.toString('base64'), mimeType: 'image/png' });
         });
 
         test('OCR 版的請求：MODEL_OCR_STRUCTURE、模板＋OCR 文字、cacheKeyParts 多一個 ocrSha256', async () => {
@@ -262,7 +262,7 @@ describe('extract 本機路徑', () => {
             assert.equal(o.parts.length, 1, '一個 text part（不依賴 adapter 怎麼串接多個 text）');
             assert.equal(o.parts[0].text,
                 `${extract.buildLocalPrompt('math_physics', 'ocr', { fromPage: 3, toPage: 4 })}\n\n${extract.wrapOcrText(text)}`);
-            assert.ok(!o.parts.some(p => p.inlineData), 'OCR 版不送圖片');
+            assert.ok(!o.parts.some(p => p.inlineData || p.imageBase64), 'OCR 版不送圖片');
         });
 
         test('MODEL_OCR_STRUCTURE 未設 → MODEL_VERIFY；兩個都沒有 → config/models.js 的 MODEL_VERIFY', async () => {
@@ -338,7 +338,7 @@ describe('extract 本機路徑', () => {
             await extract.run(ctx, { pdfBytes: pdf, chunk: CHUNK });
             assert.equal(render.calls.length, 1);
             assert.deepEqual({ ...render.calls[0], pdfBytes: undefined }, { pdfBytes: undefined, fromPage: 3, toPage: 4, dpi: 150 });
-            assert.equal(calls[0].parts[1].inlineData.data, Buffer.from('rendered-3').toString('base64'));
+            assert.equal(calls[0].parts[1].imageBase64, Buffer.from('rendered-3').toString('base64'));
         });
 
         test('化學卷：extract_vision_chem／extract_ocr_chem、化學模板與 SYSTEM、化學值域的 schema', async () => {

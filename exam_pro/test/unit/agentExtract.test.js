@@ -326,7 +326,8 @@ describe('extract.run', () => {
         const pdf = await makePdf(1);
         const ctx = {
             llm: { generateJson: async () => { const e = new Error('429 配額用盡'); e.errorClass = 'rate_limited'; throw e; } },
-            logger: console, config: { models: {}, thresholds: {} }
+            // 〔本機模式整合〕預設模型改成本機後，這則測的是 Gemini 路徑：明寫 extract 模型
+            logger: console, config: { models: { extract: 'gemini:gemini-3.5-flash' }, thresholds: {} }
         };
         const outcome = await extract.run(ctx, { pdfBytes: pdf, chunk: { no: 1, fromPage: 1, toPage: 1 } });
         assert.equal(outcome.kind, 'error');

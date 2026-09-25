@@ -35,7 +35,7 @@
 
 分頁式版面（PR #6）：Hero 區塊（工作流三步說明＋CTA）已整段刪除（commit 995f444）；5 個 `.app-view` 視圖容器由 inline script 的 hash 路由一次只顯示一個（`VIEW_FOR_ANCHOR`，index.html:1440-1446；`showView`／`routeFromHash`，:1449-1468）。
 
-視圖切換動效（2026-08-29）：切換時新視圖以 GSAP 淡入＋上移歸位（`autoAlpha` 0→1、`y` 28→0，0.45s `power2.out`），舊視圖即時隱藏；首次載入、同視圖內子錨點不觸發動效。守門條件 `motionOn()`：`prefers-reduced-motion: reduce` 或 GSAP CDN（jsdelivr，釘 3.13.0）載入失敗時退回硬切，功能不依賴動畫；動畫結束 `clearProps` 歸還 inline style，快速連切由 `overwrite: 'auto'` 處理。
+視圖切換動效（2026-08-29）：切換時新視圖以 GSAP 淡入＋上移歸位（`autoAlpha` 0→1、`y` 28→0，0.45s `power2.out`），舊視圖即時隱藏；首次載入、同視圖內子錨點不觸發動效。守門條件 `motionOn()`：`prefers-reduced-motion: reduce` 或 GSAP（〔修訂 2026-09-25〕改從本機 `/vendor/gsap` 載入，釘 3.13.0）載入失敗時退回硬切，功能不依賴動畫；動畫結束 `clearProps` 歸還 inline style，快速連切由 `overwrite: 'auto'` 處理。
 
 ```text
 Topbar（sticky 導覽：品牌 Tutor-exam-bank＋5 個分頁連結（行動版 overflow-x-auto 橫向捲動）＋系統就緒指示）
@@ -124,9 +124,9 @@ view-assistant（:588） ─ #assistant 空錨點（:589）
 | 項目 | 連結／位置 |
 | :--- | :--- |
 | SSOT | `exam_pro/public/index.html`（無 Figma 稿，程式碼即設計權威） |
-| Design Tokens | 同檔 `:root` CSS 變數（--ink／--brand／--mint 等）＋Tailwind CDN |
+| Design Tokens | 同檔 `:root` CSS 變數（--ink／--brand／--mint 等）＋Tailwind（〔修訂 2026-09-25〕本機 `/vendor/tailwindcss`） |
 | 元件對照 | `createQuestionEditor`／`showToast`／`apiFetch` 等經 `window.ExamApp` 供各分頁 module 共用 |
-| 已知限制 | Tailwind 與 MathJax 走 CDN，離線環境無樣式與公式渲染；〔修訂 2026-09-24〕MathJax 設定明確載入 mhchem（`\ce{…}` 化學式），與 `ui/safe`，並關掉數學式裡的連結（裁決 S5-35，尚待瀏覽器實測）；階段 5 的掛鉤只以 miniDom 與 `check:html` 驗證 |
+| 已知限制 | ~~Tailwind 與 MathJax 走 CDN，離線環境無樣式與公式渲染~~〔修訂 2026-09-25〕已改從本機載入，離線可用（`docs/local-mode.md` 第 5 條）；請用 `ALLOWED_ORIGINS` 裡的網址（預設 `http://localhost:3000`）開頁面，用 `127.0.0.1` 開會讓字型請求被 CORS 擋下；〔修訂 2026-09-24〕MathJax 設定明確載入 mhchem（`\ce{…}` 化學式），與 `ui/safe`，並關掉數學式裡的連結（裁決 S5-35，尚待瀏覽器實測）；階段 5 的掛鉤只以 miniDom 與 `check:html` 驗證 |
 
 ## 10. 追溯
 

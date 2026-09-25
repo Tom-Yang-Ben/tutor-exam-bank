@@ -86,10 +86,14 @@ describe('recordingPlan：這一輪錄製用到哪些模型、要不要金鑰與
         assert.equal(local.recordingPlan({ models: { ...LOCAL_CI, MODEL_EXTRACT: 'gemini:gemini-3.5-flash' }, suites: ALL }).needOcr, false);
     });
 
-    test('ci.yml 沒寫 MODEL_NLQ：nlq 用 services/nlqService.js 的預設（Gemini），錄 nlq 就要金鑰', () => {
+    test('〔LM-7〕ci.yml 沒寫 MODEL_NLQ：nlq 用 services/nlqService.js 的預設（本機），錄 nlq 不需要金鑰', () => {
         const p = local.recordingPlan({ models: { MODEL_EXTRACT: LOCAL_CI.MODEL_EXTRACT, MODEL_VERIFY: LOCAL_CI.MODEL_VERIFY }, suites: ['nlq'] });
-        assert.equal(p.needGeminiKey, true);
-        assert.deepEqual(p.gemini.map(u => u.key), ['MODEL_NLQ']);
+        assert.equal(p.needGeminiKey, false);
+        assert.deepEqual(p.gemini.map(u => u.key), []);
+        assert.ok(p.ollama.includes('qwen3:8b'));
+        const g = local.recordingPlan({ models: { MODEL_EXTRACT: LOCAL_CI.MODEL_EXTRACT, MODEL_VERIFY: LOCAL_CI.MODEL_VERIFY, MODEL_NLQ: 'gemini:gemini-3.5-flash' }, suites: ['nlq'] });
+        assert.equal(g.needGeminiKey, true, '明寫 Gemini 的 MODEL_NLQ 才需要金鑰');
+        assert.deepEqual(g.gemini.map(u => u.key), ['MODEL_NLQ']);
         assert.equal(local.recordingPlan({ models: { MODEL_EXTRACT: LOCAL_CI.MODEL_EXTRACT, MODEL_VERIFY: LOCAL_CI.MODEL_VERIFY }, suites: ['classify'] }).needGeminiKey, false);
     });
 

@@ -17,6 +17,11 @@
 //   真正的 agents/ 目錄去跑本檔建出來的列，於是本檔的斷言就對不上了。
 //   本檔設 JOB_RUNNER=off 只能擋住「app 自己起 runner」，擋不住外部行程。
 // ─────────────────────────────────────────────────────────────
+// 〔本機模式整合 LM-8〕本檔測的是 Gemini 路徑（Gemini 的模板、cassette、code execution／語音）。
+// 預設模型改成本機後（docs/local-mode.md 第 2 條），在本檔的行程內明寫 Gemini；本機路徑另有
+// test/integration/localExtract.pg.test.js 與 test/unit/llmOllama*.test.js 覆蓋。每個測試檔是獨立行程，不會外溢。
+process.env.MODEL_EXTRACT = 'gemini:gemini-3.5-flash';
+process.env.MODEL_VERIFY = 'gemini:gemini-3.1-pro-preview';
 const { test, describe, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');

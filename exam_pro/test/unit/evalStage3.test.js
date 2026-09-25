@@ -263,7 +263,8 @@ describe('package.json 與 ci.yml 的接線', () => {
     test('既有的 scripts 沒被動到（scripts 由 WS-D 統一，但不代表可以改別人的）', () => {
         assert.equal(pkg.scripts.test, 'node --test "test/unit/**/*.test.js"');
         assert.equal(pkg.scripts['eval:classify'], 'npm run eval -- --suite classify');
-        assert.equal(pkg.scripts['check:html'], 'node eval/tools/check_html.js');
+        // 〔本機模式整合〕check:html 刻意串上 L3 的離線檢查（public/ 不得有外部資源網址）；原本那支照舊排第一
+        assert.equal(pkg.scripts['check:html'], 'node eval/tools/check_html.js && node scripts/check_html_offline.js');
     });
 
     test('test:e2e 存在、走 --test-concurrency=1、且帶 .env.replay（E-X15）', () => {

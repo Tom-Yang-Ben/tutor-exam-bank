@@ -91,8 +91,8 @@ jobs:
       # 向量檔 eval/fixtures/embeddings.<模型>.768.json 的模型段（`:`、`/`、`\` 換成 `-`）：
       # 這一行對應 embeddings.ollama-qwen3-embedding-0.6b.768.json。沒有前綴的舊值（gemini-embedding-001）視為 Gemini。
       EMBED_MODEL: ollama:qwen3-embedding:0.6b
-      # 自然語言查題的 LLM 輔路徑。services/nlqService.js 沒設時的預設仍是 Gemini，
-      # 不寫這行的話本機重錄 nlq 會去呼叫雲端；與 MODEL_VERIFY 同一個本機純文字模型。
+      # 自然語言查題的 LLM 輔路徑。〔LM-7〕services/nlqService.js 沒設時的預設已改成同一個本機模型；
+      # 這裡仍明寫，讓 CI 讀哪一組 nlq cassette 在 workflow 檔上看得見。
       MODEL_NLQ: ollama:qwen3:8b
       # fork PR 的 replay miss 降為 warning（規劃 §5.3.3、介面第 5.2 條）。
       # 判斷本身在 eval/lib/replayMiss.js（介面明說「這個判斷不在 services/llm 裡」）；

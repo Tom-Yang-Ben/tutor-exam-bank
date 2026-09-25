@@ -40,7 +40,7 @@ const LOCAL_DEFAULTS = Object.freeze({
  * services/nlqService.js 的 DEFAULT_MODEL_NLQ（該檔沒有匯出這個常數）。
  * CI 沒設 MODEL_NLQ 時 nlq suite 用的就是它；單元測試掃 nlqService.js 的原始碼，兩邊不一致就紅。
  */
-const NLQ_CODE_DEFAULT = 'gemini:gemini-3.5-flash';
+const NLQ_CODE_DEFAULT = 'ollama:qwen3:8b';   // 〔LM-7〕與 services/nlqService.js 的 DEFAULT_MODEL_NLQ 同步
 
 /** 第 2 條：拆題模型是 ollama 時 JOB_NODE_TIMEOUT_MS 的預設（45 分） */
 const LOCAL_NODE_TIMEOUT_MS = 2_700_000;

@@ -10,3 +10,6 @@ exam_pro/eval/** text eol=lf
 # 全部作廢，而且 `git status` 是乾淨的，只有在別台機器 checkout 打開檔案時才會發現。
 # binary 同時關掉 eol 轉換與 diff，正是這裡要的。
 exam_pro/eval/fixtures/*.pdf binary
+
+# 〔本機模式整合〕Windows 一鍵腳本以 CRLF 原樣進版控、原樣 checkout（cmd 的 goto／標籤在 LF 下會出錯），不受 core.autocrlf 影響
+exam_pro/scripts/windows/*.bat -text

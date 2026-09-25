@@ -225,7 +225,8 @@ async function runPipeline(opts) {
         classifyMinConf: Number(process.env.CLASSIFY_MIN_CONF || 0.8),
         dedupDup: Number(process.env.DEDUP_DUP_THRESHOLD || 0.97),
         dedupVariant: Number(process.env.DEDUP_VARIANT_THRESHOLD || 0.90),
-        pdfChunkPages: Number(process.env.JOB_PDF_CHUNK_PAGES || 20),
+        // 〔本機模式整合〕與 runner 同一條規則：拆題模型是 ollama 且沒明寫時一塊 2 頁
+        pdfChunkPages: Number(process.env.JOB_PDF_CHUNK_PAGES || require('../../workers/jobRunner').loadLocalModeConfig().pdfChunkPages || 20),
         inlineMaxBytes: Number(process.env.GEMINI_INLINE_MAX_BYTES || 15728640),
         nodeTimeoutMs: Number(process.env.JOB_NODE_TIMEOUT_MS || 120000)
     }, (opts.config && opts.config.thresholds) || {});
@@ -325,8 +326,10 @@ async function runPipeline(opts) {
             logger,
             config: {
                 models: {
-                    extract: process.env.MODEL_EXTRACT || 'gemini:gemini-3.5-flash',
-                    verify: require('../../config/models').MODEL_VERIFY   // 單一真相：config/models.js（裁決 S2-29）
+                    // 〔本機模式整合〕extract 也改讀 config/models.js（未設＝本機預設），不再寫死 Gemini
+                    extract: require('../../config/models').MODEL_EXTRACT,
+                    verify: require('../../config/models').MODEL_VERIFY,   // 單一真相：config/models.js（裁決 S2-29）
+                    ocrStructure: String(process.env.MODEL_OCR_STRUCTURE || '').trim() || require('../../config/models').MODEL_VERIFY
                 },
                 limits: sm.tables().DEFAULT_LIMITS,
                 thresholds,

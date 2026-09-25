@@ -546,7 +546,9 @@ function createRunner(opts = {}) {
         try {
             const pricing = require('../config/pricing');
             if (typeof pricing.estimateCost === 'function') {
-                const modelId = String(meter.model).includes(':') ? String(meter.model).split(':').pop() : String(meter.model);
+                // 〔本機模式整合〕'ollama:qwen3:8b' 的 id 是 'qwen3:8b'，不能取最後一段；Gemini 的結果不變
+                let modelId;
+                try { modelId = require('../config/models').parseModel(String(meter.model)).id; } catch (_) { modelId = String(meter.model); }
                 const r = pricing.estimateCost({
                     modelId, tokenIn: meter.tokenIn, tokenOut: meter.tokenOut,
                     tokenThinking: meter.tokenThinking, tokenCached: meter.tokenCached
@@ -1478,9 +1480,9 @@ function createRunner(opts = {}) {
             };
         } catch (err) {
             if (err.code !== 'MODULE_NOT_FOUND') throw err;
-            const verify = process.env.MODEL_VERIFY || 'gemini:gemini-3.1-pro-preview';   // 與 config/models.js 的 DEFAULT_VERIFY 一致（裁決 S2-29）
+            const verify = process.env.MODEL_VERIFY || 'ollama:qwen3:8b';   // 〔本機模式整合〕與 config/models.js 的 DEFAULT_VERIFY 一致
             modelsCache = {
-                extract: process.env.MODEL_EXTRACT || 'gemini:gemini-3.5-flash',
+                extract: process.env.MODEL_EXTRACT || 'ollama:qwen3-vl:8b',
                 verify,
                 variant: process.env.MODEL_VARIANT || verify,
                 ocrStructure: String(process.env.MODEL_OCR_STRUCTURE || '').trim() || verify

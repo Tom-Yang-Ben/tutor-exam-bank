@@ -51,7 +51,9 @@ const MAX_LIMIT = 50;
 const MAX_CHAPTERS = 3;          // 第 6.4 條第 4 點：多章要對 buildHybridQuery 跑多次
 const CACHE_MAX = 100;           // 第 6.7 條：LRU 100 筆
 const EF_SEARCH = 100;           // 與 /similar 相同（interfaces-stage1.md 第 5 條）
-const DEFAULT_MODEL_NLQ = 'gemini:gemini-3.5-flash';
+// 〔本機模式整合 LM-7〕預設改成本機的文字模型：沒設 MODEL_NLQ 時不得連外（docs/local-mode.md 第 1 條第 1 點）。
+// 逾時仍是 4 秒（實際上只用規則解析）；要用 LLM 輔路徑就把 NLQ_TIMEOUT_MS 調大，見 docs/local-mode.md 第 10 條。
+const DEFAULT_MODEL_NLQ = 'ollama:qwen3:8b';
 const DEFAULT_TIMEOUT_MS = 4000;
 const LIKE_MAX_TERMS = 5;
 

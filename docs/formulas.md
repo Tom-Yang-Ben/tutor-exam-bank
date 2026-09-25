@@ -9,7 +9,7 @@
 
 | 端 | 引擎 | 讀到的是什麼 |
 |---|---|---|
-| 網頁（題庫列表、複核、組卷預覽） | MathJax 3（CDN，`tex-mml-chtml`） | `question_text`／`answer_text` 原文，`$…$` 行內、`$$…$$` 區塊 |
+| 網頁（題庫列表、複核、組卷預覽） | MathJax 3（〔修訂 2026-09-25〕本機 `/vendor/mathjax`，`tex-mml-chtml`） | `question_text`／`answer_text` 原文，`$…$` 行內、`$$…$$` 區塊 |
 | Word 匯出 | `utils/textFormatter.js` → OMML（`m:oMath`） | 同一份原文，逐行掃描，`$…$` 與 `$$…$$` 轉成 Word 原生數學物件 |
 | 入庫閘門 | `utils/formulaLint.js`（lint agent 與複核頁 approve 都用它） | 同一份原文；有 `error` 級問題就擋下，進 `needs_review('formula_unparsable')` |
 

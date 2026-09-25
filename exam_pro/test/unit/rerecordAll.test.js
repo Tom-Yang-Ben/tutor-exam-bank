@@ -479,15 +479,17 @@ describe('yes 確認與驗證表', () => {
         assert.ok(errors.some(e => e.includes('setup_local_ai.bat')), errors.join('\n'));
     });
 
-    test('main（混合）：MODEL_NLQ 仍走 Gemini 時要金鑰，訊息指名是哪一個', async (t) => {
+    test('main（混合）：MODEL_NLQ 明寫 Gemini 時要金鑰，訊息指名是哪一個', async (t) => {
         t.mock.method(console, 'log', () => {});
         const errors = [];
         t.mock.method(console, 'error', (m) => errors.push(String(m)));
-        const mixed = localDeps({ readCiModels: () => ({ ...LOCAL_CI, MODEL_NLQ: undefined }), askYes: async () => { throw new Error('不該問'); } });
+        // 〔LM-7〕nlqService 沒設時的預設已改成本機；要測「混合」就明寫 Gemini 的 MODEL_NLQ
+        const NLQ_GEMINI = 'gemini:gemini-3.5-flash';
+        const mixed = localDeps({ readCiModels: () => ({ ...LOCAL_CI, MODEL_NLQ: NLQ_GEMINI }), askYes: async () => { throw new Error('不該問'); } });
         await withEnv({ GEMINI_API_KEY: undefined, TEST_DATABASE_URL: 'postgres://x/y_test' }, async () => {
             assert.equal(await rerecord.main(['--suites', 'nlq'], mixed.deps), 1);
         });
-        assert.ok(errors.some(e => e.includes('GEMINI_API_KEY') && e.includes(`MODEL_NLQ=${local.NLQ_CODE_DEFAULT}`)), errors.join('\n'));
+        assert.ok(errors.some(e => e.includes('GEMINI_API_KEY') && e.includes(`MODEL_NLQ=${NLQ_GEMINI}`)), errors.join('\n'));
     });
 
     test('main --dry-run --json（本機）：印出本機區塊（要下載的模型、要不要 OCR、預估秒數），不做任何錄前檢查', async (t) => {

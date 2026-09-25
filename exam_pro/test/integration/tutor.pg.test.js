@@ -15,6 +15,13 @@
 // 三道防線同其他整合測試：只讀 TEST_DATABASE_URL、庫名必須以 _test 結尾、require config/db 前先覆寫 DATABASE_URL。
 // 整合測試不得假設別的 WS 已寫入資料（第 2 條）：知識點、題目—知識點、錯因都由本檔自己插 fixture。
 // ─────────────────────────────────────────────────────────────
+// 〔本機模式整合 LM-8〕本檔測的是 Gemini 路徑（Gemini 的模板、cassette、code execution／語音）。
+// 預設模型改成本機後（docs/local-mode.md 第 2 條），在本檔的行程內明寫 Gemini；本機路徑另有
+// test/integration/localExtract.pg.test.js 與 test/unit/llmOllama*.test.js 覆蓋。每個測試檔是獨立行程，不會外溢。
+process.env.MODEL_EXTRACT = 'gemini:gemini-3.5-flash';
+process.env.MODEL_VERIFY = 'gemini:gemini-3.1-pro-preview';
+process.env.MODEL_TUTOR = 'gemini:gemini-3.1-pro-preview';
+process.env.MODEL_VOICE = 'gemini:gemini-3.5-flash';
 const { test, describe, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

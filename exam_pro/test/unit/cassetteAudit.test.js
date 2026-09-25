@@ -81,6 +81,9 @@ describe('inventory：範圍內六個 agent，化學與 tutor／voice 不碰', (
     });
 
     test('〔本機模式 L4〕本機拆題的 ocr／extract_vision／extract_ocr 也在範圍內；化學版照舊不碰', () => {
+        // 〔本機模式整合〕ocr.v1 的模板原文由 services/ocr 註冊（L2）；先載入，測試寫的鍵才與正式錄製相同
+        require('../../services/ocr');
+        require('../../agents/extract');
         const dir = path.join(tmp, 'inv-local');
         const parts = { template: 'extract_vision.v1', chunkNo: 1, pdfSha256: 'f'.repeat(64) };
         writeCassette(dir, { agent: 'extract_vision', model: 'qwen3-vl:8b', template: 'extract_vision.v1', schema: buildSchema('extract'), cacheKeyParts: parts });

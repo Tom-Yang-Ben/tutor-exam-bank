@@ -641,7 +641,9 @@ async function runLocal(ctx, input, { bytes, pdfSha256, chunkNo, fromPage, toPag
             system: v.system,
             parts: [
                 { text: buildLocalPrompt(group, 'vision', range) },
-                ...images.map(png => ({ inlineData: { mimeType: 'image/png', data: Buffer.from(png).toString('base64') } }))
+                // 〔本機模式整合 LM-4〕圖片 part 用既有慣例 {imageBase64, mimeType}（gemini.js、cassette.summarizeParts 都認得），
+                // cassette 的 request 摘要才會記成圖片（位元組數＋sha256），不會是 unknown；鍵不含 parts，不受影響。
+                ...images.map(png => ({ imageBase64: Buffer.from(png).toString('base64'), mimeType: 'image/png' }))
             ],
             schema,
             maxOutputTokens: LOCAL_MAX_OUTPUT_TOKENS,
