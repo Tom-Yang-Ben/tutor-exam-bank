@@ -24,6 +24,7 @@
 //      「中文一樣、數字不同」的兩個版本（不同學校、不同年度的同一題）覆蓋率都是 1。所以**每一題**都拿題幹的
 //      數字與小寫英文字母（LaTeX 裡的數字也算；大寫字母不比——選項代號 (A)–(E) 與幾何頂點標註常只有一邊有）
 //      對原卷該題的段落（圖框裡的標註與刻度不算），算多重集合的 Jaccard 相符度，併進比對分數（proposalScore）。
+//      〔審查修正 2〕段落也不算頁首帶與頁尾帶的行（headerRatio／footerRatio）：跨頁的題中間夾著的頁碼與頁首不再變成多出來的數字。
 //
 // 座標一律是 PDF 點（1/72 吋），頁面左上角為原點，矩形 [x0, y0, x1, y1]。
 // ─────────────────────────────────────────────────────────────
@@ -49,6 +50,12 @@ const LAYOUT_DEFAULTS = Object.freeze({
     flatMaxHeight: 40,
     detailMismatchCap: 0.7,   // 數字或英文字母與原卷不一致時，數字係數最多這麼大（見 detailFactor）
     footerRatio: 0.05,        // 題目段落往下接「只有數字的行」時，頁面最下方這個比例的區域當頁尾，不接
+                              // 〔審查修正 2〕題目本身跨頁（欄）時，夾在中間、整行在這一帶的行（頁碼「第 2 頁，共 4 頁」）也不算
+    headerRatio: 0.05,        // 〔審查修正 2〕頁首帶：頁面最上方這個比例的區域；題目跨頁時夾在中間、整行（連下緣）都在這一帶的行
+                              // （下一頁的頁首「112 學年度…段考」）不算進段落。比照 footerRatio 取 5%：A4 約 42pt≈1.5 cm，
+                              // 正文上邊界用 Word「窄」邊界（1.27 cm＝36pt）時第一行的下緣約 48pt，仍在帶外；只看「整行都在帶內」、
+                              // 題目起點與終點那一行一律不略過，所以壓到帶上的正文照算。判錯的兩個方向（頁首沒認出、正文被當頁首）
+                              // 都只會讓數字對不上而標橘，不會悄悄算成相符
     tailMax: SOURCE_DEFAULTS.tailMax,         // 與原卷比對相同：題目最後一個中文字之後最多再接這麼多字
     k: SOURCE_DEFAULTS.k,                     // 與原卷比對相同：中文字 5-gram
     minCjk: SOURCE_DEFAULTS.minCjk,           // 題幹中文字少於此數不比（定位不可靠）
@@ -453,6 +460,15 @@ function locateInDoc(questionText, doc, options) {
  * **圖框裡的字行一律跳過**（頂點標註、座標刻度 0 1 2 3 是圖的一部分，題幹不會有）：不算進段落，也不當成
  * 停下來的理由（圖的標註常排在內容流的後面、位置卻在上方，或本身是中文字）。
  *
+ * 〔審查修正 2（2026-09-26）〕**頁首帶與頁尾帶的行一律跳過**（headerRatio／footerRatio；整行都在帶內才算，
+ * 起點那一行與 matchEndLine 本身是定位到的題目文字，不跳過）：題目跨頁（雙欄卷跨欄後再跨頁）時，
+ * 上一頁的頁尾「第 2 頁，共 4 頁」與下一頁的頁首「112 學年度…段考」在內容流裡夾在題目中間，修正前會被收進段落、
+ * 變成多出來的數字——數字與題庫完全相同的題被標「數字不一致」、分數壓到 0.7。與圖框裡的字一樣，跳過的行
+ * 也不當成停下來的理由（頁首碰巧長得像大題標題或題組說明時，不會把段落截短）。
+ * **不依欄位過濾**：用行的中心在頁面哪一半判斷欄位，會把雙欄頁上橫跨全寬的題、以及被判成雙欄的單欄頁
+ * （選項左右排成兩行）裡真正屬於這一題的行濾掉，而一般的雙欄卷內容流是一欄排完才排下一欄、跨欄時中間
+ * 只會夾頁首頁尾，所以只做頁首頁尾（docs/figures.md「舊題補附圖」已知限制）。
+ *
  * @param {object} doc buildDocIndex 的輸出
  * @param {object} loc locateInDoc 的 located 結果
  * @param {Map<number, Array<{bbox:number[]}>>} [figuresByPage] detectFigures 找到的圖
@@ -463,6 +479,17 @@ function questionSegment(doc, loc, figuresByPage = new Map(), options) {
     const o = opt(options);
     if (!doc || !loc || !loc.startLine) return '';
     const inFigure = (l) => (figuresByPage.get(l.page) || []).some(f => contains(expand(f.bbox, 1), l.bbox));
+    // 頁首帶：下緣 ≤ headerY；頁尾帶：上緣 ≥ footerY（整行都在帶內）。頁面大小不明時不認
+    const bandsOf = (pageNo) => {
+        const size = doc.pageSizes ? doc.pageSizes.get(pageNo) : null;
+        return size && size.height > 0
+            ? { headerY: size.height * o.headerRatio, footerY: size.height * (1 - o.footerRatio) }
+            : { headerY: -Infinity, footerY: Infinity };
+    };
+    const inPageBand = (l) => {
+        const b = bandsOf(l.page);
+        return l.bbox[3] <= b.headerY || l.bbox[1] >= b.footerY;
+    };
     const first = loc.startLine.lineNo;
     const endNo = Math.max(first, (loc.matchEndLine || loc.endLine || loc.startLine).lineNo);
     const parts = [];
@@ -471,12 +498,12 @@ function questionSegment(doc, loc, figuresByPage = new Map(), options) {
     for (; i < doc.lines.length && i <= endNo; i++) {
         const l = doc.lines[i];
         if (inFigure(l)) continue;
+        if (i > first && i < endNo && inPageBand(l)) continue;       // 跨頁時夾在中間的頁尾、頁首（審查修正 2）
         if (i > first && lineBoundaryKind(l.text)) return parts.join('\n');
         last = l;
         parts.push(i === first ? l.text.replace(QUESTION_NO_LINE, ' ') : l.text);
     }
-    const size = doc.pageSizes ? doc.pageSizes.get(last.page) : null;
-    const footerY = size && size.height > 0 ? size.height * (1 - o.footerRatio) : Infinity;
+    const footerY = bandsOf(last.page).footerY;
     let chars = 0;
     for (; i < doc.lines.length; i++) {
         const l = doc.lines[i];

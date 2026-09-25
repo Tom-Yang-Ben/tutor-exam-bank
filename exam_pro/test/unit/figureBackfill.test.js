@@ -13,6 +13,9 @@
 //   7. 〔審查修正 2026-09-26〕數字與英文字母一律納入比對分數（原卷該題的段落、相符度、數字係數、依據寫「數字不一致」、
 //      多份卷取數字相符的那份）；需要注意的列不論分數都標橘底；--apply 核對「題幹前60字」；--use-llm 的花費煞車
 //      （每份卷 JOB_COST_BUDGET_USD、當日 DAILY_COST_BUDGET_USD，假的 LLM 回 usage 估價）。
+//   8. 〔審查修正 2 2026-09-26〕跨頁的題：夾在中間的上一頁頁尾與下一頁頁首（頁首帶 headerRatio、頁尾帶 footerRatio）
+//      不算進段落——數字與題庫相同的題相符度 1、不標數字不一致（單欄跨頁、雙欄右欄跨到下一頁左欄）；同頁跨欄照舊整段都算；
+//      壓到帶上的正文、題目起點與終點那一行不略過。
 // 不連資料庫、不呼叫任何 LLM。題目文字取自本專案自製的公開樣卷（eval/fixtures/sample_exam.pdf）。
 // ─────────────────────────────────────────────────────────────
 const { test, describe, before, after } = require('node:test');
@@ -568,6 +571,123 @@ describe('utils/figureLayout — 數字與英文字母（審查修正）', () =>
         assert.equal(L.proposalScore({ coverage: 0.9, layout: 'mostly', ratio: 0.8, detail: null }), 0.9, '沒有比（null）視為 1');
         assert.equal(L.detailFactor(0.99), 0.7);
         assert.equal(L.detailFactor(1), 1);
+    });
+});
+
+// ───────── 審查修正 2（2026-09-26）：跨頁、跨欄的題，頁尾與下一頁的頁首不算進段落 ─────────
+
+describe('utils/figureLayout — 跨頁、跨欄的題：頁首頁尾不算進段落（審查修正 2）', () => {
+    // 題庫的題與原卷數字完全相同；原卷上這一題跨兩頁，中間夾著上一頁的頁尾與下一頁的頁首（都帶數字）
+    const STORED = '質量 $2$ kg 的木塊靜置於水平桌面上，以 $10$ N 的水平力推動，木塊與桌面間的動摩擦係數為 $0.3$，'
+        + '求木塊在 $3$ 秒末的速度大小為何？\n(A) $1.2$ (B) $2.4$ (C) $3.6$ (D) $4.8$';
+    const EXACT = {
+        similarity: 1, exact: true, compared: true,
+        missing: { digits: [], letters: [] }, extra: { digits: [], letters: [] }
+    };
+    const FOOTER = line('第 2 頁，共 4 頁', 260, 812, 335, 824);       // 頁尾：y0 812 ≥ 842 × 0.95
+    const HEADER = line('112 學年度　段考', 240, 20, 355, 32);         // 頁首：y1 32 ≤ 842 × 0.05
+    const segmentOf = (pages, options) => {
+        const doc = L.buildDocIndex(pages);
+        const loc = L.locateInDoc(STORED, doc);
+        assert.equal(loc.status, 'located');
+        assert.notEqual(loc.startLine.page, loc.matchEndLine.page, '前提：這一題跨兩頁');
+        return { doc, seg: L.questionSegment(doc, loc, new Map(), options) };
+    };
+
+    test('單欄卷跨頁：上一頁頁尾「第 2 頁，共 4 頁」、下一頁頁首「112 學年度」不算——數字相同的題相符度 1、不標數字不一致', () => {
+        const p2 = page([
+            line('6. 一質點作等速率圓周運動，下列關於其速度與加速度的敘述何者正確？', 56, 700, 540, 714),
+            line('7. 質量 2 kg 的木塊靜置於水平桌面上，以 10 N 的水平力推動，', 56, 752, 540, 766),
+            line('木塊與桌面間的動摩擦係數為 0.3，', 70, 770, 400, 784),
+            FOOTER
+        ], [], { page: 2 });
+        const p3 = page([
+            HEADER,
+            line('求木塊在 3 秒末的速度大小為何？', 70, 56, 400, 70),
+            line('(A) 1.2　(B) 2.4　(C) 3.6　(D) 4.8', 70, 74, 400, 88),
+            line('8. 設物體沿斜面下滑，斜面傾角為三十度，求物體下滑的加速度大小。', 56, 110, 540, 124)
+        ], [], { page: 3 });
+        const { seg } = segmentOf([p2, p3]);
+        assert.ok(!/頁/.test(seg), `頁尾不算：${seg}`);
+        assert.ok(!/學年度/.test(seg), `頁首不算：${seg}`);
+        assert.match(seg, /動摩擦係數為 0\.3/, '跨頁前的題目文字照算');
+        assert.match(seg, /\(D\) 4\.8/, '下一頁的選項行照接');
+        const d = L.detailCompare(STORED, seg);
+        assert.deepEqual(d, EXACT);
+        const score = L.proposalScore({ coverage: 1, layout: 'inside', ratio: 1, detail: d.similarity });
+        assert.equal(score, 1, '分數不被數字係數壓到 0.7');
+        assert.deepEqual(bf.attentionReasons({
+            method: 'layout', layout: 'inside', score, flat: false, otherPages: 0,
+            detail: d.similarity, detailMismatch: !d.exact, detailExtra: d.extra
+        }), [], '不標「數字不一致」');
+
+        // headerRatio／footerRatio 設 0 ＝ 不認頁首頁尾：頁碼與學年度的數字就會混進來（修正前第一個迴圈的行為）
+        const raw = L.detailCompare(STORED, segmentOf([p2, p3], { headerRatio: 0, footerRatio: 0 }).seg);
+        assert.equal(raw.exact, false);
+        assert.deepEqual(raw.extra.digits, ['1', '1', '2', '2', '4']);
+    });
+
+    test('雙欄卷跨頁：右欄最下方接到下一頁左欄最上方，中間的頁尾頁首不算', () => {
+        const p2 = page([
+            line('5. 一質點作等速率圓周運動，下列關於其', 40, 100, 280, 114),
+            line('速度與加速度的敘述何者正確？請說明。', 40, 120, 280, 134),
+            line('6. 設物體沿斜面下滑，斜面傾角為三十度，', 40, 140, 280, 154),
+            line('求物體下滑的加速度大小，並說明理由。', 40, 160, 280, 174),
+            line('7. 質量 2 kg 的木塊靜置於水平桌面上，', 320, 740, 560, 754),
+            line('以 10 N 的水平力推動，木塊與桌面間的', 320, 758, 560, 772),
+            line('動摩擦係數為 0.3，', 320, 776, 420, 790),
+            FOOTER
+        ], [], { page: 2 });
+        const p3 = page([
+            HEADER,
+            line('求木塊在 3 秒末的速度大小為何？', 40, 56, 280, 70),
+            line('(A) 1.2　(B) 2.4　(C) 3.6　(D) 4.8', 40, 74, 280, 88),
+            line('8. 下列何者為向量？請選出所有正確的選項。', 40, 110, 280, 124),
+            line('(A) 速度　(B) 速率　(C) 質量　(D) 位移', 40, 130, 280, 144),
+            line('9. 設物體沿斜面下滑，斜面傾角為三十度，', 320, 56, 560, 70),
+            line('求物體下滑的加速度大小，並說明理由。', 320, 74, 560, 88),
+            line('10. 一質點作等速率圓周運動，下列關於其', 320, 110, 560, 124)
+        ], [], { page: 3 });
+        const { doc, seg } = segmentOf([p2, p3]);
+        assert.deepEqual([doc.columnsByPage.get(2), doc.columnsByPage.get(3)], [2, 2], '前提：兩頁都判成雙欄');
+        assert.ok(!/頁|學年度/.test(seg), `頁首頁尾不算：${seg}`);
+        assert.ok(!/速率/.test(seg), '下一題不算');
+        assert.deepEqual(L.detailCompare(STORED, seg), EXACT);
+    });
+
+    test('雙欄卷跨欄（同一頁左欄接右欄）照舊整段都算；頁首帶只略過「整行都在帶內」的行，題目起點與終點那一行一律不略過', () => {
+        // 右欄最上方那一行壓到頁首帶（y0 40 < 42.1）但下緣在帶外（y1 54）：是正文，照算
+        const p = page([
+            line('5. 設物體沿斜面下滑，斜面傾角為三十度，', 40, 100, 280, 114),
+            line('求物體下滑的加速度大小，並說明理由。', 40, 120, 280, 134),
+            line('7. 質量 2 kg 的木塊靜置於水平桌面上，', 40, 740, 280, 754),
+            line('以 10 N 的水平力推動，木塊與桌面間的', 40, 758, 280, 772),
+            line('動摩擦係數為 0.3，', 320, 40, 420, 54),
+            line('求木塊在 3 秒末的速度大小為何？', 320, 58, 560, 72),
+            line('(A) 1.2　(B) 2.4　(C) 3.6　(D) 4.8', 320, 76, 560, 90),
+            line('8. 下列何者為向量？請選出所有正確的選項。', 320, 110, 560, 124)
+        ]);
+        const doc = L.buildDocIndex([p]);
+        assert.equal(doc.columnsByPage.get(1), 2);
+        const loc = L.locateInDoc(STORED, doc);
+        assert.equal(loc.status, 'located');
+        assert.deepEqual(L.detailCompare(STORED, L.questionSegment(doc, loc)), EXACT);
+
+        // 版面極窄的卷：題目第一行就在頁首帶內、最後一行在頁尾帶內——它們是定位到的題目本身，不略過
+        const narrow = page([
+            line('1. 質量 2 kg 的木塊靜置於水平桌面上，以 10 N 的水平力推動，', 56, 26, 540, 38),
+            line('木塊與桌面間的動摩擦係數為 0.3，', 70, 400, 400, 414),
+            line('求木塊在 3 秒末的速度大小為何？(A) 1.2　(B) 2.4　(C) 3.6　(D) 4.8', 70, 802, 540, 814)
+        ]);
+        const nd = L.buildDocIndex([narrow]);
+        const nl = L.locateInDoc(STORED, nd);
+        assert.equal(nl.status, 'located');
+        assert.deepEqual(L.detailCompare(STORED, L.questionSegment(nd, nl)), EXACT);
+    });
+
+    test('LAYOUT_DEFAULTS：頁首帶 headerRatio 比照頁尾帶 footerRatio（各 5%）', () => {
+        assert.equal(L.LAYOUT_DEFAULTS.headerRatio, 0.05);
+        assert.equal(L.LAYOUT_DEFAULTS.footerRatio, 0.05);
     });
 });
 
