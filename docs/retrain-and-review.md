@@ -767,6 +767,47 @@ capForAttach(newCount, ratio) ：R6，floor(新題數 × 比例)，且新題＋�
 | `fetchHistories(db, [[studentId, questionId], …])` | 作答歷史（API-13 的重練成效可以用） |
 | 純函式：`pendingOf(history, enteredOn)`、`orderUnits(views)`、`priorityKey(view)`、`stepLabel(step, stepDays)`、`buildItemView(row, ctx)`、`summarizeChanges(changes, entered)`、`todayLocal()`、`retrainConflictMessage(qid)`；常數 `IN_FLIGHT_WARN_DAYS`、`DEFERRABLE_CONSTRAINTS` | 排序、關卡名稱、已派出的判斷與畫面資料形狀 |
 
+#### 5.6.3 實作狀態（第二階段之二：PR-3 出卷整合）
+
+> **PR-3 已實作**（分支 `dec/retrain-p3-paper`，起點 `dec/retrain-p2-core`＝`836740057a`）。依第 8 節 R6、R7、R8、R12（以及 R9、R10）實作；第 5.6.1、5.6.2 節的原文不動。
+>
+> **沒有新的 migration**（M2＝0017 已涵蓋出卷要的欄位）。**沒有改動凍結介面**：`config/retrain.js`、`services/retrainSchedule.js`、`services/retrainService.js`、`utils/followUpPaperCheck.js`、`test/helpers/attempts.js`、0016／0017 一個字都沒動；需要的東西都在呼叫端（controller）或新檔案裡。
+>
+> **沒做**（PR-4）：`public/js/retrain.js`（清單卡、「出一份重練卷」按鈕與草稿畫面）、批改卡勾選框與徽章、學生清單徽章、API-13。PR-4 的「出一份重練卷」直接呼叫本節的 API-5，確認走 API-7。
+
+| 項目 | 狀態 | 說明 |
+| :--- | :--- | :--- |
+| 挑題：`services/retrainSelect.js`（新檔） | ✅ | 到期清單用 PR-2 的 `listDueUnits`（第 4.7 節的排序、承上組為單位、`blocked`）；`pickUnits` 依序逐組放入，**R12 選 2**：剩下的名額 > 0 而且不夠整組 → 400、不產生草稿，訊息同第 4.7 節的例子（「……請把重練題數改成 5 或 8。」）；剛好放滿就停。**R8 選 1**：完全不看 `variant_of`，新題照既有流程抽（家族互斥只在新題之間），`mergeForPaper` 合併後用同一個 `sortForPaper` 一起排（**R7 選 1**：卷面不另分區），每題多 `purpose`、`retrain_step` |
+| API-5 `POST /api/students/:id/retrain-paper` | ✅ | `controllers/retrainController.js` 的 `retrainPaper`，掛在 `routes/index.js` 檔尾的錯題重練區塊（旗標關閉不掛載）。只產草稿、不寫庫；回應形狀同第 5.2 節（差異見下表 ⑤）；純重練卷卷名在 API-7 確認時產生 |
+| API-6 `generate-paper` 的 `retrain: { count, as_of? }` | ✅ | 單章與 blueprint 兩條路徑（`examController.attachRetrain`）：新題照舊抽完才挑重練題、另外加上；新題＋重練 ≤ 50；只挑**同科目**的到期題；回應最後多 `retrain: { wanted, got, due_total }`、每題多 `purpose`、`retrain_step`。非 `dry_run` 直接寫入時與 API-7 同一套寫入。沒帶（或 `null`）逐字不變；旗標關閉卻帶了 → 400 |
+| API-7 `confirm-paper` 的 `retrain_question_ids` | ✅ | `writePaper` 多收 `retrainQuestionIds`：建卷之後先交給 PR-2 的 `insertRetrainAssignments`（`SELECT … FOR UPDATE` 鎖項目再檢查，不符 → 409 `retrainConflictMessage`，整筆回滾），其餘題照舊走新題的寫入閘門（衝突 409，訊息不變）。沒有重練題時交易裡的語句與之前一模一樣（`controllers.pg.test.js` 掛在 `assignments` 上的觸發器測試照樣成立）。純重練卷卷名「`<姓名>-錯題重練卷(日期)`」（日期格式同既有卷名 `YYYY_M_D`）。回應最後多 `retrain_question_ids`（依出題順序） |
+| API-7 與 B7 整組檢查（風險 R-9） | ✅ | 整組規則不變、重練題與新題一視同仁（重練卷只放承上題 → 400）。只在帶了 `retrain_question_ids` 時，把「不在卷裡、該生寫過、但還在清單上（沒移出）」的組員原因從 `answered`（只能整組刪）改標 `not_in_paper`（加回來就好）；調整在 `examController.incompleteFollowUpGroupsInPaper`，`utils/followUpPaperCheck.js` 沒動 |
+| API-8 `remedial-paper` 的 `retrain_count` | ✅ | `remedialController` 在 `planRemedialPaper` 之後呼叫 `retrainSelect.appendRetrainBucket`：`items` 最後多 `bucket = 'retrain'` 的題（另帶 `item_id`、`step`、`step_label`、`due_on`、`overdue_days`），`blueprint` 多一列、到期的不夠時 `shortfalls` 多一列（`reason = 'not_enough_due'`），`notes` 接在後面，`question_ids` 重排。**R10 選 1**：`basis` 與弱點排序照舊讀檢視 `attempts`（整合測試驗：重練答對不改變）。0 或沒帶逐字不變 |
+| API-12 `download-word` 的 `paper_id` | ✅ | 旗標開啟而且帶了 `paper_id` 時查這張卷的重練派題，標準版與詳解版**答案區**的題號後加「（重練）」（「第 3 題（重練）答案：」）；題目區（卷面）與學生版不標（**R7 選 1**）。沒帶（或旗標關閉）時 `.docx` 逐位元不變（單元測試固定時鐘比對整個檔案） |
+| 畫面：組卷頁（`index.html` inline script，標〔retrain〕） | ✅ | 題數下方的插入點 `<div id="retrainAttachSlot" hidden>`：旗標開啟而且選了學生時才填入「☐ 附上到期的重練題 [N] 題（目前到期 M 題）」——預設不勾，N 預設 `capForAttach(新題數)`，老師改過之後題數再變也不覆寫；M 讀 API-1 的 `counts.due`（同科目）。預覽卡上重練題標「重練・第 n 關」、按鈕改成「移除這題／移除這組」；確認帶 `retrain_question_ids`；R12 的 400 照舊顯示在結果區；確認後的畫面在重練題題號後標「（重練）」 |
+| 畫面：補救卷（`public/js/remedial.js`） | ✅ | 配比下方「☐ 附上到期重練 [N] 題（目前到期 M 題）」（預設不勾，N 預設 `min(20, capForAttach(題數))`）；草稿多一組「到期重練」（標關卡、承上組整組刪、不足量原因「到期的題不夠」）；確認帶 `retrain_question_ids`；下載 Word 時帶 `paper_id` |
+| 畫面：試卷列表（`public/js/students.js` 最小掛鉤） | ✅ | `GET /api/students/:id/papers` 在旗標開啟時每列多 `retrain_count`（另一條查詢，原 SQL 不動）；卷名旁「含重練 N 題」（N > 0 才渲染） |
+| 設定：`RETRAIN_ATTACH_RATIO` 給前端 | ✅ | `app.js` 注入 `<meta name="retrain-attach-ratio">`（`config/retrain.js` 讀、非法值退回 0.3），組卷頁與補救卷的 N 預設值跟著 `.env` 走 |
+| 測試 | ✅ | 單元：`retrainSelect.test.js`（TC-039-1）、`retrainValidation.test.js` 擴充 API-5～8、API-12（TC-039-2）、`solutionText.test.js` 擴充 Word 標示與逐位元不變（TC-039-4）、`retrainPaperUi.test.js`（組卷頁附帶選項預設不勾、題數預設三成；補救卷；試卷列表）。整合：`retrainPaper.pg.test.js`（TC-039-3 的出卷部分：草稿不寫庫、混合卷派題用途與關卡、純重練卷卷名、補救卷 retrain 組、兩個確認同時送出後者 409、刪重練卷後重算；R-9、R10；API-12 整合層）。e2e：`paperWord.e2e.test.js` 新增一案（新卷 → 勾要重練 → 重練卷 → 下載），不需要 cassette。既有斷言一條沒改 |
+
+**與本檔（凍結版）不同、或本檔沒寫而由實作決定之處**（第 8 節沒有逐條決定，列給 Owner 確認）：
+
+| # | 項目 | 實作 |
+| :--- | :--- | :--- |
+| ① | R12 的建議題數（第 4.7 節只舉例） | 「放到前一組為止的題數」為 0 時不列；「含這一組的題數」超過上限（API-5／6：新題＋重練 ≤ 50；API-8：≤ 20 且合計 ≤ 50）時不列；兩個都不能用時說「請調整重練題數」 |
+| ② | API-6 的 `exclude_ids` | 也排除重練題：含其中任一題的承上組整組不挑（不報錯、不佔名額）。組卷預覽上「移除這題」的重練題放在這裡，換題、重抽時才不會又回來 |
+| ③ | API-6 只挑同科目 | 附在新卷的重練題限同一科（不限章節）；API-5 的 `subject` 沒給時不限科目 |
+| ④ | 新參數給 `null` | API-6 的 `retrain`、API-7 的 `retrain_question_ids`、API-8 的 `retrain_count` 為 `null` 時等於沒帶（同既有的 `exclude_ids`、`blueprint`）；旗標關閉時只要帶了非 `null` 的值（`count: 0`、空陣列也算）就 400。API-7 的空陣列＝沒有重練題（回應照樣多 `retrain_question_ids: []`） |
+| ⑤ | API-5 的回應 | `subject` 沒給時是 `null`；`items` 依優先順序（第 4.7 節）、`question_ids` 依出題順序；每題另多 `status`、`due`（`include_not_due` 時看得出哪幾題還沒到期、哪幾題是被承上組帶著出的已會題）；沒有到期的題回 200、空草稿、附註「目前沒有到期的重練題。」；整組不能出的組逐組寫進附註。`include_not_due` 的「想出」＝進行中、沒派出、沒封存，排在到期的後面 |
+| ⑥ | 檢查順序 | API-6、API-8：新參數的檢查排在既有的參數檢查之後、查學生之前；API-7：排在學生 404 與封存 400 之後、B7 整組檢查之前；API-12：排在既有檢查（題目、版本）之後 |
+| ⑦ | API-12 的 `paper_id` | 旗標關閉時一律忽略（組卷頁本來就把 `paper_id` 一起送來，Word 必須逐位元不變）；旗標開啟時格式不對 400、卷不存在或卷上沒有重練題就不標（不回 404：下載看的是 `question_ids`）。**詳解版的題目區也不標**：API-12 寫「詳解版在重練題的題號後加」，ACPT-039-5 與 TC-039-4 寫「學生版與卷面（題目區）不標」，取交集＝只標答案（與詳解）區 |
+| ⑧ | API-8 的「到期重練」組 | `target` 為 `{ type: 'retrain', name: '到期重練' }`；`blueprint` 那一列的 `rationale` 寫到期題數與排序規則；`as_of` 固定今天（API-8 沒有這個參數） |
+| ⑨ | 補救卷的畫面 | 第 5.3 節只寫「到期重練 [N] 題」；做成與組卷頁一樣的「勾選框（預設不勾）＋題數」，N 預設三成、不超過 20（R6「可勾」） |
+| ⑩ | 試卷列表的「含重練 N 題」 | 需要後端資料：`GET /api/students/:id/papers` 在旗標開啟時多 `retrain_count`（旗標關閉時逐字不變） |
+| ⑪ | 設定 | `RETRAIN_ATTACH_RATIO` 經 `<meta name="retrain-attach-ratio">` 給前端；前端的 `capForAttach` 與 `services/retrainSchedule.js` 同一條規則（單元測試逐一比對） |
+
+**給 PR-4 的介面**：API-5 草稿的形狀見上表 ⑤；「出一份重練卷」確認時送 `confirm-paper { student_id, question_ids, retrain_question_ids: question_ids }`，409 的訊息是 `retrainConflictMessage`（草稿過期，請重新產生）；下載 Word 帶 `paper_id` 才有 R7 的標示。`services/retrainSelect.js` 的 `buildRetrainDraft`、`selectRetrain`、`unitsFromViews`、`pickUnits` 可以直接呼叫。
+
 ---
 
 ## 6. 測試計畫與驗收

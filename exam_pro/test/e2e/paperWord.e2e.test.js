@@ -253,5 +253,76 @@ function runSuite() {
             assert.equal(res.status, 400);
             assert.equal(res.body.message, '無效的題目資料，無法產生 Word');
         });
+
+        // ── 〔retrain PR-3〕TC-039-4 的 e2e：新卷 → 批改錯並勾「要重練」→ 出一份重練卷 → 下載 Word（R7 選 1 的標示）──
+        // docs/retrain-and-review.md 第 5.2 節 API-5、API-7、API-10、API-12。全程不呼叫 LLM、不需要 cassette。
+        // 另載一份開了 FEATURE_STUDENTS 與 FEATURE_RETRAIN 的 app（路由在載入當下決定掛不掛）；擴充的既有端點每次請求即時讀旗標，
+        // 所以旗標只在這一組測試期間打開。這位學生由這一組自己建、自己刪（經 DELETE /api/students/:id，依序刪重練資料）。
+        describe('〔retrain PR-3〕新卷 → 勾要重練 → 重練卷 → Word 標「（重練）」', () => {
+            const RETRAIN_STUDENT = `${STUDENT}-重練`;
+            const APP_PATH = path.join(APP_DIR, 'app');
+            const ROUTES_PATH = path.join(APP_DIR, 'routes', 'index.js');
+            let appR = null;
+            let studentId = null;
+            const saved = {};
+
+            before(async () => {
+                for (const k of ['FEATURE_STUDENTS', 'FEATURE_RETRAIN']) saved[k] = process.env[k];
+                delete require.cache[require.resolve(APP_PATH)];
+                delete require.cache[require.resolve(ROUTES_PATH)];
+                process.env.FEATURE_STUDENTS = 'true';
+                process.env.FEATURE_RETRAIN = 'true';
+                appR = require(APP_PATH);
+                // 上一輪被中斷時可能留下同名學生：經 API 刪（會依序刪重練派題、排程項目、派題、卷）
+                const { rows } = await query('SELECT id FROM students WHERE name = $1', [RETRAIN_STUDENT]);
+                for (const r of rows) await request(appR).delete(`/api/students/${r.id}`);
+            });
+
+            after(async () => {
+                if (studentId !== null) await request(appR).delete(`/api/students/${studentId}`);
+                for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+            });
+
+            test('重練卷確認後下載：標準版答案區標「（重練）」、公式照樣是 <m:oMath>；學生版不標', async () => {
+                const retrainService = require(path.join(APP_DIR, 'services', 'retrainService'));
+                const { addDays } = require(path.join(APP_DIR, 'services', 'retrainSchedule'));
+                const created = await request(appR).post('/api/students').send({ name: RETRAIN_STUDENT });
+                assert.equal(created.status, 201, JSON.stringify(created.body));
+                studentId = created.body.id;
+
+                // 新卷（前兩題）→ 第 1 題批改錯並勾「要重練」、第 2 題對
+                const [qa, qb] = questionIds;
+                const paper = await request(appR).post('/api/confirm-paper').send({ student_id: studentId, question_ids: [qa, qb] });
+                assert.equal(paper.status, 200, JSON.stringify(paper.body));
+                const graded = await request(appR).patch(`/api/papers/${paper.body.paper_id}/results`)
+                    .send({ results: [{ question_id: qa, result: 0, retrain: true }, { question_id: qb, result: 1 }] });
+                assert.equal(graded.status, 200, JSON.stringify(graded.body));
+                assert.equal(graded.body.retrain.entered, 1);
+
+                // 出一份重練卷：第 1 關到期日＝派題日＋1 天，預計作答日選明天
+                const tomorrow = addDays(retrainService.todayLocal(), 1);
+                const draft = await request(appR).post(`/api/students/${studentId}/retrain-paper`).send({ as_of: tomorrow });
+                assert.equal(draft.status, 200, JSON.stringify(draft.body));
+                assert.deepEqual(draft.body.question_ids, [qa]);
+                const confirmed = await request(appR).post('/api/confirm-paper')
+                    .send({ student_id: studentId, question_ids: draft.body.question_ids, retrain_question_ids: draft.body.question_ids });
+                assert.equal(confirmed.status, 200, JSON.stringify(confirmed.body));
+                assert.match(confirmed.body.paper_title, new RegExp(`^${RETRAIN_STUDENT}-錯題重練卷\\(`));
+
+                const download = edition => request(appR).post('/api/download-word')
+                    .send({ paper_title: confirmed.body.paper_title, student_name: RETRAIN_STUDENT,
+                        question_ids: confirmed.body.question_ids, paper_id: confirmed.body.paper_id, edition })
+                    .buffer(true)
+                    .parse((res, cb) => { const chunks = []; res.on('data', c => chunks.push(c)); res.on('end', () => cb(null, Buffer.concat(chunks))); });
+                const std = await download('standard');
+                assert.equal(std.status, 200);
+                const xml = documentXml(std.body);
+                assert.ok(xml.includes('第 1 題（重練）答案：'), '標準版答案區要標（R7 選 1）');
+                assert.equal(xml.split('（重練）').length - 1, 1, '題目區（卷面）不標');
+                assert.ok(xml.includes('<m:oMath'), '重練題就是原題：公式照樣轉成 Word 原生方程式');
+                const stu = await download('student');
+                assert.ok(!documentXml(stu.body).includes('（重練）'), '學生版完全不標');
+            });
+        });
     });
 }

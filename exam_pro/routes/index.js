@@ -290,6 +290,9 @@ if (featuresRetrain.FEATURE_RETRAIN) {
     router.post('/students/:id/retrain-items', retrainController.addItems);
     router.patch('/students/:id/retrain-items/:itemId', retrainController.patchItem);
     router.get('/retrain/summary', retrainController.summary);
+    // 〔retrain PR-3〕API-5：出一份重練卷的草稿（只讀；確認走既有的 POST /confirm-paper 加 retrain_question_ids）。
+    // API-6～8、API-12 是既有端點的擴充，改在原本的 controller（examController、remedialController、wordController）。
+    router.post('/students/:id/retrain-paper', retrainController.retrainPaper);
 }
 
 module.exports = router;

@@ -828,6 +828,10 @@ function paperCard(app, paper, onGraded) {
     const left = el('div', 'min-w-0');
     left.append(
         el('p', 'truncate text-sm font-extrabold text-slate-800', { textContent: paper.title }),
+        // 〔retrain PR-3〕卷名旁「含重練 N 題」（FEATURE_RETRAIN 開啟時 API 才帶 retrain_count；0 或沒有這個鍵就不渲染）
+        ...(Number(paper.retrain_count) > 0 ? [el('span', 'mt-0.5 inline-block rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700', {
+            textContent: `含重練 ${Number(paper.retrain_count)} 題`
+        })] : []),
         el('p', 'mt-0.5 text-[11px] text-slate-400', {
             textContent: `#${paper.paper_id}　·　${String(paper.created_at).slice(0, 10)}　·　已批改 ${paper.graded}／${paper.total} 題`
         })

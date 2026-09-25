@@ -221,6 +221,17 @@ exports.listStudentPapers = async (req, res, next) => {
               ORDER BY p.created_at DESC, p.id DESC`,
             [studentId]
         );
+        // 〔retrain PR-3〕docs/retrain-and-review.md 第 5.3 節「試卷列表：卷名旁『含重練 N 題』」：
+        // FEATURE_RETRAIN 開啟時每列多 retrain_count（這張卷上的重練派題數；另一條查詢，上面的 SQL 一個字都不動）。
+        // 旗標關閉時回應逐字不變。
+        if (require('../config/features').FEATURE_RETRAIN) {
+            const { rows: rc } = await query(
+                `SELECT paper_id, COUNT(*)::int AS n FROM assignments
+                  WHERE student_id = $1 AND purpose = 'retrain' AND paper_id IS NOT NULL GROUP BY paper_id`,
+                [studentId]);
+            const byPaper = new Map(rc.map(r => [r.paper_id, r.n]));
+            return res.status(200).json({ items: rows.map(r => ({ ...r, retrain_count: byPaper.get(r.paper_id) || 0 })) });
+        }
         res.status(200).json({ items: rows });
     } catch (err) {
         next(err);

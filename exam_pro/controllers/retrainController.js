@@ -5,6 +5,7 @@
 //   API-2  POST  /api/students/:id/retrain-items                            以題號手動加入
 //   API-3  PATCH /api/students/:id/retrain-items/:itemId                    移出／判定已會／重新加入
 //   API-4  GET   /api/retrain/summary?as_of=                                學生清單的到期徽章
+//   API-5  POST  /api/students/:id/retrain-paper                            〔PR-3〕出一份重練卷的草稿（只讀）
 //
 // 只在 FEATURE_RETRAIN 開啟時掛載（routes/index.js 檔尾的錯題重練區塊；關閉時落到 Express 預設 404）。
 // 全部不呼叫 LLM，不套限流（同裁決 S5-25 對 WS-D 四支端點的處理）。回應不含學生姓名（API-4 以 id 對應既有學生清單）。
@@ -14,6 +15,8 @@
 // ─────────────────────────────────────────────────────────────
 const v = require('../utils/retrainValidation');
 const retrain = require('../services/retrainService');
+// 〔retrain PR-3〕API-5 出一份重練卷的草稿
+const retrainSelect = require('../services/retrainSelect');
 
 // config/db 缺 DATABASE_URL 就在 require 當下丟錯；延遲到第一次查詢才載入（同 kcController 的做法）
 const db = {
@@ -98,6 +101,32 @@ exports.patchItem = async (req, res, next) => {
         });
         if (out.status !== 200) return res.status(out.status).json({ message: out.message });
         res.status(200).json({ ...out.item, group_changed: out.group_changed });
+    } catch (err) {
+        next(err);
+    }
+};
+
+/**
+ * 〔retrain PR-3〕API-5 POST /api/students/:id/retrain-paper — 一份純重練卷的草稿（只讀、不寫庫；第 5.2 節）。
+ * body { subject?, count?(1–50，預設 10), as_of?, include_not_due?(預設 false) }。
+ * 挑法見 services/retrainSelect.js：第 4.7 節的排序、承上組整組放不下 → 400 不產生草稿（R12 選 2）。
+ * 確認走 API-7：confirm-paper { student_id, question_ids, retrain_question_ids: question_ids }，
+ * 卷名「<姓名>-錯題重練卷(日期)」在確認時產生（這裡不讀學生姓名）。
+ */
+exports.retrainPaper = async (req, res, next) => {
+    const studentId = v.parseStudentId(req.params.id);
+    if (studentId === null) return res.status(404).json({ message: STUDENT_NOT_FOUND });
+    const today = retrain.todayLocal();
+    const parsed = v.parseRetrainPaperBody(req.body, { today });
+    if (parsed.error) return res.status(400).json({ message: parsed.error });
+    try {
+        if (!(await studentExists(db, studentId))) return res.status(404).json({ message: STUDENT_NOT_FOUND });
+        const out = await retrainSelect.buildRetrainDraft(db.query, {
+            studentId, subject: parsed.subject, count: parsed.count, asOf: parsed.asOf,
+            includeNotDue: parsed.includeNotDue, today
+        });
+        if (out.error) return res.status(400).json({ message: out.error.message });
+        res.status(200).json(out.draft);
     } catch (err) {
         next(err);
     }

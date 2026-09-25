@@ -118,6 +118,7 @@ const VOICE_ROUTE = hasRoute(routes, 'post', '/voice/transcribe') ? 'mounted' : 
 //                         兩顆按鈕在同一列，但背後是兩條各自獨立的路由。
 //    __VOICE_ROUTE__      POST /api/voice/transcribe 實際上有沒有掛（本機模式 L3；不是旗標，是路由表的結果）
 //    __FEATURE_RETRAIN__  錯題重練與間隔複習的畫面（docs/retrain-and-review.md 第 5.1 節；預設關）
+//    __RETRAIN_ATTACH_RATIO__ 〔retrain PR-3〕附上到期重練題的預設比例（RETRAIN_ATTACH_RATIO；不是旗標，只在旗標開啟時被讀）
 function serveIndex(req, res, next) {
     fs.readFile(path.join(PUBLIC_DIR, 'index.html'), 'utf8', (err, html) => {
         if (err) return next(err);
@@ -143,6 +144,9 @@ function serveIndex(req, res, next) {
                 .replaceAll('__FEATURE_VOICE__', process.env.FEATURE_VOICE || 'false')
                 // 錯題重練與間隔複習（docs/retrain-and-review.md 第 5.1 節）：畫面由第四階段的 public/js/retrain.js 讀
                 .replaceAll('__FEATURE_RETRAIN__', process.env.FEATURE_RETRAIN || 'false')
+                // 〔retrain PR-3〕附上到期重練題的預設比例（RETRAIN_ATTACH_RATIO，R6）：組卷頁與補救卷的題數預設值
+                // ＝capForAttach(新題數)，比例跟著 .env 走（config/retrain.js 讀、非法值退回 0.3）。不是旗標。
+                .replaceAll('__RETRAIN_ATTACH_RATIO__', String(require('./config/retrain').loadRetrainConfig().attachRatio))
                 // 本機模式 L3：語音路由實際上有沒有掛（見上方 VOICE_ROUTE）
                 .replaceAll('__VOICE_ROUTE__', VOICE_ROUTE));
     });

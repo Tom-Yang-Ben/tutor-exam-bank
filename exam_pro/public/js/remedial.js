@@ -14,6 +14,9 @@
 //   #coverage（題庫視圖）  GET /api/coverage：章 × 難度的熱度表；選了學生改看「還沒寫過」的題數；
 //                          另列每個知識點掛了幾題。
 //
+// 〔retrain PR-3〕FEATURE_RETRAIN 開啟時，配比下方多「☐ 附上到期重練 [N] 題」，草稿多一組「到期重練」
+// （POST remedial-paper 的 retrain_count；確認時帶 retrain_question_ids、下載 Word 時帶 paper_id）。細節見下方〔retrain PR-3〕那一段。
+//
 // 跨 module 的唯一通道：監聽 document 上的 `remedial:add`（detail.question_id），把題目加進目前的草稿。
 // 發送端是「找相似」結果每列的「加入補救卷」按鈕（〔stage5 WS-D〕掛鉤，見 docs/remedial.md）。
 //
@@ -27,15 +30,74 @@
 /** 跨 module 事件名（契約第 4.4 條第 5 項凍結）。 */
 export const REMEDIAL_ADD_EVENT = 'remedial:add';
 
-export const BUCKET_ORDER = ['remedial', 'prerequisite', 'extension', 'manual'];
-export const BUCKET_LABEL = { remedial: '補救', prerequisite: '先備', extension: '延伸', manual: '手動加入' };
+// 〔retrain PR-3〕'retrain'（到期重練）：FEATURE_RETRAIN 開啟、而且產生草稿時附了到期重練題才會出現這一組
+export const BUCKET_ORDER = ['remedial', 'prerequisite', 'extension', 'retrain', 'manual'];
+export const BUCKET_LABEL = { remedial: '補救', prerequisite: '先備', extension: '延伸', retrain: '到期重練', manual: '手動加入' };
 const BUCKET_HINT = {
     remedial: '最弱的單位，選不超過他答錯題難度＋1 的題',
     prerequisite: '弱知識點的先備知識點，選基礎題',
     extension: '已相對掌握的單位，選難一點的題',
+    retrain: '錯題重練清單裡到期的原題，依逾期天數排序、承上題整組出；學生的卷面不會標出來',
     manual: '老師自己加的題；承上題會連同前題整組加入，已封存或他寫過的題不會加入'
 };
-const SHORTFALL_REASON = { insufficient_stock: '庫存不足', follow_up_group: '承上題須整組出題' };
+const SHORTFALL_REASON = { insufficient_stock: '庫存不足', follow_up_group: '承上題須整組出題', not_enough_due: '到期的題不夠' };
+
+// ───────────────────────── 〔retrain PR-3〕附上到期的重練題（docs/retrain-and-review.md 第 5.2 節 API-8、第 5.3 節）─────────────────────────
+//
+// FEATURE_RETRAIN 開啟時，配比下方多一列「☐ 附上到期重練 [N] 題（目前到期 M 題）」（〔Owner 決策單 2026-09-26 R6 選 1〕）：
+// 預設不勾；N 預設 capForAttach(題數)＝題數 × RETRAIN_ATTACH_RATIO（<meta name="retrain-attach-ratio">，預設三成）無條件捨去，
+// 而且不超過 20（API-8 的上限）、題數＋N ≤ 50。勾了才在 remedial-paper 的 body 帶 retrain_count，草稿多一組「到期重練」；
+// 確認時把這組的題號放進 confirm-paper 的 retrain_question_ids；下載 Word 時帶 paper_id（標準版答案區與詳解版標「（重練）」，R7）。
+// 旗標關閉時這一列不渲染、送出的請求與 PR-3 之前逐字相同。
+
+/** API-8 retrain_count 的上限（與伺服器 utils/retrainValidation.js 相同）。 */
+export const MAX_RETRAIN_COUNT = 20;
+/** 沒注入比例或不合法時的預設（config/retrain.js 的 DEFAULT_ATTACH_RATIO）。 */
+export const DEFAULT_ATTACH_RATIO = 0.3;
+
+/**
+ * <meta name="retrain-attach-ratio"> 的內容 → 比例；不合法（含沒被替換的佔位字串）回預設 0.3（純函式）。
+ * @param {any} raw
+ * @returns {number}
+ */
+export function parseAttachRatio(raw) {
+    const s = String(raw ?? '').trim();
+    const n = Number(s);
+    return /^\d+(\.\d+)?$/.test(s) && n <= 2 ? n : DEFAULT_ATTACH_RATIO;
+}
+
+/**
+ * 補救卷「到期重練」的題數預設（純函式）：與 services/retrainSchedule.js 的 capForAttach 同一條規則
+ * （floor(題數 × 比例)、題數＋重練 ≤ 50），再夾在 API-8 的上限 20 以內。
+ * @param {number} total
+ * @param {number} ratio
+ * @returns {number}
+ */
+export function retrainDefaultCount(total, ratio) {
+    const n = Number.isInteger(total) && total > 0 ? total : 0;
+    return Math.max(0, Math.min(Math.floor(n * ratio + 1e-9), MAX_PAPER - n, MAX_RETRAIN_COUNT));
+}
+
+/**
+ * 確認出卷要多帶的鍵（純函式）：草稿裡有「到期重練」組的題才帶 retrain_question_ids（依草稿順序）。
+ * @param {object|null} draft
+ * @returns {{retrain_question_ids?:number[]}}
+ */
+export function retrainConfirmKeys(draft) {
+    const ids = (draft?.items || []).filter(i => i.bucket === 'retrain').map(i => i.question_id);
+    return ids.length ? { retrain_question_ids: ids } : {};
+}
+
+/** @returns {boolean} FEATURE_RETRAIN 是否開啟（與 feature-remedial 同一種讀法） */
+function retrainEnabled() {
+    const meta = document.querySelector('meta[name="feature-retrain"]');
+    return parseBool(meta ? meta.content : '');
+}
+
+function retrainRatio() {
+    const meta = document.querySelector('meta[name="retrain-attach-ratio"]');
+    return parseAttachRatio(meta ? meta.content : '');
+}
 
 export const DAYS_OPTIONS = [30, 90, 180, 365];
 export const DEFAULT_DAYS = 90;              // 與伺服器端預設相同（契約第 4.4 條第 2 項）
@@ -61,10 +123,12 @@ export const SOURCE_SCOPES = [
  * @param {{subject:string, total:number, mix:object, days:number, scope?:string}} p
  * @returns {object}
  */
-export function remedialRequestBody({ subject, total, mix, days, scope }) {
+export function remedialRequestBody({ subject, total, mix, days, scope, retrainCount }) {
     const body = { subject, total, mix, days };
     const row = SOURCE_SCOPES.find(r => r[0] === scope);
     if (row && row[2]) body.source_types = row[2];
+    // 〔retrain PR-3〕勾了「附上到期重練」而且題數 > 0 才帶（沒帶＝回應與 PR-3 之前逐字相同）
+    if (Number.isInteger(retrainCount) && retrainCount > 0) body.retrain_count = retrainCount;
     return body;
 }
 const KC_TABLE_LIMIT = 10;                   // 「知識點掌握度」只列最弱的 10 個
@@ -563,6 +627,8 @@ function mountRemedialSkeleton(section) {
         labeled('題源限制', ui.scope), ui.generate
     );
     section.appendChild(controls);
+    // 〔retrain PR-3〕配比下方「附上到期重練 [N] 題」（旗標關閉時不渲染）
+    if (retrainEnabled()) section.appendChild(mountRetrainRow(ui));
 
     ui.status = el('p', 'mt-2 text-[11px] text-slate-400', { id: 'remStatus', textContent: '' });
     ui.kc = el('div', 'mt-4', { id: 'remKc' });
@@ -570,6 +636,68 @@ function mountRemedialSkeleton(section) {
     ui.result = el('div', 'mt-4', { id: 'remResult' });
     section.append(ui.status, ui.kc, ui.draft, ui.result);
     return ui;
+}
+
+/**
+ * 〔retrain PR-3〕「☐ 附上到期重練 [N] 題（目前到期 M 題）」那一列；ui 多 retrainAttach、retrainCount、retrainDue。
+ * 預設不勾；N 預設 retrainDefaultCount(題數)，老師改過 N 之後題數再變也不覆寫。
+ * @param {object} ui
+ * @returns {HTMLElement}
+ */
+function mountRetrainRow(ui) {
+    const row = el('div', 'mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-violet-200 bg-violet-50/60 px-3 py-2 text-xs font-bold text-slate-600', {
+        id: 'remRetrainRow'
+    });
+    ui.retrainAttach = el('input', '', { id: 'remRetrainAttach', type: 'checkbox', 'aria-label': '附上到期重練' });
+    ui.retrainAttach.checked = false;                  // 預設不勾（R6）
+    ui.retrainCount = el('input', 'field-control w-20 p-1.5 text-sm', {
+        id: 'remRetrainCount', type: 'number', min: 0, max: MAX_RETRAIN_COUNT, 'aria-label': '到期重練題數'
+    });
+    ui.retrainEdited = false;
+    ui.retrainCount.addEventListener('input', () => { ui.retrainEdited = true; });
+    ui.retrainDue = el('span', 'font-normal text-slate-400', { id: 'remRetrainDue', textContent: '' });
+    // 只有勾選框和它的文字包在 label 裡：點題數欄或到期數不會切換勾選
+    const toggle = el('label', 'flex items-center gap-2 cursor-pointer');
+    toggle.append(ui.retrainAttach, el('span', '', { textContent: '附上到期重練' }));
+    row.append(toggle, ui.retrainCount, el('span', '', { textContent: '題' }), ui.retrainDue);
+    syncRetrainCount(ui);
+    ui.total.addEventListener('input', () => syncRetrainCount(ui));
+    return row;
+}
+
+/** 題數改變時更新 N 的預設（老師改過就不動）。 */
+function syncRetrainCount(ui) {
+    if (!ui.retrainCount || ui.retrainEdited) return;
+    const total = parseTotal(ui.total.value);
+    ui.retrainCount.value = String(retrainDefaultCount(total ?? 0, retrainRatio()));
+}
+
+/** 讀目前到期題數（選的學生、科目）；晚到的舊回應不覆寫。 */
+async function refreshRetrainDue(app, ui, studentId, subject) {
+    if (!ui.retrainDue) return;
+    const seq = (ui.retrainDueSeq = (ui.retrainDueSeq || 0) + 1);
+    if (!studentId || !subject) { ui.retrainDue.textContent = ''; return; }
+    ui.retrainDue.textContent = '（讀取目前到期題數…）';
+    try {
+        const params = new URLSearchParams({ status: 'due', subject });
+        const res = await app.apiFetch(`/api/students/${studentId}/retrain-items?${params.toString()}`);
+        const body = res.ok ? await res.json() : null;
+        if (seq !== ui.retrainDueSeq) return;
+        ui.retrainDue.textContent = body && body.counts ? `（目前到期 ${body.counts.due} 題）` : `（目前到期題數讀取失敗：${await messageOf(res)}）`;
+    } catch {
+        if (seq === ui.retrainDueSeq) ui.retrainDue.textContent = '（目前到期題數讀取失敗）';
+    }
+}
+
+/**
+ * 產生草稿要帶的 retrain_count：沒勾（或這一列不在）＝0＝不帶；勾了但 N 不是 0–20 的整數回 null（呼叫端提示）。
+ * @returns {number|null}
+ */
+function retrainCountOf(ui) {
+    if (!ui.retrainAttach || !ui.retrainAttach.checked) return 0;
+    const s = String(ui.retrainCount.value ?? '').trim();
+    const n = Number(s);
+    return s !== '' && Number.isInteger(n) && n >= 0 && n <= MAX_RETRAIN_COUNT ? n : null;
 }
 
 function selectedStudent(ui, students) {
@@ -671,7 +799,9 @@ function renderDraft(app, ui) {
                 item.follows_question_id ? `承上 #${item.follows_question_id}` : (inGroup ? '有承上題' : ''),
                 item.chapter || '',
                 item.difficulty ? '★'.repeat(item.difficulty) : '',
-                item.target && item.bucket !== 'manual' ? `目標：${item.target.name}` : ''
+                item.target && item.bucket !== 'manual' && item.bucket !== 'retrain' ? `目標：${item.target.name}` : '',
+                // 〔retrain PR-3〕到期重練的題標關卡（R7：這是老師看的畫面；學生卷面不標）
+                item.bucket === 'retrain' && item.step ? `重練・第 ${item.step} 關` : ''
             ].filter(Boolean).join('　·　');
             const row = el('div', 'flex items-start justify-between gap-2');
             row.appendChild(el('p', 'text-[11px] font-bold text-slate-400', { textContent: meta }));
@@ -732,13 +862,16 @@ async function generateDraft(app, ui, shared) {
     if (!subject) return app.showToast('請先選科目。', 'error');
     if (total === null) return app.showToast(`題數要是 ${MIN_TOTAL}–${MAX_TOTAL} 的整數。`, 'error');
     if (!mix) return app.showToast('配比要是三個非負數，而且不能全是 0。', 'error');
+    // 〔retrain PR-3〕勾了「附上到期重練」才帶 retrain_count（旗標關閉時這一列不存在＝0＝不帶）
+    const retrainCount = retrainCountOf(ui);
+    if (retrainCount === null) return app.showToast(`到期重練題數要是 0–${MAX_RETRAIN_COUNT} 的整數。`, 'error');
 
     ui.generate.disabled = true;
     ui.status.textContent = '產生草稿中…';
     try {
         const params = new URLSearchParams({ subject, days: String(days) });
         const [res, kcRes] = await Promise.all([
-            postJson(app, `/api/students/${student.id}/remedial-paper`, remedialRequestBody({ subject, total, mix, days, scope: ui.scope.value })),
+            postJson(app, `/api/students/${student.id}/remedial-paper`, remedialRequestBody({ subject, total, mix, days, scope: ui.scope.value, retrainCount })),
             app.apiFetch(`/api/students/${student.id}/weakness/kc?${params.toString()}`)
         ]);
         if (!res.ok) { app.showToast(await messageOf(res), 'error'); ui.status.textContent = ''; return; }
@@ -774,7 +907,8 @@ async function confirmDraft(app, ui, btn) {
     }
     btn.disabled = true;
     try {
-        const res = await postJson(app, '/api/confirm-paper', { student_id: draft.student_id, question_ids: ids });
+        // 〔retrain PR-3〕草稿有「到期重練」組才多帶 retrain_question_ids
+        const res = await postJson(app, '/api/confirm-paper', { student_id: draft.student_id, question_ids: ids, ...retrainConfirmKeys(draft) });
         if (!res.ok) { app.showToast(await messageOf(res), 'error'); return; }
         const paper = await res.json();
         state.lastPaper = { paper_title: paper.paper_title, student_name: draft.student_name, question_ids: paper.question_ids, paper_id: paper.paper_id };
@@ -801,14 +935,19 @@ export const WORD_EDITIONS = [
 
 /**
  * 下載請求的 body 與檔名（純函式）。不認得的版本一律當 standard。
+ * 〔retrain PR-3〕opts.paperId（FEATURE_RETRAIN 開啟時才給）：body 多 paper_id，伺服器依 R7 在標準版答案區與詳解版標「（重練）」。
  * @param {{paper_title:string, student_name:string, question_ids:number[]}} paper
  * @param {string} edition
+ * @param {{paperId?:number|null}} [opts]
  * @returns {{body:object, filename:string}}
  */
-export function wordDownloadRequest(paper, edition) {
+export function wordDownloadRequest(paper, edition, { paperId = null } = {}) {
     const row = WORD_EDITIONS.find(e => e[0] === edition) || WORD_EDITIONS[0];
     return {
-        body: { paper_title: paper.paper_title, student_name: paper.student_name, question_ids: paper.question_ids, edition: row[0] },
+        body: {
+            paper_title: paper.paper_title, student_name: paper.student_name, question_ids: paper.question_ids, edition: row[0],
+            ...(Number.isInteger(paperId) && paperId > 0 ? { paper_id: paperId } : {})
+        },
         filename: `${paper.paper_title}${row[2]}.docx`
     };
 }
@@ -835,7 +974,8 @@ function renderResult(app, ui) {
 
 /** 走既有的 POST /api/download-word（與組卷分頁同一支）。 */
 async function downloadWord(app, paper, edition = 'standard') {
-    const { body, filename } = wordDownloadRequest(paper, edition);
+    // 〔retrain PR-3〕旗標開啟時帶 paper_id（R7 的「（重練）」標示）；關閉時請求與 PR-3 之前相同
+    const { body, filename } = wordDownloadRequest(paper, edition, { paperId: retrainEnabled() ? paper.paper_id : null });
     const res = await postJson(app, '/api/download-word', body);
     const type = res.headers.get('content-type') || '';
     if (!res.ok || !type.includes('application/vnd.openxmlformats-officedocument')) throw new Error(await messageOf(res));
@@ -934,6 +1074,12 @@ function mountRemedial(app, section, shared) {
     fillSelect(ui.subject, shared.subjects.map(s => [s, s]));
     if (shared.error) ui.status.textContent = `學生或科目清單載入失敗：${shared.error}`;
     renderDraft(app, ui);
+    // 〔retrain PR-3〕選學生、換科目時更新「目前到期 M 題」（這一列只在旗標開啟時存在）
+    if (ui.retrainDue) {
+        const refresh = () => { refreshRetrainDue(app, ui, Number(ui.student.value) || null, ui.subject.value).catch(() => { }); };
+        ui.student.addEventListener('change', refresh);
+        ui.subject.addEventListener('change', refresh);
+    }
     ui.generate.addEventListener('click', () => { generateDraft(app, ui, shared).catch(err => console.error('[remedial] 產生草稿失敗', err)); });
     document.addEventListener(REMEDIAL_ADD_EVENT, (event) => handleAdd(app, ui, shared, (event && event.detail) || {}));
     return ui;

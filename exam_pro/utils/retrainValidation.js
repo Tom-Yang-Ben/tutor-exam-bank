@@ -6,6 +6,11 @@
 //   API-3  PATCH /api/students/:id/retrain-items/:itemId { action, note? }   parseActionBody
 //   API-4  GET   /api/retrain/summary?as_of=                                 parseSummaryQuery
 //   API-10 PATCH /api/papers/:id/results 的 results[i].retrain（R1 選 2）     parseRetrainFlags
+//   〔PR-3〕API-5  POST /api/students/:id/retrain-paper                      parseRetrainPaperBody
+//   〔PR-3〕API-6  POST /api/generate-paper 的 retrain: { count, as_of? }     parseAttachParam
+//   〔PR-3〕API-7  POST /api/confirm-paper 的 retrain_question_ids            parseConfirmRetrain
+//   〔PR-3〕API-8  POST /api/students/:id/remedial-paper 的 retrain_count     parseRemedialRetrain
+//   〔PR-3〕API-12 POST /api/download-word 的 paper_id                        parseWordPaperId
 //
 // 嚴格驗證（同裁決 S5-21）：不認得的查詢參數或 body 鍵一律 400，不靜默略過——拼錯的鍵被略過，
 // 老師會以為設定生效了。同名查詢參數重複（?status=a&status=b）也是 400。
@@ -193,6 +198,161 @@ function parseRetrainFlags(body, { enabled }) {
     return { flags };
 }
 
+// ───────────────────────── 〔retrain PR-3〕出卷整合（API-5～8、API-12）─────────────────────────
+//
+// 共同規則：
+//   - 擴充既有端點（API-6、7、8、12）的新參數沒帶（undefined 或 null）＝沒有這個功能，呼叫端的行為與回應逐字不變。
+//   - 旗標關閉卻帶了新參數 → 400「retrain 需要開啟 FEATURE_RETRAIN。」（讓老師知道沒生效，而不是靜默忽略；同 API-10）。
+//     唯一的例外是 API-12 的 paper_id：組卷頁早就把 paper_id 一起送給 download-word（currentPaperCache），
+//     旗標關閉時照舊忽略它，Word 逐位元不變。
+//   - 巢狀物件（retrain: {…}）與新端點（API-5）的 body 一樣嚴格：不認得的鍵 400（同裁決 S5-21）。
+
+/** 旗標關閉卻帶了重練參數（API-6、7、8、10 共用的訊息）。 */
+const RETRAIN_DISABLED_MESSAGE = 'retrain 需要開啟 FEATURE_RETRAIN。';
+/** 一份卷最多幾題（同 config/retrain.js 的 MAX_PAPER_QUESTIONS、examController 的 MAX_QUESTIONS）。 */
+const MAX_PAPER = 50;
+/** API-5 的 count 預設（第 5.2 節）。 */
+const DEFAULT_RETRAIN_PAPER_COUNT = 10;
+/** API-8 的 retrain_count 上限（第 5.2 節：0–20）。 */
+const MAX_REMEDIAL_RETRAIN = 20;
+
+const isPositiveInt4 = x => Number.isInteger(x) && x >= 1 && x <= INT4_MAX;
+
+/**
+ * 日期參數（body 裡的 as_of）：沒給、null、空字串＝today；其餘必須是真的有這一天的 'YYYY-MM-DD'。
+ * @returns {{error:string}|{value:string}}
+ */
+function parseBodyDate(raw, today, label) {
+    if (raw === undefined || raw === null || (typeof raw === 'string' && raw.trim() === '')) return { value: today };
+    if (typeof raw !== 'string' || !isValidDate(raw.trim())) return { error: `${label} 必須是 YYYY-MM-DD 格式的日期。` };
+    return { value: raw.trim() };
+}
+
+/**
+ * API-6：POST /api/generate-paper 的 retrain: { count, as_of? }（附上到期的重練題，R6 選 1）。
+ *
+ * count 0–50（前端預先帶入 capForAttach(新題數)，老師可改）；新題＋重練合計不得超過 50 題。
+ *
+ * @param {any} raw req.body.retrain
+ * @param {{enabled:boolean, newCount:number, today:string}} opts newCount：新題題數（單章的 count 或 blueprint 的總和）
+ * @returns {{error:string} | {value:null} | {value:{count:number, asOf:string}}}
+ */
+function parseAttachParam(raw, { enabled, newCount, today }) {
+    if (raw === undefined || raw === null) return { value: null };
+    if (!enabled) return { error: RETRAIN_DISABLED_MESSAGE };
+    if (typeof raw !== 'object' || Array.isArray(raw)) return { error: 'retrain 必須是物件：{ count, as_of? }。' };
+    const allowed = ['count', 'as_of'];
+    const unknown = Object.keys(raw).filter(k => !allowed.includes(k));
+    if (unknown.length) {
+        return { error: `retrain 不接受的欄位：${unknown.join('、')}（可用的欄位：${allowed.join('、')}）。` };
+    }
+    if (!Number.isInteger(raw.count) || raw.count < 0 || raw.count > MAX_PAPER) {
+        return { error: `retrain.count 必須是 0~${MAX_PAPER} 的整數。` };
+    }
+    const asOf = parseBodyDate(raw.as_of, today, 'retrain.as_of');
+    if (asOf.error) return { error: asOf.error };
+    if (newCount + raw.count > MAX_PAPER) {
+        return { error: `新題加重練題最多 ${MAX_PAPER} 題（新題 ${newCount} 題＋重練 ${raw.count} 題）。` };
+    }
+    return { value: { count: raw.count, asOf: asOf.value } };
+}
+
+/**
+ * API-7：POST /api/confirm-paper 的 retrain_question_ids（必須是 question_ids 的子集；可以是空陣列）。
+ *
+ * @param {object} body 已通過既有檢查（question_ids 是 1–50 個不重複的正整數）
+ * @param {{enabled:boolean}} opts
+ * @returns {{error:string} | {value:null} | {value:number[]}}
+ */
+function parseConfirmRetrain(body, { enabled }) {
+    const raw = body ? body.retrain_question_ids : undefined;
+    if (raw === undefined || raw === null) return { value: null };
+    if (!enabled) return { error: RETRAIN_DISABLED_MESSAGE };
+    if (!Array.isArray(raw) || raw.some(v => !isPositiveInt4(v))) {
+        return { error: 'retrain_question_ids 必須是正整數陣列。' };
+    }
+    if (new Set(raw).size !== raw.length) return { error: 'retrain_question_ids 不得重複。' };
+    const inPaper = new Set(Array.isArray(body.question_ids) ? body.question_ids : []);
+    const outside = raw.filter(id => !inPaper.has(id));
+    if (outside.length) {
+        return { error: `retrain_question_ids 的每一題都必須在 question_ids 裡（不在的：${outside.join('、')}）。` };
+    }
+    return { value: [...raw] };
+}
+
+/**
+ * API-5：POST /api/students/:id/retrain-paper 的 body：{ subject?, count?(1–50，預設 10), as_of?, include_not_due?(預設 false) }。
+ * 全部選填；沒有 body（或空物件）＝全部預設。
+ *
+ * @param {any} body
+ * @param {{today:string}} opts
+ * @returns {{error:string} | {subject:string|null, count:number, asOf:string, includeNotDue:boolean}}
+ */
+function parseRetrainPaperBody(body, { today }) {
+    const b = body === undefined || body === null ? {} : body;
+    const keyError = checkBodyKeys(b, ['subject', 'count', 'as_of', 'include_not_due']);
+    if (keyError) return { error: keyError };
+
+    let subject = null;
+    if (b.subject !== undefined && b.subject !== null && !(typeof b.subject === 'string' && b.subject.trim() === '')) {
+        if (typeof b.subject !== 'string' || !SUBJECTS.includes(b.subject.trim())) return { error: 'subject 不在白名單內。' };
+        subject = b.subject.trim();
+    }
+
+    let count = DEFAULT_RETRAIN_PAPER_COUNT;
+    if (b.count !== undefined && b.count !== null) {
+        if (!Number.isInteger(b.count) || b.count < 1 || b.count > MAX_PAPER) return { error: `count 必須是 1~${MAX_PAPER} 的整數。` };
+        count = b.count;
+    }
+
+    const asOf = parseBodyDate(b.as_of, today, 'as_of');
+    if (asOf.error) return { error: asOf.error };
+
+    let includeNotDue = false;
+    if (b.include_not_due !== undefined && b.include_not_due !== null) {
+        if (typeof b.include_not_due !== 'boolean') return { error: 'include_not_due 只接受 true 或 false。' };
+        includeNotDue = b.include_not_due;
+    }
+    return { subject, count, asOf: asOf.value, includeNotDue };
+}
+
+/**
+ * API-8：POST /api/students/:id/remedial-paper 的 retrain_count（0–20，預設 0；total＋retrain_count ≤ 50）。
+ * 0（或沒帶）＝沒有「到期重練」組，回應與沒有這個參數時逐字相同。
+ *
+ * @param {object} body
+ * @param {{enabled:boolean, total:number}} opts total：已驗證過的補救題數
+ * @returns {{error:string} | {count:number}}
+ */
+function parseRemedialRetrain(body, { enabled, total }) {
+    const raw = body && typeof body === 'object' ? body.retrain_count : undefined;
+    if (raw === undefined || raw === null) return { count: 0 };
+    if (!enabled) return { error: RETRAIN_DISABLED_MESSAGE };
+    if (!Number.isInteger(raw) || raw < 0 || raw > MAX_REMEDIAL_RETRAIN) {
+        return { error: `retrain_count 必須是 0~${MAX_REMEDIAL_RETRAIN} 的整數。` };
+    }
+    if (total + raw > MAX_PAPER) {
+        return { error: `total 加上 retrain_count 最多 ${MAX_PAPER} 題（補救 ${total} 題＋重練 ${raw} 題）。` };
+    }
+    return { count: raw };
+}
+
+/**
+ * API-12：POST /api/download-word 的 paper_id（有帶時依 R7 標示重練題）。
+ * 旗標關閉時一律忽略（回 null）：組卷頁本來就會把 paper_id 一起送來，旗標關閉時 Word 必須逐位元不變。
+ *
+ * @param {object} body
+ * @param {{enabled:boolean}} opts
+ * @returns {{error:string} | {paperId:number|null}}
+ */
+function parseWordPaperId(body, { enabled }) {
+    if (!enabled) return { paperId: null };
+    const raw = body && typeof body === 'object' ? body.paper_id : undefined;
+    if (raw === undefined || raw === null) return { paperId: null };
+    if (!isPositiveInt4(raw)) return { error: 'paper_id 必須是正整數。' };
+    return { paperId: raw };
+}
+
 module.exports = {
     LIST_STATUSES,
     ACTIONS,
@@ -204,5 +364,14 @@ module.exports = {
     parseSummaryQuery,
     parseAddBody,
     parseActionBody,
-    parseRetrainFlags
+    parseRetrainFlags,
+    // 〔retrain PR-3〕出卷整合
+    RETRAIN_DISABLED_MESSAGE,
+    DEFAULT_RETRAIN_PAPER_COUNT,
+    MAX_REMEDIAL_RETRAIN,
+    parseAttachParam,
+    parseConfirmRetrain,
+    parseRetrainPaperBody,
+    parseRemedialRetrain,
+    parseWordPaperId
 };

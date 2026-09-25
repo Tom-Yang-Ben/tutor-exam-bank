@@ -6,6 +6,11 @@ const { findIncompleteFollowUpGroups, incompleteFollowUpGroupsMessage } = requir
 const { buildItemLookupQuery } = require('../services/remedialService');
 // 〔retrain PR-2〕刪卷時的排程項目處理（第 3.9 節）。retrainService 不 require 本檔，載入時不成環。
 const retrainService = require('../services/retrainService');
+// 〔retrain PR-3〕出卷整合（docs/retrain-and-review.md 第 5.2 節 API-6、API-7）：挑到期的重練題、參數驗證、旗標。
+// retrainSelect 也不 require 本檔（排序直接用 utils/paperGroups），載入時不成環。
+const retrainSelect = require('../services/retrainSelect');
+const retrainValidation = require('../utils/retrainValidation');
+const features = require('../config/features');
 // 〔stage5 WS-D〕pg 序列化查詢參數的同一支函式（pg 的 package.json exports 公開 ./lib/*）：
 // 單章路徑用它把 chapter 轉成與抽出前 `q.chapter = $2` 相同的比對字串（見 selectPaperQuestions）
 const { prepareValue } = require('pg/lib/utils');
@@ -95,6 +100,11 @@ function followUpShortfallText({ label, wanted, got, suggest = null, minUnitSize
 // attempts 改成唯讀相容檢視（只含「新題」派題，每生每題最多一列＝舊表的語意），所以候選池的
 // NOT EXISTS 一個字都不用改，新題組卷照舊排除該生寫過的題。寫入的閘門搬到 assignments 的部分唯一索引
 // assignments_first_exposure_key（只管 purpose = 'new'），見 buildInsertNewAssignmentsSql。
+//
+// 〔retrain PR-3〕docs/retrain-and-review.md 第 5.2 節 API-6：單章與 blueprint 兩條路徑都接受 retrain: { count, as_of? }
+// （附上到期的重練題，〔Owner 決策單 2026-09-26 R6 選 1〕）。新題題數的語意不變，重練題另外加（合計 ≤ 50）；
+// 重練題不經候選池、不佔家族名額（R8），合併後用 sortForPaper 一起排（R7），承上組整組放不下 → 400（R12）。
+// 旗標關閉卻帶了 retrain → 400；沒帶 retrain 時回應逐字不變。見 attachRetrain。
 // ─────────────────────────────────────────────────────────────
 
 /**
@@ -384,6 +394,12 @@ exports.generatePaper = async (req, res, next) => {
         if (source_types.length > 0) sourceTypes = [...new Set(source_types)];
     }
 
+    // 〔retrain PR-3〕API-6 retrain: { count, as_of? }（排在既有參數檢查之後；沒帶＝null，以下與 PR-3 之前逐字相同）
+    const attach = retrainValidation.parseAttachParam(req.body.retrain, {
+        enabled: features.FEATURE_RETRAIN, newCount: limitCount, today: localDates().todayStr
+    });
+    if (attach.error) return res.status(400).json({ message: attach.error });
+
     try {
         const { student, error } = await resolveStudent({ student_id, student_name });
         if (error) return res.status(error.status).json({ message: error.message });
@@ -392,9 +408,21 @@ exports.generatePaper = async (req, res, next) => {
             studentId: student.id, studentName: student.name, subject, chapter, limitCount, excludeIds, sourceTypes
         });
         if (picked.error) return res.status(picked.error.status).json({ message: picked.error.message });
-        const { sortedQuestions, finalSortedIds, paperTitle, todayStr } = picked;
+        let { sortedQuestions, finalSortedIds } = picked;
+        const { paperTitle, todayStr } = picked;
         // 少出題附註（FR-019 PR2）：只在真的少出時才帶 shortfall／note 兩鍵，其餘回應形狀不變
         const shortfallKeys = picked.shortfall ? { shortfall: picked.shortfall, note: picked.note } : {};
+
+        // 〔retrain PR-3〕附上到期的重練題：新題照上面的流程抽，重練題另外挑、合併後一起排（R6、R7、R8、R12）
+        const withRetrain = await attachRetrain(attach.value, {
+            studentId: student.id, subject, newCount: limitCount, excludeIds, today: todayStr, sortedQuestions
+        });
+        if (withRetrain.error) return res.status(400).json({ message: withRetrain.error.message });
+        if (withRetrain.questions) {
+            sortedQuestions = withRetrain.questions;
+            finalSortedIds = sortedQuestions.map(q => q.id);
+        }
+        const retrainKeys = withRetrain.keys;
 
         // ── dry_run：到此為止，一個位元組都沒寫（W1-2 的「草稿」）──
         if (dry_run) {
@@ -405,14 +433,19 @@ exports.generatePaper = async (req, res, next) => {
                 paper_title_preview: paperTitle,
                 question_ids: finalSortedIds,
                 questions: sortedQuestions,
-                ...shortfallKeys
+                ...shortfallKeys,
+                ...retrainKeys
             });
         }
 
         // ── 真出卷：建卷＋派題＋作答同一交易 ──
         const outcome = await writePaper({
-            studentId: student.id, paperTitle, questionIds: finalSortedIds, todayStr
+            studentId: student.id, paperTitle, questionIds: finalSortedIds, todayStr,
+            retrainQuestionIds: withRetrain.ids
         });
+        if (outcome.retrainConflict) {
+            return res.status(409).json({ message: retrainService.retrainConflictMessage(outcome.retrainConflict.question_id) });
+        }
         if (outcome.conflict) {
             return res.status(409).json({ message: '部分題目已被同時指派給該學生，請重試。' });
         }
@@ -422,12 +455,39 @@ exports.generatePaper = async (req, res, next) => {
             paper_title: paperTitle,
             question_ids: finalSortedIds,
             questions: sortedQuestions,
-            ...shortfallKeys
+            ...shortfallKeys,
+            ...retrainKeys
         });
     } catch (err) {
         next(err);
     }
 };
+
+/**
+ * 〔retrain PR-3〕API-6：把到期的重練題附在新卷上（只讀；單章與 blueprint 兩條路徑共用）。
+ *
+ * 新題照既有流程抽完之後才呼叫：新題題數的語意不變，重練題另外加上（R6 選 1）。重練題不經候選池、
+ * 不佔變式家族名額（R8 選 1），挑法見 services/retrainSelect.js（第 4.7 節的排序；承上組整組放不下 → 400，R12 選 2）。
+ * 兩者合併後用 sortForPaper 一起依題型、難度排（R7 選 1：卷面不另分區），每題多 purpose、retrain_step。
+ * exclude_ids 也排除重練題（整組）：組卷預覽上「移除這題」的重練題放在這裡，換題、重抽時不會再回來。
+ *
+ * @param {{count:number, asOf:string}|null} attach parseAttachParam 的結果；null＝沒帶 retrain
+ * @param {{studentId:number, subject:string, newCount:number, excludeIds:number[], today:string, sortedQuestions:object[]}} p
+ * @returns {Promise<{error:{message:string}} | {questions:object[]|null, ids:number[], keys:object}>}
+ *   沒帶 retrain 時 questions 為 null、ids 為 []、keys 為 {}（回應逐字不變）
+ */
+async function attachRetrain(attach, { studentId, subject, newCount, excludeIds, today, sortedQuestions }) {
+    if (!attach) return { questions: null, ids: [], keys: {} };
+    const sel = await retrainSelect.selectForAttach(query, {
+        studentId, subject, asOf: attach.asOf, today, count: attach.count, newCount, excludeIds
+    });
+    if (sel.error) return { error: sel.error };
+    return {
+        questions: retrainSelect.mergeForPaper(sortedQuestions, sel.questions, sel.stepById, sortForPaper),
+        ids: sel.ids,
+        keys: { retrain: sel.summary }
+    };
+}
 
 // ─────────────────────────────────────────────────────────────
 // 〔stage5 WS-D〕跨章配額組卷（docs/interfaces-stage5.md 第 4.4 條第 3 項；DEC-016）
@@ -607,6 +667,11 @@ async function generateBlueprintPaper(req, res, next) {
     if (ex.error) return res.status(400).json({ message: ex.error });
     const st = parseSourceTypes(req.body.source_types);
     if (st.error) return res.status(400).json({ message: st.error });
+    // 〔retrain PR-3〕API-6 retrain（同單章路徑；新題題數＝blueprint 的總和）
+    const attach = retrainValidation.parseAttachParam(req.body.retrain, {
+        enabled: features.FEATURE_RETRAIN, newCount: parsed.rows.reduce((s, r) => s + r.count, 0), today: localDates().todayStr
+    });
+    if (attach.error) return res.status(400).json({ message: attach.error });
 
     try {
         const { student, error } = await resolveStudent({ student_id, student_name });
@@ -646,10 +711,20 @@ async function generateBlueprintPaper(req, res, next) {
                FROM questions WHERE id = ANY($1::int[])`,
             [ids]
         );
-        const sortedQuestions = sortForPaper(fullQuestions);
-        const finalSortedIds = sortedQuestions.map(q => q.id);
+        let sortedQuestions = sortForPaper(fullQuestions);
+        let finalSortedIds = sortedQuestions.map(q => q.id);
         const { titleDate, todayStr } = localDates();
         const paperTitle = blueprintTitle(student.name, parsed.rows.map(r => r.chapter), titleDate);
+        // 〔retrain PR-3〕附上到期的重練題（下面的不足量附註照舊只算新題）
+        const newTotal = finalSortedIds.length;
+        const withRetrain = await attachRetrain(attach.value, {
+            studentId: student.id, subject, newCount: requested, excludeIds: ex.value, today: todayStr, sortedQuestions
+        });
+        if (withRetrain.error) return res.status(400).json({ message: withRetrain.error.message });
+        if (withRetrain.questions) {
+            sortedQuestions = withRetrain.questions;
+            finalSortedIds = sortedQuestions.map(q => q.id);
+        }
         const extra = {
             blueprint: report,
             shortfalls,
@@ -657,8 +732,9 @@ async function generateBlueprintPaper(req, res, next) {
                 note: `跨章配額有 ${shortfalls.length} 列不足量：`
                     + shortfalls.map(s => `第 ${s.row} 列「${s.chapter}」要 ${s.wanted} 題只抽到 ${s.got} 題`
                         + (s.reason === 'insufficient_stock' ? '（庫存不足）' : '（承上題須整組出題）')).join('；')
-                    + `。本卷實際 ${finalSortedIds.length} 題（要求 ${requested} 題）。`
-            } : {})
+                    + `。本卷實際 ${newTotal} 題（要求 ${requested} 題）。`
+            } : {}),
+            ...withRetrain.keys
         };
 
         if (dry_run) {
@@ -673,7 +749,12 @@ async function generateBlueprintPaper(req, res, next) {
             });
         }
 
-        const outcome = await writePaper({ studentId: student.id, paperTitle, questionIds: finalSortedIds, todayStr });
+        const outcome = await writePaper({
+            studentId: student.id, paperTitle, questionIds: finalSortedIds, todayStr, retrainQuestionIds: withRetrain.ids
+        });
+        if (outcome.retrainConflict) {
+            return res.status(409).json({ message: retrainService.retrainConflictMessage(outcome.retrainConflict.question_id) });
+        }
         if (outcome.conflict) {
             return res.status(409).json({ message: '部分題目已被同時指派給該學生，請重試。' });
         }
@@ -715,9 +796,19 @@ function buildInsertNewAssignmentsSql() {
 
 /**
  * 建卷＋寫派題與作答（generate 與 confirm 共用；同一交易、rowCount 硬閘門）。
- * @returns {Promise<{paperId:number|null, conflict:boolean}>}
+ *
+ * 〔retrain PR-3〕retrainQuestionIds（questionIds 的子集）寫成重練派題（API-7；docs/retrain-and-review.md 第 5.2 節）：
+ * 建卷之後先交給 services/retrainService.js 的 insertRetrainAssignments——它先 `SELECT … FOR UPDATE` 鎖住這些題的
+ * 排程項目，再逐題檢查「屬於這位學生、沒移出、沒有已派出待批改」（不變量 I6，已派出照 countsAsInFlight 判斷），
+ * 不符就什麼都不寫、回 retrainConflict（呼叫端回 409 retrainConflictMessage）；符合就寫 purpose = 'retrain'、
+ * retrain_item_id、retrain_step（當下關卡）與空白作答並重算。其餘的題照舊走新題的寫入閘門。
+ * 「先鎖項目、再動派題與作答」與批改、刪卷同一個順序（retrainService 檔頭的「併發」）。
+ * 沒有重練題（預設）時，這個交易裡的語句與 PR-3 之前一模一樣。
+ *
+ * @param {{studentId:number, paperTitle:string, questionIds:number[], todayStr:string, retrainQuestionIds?:number[]}} p
+ * @returns {Promise<{paperId:number|null, conflict:boolean, retrainConflict?:{question_id:number, reason:string}}>}
  */
-async function writePaper({ studentId, paperTitle, questionIds, todayStr }) {
+async function writePaper({ studentId, paperTitle, questionIds, todayStr, retrainQuestionIds = [] }) {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -725,14 +816,30 @@ async function writePaper({ studentId, paperTitle, questionIds, todayStr }) {
             `INSERT INTO exam_papers (title, student_id, question_ids) VALUES ($1, $2, $3::int[]) RETURNING id`,
             [paperTitle, studentId, questionIds]
         );
-        const ins = await client.query(
-            buildInsertNewAssignmentsSql(),
-            [studentId, questionIds, paper.id, todayStr]
-        );
-        // 寫入筆數少於題數 ⇒ 有題目在選完之後被別的請求指派給同一位學生（或預覽已過期）
-        if (ins.rowCount !== questionIds.length) {
-            await client.query('ROLLBACK');
-            return { paperId: null, conflict: true };
+        // 〔retrain PR-3〕重練題：先鎖項目再檢查、寫入（有衝突時什麼都沒寫）
+        let newIds = questionIds;
+        if (retrainQuestionIds.length > 0) {
+            const r = await retrainService.insertRetrainAssignments(client, {
+                studentId, paperId: paper.id, assignedAt: todayStr, questionIds: retrainQuestionIds
+            });
+            if (r.conflict) {
+                await client.query('ROLLBACK');
+                return { paperId: null, conflict: false, retrainConflict: r.conflict };
+            }
+            const retrainSet = new Set(retrainQuestionIds);
+            newIds = questionIds.filter(id => !retrainSet.has(id));
+        }
+        // 純重練卷沒有新題：不必跑新題的寫入
+        if (retrainQuestionIds.length === 0 || newIds.length > 0) {
+            const ins = await client.query(
+                buildInsertNewAssignmentsSql(),
+                [studentId, newIds, paper.id, todayStr]
+            );
+            // 寫入筆數少於題數 ⇒ 有題目在選完之後被別的請求指派給同一位學生（或預覽已過期）
+            if (ins.rowCount !== newIds.length) {
+                await client.query('ROLLBACK');
+                return { paperId: null, conflict: true };
+            }
         }
         await client.query('COMMIT');
         return { paperId: paper.id, conflict: false };
@@ -758,6 +865,14 @@ async function writePaper({ studentId, paperTitle, questionIds, todayStr }) {
 // 組內不在卷裡的成員是已封存或該生已寫過的，比照前端「組內有封存或已寫過的題就不加」＝這一組不能出；
 // 規則與原因標記見 utils/followUpPaperCheck.js。順序不必由呼叫端排：底下一律用 sortForPaper 重排，
 // 整組都在時必然相鄰且依承接順序。回 400 時不寫任何東西、訊息不含學生姓名。
+//
+// 〔retrain PR-3〕docs/retrain-and-review.md 第 5.2 節 API-7：body 可多帶 retrain_question_ids（question_ids 的子集）。
+//   - 旗標關閉卻帶了 → 400「retrain 需要開啟 FEATURE_RETRAIN。」；格式不對、不是子集 → 400（都排在既有檢查之後）。
+//   - 這些題寫成重練派題（writePaper → retrainService.insertRetrainAssignments：交易內 SELECT … FOR UPDATE 鎖項目再檢查，
+//     狀態不符 → 409「題目 <id> 的重練狀態已改變（可能已派到別張卷），請重新產生草稿。」）；其餘題照舊寫新題派題。
+//   - B7 的整組檢查與新題共用、一視同仁（incompleteFollowUpGroupsInPaper）。
+//   - 每一題都是重練題（純重練卷）時卷名是「<姓名>-錯題重練卷(日期)」。
+//   - 回應多 retrain_question_ids（有帶才多，依出題順序）；沒帶時行為與回應逐字不變。
 // ─────────────────────────────────────────────────────────────
 
 /**
@@ -771,9 +886,25 @@ async function writePaper({ studentId, paperTitle, questionIds, todayStr }) {
  * @param {number[]} questionIds
  * @returns {Promise<ReturnType<typeof findIncompleteFollowUpGroups>>}
  */
-async function incompleteFollowUpGroupsInPaper(studentId, questionIds) {
+async function incompleteFollowUpGroupsInPaper(studentId, questionIds, retrainIds = null) {
     const { text, values } = buildItemLookupQuery(questionIds, studentId);
-    const { rows } = await query(text, values);
+    let { rows } = await query(text, values);
+    // 〔retrain PR-3〕重練題與新題一視同仁（設計稿第 3.8 節、API-7、風險 R-9）：整組檢查的規則不變（卷裡有某組的任何一題，
+    // 整組都要在卷裡），只是「缺的題能不能加回來」要把重練算進去——帶了 retrain_question_ids 時，不在卷裡、該生寫過、
+    // 但還在錯題重練清單上（沒移出）的組員可以當重練題加回來，原因標 not_in_paper 而不是 answered（「只能整組刪」）。
+    // 沒帶 retrain_question_ids 時一個字都不變。
+    if (retrainIds !== null) {
+        const inPaper = new Set(questionIds);
+        const candidates = rows.filter(r => r.answered && !inPaper.has(r.id)).map(r => r.id);
+        if (candidates.length > 0) {
+            const { rows: live } = await query(
+                `SELECT question_id FROM retrain_items
+                  WHERE student_id = $1 AND question_id = ANY($2::int[]) AND status <> 'retired'`,
+                [studentId, candidates]);
+            const retrainable = new Set(live.map(r => r.question_id));
+            rows = rows.map(r => (retrainable.has(r.id) ? { ...r, answered: false } : r));
+        }
+    }
     return findIncompleteFollowUpGroups(questionIds, rows);
 }
 
@@ -801,8 +932,13 @@ exports.confirmPaper = async (req, res, next) => {
             return res.status(400).json({ message: '部分題目已不存在或已封存，請重新預覽。' });
         }
 
+        // 〔retrain PR-3〕API-7 retrain_question_ids（既有檢查之後；沒帶＝null，以下與 PR-3 之前逐字相同）
+        const rt = retrainValidation.parseConfirmRetrain(req.body, { enabled: features.FEATURE_RETRAIN });
+        if (rt.error) return res.status(400).json({ message: rt.error });
+        const retrainIds = rt.value;
+
         // 〔Owner 決策單 2026-09-25 B7〕承上題必須整組：缺題就 400，列出哪一組缺了哪幾題
-        const incomplete = await incompleteFollowUpGroupsInPaper(student.id, question_ids);
+        const incomplete = await incompleteFollowUpGroupsInPaper(student.id, question_ids, retrainIds);
         if (incomplete.length > 0) {
             return res.status(400).json({
                 message: incompleteFollowUpGroupsMessage(incomplete),
@@ -815,20 +951,31 @@ exports.confirmPaper = async (req, res, next) => {
         const finalSortedIds = sortedQuestions.map(q => q.id);
         const { titleDate, todayStr } = localDates();
         // 預覽是單一章節出的；混章時取排序後第一題的章節（標題本來就只是人看的）
-        const paperTitle = `${student.name}-${sortedQuestions[0].chapter}特訓卷(${titleDate})`;
+        // 〔retrain PR-3〕純重練卷（每一題都是重練題）的卷名是「<姓名>-錯題重練卷(日期)」（第 5.2 節 API-5、第 5.4 節）
+        const paperTitle = retrainSelect.isPureRetrain(finalSortedIds, retrainIds)
+            ? retrainSelect.retrainPaperTitle(student.name, titleDate)
+            : `${student.name}-${sortedQuestions[0].chapter}特訓卷(${titleDate})`;
 
         const outcome = await writePaper({
-            studentId: student.id, paperTitle, questionIds: finalSortedIds, todayStr
+            studentId: student.id, paperTitle, questionIds: finalSortedIds, todayStr,
+            ...(retrainIds !== null ? { retrainQuestionIds: retrainIds } : {})
         });
+        if (outcome.retrainConflict) {
+            // 〔retrain PR-3〕項目在草稿之後被派到別張卷、移出或還沒進清單（不變量 I6）
+            return res.status(409).json({ message: retrainService.retrainConflictMessage(outcome.retrainConflict.question_id) });
+        }
         if (outcome.conflict) {
             return res.status(409).json({ message: '部分題目已被指派給該學生（可能是預覽已過期），請重新預覽。' });
         }
+        const retrainSet = new Set(retrainIds || []);
         res.status(200).json({
             message: '出卷完成！已記錄作答歷史，避免下次重複。',
             paper_id: outcome.paperId,
             paper_title: paperTitle,
             question_ids: finalSortedIds,
-            questions: sortedQuestions.map(({ chapter, ...q }) => q)
+            questions: sortedQuestions.map(({ chapter, ...q }) => q),
+            // 〔retrain PR-3〕有帶才多，依出題順序
+            ...(retrainIds !== null ? { retrain_question_ids: finalSortedIds.filter(q => retrainSet.has(q)) } : {})
         });
     } catch (err) {
         next(err);
