@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "nlq.v1 — 把一句口語查題需求翻成受限的檢索條件",
+  "title": "nlq.v2 — 把一句口語查題需求翻成受限的檢索條件（數學、物理、化學三科）",
   "description": "只有在規則解析抓不到任何章節、而剩下的文字仍有實詞時才會呼叫（docs/interfaces-stage3.md 第 6.3 條）。全部欄位不是 enum 就是整數或字串陣列——SQL 是固定的，模型只負責填空。",
   "type": "object",
   "additionalProperties": false,
@@ -23,16 +23,16 @@
   "properties": {
     "subject": {
       "type": "string",
-      "x-enum": "subject",
-      "description": "這句話在問哪一科。判斷不出來就整個欄位不要輸出，不要猜——猜錯會讓整份候選集跑錯學科。"
+      "x-enum": "subject_all",
+      "description": "這句話在問哪一科（數學、物理或化學）。判斷不出來就整個欄位不要輸出，不要猜——猜錯會讓整份候選集跑錯學科。"
     },
     "chapters": {
       "type": "array",
       "maxItems": 3,
-      "description": "最相關的精細章節，最多 3 個，依相關性由高到低。每個都必須完全等於白名單中的字串。想不到任何一章就回空陣列，不要硬填。",
+      "description": "最相關的精細章節，最多 3 個，依相關性由高到低。每個都必須完全等於白名單中的字串（化學章名在白名單裡以「」框起，輸出時不要帶「」）。想不到任何一章就回空陣列，不要硬填。",
       "items": {
         "type": "string",
-        "x-enum": "chapter"
+        "x-enum": "chapter_all"
       }
     },
     "question_types": {

@@ -35,11 +35,12 @@
 const crypto = require('crypto');
 
 const {
-    CHAPTERS, SUBJECTS, LEGACY_SUBJECTS,
+    CHAPTERS, SUBJECTS,
     isValidSubject, isValidChapter, isValidQuestionType, normalizeDifficulty
 } = require('../config/chapters');
 const { CHAPTER_ALIASES, subjectOfChapter } = require('../config/chapterAliases');
-const { parseQuery, mentionsChemistry, isChemistryOnlyQuery } = require('../utils/nlqHeuristics');
+const { parseQuery, mentionsChemistry, chemistrySubjectPrior } = require('../utils/nlqHeuristics');
+const { joinChapters } = require('../agents/promptParts');
 const { registerTemplate } = require('./llm/templates');
 const { loadPseudonymizer, IDENTITY } = require('../utils/pseudonym');
 
@@ -72,17 +73,21 @@ const WARN = {
     noEmbed: 'embedding 服務不可用，改用關鍵字 LIKE 檢索。'
 };
 
-const TEMPLATE = 'nlq.v1';
+// 〔Owner 決策單 2026-09-25 B5〕nlq.v1 → nlq.v2：LLM 輔路徑加上化學（原裁決 S5-13 維持不支援，Owner 改判支援並接受重錄）。
+// SYSTEM、模板、白名單（三科）與 schema（agents/schemas/nlq.json 的 subject_all／chapter_all）一起改，
+// 識別名升版讓 nlq.v1 的 cassette 自然失效（鍵的 promptTemplateHash 與 schemaHash 都變），不會被誤讀。
+// 註冊字串依階段 5 的慣例改為 SYSTEM + '\n---\n' + 模板（docs/interfaces-stage5.md 第 1.2 條）：之後 SYSTEM 一改鍵就變。
+const TEMPLATE = 'nlq.v2';
 
-const SYSTEM = '你是一位台灣高中數學與物理家教老師的題庫助理。你的工作是把老師隨口說的一句查題需求，翻成題庫看得懂的檢索條件。你只輸出 JSON，不輸出任何其他文字。';
+const SYSTEM = '你是一位台灣高中數學、物理與化學家教老師的題庫助理。你的工作是把老師隨口說的一句查題需求，翻成題庫看得懂的檢索條件。你只輸出 JSON，不輸出任何其他文字。';
 
 const PROMPT_TEMPLATE = `老師想在題庫裡找題目，他說的是下面這一句話。請把它翻成檢索條件。
 
 {{CHAPTER_WHITELIST}}
 
 【規則】
-1. chapter 必須「完全等於」白名單裡的某一個字串，一個字都不能差，也不得自創新詞。
-2. 判斷依據是「解這一題需要用到哪一章的觀念」，不是句子裡出現了哪些名詞。
+1. chapter 必須「完全等於」白名單裡的某一個字串，一個字都不能差，也不得自創新詞。化學的章名在白名單裡以「」框起（有一章叫「醇、酚、醚」，章名本身含頓號）；輸出時不要帶「」。
+2. 判斷依據是「解這一題需要用到哪一章的觀念」，不是句子裡出現了哪些名詞。同一個詞可能出現在不同學科（例如「濃度」「速率」「平衡」「能量」），要看整句話在問哪一科的觀念。
 3. 想不到任何一章就回空陣列。硬填一章會讓候選集整個跑錯地方，比誠實回空陣列糟得多。
 4. 老師沒提到的條件（學科、難度、題型、學生）就整個欄位不要輸出，不要猜。
 5. semantic_text 只留概念詞與名詞，把「幫我」「有沒有」「題目」這類贅字拿掉。
@@ -90,19 +95,20 @@ const PROMPT_TEMPLATE = `老師想在題庫裡找題目，他說的是下面這�
 【老師說的話】
 {{QUERY}}`;
 
-registerTemplate(TEMPLATE, PROMPT_TEMPLATE);
+registerTemplate(TEMPLATE, `${SYSTEM}\n---\n${PROMPT_TEMPLATE}`);
 
 /**
- * 白名單區塊（不共用 agents/promptParts.js：那是 WS-B 的檔，這裡只需要兩行）
+ * 白名單區塊：三科（SUBJECTS）各一行「科目：章、章、…」。
  *
- * 〔stage5 WS-B〕只列數學與物理（LEGACY_SUBJECTS）：這段文字進的是 nlq.v1 的既有 prompt，
- * nlq schema 的 enum 也維持兩科（agents/schemas/index.js）。化學只走規則路徑（parseOnly 的說明）。
+ * 〔章節重整 CH-A〕2026-09-25 起數學／物理是重整後的 52＋34 章（config/chapterPlan.js；docs/chapter-restructure.md
+ * 第 3.1 條第 5 點）。清單照舊由 CHAPTERS 動態產生。
  *
- * 〔章節重整 CH-A〕2026-09-25 起兩科是重整後的 52＋34 章（config/chapterPlan.js；docs/chapter-restructure.md
- * 第 3.1 條第 5 點）。清單照舊由 CHAPTERS 動態產生；nlq.v1 的 cassette 因此失效，由 Owner 依該檔第 5 條重錄。
+ * 〔Owner 決策單 2026-09-25 B5〕原本只列數學與物理（〔stage5 WS-B〕nlq.v1 凍結為兩科），改列三科，
+ * 與 nlq schema 的 chapter_all 同一份值域。章節串接沿用 agents/promptParts.js 的 joinChapters：
+ * 化學有一章叫「醇、酚、醚」，該科每章加「」；數學與物理的兩行與 nlq.v1 逐字相同。
  */
 function chapterWhitelistText() {
-    const lines = LEGACY_SUBJECTS.map(subject => `${subject}：${CHAPTERS[subject].join('、')}`);
+    const lines = SUBJECTS.map(subject => `${subject}：${joinChapters(CHAPTERS[subject])}`);
     return `【精細章節白名單（chapters 只能從這裡面挑）】\n${lines.join('\n')}`;
 }
 
@@ -369,7 +375,8 @@ async function callLlm({ llm, query, logger, pseudonymizer = IDENTITY }) {
 
 /**
  * 〔stage5 WS-B〕數理名詞表（utils/tokenize.js 的 MATH_PHYSICS_TERMS）。
- * 延遲 require：tokenize 一載入就讀 jieba 詞典，只有「規則沒抓到章節、又有化學線索」的句子才需要它。
+ * 延遲 require：tokenize 一載入就讀 jieba 詞典，只有「規則沒抓到章節、又有化學線索」的句子才需要它
+ * （〔Owner 決策單 2026-09-25 B5〕用途改為化學科目推定，見 parseOnly）。
  * @returns {readonly string[]}
  */
 function mathPhysicsTerms() {
@@ -399,19 +406,21 @@ async function parseOnly(opts = {}) {
     let parsePath = 'rules';
     const warnings = [];
 
-    // 〔stage5 WS-B〕化學只走規則路徑（docs/interfaces-stage5.md 第 4.2 條第 2 點、docs/chemistry.md 第 7 節）：
-    // nlq.v1 的 prompt 與 schema 凍結為數學／物理兩科，化學句子送出去模型只能在兩科裡硬挑一章。
-    // 規則沒抓到章節、句子有化學線索、**而且沒有任何數理線索**（點名數學／物理、數理名詞）時，
-    // 才不呼叫 LLM、subject 設成化學。有數理線索就照舊走 LLM 輔路徑——「物理 濃度梯度造成的擴散」
-    // 「數學的溶液混合濃度應用題」必須維持這個分支加進來之前的行為，不能被鎖進化學。
+    // 〔Owner 決策單 2026-09-25 B5〕LLM 輔路徑（nlq.v2）認得化學，化學句子不再跳過 LLM。
+    // 原本（〔stage5 WS-B〕docs/interfaces-stage5.md 第 4.2 條第 2 點）nlq.v1 凍結為數學／物理兩科，
+    // 規則沒抓到章節、只有化學線索的句子直接不呼叫 LLM、subject 設成化學；現在這類句子與數理句子
+    // 一樣依第 6.3 條交給 LLM，由它挑化學章節。
+    // 規則層的化學推定（utils/nlqHeuristics.js 的 chemistrySubjectPrior：只有化學線索、沒有數理線索，
+    // 或明確點名化學而沒點名數學／物理）改當**退路**：LLM 失敗、或 LLM 科目與章節都沒給時，
+    // 再驗之後的 subject 補成化學——化學句子至少維持加入 LLM 支援之前的範圍（只查化學），不會退成三科全查。
+    // 有數理線索的句子推定為否：「物理 濃度梯度造成的擴散」「數學的溶液混合濃度應用題」的行為與先前相同。
     // 抓到化學章節或別名的句子 confident 本來就是 true，不會走到這裡。
-    // （規則層的 filters.subject 只由章節反推，confident 為 false 時一定是 null。）
-    const chemistryOnly = !rules.confident && mentionsChemistry(query)
-        && isChemistryOnlyQuery(query, { mathPhysicsTerms: mathPhysicsTerms() });
-    if (chemistryOnly) filters = Object.assign({}, filters, { subject: '化學' });
+    // 化學推定只在句子有化學線索時才算（mentionsChemistry 先擋）：數理名詞表要載入 jieba 詞典，數理句子不必付這個成本。
+    const chemistryPrior = !rules.confident && mentionsChemistry(query)
+        && chemistrySubjectPrior(query, { mathPhysicsTerms: mathPhysicsTerms() });
 
     // 第 6.3 條：**只有在 confident === false 且 semantic_text 仍有實詞時才呼叫**
-    if (!rules.confident && !chemistryOnly && hasContentWord(semanticText)) {
+    if (!rules.confident && hasContentWord(semanticText)) {
         const llm = opts.llm || require('./llm');
         const data = await callLlm({ llm, query, logger: opts.logger, pseudonymizer: opts.pseudonymizer || IDENTITY });
         if (data) {
@@ -426,6 +435,10 @@ async function parseOnly(opts = {}) {
     }
 
     const validated = validateFilters(filters);
+    // 〔Owner 決策單 2026-09-25 B5〕化學推定只補空的科目：LLM 給了科目或（合法的）章節就以 LLM 為準（mergeLlm 的原則）
+    if (chemistryPrior && validated.filters.subject === null && validated.filters.chapters.length === 0) {
+        validated.filters.subject = '化學';
+    }
     const value = {
         filters: validated.filters,
         parse_path: parsePath,

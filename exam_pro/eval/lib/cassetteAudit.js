@@ -146,19 +146,27 @@ function injectEnums(node, sources) {
 
 /**
  * 數學／物理卷別的 enum 值域；可注入章節白名單。
- * @param {Record<string,string[]>} [chapters] 注入的 { 科目: 章節[] }；只取 LEGACY_SUBJECTS（數學、物理）兩科
+ *
+ * 〔Owner 決策單 2026-09-25 B5〕nlq.json（nlq.v2）改讀三科的 chapter_all（agents/schemas/index.js）：
+ * 注入時 chapter_all 也要跟著換——數學、物理取注入的清單（必填，同 chapter），化學有注入就用注入的，
+ * 沒有就沿用現行 config/chapters.js（CH-B 的重標只注入數學與物理）。順序與 ENUM_SOURCES.chapter_all 相同（SUBJECTS 序）。
+ * @param {Record<string,string[]>} [chapters] 注入的 { 科目: 章節[] }；chapter 只取 LEGACY_SUBJECTS（數學、物理）兩科
  * @returns {Record<string, string[]>}
  */
 function enumSources(chapters) {
     const { ENUM_SOURCES } = require('../../agents/schemas');
     if (!chapters) return ENUM_SOURCES;
-    const { LEGACY_SUBJECTS } = require('../../config/chapters');
+    const { LEGACY_SUBJECTS, SUBJECTS, CHAPTERS } = require('../../config/chapters');
+    const legacyOf = (s) => {
+        if (!Array.isArray(chapters[s])) throw new Error(`cassetteAudit：注入的 chapters 缺少「${s}」`);
+        return chapters[s];
+    };
     return {
         ...ENUM_SOURCES,
-        chapter: LEGACY_SUBJECTS.flatMap(s => {
-            if (!Array.isArray(chapters[s])) throw new Error(`cassetteAudit：注入的 chapters 缺少「${s}」`);
-            return chapters[s];
-        })
+        chapter: LEGACY_SUBJECTS.flatMap(legacyOf),
+        chapter_all: SUBJECTS.flatMap(s => (LEGACY_SUBJECTS.includes(s)
+            ? legacyOf(s)
+            : (Array.isArray(chapters[s]) ? chapters[s] : CHAPTERS[s])))
     };
 }
 
