@@ -20,6 +20,10 @@
 //      題組說明與定位到的題目起點把卷面切成一段一段；圖屬於「垂直方向重疊最多」的那一段（雙欄卷分左右欄）；
 //      頁首（該欄第一個分段之前）的圖接續上一欄／上一頁最後一段。段落的主人是定位在那裡的候選題；
 //      沒有主人的段落（題庫裡沒有、已經有附圖、或定位不到的題）上的圖不提議。
+//   4. 比數字與英文字母（questionSegment → detailCompare）〔審查修正 2026-09-26〕：中文字 5-gram 幾乎不看數字，
+//      「中文一樣、數字不同」的兩個版本（不同學校、不同年度的同一題）覆蓋率都是 1。所以**每一題**都拿題幹的
+//      數字與小寫英文字母（LaTeX 裡的數字也算；大寫字母不比——選項代號 (A)–(E) 與幾何頂點標註常只有一邊有）
+//      對原卷該題的段落（圖框裡的標註與刻度不算），算多重集合的 Jaccard 相符度，併進比對分數（proposalScore）。
 //
 // 座標一律是 PDF 點（1/72 吋），頁面左上角為原點，矩形 [x0, y0, x1, y1]。
 // ─────────────────────────────────────────────────────────────
@@ -43,6 +47,9 @@ const LAYOUT_DEFAULTS = Object.freeze({
     carryFactor: 0.9,         // 頁首的圖接續上一頁最後一題：分數打的折扣
     flatAspect: 5,            // 寬高比超過此數且高 < flatMaxHeight → 提醒「可能是算式圖片」
     flatMaxHeight: 40,
+    detailMismatchCap: 0.7,   // 數字或英文字母與原卷不一致時，數字係數最多這麼大（見 detailFactor）
+    footerRatio: 0.05,        // 題目段落往下接「只有數字的行」時，頁面最下方這個比例的區域當頁尾，不接
+    tailMax: SOURCE_DEFAULTS.tailMax,         // 與原卷比對相同：題目最後一個中文字之後最多再接這麼多字
     k: SOURCE_DEFAULTS.k,                     // 與原卷比對相同：中文字 5-gram
     minCjk: SOURCE_DEFAULTS.minCjk,           // 題幹中文字少於此數不比（定位不可靠）
     minCoverage: SOURCE_DEFAULTS.minCoverage  // 定位覆蓋率門檻（0.8）
@@ -337,16 +344,19 @@ function questionCjk(questionText) {
  * 整份 PDF 的文字層索引（每行正規化後以換行串接；頁與頁之間也是換行）。
  * @param {Array<{page:number, width:number, height:number, lines:Array<{bbox:number[], text:string}>}>} pages
  * @returns {{text:string, lines:Array<{page:number, col:number, bbox:number[], text:string, start:number, end:number, lineNo:number}>,
- *            seq:string, pos:number[], columnsByPage:Map<number,number>, gramSet:Set<string>}}
+ *            seq:string, pos:number[], columnsByPage:Map<number,number>, pageSizes:Map<number,{width:number,height:number}>,
+ *            gramSet:Set<string>}}
  */
 function buildDocIndex(pages, options) {
     const o = opt(options);
     const lines = [];
     const columnsByPage = new Map();
+    const pageSizes = new Map();
     let text = '';
     for (const p of pages || []) {
         const columns = pageColumns(p);
         columnsByPage.set(p.page, columns);
+        pageSizes.set(p.page, { width: Number(p.width) || 0, height: Number(p.height) || 0 });
         for (const l of p.lines || []) {
             if (!isRect(l.bbox)) continue;
             const t = normalizeSourceText(l.text).replace(/\n/g, ' ');
@@ -362,7 +372,7 @@ function buildDocIndex(pages, options) {
     for (let i = 0; i < text.length; i++) {
         if (CJK_ONE.test(text[i])) { pos.push(i); seq += text[i]; }
     }
-    return { text, lines, seq, pos, columnsByPage, gramSet: new Set(grams(seq, o.k)) };
+    return { text, lines, seq, pos, columnsByPage, pageSizes, gramSet: new Set(grams(seq, o.k)) };
 }
 
 /** 文字層位移 → 所在行（二分搜尋） */
@@ -383,8 +393,12 @@ function lineAtOffset(doc, offset) {
  * @param {string} questionText
  * @param {object} doc buildDocIndex 的輸出
  * @param {object} [options]
- * @returns {{status:'located', coverage:number, from:number, to:number, startLine:object, endLine:object}
+ * @returns {{status:'located', coverage:number, from:number, to:number, startLine:object, endLine:object,
+ *            matchTo:number, matchEndLine:object}
  *          |{status:'low_anchor'|'not_found', coverage:number|null}}
+ *   to／endLine：起點往後數「題幹的中文字數」那個字（原卷多幾個字或少幾個字時會偏）；
+ *   matchTo／matchEndLine：比對窗內（同 coverage，題幹字數＋10）最後一個對得上的 gram 的結尾——題目在原卷實際結束的位置，
+ *   questionSegment 用它截段落。
  */
 function locateInDoc(questionText, doc, options) {
     const o = opt(options);
@@ -417,19 +431,97 @@ function locateInDoc(questionText, doc, options) {
     const endRaw = doc.pos[lastCjk] + 1;
     const startLine = lineAtOffset(doc, startRaw);
     const endLine = lineAtOffset(doc, Math.max(startRaw, endRaw - 1));
-    return { status: 'located', coverage, from: startRaw, to: endRaw, startLine, endLine };
+
+    const qSet = new Set(qg);
+    const winEnd = Math.min(doc.seq.length, best.start + q.length + 10);
+    let matchLast = Math.min(doc.seq.length - 1, best.start + o.k - 1);
+    for (let i = winEnd - o.k; i >= best.start; i--) {
+        if (qSet.has(doc.seq.slice(i, i + o.k))) { matchLast = i + o.k - 1; break; }
+    }
+    const matchTo = doc.pos[matchLast] + 1;
+    const matchEndLine = lineAtOffset(doc, Math.max(startRaw, matchTo - 1));
+    return { status: 'located', coverage, from: startRaw, to: endRaw, startLine, endLine, matchTo, matchEndLine };
 }
 
 /**
- * 題幹與原卷段落的數字、小寫字母相似度（Jaccard，0–1）。只在「兩題中文字一樣、只差數字」時拿來決勝。
- * @param {string} questionText
- * @param {string} segment 原卷段落（已正規化）
+ * 原卷裡「這一題」的段落（拿來比數字與英文字母；純函式）。
+ *
+ * 範圍：起點所在的行（行首的題號拿掉）一路到 matchEndLine；途中遇到題號行、大題標題就停（下一題了）。
+ * 題幹最後一個中文字之後常還有只有數字的選項行（「(A) 5 (B) 6」），所以再往下接：同頁同欄、往下走、
+ * 沒有中文字、不是題號行、不在頁尾區（footerRatio）的行，合計不超過 tailMax 字；遇到有中文字的行就停
+ * （題目本身的中文字都已經在上面的範圍內，再有中文字的是別的東西：下一題、頁尾「第 1 頁」、圖說）。
+ * **圖框裡的字行一律跳過**（頂點標註、座標刻度 0 1 2 3 是圖的一部分，題幹不會有）：不算進段落，也不當成
+ * 停下來的理由（圖的標註常排在內容流的後面、位置卻在上方，或本身是中文字）。
+ *
+ * @param {object} doc buildDocIndex 的輸出
+ * @param {object} loc locateInDoc 的 located 結果
+ * @param {Map<number, Array<{bbox:number[]}>>} [figuresByPage] detectFigures 找到的圖
+ * @param {object} [options]
+ * @returns {string} 已正規化的段落（行與行之間換行）
  */
-function detailSimilarity(questionText, segment) {
+function questionSegment(doc, loc, figuresByPage = new Map(), options) {
+    const o = opt(options);
+    if (!doc || !loc || !loc.startLine) return '';
+    const inFigure = (l) => (figuresByPage.get(l.page) || []).some(f => contains(expand(f.bbox, 1), l.bbox));
+    const first = loc.startLine.lineNo;
+    const endNo = Math.max(first, (loc.matchEndLine || loc.endLine || loc.startLine).lineNo);
+    const parts = [];
+    let last = doc.lines[first];
+    let i = first;
+    for (; i < doc.lines.length && i <= endNo; i++) {
+        const l = doc.lines[i];
+        if (inFigure(l)) continue;
+        if (i > first && lineBoundaryKind(l.text)) return parts.join('\n');
+        last = l;
+        parts.push(i === first ? l.text.replace(QUESTION_NO_LINE, ' ') : l.text);
+    }
+    const size = doc.pageSizes ? doc.pageSizes.get(last.page) : null;
+    const footerY = size && size.height > 0 ? size.height * (1 - o.footerRatio) : Infinity;
+    let chars = 0;
+    for (; i < doc.lines.length; i++) {
+        const l = doc.lines[i];
+        if (inFigure(l)) continue;
+        if (l.page !== last.page || l.col !== last.col) break;
+        if (l.bbox[1] < last.bbox[1] - 2) break;                     // 往上跳：內容流接到別處去了
+        if (lineBoundaryKind(l.text) || CJK_ONE.test(l.text)) break;
+        if (l.bbox[1] >= footerY) break;                             // 頁尾（頁碼）
+        chars += l.text.length;
+        if (chars > o.tailMax) break;
+        last = l;
+        parts.push(l.text);
+    }
+    return parts.join('\n');
+}
+
+/** 多重集合 → 依字元排序、重複照列的陣列（{9:2, 7:1} → ['7','9','9']） */
+function expandMultiset(m) {
+    return Object.keys(m).sort().flatMap(c => Array(m[c]).fill(c));
+}
+
+/**
+ * 題幹與原卷段落的數字、英文字母比對（純函式）。
+ *
+ * 兩邊各自數數字 0–9 與小寫英文字母 a–z 的多重集合（與原卷比對 utils/sourceCheck.js 同一套 tally：題幹先把 LaTeX
+ * 轉成可比對的字——$10$、\frac{1}{2} 裡的數字照算，指令名不算，[附圖描述：…] 不算；兩邊都去掉行首題號與配分註記）。
+ * 大寫字母不比：選項代號 (A)–(E)、幾何頂點標註常只有一邊有，比了會一直誤報。
+ *
+ * 相符度＝Jaccard（交集 ÷ 聯集，重複的字照次數算）。兩邊都沒有數字與字母 → 1（沒得比）。
+ * 只要有一個字對不上，相符度一律**無條件捨去**到小數兩位且最多 0.99——四捨五入可能把 399/400 顯示成 1.00。
+ *
+ * @param {string} questionText 題庫的題幹（LaTeX）
+ * @param {string} segment 原卷段落（questionSegment 的輸出，或已轉成可比對字串的模型抄本）
+ * @returns {{similarity:number, exact:boolean, compared:boolean,
+ *            missing:{digits:string[], letters:string[]}, extra:{digits:string[], letters:string[]}}}
+ *   exact：兩邊完全相同；compared：至少一邊有數字或字母；
+ *   missing：題庫有、原卷沒有；extra：原卷有、題庫沒有
+ */
+function detailCompare(questionText, segment) {
     const a = tally(stripNumbering(latexToComparable(questionText)));
-    const b = tally(stripNumbering(segment));
+    const b = tally(stripNumbering(normalizeSourceText(segment)));
     let inter = 0;
     let uni = 0;
+    const missing = { digits: {}, lower: {} };
+    const extra = { digits: {}, lower: {} };
     for (const key of ['digits', 'lower']) {
         const keys = new Set([...Object.keys(a[key]), ...Object.keys(b[key])]);
         for (const c of keys) {
@@ -437,9 +529,26 @@ function detailSimilarity(questionText, segment) {
             const y = b[key][c] || 0;
             inter += Math.min(x, y);
             uni += Math.max(x, y);
+            if (x > y) missing[key][c] = x - y;
+            if (y > x) extra[key][c] = y - x;
         }
     }
-    return uni === 0 ? 1 : Number((inter / uni).toFixed(2));
+    const exact = inter === uni;
+    const similarity = exact ? 1 : Math.min(0.99, Math.floor((inter / uni) * 100) / 100);
+    return {
+        similarity, exact, compared: uni > 0,
+        missing: { digits: expandMultiset(missing.digits), letters: expandMultiset(missing.lower) },
+        extra: { digits: expandMultiset(extra.digits), letters: expandMultiset(extra.lower) }
+    };
+}
+
+/**
+ * 題幹與原卷段落的數字、小寫字母相符度（0–1）＝ detailCompare(...).similarity。
+ * @param {string} questionText
+ * @param {string} segment 原卷段落（已正規化）
+ */
+function detailSimilarity(questionText, segment) {
+    return detailCompare(questionText, segment).similarity;
 }
 
 /**
@@ -565,16 +674,30 @@ function assignFigure(figure, page, columns, boundaries, options) {
 }
 
 /**
- * 比對分數（0–1）＝ 題幹在原卷的覆蓋率 × 版面係數。版面係數：圖整張或大半（≥ ambiguousOverlap）在該題範圍內 1；
- * 跨兩題時＝重疊比例 ÷ ambiguousOverlap；頁首接續上一頁的圖 carryFactor（0.9）。
- * @param {{coverage:number, layout:string, ratio:number}} m
+ * 數字係數（0–1）：數字與英文字母和原卷完全相符（或兩邊都沒有）＝1；有任何一個對不上＝min(相符度, detailMismatchCap)。
+ * 封頂的理由：中文一樣、只差一兩個數字的長題，Jaccard 仍有 0.9 以上，單純相乘不夠「明顯」；
+ * 封在 0.7（低於預覽頁的 0.8）確保這種題一定落在要特別確認的那一群。
+ * @param {number|null|undefined} detail detailCompare 的 similarity；沒有比（null／undefined）視為 1
  */
-function proposalScore({ coverage, layout, ratio }, options) {
+function detailFactor(detail, options) {
+    const o = opt(options);
+    if (detail === null || detail === undefined || !(Number(detail) < 1)) return 1;
+    return Math.min(Number(detail), o.detailMismatchCap);
+}
+
+/**
+ * 比對分數（0–1）＝ 題幹在原卷的覆蓋率 × 版面係數 × 數字係數。
+ *   版面係數：圖整張或大半（≥ ambiguousOverlap）在該題範圍內 1；跨兩題時＝重疊比例 ÷ ambiguousOverlap；
+ *             頁首接續上一頁的圖 carryFactor（0.9）。
+ *   數字係數：見 detailFactor（數字、英文字母完全相符 1；不一致時 ≤ 0.7）。
+ * @param {{coverage:number, layout:string, ratio:number, detail?:number|null}} m
+ */
+function proposalScore({ coverage, layout, ratio, detail }, options) {
     const o = opt(options);
     let factor = 1;
     if (layout === 'carry') factor = o.carryFactor;
     else if (layout === 'ambiguous') factor = Math.min(1, ratio / o.ambiguousOverlap);
-    return Number((Number(coverage) * factor).toFixed(2));
+    return Number((Number(coverage) * factor * detailFactor(detail, o)).toFixed(2));
 }
 
 module.exports = {
@@ -584,7 +707,9 @@ module.exports = {
     // 找圖
     clusterRects, detectFigures, absorbLabels, lineBoundaryKind, hasFigureHint,
     // 欄位與文字層
-    pageColumns, columnOf, buildDocIndex, lineAtOffset, questionCjk, locateInDoc, detailSimilarity, textSimilarity,
+    pageColumns, columnOf, buildDocIndex, lineAtOffset, questionCjk, locateInDoc, textSimilarity,
+    // 數字與英文字母
+    questionSegment, detailCompare, detailSimilarity, detailFactor,
     // 分段與分題
     buildBoundaries, assignFigure, proposalScore, compareKey
 };

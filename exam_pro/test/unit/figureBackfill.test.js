@@ -10,6 +10,9 @@
 //   5. dry-run（假的 DB，真的 mupdf＋自製小 PDF，放在中文資料夾）：CSV／預覽頁／暫存圖都產生、內容正確；
 //      **沒加 --use-llm 時一次都不呼叫拆題 agent**；加了以後只對掃描檔呼叫，模型框的圖以題幹相似度對題。
 //   6. Windows 雙擊腳本 scripts/windows/backfill_figures.bat：CRLF、無 BOM、只跑 dry-run、每個出口都 pause。
+//   7. 〔審查修正 2026-09-26〕數字與英文字母一律納入比對分數（原卷該題的段落、相符度、數字係數、依據寫「數字不一致」、
+//      多份卷取數字相符的那份）；需要注意的列不論分數都標橘底；--apply 核對「題幹前60字」；--use-llm 的花費煞車
+//      （每份卷 JOB_COST_BUDGET_USD、當日 DAILY_COST_BUDGET_USD，假的 LLM 回 usage 估價）。
 // 不連資料庫、不呼叫任何 LLM。題目文字取自本專案自製的公開樣卷（eval/fixtures/sample_exam.pdf）。
 // ─────────────────────────────────────────────────────────────
 const { test, describe, before, after } = require('node:test');
@@ -483,6 +486,314 @@ describe('scripts/backfill_figures — dry-run（假的 DB、自製小 PDF、中
         });
         assert.deepEqual(r.stats, { chunks: 2, failedChunks: 1, boxes: 1, matched: 0 });
         assert.deepEqual(r.proposals, []);
+    });
+});
+
+// ───────── 審查修正（2026-09-26）：數字一律納入分數、需要注意的列不論分數都標橘、--apply 核對題幹、--use-llm 花費煞車 ─────────
+
+describe('utils/figureLayout — 數字與英文字母（審查修正）', () => {
+    // 單欄卷：第 5 題題號與題幹同一行、下一行接著題幹、再下一行是只有數字的選項；右邊一張圖（框裡有刻度列）；第 6 題
+    const P5 = [
+        line('5. 質量 2 kg 的物體受到合力 10 N，', 56, 100, 400, 114),
+        line('求其加速度的大小為何？', 70, 116, 300, 130),
+        line('(A) 5　(B) 2　(C) 20　(D) 0.2', 70, 132, 300, 146),
+        line('0   1   2   3   t(s)', 422, 172, 518, 182),
+        line('6. 一質點作等速率圓周運動，下列關於其速度與加速度的敘述何者正確？', 56, 200, 540, 214)
+    ];
+    const FIG = { bbox: [420, 120, 520, 184] };
+    const STORED = '質量 $2$ kg 的物體受到合力 $10$ N，求其加速度的大小為何？\n(A) $5$ (B) $2$ (C) $20$ (D) $0.2$';
+    const segmentOf = (lines, text, figs = [FIG], extra = {}) => {
+        const p = page(lines, [], extra);
+        const doc = L.buildDocIndex([p]);
+        const loc = L.locateInDoc(text, doc);
+        assert.equal(loc.status, 'located');
+        return L.questionSegment(doc, loc, new Map([[p.page, figs]]));
+    };
+
+    test('questionSegment：題號拿掉、只有數字的選項行接進來、圖框裡的刻度不算、遇到下一題就停', () => {
+        const seg = segmentOf(P5, STORED);
+        assert.ok(!/^\s*5\./.test(seg), `題號不算進段落：${seg}`);
+        assert.match(seg, /\(A\) 5/, '選項行（沒有中文字）接進段落');
+        assert.ok(!/t\(s\)/.test(seg), '圖框裡的刻度列不算');
+        assert.ok(!/質點/.test(seg), '下一題不算');
+        assert.deepEqual(L.detailCompare(STORED, seg), {
+            similarity: 1, exact: true, compared: true,
+            missing: { digits: [], letters: [] }, extra: { digits: [], letters: [] }
+        });
+    });
+
+    test('questionSegment：頁尾的頁碼、內容流裡排在後面卻在上方的字（表格格子）不接', () => {
+        const tail = [
+            line('5. 質量 2 kg 的物體受到合力 10 N，求其加速度的大小為何？', 56, 760, 540, 774),
+            line('(A) 5　(B) 2　(C) 20　(D) 0.2', 70, 776, 300, 790),
+            line('- 1 -', 280, 815, 310, 825)                       // 頁尾（842 × 0.95 以下）
+        ];
+        const seg = segmentOf(tail, STORED, []);
+        assert.match(seg, /\(D\) 0\.2/);
+        assert.ok(!/- 1 -/.test(seg), `頁碼不算：${seg}`);
+        const upward = [P5[0], P5[1], P5[2], line('7', 500, 40, 506, 50)];   // 內容流最後才畫的格子，位置在頁首
+        assert.ok(!/7/.test(segmentOf(upward, STORED, [])));
+        // 圖裡的中文標註（內容流排在題幹之後）不是停下來的理由：後面的選項行照接
+        const label = [P5[0], P5[1], line('木塊', 430, 122, 460, 134), P5[2], P5[4]];
+        const withLabel = segmentOf(label, STORED);
+        assert.ok(!/木塊/.test(withLabel));
+        assert.match(withLabel, /\(D\) 0\.2/);
+    });
+
+    test('detailCompare：中文一樣、數字不同 → 相符度低、列出兩邊各多了什麼；兩邊都沒有數字字母 → 沒得比', () => {
+        const seg = '質量 2 kg 的物體受到合力 10 N,求其加速度。';
+        const d = L.detailCompare('質量 $7$ kg 的物體受到合力 $99$ N，求其加速度。', seg);
+        assert.equal(d.exact, false);
+        assert.equal(d.similarity, 0.25, 'k、g 相符；7、9、9 與 2、1、0 不符：2 ÷ 8');
+        assert.deepEqual(d.missing, { digits: ['7', '9', '9'], letters: [] });
+        assert.deepEqual(d.extra, { digits: ['0', '1', '2'], letters: [] });
+        const letters = L.detailCompare('設 $f(x)$ 為實係數多項式，求 $f$ 的次數為何', '設 g(x) 為實係數多項式,求 g 的次數為何');
+        assert.deepEqual([letters.missing.letters, letters.extra.letters], [['f', 'f'], ['g', 'g']]);
+        const none = L.detailCompare('關於等速圓周運動，下列敘述何者正確？', '關於等速圓周運動,下列敘述何者正確?');
+        assert.deepEqual([none.similarity, none.exact, none.compared], [1, true, false]);
+        assert.equal(L.detailCompare('第 $10$ 題', '1. 第 10 題').exact, true, '原卷行首的題號不算');
+    });
+
+    test('detailCompare：只要有一個字對不上，相符度無條件捨去且最多 0.99（399/400 不會顯示成 1.00）', () => {
+        const d = L.detailCompare(`數字很多的題目${'1'.repeat(399)}`, `數字很多的題目${'1'.repeat(400)}`);
+        assert.equal(d.exact, false);
+        assert.equal(d.similarity, 0.99);
+    });
+
+    test('proposalScore：數字係數——相符 1；不一致時乘上相符度且最多 0.7；和版面係數相乘', () => {
+        assert.equal(L.proposalScore({ coverage: 1, layout: 'inside', ratio: 1, detail: 1 }), 1);
+        assert.equal(L.proposalScore({ coverage: 1, layout: 'inside', ratio: 1, detail: 0.95 }), 0.7, '只差一兩個數字也封在 0.7');
+        assert.equal(L.proposalScore({ coverage: 1, layout: 'inside', ratio: 1, detail: 0.25 }), 0.25);
+        assert.equal(L.proposalScore({ coverage: 1, layout: 'carry', ratio: 1, detail: 0.5 }), 0.45);
+        assert.equal(L.proposalScore({ coverage: 0.9, layout: 'mostly', ratio: 0.8, detail: null }), 0.9, '沒有比（null）視為 1');
+        assert.equal(L.detailFactor(0.99), 0.7);
+        assert.equal(L.detailFactor(1), 1);
+    });
+});
+
+describe('scripts/backfill_figures — 數字不一致、橘底、過期檢查（審查修正）', () => {
+    const fakeDb = (rows) => ({
+        query: async (sql) => {
+            assert.match(sql, /question_img IS NULL/);
+            return { rows: rows.map(r => ({ source_detail: null, archived: false, pdf_shas: [], job_ids: [], ...r })) };
+        }
+    });
+    let dir;
+    before(async () => {
+        dir = path.join(TMP, '各校考卷-數字');
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, '自製附圖卷.pdf'), await fx.makeFigurePdf());
+    });
+
+    test('中文完全一樣、數字不同的題（題庫沒有數字相符的另一版）：明顯降分、依據寫「數字不一致」、預覽頁橘底', async () => {
+        const out = path.join(TMP, 'out-mismatch');
+        const r = await bf.dryRun({
+            db: fakeDb([{ id: 70, subject: '物理', chapter: '牛頓運動定律', question_text: '質量 $7$ kg 的物體受到合力 $99$ N，求其加速度。' }]),
+            dir, outDir: out, logger: { warn() { } }
+        });
+        assert.deepEqual(r.proposals.map(p => p.id), [70]);
+        const p = r.proposals[0];
+        assert.equal(p.coverage, 1, '中文字覆蓋率照樣是 1');
+        assert.equal(p.detailMismatch, true);
+        assert.equal(p.score, 0.25, '分數乘上數字相符度（原本是 1.00）');
+        assert.ok(bf.attentionReasons(p).includes('數字不一致'));
+        const csv = decodeCsvBuffer(fs.readFileSync(r.csvPath)).text;
+        assert.match(csv, /,0\.25,題幹覆蓋 1\.00；數字不一致（相符 0\.25；題庫有、原卷沒有：7、9、9；原卷有、題庫沒有：0、1、2），請確認圖上數值；/);
+        const html = fs.readFileSync(r.previewPath, 'utf8');
+        assert.match(html, /<tr class="low">/);
+        assert.match(html, /請特別確認：分數低於 0\.8、數字不一致/);
+    });
+
+    test('數字相符的題：依據寫「數字與英文字母相符」、不標橘；同文異數的兩題都在題庫時，相符的那題得圖', async () => {
+        const r = await bf.dryRun({
+            db: fakeDb([
+                { id: 5, subject: '物理', chapter: '牛頓運動定律', question_text: '質量 $2$ kg 的物體受到合力 $10$ N，求其加速度。' },
+                { id: 70, subject: '物理', chapter: '牛頓運動定律', question_text: '質量 $7$ kg 的物體受到合力 $99$ N，求其加速度。' }
+            ]),
+            dir, outDir: path.join(TMP, 'out-match'), logger: { warn() { } }
+        });
+        assert.deepEqual(r.proposals.map(p => p.id), [5]);
+        assert.equal(r.stats.tieLost, 1);
+        const p = r.proposals[0];
+        assert.equal(p.detail, 1);
+        assert.match(bf.basisText(p), /^題幹覆蓋 1\.00；數字與英文字母相符；圖大半在該題範圍內/);
+        assert.deepEqual(bf.attentionReasons(p), []);
+        assert.ok(!fs.readFileSync(r.previewPath, 'utf8').includes('<tr class="low">'));
+    });
+
+    test('pickBest：多份卷都有這一題時，數字相符的那份勝過分數與路徑順序、也勝過來源註記；入庫紀錄相符仍最優先', () => {
+        const p = (o) => ({ jobIds: [], sourceDetailMatch: false, score: 0.9, pdfRel: 'b.pdf', page: 1, detail: 1, ...o });
+        assert.equal(bf.pickBest([p({ pdfRel: 'a-別校.pdf', detail: 0.25, score: 0.25 }), p({ pdfRel: 'b-原卷.pdf', score: 0.9 })]).pdfRel, 'b-原卷.pdf');
+        assert.equal(bf.pickBest([p({ pdfRel: 'a.pdf', detail: 0.6, score: 0.6, sourceDetailMatch: true }), p({ pdfRel: 'c.pdf' })]).pdfRel, 'c.pdf',
+            '來源註記只要有兩字詞出現在路徑就算，比不上數字相符');
+        assert.equal(bf.pickBest([p({ pdfRel: 'a.pdf', detail: 0.9, score: 0.7, jobIds: [4] }), p({ pdfRel: 'c.pdf' })]).pdfRel, 'a.pdf');
+    });
+
+    test('attentionReasons／renderPreview：頁首接續、跨兩題、模型框圖、扁長、另有他頁的圖——分數 0.8 以上也標橘底', () => {
+        const base = { method: 'layout', layout: 'inside', score: 1, detail: 1, detailMismatch: false, flat: false, otherPages: 0 };
+        assert.deepEqual(bf.attentionReasons(base), []);
+        assert.deepEqual(bf.attentionReasons({ ...base, layout: 'carry', score: 0.9 }), ['頁首接續上一頁（欄）']);
+        assert.deepEqual(bf.attentionReasons({ ...base, layout: 'ambiguous', score: 0.85 }), ['圖跨兩題']);
+        assert.deepEqual(bf.attentionReasons({ ...base, method: 'llm', layout: 'llm' }), ['模型框圖']);
+        assert.deepEqual(bf.attentionReasons({ ...base, flat: true, otherPages: 1 }), ['扁長', '另有其他頁的圖']);
+        assert.deepEqual(bf.attentionReasons({ ...base, score: 0.7, detail: 0.9, detailMismatch: true, detailExtra: { digits: [], letters: ['g'] } }),
+            ['分數低於 0.8', '英文字母不一致']);
+
+        const row = (id, o) => ({ id, subject: '物理', chapter: 'x', text: 't', pdfRel: 'a.pdf', page: 1, imageName: `q${id}.png`, basis: 'b', ...o });
+        const html = bf.renderPreview([
+            row(1, { score: 0.9, attention: bf.attentionReasons({ ...base, layout: 'carry', score: 0.9 }) }),
+            row(2, { score: 0.85, attention: bf.attentionReasons({ ...base, layout: 'ambiguous', score: 0.85 }) }),
+            row(3, { score: 1, attention: [] })
+        ]);
+        assert.equal((html.match(/<tr class="low">/g) || []).length, 2, '頁首接續 0.9、跨兩題 0.85 都標橘底');
+        assert.match(html, /請特別確認：頁首接續上一頁（欄）/);
+        assert.match(html, /橘底 2 題/);
+        assert.match(html, /不論分數多少/);
+    });
+
+    test('readApplyRows：帶出「題幹前60字」；有這一欄時留空報錯；整欄不見時回報 stemColumn=false（CLI 擋下）', () => {
+        const ok = bf.readApplyRows('題號,題幹前60字,圖檔暫存路徑\r\n3,質量 2 kg 的物體,q3.png\r\n4,,q4.png\r\n');
+        assert.equal(ok.stemColumn, true);
+        assert.deepEqual(ok.rows.map(r => [r.id, r.stem]), [[3, '質量 2 kg 的物體']]);
+        assert.equal(ok.errors.length, 1);
+        assert.match(ok.errors[0], /題號 4.*「題幹前60字」是空的/);
+        const none = bf.readApplyRows('題號,圖檔暫存路徑\r\n3,q3.png\r\n');
+        assert.equal(none.stemColumn, false);
+        assert.deepEqual(none.errors, []);
+    });
+
+    test('stemMatches：以 stemPreview 重算題庫現值逐字比；已封存前綴、Excel 公式防護的 \'、Big5 另存的「?」不算不同', () => {
+        const { stemPreview } = require('../../scripts/migrate_chapters');
+        const text = '質量 $2$ kg 的物體受到合力 $10$ N，求其加速度。這一題很長很長很長很長很長很長很長很長很長很長很長很長很長很長很長。';
+        assert.equal(bf.stemMatches(stemPreview(text), text), true);
+        assert.equal(bf.stemMatches(stemPreview(text, true), text), true, '產生提議檔時已封存、現在解除封存');
+        assert.equal(bf.stemMatches(stemPreview(text), text.replace('$2$', '$3$')), false, '題目被改過');
+        assert.equal(bf.stemMatches(stemPreview('另一題：物體由靜止出發'), text), false, '同題號是別的題（另一個資料庫）');
+        assert.equal(bf.stemMatches(stemPreview('-3 是方程式的根嗎？'), '-3 是方程式的根嗎？'), true);
+        assert.equal(bf.stemMatches(stemPreview(text).replace('質', '?'), text), true, 'Big5 沒有的字變成「?」');
+        assert.equal(bf.stemMatches('  ', text), false);
+        assert.equal(bf.stemMatches(stemPreview(text), null), false);
+    });
+});
+
+describe('scripts/backfill_figures — --use-llm 的花費煞車（審查修正）', () => {
+    const GEMINI = 'gemini:gemini-3.5-flash';                 // input US$1.5／百萬 token
+    const pricedCtx = (models, pdfChunkPages = 1) => ({
+        job: {},
+        llm: { generateJson: async () => ({ data: {}, usage: { tokenIn: 1_000_000, tokenOut: 0 } }) },
+        config: { models, thresholds: { pdfChunkPages } }
+    });
+    const spending = async (ctx) => {
+        await ctx.llm.generateJson({ model: ctx.config.models.extract });
+        return { kind: 'pass', data: { questions: [] } };
+    };
+    const run = (budget, models = { extract: GEMINI }, pageCount = 5) => bf.llmProposals({
+        bytes: Buffer.from('x'), pageCount, pdfRel: 'a.pdf', pdfAbs: '/a.pdf', sha: 's', candidates: [], group: 'math_physics',
+        extractRun: spending, makeCtx: () => pricedCtx(models), budget
+    });
+
+    test('callCostUsd：照 config/pricing.js；本機模型 0；價目表查不到的雲端模型以最貴的單價估', () => {
+        const pricing = require('../../config/pricing');
+        assert.equal(bf.callCostUsd(GEMINI, { tokenIn: 1_000_000 }), 1.5);
+        assert.equal(bf.callCostUsd('ollama:qwen3-vl:8b', { tokenIn: 1_000_000 }), 0);
+        const maxIn = Math.max(...Object.values(pricing.PRICING).filter(r => r.verified_on).map(r => r.input));
+        assert.equal(bf.callCostUsd('gemini:gemini-9-unknown', { tokenIn: 1_000_000 }), maxIn);
+        assert.equal(bf.isFreeModel('ollama:qwen3:8b'), true);
+        assert.equal(bf.isFreeModel(GEMINI), false);
+        assert.deepEqual(bf.extractModelSpecs({ extract: 'ollama:qwen3-vl:8b', ocrStructure: 'ollama:qwen3:8b' }), ['ollama:qwen3-vl:8b', 'ollama:qwen3:8b'],
+            '本機路徑另外呼叫 OCR 結構化模型');
+        assert.deepEqual(bf.extractModelSpecs({ extract: GEMINI, verify: 'gemini:gemini-3.7-flash' }), [GEMINI]);
+    });
+
+    test('當日上限 DAILY_COST_BUDGET_USD：job_events 今天已花的＋這一次已花的 ≥ 上限就不再呼叫', async () => {
+        let reads = 0;
+        const budget = bf.createLlmBudget({ perPdfUsd: 100, dailyUsd: 5, readDailySpent: async () => { reads += 1; return 2; } });
+        const r = await run(budget);
+        assert.equal(r.stats.chunks, 2, '2＋1.5＝3.5 < 5 → 再一塊；2＋3＝5 → 停');
+        assert.deepEqual(r.spend, { usd: 3, skippedChunks: 3, stoppedBy: 'daily_budget' });
+        assert.equal(reads, 1, '當日花費只查一次');
+        assert.equal(budget.state.spentUsd, 3);
+        const next = await run(budget);
+        assert.equal(next.stats.chunks, 0, '下一份卷一塊都不呼叫');
+        assert.equal(budget.state.skippedPdfs, 1);
+        assert.equal(budget.state.stoppedBy, 'daily_budget');
+    });
+
+    test('每份卷上限 JOB_COST_BUDGET_USD：這份卷已花 ≥ 上限就停；下一份卷重新計算', async () => {
+        const budget = bf.createLlmBudget({ perPdfUsd: 0.5, dailyUsd: 100, readDailySpent: async () => 0 });
+        const a = await run(budget);
+        assert.equal(a.stats.chunks, 1);
+        assert.deepEqual(a.spend, { usd: 1.5, skippedChunks: 4, stoppedBy: 'pdf_budget' });
+        const b = await run(budget);
+        assert.equal(b.stats.chunks, 1, '下一份卷照樣可以呼叫');
+        assert.equal(budget.state.spentUsd, 3);
+    });
+
+    test('本機模型不查帳、不擋；查帳失敗就不呼叫', async () => {
+        const local = bf.createLlmBudget({ perPdfUsd: 0.01, dailyUsd: 0.01, readDailySpent: async () => { throw new Error('不該查帳'); } });
+        assert.deepEqual(bf.describeLlmSpend(local.state), [], '沒有卷需要模型時不印花費');
+        const r = await run(local, { extract: 'ollama:qwen3-vl:8b', ocrStructure: 'ollama:qwen3:8b' });
+        assert.equal(r.stats.chunks, 5);
+        assert.equal(r.spend.usd, 0);
+        assert.equal(local.state.paid, false);
+        assert.match(bf.describeLlmSpend(local.state).join('\n'), /本機模型（不花錢）/);
+
+        const broken = bf.createLlmBudget({ perPdfUsd: 100, dailyUsd: 100, readDailySpent: async () => { throw new Error('連不上資料庫'); } });
+        const b = await run(broken);
+        assert.equal(b.stats.chunks, 0);
+        assert.equal(b.spend.stoppedBy, 'ledger_error');
+        assert.match(bf.describeLlmSpend(broken.state).join('\n'), /讀不到今天的花費.*連不上資料庫/);
+    });
+
+    test('dry-run：當日上限已用完 → 一次都不呼叫模型，確定性比對照做；結尾印出原因', async () => {
+        const dir = path.join(TMP, '各校考卷-預算');
+        fs.mkdirSync(path.join(dir, '掃描'), { recursive: true });
+        fs.writeFileSync(path.join(dir, '自製附圖卷.pdf'), await fx.makeFigurePdf());
+        fs.writeFileSync(path.join(dir, '掃描', '掃描卷.pdf'), await fx.makeScannedPdf());
+        const db = {
+            query: async () => ({ rows: [{ id: 9, subject: '物理', chapter: 'x', source_detail: null, archived: false, pdf_shas: [], job_ids: [],
+                question_text: '馬拉車前進時，馬對車的作用力 $F$ 與車對馬的反作用力，兩者的關係為何？' }] })
+        };
+        let called = 0;
+        const llmBudget = bf.createLlmBudget({ perPdfUsd: 0.5, dailyUsd: 5, readDailySpent: async () => 5 });
+        const r = await bf.dryRun({
+            db, dir, outDir: path.join(TMP, 'out-budget'), useLlm: true, llmBudget, logger: { warn() { } },
+            extractRun: async () => { called += 1; return { kind: 'pass', data: { questions: [] } }; },
+            makeCtx: () => pricedCtx({ extract: GEMINI }, 20)
+        });
+        assert.equal(called, 0);
+        assert.deepEqual(r.proposals.map(p => p.id), [9], '不花錢的確定性比對照常提議');
+        assert.equal(r.stats.llm.pdfs, 0);
+        assert.equal(r.stats.llmSpend.stoppedBy, 'daily_budget');
+        assert.equal(r.stats.llmSpend.skippedPdfs, 1, '只有掃描檔需要模型');
+        assert.match(bf.describeLlmSpend(r.stats.llmSpend).join('\n'), /已達當日上限 DAILY_COST_BUDGET_USD＝US\$5\.0000/);
+    });
+
+    test('describeLlmPlan：雲端付費模型先印出上限；本機模型說明不花錢', () => {
+        const paid = bf.describeLlmPlan({ models: { extract: GEMINI, verify: 'gemini:gemini-3.7-flash' }, perPdfUsd: 0.5, dailyUsd: 5 }).join('\n');
+        assert.match(paid, /雲端付費模型：gemini:gemini-3\.5-flash/);
+        assert.match(paid, /每份卷 US\$0\.5000（JOB_COST_BUDGET_USD）、當日 US\$5\.0000（DAILY_COST_BUDGET_USD/);
+        const local = bf.describeLlmPlan({ models: { extract: 'ollama:qwen3-vl:8b', ocrStructure: 'ollama:qwen3:8b' }, perPdfUsd: 0.5, dailyUsd: 5 }).join('\n');
+        assert.match(local, /本機模型.*不花錢/);
+    });
+
+    test('模型框圖也比數字：中文相似度同分時數字相符的題得；只有數字不符的題時標「數字不一致」、分數 ≤ 0.7', async () => {
+        const cand = (id, text) => ({ id, text, subject: '物理', chapter: 'x', lowAnchor: false, pdfShas: [], jobIds: [], hint: false, sourceDetail: null });
+        const five = cand(5, '質量 $2$ kg 的物體受到合力 $10$ N，求其加速度。');
+        const fiftyFive = cand(55, '質量 $3$ kg 的物體受到合力 $12$ N，求其加速度。');
+        const extractRun = async () => ({ kind: 'pass', data: { questions: [
+            { question_text: '質量 $3$ kg 的物體受到合力 $12$ N，求其加速度。', figure_page: 1, figure_box: [100, 100, 300, 300] }
+        ] } });
+        const args = { bytes: Buffer.from('x'), pageCount: 1, pdfRel: 'a.pdf', pdfAbs: '/a.pdf', sha: 's', group: 'math_physics', extractRun,
+            makeCtx: () => ({ config: { models: { extract: 'fake:vision' }, thresholds: { pdfChunkPages: 20 } } }) };
+        const both = await bf.llmProposals({ ...args, candidates: [five, fiftyFive] });
+        assert.deepEqual(both.proposals.map(p => [p.id, p.detail, p.score]), [[55, 1, 1]]);
+        const only = await bf.llmProposals({ ...args, candidates: [five] });
+        const p = only.proposals[0];
+        assert.equal(p.detailMismatch, true);
+        assert.ok(p.score <= 0.7);
+        assert.match(bf.basisText(p), /^模型框圖（fake:vision）；題幹相似 1\.00；數字不一致（/);
+        assert.deepEqual(bf.attentionReasons(p).sort(), ['分數低於 0.8', '數字不一致', '模型框圖'].sort());
     });
 });
 

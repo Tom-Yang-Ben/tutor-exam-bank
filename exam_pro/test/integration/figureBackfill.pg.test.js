@@ -12,6 +12,8 @@
 //      刪掉的列下次照列。已經有別的附圖的題略過並回報。
 //   ④ 交易：題號不存在 → 整批不寫；中途丟例外 → 全部回滾、這次新放的圖檔也刪掉。
 //   ⑤ CLI：子行程跑 --dry-run（--test 打測試庫）exit 0；不合法的提議檔、--apply 配 --use-llm 都 exit 1、資料庫不動。
+//   ⑥ 〔審查修正 2026-09-26〕--apply 核對題幹：產生提議檔之後題目被改過、或提議檔是對另一個資料庫產生的（同題號是
+//      別的題）→ 那一題略過並回報、不貼圖；提議檔少了「題幹前60字」欄 → CLI exit 1、整批不寫。
 // 不呼叫 LLM（沒有注入 LLM、沒有 cassette；--use-llm 的行為由單元測試以假的拆題 agent 驗證）。
 //
 // 三道防線與其他整合測試相同：只讀 TEST_DATABASE_URL、庫名必須以 _test 結尾、在 require config/db.js 之前覆寫
@@ -270,6 +272,61 @@ function runSuite() {
             const mixed = run(['--test', '--apply', bad, '--use-llm']);
             assert.equal(mixed.status, 1);
             assert.match(mixed.stderr, /--use-llm 只用在 --dry-run/);
+            assert.deepEqual(await snapshot(), before);
+        });
+    });
+
+    // 〔審查修正 2026-09-26〕--apply 比照 migrate_chapters.js 的過期檢查：提議檔的「題幹前60字」與題庫現值不同 → 略過並警告
+    describe('⑥ --apply 核對題幹（題庫現值與提議檔不同就略過）', () => {
+        beforeEach(seed);
+
+        test('產生提議檔之後題目在題庫頁被改過 → 那一題略過並回報，其餘照套', async () => {
+            const r = await bf.dryRun({ db, dir: DIR, outDir: nextOut(), logger: quiet });
+            const rows = await loadApply(r.csvPath);
+            assert.deepEqual(rows.map(x => x.id), [ids.q5, ids.q5dup, ids.q9]);
+            await query('UPDATE questions SET question_text = $2 WHERE id = $1',
+                [ids.q9, '馬拉車前進時，馬對車的作用力 $F$ 與車對馬的反作用力，兩者的大小關係為何？（老師改過題目）']);
+
+            const a = await bf.applyRows({ db, rows, figuresDir: FIGDIR });
+            assert.equal(a.ok, true);
+            assert.deepEqual(a.appliedIds, [ids.q5, ids.q5dup], '已封存的重複題：提議檔的「（已封存）」前綴不算不同');
+            assert.deepEqual(a.stale.map(s => [s.id, s.line]), [[ids.q9, 4]]);
+            assert.match(a.stale[0].csvStem, /兩者的關係為何/);
+            assert.match(a.stale[0].dbStem, /兩者的大小關係為何/);
+            assert.equal(await imgOf(ids.q9), null, '改過的題不貼圖');
+            assert.ok(!figFiles().some(f => f.startsWith(`backfill-${ids.q9}-`)), '也不放圖檔');
+        });
+
+        test('提議檔是對另一個資料庫產生的（同一個題號在這裡是別的題）→ 略過並回報，不把圖貼到不相干的題', async () => {
+            const r = await bf.dryRun({ db, dir: DIR, outDir: nextOut(), logger: quiet });
+            // 另一台電腦的第 ids.q5 題，在這個資料庫裡的同一個題號是第 7 題（直線運動）：以改題號模擬
+            const edited = teacherEdits(r.csvPath, { drop: [ids.q5dup, ids.q9], retarget: { from: ids.q5, to: ids.q7 } });
+            const before = await snapshot();
+            const a = await bf.applyRows({ db, rows: await loadApply(edited), figuresDir: FIGDIR });
+            assert.equal(a.ok, true);
+            assert.equal(a.applied, 0);
+            assert.deepEqual(a.stale.map(s => s.id), [ids.q7]);
+            assert.match(a.stale[0].csvStem, /^質量 \$2\$ kg/);
+            assert.match(a.stale[0].dbStem, /^物體由靜止出發/);
+            assert.deepEqual(await snapshot(), before);
+            assert.deepEqual(figFiles(), []);
+        });
+
+        test('CLI：提議檔少了「題幹前60字」欄 → exit 1、整批不寫（無法核對就不套用）', async () => {
+            const r = await bf.dryRun({ db, dir: DIR, outDir: nextOut(), logger: quiet });
+            const table = parseCsv(decodeCsvBuffer(fs.readFileSync(r.csvPath)).text);
+            const stemCol = table[0].cells.indexOf('題幹前60字');
+            assert.ok(stemCol >= 0);
+            const noStem = path.join(path.dirname(r.csvPath), 'no-stem.csv');
+            fs.writeFileSync(noStem, '﻿' + table.map(t => t.cells.filter((c, i) => i !== stemCol)
+                .map(c => (/[",\r\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(',')).join('\r\n') + '\r\n');
+            const before = await snapshot();
+            const res = spawnSync(process.execPath, [path.join(APP_DIR, 'scripts', 'backfill_figures.js'), '--test', '--apply', noStem], {
+                cwd: APP_DIR, encoding: 'utf8', env: { ...process.env, TEST_DATABASE_URL }
+            });
+            assert.equal(res.status, 1, res.stderr);
+            assert.match(res.stdout, /整批不寫入/);
+            assert.match(res.stdout, /表頭缺少「題幹前60字」欄/);
             assert.deepEqual(await snapshot(), before);
         });
     });
