@@ -8,6 +8,8 @@
 //   - R4：又錯回第一關、錯的次數加一，錯滿 3 次卡關但仍在清單、照樣到期
 //   - 邊界：空歷史、同日多筆、未批改（已派出）、老師移出／判定已會、練到會後重新加入、
 //     已練到會的承上組同組題被帶著出又答錯、跨月跨年與閏日、時區
+//   - R11 選 3：手動加入以前的題時，起算日之前還沒批改的新題派題（例如 MySQL 時期匯入的舊紀錄）
+//     不算已派出，不會讓項目永遠不到期
 //   - 參數化：K＝2／4、不同間隔表（Owner 改設定不需改程式）
 //   - capForAttach：新題數的三成、無條件捨去、合計不超過 50 題
 //
@@ -172,11 +174,86 @@ describe('R1 選 2：進清單由老師決定，新題那一次的對錯不影�
         assert.equal(isDue(s, '2026-10-21'), true);
     });
 
-    test('新題那一張卷還沒批改（取消批改）：算已派出，不到期', () => {
+    test('批改卡勾選的那一筆新題取消批改（派題日＝起算日）：算已派出，批改完才到期', () => {
         const s = computeRetrainState({ entered_on: '2026-10-01', history: [N(1, '2026-10-01', null)] });
         assert.equal(s.in_flight, true);
         assert.equal(s.in_flight_since, '2026-10-01');
         assert.equal(isDue(s, '2026-10-10'), false);
+    });
+});
+
+describe('R11 選 3：手動加入以前的題，那一筆舊的新題派題沒批改也不擋排程', () => {
+    // 審查 major：MySQL 時期匯入的 attempts 全部 result 為 NULL，對不上卷的 paper_id 也是 NULL，
+    // 批改只能經 PATCH /api/papers/:id/results，所以那一筆永遠批改不了。
+    // 若把它算成「已派出」，手動加入的項目會永遠不到期、出卷 409、一加入就跳「超過 14 天未批改」。
+    const LEGACY = N(7, '2026-03-10', null);   // MySQL 時期的舊紀錄：沒批改、沒有卷
+
+    test('起算日之前、還沒批改的新題派題不算已派出：隔天照常到期', () => {
+        const s = computeRetrainState({ entered_on: '2026-09-26', history: [LEGACY] });
+        assert.deepEqual(s, {
+            status: 'active', step: 1, due_on: '2026-09-27', streak: 0, lapses: 0,
+            last_attempt_on: null, mastered_on: null, in_flight: false, in_flight_since: null, stuck: false
+        });
+        assert.equal(isDue(s, '2026-09-26'), false);
+        assert.equal(isDue(s, '2026-09-27'), true);
+        assert.equal(overdueDays(s, '2026-10-10'), 13);
+    });
+
+    test('以前那一張卷只是沒批改（有卷、之後才批）：一樣不擋；之後批改成對或錯也不影響排程', () => {
+        const pending = computeRetrainState({ entered_on: '2026-09-26', history: [N(7, '2026-09-01', null)] });
+        const gradedWrong = computeRetrainState({ entered_on: '2026-09-26', history: [N(7, '2026-09-01', 0)] });
+        const gradedRight = computeRetrainState({ entered_on: '2026-09-26', history: [N(7, '2026-09-01', 1)] });
+        assert.equal(pending.in_flight, false);
+        assert.deepEqual(pending, gradedWrong);
+        assert.deepEqual(pending, gradedRight);
+    });
+
+    test('加入後照常升關、練到會（舊的新題派題一直沒批改）', () => {
+        const h = [LEGACY, R(20, '2026-09-28', 1), R(21, '2026-10-05', 1), R(22, '2026-10-19', 1)];
+        const mid = computeRetrainState({ entered_on: '2026-09-26', history: h.slice(0, 3) });
+        assert.deepEqual(pick(mid), { status: 'active', step: 3, due_on: '2026-10-19', streak: 2, lapses: 0, stuck: false });
+        assert.equal(mid.in_flight, false);
+        const done = computeRetrainState({ entered_on: '2026-09-26', history: h });
+        assert.equal(done.status, 'mastered');
+        assert.equal(done.mastered_on, '2026-10-19');
+    });
+
+    test('加入後派出的重練卷還沒批改：照樣算已派出，已派出日期是那張重練卷的（不是舊紀錄的）', () => {
+        const s = computeRetrainState({ entered_on: '2026-09-26', history: [LEGACY, R(20, '2026-09-28', null)] });
+        assert.equal(s.in_flight, true);
+        assert.equal(s.in_flight_since, '2026-09-28');
+        assert.equal(isDue(s, '2026-12-31'), false);
+    });
+
+    test('邊界：新題派題日＝起算日（當天手動加入當天的卷）還沒批改 → 算已派出', () => {
+        const s = computeRetrainState({ entered_on: '2026-09-26', history: [N(7, '2026-09-26', null)] });
+        assert.equal(s.in_flight, true);
+        assert.equal(s.in_flight_since, '2026-09-26');
+        const dayBefore = computeRetrainState({ entered_on: '2026-09-26', history: [N(7, '2026-09-25', null)] });
+        assert.equal(dayBefore.in_flight, false, '前一天的就不算');
+    });
+
+    test('重新加入之前那一輪的重練卷還沒批改：仍算已派出（它在卷上，批改得到；I6）', () => {
+        const s = computeRetrainState({
+            entered_on: '2026-12-01',
+            history: [N(1, '2026-10-01', 0), R(2, '2026-10-05', 1), R(3, '2026-10-12', null)]
+        });
+        assert.equal(s.in_flight, true);
+        assert.equal(s.in_flight_since, '2026-10-12');
+        assert.equal(s.step, 1, '上一輪的作答不影響這一輪的關卡');
+    });
+
+    test('countsAsInFlight：重練派題一律算；新題派題只有派題日 ≥ 起算日才算', () => {
+        const { countsAsInFlight } = sched;
+        assert.equal(countsAsInFlight(R(1, '2026-01-01'), '2026-09-26'), true);
+        assert.equal(countsAsInFlight(R(1, '2026-12-01'), '2026-09-26'), true);
+        assert.equal(countsAsInFlight(N(1, '2026-09-25'), '2026-09-26'), false);
+        assert.equal(countsAsInFlight(N(1, '2026-09-26'), '2026-09-26'), true);
+        assert.equal(countsAsInFlight(N(1, '2026-09-27'), '2026-09-26'), true);
+        assert.throws(() => countsAsInFlight(null, '2026-09-26'), TypeError);
+        assert.throws(() => countsAsInFlight({ ...N(1, '2026-09-26'), purpose: 'review' }, '2026-09-26'), TypeError);
+        assert.throws(() => countsAsInFlight(N(1, '9/26'), '2026-09-26'), TypeError);
+        assert.throws(() => countsAsInFlight(N(1, '2026-09-26'), undefined), TypeError);
     });
 });
 
@@ -256,6 +333,8 @@ describe('同一天多筆作答', () => {
         assert.deepEqual(pick(s), { status: 'active', step: 3, due_on: '2026-10-19', streak: 2, lapses: 0, stuck: false });
     });
 
+    // 手動加入當天就出重練卷時要算進來。已知邊界（設計稿第 4.4 節「起算日當天的重練派題」）：
+    // 同一天先批改一筆當天的重練、再按「重新加入」，那一筆也會算進新一輪；純函式只收日期，排除它要 PR-2 另記派題編號。
     test('與起算日同一天的重練派題算在這一輪', () => {
         const s = computeRetrainState({ entered_on: '2026-10-05', history: [R(11, '2026-10-05', 1)] });
         assert.equal(s.step, 2);

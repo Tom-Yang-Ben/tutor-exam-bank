@@ -2,12 +2,15 @@
 // retrainScheduleProperty.test.js — 排程純函式的隨機測試（設計稿第 6.3 節 TC-038-4）
 //
 // 固定種子產生 1,000 組隨機作答歷史（含新題、重練、未批改、部分給分、同日多筆、
-// 重新加入之前那一輪、老師的手動決定、K＝2／3／4），檢查：
+// 重新加入之前那一輪、手動加入以前沒批改的題、老師的手動決定、K＝2／3／4），檢查：
 //   1. 與一個寫法完全不同的參考實作（「最後一次答錯之後連對幾次」）結果相同
 //   2. 輸入順序打亂，結果相同
-//   3. 依隨機順序逐筆批改、改判、取消批改，每次都重算；最後一次的結果＝對最終歷史直接算一次
-//      （設計稿不變量 I7：排程快取＝作答歷史重算的結果，與批改的先後無關）
-//   4. 不變量：只有進行中才有到期日（I5）；進行中時 關卡＝連對＋1 且連對 < K；卡關只出現在進行中
+//   3. 依隨機順序逐筆批改、改判、取消批改：每一個中間歷史（部分批改）也都與參考實作相同
+//      （純函式每次從頭重算，「最後一次重算＝直接算最終歷史」必然成立，所以不拿它當檢查；
+//       不變量 I7「排程快取＝作答歷史重算的結果」的風險在 PR-2 的 I/O 層，由整合測試
+//       TC-038-3／TC-038-4 驗）
+//   4. 已派出的判斷：全部未批改時，有重練派題、或起算日當天以後的新題派題才算
+//   5. 不變量：只有進行中才有到期日（I5）；進行中時 關卡＝連對＋1 且連對 < K；卡關只出現在進行中
 //
 // 不呼叫 LLM、不連 DB。執行：npm test
 // ─────────────────────────────────────────────────────────────
@@ -90,7 +93,9 @@ function reference({ entered_on, teacher_override, override_on, history }, { ste
 
     const retrains = sorted.filter(e => e.purpose === 'retrain' && graded(e));
     const lapses = retrains.filter(e => !correct(e)).length;
-    const pending = sorted.filter(e => !graded(e));
+    // 已派出：還沒批改的重練派題，或起算日當天以後還沒批改的新題派題
+    // （起算日之前的新題派題可能是批改不了的舊紀錄，不算；設計稿第 4.4 節）
+    const pending = sorted.filter(e => !graded(e) && (e.purpose === 'retrain' || e.assigned_at >= entered_on));
     const cycle = retrains.filter(e => e.assigned_at >= entered_on);
     let lastWrong = -1;
     cycle.forEach((e, i) => { if (!correct(e)) lastWrong = i; });
@@ -153,28 +158,55 @@ describe(`TC-038-4：隨機作答歷史（種子 ${SEED}，${CASES} 組）`, () 
         });
     });
 
-    test('逐筆批改（隨機先後、中途改判與取消批改）每次重算；最後結果＝直接算最終歷史', () => {
+    test('情境涵蓋：手動加入以前的題、那一筆舊的新題派題一直沒批改（審查 major 的情境）', () => {
+        const legacy = cases.filter(c => c.input.history.some(e => e.purpose === 'new' && e.result === null &&
+            e.assigned_at < c.input.entered_on));
+        assert.ok(legacy.length > 10, `只有 ${legacy.length} 組`);
+        const notBlocked = legacy.filter(c => !computeRetrainState(c.input, c.params).in_flight);
+        assert.ok(notBlocked.length > 5, '其中沒有其他未批改派題的，不算已派出');
+    });
+
+    test('逐筆批改（隨機先後、中途改判與取消批改）：每一個中間狀態都與參考實作相同', () => {
+        // 純函式每次都從頭重算，「最後一次重算＝直接算最終歷史」本身必然成立，驗不到東西；
+        // 這裡改驗「部分批改、改判到一半、取消批改」這些中間歷史，每一個都與參考實作逐欄相同，
+        // 等於在 1,000 組之外再多驗上萬組半批改的歷史。
+        // 排程快取與作答歷史一致（不變量 I7）的風險在 PR-2 的 I/O 層（同一交易內更新快取），
+        // 由 retrain.pg.test.js 的 TC-038-3／TC-038-4 整合測試驗，不在這支單元測試。
         const r3 = prng(SEED + 2);
+        let checked = 0;
         cases.forEach((c, i) => {
             const final = c.input.history;
+            const check = (live, when) => {
+                const input = { ...c.input, history: live.map(e => ({ ...e })) };
+                assert.deepEqual(computeRetrainState(input, c.params), reference(input, c.params), `第 ${i} 組（${when}）`);
+                checked += 1;
+            };
             // 從「全部派出、都還沒批改」開始
             const live = final.map(e => ({ ...e, result: null, score: null }));
-            let cached = computeRetrainState({ ...c.input, history: live }, c.params);
-            assert.equal(cached.in_flight, true);
+            check(live, '全部未批改');
             for (const idx of shuffle(r3, final.map((_, k) => k))) {
                 // 三成的機會先批成別的結果（之後改判）或先取消批改一次
                 if (r3() < 0.3) {
                     live[idx] = { ...live[idx], result: pickOne(r3, [0, 1]), score: pickOne(r3, [null, 0.5, 1]) };
-                    cached = computeRetrainState({ ...c.input, history: live }, c.params);
+                    check(live, `先批第 ${idx} 筆`);
                     if (r3() < 0.5) {
                         live[idx] = { ...live[idx], result: null, score: null };
-                        cached = computeRetrainState({ ...c.input, history: live }, c.params);
+                        check(live, `取消批改第 ${idx} 筆`);
                     }
                 }
                 live[idx] = { ...final[idx] };
-                cached = computeRetrainState({ ...c.input, history: live }, c.params);
+                check(live, `第 ${idx} 筆改成最終結果`);
             }
-            assert.deepEqual(cached, computeRetrainState(c.input, c.params), `第 ${i} 組`);
+        });
+        assert.ok(checked > 5000, `中間狀態只有 ${checked} 個`);
+    });
+
+    test('全部未批改時：有重練派題、或起算日當天以後的新題派題，才算已派出', () => {
+        cases.forEach((c, i) => {
+            const live = c.input.history.map(e => ({ ...e, result: null, score: null }));
+            const s = computeRetrainState({ ...c.input, history: live }, c.params);
+            const expected = live.some(e => e.purpose === 'retrain' || e.assigned_at >= c.input.entered_on);
+            assert.equal(s.in_flight, expected, `第 ${i} 組`);
         });
     });
 
