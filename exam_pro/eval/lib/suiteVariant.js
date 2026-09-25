@@ -270,8 +270,9 @@ async function runGates(ctx, deps, variant, source, seenHashes) {
     mark('verify', verifyOutcome.kind === 'pass' || verifyOutcome.kind === 'skipped');
     if (stoppedAt) return { gates, passedAll: false, stoppedAt, misses, embedMisses };
 
-    // dedup1：與 fixture 比餘弦，**排除藍本整個家族**（裁決 S3-14）
-    const dedup1 = deps.dedup1({ source, chapter, question_text: questionText, answer_text: answerText, difficulty: variant.data.difficulty, question_type: variant.data.question_type, subject: variant.data.subject });
+    // dedup1：與 fixture 比餘弦，**排除藍本整個家族**（裁決 S3-14）。
+    // embed_text 用 classify 之後的章節與 lint 之後的題幹（與 runner 相同），不一定等於跑題檢查 embed 過的那一段。
+    const dedup1 = await deps.dedup1({ source, chapter, question_text: questionText, answer_text: answerText, difficulty: variant.data.difficulty, question_type: variant.data.question_type, subject: variant.data.subject });
     mark('dedup1', dedup1.ok);
     if (dedup1.miss) embedMisses.push(dedup1.miss);
 
@@ -516,7 +517,8 @@ async function runGeneration({ golden, fixture, emb, offtopicSimMin, generateFn,
 
             const res = await runGates(ctx, {
                 agents, textHash,
-                dedup1: (fields) => dedup1InMemory({ fields, source, fixture, emb, buildEmbedText })
+                // 向量走 ctx.llm.embed：錄製時（EMBED_MODE=record）與跑題檢查一樣真的呼叫模型並錄檔
+                dedup1: (fields) => dedup1InMemory({ fields, source, fixture, emb, buildEmbedText, embed: ctx.llm.embed })
             }, variant, source, seenHashes);
 
             for (const g of GATES) if (res.gates[g] === true) counts[g] += 1;
@@ -544,11 +546,16 @@ async function runGeneration({ golden, fixture, emb, offtopicSimMin, generateFn,
         failures.push(...misses);       // **原樣**，run.js 的 partitionFailures 靠凍結前綴辨識
     }
     if (embedMisses.length) {
-        warnings.push(
-            `${embedMisses.length} 次在 embedding fixture 查不到變式題的向量：` +
-            '**錄製時 LLM_MODE=record 與 EMBED_MODE=record 必須一起開**（裁決 S3-20）——' +
-            '變式題幹是新字串，只錄 LLM 不錄向量的話跑題檢查與 dedup1 這兩道永遠量不到。' +
-            'gate_pass_rate 這一輪 n/a。'
+        const mode = currentEmbedMode();
+        warnings.push(mode === 'fixture'
+            ? `${embedMisses.length} 次在 embedding fixture 查不到變式題的向量：` +
+              '**錄製時 LLM_MODE=record 與 EMBED_MODE=record 必須一起開**（裁決 S3-20）——' +
+              '變式題幹是新字串，只錄 LLM 不錄向量的話跑題檢查與 dedup1 這兩道永遠量不到。' +
+              'gate_pass_rate 這一輪 n/a。'
+            // 錄製時（record／live）還拿不到向量，是 embedding 模型的呼叫失敗，不是「忘了開 record」
+            : `${embedMisses.length} 次取變式題的向量時 embedding 模型呼叫失敗（EMBED_MODE=${mode}）：` +
+              '其餘的向量已照常錄進向量檔；確認模型可用後以 LLM_MODE=replay、EMBED_MODE=record 再跑一次 variant suite 補齊' +
+              '（docs/local-mode.md 第 10.7 節）。gate_pass_rate 這一輪 n/a。'
         );
         failures.push(...embedMisses);
     }
@@ -565,22 +572,43 @@ async function runGeneration({ golden, fixture, emb, offtopicSimMin, generateFn,
     };
 }
 
-/** dedup1 的記憶體版：與 fixture 比餘弦，排除藍本整個家族 */
-function dedup1InMemory({ fields, source, fixture, emb, buildEmbedText }) {
+/** 現在的 EMBED_MODE（只拿來寫訊息；非法值由 services/llm 的 embed() 自己丟錯） */
+function currentEmbedMode() {
+    return String(process.env.EMBED_MODE || 'fixture').toLowerCase();
+}
+
+/**
+ * dedup1 的記憶體版：與 fixture 比餘弦，排除藍本整個家族。
+ *
+ * 變式題幹的向量走 ctx.llm.embed（＝services/llm 的 embed()，與 workers/jobRunner.js 的 dedup1 同一個入口），
+ * 所以**跟著 EMBED_MODE**：fixture（CI）查 eval/fixtures/embeddings.<model>.<dim>.json，查不到就誠實回 miss；
+ * record 真的呼叫 embedding 模型並錄進同一個檔（裁決 S3-20：錄製時 LLM_MODE 與 EMBED_MODE 一起開 record）。
+ *
+ * 〔dec/fix-variant-embed-record〕之前這裡寫死 embedFromFixture：錄製時 dedup1 仍去讀檔，只有「剛好與
+ * generateVariant 跑題檢查錄過的是同一段文字」才查得到。dedup1 的 embed_text 用的是 classify 之後的章節與
+ * lint 之後的題幹，其中一個變了（例：lint 第三層把 \overrightarrow 改寫成 \vec）就查不到——Owner
+ * 2026-09-26 以本機模型重錄時有 1 題因此缺向量，gate_pass_rate 整輪 n/a。訊息裡的 EMBED_MODE 以前也是寫死的
+ * 「fixture」，錄製時看起來像子行程沒拿到 record；現在寫的是實際的模式。
+ *
+ * @param {{fields:object, source:object, fixture:object, emb:object, buildEmbedText:Function,
+ *          embed:(opts:object)=>Promise<{vectors:number[][]}>}} opts
+ * @returns {Promise<{ok:boolean, miss?:string}>}
+ */
+async function dedup1InMemory({ fields, source, fixture, emb, buildEmbedText, embed }) {
     const dupTh = Number(process.env.DEDUP_DUP_THRESHOLD || 0.97);
     let vec;
     try {
-        const { embedFromFixture } = require('../../services/llm/fixture');
         const text = buildEmbedText(fields);
-        const res = embedFromFixture({
+        const res = await embed({
             model: require('./localMode').embedModelFromEnv(),   // 〔本機模式 L4〕沒設時是本機預設
             texts: [text],
-            dim: Number(process.env.EMBED_DIM || 768)
+            dim: Number(process.env.EMBED_DIM || 768),
+            taskType: 'RETRIEVAL_DOCUMENT'                         // 與 generateVariant 的跑題檢查相同（寫入用）
         });
         vec = res.vectors[0];
     } catch (err) {
-        // 第 4 條：**不得靜默回退成假向量**。沒錄到向量就誠實回報。
-        return { ok: false, miss: `dedup1 取不到變式題的向量（EMBED_MODE=fixture）：${err.message}` };
+        // 第 4 條：**不得靜默回退成假向量**。沒錄到（或錄製時沒算到）向量就誠實回報。
+        return { ok: false, miss: `dedup1 取不到變式題的向量（EMBED_MODE=${currentEmbedMode()}）：${err.message}` };
     }
     let best = 0;
     for (const q of fixture.questions) {
@@ -651,4 +679,8 @@ function safeRequire(abs) {
     }
 }
 
-module.exports = { runVariantSuite, retrieveInMemory, cosine, loadVariantGolden, validateGoldenEntries, GATES, PER_SOURCE, AGENT_PATH };
+module.exports = {
+    runVariantSuite, retrieveInMemory, cosine, loadVariantGolden, validateGoldenEntries, GATES, PER_SOURCE, AGENT_PATH,
+    // 單元測試用（test/unit/evalVariantEmbedRecord.test.js）：不經 loadEmbeddings，直接餵 fixture 題的向量
+    runGeneration
+};
