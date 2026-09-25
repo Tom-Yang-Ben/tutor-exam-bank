@@ -1,8 +1,9 @@
 # 錯題重練與間隔複習：設計草案
 
 > **狀態：草案，待 Owner 決定第 8 節後凍結。**
-> 版本 0.1（2026-09-26）｜分支 `dec/design-retrain-spaced`（基準 `7b7065c`，`local/integration`）｜本檔只寫設計，沒有改任何程式。
-> **需求來源**：DEC-003 例外條款（錯題重練與間隔複習可再出同一題、每次作答各自記錄；資料層拆「派題」與「作答」，Owner 選 a：拆表）、DEC-016（錯過的題要練到會為止、依間隔複習排程回測）；兩者 2026-09-25 已核准。開發順序依 Owner 決策單 B22（錯題重練 → 間隔複習 → 診斷報告 → …）。缺口編號 G11、G13（`docs/HANDOFF.md` 第 0.2 節 G 段）。
+> 版本 0.2（2026-09-26，依設計審查修正）｜分支 `dec/design-retrain-spaced`（基準 `7b7065c`，`local/integration`）｜本檔只寫設計，沒有改任何程式。
+> 〔修訂 2026-09-26 設計審查〕第 6.4 節改成如實列出會改動的既有斷言（含 `students.pg.test.js` 的 EXPLAIN 與 `controllers.pg.test.js` 的觸發器）；第 4.8 節、R3、R6 補上附帶上限與每週重練份量的關係；承上組放不下的處理改列為 R12 待 Owner 決定；R2、R4 選項說明與數字、出處更正。
+> **需求來源**：DEC-003 例外條款（錯題重練與間隔複習可再出同一題、每次作答各自記錄；資料層拆「派題」與「作答」，Owner 選 a：拆表）、DEC-016（錯過的題要練到會為止、依間隔複習排程回測）；兩者 2026-09-25 已核准。開發順序依 Owner 決策單 B22（錯題重練 → 間隔複習 → 診斷報告 → …；`docs/HANDOFF.md` 第 0.2 節 G 段）。缺口編號 G11、G13 出自 2026-09-24 缺口分析第 5 節「缺口總表」P1，`engineering_docs/01_requirements/srs.md` 第 1 節「尚未分配 FR」一條也以這兩個編號引用。
 > **編號**：功能需求自 FR-036 起、驗收自 ACPT-036 起，本檔的編號是**草案**，正式分配由整合階段決定。migration 寫成「0016 之後的下一號」（0016 可能被同一輪的其他分支用掉），本檔以 **M1**、**M2** 代稱，預計是 0017、0018。
 > **不呼叫任何 LLM**：這個功能全是資料庫與純函式，本機模式與 Gemini 模式的行為相同，不需要任何 cassette。
 > 共用文件（`engineering_docs/**`、`docs/HANDOFF.md`、`docs/roadmap-plan.md`、`docs/interfaces-stage5.md`）由文件整合任務依本檔回填，本分支沒有動。
@@ -35,7 +36,7 @@
 
 **資料上怎麼做到**：把現在一張 `attempts` 表拆成兩張——「**派題**」（哪一題、哪一天、在哪張卷、派給誰、這次是新題還是重練）與「**作答**」（對錯、部分給分、錯因、學生答案、註記）。「新題每生每題只能派一次」的硬閘門留在派題表上，只管「新題」；重練題另走排程清單。舊的 `attempts` 名字保留成一個唯讀檢視，內容和現在完全一樣（每生每題一列、第一次那次），所以弱點面板、補救卷、覆蓋率等既有功能的讀法與數字都不用改。
 
-**需要 Owner 決定的 11 件事**在第 8 節，每題都附背景、選項與建議；不看其他段落也能回答。
+**需要 Owner 決定的 12 件事**在第 8 節，每題都附背景、選項與建議；不看其他段落也能回答。
 
 ---
 
@@ -108,7 +109,7 @@
 | **A. 排除（他寫過沒）** | `examController.js:105`、`hybrid.js:107`、`nlqService.js:554`、`variantService.js:168`、`coverageService.js:42`、`remedialService.js:377`、`questionController.js:462、560`（刪題保護：有作答就改封存） | 這題**曾經派給**他過沒 |
 | **B. 診斷（他會不會）** | `weaknessService.js:54、126、148、196`（章節／題型／難度、週趨勢、最近錯題、錯因分布）、`kcWeaknessService.js:100、139`（知識點掌握度、basis 判斷）、`remedialService.js:329`（章節基底掌握度）、`tutorService.js:481`（家教的錯因摘要）、`studentController.js:135`（最近錯題的批改細節，以 `(student_id, question_id)` 對應） | 他第一次遇到這題的表現 |
 | **C. 卷層（這張卷每一題）** | `paperController.js:284`（試卷明細）、`paperController.js:363`（批改 PATCH）、`studentController.js:185`（學生清單的批改完成率）、`studentController.js:213`（試卷列表的已批改數）、`assistantService.js:63`（助教 `list_students` 的計數） | 這張卷上**所有**派題與作答 |
-| **D. 寫入** | `examController.js:596`（writePaper）、`:688`（deletePaper）、`studentAdminController.js:121`（刪學生）、`:160–168`（合併學生）、`paperController.js:363`（PATCH）、`migrate/import_pg.js:259、273`（階段 1 的 MySQL 切換工具，已完成的一次性任務）、`eval/lib/pgEngine.js:130`（eval 灌 fixture 前 TRUNCATE）、測試夾具（23 個測試檔、約 46 處 INSERT／DELETE／TRUNCATE） | — |
+| **D. 寫入** | `examController.js:596`（writePaper）、`:688`（deletePaper）、`studentAdminController.js:121`（刪學生）、`:160–168`（合併學生）、`paperController.js:363`（PATCH）、`migrate/import_pg.js:259、273`（階段 1 的 MySQL 切換工具，已完成的一次性任務）、`eval/lib/pgEngine.js:130`（eval 灌 fixture 前 TRUNCATE）、測試夾具（23 個測試檔、約 46 處 INSERT／UPDATE／DELETE／TRUNCATE；另有 `controllers.pg.test.js` 掛在 `attempts` 上的 BEFORE INSERT 觸發器） | — |
 
 ### 2.4 卡在哪
 
@@ -121,7 +122,7 @@
 | # | 改動 | 為什麼 |
 | :--- | :--- | :--- |
 | 1 | **閘門搬家**：`UNIQUE (student_id, question_id)` 改成派題表上的部分唯一索引，只管「用途＝新題」的列 | 新題仍然每生每題一次；重練列不受限 |
-| 2 | **排除規則不動**：`attempts` 改成唯讀檢視，只列「新題」那一次派題（每生每題最多一列，和現在一樣）；再加一條由外鍵保證的不變量「重練派題一定有同生同題的新題派題」 | 有了這條不變量，「有新題派題」＝「曾經派過」，A 類九處查詢不用改就是對的 |
+| 2 | **排除規則不動**：`attempts` 改成唯讀檢視，只列「新題」那一次派題（每生每題最多一列，和現在一樣）；再加一條由外鍵保證的不變量「重練派題一定有同生同題的新題派題」 | 有了這條不變量，「有新題派題」＝「曾經派過」，A 類八處查詢不用改就是對的 |
 | 3 | **重練走另一條路**：重練題不經候選池，而是從排程清單（`retrain_items`）挑到期的；確認出卷時寫成「重練」派題並連到清單項目 | 重練題本來就不是「新題」，不該和候選池混在一起 |
 | 4 | **寫入點改寫**（D 類）：寫派題表與作答表，而不是寫檢視 | 檢視是唯讀的，寫錯地方會立刻報錯（不會靜默） |
 | 5 | **卷層讀取改讀全部派題**（C 類四處＋助教一處）：改讀另一個檢視 `assignment_attempts` | 重練卷上的題不是「新題」，檢視 `attempts` 看不到它們 |
@@ -322,7 +323,7 @@ SELECT s.id AS assignment_id, s.student_id, s.question_id, s.paper_id, s.assigne
 | I6 | 同一個排程項目不會同時被派到兩張還沒批改的卷 | 程式：確認出卷時對項目 `SELECT … FOR UPDATE` 後再檢查（第 5.2 節 API-7） |
 | I7 | 排程快取＝作答歷史重算的結果 | 程式：批改、改判、刪卷、合併之後，在同一交易內重算受影響的項目（第 4.6 節） |
 
-**I1 是這份設計的關鍵**：有了它，「這位學生有沒有這一題的新題派題」與「這一題有沒有派給過他（任何用途）」永遠相等，所以 A 類九處排除查詢繼續讀檢視 `attempts` 就是對的，不用改。
+**I1 是這份設計的關鍵**：有了它，「這位學生有沒有這一題的新題派題」與「這一題有沒有派給過他（任何用途）」永遠相等，所以 A 類八處排除查詢繼續讀檢視 `attempts` 就是對的，不用改。
 
 ### 3.6 既有資料遷移
 
@@ -331,7 +332,7 @@ SELECT s.id AS assignment_id, s.student_id, s.question_id, s.paper_id, s.assigne
 3. 套 M2：只建新表與新欄位，不搬資料。
 4. 功能旗標開啟時，執行 `npm run retrain:rebuild -- --dry-run`（印出會建立幾個項目、各幾題到期）→ 再不帶 `--dry-run` 執行。補建的範圍依 R11 的決定（建議：最近 30 天的錯題）。
 5. **驗證腳本**（PR-1 交付）：migration 前後各跑一次，把每位學生的 `GET /api/students/:id/weakness`、`/weakness/kc`、`GET /api/coverage?student_id=`、補救卷的 `basis` 與 `blueprint` 存成 JSON，比對必須逐欄相同。
-6. `migrate/import_pg.js`、`export_pg_delta.js`、`verify.js` 是 2026-08-21 MySQL 切換用的一次性工具，寫的是舊 `attempts` 表；M1 之後不再適用，檔頭加註「只適用於 0016 之前的 schema」，不另外改寫。
+6. `migrate/import_pg.js`、`export_pg_delta.js`、`verify.js` 是 2026-08-21 MySQL 切換用的一次性工具，寫的是舊 `attempts` 表；M1 之後不再適用，檔頭加註「只適用於 M1 之前的 schema」（寫上 M1 實際分到的編號），不另外改寫。
 
 ### 3.7 索引
 
@@ -345,7 +346,7 @@ SELECT s.id AS assignment_id, s.student_id, s.question_id, s.paper_id, s.assigne
 | `idx_retrain_items_due (student_id, due_on) WHERE status='active'` | 到期清單、出卷挑題 |
 | `idx_assignments_retrain_item (retrain_item_id)`（部分） | 項目的作答歷史、「已派出待批改」判斷 |
 
-既有 `students.pg.test.js` 的 1,000 筆 fixture 與 EXPLAIN 斷言照跑；PR-1 另加一條 EXPLAIN，確認候選池展開檢視後走的是部分唯一索引。
+既有 `students.pg.test.js` 的 1,000 筆 fixture 照用（寫入改走 helper）。它的 EXPLAIN 斷言**不能照跑**：斷言寫死舊索引名 `idx_attempts_student_date`，而這個索引隨拆表搬到 `assignments` 並改名；前置的 `ANALYZE attempts` 對檢視只會警告、不收統計。兩處都要改，逐條列在第 6.4 節。PR-1 另加一條 EXPLAIN，確認候選池展開檢視後走的是部分唯一索引。
 
 ### 3.8 與補救卷、弱點統計、其他功能的關係
 
@@ -357,7 +358,7 @@ SELECT s.id AS assignment_id, s.student_id, s.question_id, s.paper_id, s.assigne
 | 題庫覆蓋率的「還沒寫過」 | 不變。 |
 | 找相似、NLQ、變式檢索的「排除他寫過的題」 | 不變。 |
 | 承上題（FR-019、Owner 決策單 B7：確認出卷時伺服器端檢查整組） | 重練以**整組**為單位（第 4.4 節）；B7 的整組檢查要把重練題與新題一視同仁（見第 7.1 節風險 R-9）。 |
-| 承上題湊不滿（決策單 B10：直接報錯） | 只作用在新題；重練題是附帶的，放不下的組寫進 `notes`、不報錯。 |
+| 承上題湊不滿（決策單 B10：直接報錯） | B10 只作用在新題。重練題的承上組整組放不下時，是跳過並寫進 `notes`、還是比照 B10 報錯，**待 Owner 決定**（第 8 節 R12）。 |
 | 變式家族互斥 | 新題之間照舊；重練題與它的變式能否同卷依 R8。 |
 | 知識點標註、化學、詳解 | 無關（重練題就是原題，標註與詳解照用）。 |
 
@@ -465,7 +466,7 @@ computeRetrainState({ reason, entered_on, teacher_override, history }, params) �
 
 - **到期清單**：進行中、到期日 ≤ 預計作答日、沒有已派出待批改、題目沒封存。
 - **排序**（到期太多、放不下時先出誰）：逾期天數多的先 → 關卡小的先（剛錯的比較急）→ 錯次數多的先 → 題號小的先。承上組以組為單位、依組內最急的一題排序。
-- **上限**：附在新卷時預設最多為新題數的三成（R6），獨立重練卷最多 50 題（同 `confirm-paper` 上限）。放不下的組不拆開，跳過並寫進 `notes`；沒被挑到的題繼續留在到期清單（逾期天數會增加，下次優先）。
+- **上限**：附在新卷時預設最多為新題數的三成（R6），獨立重練卷最多 50 題（同 `confirm-paper` 上限）。承上組不拆開；整組放不下時是跳過並寫進 `notes`、還是報錯，依 R12。沒被挑到的題繼續留在到期清單（逾期天數會增加，下次優先）。附帶上限和每週重練份量的關係見第 4.8 節：照建議參數，附帶只消化得了一部分。
 
 ### 4.8 份量估算（給 R3、R6 參考）
 
@@ -477,7 +478,19 @@ computeRetrainState({ reason, entered_on, teacher_override, history }, params) �
 | 對 3 次（建議） | 約 18 題 | 約 38 題 |
 | 對 4 次 | 約 24 題 | 約 63 題 |
 
-意思是：**門檻越高、重練越常又錯，每週要分給舊題的位置就越多**，而版面有上限，多出來的會一直逾期。所以本設計另外提供：①「卡關」提醒（同一題錯三次，重做同一題的效益已經很低，應該換成講觀念或出變式）；②成效統計看得到「到期清單有沒有越堆越多」；③門檻與上限都在設定檔，用一陣子再調。
+意思是：**門檻越高、重練越常又錯，每週要分給舊題的位置就越多**，而版面有上限，多出來的會一直逾期。
+
+**和附帶上限（R6）的關係**：同一個假設下（每週 20 題新題），附在新卷的上限若是新題數的三成（R6 的建議預設），一週只放得下 6 題舊題：
+
+| 畢業門檻 | 每週要重練 | 附帶放得下 | 附帶消化得了 | 其餘靠獨立重練卷（每週） |
+| :--- | :--- | :--- | :--- | :--- |
+| 對 2 次 | 12～21 題 | 6 題 | 約 1/2～3/10 | 約 6～15 題 |
+| 對 3 次（建議） | 18～38 題 | 6 題 | 約 1/3～1/6 | 約 12～32 題 |
+| 對 4 次 | 24～63 題 | 6 題 | 約 1/4～1/10 | 約 18～57 題（上限一份 50 題，可能要兩份） |
+
+一般來說：附帶一週放得下「附帶比例 × 新題數」，要重練的是「錯題率 × 新題數 × 每題平均重練次數」，而平均重練次數至少是畢業門檻 K。附帶比例和錯題率都是三成時，附帶只消化得了 1 ÷ 平均重練次數，最多 1/K。R3 的三個選項 K 都至少是 2，所以**光靠附在新卷，到期清單每週都會變長**。要跟上，只能每週另出一份獨立重練卷（上表最後一欄），或調高附帶比例（對 3 次時要調到新題數的九成到約兩倍，舊題會和新題一樣多甚至更多），或降低門檻。R3 和 R6 因此要一起決定。
+
+本設計另外提供：①「卡關」提醒（同一題錯三次，重做同一題的效益已經很低，應該換成講觀念或出變式）；②成效統計看得到「到期清單有沒有越堆越多」（API-13 的 `backlog`）；③門檻與附帶比例都在設定檔，用一陣子再調。
 
 ---
 
@@ -633,7 +646,7 @@ computeRetrainState({ reason, entered_on, teacher_override, history }, params) �
 
 1. `.env` 設 `FEATURE_RETRAIN=true` 並重啟；第一次開啟後執行 `npm run retrain:rebuild -- --dry-run` 看會補進幾題，沒問題再去掉 `--dry-run` 執行一次。
 2. 平常批改照舊。錯的題會自動進該生的「錯題重練」清單；批改卡儲存後會提示進了幾題。
-3. 出卷時勾「附上到期的重練題」，預覽卡上有「重練」徽章的就是舊題；不想出的按「移除這題」。考前想集中整理，到學生頁按「出一份重練卷」。
+3. 出卷時勾「附上到期的重練題」，預覽卡上有「重練」徽章的就是舊題；不想出的按「移除這題」。附帶放不完的到期題（照建議參數大約每週都會有，第 4.8 節）或考前想集中整理時，到學生頁按「出一份重練卷」。
 4. 批改重練題：對了升一關，錯了回第一關；連對三次就「練到會」。清單上的「卡關」表示同一題錯了三次，建議改講觀念或出變式，而不是再重做同一題。
 5. 覺得某題不必練（例如只是粗心），在清單上按「移出」；確定已經會了按「判定已會」。
 6. 弱點面板的數字只看每題第一次作答，所以不會因為重練而變好看；重練的效果看「重練成效」小表。
@@ -658,7 +671,7 @@ computeRetrainState({ reason, entered_on, teacher_override, history }, params) �
 | FR-036 | 派題與作答分開記錄：`assignments`（用途 new／retrain）＋`attempt_records`；新題每生每題一次由部分唯一索引保證；舊 `attempts` 以唯讀檢視保留原語意（每生每題第一次）；既有資料無損遷移 | 無新端點；`GET /api/papers/:id` 每題多 `purpose`、`retrain_step` | 無（核心資料層） | DEC-003 例外條款、B22 | Must | ACPT-036-1～4 |
 | FR-037 | 錯題重練清單：批改答錯自動建立排程項目（規則依 R1、R2）、承上組整組、老師手動加入／移出／判定已會／重新加入、舊資料補建 | API-1～4、`npm run retrain:rebuild` | `FEATURE_RETRAIN` | DEC-003 例外條款、DEC-016 | Must | ACPT-037-1～4 |
 | FR-038 | 間隔複習排程：固定關卡（間隔與畢業門檻依 R3～R5）、答錯回第一關、卡關提醒、已派出不重複派、改判／刪卷後由作答歷史重算 | 無獨立端點（`services/retrainSchedule.js`、`config/retrain.js`）；API-10 回報排程變化 | `FEATURE_RETRAIN` | DEC-016 | Must | ACPT-038-1～4 |
-| FR-039 | 出卷帶入重練題：新卷附帶、獨立重練卷、補救卷附帶；確認時寫成重練派題；承上組、家族規則（R8）、上限（R6）；Word 標示（R7） | API-5～8、API-11、API-12 | `FEATURE_RETRAIN`（沒帶新參數時既有行為逐字不變） | DEC-016 | Must | ACPT-039-1～5 |
+| FR-039 | 出卷帶入重練題：新卷附帶、獨立重練卷、補救卷附帶；確認時寫成重練派題；承上組（整組放不下時依 R12）、家族規則（R8）、上限（R6）；Word 標示（R7） | API-5～8、API-11、API-12 | `FEATURE_RETRAIN`（沒帶新參數時既有行為逐字不變） | DEC-016 | Must | ACPT-039-1～5 |
 | FR-040 | 重練成效與到期提醒：成效統計、學生清單到期數、批改卡與試卷明細標示；弱點與補救卷的口徑（R10） | API-13、API-4 | `FEATURE_RETRAIN` | DEC-016、DEC-015 | Should | ACPT-040-1～3 |
 
 **NFR 影響（草案）**：
@@ -673,7 +686,7 @@ computeRetrainState({ reason, entered_on, teacher_override, history }, params) �
 | ACPT-036-1 | Given 升級前已有作答紀錄，When 執行 M1，Then 每一筆舊紀錄變成一筆「新題」派題加一筆作答，編號、學生、題目、卷、派題日、對錯、部分給分、錯因、學生答案、註記全部相同；弱點面板、知識點掌握度、補救卷草稿的 `basis` 與目標、覆蓋率的「還沒寫過」與升級前逐欄相同。 |
 | ACPT-036-2 | Given 某生寫過某題（新題或重練都算），When 以單章、跨章、補救卷、NLQ、找相似、變式檢索、覆蓋率挑「新題」，Then 那一題都不會出現。 |
 | ACPT-036-3 | When 以「新題」身分把同一題第二次派給同一位學生（含兩個出卷請求同時搶同一題），Then 資料庫擋下，出卷回 409，整張卷不寫入。 |
-| ACPT-036-4 | Given 沒有任何重練資料，Then 出卷、確認、批改、刪卷、刪學生、合併學生、刪題的回應與行為與升級前相同（既有整合與 e2e 測試的斷言不改）。 |
+| ACPT-036-4 | Given 沒有任何重練資料，Then 出卷、確認、批改、刪卷、刪學生、合併學生、刪題的回應與行為與升級前相同：既有整合與 e2e 測試中驗這些行為的斷言一條不改；只有第 6.4 節列出、直接檢查資料表結構與索引名稱的斷言依 Owner 決策改寫。 |
 | ACPT-037-1 | Given 旗標開啟，When 批改把新題判錯（依 R1、R2），Then 同一次儲存就建立該題的重練項目（第 1 關、下一份卷即可出）；When 還沒重練前把它改判成對，Then 項目消失。 |
 | ACPT-037-2 | When 老師移出、判定已會、重新加入，或以題號手動加入（只接受曾派給他的題），Then 清單立即反映；移出與已會的題不會到期、不會被挑進卷。 |
 | ACPT-037-3 | Given 承上組內任一題進清單，Then 同組其他題一起進清單；出卷時整組出現、不會只出承上題。 |
@@ -684,7 +697,7 @@ computeRetrainState({ reason, entered_on, teacher_override, history }, params) �
 | ACPT-038-4 | When 改判、取消批改或刪掉重練卷，Then 排程重新計算，結果與「從頭依序批改一次」完全相同。 |
 | ACPT-039-1 | When 出卷時選「附上到期的重練題 N 題」或按「出一份重練卷」，Then 草稿只含到期、未派出、題目未封存的項目，依逾期天數排序，數量不超過 N；產生草稿不寫任何資料。 |
 | ACPT-039-2 | When 確認出卷，Then 重練題寫成「重練」派題並記下所屬項目與當時關卡，新題照舊受硬閘門保護；同一張卷同一題至多一次。 |
-| ACPT-039-3 | Then 承上組整組出；重練題與它的變式能否同卷依 R8；放不下的組不拆開，寫進說明。 |
+| ACPT-039-3 | Then 承上組整組出；重練題與它的變式能否同卷依 R8；放不下的組不拆開，整組放不下時依 R12 處理（跳過並寫進說明，或報錯）。 |
 | ACPT-039-4 | Given 沒帶任何重練參數，Then `generate-paper`、`confirm-paper`、`remedial-paper`、`download-word` 的回應與輸出逐字（Word 逐位元）不變。 |
 | ACPT-039-5 | When 以 `paper_id` 下載 Word，Then 依 R7 標示重練題；學生版不標（R7 選 1 時）。 |
 | ACPT-040-1 | 學生頁顯示：進過清單的題數、練到會、進行中、卡關、第一次重練答對率、隔週回測答對率、到期與逾期題數，可依科目與時間窗篩選。 |
@@ -701,7 +714,7 @@ computeRetrainState({ reason, entered_on, teacher_override, history }, params) �
 | TC-036-2 | 整合 | 同上 | 部分唯一索引擋重複新題（23505）、重練列不受限、`(paper_id, question_id)` 唯一、`question_id` RESTRICT、兩個檢視的欄位名稱與順序（`attempts` 與舊表相同＋`assignment_id`） |
 | TC-036-3 | 整合 | `test/integration/assignmentSplitGolden.pg.test.js` | 以 `students.pg.test.js` 的 1,000 筆 fixture 在 M1 前後各取弱點、知識點掌握度、補救卷草稿（固定亂數）、覆蓋率的 JSON，逐欄相同 |
 | TC-036-4 | 整合 | 同上 | EXPLAIN：候選池展開檢視後使用 `assignments_first_exposure_key`，沒有掃 `attempt_records` |
-| TC-036-5 | 整合／e2e | 既有全部 | 夾具改用 helper 後，既有斷言一條不改全部通過（ACPT-036-4） |
+| TC-036-5 | 整合／e2e | 既有全部 | 夾具改用 helper（`controllers.pg.test.js` 的觸發器改掛 `assignments`）後全部通過；除第 6.4 節列出、依 Owner 決策改寫的結構與索引名稱斷言外，既有斷言一條不改（ACPT-036-4） |
 | TC-036-6 | 單元 | `test/unit/noWritesToAttemptsView.test.js` | 掃描 `controllers/`、`services/`、`workers/`、`scripts/`、`queries/`，不得出現對 `attempts` 的 INSERT／UPDATE／DELETE／TRUNCATE |
 | TC-037-1 | 整合 | `test/integration/retrain.pg.test.js` | 旗標關閉 404 且批改不建項目；答錯建項目、改判成對刪項目；手動加入（`not_assigned` 等 skipped 原因）；移出／判定已會／重新加入；承上組一起進 |
 | TC-037-2 | 整合 | 同上 | `retrain:rebuild` 的 `--dry-run` 不寫入、正式執行冪等、`--since-days` 範圍、與「一直開著」逐筆比對相同 |
@@ -709,7 +722,7 @@ computeRetrainState({ reason, entered_on, teacher_override, history }, params) �
 | TC-038-2 | 單元 | 同上 | 參數化：K＝2／3／4、間隔表不同時的結果（Owner 改設定不需改程式） |
 | TC-038-3 | 整合 | `retrain.pg.test.js` | 批改 PATCH 同一交易建立／更新項目（PATCH 失敗時項目不變）；已派出不再被挑、兩個確認同時送出後者 409 |
 | TC-038-4 | 單元 | `test/unit/retrainScheduleProperty.test.js` | 隨機作答歷史（固定種子，1,000 組）：逐筆重算＝最後重算 |
-| TC-039-1 | 單元 | `test/unit/retrainSelect.test.js` | 到期挑選、排序、上限、承上組不拆、封存排除、家族規則（R8 兩種設定） |
+| TC-039-1 | 單元 | `test/unit/retrainSelect.test.js` | 到期挑選、排序、上限、承上組不拆（整組放不下時依 R12）、封存排除、家族規則（R8 兩種設定） |
 | TC-039-2 | 單元 | `test/unit/retrainValidation.test.js` | API-1～8 的參數驗證（400 訊息）、`retrain_question_ids` 必須是子集、旗標關閉時帶 `retrain` 回 400 |
 | TC-039-3 | 整合 | `retrain.pg.test.js` | 草稿不寫庫；混合卷確認後派題用途與關卡正確；純重練卷卷名；補救卷 `retrain` 組；刪重練卷後重算；刪原卷被擋 409；刪學生與合併學生的處理 |
 | TC-039-4 | 單元＋e2e | `test/unit/solutionText.test.js`（擴充）、`test/e2e/paperWord.e2e.test.js`（新增一案） | Word：沒帶 `paper_id` 逐位元不變；帶了依 R7 標示；e2e 走「新卷 → 批改錯 → 重練卷 → 下載」 |
@@ -718,17 +731,29 @@ computeRetrainState({ reason, entered_on, teacher_override, history }, params) �
 
 回歸：完整 `ci.sh`（unit、check:html、migrate、integration、e2e、五個 eval）。eval 的量測值不得因本功能改變（eval 不灌作答紀錄，只有 `pgEngine.js` 的 TRUNCATE 要改表名）。
 
-### 6.4 既有測試會動到哪些（全部是「依 Owner 決策改變的行為」或「夾具寫法」，沒有放寬任何斷言）
+### 6.4 既有測試會動到哪些
 
-| 檔案 | 變動 | 標註 |
-| :--- | :--- | :--- |
-| `test/integration/schema.test.js`「四張表都在」 | 改驗 `assignments`、`attempt_records` 是實體表、`attempts` 是檢視（斷言變多） | 〔Owner 決策單 2026-09-25 B22；DEC-003 例外條款〕 |
-| `schema.test.js`「attempts 的 UNIQUE 擋得住重複指派」 | 改對 `assignments` 的新題部分唯一索引驗同一件事；另加「重練列可重複」 | 同上 |
-| `schema.test.js`「attempts.question_id 是 ON DELETE RESTRICT」 | 改驗 `assignments.question_id`（以及 M2 的 `retrain_items.question_id`） | 同上 |
-| 23 個整合／e2e 測試檔、約 46 處夾具寫入 | `INSERT INTO attempts …`、`DELETE FROM attempts …`、`TRUNCATE attempts, …` 改用 `test/helpers/attempts.js`（`insertAttempt`、`clearAttempts`），只動準備資料的程式，不動斷言 | 夾具改寫，於 helper 檔頭說明 |
-| `test/e2e/paperWord.e2e.test.js` 的 `ON CONFLICT (student_id, question_id)` 夾具 | 改用 helper | 同上 |
-| 讀取 `FROM attempts WHERE paper_id = …` 的斷言（`grading`、`students`、`controllers` 等） | **不動**：讀的是檢視，沒有重練資料時內容相同 | — |
-| 單元測試中比對 SQL 字串的正規表示式（`remedialValidation.test.js:196`、`hybridQuery.test.js:62`） | **不動**：候選池 SQL 沒改 | — |
+PR-1 要改的既有測試以本表為準（第 5.6 節 PR-1 那一列只舉了 `schema.test.js` 的三條）。行號是基準 `7b7065c` 的行號。分三類：
+
+- **依 Owner 決策改變的行為**：資料表結構或索引名稱本身變了（DEC-003 例外條款選 a：拆表），斷言跟著改寫，驗的仍是同一件事或更多。檔內註明〔Owner 決策單 2026-09-25 B22；DEC-003 例外條款〕。
+- **夾具寫法**：只動準備資料或測試工具的程式，斷言一條不改。
+- **不動**：列出來是為了說明已經檢查過。
+
+沒有任何一條是放寬斷言。
+
+| 檔案與位置 | 為什麼要改 | 怎麼改 | 類別 |
+| :--- | :--- | :--- | :--- |
+| `test/integration/schema.test.js:43`「四張表都在」 | 只收 `table_type = 'BASE TABLE'`；`attempts` 變成檢視後不在清單裡 | 改驗 `assignments`、`attempt_records` 是實體表，`attempts`、`assignment_attempts` 是檢視（斷言變多） | 依 Owner 決策改變的行為 |
+| `schema.test.js:109`「attempts 的 UNIQUE(student_id, question_id) 擋得住重複指派」 | 對檢視 INSERT 會直接報錯，驗不到唯一約束 | 改對 `assignments` 的新題部分唯一索引驗同一件事（同生同題第二筆 `purpose = 'new'` → duplicate key）；另加「重練列可重複」 | 依 Owner 決策改變的行為 |
+| `schema.test.js:137`「attempts.question_id 是 ON DELETE RESTRICT」 | 檢視沒有外鍵，`conrelid = 'attempts'::regclass` 查不到任何一列 | 改驗 `assignments.question_id`（M2 之後加驗 `retrain_items.question_id`） | 依 Owner 決策改變的行為 |
+| `test/integration/students.pg.test.js:987`「by_chapter 的計畫含 idx_attempts_student_date」（斷言在 1008 行） | 這個索引隨拆表搬到 `assignments`，改名為 `idx_assignments_student_date`（第 3.7 節），計畫裡不會再出現舊名 | 斷言、失敗訊息與測試名稱裡的索引名改成新名。`enable_seqscan = off` 不變，要驗的意圖也不變：時間窗條件要用得到 `(student_id, assigned_at)` 索引。檢視展開後多了 `purpose = 'new'`，新題的部分唯一索引也可能被選中。PR-1 要在真庫確認計畫仍走時間窗索引；走不到就調整索引設計（例如時間窗索引也帶 `WHERE purpose = 'new'`），不放寬斷言 | 依 Owner 決策改變的行為（索引隨拆表改名） |
+| `students.pg.test.js:983`「查詢計畫」區塊 `beforeEach` 的 `ANALYZE attempts` | 對檢視做 ANALYZE 只會警告、不收統計，EXPLAIN 就失去意義 | 改成 `ANALYZE assignments, attempt_records` | 夾具寫法 |
+| `test/integration/controllers.pg.test.js:78` 的 `withAttemptsTrigger`，以及 101、106 行的 `DROP TRIGGER … ON attempts` | PostgreSQL 不允許在檢視上建列層級的 BEFORE 觸發器，`CREATE TRIGGER … BEFORE INSERT ON attempts FOR EACH ROW` 直接報錯。用它的兩條 DEC-003 硬閘門測試會在準備階段就失敗：307 行「attempts 寫入筆數短少時回 409，訊息逐字不變且整筆交易回滾」、329 行「第二句 INSERT 直接拋錯時整筆交易回滾」 | 觸發器改掛 `assignments`，建立與拆除都改。409 那條必須仍然走「`INSERT INTO assignments … ON CONFLICT (student_id, question_id) WHERE purpose = 'new' DO NOTHING`＋寫入筆數檢查」這條路：觸發器讓一題寫不進去 → 筆數短少 → 409、訊息逐字不變、整筆回滾。拋錯那條改由 `assignments` 的 INSERT 拋錯。兩條的狀態碼、訊息、回滾後 `exam_papers` 與 `attempts` 為空、之後請求恢復正常等斷言都不改；回滾檢查可以另加 `assignments`、`attempt_records`（只加不減） | 夾具寫法 |
+| 23 個整合／e2e 測試檔、約 46 處夾具寫入：`test/e2e/` 的 `paperWord`、`pipeline`；`test/integration/` 的 `chapterMigration`、`chemistry`、`controllers`、`dedup`、`followUp`、`grading`、`hybrid`、`jobs`、`kc`、`kcTagging`、`localExtract`、`nlq`、`paperGroups`、`remedial`、`searchReindex`、`solutions`、`stage5CrossWs`、`studentProfile`、`students`、`tutor`、`variants` | 對檢視做 INSERT、UPDATE、DELETE 或 TRUNCATE 都會報錯 | 改用 `test/helpers/attempts.js`：`insertAttempt`、`clearAttempts`，另加一個更新作答的函式，給 `grading.pg.test.js` 的四處 `UPDATE attempts` 用。`TRUNCATE … attempts, exam_papers, students, questions … CASCADE` 拿掉 `attempts` 即可，CASCADE 會帶到 `assignments`、`attempt_records`。`paperWord.e2e.test.js` 的 `ON CONFLICT (student_id, question_id)` 一併改。只動準備資料的程式 | 夾具寫法（於 helper 檔頭說明） |
+| 讀取 `FROM attempts …` 的斷言（`grading`、`students`、`controllers`、`remedial`、`paperGroups`、`stage5CrossWs`、e2e 兩檔） | — | **不動**：讀的是檢視，沒有重練資料時內容相同 | 不動 |
+| 回應形狀的斷言：刪學生的 `deleted.attempts`、合併的 `moved_attempts` 與 `dropped_conflicts`、刪卷的 `deleted_attempts`（`controllers.pg.test.js` 576、596、668 行） | — | **不動**：第 3.9 節保留原語意（計的是派題筆數），沒有重練資料時數字相同 | 不動 |
+| `hybrid.pg.test.js:104` 的 `to_regclass('public.attempts')` | — | **不動**：檢視也查得到 | 不動 |
+| 單元測試中比對 SQL 字串的正規表示式（`remedialValidation.test.js:196`、`hybridQuery.test.js:62`） | — | **不動**：候選池 SQL 沒改 | 不動 |
 
 ### 6.5 CI 與本機模式
 
@@ -745,7 +770,7 @@ computeRetrainState({ reason, entered_on, teacher_override, history }, params) �
 | :--- | :--- | :--- | :--- | :--- |
 | R-1 | PR-1 改動 23 個測試檔的夾具，與同一輪其他分支大量衝突 | 高 | 中 | 等本輪（B5、B7、B10、B20、B21…）合併後才開 PR-1；夾具集中到一個 helper，衝突只在呼叫行 |
 | R-2 | 日後有人對檢視 `attempts` 寫入，或以為它包含重練 | 中 | 中 | 寫入會立刻報錯；TC-036-6 掃描禁止；`db_design.md` 與檢視上的 `COMMENT ON VIEW` 寫明「只含第一次派題」 |
-| R-3 | 到期清單越堆越多（第 4.8 節），舊題擠掉新題或永遠排不完 | 中 | 高 | 附帶上限、優先順序、卡關提醒、成效統計的逾期數；R3、R6 由 Owner 依份量決定，設定檔可調 |
+| R-3 | 到期清單越堆越多（第 4.8 節），舊題擠掉新題或永遠排不完。照建議參數（R3 對 3 次、R6 附帶三成），附帶只消化得了每週重練量的約 1/3～1/6 | 高（只靠附帶時） | 高 | 每週另出一份獨立重練卷（照第 4.8 節的假設約 12～32 題）；附帶上限、優先順序、卡關提醒、成效統計的逾期數；R3、R6 由 Owner 依份量一起決定，門檻與附帶比例在設定檔可調 |
 | R-4 | 同一題重做多次，學生記住答案而不是學會 | 中 | 中 | 間隔拉開到週；弱點只看第一次作答（R10）；卡關提醒改教法；R9 保留日後改用變式的路 |
 | R-5 | 批改拖很久，排程失真 | 中 | 低 | 以派題日起算；已派出未批改不重派並提醒（14 天） |
 | R-6 | 刪原卷被擋（新的 409），老師不知道為什麼 | 低 | 低 | 訊息列出擋住的重練卷編號；只在有重練資料時發生 |
@@ -770,7 +795,7 @@ computeRetrainState({ reason, entered_on, teacher_override, history }, params) �
 
 ## 8. 需要 Owner 決定的問題
 
-每一題都可以單獨回答。選完之後本檔凍結，參數寫進 `config/retrain.js` 並標〔Owner 決策單 <日期> R*〕。第 5.6 節：PR-1 不需要等這些答案；PR-2 需要 R1～R5、R9、R11；PR-3 需要 R6～R8；PR-4 需要 R10。
+每一題都可以單獨回答；R3 與 R6 的份量互相牽動（第 4.8 節），建議一起看。選完之後本檔凍結，參數寫進 `config/retrain.js` 並標〔Owner 決策單 <日期> R*〕。第 5.6 節：PR-1 不需要等這些答案；PR-2 需要 R1～R5、R9、R11；PR-3 需要 R6～R8、R12；PR-4 需要 R10。R12 是設計審查後補的題，和決策單同名題一致，放在出卷一組（R8 之後）。
 
 ### R1　哪些錯題要自動進「錯題重練」清單（錯題重練）
 
@@ -786,27 +811,29 @@ computeRetrainState({ reason, entered_on, teacher_override, history }, params) �
 
 ### R2　部分給分的題，算「對」還是「錯」（錯題重練）
 
-**背景**：計算題可以給部分分（例如 60%）。「要不要進重練清單」和「這次重練算不算過關」都要用到這條線。補救卷現在把「沒拿滿分」當成答錯來算平均難度。
+**背景**：計算題可以給部分分（例如 60%）。「要不要進重練清單」和「這次重練算不算過關」都要用到這條線。系統現在有三種算法：補救卷把「沒拿滿分」當成答錯題來算平均難度；知識點掌握度與補救卷的章節掌握度按比例計分（給 60% 算 0.6 題對）；弱點面板的錯題數只看「對／錯」按鈕。這一題只決定重練，不會改動那三處既有算法。
 
 | 選項 | 內容 | 影響 |
 | :--- | :--- | :--- |
-| **1（建議）** | 只有全對才算對（沒給部分分，或給 100%） | 最嚴，和補救卷、知識點掌握度的算法一致；拿 80% 也要再練 |
+| **1（建議）** | 只有全對才算對（沒給部分分，或給 100%） | 最嚴，和補救卷判定「答錯題」的方式一致；拿 80% 也要再練 |
 | 2 | 拿到 80% 以上算對 | 小失誤不必再練；80% 這條線是人為訂的 |
-| 3 | 只看「對／錯」按鈕，不看部分給分 | 最簡單；按了「對」但給 50% 的題也算對 |
+| 3 | 只看「對／錯」按鈕，不看部分給分 | 最簡單，和弱點面板的錯題數一致；按了「對」但給 50% 的題也算對 |
 
-**建議與理由**：選 1。「練到會」應該是整題做對；和系統其他地方的算法一致，老師不必記兩套規則；只差一點的題通常下一次就過關，負擔不大。
+**建議與理由**：選 1。「練到會」應該是整題做對，和補救卷判定答錯題的方式相同；只差一點的題通常下一次就過關，負擔不大。
 
 ### R3　怎樣才算「練到會」（間隔複習）
 
 **背景**：錯題重做一次就對，常常只是剛看過詳解還記得；隔一段時間再考還對，才比較像真的會。做法是「錯了之後先重做一次，之後隔一段時間再考」，連續對滿幾次才畢業。次數越多越可靠，但每週要分給舊題的位置越多：假設每週新錯 6 題，畢業要對 2／3／4 次時，每週大約要重練 12～21／18～38／24～63 題舊題（前面的數字是每次重練都對，後面是重練有三成又錯）。
 
+**要和 R6 一起看**：R6 建議的「附在新卷、上限為新題數的三成」，在每週 20 題新題時一週只放得下 6 題。其餘要靠每週另出一份獨立重練卷：選 1 約 6～15 題，選 2 約 12～32 題，選 3 約 18～57 題（一份重練卷上限 50 題，可能要兩份）。不另出重練卷的話，三個選項的清單都會越堆越多，只是選 1 堆得最慢（第 4.8 節）。
+
 | 選項 | 內容 | 影響 |
 | :--- | :--- | :--- |
 | 1 | 對 2 次：重做對一次，隔 1 週再對一次（約 2 週畢業） | 負擔最輕；只驗證到「1 週後還記得」 |
-| **2（建議）** | 對 3 次：重做、隔 1 週、再隔 2 週（約 3～4 週畢業） | 驗證到「2 週後還記得」；每週舊題約為新錯題的 3 倍 |
+| **2（建議）** | 對 3 次：重做、隔 1 週、再隔 2 週（約 3～4 週畢業） | 驗證到「2 週後還記得」；每週舊題約為新錯題的 3 倍，附在新卷只放得下約 1/3～1/6，其餘要每週另出一份重練卷 |
 | 3 | 對 4 次：重做、隔 1、2、4 週（約 7～8 週畢業） | 最可靠、接近段考週期；舊題量最大，清單容易排不完 |
 
-**建議與理由**：選 2。學習研究常見的建議是「隔開時間、成功回想滿三次」；兩週的間隔大約就是兩次考試之間會遇到的遺忘。更多次會讓舊題擠掉新題。數字寫在設定檔，用一陣子發現清單消化不完，改成 1 只要改一個數字。
+**建議與理由**：選 2。學習研究常見的建議是「隔開時間、成功回想滿三次」；兩週的間隔大約就是兩次考試之間會遇到的遺忘。更多次會讓舊題擠掉新題。這個建議的前提是每週另出一份獨立重練卷（R6）。數字寫在設定檔，用一陣子發現清單消化不完，改成 1 只要改一個數字。
 
 ### R4　重練或隔週回測時又錯了，怎麼辦（間隔複習）
 
@@ -816,7 +843,7 @@ computeRetrainState({ reason, entered_on, teacher_override, history }, params) �
 | :--- | :--- | :--- |
 | **1（建議）** | 回到第一關（下一份卷就再重做），錯的次數加一；錯滿 3 次標「卡關」提醒你（仍留在清單） | 最嚴；卡關的題由你決定改講觀念或出變式 |
 | 2 | 只退一關（例如從「隔 2 週」退回「隔 1 週」） | 畢業比較快；可能半會半不會就畢業 |
-| 3 | 回到第一關；錯滿 3 次自動移出清單，改由補救卷處理那個觀念 | 自動化；但你少看一眼，那一題之後不會再出 |
+| 3 | 回到第一關；錯滿 3 次自動移出清單，改由補救卷處理那個觀念 | 自動化；但你少看一眼，那一題之後不會再出。也和已核准的 DEC-016「錯過的題要練到會為止」衝突，選這個要先修訂 DEC-016 |
 
 **建議與理由**：選 1。間隔複習的標準做法是錯了就從頭；「卡關」只提醒、不自動移出，換不換教法由你決定，系統不替你放棄一題。
 
@@ -836,13 +863,15 @@ computeRetrainState({ reason, entered_on, teacher_override, history }, params) �
 
 **背景**：到期的重練題要放進某一份卷，學生才會再寫到。可以附在平常出的新卷裡，也可以單獨出一份「錯題重練卷」，或兩種都有。附在新卷時要有上限，不然舊題會擠掉新題。
 
+注意份量：照 R3 的建議（對 3 次才算會），一週新錯 6 題時，每週大約要重練 18～38 題舊題。附在新卷的上限若是三成、一份新卷 20 題，只放得下 6 題，其餘要靠獨立的重練卷消化，大約每週一份、12～32 題。一般來說，附帶比例和錯題率都是三成時，附帶最多只消化得了每週重練量的 1/K（K 是 R3 的畢業次數），實際上更少（第 4.8 節）。
+
 | 選項 | 內容 | 影響 |
 | :--- | :--- | :--- |
-| **1（建議）** | 兩種都有：出新卷（單章、跨章、補救卷）時可勾「附上到期的重練題」，預設最多為新題數的三成（出卷時可改）；另有「出一份重練卷」按鈕 | 最有彈性；出卷頁多一個選項 |
-| 2 | 只出獨立的重練卷 | 畫面最單純；學生要多寫一份卷，你要記得出 |
-| 3 | 每份新卷自動附上（不用勾），上限三成 | 不會忘；想出純新題卷時要記得關掉 |
+| **1（建議）** | 兩種都有：出新卷（單章、跨章、補救卷）時可勾「附上到期的重練題」，預設最多為新題數的三成（出卷時可改）；另有「出一份重練卷」按鈕 | 最有彈性；出卷頁多一個選項。照 R3 的建議，「出一份重練卷」大約每週都要用一次 |
+| 2 | 只出獨立的重練卷 | 畫面最單純；學生要多寫一份卷，你要記得出；每週的重練量全在這份卷上 |
+| 3 | 每份新卷自動附上（不用勾），上限三成 | 不會忘；想出純新題卷時要記得關掉；三成同樣只消化得了一部分，放不完的仍要靠獨立重練卷 |
 
-**建議與理由**：選 1。平常上課順手附幾題最省事，考前集中整理時用獨立重練卷；三成只是預設值，每次出卷都能改。
+**建議與理由**：選 1。平常上課順手附幾題，放不完的到期題用獨立重練卷消化；三成只是預設，每次出卷都能改。只靠附帶消化不完：R3 不論選哪一個，都要搭配獨立重練卷，每週大約是選 1 為 6～15 題、選 2（建議）為 12～32 題、選 3 為 18～57 題。所以照 R3 的建議，重練卷大約每週都要出一份，不是只在考前或清單變長時才出。
 
 ### R7　卷面上要不要標出「重練題」（出卷）
 
@@ -867,6 +896,17 @@ computeRetrainState({ reason, entered_on, teacher_override, history }, params) �
 
 **建議與理由**：選 1。符合你之前的取捨（要能同卷集中練同一個觀念）；變式本來就是為了「換個數字再練一次」。
 
+### R12　重練題的承上題組放不進卷時怎麼辦（出卷）
+
+**背景**：到期的重練題若屬於承上題組，要整組一起出（第 4.4 節）。你在 B10 決定：新題湊不滿題數時直接報錯、請你改題數。重練題附在卷上時，數量本來就是「最多幾題」，不是一定要湊滿。這一題只問重練題；新題的 B10 規則不受影響。
+
+| 選項 | 內容 | 影響 |
+| :--- | :--- | :--- |
+| **1（建議）** | 跳過那一組，出卷結果附註「有一組重練題因為整組放不下，下次再出」 | 卷一定出得來；那一組留在到期清單，逾期天數增加，下次優先 |
+| 2 | 跟新題一樣直接報錯，請你調整題數 | 規則和新題一致；到期清單裡有大組時，可能要調整題數才出得了卷 |
+
+**建議與理由**：選 1。重練題數是上限，放不下就留到下次，不該讓整份卷出不來；新題的 B10 規則不受影響。這一題決定組卷時重練題組的處理（FR-039，PR-3）。
+
 ### R9　重練要用原題，還是改用同家族的變式（錯題重練）
 
 **背景**：同一題重做好幾次，學生可能記得答案，而不是真的會。另一種做法：第一次重練用原題，之後的隔週回測改用同一家族、他還沒寫過的變式（沒有才用原題）。這樣排程要從「一題」改成「一個家族」來追蹤，工作量大約多一倍；目前自動生成變式的通過率還不高（約四分之一），很多題沒有現成的變式。
@@ -888,7 +928,7 @@ computeRetrainState({ reason, entered_on, teacher_override, history }, params) �
 | 2 | 每題只算「最近一次」作答 | 進步馬上看得到；重練對了可能只是記得答案，弱點會太早消失，補救卷可能太早不補 |
 | 3 | 每次作答都算 | 最簡單；重練多次的題比重過高，掌握度失真 |
 
-**建議與理由**：選 1。弱點要回答的是「他遇到沒看過的題會不會」，重練成效另外看才不會混在一起；而且這個選項上線後，既有的數字、報表與測試一個都不用改。
+**建議與理由**：選 1。弱點要回答的是「他遇到沒看過的題會不會」，重練成效另外看才不會混在一起；而且選這個，既有的數字與報表不變，弱點相關的測試除了拆表本身要改的那幾條（第 6.4 節）之外都不用改。
 
 ### R11　開啟這個功能時，以前的錯題要不要補進清單（上線）
 
