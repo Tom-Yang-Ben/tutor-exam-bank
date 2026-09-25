@@ -318,6 +318,35 @@ CI 不裝 Ollama、不裝 Python，只讀 repo 裡錄好的回放檔（cassette�
 5. 錄完：`git add eval/cassettes eval/fixtures/embeddings.*.json`，commit、push。本機的向量檔叫 `eval/fixtures/embeddings.ollama-qwen3-embedding-0.6b.768.json`（模型名裡的 `:` 換成 `-`，Windows 檔名不能有冒號）。
 6. `npm run cassettes:prune` 會把原本 Gemini 錄的回放檔列為「CI 不再讀到」。**還想保留讓 CI 切回 Gemini 的可能，就先不要 `--apply`**（刪掉之後要切回就得再用 Gemini 重錄、花錢）；確定不回頭再刪。
 7. 回放驗證有門檻未達時，照 10.5 最後一點：不放寬，交給 Owner 裁決。〔修訂 2026-09-26 決策單 A7〕Owner 已裁決：門檻不放寬、照實紅燈，之後改善；帶紅燈的 PR 能否合併等第二輪 X1。
+8. **〔2026-09-26 修正〕variant 那一步最後報「dedup1 取不到變式題的向量（EMBED_MODE=fixture）：embedding fixture 查無此文本」、`gate_pass_rate` n/a**：舊版 `eval/lib/suiteVariant.js` 的 dedup1 寫死去讀向量檔，不看 `EMBED_MODE`（訊息裡的「EMBED_MODE=fixture」也是寫死的字，子行程其實是 record）。平常查得到，是因為出變式的跑題檢查剛剛才把**同一段文字**錄進檔；classify 換了章、或 lint 改寫了題幹（例：模型寫 `\overrightarrow`、lint 改成 `\vec`）的那幾題，dedup1 要的那一段沒有人錄過。`dec/fix-variant-embed-record` 已修正：錄製時 dedup1 也呼叫 embedding 模型並寫進向量檔。
+
+   **第 4 步錄好的 cassette 不必重錄**。拉到修正版後只補向量（只呼叫 `qwen3-embedding:0.6b`，LLM 全部回放，幾分鐘）。Ollama 開著，在 `exam_pro\` 開命令提示字元（cmd）逐行執行：
+
+   ```bat
+   git pull
+   set MODEL_
+   set EMBED_MODEL
+   set LLM_MODE=replay
+   set EMBED_MODE=record
+   node eval\run.js --suite variant
+   set LLM_MODE=
+   set EMBED_MODE=
+   npm run cassettes:rerecord -- --dry-run --suites variant
+   ```
+
+   - `set MODEL_`、`set EMBED_MODEL` 應回「環境變數 … 沒有定義」：模型不必設，程式預設就是 `ci.yml` 的本機模型。有列出東西的話先 `set 那個名字=` 清掉，否則錄出來的鍵 CI 讀不到。
+   - `node eval\run.js --suite variant` 會印幾十行 `[embed:record] 已寫入 … 筆向量`；最後**不應再有**「查不到變式題的向量」，`gate_pass_rate` 應是數字。結束碼仍可能是 1——那是 `retrieved_coverage` 低於門檻（第 9 點），與這個問題無關。
+   - 最後一行是 CI 的設定（回放）：盤點表 variant 那一列的「缺 cassette」「缺向量」都應是 0。
+   - 若出現 `cassette replay miss`（例如 pull 下來的版本改了 prompt），改成整步重錄：`scripts\windows\record_local.bat variant`（variant 的 LLM 全部重跑，上次花了 17292 秒）。
+   - 補好後 `git add eval/fixtures/embeddings.ollama-qwen3-embedding-0.6b.768.json`（連同第 4 步錄好、還沒 commit 的 `eval/cassettes`），commit、push。
+   - PowerShell 的寫法：`$env:LLM_MODE='replay'; $env:EMBED_MODE='record'; node eval/run.js --suite variant; Remove-Item Env:LLM_MODE, Env:EMBED_MODE`。
+9. **`retrieved_coverage` 遠低於門檻（本機重錄實測 0.2333，門檻 0.8367）與第 8 點無關**：這個數字零 LLM、零 embedding 呼叫，只拿 fixture 60 題已錄好的向量算「同科、同難度、餘弦 ≥ `VARIANT_RETRIEVE_SIM_MIN`（0.80）的題有沒有 2 題」。0.80 是照 Gemini 向量的餘弦分布定的（`docs/variants.md` 第 3 節：同概念換數字最低 0.93、跨章中位數 0.78）；換成 `qwen3-embedding:0.6b` 分布就不同，同一個門檻只剩 7／30 個藍本過。依 LM-14 門檻不動、照實紅燈。之後要評估時可以先看分布（只讀向量檔，不改任何設定）：
+
+   ```bat
+   node -e "const s=require('./eval/lib/suiteVariant'),f=require('./eval/lib/fixtures').loadFixture(),e=require('./eval/lib/embeddings').loadEmbeddings({questions:f.questions});for(const x of s.loadVariantGolden({fixtureById:f.byId}).entries){const h=s.retrieveInMemory({source:f.byId.get(x.source_question_id),questions:f.questions,vectorOf:e.vectorOf,simMin:-1});console.log(x.id,x.chapter,h.slice(0,2).map(r=>r.cosine.toFixed(3)).join(' '))}"
+   ```
+
+   每行是一個藍本與「最近、第 2 近」的餘弦；第 2 個數字 ≥ 門檻的藍本才算覆蓋。要不要依本機向量重新校準 `VARIANT_RETRIEVE_SIM_MIN`（以及跑題的 `VARIANT_OFFTOPIC_SIM_MIN` 0.90、去重的 `DEDUP_DUP_THRESHOLD` 0.97，同樣是照 Gemini 定的）由 Owner 裁決。
 
 ### 10.8 疑難排解
 
@@ -334,6 +363,7 @@ CI 不裝 Ollama、不裝 Python，只讀 repo 裡錄好的回放檔（cassette�
 | 很多題停在複核、原因是「拆題交叉驗證不一致」 | 預期中的行為（第 1 條第 6 點） | 在複核頁對照原卷改對後核准 |
 | 語音按鈕不見了 | 本機模式不提供語音 | 預期中的行為；要用語音只能切回 Gemini（10.4） |
 | GitHub Actions 的 e2e／eval 紅燈，訊息是 replay miss 或缺向量 | `ci.yml` 已改本機模型，回放檔還沒以本機模型重錄 | 照 10.7 重錄 |
+| 重錄 variant 時大部分題都有「已寫入 2 筆向量」，最後卻報「dedup1 取不到變式題的向量（EMBED_MODE=fixture）」、`gate_pass_rate` n/a | 2026-09-26 之前的版本 dedup1 寫死讀向量檔（已修正） | 拉新版後照 10.7 第 8 點只補向量，不必重錄 LLM |
 | `.bat` 視窗裡中文變亂碼 | 主控台字型不支援 | 不影響執行；log 檔是 UTF-8，用記事本開 |
 | 頁面沒有樣式、公式不排版、字型怪怪的，瀏覽器主控台有 500／CORS 錯誤 | 用 `http://127.0.0.1:3000` 開頁面；字型、MathJax、Tailwind 改由本機伺服器提供後要過 `ALLOWED_ORIGINS` | 一律用 `.env` 的 `ALLOWED_ORIGINS` 裡的網址開（預設 `http://localhost:3000`） |
 | 拆題被切在兩頁中間的題，兩個引擎都拆成殘缺的一題卻自動入庫 | 一塊 2 頁的已知限制（LM-12 ①） | 複核時留意跨頁題；可在 `.env` 把 `JOB_PDF_CHUNK_PAGES` 設大一點（每塊更慢） |
