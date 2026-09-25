@@ -665,6 +665,9 @@
         <div id="view-students" class="app-view hidden">
         <section id="students"></section>
 
+        <!-- 錯題重練卡（〔retrain PR-4〕docs/retrain-and-review.md 第 5.3 節；內容由 public/js/retrain.js 建立，FEATURE_RETRAIN 關閉時整段不渲染） -->
+        <section id="retrain"></section>
+
         <!-- 依弱點出補救卷（階段 5 WS-D；內容由 public/js/remedial.js 建立，FEATURE_REMEDIAL 關閉時整段不渲染） -->
         <section id="remedial"></section>
         </div><!-- /view-students -->
@@ -1933,6 +1936,7 @@
         // 〔stage5 整合〕WS-D 的兩個子錨點：補救卷在學生視圖、覆蓋率在題庫視圖（不是頂層分頁）
         VIEW_FOR_ANCHOR.remedial = 'view-students';
         VIEW_FOR_ANCHOR.coverage = 'view-library';
+        VIEW_FOR_ANCHOR.retrain = 'view-students';   // 〔retrain PR-4〕錯題重練卡在學生視圖（子錨點）
 
         let activeViewId = null;   // 首次 routeFromHash 前為 null——初始載入不跑動效
 
@@ -2037,6 +2041,8 @@
     <script type="module" src="/js/kc.js"></script>
     <script type="module" src="/js/remedial.js"></script>
     <script type="module" src="/js/tutor.js"></script>
+    <!-- 〔retrain PR-4〕錯題重練卡（跟著學生分頁選的學生走，所以排在 students.js 之後） -->
+    <script type="module" src="/js/retrain.js"></script>
 </body>
 
 </html>

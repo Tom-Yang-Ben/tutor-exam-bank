@@ -11,6 +11,7 @@
 //   〔PR-3〕API-7  POST /api/confirm-paper 的 retrain_question_ids            parseConfirmRetrain
 //   〔PR-3〕API-8  POST /api/students/:id/remedial-paper 的 retrain_count     parseRemedialRetrain
 //   〔PR-3〕API-12 POST /api/download-word 的 paper_id                        parseWordPaperId
+//   API-13 GET   /api/students/:id/retrain-stats?days=&subject=（PR-4）      parseStatsQuery
 //
 // 嚴格驗證（同裁決 S5-21）：不認得的查詢參數或 body 鍵一律 400，不靜默略過——拼錯的鍵被略過，
 // 老師會以為設定生效了。同名查詢參數重複（?status=a&status=b）也是 400。
@@ -173,6 +174,37 @@ function parseActionBody(body) {
         note = v === '' ? null : v;
     }
     return { action: body.action, hasNote, note };
+}
+
+/** 〔retrain PR-4〕API-13 的時間窗（days）：預設與合法區間同 GET /api/students/:id/weakness（interfaces-stage3.md 第 1.5 條）。 */
+const STATS_DEFAULT_DAYS = 90;
+const STATS_MIN_DAYS = 1;
+const STATS_MAX_DAYS = 365;
+
+/**
+ * 〔retrain PR-4〕API-13 GET /api/students/:id/retrain-stats?days=&subject= 的查詢參數。
+ * days：1～365 的整數，沒給（或空字串）＝90；subject：白名單內，沒給＝不分科。不認得的參數 400（同裁決 S5-21）。
+ * @param {object} query req.query
+ * @returns {{error:string} | {days:number, subject:string|null}}
+ */
+function parseStatsQuery(query) {
+    const q = query && typeof query === 'object' ? query : {};
+    const keyError = checkQueryKeys(q, ['days', 'subject']);
+    if (keyError) return { error: keyError };
+
+    let days = STATS_DEFAULT_DAYS;
+    if (given(q, 'days')) {
+        const s = q.days.trim();
+        const n = Number(s);
+        if (!Number.isInteger(n) || String(n) !== s || n < STATS_MIN_DAYS || n > STATS_MAX_DAYS) {
+            return { error: `days 必須是 ${STATS_MIN_DAYS}~${STATS_MAX_DAYS} 的整數。` };
+        }
+        days = n;
+    }
+
+    const subject = given(q, 'subject') ? q.subject.trim() : null;
+    if (subject !== null && !SUBJECTS.includes(subject)) return { error: 'subject 不在白名單內。' };
+    return { days, subject };
 }
 
 /**
@@ -373,5 +405,8 @@ module.exports = {
     parseConfirmRetrain,
     parseRetrainPaperBody,
     parseRemedialRetrain,
-    parseWordPaperId
+    parseWordPaperId,
+    // 〔retrain PR-4〕API-13
+    STATS_DEFAULT_DAYS,
+    parseStatsQuery
 };

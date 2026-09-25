@@ -808,6 +808,39 @@ capForAttach(newCount, ratio) ：R6，floor(新題數 × 比例)，且新題＋�
 
 **給 PR-4 的介面**：API-5 草稿的形狀見上表 ⑤；「出一份重練卷」確認時送 `confirm-paper { student_id, question_ids, retrain_question_ids: question_ids }`，409 的訊息是 `retrainConflictMessage`（草稿過期，請重新產生）；下載 Word 帶 `paper_id` 才有 R7 的標示。`services/retrainSelect.js` 的 `buildRetrainDraft`、`selectRetrain`、`unitsFromViews`、`pickUnits` 可以直接呼叫。
 
+#### 5.6.4 實作狀態（第二階段之三：PR-4 畫面與成效）
+
+> **PR-4 已實作**（分支 `dec/retrain-p4-ui`，起點 `dec/retrain-p2-core`＝`836740057a`）。第 5.6.3 節留給同時進行的 PR-3（出卷整合）。依 Owner 2026-09-26 決策單第三輪（第 8 節）實作；第 5.6.1、5.6.2 節的原文不動。
+>
+> **沒做**（PR-3）：API-5～8、API-12 的伺服器端、組卷頁、補救卷、Word 標示。本 PR 的前端照第 5.2 節凍結的形狀呼叫 API-5（產草稿）、API-7（`confirm-paper` 帶 `retrain_question_ids`）、API-12（`download-word` 帶 `paper_id`），單元測試用 mock；PR-3 合併之前按「出一份重練卷」會顯示伺服器的 404。沒有新的 migration、設定或環境變數。
+
+| 項目 | 狀態 | 說明 |
+| :--- | :--- | :--- |
+| API-13 `GET /api/students/:id/retrain-stats?days=&subject=` | ✅ 已實作 | 掛在 `routes/index.js` 檔尾錯題重練區塊（旗標關閉不掛載）；`controllers/retrainController.js` 的 `stats`；參數驗證 `utils/retrainValidation.js` 的 `parseStatsQuery`（嚴格驗證，同裁決 S5-21）；計算在新檔 `services/retrainStatsService.js`（只讀；題數與到期直接用 `retrainService.listItems`，所以判斷與 API-1 完全相同）。語意見下表 ① |
+| 學生分頁「錯題重練」卡（`public/js/retrain.js`，錨點 `#retrain`） | ✅ 已實作 | 放在學生視圖、緊接在 `#students`（弱點面板）之後。四個數字（到期、進行中、練到會、卡關；點一下就篩那一類）；清單照 API-1 回來的順序（伺服器依第 4.7 節排好，前端不重排）；每列章節、題幹預覽（MathJax）、關卡標籤、下次到期（逾期標紅）、連對／錯次數、徽章（到期／已派出卷 #…／卡關／已封存，另有「派出超過 14 天還沒批改」）、可展開作答歷史（錯因用 `GET /api/error-types` 的標籤）；每列動作移出、判定已會、重新加入（API-3）、找相似（沿用既有的 `examapp:variant-request`，FEATURE_SIMILAR 關閉時不畫）；上方「手動加入題號」（API-2）、「出一份重練卷」（API-5 → 草稿沿用補救卷樣式、承上組整組刪 → API-7 → 下載 Word 帶 `paper_id`，三種版本）；「重練成效」小表（API-13） |
+| 批改卡（`public/js/students.js` 最小掛鉤） | ✅ 已實作 | 新題對錯按鈕旁「要重練」勾選框（預設不勾、答錯也不自動勾；依 API-9 的 `retrain_flagged` 顯示已勾）；重練題不給勾選框、改標「重練・第 n 關」；`diffResults` 只在勾選改過時送 `results[i].retrain`；儲存後依 API-10 的 `retrain` 摘要提示「3 題進入重練清單、1 題練到會。」 |
+| 學生清單的到期徽章（API-4） | ✅ 已實作 | 學生分頁的學生下拉選單：`姓名【到期 N】（N 卷，已批 …）`（下表 ④）。載入學生視圖、批改後、重練卡改了清單之後更新 |
+| 旗標關閉 | ✅ | `#retrain` 整段不渲染（空 `<section>`）；students.js 不畫勾選框與徽章、不改選項文字、不發事件、不打任何新 API，PATCH body 與 `diffResults` 的輸出逐位元不變（列上沒有 `retrain` 鍵）。FEATURE_STUDENTS 關閉（學生分頁不存在）時重練卡也不渲染 |
+| `index.html` | ✅ | 只加三處：`<section id="retrain">`、`<script type="module" src="/js/retrain.js">`（排在 students.js 之後）、`VIEW_FOR_ANCHOR.retrain = 'view-students'`（下表 ⑨） |
+| `npm run check:html` | ✅ | `eval/tools/check_html.js` 新增 `RETRAIN_PAGES`（`#retrain` 的 section、module、meta、parseBool、「整段不渲染」）與 `RETRAIN_EXTRA_METAS`（students.js 必須讀 `feature-retrain`）；既有的 `STAGE*_PAGES` 清單不動 |
+| 測試 | ✅ | 單元：`test/unit/retrainUi.test.js`（TC-040-2：miniDom 同時跑 students.js 與 retrain.js；旗標關閉不渲染、不發請求；清單順序與徽章；動作按鈕送出的 body；手動加入；重練卷草稿 → 確認 → Word 的 body；R12 的 400 與確認時的 409 原樣顯示；重練成效表；批改卡勾選框預設不勾、徽章、送出的 body 與提示；學生清單徽章；伺服器文字一律 textContent）、`test/unit/retrainStats.test.js`（API-13 的純函式與參數驗證）。整合：`test/integration/retrainStats.pg.test.js`（TC-040-1 的 stats 部分：旗標、404／400、第 4.5 節的例子、題數＝API-1 的 counts、時間窗含 since 當天、R2、沒批改不算、依科目）。既有斷言一條沒改 |
+
+**與本檔（凍結版）不同、或本檔沒寫而由實作決定之處**：
+
+| # | 項目 | 實作 |
+| :--- | :--- | :--- |
+| ① | API-13 的時間窗（第 5.2 節只列參數） | `days` 只影響答對率：`first_retrain`／`spaced` 只算派題日 ≥ `since`（＝今天 − `days`，含當天；與弱點面板的 `assigned_at >= CURRENT_DATE - days` 同一種算法）而且已批改的重練派題。題數（`entered`／`active`／`mastered`／`retired`／`stuck`）、`backlog`、`by_chapter` 是**清單現況**（依科目篩選、不受 `days` 影響）：「進過清單」＝還在表上的項目（進行中＋練到會＋移出；還沒重練就取消勾選的項目已刪掉，不算）。`days` 1～365、預設 90（同 weakness API）；回應最後多一個 `since`。`backlog` 以今天為準（不收 `as_of`）：`due_now`＝API-1 的 `due`（已派出、封存的不算），`overdue_7d`＝其中逾期 ≥ 7 天。`by_chapter` 依進過清單多 → 進行中多 → 章節名排序，沒有章節的是 `null`、排最後 |
+| ② | 重練卡的學生、科目、時間窗 | 跟著學生分頁上方的下拉走（students.js 每次載入學生視圖時發 `examapp:student-view`，detail 帶 `student_id`、`student_name`、`subject`、`days`；retrain.js 掛載時也直接讀一次下拉，避免事件比監聽先到）。卡片自己另有「顯示」（API-1 的 `status`）與「預計作答日」（API-1、API-5 的 `as_of`；空白＝今天）。換學生時草稿與上一張卷一起清掉 |
+| ③ | 重練卡改了清單之後 | retrain.js 發 `examapp:retrain-changed`（detail `student_id`、`papers_changed`）：students.js 更新到期徽章；確認了重練卷（`papers_changed`）時重載整個學生視圖，新卷立刻出現在試卷列表、可以批改 |
+| ④ | 學生清單的「到期 3」徽章 | 學生清單是 `<select>`，選項放不了樣式徽章：做成選項文字 `姓名【到期 3】（2 卷，已批 50.0%）`；沒有到期的題就維持原文字。`data-name` 不變（「立即批改」靠它比對姓名） |
+| ⑤ | 動作的確認 | 「移出」「判定已會」要按第二次才送（同學生管理面板的做法；按錯了只能「重新加入」，進度會歸零）；「重新加入」一按就送。重練卡不提供改備註（API-3 的 `note` 只顯示） |
+| ⑥ | 批改卡儲存後的提示 | 除了 API-10 摘要（進清單、升一關、練到會、答錯回第 1 關，都是 0 就不提示），這次改成「錯」卻沒勾「要重練」的新題另外提醒「這次有 N 題答錯但沒勾「要重練」，不會進清單。」（第 7.1 節風險 R-12 的對策） |
+| ⑦ | 勾選框的條件 | 旗標開啟**而且** API-9 帶了 `purpose` 才畫（伺服器沒帶時不畫，也就不會送出伺服器不收的 `retrain`）；`purpose = 'new'` 的每一題都能勾（含答對、還沒批改的題），`purpose = 'retrain'` 不給勾選框 |
+| ⑧ | 「出一份重練卷」的選項 | 題數（預設 10、1～50）、「也放還沒到期的題」（API-5 的 `include_not_due`，有勾才送）；科目與預計作答日有選才送。承上組整組放不下的 400（R12）與確認時的 409 原樣顯示；草稿刪題以承上組為單位（「刪這組」） |
+| ⑨ | `index.html` | 除了第 5.3 節的 section 與 module，多一行 `VIEW_FOR_ANCHOR.retrain = 'view-students'`：沒有它，網址 `#retrain` 會落回建立題目視圖 |
+| ⑩ | 找相似 | 送 `examapp:variant-request`（`action = 'similar'`），`question_text` 給的是 API-1 的題幹預覽（API-1 不回全文） |
+| ⑪ | 試卷列表的「含重練 4 題」（第 5.3 節表格最後一列） | 沒做：`GET /api/students/:id/papers` 沒有這個數字，要改 API，不在這一輪 PR-4 的範圍 |
+
 ---
 
 ## 6. 測試計畫與驗收
