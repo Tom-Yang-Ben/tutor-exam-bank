@@ -27,6 +27,48 @@ describe('〔知識點審定單 2026-09-26〕數學種子檔', () => {
         assert.equal(seed.components.filter(c => c.chapter === '多項式函數的圖形').length, 5);
     });
 
+    test('M3 後續（Owner 補答）：勘根定理改寫成連續函數版本；中間值定理只寫一般敘述，勘根定理是它的特例', () => {
+        const root = byCode.get('MATH.函數的極限.07');
+        assert.ok(root.description.includes('連續'));
+        assert.ok(root.description.includes('f(a)f(b)<0'));
+        assert.ok(root.description.includes('二分法'));
+        assert.ok(!root.description.includes('多項式'));
+        assert.ok(root.spoken_text.includes('連續'));
+        assert.ok(root.spoken_text.includes('二分法'));
+        const ivt = byCode.get('MATH.函數的極限.06');
+        assert.ok(!ivt.description.includes('f(a)f(b)<0'));
+        assert.ok(ivt.description.includes('勘根定理是它的特例'));
+        assert.ok(!ivt.spoken_text.includes('推廣'));
+    });
+
+    test('M15（Owner 補答）：「複數的幾何意涵」拆成 3 條，刪極式、棣美弗定理、n 次方根', () => {
+        const ch = seed.components.filter(c => c.chapter === '複數的幾何意涵');
+        assert.deepEqual(ch.map(c => [c.code, c.sort, c.name]), [
+            ['MATH.複數的幾何意涵.01', 1, '複數平面與絕對值'],
+            ['MATH.複數的幾何意涵.06', 2, '複數加減的幾何意義'],
+            ['MATH.複數的幾何意涵.03', 3, '複數乘除的幾何意義']
+        ]);
+        for (const gone of ['MATH.複數的幾何意涵.02', 'MATH.複數的幾何意涵.04', 'MATH.複數的幾何意涵.05']) {
+            assert.equal(byCode.has(gone), false, gone);
+            assert.ok(!allPrereqs().includes(gone), gone);
+        }
+        for (const c of ch) {
+            assert.ok(!/極式|棣美弗|次方根|cosθ\+i sinθ/.test(c.description + c.spoken_text), c.code);
+        }
+        assert.ok(byCode.get('MATH.複數的幾何意涵.06').description.includes('實軸的鏡射'));
+        assert.ok(byCode.get('MATH.複數的幾何意涵.03').description.includes('逆時針旋轉 90°'));
+    });
+
+    test('M17（Owner 補答）：刪橢圓焦點三角形面積公式與配方後的退化情形，代碼不變', () => {
+        const e4 = byCode.get('MATH.橢圓.04');
+        assert.ok(!/tan\(θ\/2\)/.test(e4.description + e4.spoken_text));
+        assert.ok(e4.description.includes('餘弦定理'));
+        for (const code of ['MATH.橢圓.03', 'MATH.雙曲線.04']) {
+            const c = byCode.get(code);
+            assert.ok(!/只是一點|一個點|沒有圖形|相交直線/.test(c.description + c.spoken_text), code);
+        }
+    });
+
     test('M4：「集合與計數原理」新增命題與且或非、充分條件與必要條件', () => {
         const names = seed.components.filter(c => c.chapter === '集合與計數原理').map(c => c.name);
         assert.ok(names.includes('命題與且、或、非'));
@@ -64,17 +106,22 @@ describe('〔知識點審定單 2026-09-26〕數學種子檔', () => {
         assert.ok(!p.some(x => x.startsWith('MATH.空間直線方程式.')));
     });
 
-    test('對照檔 code-map-數學-2026-09-26：值都在種子檔，刪除只有一筆，新增的兩條不在鍵裡', () => {
+    test('對照檔 code-map-數學-2026-09-26：值都在種子檔，刪除 4 筆，新增的 3 條不在鍵裡', () => {
         for (const [from, to] of Object.entries(mapR2)) {
             if (to === null) continue;
             assert.ok(byCode.has(to), `${from} → ${to} 不在種子檔`);
         }
-        assert.deepEqual(Object.entries(mapR2).filter(([, v]) => v === null).map(([k]) => k), ['MATH.二項分布與幾何分布.04']);
+        assert.deepEqual(Object.entries(mapR2).filter(([, v]) => v === null).map(([k]) => k), [
+            'MATH.二項分布與幾何分布.04',
+            'MATH.複數的幾何意涵.02', 'MATH.複數的幾何意涵.04', 'MATH.複數的幾何意涵.05'
+        ]);
         assert.equal(mapR2['MATH.多項式函數的圖形.06'], 'MATH.函數的極限.07');
         assert.equal(mapR2['MATH.空間向量內積.01'], 'MATH.空間概念與座標系.06');
+        assert.equal(mapR2['MATH.複數的幾何意涵.01'], 'MATH.複數的幾何意涵.01');
+        assert.equal(mapR2['MATH.複數的幾何意涵.03'], 'MATH.複數的幾何意涵.03');
         const targets = new Set(Object.values(mapR2));
         const unmapped = seed.components.map(c => c.code).filter(c => !targets.has(c));
-        assert.deepEqual(unmapped.sort(), ['MATH.集合與計數原理.06', 'MATH.集合與計數原理.07']);
+        assert.deepEqual(unmapped.sort(), ['MATH.集合與計數原理.06', 'MATH.集合與計數原理.07', 'MATH.複數的幾何意涵.06'].sort());
     });
 });
 
