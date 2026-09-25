@@ -153,8 +153,10 @@ const TOOLS = {
                 studentId: rows[0].id, studentName: rows[0].name,
                 subject: args.subject, chapter: args.chapter.trim(), limitCount: args.count
             });
+            // 承上題整組湊不滿題數時與組卷同一個政策（FOLLOW_UP_SHORTFALL_POLICY）：預設回錯誤訊息
+            // （哪一章要幾題、最多湊到幾題、建議改成幾題；〔Owner 決策單 2026-09-25 B10〕），切成 note 時才少出題附註
             if (picked.error) return { error: picked.error.message };
-            // 與組卷同一個選題函式：承上題整組抽、相鄰排列；少出題時同樣附註（FR-019 PR2）
+            // 與組卷同一個選題函式：承上題整組抽、相鄰排列；'note' 政策下少出題時同樣附註（FR-019 PR2）
             return {
                 note: '僅預覽、尚未寫入。真的要出卷請老師在「智慧自動組卷」選同樣條件並按「確認出卷」。'
                     + (picked.note ? picked.note : ''),
