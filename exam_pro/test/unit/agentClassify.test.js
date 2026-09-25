@@ -243,7 +243,10 @@ describe('第二層：few-shot + LLM', () => {
         await classify.run(ctx, { subject: '數學', chapter: null, chapter_confidence: 0.1, question_text: QUESTION });
         assert.deepEqual(Object.keys(calls[0].cacheKeyParts), ['template', 'questionText', 'fewShotIds']);
         assert.equal(calls[0].agent, 'classify');
-        assert.equal(calls[0].template, 'classify.v1');
+        // 〔決策單 2026-09-26 A5／A7；CR-9〕原為 'classify.v1'：改了指數／對數兩章的例句並補規則 5，
+        // 鍵不含例句文字，所以識別名升版讓 classify cassette 全部失效、重錄（docs/chapter-restructure.md CR-9）。
+        assert.equal(calls[0].template, 'classify.v2');
+        assert.equal(calls[0].cacheKeyParts.template, 'classify.v2');
     });
 
     test('prompt 只列該科的白名單（物理題不該看到數學章節）', async () => {
@@ -262,6 +265,81 @@ describe('第二層：few-shot + LLM', () => {
         ctx.jq.payload = { classify: { feedback: '「平面向量」不在白名單內，最接近的是「向量內積」「平面方程式」' } };
         await classify.run(ctx, { subject: '數學', chapter: null, chapter_confidence: 0.1, question_text: QUESTION });
         assert.ok(calls[0].parts[0].text.includes('「平面向量」不在白名單內'));
+    });
+});
+
+// ───────────────── 〔CR-9〕指數與對數的分冊界線（決策單 A5） ─────────────────
+//
+// 2026-09-25 以本機模型重錄 classify：錯的 15 題有 8 題是第三冊「指數函數與對數函數」被分成第一冊「指數與對數」。
+// 這裡釘住三件事：模板寫明界線、兩章例句本身符合界線、例句不洩漏 golden 題幹（CR-8 的去洩題原則）。
+
+describe('〔CR-9〕指數與對數的分冊界線（決策單 A5）', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const { findNonCommonLogBase } = require('../../config/chapterMigrationRules');
+    const FIRST = '指數與對數';
+    const THIRD = '指數函數與對數函數';
+
+    function bigramSet(text) {
+        const s = String(text || '');
+        const set = new Set();
+        for (let i = 0; i + 1 < s.length; i++) set.add(s.slice(i, i + 2));
+        return set;
+    }
+    function dice(a, b) {
+        const A = bigramSet(a);
+        const B = bigramSet(b);
+        let common = 0;
+        for (const g of A) if (B.has(g)) common += 1;
+        return (2 * common) / (A.size + B.size);
+    }
+    function mathGolden() {
+        const file = path.join(__dirname, '..', '..', 'eval', 'golden', 'classify.json');
+        return JSON.parse(fs.readFileSync(file, 'utf8')).entries.filter(e => e.subject === '數學');
+    }
+
+    test('數學／物理模板寫明兩章的界線；化學模板不含這條', () => {
+        const t = classify.PROMPT_TEMPLATE;
+        for (const s of [`第一冊「${FIRST}」`, `第三冊「${THIRD}」`, '以 10 為底的常用對數', '底數不是 10 的對數', '換底公式', '指數或對數方程式']) {
+            assert.ok(t.includes(s), `模板缺「${s}」`);
+        }
+        assert.ok(!classify.PROMPT_TEMPLATE_CHEM.includes(THIRD), '化學模板不該出現數學的分冊界線');
+    });
+
+    test('數學題的 prompt 帶著界線規則，兩章的新例句都進了 few-shot', async () => {
+        const { ctx, calls } = fakeCtx({ data: { chapter: THIRD, confidence: 0.9, rationale: 'r' } });
+        await classify.run(ctx, { subject: '數學', chapter: null, chapter_confidence: 0, question_text: '求 $\\log_{7} 49$ 的值。' });
+        const prompt = calls[0].parts[0].text;
+        assert.ok(prompt.includes('底數不是 10 的對數'));
+        assert.ok(prompt.includes(`${getChapterExample('數學', FIRST)}\n  章節：${FIRST}`));
+        assert.ok(prompt.includes(`${getChapterExample('數學', THIRD)}\n  章節：${THIRD}`));
+    });
+
+    test('第一冊例句只用常用對數；第三冊例句示範底數不是 10 的對數、換底與指數方程式', () => {
+        const first = getChapterExample('數學', FIRST);
+        const third = getChapterExample('數學', THIRD);
+        assert.equal(findNonCommonLogBase(first), null, `第一冊例句不該出現底數不是 10 的對數：${first}`);
+        assert.ok(first.includes('常用對數') && first.includes('科學記號'), first);
+        assert.ok(!first.includes('方程式'), '指數／對數方程式屬第三冊');
+        assert.ok(findNonCommonLogBase(third), `第三冊例句要有底數不是 10 的對數：${third}`);
+        assert.ok(third.includes('換底公式') && third.includes('指數方程式'), third);
+        assert.ok(!/函數|圖形/.test(third), '第三冊例句刻意示範「不含函數／圖形字樣的計算題」也屬第三冊');
+    });
+
+    test('兩章例句不洩漏 golden 題幹（CR-8 去洩題）', () => {
+        const golden = mathGolden();
+        assert.ok(golden.length > 0);
+        // 量尺自我檢查：CR-8 判為洩題而換掉的舊第一冊例句，對 golden 的 bigram Dice 最高約 0.59
+        const leaked = '已知 $\\log 2 \\approx 0.3010$，利用常用對數估計 $3^{20}$ 是幾位數。';
+        assert.ok(Math.max(...golden.map(e => dice(leaked, e.question_text))) >= 0.5, '量尺抓不到已知的洩題例句');
+        for (const chapter of [FIRST, THIRD]) {
+            const example = getChapterExample('數學', chapter);
+            const segments = (example.match(/\$[^$]+\$/g) || []).filter(s => s.length >= 6);
+            for (const e of golden) {
+                assert.ok(dice(example, e.question_text) < 0.5, `${chapter} 的例句與 ${e.id} 太像`);
+                for (const seg of segments) assert.ok(!e.question_text.includes(seg), `${chapter} 的例句含 ${e.id} 的算式 ${seg}`);
+            }
+        }
     });
 });
 

@@ -192,6 +192,7 @@ LLM_MODE=record GEMINI_RPM=5 node eval/run.js --suite pipeline     # 樣卷 10 �
 | `config/chapters.js` 的章節白名單 | **全部**（schemaHash 變） |
 | `agents/schemas/*.json` | 該 agent 全部 |
 | agent 的 `PROMPT_TEMPLATE` | 該 agent 全部（記得把識別名版號 +1） |
+| `config/chapterExamples.js` 的例句 | 該科的 classify 全部。鍵只含 few-shot 的 id，不含例句文字，所以**一定要把分類模板的識別名版號 +1**（數學／物理：`classify.vN`；化學：`classify_chem.vN`）。不升版的話，回放拿到的是舊例句錄的答案（〔CR-9〕，`docs/chapter-restructure.md` 第 8 條） |
 | `MODEL_EXTRACT` / `MODEL_VERIFY` | 該模型的全部 |
 | `eval/fixtures/sample_exam.pdf` | `eval/cassettes/extract/**`（`pdfSha256` 變） |
 | `eval/fixtures/questions.public.json` 的題幹 | `eval/cassettes/classify/**`（`questionText` 變） |

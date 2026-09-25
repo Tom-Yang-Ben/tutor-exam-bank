@@ -41,7 +41,13 @@ const { buildSchema } = require('./schemas');
 const { chapterWhitelistText, resolveSubjectGroup } = require('./promptParts');
 const { registerTemplate } = require('../services/llm/templates');
 
-const TEMPLATE = 'classify.v1';
+// 〔章節重整整合 CR-9〕2026-09-26 v1 → v2（docs/chapter-restructure.md 第 8 條 CR-9）：
+//   ① 規則 5 補上「指數與對數」（第一冊）／「指數函數與對數函數」（第三冊）的分冊界線（決策單 A5）；
+//   ② config/chapterExamples.js 這兩章的例句改寫。
+//   cassette 的鍵只含模板原文、題幹與 few-shot 的 **id**（第 5.2 條），**不含例句文字**——只改例句的話鍵不變，
+//   回放會拿到舊答案、量不到改善。所以識別名版號 +1：cacheKeyParts.template 跟著變，數學與物理
+//   （共用這一份模板）的 classify cassette 全部要重錄。化學走 classify_chem.v1，不受影響。
+const TEMPLATE = 'classify.v2';
 const DEFAULT_MIN_CONF = 0.8;
 const FEW_SHOT_K = 8;              // 向量最近鄰取幾題（階段 3 第 5.1 條把 5 改成 8）
 const KNN_VOTE_N = 5;              // 投票只看最近的幾個鄰居（第 5.2 條）
@@ -62,6 +68,7 @@ const PROMPT_TEMPLATE = `請判斷下面這道題目屬於哪一個精細章節�
 2. 判斷依據是「解這一題需要用到哪一章的觀念」，不是題目裡出現了哪些名詞。例如用到向量夾角公式的題目屬於向量內積，即使題幹在講風力或斜面。
 3. 若題目橫跨兩章，選「非用不可」的那一章；只是順帶用到的計算工具不算。
 4. confidence 請誠實給分：低於門檻的題目會被送去人工複核，這比標錯章節便宜得多。
+5. 冊別依 108 課綱。章名相近、分在不同冊的兩章，看題目實際用到的內容，不要只看章名字面。數學第一冊「指數與對數」只收指數律與以 10 為底的常用對數（不寫底數的 log；含其運算、科學記號、首數與尾數、位數估計）；底數不是 10 的對數（含對數律、換底公式）、指數或對數方程式與不等式、指數函數與對數函數的圖形，都屬第三冊「指數函數與對數函數」。
 
 {{FEW_SHOT}}
 

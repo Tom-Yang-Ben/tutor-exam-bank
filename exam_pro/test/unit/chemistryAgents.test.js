@@ -185,7 +185,8 @@ describe('classify：化學題', () => {
         const { ctx, calls } = fakeCtx({ responses: [{ chapter: '向量內積', confidence: 0.9, rationale: 'x' }], job: { subject_group: 'chemistry' } });
         await classify.run(ctx, { subject: '數學', question_text: '求向量夾角' });
         assert.equal(calls[0].agent, 'classify');
-        assert.equal(calls[0].template, 'classify.v1');
+        // 〔決策單 2026-09-26 A5／A7；CR-9〕原為 'classify.v1'：數學／物理的分類模板升版（化學的 classify_chem.v1 不變）
+        assert.equal(calls[0].template, 'classify.v2');
         assert.equal(calls[0].system, classify.SYSTEM);
         assert.equal(calls[0].schema, buildSchema('classify'));
     });

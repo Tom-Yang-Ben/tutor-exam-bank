@@ -83,7 +83,7 @@ Word 端：`utils/chemFormula.js` 的 `ceToLatex` 先把 `\ce{…}` 轉成等價
 | 節點 | 數學／物理（逐字不變） | 化學（新） | 化學路徑的差別 |
 | :--- | :--- | :--- | :--- |
 | extract | `extract`／`extract.v2` | `extract_chem`／`extract_chem.v1` | SYSTEM、模板（化學式規範、結構式與實驗裝置寫進 figure_desc、週期表不是題目）、schema 值域（subject＝化學、chapter＝44 章） |
-| classify | `classify`／`classify.v1` | `classify_chem`／`classify_chem.v1` | SYSTEM、模板、schema；閘門、kNN 投票、few-shot 取材與 cacheKeyParts 共用 |
+| classify | `classify`／`classify.v2`（〔CR-9〕2026-09-26 起，原 v1；化學不受影響） | `classify_chem`／`classify_chem.v1` | SYSTEM、模板、schema；閘門、kNN 投票、few-shot 取材與 cacheKeyParts 共用 |
 | lint | `lint`／`lint.v2` | `lint_chem`／`lint_chem.v1` | 只有第三層（LLM 重寫）換模板——數學版會叫模型「改寫掉不支援的指令」，會把 `\ce` 拆掉 |
 | source_check | —（零成本） | — | 題幹先過 `ceToComparable` |
 | verify | `verify`／`verify.v1` | `verify_chem`／`verify_chem.v1` | SYSTEM 要求數值帶單位、化學式用 `$\ce{…}$`；比對時帶 `subject: '化學'` |
