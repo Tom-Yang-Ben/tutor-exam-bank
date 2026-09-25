@@ -1225,6 +1225,20 @@
             list.forEach(ch => chapterSelect.appendChild(el('option', null, { value: ch, textContent: ch })));
         }
 
+        // 〔Owner 決策單 2026-09-25 B21〕舊流程 /analyze-pdf 也會裁附圖（docs/figures.md「舊流程 /analyze-pdf 的附圖」）：
+        // 預覽卡顯示裁圖讓老師核對框的準度；框錯了按「不要這張圖」，入庫時就不帶 question_img（該題照樣入庫）。
+        // 不放進共用的 createQuestionEditor（複核分頁與編輯視窗也在用）。
+        function legacyFigurePreview(q) {
+            const wrap = el('div', 'legacy-figure mt-3 flex flex-wrap items-start gap-3');
+            const img = el('img', 'max-w-full max-h-64 rounded-xl border border-slate-200 bg-white', { alt: '題目附圖（自動裁切）', loading: 'lazy' });
+            img.src = q.question_img;
+            img.addEventListener('error', () => img.replaceWith(el('p', 'text-xs text-rose-500', { textContent: '附圖載入失敗' })));
+            const drop = el('button', 'text-xs px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 font-semibold hover:bg-rose-100 cursor-pointer', { type: 'button', textContent: '不要這張圖' });
+            drop.addEventListener('click', () => { delete q.question_img; wrap.remove(); });
+            wrap.append(img, drop);
+            return wrap;
+        }
+
         // 1. PDF 智慧批量分析
         document.getElementById('uploadPdfBtn').addEventListener('click', async () => {
             const fileInput = document.getElementById('pdfFile');
@@ -1263,6 +1277,7 @@
                         card.dataset.idx = idx;   // 對應後端 rejected[].idx
                         card.appendChild(el('div', 'eyebrow text-violet-500 mb-3', { textContent: `Question ${String(idx + 1).padStart(2, '0')}` }));
                         card.appendChild(createQuestionEditor(q)); // 就地編輯：修改會同步回 globalAnalyzedQuestions
+                        if (q.question_img) card.appendChild(legacyFigurePreview(q));   // 〔B21〕有裁出附圖才顯示
                         listEl.appendChild(card);
                     });
 

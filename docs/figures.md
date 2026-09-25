@@ -21,7 +21,7 @@ Gemini 原生支援 bounding box 輸出（`[ymin, xmin, ymax, xmax]`，0–1000 
 - **bbox 對 PDF 輸入「大致準」**：第一版靠複核畫面兜底；若偏太多，升級路徑是「帶圖頁面單獨渲染成 PNG 再做一次定位呼叫」（尚未實作，也未必需要）。
 - **舊題不自動補圖**：要補得對原 PDF 重跑管線，或人工在 `questions.question_img` 填圖片 URL。
 - `data/figures/` **不進版控**、不設清理排程：檔名 `<jobId>-<idx>.png` 是確定性的，崩潰重跑會覆寫同檔不堆積；刪 job 不會刪圖（questions 可能還引用著）。
-- 舊的 `/analyze-pdf` 相容流程（`services/aiService.js`）不裁圖：它沒有 job 生命週期可掛。
+- ~~舊的 `/analyze-pdf` 相容流程（`services/aiService.js`）不裁圖：它沒有 job 生命週期可掛。~~ → 已補（2026-09-26），見下方「舊流程 /analyze-pdf 的附圖」〔Owner 決策單 2026-09-25 B21〕。
 
 ## Word 匯出（2026-09-16 實作）
 
@@ -37,7 +37,28 @@ Gemini 原生支援 bounding box 輸出（`[ymin, xmin, ymax, xmax]`，0–1000 
 - **失敗不擋整份**：檔案不存在、不是圖、格式不支援、路徑不合法——該題題幹後放一行「（附圖遺失）」，伺服器 `console.warn`（帶 `question_id`，只記檔名不記完整路徑），其餘題照常匯出。
 - 題幹裡的 `[附圖描述：…]` 文字照舊保留（verify／檢索仍需要，Word 內與圖並存）。
 
-仍未做（本次範圍外）：舊題不自動補圖（見上）、`/analyze-pdf` 舊流程不裁圖。
+仍未做（本次範圍外）：舊題不自動補圖（見上）。~~`/analyze-pdf` 舊流程不裁圖~~ 已補（2026-09-26，見下節）。
+
+## 舊流程 /analyze-pdf 的附圖（2026-09-26 實作）〔Owner 決策單 2026-09-25 B21〕
+
+roadmap 待決策第 20 項：原建議退役舊端點，Owner 選「**保留舊流程，並補上裁圖**」。
+舊流程只在 `FEATURE_PIPELINE` 關閉時由上傳區使用（開啟時 `public/js/review.js` 把同一顆按鈕改送 `POST /api/jobs`）。
+
+| 環節 | 檔案 | 做什麼 |
+| :--- | :--- | :--- |
+| 1. 拆題 | `services/aiService.js` → `agents/extract.js`（不變） | extract 本來就回 `figure_page`＋`figure_box`（Gemini 與本機路徑都是），以前是在轉成舊形狀時被丟掉 |
+| 2. 裁圖 | `services/aiService.js` 的 `attachFigures` → `services/figureService.js` 的 `cropFigures`（**同一支**，沒有另寫演算法） | 全部塊拆完、PDF 還在記憶體時整份一次裁（同頁多圖只渲染一次）；存同一個 `data/figures/`，檔名 `legacy-<請求編號>-<idx>.png`，請求編號＝UTC 時間到秒＋6 碼亂數 |
+| 3. 回傳 | `services/aiService.js` 的 `toLegacyShape` | 裁出圖的題**多一個** `question_img`（`/figures/<檔名>`）；沒有圖的題仍是那六個鍵、與之前逐位元相同；`figure_desc` 以 `[附圖描述：…]` 併題幹的備援照舊 |
+| 4. 預覽 | `public/index.html` 的 `legacyFigurePreview` | 上傳區預覽卡顯示裁圖，老師順便核對框；框錯了按「不要這張圖」，該題入庫時就不帶圖 |
+| 5. 入庫 | `controllers/questionController.js` 的 `batchSaveQuestions` | `question_img` 寫入 `questions.question_img`（與管線同一個欄位，免 migration）；只收 `resolveFigurePath` 認得的 `/figures/<檔名>`，其他值照補圖之前的行為忽略、落 NULL，不整題退回 |
+
+- **失敗只少圖、不少題**：單題裁不出來（框退化、該頁渲染失敗）由 `cropFigures` 逐題記 warn；整批失敗（mupdf 載不到、PDF 開不起來、附圖目錄寫不進去）由 `attachFigures` 記 warn（`[analyze-pdf] 附圖裁切失敗（題目照常回傳，僅缺圖）`，帶請求編號與錯誤訊息，不含題目內容）。兩種情況 HTTP 都照樣回 200、題目一題不少，只是該題沒有 `question_img`。
+- **檔名不撞、不覆寫**：管線是 `<jobId>-<idx>`（整數 job id），舊流程是 `legacy-…`；每次分析都是新的請求編號，重新分析同一份卷不會蓋掉已入庫題目引用的圖。代價：分析完沒按入庫（或按了「不要這張圖」）的圖會留在 `data/figures/`，與「刪 job 不刪圖」同一種取捨、不設清理排程；檔名開頭帶日期，要清可依 `legacy-<日期>` 手動清。
+- **Word 匯出**：`/figures/legacy-….png` 過得了 `resolveFigurePath` 的白名單，與管線的圖同樣嵌入。
+- **不改逾時**：本機模式下這條同步流程本來就慢（`docs/local-mode.md` LM-12 ⑤）；裁圖是純程式步驟、零模型成本（每個帶圖頁渲染一次），沒有動任何逾時設定。
+- **凍結快照沒動**：`services/legacy/analyzePdf.js`（`eval/compare_pipeline.js --method legacy` 的對照組）維持原樣；本次只改現行的相容包裝 `services/aiService.js`。
+- **Cassette 不受影響**：extract 的 prompt、schema、`cacheKeyParts` 都沒變。
+- 測試：`test/unit/legacyAnalyzePdfFigures.test.js`（真的 extract＋figureService＋公開樣卷，假 llm；含本機路徑、多塊、整批／單題失敗、預覽卡）、`test/integration/legacyAnalyzePdfFigures.pg.test.js`（HTTP 上傳 → 回傳 → batch-save → `questions.question_img`）。
 
 ## Cassette
 
