@@ -208,8 +208,10 @@ describe('政策停等（第 4.7 條）', () => {
         assert.ok(REVIEW_REASONS.includes('awaiting_approval'));
         // 第 4.7 條只承諾「政策停等不新增值」；〔修訂 2026-09-15f〕0009 為原卷比對加了第九個
         // transcription_mismatch（docs/source-check.md），與停等無關。
-        assert.equal(REVIEW_REASONS.length, 9);
+        // 〔本機模式 L2〕0015 為本機拆題交叉驗證加了第十個 extract_disagree（docs/local-mode.md 第 4 條），同樣與變式停等無關。
+        assert.equal(REVIEW_REASONS.length, 10);
         assert.equal(REVIEW_REASONS[8], 'transcription_mismatch');
+        assert.equal(REVIEW_REASONS[9], 'extract_disagree');
     });
 
     test('停等寫的 error_class 是 NULL（不在九個合法值內的字串會撞 CHECK）', () => {

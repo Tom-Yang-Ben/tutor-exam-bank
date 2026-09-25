@@ -160,6 +160,79 @@ function loadSourceCheckConfig(env = process.env) {
     return { sourceCheckMode: SOURCE_CHECK_MODES.includes(raw) ? raw : 'enforce' };
 }
 
+// ─────────────── 〔本機模式 L2〕長節點預設（docs/local-mode.md 第 2、4 條）───────────────
+
+/** 拆題模型是 ollama 時的節點逾時預設：CPU 上一塊考卷要跑 OCR＋兩次 8B 模型，四十五分鐘 */
+const LOCAL_NODE_TIMEOUT_MS = 2700000;
+/** 拆題模型是 ollama 時一次送給視覺模型的頁數 */
+const LOCAL_PDF_CHUNK_PAGES = 2;
+/** 拆題模型是 ollama 時的工作槽數：CPU 一次只跑得動一個模型，兩個槽只會讓 PaddleOCR 與 Ollama 搶記憶體 */
+const LOCAL_CONCURRENCY = 1;
+/** 續租間隔的下限（租約設得再短，也不要每幾毫秒打一次 DB） */
+const RENEW_MIN_INTERVAL_MS = 1000;
+
+/**
+ * 本機模式的長節點預設（第 2 條）。**只補「.env 沒有明寫」的那幾個鍵**——明寫的值一律優先
+ * （「明寫」＝解析得出整數；亂填的值與沒填一樣，交給這裡的預設）。
+ *
+ * 為什麼另開一支而不是改 `loadConfig()`：它的回傳形狀與預設值被單元測試 deepEqual 釘住（Gemini 路徑的預設不變）。
+ * `createRunner()` 把它疊在 `loadConfig()` 之後，只有拆題模型是 ollama 時才有覆寫。
+ *
+ * 租約（JOB_LEASE_MS）刻意**不**跟著放大：runner 在節點執行中每 renewIntervalMs 續租一次
+ * （startRenew），長節點不會因租約過期被別的槽重跑；租約維持短的，行程當掉時別的槽才接得回來。
+ * test/unit/extractLocalRunner.test.js 與 test/integration/localExtract.pg.test.js 證明這一點
+ * （後者含對照組：不續租時同一個長節點真的會被另一個槽重跑）。
+ *
+ * @param {object} [env] 預設 process.env
+ * @param {{extractModel?:string}} [opts] 拆題模型；沒給就讀 env.MODEL_EXTRACT，再沒有就用 config/models.js 的預設
+ * @returns {{localExtract:boolean, ocrEngine:'paddle'|'none', nodeTimeoutMs?:number, pdfChunkPages?:number, concurrency?:number}}
+ */
+function loadLocalModeConfig(env = process.env, opts = {}) {
+    const models = require('../config/models');
+    const spec = (opts && opts.extractModel) || String(env.MODEL_EXTRACT || '').trim() || models.MODEL_EXTRACT;
+    let localExtract = false;
+    try { localExtract = models.parseModel(spec).vendor === 'ollama'; } catch (_) { localExtract = false; }
+    const explicit = (name) => Number.isFinite(Number.parseInt(env[name], 10));
+    return {
+        localExtract,
+        ocrEngine: require('../services/ocr').resolveEngine(env),
+        ...(localExtract && !explicit('JOB_NODE_TIMEOUT_MS') ? { nodeTimeoutMs: LOCAL_NODE_TIMEOUT_MS } : {}),
+        ...(localExtract && !explicit('JOB_PDF_CHUNK_PAGES') ? { pdfChunkPages: LOCAL_PDF_CHUNK_PAGES } : {}),
+        ...(localExtract && !explicit('JOB_CONCURRENCY') ? { concurrency: LOCAL_CONCURRENCY } : {})
+    };
+}
+
+/**
+ * 節點執行中續租的間隔：預設每 30 秒（第 7.1 條），但租約短於 90 秒時縮成租約的三分之一，
+ * 保證租約到期前至少續過兩次。
+ * @param {number} leaseMs
+ */
+function renewIntervalFor(leaseMs) {
+    const third = Math.floor(Number(leaseMs) / 3);
+    if (!Number.isFinite(third) || third <= 0) return RENEW_INTERVAL_MS;
+    return Math.max(RENEW_MIN_INTERVAL_MS, Math.min(RENEW_INTERVAL_MS, third));
+}
+
+/**
+ * 〔本機模式 L2〕交叉驗證的政策停等（docs/local-mode.md 第 4 條第 4 點）：
+ * payload.extract 帶 cross_check、而且 status 不是 'agree' 的題，走到 save 時一律停在
+ * needs_review('extract_disagree')，絕不自動入庫。沒有 cross_check 的題（Gemini 路徑、變式題）回 null，照常入庫。
+ *
+ * 只看得到 save 這一格：前面任何節點先判了更嚴重的原因（重複、章節不合法、答案對不上…），
+ * 那一列早就停在 needs_review，不會走到這裡。
+ * cross_check 形狀壞掉（不是物件、沒有 status）一律當作「不一致」——往安全的方向錯。
+ *
+ * @param {object} payload job_questions.payload
+ * @returns {'extract_disagree'|null}
+ */
+function crossCheckStopReason(payload) {
+    const ex = payload && payload.extract;
+    if (!ex || typeof ex !== 'object' || !Object.prototype.hasOwnProperty.call(ex, 'cross_check')) return null;
+    const cc = ex.cross_check;
+    if (cc === null || cc === undefined) return null;
+    return typeof cc === 'object' && cc.status === 'agree' ? null : 'extract_disagree';
+}
+
 /**
  * 依總頁數與每塊頁數切出 chunk 清單（第 0.2 條：切塊是為了「失敗重試的粒度」）。
  * @param {number|null} pageCount 為 null／0 時退成單一塊、toPage 給 null（交給 agent 自己判斷整份）
@@ -391,7 +464,13 @@ function createRunner(opts = {}) {
     const db = opts.db || require('../config/db');
     const llm = opts.llm || require('../services/llm');
     const agentsDir = opts.agentsDir || path.resolve(__dirname, '..', 'agents');
-    const config = { ...loadConfig(), ...loadStage3Config(), ...loadSourceCheckConfig(), ...(opts.config || {}) };
+    // 〔本機模式 L2〕loadLocalModeConfig 疊在 loadConfig 之後：拆題模型是 ollama 且 .env 沒明寫時，補長節點預設
+    const config = {
+        ...loadConfig(), ...loadStage3Config(), ...loadSourceCheckConfig(), ...loadLocalModeConfig(), ...(opts.config || {})
+    };
+    if (!Number.isFinite(config.renewIntervalMs) || config.renewIntervalMs <= 0) {
+        config.renewIntervalMs = renewIntervalFor(config.leaseMs);
+    }
     const logger = opts.logger || makeLogger();
     const sleep = opts.sleep || ((ms) => new Promise(r => setTimeout(r, ms)));
     const estimateCost = opts.estimateCost || estimateCostFromPricing;
@@ -542,6 +621,8 @@ function createRunner(opts = {}) {
      * 租約續期：呼叫進行中每 30 秒延一次，避免另一個槽重新認領仍在付費的列。
      * 只延「還鎖著」的列：工作單位寫回狀態時已放掉租約（locked_until = NULL），
      * 之後才觸發的續期（例如退避睡眠期間）不該把它重新鎖上——那一列會卡到租約過期才有人接手。
+     * 〔本機模式 L2〕間隔改由 config.renewIntervalMs 決定（預設 renewIntervalFor(leaseMs)：租約 ≥ 90 秒時就是 30 秒，
+     * 與原本相同）。本機模式的節點可以跑到四十五分鐘，靠的就是這裡一直續約，而不是把租約拉長。
      */
     function startRenew(table, id) {
         const h = setInterval(() => {
@@ -549,7 +630,7 @@ function createRunner(opts = {}) {
                        WHERE id = $2 AND locked_until IS NOT NULL`,
                 [String(config.leaseMs), id])
                 .catch(err => logger.warn({ msg: '續租失敗', table, id, error: err.message }));
-        }, RENEW_INTERVAL_MS);
+        }, config.renewIntervalMs);
         if (typeof h.unref === 'function') h.unref();
         return () => clearInterval(h);
     }
@@ -589,7 +670,10 @@ function createRunner(opts = {}) {
                 // 鍵名是小寫短名 similar／pipeline，值即時由 config/features.js 讀取。
                 features: readFeatures(),
                 // 〔修訂 2026-09-15f〕source_check 節點的模式（SOURCE_CHECK_MODE，預設 enforce）
-                sourceCheck: { mode: config.sourceCheckMode }
+                sourceCheck: { mode: config.sourceCheckMode },
+                // 〔本機模式 L2〕本機拆題要不要跑 PaddleOCR（OCR_ENGINE，預設 paddle）。其餘 OCR 設定
+                // （OCR_PYTHON／OCR_DPI／OCR_TIMEOUT_MS）由 services/ocr 自己讀，與 services/llm 讀 LLM_MODE 同一個分工。
+                ocr: { engine: config.ocrEngine }
             }
         };
         delete ctx.models; delete ctx.limits;
@@ -836,6 +920,7 @@ function createRunner(opts = {}) {
             // outcome 沒有一種能從 deduped 走到 needs_review 而不謊報失敗——fail 會讓
             // job_events.error_class 寫進一個不在九個合法值內的字串，撞 job_events_error_class_check。
             // 這是整條管線唯一一處不經 transition 的狀態變更，pipeline/stateMachine.js 一個字都沒改。
+            // 〔本機模式 L2〕之後多了第二處：下方的 extract_disagree，同一個做法。
             if (node === 'save' && jq.kind === 'variant' && !config.variantAutoApprove) {
                 await writeEvent({
                     job_id: jq.job_id, jq_id: jq.id, node: 'save', attempt: attemptNo(jq.retries, 'save'),
@@ -850,6 +935,36 @@ function createRunner(opts = {}) {
                     job_id: jq.job_id, jq_id: jq.id, node: 'save', attempt: attemptNo(jq.retries, 'save'),
                     outcome: 'skipped', latency_ms: 0, state: 'needs_review', review_reason: 'awaiting_approval'
                 });
+                await maybeFinishJob(jq.job_id);
+                return;
+            }
+
+            // ── 〔本機模式 L2〕交叉驗證的政策停等（docs/local-mode.md 第 4 條第 4 點）──
+            // 本機拆題的兩版（視覺模型／PaddleOCR）不一致、或只有一版拆到的題：前面的節點照常跑完
+            // （更嚴重的原因會先把它送進複核），走到 save 時停在 needs_review('extract_disagree')，絕不自動入庫。
+            // 與上面的 awaiting_approval 同一個做法：不經 transition()（四種 outcome 都無法不謊報失敗地走到
+            // needs_review），error_class 寫 NULL。cross_check（含 alt_question_text）原樣留在 payload.extract 給複核頁。
+            const disagree = node === 'save' ? crossCheckStopReason(jq.payload) : null;
+            if (disagree) {
+                const cc = jq.payload.extract.cross_check;
+                const brief = cc && typeof cc === 'object'
+                    ? { status: cc.status ?? null, similarity: cc.similarity ?? null, picked: cc.picked ?? null }
+                    : { status: null };
+                await writeEvent({
+                    job_id: jq.job_id, jq_id: jq.id, node: 'save', attempt: attemptNo(jq.retries, 'save'),
+                    cost_usd: 0, cost_estimated: false, latency_ms: 0, outcome: 'skipped', error_class: null,
+                    detail: { reason: disagree, cross_check: brief, review_reason: disagree }
+                });
+                await db.query(
+                    `UPDATE job_questions SET state = 'needs_review', review_reason = $2,
+                            locked_until = NULL, updated_at = now() WHERE id = $1`, [jq.id, disagree]);
+                released = true;
+                logger.info({
+                    job_id: jq.job_id, jq_id: jq.id, node: 'save', attempt: attemptNo(jq.retries, 'save'),
+                    outcome: 'skipped', latency_ms: 0, state: 'needs_review', review_reason: disagree
+                });
+                // 到了終態：承上題綁定與 job 收尾照一般路徑做（PDF job 才會走到這裡）
+                await linkFollowUps(jq.job_id);
                 await maybeFinishJob(jq.job_id);
                 return;
             }
@@ -1056,7 +1171,9 @@ function createRunner(opts = {}) {
                     ...(outcome.kind === 'fail' ? { reason: outcome.reason } : {}),
                     ...(outcome.kind === 'error' ? { message: outcome.message } : {}),
                     ...(meter.usageMetadata.length > 0 ? { usage_metadata: meter.usageMetadata } : {}),
-                    ...(schemaFallbackOf(meter, outcome) ? { schema_fallback: true } : {})
+                    ...(schemaFallbackOf(meter, outcome) ? { schema_fallback: true } : {}),
+                    // 〔本機模式 L2〕本機拆題的交叉驗證摘要（各 status 題數、OCR 引擎版本）；Gemini 路徑沒有這個鍵
+                    ...(outcome.data?.cross_check_summary ? { cross_check: outcome.data.cross_check_summary } : {})
                 }
             });
             logger.info({
@@ -1353,14 +1470,20 @@ function createRunner(opts = {}) {
             // 第三個鍵是階段 3 加的（interfaces-stage3.md 第 4.2、9 條）：
             // 「MODEL_VARIANT 未設時退回 MODEL_VERIFY」的解析放在 config/models.js **之外**，
             // 也就是這裡——agent 不得自己讀 process.env，所以退回這一步只能由 runner 做。
-            modelsCache = { extract: m.MODEL_EXTRACT, verify: m.MODEL_VERIFY, variant: m.MODEL_VARIANT || m.MODEL_VERIFY };
+            modelsCache = {
+                extract: m.MODEL_EXTRACT, verify: m.MODEL_VERIFY, variant: m.MODEL_VARIANT || m.MODEL_VERIFY,
+                // 〔本機模式 L2〕第四個鍵（附加）：OCR 結果結構化的模型，未設＝MODEL_VERIFY（docs/local-mode.md 第 2 條）。
+                // 與 MODEL_VARIANT 同一個理由在這裡退回：agent 不得自己讀 process.env，config/models.js 歸 L1。
+                ocrStructure: String(process.env.MODEL_OCR_STRUCTURE || '').trim() || m.MODEL_VERIFY
+            };
         } catch (err) {
             if (err.code !== 'MODULE_NOT_FOUND') throw err;
             const verify = process.env.MODEL_VERIFY || 'gemini:gemini-3.1-pro-preview';   // 與 config/models.js 的 DEFAULT_VERIFY 一致（裁決 S2-29）
             modelsCache = {
                 extract: process.env.MODEL_EXTRACT || 'gemini:gemini-3.5-flash',
                 verify,
-                variant: process.env.MODEL_VARIANT || verify
+                variant: process.env.MODEL_VARIANT || verify,
+                ocrStructure: String(process.env.MODEL_OCR_STRUCTURE || '').trim() || verify
             };
         }
         return modelsCache;
@@ -1448,6 +1571,9 @@ module.exports = {
     buildSolutionFields,   // 〔stage5 WS-A〕save 與 scripts/backfill_solutions.js 共用
     readFeatures, schemaFallbackOf,
     runKcTagHook,   // 〔stage5 WS-C〕
+    // 〔本機模式 L2〕
+    loadLocalModeConfig, renewIntervalFor, crossCheckStopReason,
+    LOCAL_NODE_TIMEOUT_MS, LOCAL_PDF_CHUNK_PAGES, LOCAL_CONCURRENCY, RENEW_MIN_INTERVAL_MS,
     ADVANCEABLE_STATES, FREE_NODES, AGENT_MODULE_FOR_NODE, ERROR_CLASSES, SOURCE_CHECK_MODES,
     RENEW_INTERVAL_MS, BACKOFF_BASE_MS, BACKOFF_MAX_MS, EXTRACT_MAX_RETRIES
 };
