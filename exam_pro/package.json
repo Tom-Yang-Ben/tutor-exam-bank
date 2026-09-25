@@ -35,6 +35,7 @@
     "chapters:migrate": "node scripts/migrate_chapters.js",
     "follow:backfill": "node scripts/backfill_follow_ups.js",
     "solution:backfill": "node scripts/backfill_solutions.js",
+    "figures:backfill": "node scripts/backfill_figures.js",
     "kc:load": "node scripts/load_kc.js",
     "kc:validate": "node scripts/validate_kc_seed.js",
     "kc:backfill": "node scripts/backfill_kc.js",
