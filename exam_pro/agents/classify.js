@@ -41,7 +41,21 @@ const { buildSchema } = require('./schemas');
 const { chapterWhitelistText, resolveSubjectGroup } = require('./promptParts');
 const { registerTemplate } = require('../services/llm/templates');
 
-const TEMPLATE = 'classify.v1';
+// 〔章節重整整合 CR-9〕2026-09-26 v1 → v2（docs/chapter-restructure.md 第 8 條 CR-9）：
+//   ① 規則 5 補上「指數與對數」（第一冊）／「指數函數與對數函數」（第三冊）的分冊界線（決策單 A5）；
+//   ② config/chapterExamples.js 這兩章的例句改寫。
+//   ③ 〔CR-9 審查〕v2 發布前再調整：界線規則改成「只給該科看」（下方 SUBJECT_RULES，模板只留
+//      {{SUBJECT_RULES}} 占位），並補上已有書面原則的界線（數學：平面／空間向量內積；物理：
+//      eval/CHAPTER_RELABEL-2026-09.md 第 8.0 節的三組相鄰章）。v2 還沒錄過任何 cassette，所以不再升版。
+//   ④ 〔重練與收尾決策單 2026-09-26 K2／K3〕v2 發布前再補兩條 Owner 定的界線（物理 8：直線運動／平面運動；
+//      數學 7：直角三角形的邊角關係／三角函數的疊合），並把 SUBJECT_RULES 併進註冊的模板文字（見下方
+//      REGISTERED_TEMPLATE）。v2 仍然沒錄過任何 cassette，所以不再升版。
+//   cassette 的鍵只含模板原文、題幹與 few-shot 的 **id**（第 5.2 條），**不含例句文字**——只改例句的話鍵不變，
+//   回放會拿到舊答案、量不到改善。所以改例句要把識別名版號 +1：cacheKeyParts.template 跟著變，數學與物理
+//   （共用這一份模板與識別名）的 classify cassette 全部要重錄。化學走 classify_chem.v1，不受影響。
+//   界線規則自 ④ 起已在註冊的模板文字裡，改規則鍵會自己變（回放 miss、不會拿到舊答案）；仍照慣例升版，
+//   單元測試把規則雜湊與版號一起釘住當提醒。
+const TEMPLATE = 'classify.v2';
 const DEFAULT_MIN_CONF = 0.8;
 const FEW_SHOT_K = 8;              // 向量最近鄰取幾題（階段 3 第 5.1 條把 5 改成 8）
 const KNN_VOTE_N = 5;              // 投票只看最近的幾個鄰居（第 5.2 條）
@@ -62,6 +76,7 @@ const PROMPT_TEMPLATE = `請判斷下面這道題目屬於哪一個精細章節�
 2. 判斷依據是「解這一題需要用到哪一章的觀念」，不是題目裡出現了哪些名詞。例如用到向量夾角公式的題目屬於向量內積，即使題幹在講風力或斜面。
 3. 若題目橫跨兩章，選「非用不可」的那一章；只是順帶用到的計算工具不算。
 4. confidence 請誠實給分：低於門檻的題目會被送去人工複核，這比標錯章節便宜得多。
+{{SUBJECT_RULES}}
 
 {{FEW_SHOT}}
 
@@ -70,7 +85,70 @@ const PROMPT_TEMPLATE = `請判斷下面這道題目屬於哪一個精細章節�
 【要分類的題目】
 {{QUESTION}}`;
 
-registerTemplate(TEMPLATE, PROMPT_TEMPLATE);
+// 〔重練與收尾決策單 2026-09-26〕模板的註冊（registerTemplate）移到 SUBJECT_RULES 之後，見下方 REGISTERED_TEMPLATE。
+
+// ───────────── 各科的章節界線規則（〔CR-9 審查〕2026-09-26，docs/chapter-restructure.md CR-9） ─────────────
+//
+// 數學與物理共用上面的模板；界線規則會提到該科的章名，放在共用模板裡的話，物理題也會看到
+// 「指數函數與對數函數」這類數學章名。所以改成只把「該科」的規則填進 {{SUBJECT_RULES}}，
+// 接在共用的規則 1～4 後面、從 5 開始編號；沒有規則的科目整行拿掉（不留空行）。
+//
+// 只收**已有書面原則**的界線，不自創新原則；除了數學 5 沿用 CR-9 原文（前面兩句是前言），每條一句：
+//   數學 5：決策單 A5（第一冊只教常用對數；CR-6／CR-9）。文字與 CR-9 寫在共用模板時逐字相同，只是搬過來。
+//   數學 6：章名本身的定義——第三冊「向量內積」是平面向量，第四冊「空間向量內積」是空間（三維坐標）向量。
+//          只談內積；空間向量的加減沒有章（CR-8 待 Owner），這裡不涵蓋。
+//   物理 5～7：eval/CHAPTER_RELABEL-2026-09.md 第 8.0 節的分界原則（Owner 2026-09-25 裁決；CR-8 之二），
+//          等位面與電力線歸電場與電位見同檔第 8.6 節第 5 點；與 config/chapterAliases.js 既有別名一致
+//          （等速圓周運動→平面運動、向心力→摩擦力與向心力、等位面→電場與電位、庫侖定律→靜電學）。
+//   尚未有書面原則、**刻意不寫**的界線（待 Owner）：直線運動／平面運動（一維相對速度，#52 維持直線運動）、
+//   直角三角形的邊角關係／三角函數的疊合。
+//   〔重練與收尾決策單 2026-09-26 K2／K3〕上一行的兩組 Owner 已定原則（都選 1），各寫成一條、接在該科最後：
+//   數學 7（K3）：只用到銳角與平方、商數、餘角關係 → 第二冊「直角三角形的邊角關係」；化成 r sin(x＋φ) 的
+//          疊合才歸第三冊「三角函數的疊合」（與 eval/CHAPTER_RELABEL-2026-09.md 第 0 節的原則一致）。
+//   物理 8（K2）：同一直線上（一維）的運動，含一維相對速度 →「直線運動」；要用向量分解或二維才解得出 →「平面運動」。
+//
+// 〔重練與收尾決策單 2026-09-26〕規則文字已併進註冊的模板文字（下方 REGISTERED_TEMPLATE），改這裡 cassette 的鍵
+//   會自己變。原本的做法仍照舊：改規則就把 TEMPLATE 的版號 +1，數學＋物理的 classify cassette 全部重錄
+//   （docs/llm.md「什麼時候必須重錄」）；單元測試把規則文字的雜湊與版號一起釘住，當作升版的提醒。
+const SUBJECT_RULES = Object.freeze({
+    '數學': Object.freeze([
+        '冊別依 108 課綱。章名相近、分在不同冊的兩章，看題目實際用到的內容，不要只看章名字面。數學第一冊「指數與對數」只收指數律與以 10 為底的常用對數（不寫底數的 log；含其運算、科學記號、首數與尾數、位數估計）；底數不是 10 的對數（含對數律、換底公式）、指數或對數方程式與不等式、指數函數與對數函數的圖形，都屬第三冊「指數函數與對數函數」。',
+        '同樣是向量的內積，平面向量（二維坐標）屬第三冊「向量內積」，空間向量（三維坐標）屬第四冊「空間向量內積」。',
+        // 〔重練與收尾決策單 2026-09-26 K3〕選 1
+        '題目只用到銳角與平方、商數、餘角關係的，屬第二冊「直角三角形的邊角關係」；要化成 r sin(x＋φ) 的疊合，才屬第三冊「三角函數的疊合」。'
+    ]),
+    '物理': Object.freeze([
+        '必修「物體的運動（速度與加速度）」與選修「直線運動」：只需定義、名詞辨析、圖形意義或定性說明就能作答的，歸「物體的運動（速度與加速度）」；需要代入等加速度公式或從圖求數值的，歸「直線運動」。',
+        '「平面運動」與「摩擦力與向心力」：圓周運動只問速率、速度方向、向心加速度或週期（運動學）的，歸「平面運動」；需要求向心力、張力或摩擦力的，歸「摩擦力與向心力」。',
+        '「靜電學」與「電場與電位」：求兩個電荷之間的力（庫侖定律）的，歸「靜電學」；求電場、電位、電位能或作功，或問電力線（電場線）與等位面的，歸「電場與電位」。',
+        // 〔重練與收尾決策單 2026-09-26 K2〕選 1
+        '「直線運動」與「平面運動」：在同一直線上（一維）的運動，包含一維的相對速度，歸「直線運動」；要用向量分解或在二維平面上才解得出來的，歸「平面運動」。'
+    ])
+});
+const SHARED_RULE_COUNT = 4;        // 模板裡共用的規則 1～4；各科規則從 5 開始編號
+
+// 〔重練與收尾決策單 2026-09-26〕審查意見：原本註冊的是挖空後的 PROMPT_TEMPLATE，SUBJECT_RULES 不在裡面，
+//   改了規則 cassette 的鍵不會變，只能靠人記得升版。改成把規則（序列化）接在模板後面一起註冊，
+//   分隔符照化學與 tutor 的慣例用 '\n---\n'；改任何一條規則，templateHash 就跟著變。
+//   送給模型的 prompt 不變：仍由 fillSubjectRules 只填該科的規則。
+const REGISTERED_TEMPLATE = `${PROMPT_TEMPLATE}\n---\n${JSON.stringify(SUBJECT_RULES)}`;
+registerTemplate(TEMPLATE, REGISTERED_TEMPLATE);
+
+/**
+ * 該科的界線規則（已編號、以換行分隔）；沒有規則的科目回空字串。
+ * @param {string} subject
+ * @returns {string}
+ */
+function subjectRulesText(subject) {
+    const rules = Object.prototype.hasOwnProperty.call(SUBJECT_RULES, subject) ? SUBJECT_RULES[subject] : [];
+    return rules.map((rule, i) => `${SHARED_RULE_COUNT + 1 + i}. ${rule}`).join('\n');
+}
+
+/** 把 {{SUBJECT_RULES}} 換成該科規則；沒有規則就連同前面的換行一起拿掉。用函式替換，規則裡的 $ 不會被當成替換樣式 */
+function fillSubjectRules(template, subject) {
+    const rules = subjectRulesText(subject);
+    return template.replace('\n{{SUBJECT_RULES}}', () => (rules ? `\n${rules}` : ''));
+}
 
 // ───────────────────── 化學題（〔stage5 WS-B〕DEC-019、ADR-010）─────────────────────
 //
@@ -450,7 +528,8 @@ async function run(ctx, input = {}) {
             || (ctx.jq && ctx.jq.payload && ctx.jq.payload.classify && ctx.jq.payload.classify.feedback)
             || '';
 
-        const prompt = v.promptTemplate
+        // 〔CR-9 審查〕界線規則只填該科的（化學模板沒有這個占位，fillSubjectRules 原樣回傳）
+        const prompt = fillSubjectRules(v.promptTemplate, subject)
             .replace('{{CHAPTER_WHITELIST}}', chapterWhitelistText(subject))
             .replace('{{FEW_SHOT}}', fewShotText(examples))
             .replace('{{FEEDBACK}}', feedback ? `【上一次的錯誤，請不要再犯】\n${feedback}` : '')
@@ -512,6 +591,10 @@ module.exports = {
     // 階段 3（第 5 條）
     knnVote, orderExamples,
     TEMPLATE, SYSTEM, PROMPT_TEMPLATE,
+    // 〔CR-9 審查〕各科的界線規則
+    SUBJECT_RULES, subjectRulesText, fillSubjectRules,
+    // 〔重練與收尾決策單 2026-09-26〕註冊的模板文字（PROMPT_TEMPLATE＋'\n---\n'＋序列化的 SUBJECT_RULES）
+    REGISTERED_TEMPLATE,
     FEW_SHOT_K, KNN_VOTE_N, KNN_VOTE_MIN_HUMAN, DEFAULT_KNN_VOTE_SIM,
     // 〔stage5 WS-B〕化學題
     AGENT_CHEM, TEMPLATE_CHEM, SYSTEM_CHEM, PROMPT_TEMPLATE_CHEM
