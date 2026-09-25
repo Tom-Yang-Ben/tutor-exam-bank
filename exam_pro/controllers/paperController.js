@@ -27,9 +27,25 @@
 // 以（卷, 題）對應，assignments_paper_question_key 保證一張卷同一題至多一筆派題）。
 // 沒有重練資料時兩者讀寫到的列與拆表前的 attempts 完全相同：回應形狀、400 訊息、檢查順序、
 // 全有全無與 { updated } 的語意都沒有變。
+//
+// 〔retrain PR-2〕docs/retrain-and-review.md 第 5.2 節 API-9、API-10（FEATURE_RETRAIN，每次請求即時讀旗標）：
+//   GET   旗標開啟時 questions[] 每題多 purpose（new／retrain）、retrain_step（新題為 null）、
+//         retrain_flagged（老師是否在批改卡勾了這一筆新題派題的「要重練」、而且項目沒被移出；重練題為 null）。
+//         旗標關閉時 SQL 與回應逐字不變。
+//   PATCH results[i] 另外接受 retrain: boolean（「要重練」勾選，〔Owner 決策單 2026-09-26 R1 選 2〕；沒送＝不動）。
+//         新規則的檢查一律排在既有檢查（含卷不存在、題目不在卷上、錯因科目限制）之後：
+//           旗標關閉卻帶 retrain → 400「retrain 需要開啟 FEATURE_RETRAIN。」
+//           retrain 不是布林 → 400；勾在重練題（或沒有派題的題）上 → 400。
+//         勾選與承上組的規則在 services/retrainService.js 的 applyGrading。
+//         勾選與排程重算（services/retrainService.js）與批改的 UPDATE 在同一個交易：任何一步失敗整筆回滾，
+//         項目不變。旗標開啟時回應多 retrain: { entered, advanced, mastered, reset }；旗標關閉時回應照舊只有
+//         { updated }，但既有項目照樣在同一交易內重算（資料完整性，第 5.1 節「旗標不管什麼」）。
 // ─────────────────────────────────────────────────────────────
 const { query, pool } = require('../config/db');
 const { ERROR_TYPE_CODES, MAX_ERROR_TYPES, isValidErrorType, labelOf } = require('../config/errorTypes');
+const features = require('../config/features');
+const retrain = require('../services/retrainService');
+const { parseRetrainFlags } = require('../utils/retrainValidation');
 
 /** 單次最多批改幾題（第 1.4 條凍結）。 */
 const MAX_RESULTS = 100;
@@ -255,6 +271,19 @@ function toRecordset(items) {
     }));
 }
 
+/**
+ * 〔retrain PR-2〕API-9 旗標開啟時多的三欄（接在 teacher_note 之後）。
+ * retrain_flagged：以這一筆新題派題為來源、reason = 'flagged'（老師在批改卡勾的）而且沒被移出的項目存在
+ * （批改卡的「要重練」顯示已勾）。承上組一起進來的（group）與清單上手動加入的（manual）不算勾選；
+ * 重練派題與沒有派題的題為 null。
+ */
+const RETRAIN_DETAIL_COLUMNS = `,
+                    a.purpose, a.retrain_step,
+                    CASE WHEN a.purpose = 'new' THEN EXISTS (
+                        SELECT 1 FROM retrain_items ri
+                         WHERE ri.source_assignment_id = a.assignment_id AND ri.reason = 'flagged'
+                           AND ri.status <> 'retired') END AS retrain_flagged`;
+
 // ─────────────────── 1.3 GET /api/papers/:id ───────────────────
 
 exports.getPaper = async (req, res, next) => {
@@ -282,11 +311,14 @@ exports.getPaper = async (req, res, next) => {
         // 批改卡才能「展開答案與詳解」、錯因 chip 才能依科目過濾。score 是 NUMERIC，
         // pg 預設回字串，這裡轉 float8；沒有派題列時 error_types 回 []（不是 null）。
         // solution_src 是契約以外多帶的一欄：批改卡要標示詳解是驗算模型產生還是老師寫的。
+        //
+        // 〔retrain PR-2〕旗標開啟時在最後多三欄（API-9）；關閉時 SQL 與沒有這一段時一字不差。
+        const retrainCols = features.FEATURE_RETRAIN ? RETRAIN_DETAIL_COLUMNS : '';
         const { rows: questions } = await query(
             `SELECT q.id AS question_id, q.question_text, q.question_type, q.difficulty, a.result,
                     q.subject, q.chapter, q.answer_text, q.solution_text, q.solution_src,
                     a.score::float8 AS score, COALESCE(a.error_types, '{}') AS error_types,
-                    a.response, a.teacher_note
+                    a.response, a.teacher_note${retrainCols}
                FROM unnest($2::int[]) WITH ORDINALITY AS u(qid, ord)
                JOIN questions q ON q.id = u.qid
                LEFT JOIN assignment_attempts a ON a.paper_id = $1 AND a.question_id = u.qid
@@ -308,6 +340,49 @@ exports.getPaper = async (req, res, next) => {
 
 // ───────────── 1.4 PATCH /api/papers/:id/results ─────────────
 
+/**
+ * 〔retrain PR-2〕批改前的排程準備（在交易內、既有檢查之後、UPDATE 之前）。
+ *
+ *   1. 這些題在這張卷上的派題：「要重練」只能勾在新題派題上（重練題帶了、或卷上根本沒有派題 → 400）。
+ *   2. 依學生整理（一張卷只屬於一位學生；以派題的 student_id 為準）：要重算的題＋勾選的承上組計畫。
+ *   3. 鎖住會動到的排程項目。
+ *
+ * @param {object} client
+ * @param {number} paperId
+ * @param {Array<{question_id:number}>} items parseResultsBody 的結果
+ * @param {Array<{question_id:number, retrain:boolean}>} flags parseRetrainFlags 的結果
+ * @returns {Promise<{error:string} | {students:Array<{studentId:number, questionIds:number[], plan:object}>}>}
+ */
+async function prepareRetrain(client, paperId, items, flags) {
+    const { rows: asg } = await client.query(
+        `SELECT student_id, question_id, purpose, to_char(assigned_at, 'YYYY-MM-DD') AS assigned_at
+           FROM assignments WHERE paper_id = $1 AND question_id = ANY($2::int[])`,
+        [paperId, items.map(it => it.question_id)]);
+    const asgOf = new Map(asg.map(r => [r.question_id, r]));
+    for (const f of flags) {
+        const a = asgOf.get(f.question_id);
+        if (!a) return { error: `題目 ${f.question_id} 在這張卷上沒有派題紀錄，不能勾「要重練」。` };
+        if (a.purpose !== 'new') {
+            return { error: `題目 ${f.question_id} 在這張卷上是重練題，「要重練」只能勾在新題上（要移出請到錯題重練清單）。` };
+        }
+    }
+    const byStudent = new Map();
+    for (const a of asg) {
+        if (!byStudent.has(a.student_id)) byStudent.set(a.student_id, []);
+        byStudent.get(a.student_id).push(a.question_id);
+    }
+    const students = [];
+    for (const [studentId, questionIds] of byStudent) {
+        const mine = flags.filter(f => asgOf.get(f.question_id).student_id === studentId)
+            .map(f => ({ ...f, assigned_at: asgOf.get(f.question_id).assigned_at }));
+        const p = await retrain.planGradingFlags(client, { studentId, flags: mine });
+        if (p.error) return { error: p.error };
+        await retrain.lockForGrading(client, studentId, [...questionIds, ...p.plan.questionIds]);
+        students.push({ studentId, questionIds, plan: p.plan });
+    }
+    return { students };
+}
+
 exports.patchResults = async (req, res, next) => {
     const paperId = parseId(req.params.id);
     if (paperId === null) return res.status(404).json({ message: PAPER_NOT_FOUND });
@@ -315,6 +390,9 @@ exports.patchResults = async (req, res, next) => {
     const parsed = parseResultsBody(req.body);
     if (parsed.error) return res.status(400).json({ message: parsed.error });
     const { items } = parsed;
+    // 〔retrain PR-2〕「要重練」勾選（API-10）：先解析，錯誤等既有檢查都通過之後才回報（新規則排在既有檢查之後）
+    const retrainOn = features.FEATURE_RETRAIN;
+    const flagsParsed = parseRetrainFlags(req.body, { enabled: retrainOn });
 
     const client = await pool.connect();
     try {
@@ -354,6 +432,19 @@ exports.patchResults = async (req, res, next) => {
                     message: `題目 ${conflict.question_id} 是${conflict.subject}題，不能標記「${labelOf(conflict.code)}」（${conflict.code}）。`
                 });
             }
+        }
+
+        // 〔retrain PR-2〕新規則的檢查（既有檢查全部通過之後）與批改前的準備：
+        // 找出這些題在這張卷上的派題（勾選只收新題派題；重算要知道是哪位學生的哪一題），
+        // 依承上組整理勾選，最後先鎖住會動到的排程項目（先鎖項目、再寫作答，與刪卷、出卷的順序一致）。
+        if (flagsParsed.error) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: flagsParsed.error });
+        }
+        const retrainPrep = await prepareRetrain(client, paperId, items, flagsParsed.flags);
+        if (retrainPrep.error) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: retrainPrep.error });
         }
 
         // 一句 UPDATE 打完，不逐題 round-trip：
@@ -398,9 +489,17 @@ exports.patchResults = async (req, res, next) => {
             [paperId, JSON.stringify(toRecordset(items))]
         );
 
+        // 〔retrain PR-2〕套用勾選並重算受影響的項目（同一交易；旗標關閉時只重算既有項目）
+        const summary = { entered: 0, advanced: 0, mastered: 0, reset: 0 };
+        const today = retrain.todayLocal();
+        for (const s of retrainPrep.students) {
+            const r = await retrain.applyGrading(client, { studentId: s.studentId, questionIds: s.questionIds, plan: s.plan, today });
+            for (const k of Object.keys(summary)) summary[k] += r[k];
+        }
+
         await client.query('COMMIT');
         // updated = 實際 UPDATE 到的列數；重送同樣的值也算數（第 1.4 條）
-        res.status(200).json({ updated: updated.rowCount });
+        res.status(200).json(retrainOn ? { updated: updated.rowCount, retrain: summary } : { updated: updated.rowCount });
     } catch (err) {
         await client.query('ROLLBACK').catch(() => { });
         next(err);

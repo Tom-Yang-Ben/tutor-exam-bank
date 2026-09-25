@@ -718,6 +718,55 @@ capForAttach(newCount, ratio) ：R6，floor(新題數 × 比例)，且新題＋�
 | 測試 | ✅ 已實作 | 整合：`assignmentSplit.pg.test.js`（在暫用 schema 上套到 0015、灌舊資料再套 0016：空庫、筆數與 id 與逐欄內容、序號接續、冪等、自我檢查回滾、TC-036-3 黃金比對三百多支查詢、TC-036-4 EXPLAIN、驗證腳本）、`assignmentWrites.pg.test.js`（出卷寫入、新題組卷排除已作答、批改各自記錄、第 3.9 節四個動作、檢視唯讀）。單元：`noWritesToAttemptsView.test.js`（TC-036-6）、`assignmentSplit.test.js`。既有測試：`schema.test.js` 三條依第 6.4 節改寫並加註；夾具改用 `test/helpers/attempts.js`、清表改成 `TRUNCATE attempt_records, assignments, …`，斷言一條都沒改 |
 | M2、排程、API-1～13、CLI、畫面 | ⬜ 未做 | PR-2～PR-4；需要第 8 節的答案 |
 
+#### 5.6.2 實作狀態（第二階段之一：PR-2 排程核心）
+
+> **PR-2 已實作**（分支 `dec/retrain-p2-core`，起點 `dec/retrain-base` ＝ `local/integration`＋第一階段資料層＋排程純函式＋排程修正 `dec/retrain-schedule-fix`）。依 Owner 2026-09-26 決策單第三輪（第 8 節）的答覆實作；第 5.6.1 節的原文不動。
+>
+> **Migration 編號：M2 ＝ `0017_retrain_items.sql`**（M1 已用 0016）。照 repo 慣例可重複套用（`IF NOT EXISTS`、`CREATE OR REPLACE`、DO 區塊判斷約束是否已存在），空庫可從 0001 套到 0017；0016 時期若已有沒有項目的重練派題，0017 直接 RAISE、整支回滾。
+>
+> **沒做**（留給 PR-3、PR-4）：API-5～8、API-12、組卷頁、補救卷、Word 標示；`public/js/retrain.js`、批改卡勾選框、學生清單徽章、API-13。
+
+| 項目 | 狀態 | 說明 |
+| :--- | :--- | :--- |
+| M2：`retrain_items`、`assignments.retrain_item_id／retrain_step`、兩個約束、索引、檢視 `assignment_attempts` 往後加兩欄 | ✅ 已實作 | DDL 同第 3.4 節，差異見下表 ①② |
+| `services/retrainService.js`（I/O 層） | ✅ 已實作 | 讀作答歷史（檢視 `assignment_attempts`）→ `computeRetrainState` → 只寫回有變的快取欄位；到期清單依第 4.7 節排序；「已派出」一律照純函式 `countsAsInFlight`、「卡關」由 `lapses` 算。會改變歷史或項目的寫入（批改、取消批改、改判、刪卷、刪學生、合併學生、老師的 override、手動加入）與重算在同一個交易（函式收已 BEGIN 的 client）。**鎖**：先 `SELECT … FOR UPDATE` 鎖項目（依 id 排序），再用另一句讀歷史——READ COMMITTED 下等鎖之後的那一句看得到先提交的寫入，兩個交易同時批改同一項目的兩張重練卷，後者重算時兩筆都算到；批改、刪卷、出卷一律「先鎖項目、再動派題與作答」 |
+| API-10 批改（`retrain` 勾選） | ✅ 已實作 | 新規則的檢查排在既有檢查（含卷不存在、題目不在卷上、錯因科目限制）之後；旗標關閉帶 `retrain` → 400「retrain 需要開啟 FEATURE_RETRAIN。」；只收新題派題（重練題、卷上沒有派題的題帶了 → 400）；旗標開啟時回應多 `retrain: { entered, advanced, mastered, reset }`。勾選規則見下表 ⑥⑦ |
+| API-9 試卷明細 | ✅ 已實作 | 旗標開啟時每題多 `purpose`、`retrain_step`、`retrain_flagged`（接在既有鍵之後）；旗標關閉時 SQL 與回應逐字不變 |
+| API-1～4 | ✅ 已實作 | `controllers/retrainController.js`，掛在 `routes/index.js` 檔尾一個區塊，旗標關閉不掛載（Express 預設 404）；參數驗證是純函式 `utils/retrainValidation.js`（不認得的查詢參數與 body 鍵一律 400，同裁決 S5-21） |
+| API-11 刪卷、刪學生、合併學生、刪題（第 3.9 節） | ✅ 已實作 | 刪卷的 409 改依排程項目判斷（新題派題 → 以它為來源的項目 → 屬於項目的別張卷重練派題；訊息與回應形狀同 PR-1）；沒重練過的項目隨原卷一起刪；刪重練卷後依剩下的歷史重算。刪學生依序刪重練派題 → 項目 → 其餘派題 → 卷 → 學生。合併學生交易內 `SET CONSTRAINTS assignments_retrain_item_fk, retrain_items_source_fk DEFERRED`，衝突題的來源側項目一起刪、其餘項目搬到目標、最後重算目標學生搬過來的項目。刪題照舊（有任何派題只能封存）。四者不受旗標管 |
+| CLI `npm run retrain:recompute -- [--dry-run] [--student <id>] [--test]` | ✅ 已實作 | `scripts/recompute_retrain.js`：只重算既有項目、不建立任何項目；一個交易，`--dry-run` 跑完 ROLLBACK；只寫回有變的列（冪等）；只印題數與學生數 |
+| `FEATURE_RETRAIN`、`.env.example` | ✅ | 旗標第一階段已加（`config/features.js`、`<meta name="feature-retrain">`、`app.js` 注入）；`.env.example` 補 `FEATURE_RETRAIN` 與四個 `RETRAIN_*` 的說明（預設值與 R 編號）。`IN_FLIGHT_WARN_DAYS = 14` 是 `services/retrainService.js` 的常數，不開放環境變數覆寫 |
+| 測試 | ✅ | 整合：`retrain.pg.test.js`（TC-037-1、TC-037-2、TC-038-3、TC-039-3 的刪卷／刪學生／合併、TC-040-1 的 API-4；旗標開關兩種情形；兩個交易同時操作同一項目；每一步排程快取＝對當下歷史呼叫純函式〔I7〕；重算失敗時整筆回滾）、`retrainMigration.pg.test.js`（0017 空庫套用、約束與不變量、延後檢查、重複套用、0016 有資料時套用與 RAISE）。單元：`retrainValidation.test.js`（API-1～4、API-10 的參數驗證）、`retrainService.test.js`（排序、關卡名稱、已派出、摘要、CLI 參數、0017 靜態檢查）、`retrainScheduleCutoff.test.js`（純函式新增的可選輸入）。既有斷言一條沒改；夾具的改動見下表 ⑬ |
+
+**與本檔（凍結版）不同、或本檔沒寫而由實作決定之處**：
+
+| # | 項目 | 實作 |
+| :--- | :--- | :--- |
+| ① | `retrain_items.entered_after_assignment_id`（第 3.4 節沒有） | 重新加入（API-3 `reactivate`、批改卡再勾回已移出的題）時寫入「當下這位學生這一題最大的派題編號」（沒有派題時 0）；純函式 `computeRetrainState` 多一個**可選**輸入 `entered_after_assignment_id`（規則 8）：派題日＝起算日、編號 ≤ 它的重練派題算前一輪（只累計錯的次數）。解決第 4.4 節「同一天先批改當天的重練、再按重新加入」的已知邊界。沒給時純函式行為與之前完全相同，已交付的純函式測試一條沒改（新增 `retrainScheduleCutoff.test.js`） |
+| ② | 索引與具名約束 | 多一個 `idx_retrain_items_source (source_assignment_id)`（刪卷由新題派題找項目、刪派題時外鍵檢查用）；`assignments.retrain_step` 的 CHECK 以具名約束 `assignments_retrain_step_check` 加上 |
+| ③ | API-1 回應 | 每筆除了第 5.2 節例子的鍵，另有 `entered_on`、`in_flight_since`、`in_flight_warn`（已派出超過 14 天未批改；以今天算，不以 `as_of` 算）、`last_attempt_on`、`override_on`、`note`。`counts` 依 `subject` 篩選、不依 `status` 篩選；`counts.in_flight`＝進行中而且已派出。第 4.7 節只規定到期的排序：沒到期的排在後面，進行中依到期日早的先，再來練到會、移出。`step_label` 依間隔天數命名（1＝錯題重練、7 天＝一週回測、14 天＝兩週回測；不是整週時「隔 N 天回測」） |
+| ④ | API-2 | `added[i]` 多一個 `reason`（`manual`／`group`）；承上組的同組題（曾以新題派給他、還沒有項目的）以 `group` 一起加，也列在 `added`。已有項目（含已移出）的題一律 `already_in_schedule`，API-2 不改動任何既有項目（已移出的用 API-3 `reactivate`）。同組題已封存也照樣建項目（整組一起進出） |
+| ⑤ | API-3 | 回應是 API-1 一筆的形狀，另加 `group_changed: [{ item_id, question_id }]`。`retire` 對整個承上組（同組其他項目一起移出）；`reactivate` 把同組已移出的項目一起帶回（已練到會的組員不動，出卷時照第 4.4 節被帶著出）；`mark_mastered` 只動這一題。對「進行中、沒有 override」的項目 `reactivate` → 409「這一題正在重練中，不需要重新加入。」（避免誤按把進度歸零）；重複 `retire`／`mark_mastered` 是 no-op（保留原本的日期） |
+| ⑥ | API-10 的勾選規則（第 4.4 節只寫到單題） | **勾**：這一題沒有項目 → 建 `flagged`（起算日＝這一筆新題派題日）；已有 `group`／`manual` 項目 → 改成 `flagged`（排程不動、不算 entered）；已移出 → 重新加入。同組其他題（曾以新題派給他的）沒有項目 → 建 `group`（起算日同勾選的那一題）；同組已移出的一起重新加入。**取消**：只作用在 `reason = flagged`、沒移出的項目（批改卡不動 `manual`、`group`）：同組還有別題維持勾選 → 這一題改成 `group`；同組已經沒有勾選 → 這一題與同組 `group` 項目一起離開清單（還沒重練過刪、重練過移出），`manual` 不動。答錯但沒勾的題不會進清單；改判成對不刪項目 |
+| ⑦ | API-9 的 `retrain_flagged` | ＝以這一筆新題派題為來源、`reason = 'flagged'`、沒被移出的項目存在（老師親手勾的才算；承上組帶進來的與手動加入的顯示為沒勾） |
+| ⑧ | API-10 的 `retrain` 摘要 | `entered`＝這次建立或重新加入的項目（含承上組一起進的）；`mastered`＝這次變成練到會；`reset`＝這次多了一次錯（重練或回測答錯，回第 1 關）；`advanced`＝仍在進行中而關卡往上升。這次才進清單的只算 `entered` |
+| ⑨ | 旗標關閉時的批改 | 回應照舊只有 `{ updated }`，但既有項目照樣在同一交易內重算（第 5.1 節「旗標不管什麼」） |
+| ⑩ | API-4 | 只列有進行中項目的學生，依學生 id 排序；不回姓名 |
+| ⑪ | 刪卷的 409 查詢 | 改依排程項目判斷（`retrain_items.source_assignment_id` → `assignments.retrain_item_id`），SQL 另外照舊寫出同生同題、別張卷的條件（兩個複合外鍵保證本來就成立），`assignmentSplit.test.js` 對這支 SQL 的三條既有斷言照樣成立 |
+| ⑫ | 合併學生的順序 | 排程項目的刪除與搬家放在「刪衝突題派題」之後、「搬其餘派題」之前：「目標有沒有這一題的新題派題」只能看目標原本的派題 |
+| ⑬ | 測試夾具 | `test/helpers/attempts.js` 多收 `retrain_item_id`、`retrain_step`；`purpose = 'retrain'` 而沒給項目時自動找（或建一個 `manual`）同生同題的項目——0017 之後重練派題必須屬於項目。只有這一批有重練派題時寫入語句才多這兩欄，其餘與 0016 時逐字相同。`schema.test.js` 的重練派題夾具改成先建項目再寫（斷言不變，檔內加註） |
+
+**給 PR-3（出卷整合）與 PR-4（畫面與成效）直接呼叫的介面**（`services/retrainService.js`；`db` 可以是 pool、client 或 query 函式；`client` 必須已 BEGIN，由呼叫端 COMMIT／ROLLBACK）：
+
+| 函式 | 用途 |
+| :--- | :--- |
+| `listDueUnits(db, studentId, { asOf?, subject?, today?, params? })` → `{ as_of, due_total, units: [{ group_ids, size, due_count, overdue_days, items }], blocked: [{ group_ids, reasons: [{ question_id, reason }] }] }` | 到期的重練題，依第 4.7 節排好、以承上組為單位；整組不能出（`not_in_schedule`／`retired`／`archived`／`in_flight`）的放 `blocked`。上限與 R12 的「整組放不下就 400」由 PR-3 依 `units` 的順序逐組放入 |
+| `insertRetrainAssignments(client, { studentId, paperId, assignedAt, questionIds, params? })` → `{ conflict: { question_id, reason } }` 或 `{ conflict: null, rows: [{ question_id, item_id, assignment_id, retrain_step }] }` | 在出卷交易內寫重練派題＋空白作答並重算；先鎖項目再檢查 I6（兩個確認同時送出，後者得到 `in_flight`）。有 conflict 時什麼都沒寫，呼叫端 ROLLBACK 並回 409 `retrainConflictMessage(question_id)` |
+| `listItems(db, studentId, { status?, subject?, asOf?, today?, params? })`、`getItemView(db, studentId, itemId, …)`、`summary(db, { asOf?, today?, params? })` | API-1、API-3、API-4 的資料（PR-4 的清單卡與徽章） |
+| `recompute(client, studentId, questionIds?)`、`recomputePairs(client, [{ student_id, question_id }])`、`recomputeAll(client, { studentId? })` | 同一交易內重算（只重算、不建立項目） |
+| `fetchHistories(db, [[studentId, questionId], …])` | 作答歷史（API-13 的重練成效可以用） |
+| 純函式：`pendingOf(history, enteredOn)`、`orderUnits(views)`、`priorityKey(view)`、`stepLabel(step, stepDays)`、`buildItemView(row, ctx)`、`summarizeChanges(changes, entered)`、`todayLocal()`、`retrainConflictMessage(qid)`；常數 `IN_FLIGHT_WARN_DAYS`、`DEFERRABLE_CONSTRAINTS` | 排序、關卡名稱、已派出的判斷與畫面資料形狀 |
+
 ---
 
 ## 6. 測試計畫與驗收

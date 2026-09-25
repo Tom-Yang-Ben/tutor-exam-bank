@@ -61,9 +61,11 @@ module.exports = {
     get FEATURE_VOICE() { return isEnabled('FEATURE_VOICE'); },             // 按住說話（WS-E；需 FEATURE_TUTOR）
 
     // ── 錯題重練與間隔複習（docs/retrain-and-review.md 第 5.1 節；DEC-003 例外條款、DEC-016）──
-    // 預設關。管：新 API 是否掛載、畫面是否顯示、批改後是否自動建立重練項目、出卷 API 是否接受重練參數
-    // （以上都在第二階段之後才有）。不管：派題／作答拆表（migrations/0016，核心資料層，旗標關也生效）、
-    // 刪卷／刪學生／合併學生時對重練資料的處理（資料完整性，一律執行）。
+    // 預設關。管：新 API 是否掛載、畫面是否顯示、批改 API 是否接受「要重練」勾選（〔R1 選 2〕老師勾才進清單）、
+    // 試卷明細是否多帶重練欄位、出卷 API 是否接受重練參數（第二階段之後才有）。不管：派題／作答拆表（migrations/0016，
+    // 核心資料層，旗標關也生效）、刪卷／刪學生／合併學生時對重練資料的處理與既有項目的重算（資料完整性，一律執行）。
+    // 讀取點：routes/index.js 檔尾的錯題重練區塊（掛載）、controllers/paperController.js（每次請求即時讀）、
+    // app.js 注入前端 <meta name="feature-retrain">（__FEATURE_RETRAIN__）。
     // 名稱避開 review：/api/review 與 reviewController 已是拆題的「人工複核佇列」（FR-006）。
     get FEATURE_RETRAIN() { return isEnabled('FEATURE_RETRAIN'); }
 };

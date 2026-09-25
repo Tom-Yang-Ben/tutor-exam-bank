@@ -44,7 +44,8 @@
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
     "db:backup": "node scripts/backup.js",
-    "report:jobs": "node scripts/report_jobs.js"
+    "report:jobs": "node scripts/report_jobs.js",
+    "retrain:recompute": "node scripts/recompute_retrain.js"
   },
   "keywords": [
     "exam-bank",

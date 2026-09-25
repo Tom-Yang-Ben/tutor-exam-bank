@@ -153,10 +153,20 @@ describe('migrations 套用結果', { skip: SKIP }, () => {
             await client.query('ROLLBACK TO SAVEPOINT dup');
 
             // 重練派題：同一題可以再派（兩次），每次作答各自一列
+            // 〔retrain PR-2〕夾具：migrations/0017 之後重練派題必須屬於同生同題的排程項目（assignments_retrain_link_check、
+            // assignments_retrain_item_fk），所以先替這一題的新題派題建一個項目、重練派題帶上 retrain_item_id 與 retrain_step。
+            // 斷言不變（docs/retrain-and-review.md 第 6.4 節：只動準備資料的程式）。
+            const { rows: [src] } = await client.query(
+                `SELECT id FROM assignments WHERE student_id = $1 AND question_id = $2 AND purpose = 'new'`, [sid, qid]);
+            const { rows: [item] } = await client.query(
+                `INSERT INTO retrain_items (student_id, question_id, source_assignment_id, reason, due_on)
+                 VALUES ($1, $2, $3, 'manual', CURRENT_DATE + 1) RETURNING id`, [sid, qid, src.id]);
             const r1 = await client.query(
-                `INSERT INTO assignments (student_id, question_id, purpose) VALUES ($1, $2, 'retrain') RETURNING id`, [sid, qid]);
+                `INSERT INTO assignments (student_id, question_id, purpose, retrain_item_id, retrain_step)
+                 VALUES ($1, $2, 'retrain', $3, 1) RETURNING id`, [sid, qid, item.id]);
             const r2 = await client.query(
-                `INSERT INTO assignments (student_id, question_id, purpose) VALUES ($1, $2, 'retrain') RETURNING id`, [sid, qid]);
+                `INSERT INTO assignments (student_id, question_id, purpose, retrain_item_id, retrain_step)
+                 VALUES ($1, $2, 'retrain', $3, 1) RETURNING id`, [sid, qid, item.id]);
             await client.query('INSERT INTO attempt_records (assignment_id, result) VALUES ($1, 0), ($2, 1)',
                 [r1.rows[0].id, r2.rows[0].id]);
             const { rows: all } = await client.query(

@@ -33,6 +33,16 @@
 //                            相當於舊寫法的 `ON CONFLICT (student_id, question_id) DO NOTHING`。
 //
 // 回傳：實際寫進去的派題 id（依輸入順序）。拆表時 id 原樣保留，所以派題 id＝檢視 attempts 的 id。
+//
+// 〔retrain PR-2〕migrations/0017 之後重練派題必須屬於同生同題的排程項目（assignments_retrain_link_check、
+// assignments_retrain_item_fk），多收兩個欄位：
+//   retrain_item_id          重練派題所屬的項目；purpose = 'retrain' 而沒給時，自動找（或建一個 reason = 'manual'、
+//                            起算日＝那一題新題派題日的）項目——同生同題的新題派題必須已經在資料庫裡（不變量 I1），
+//                            否則直接丟錯。自動建的項目只填第 1 關的初值，不重算；要排程快取正確的測試
+//                            請呼叫 services/retrainService.js 的 recompute。
+//   retrain_step             重練派題當下的關卡；purpose = 'retrain' 而沒給時＝1
+// 只有這一批有重練派題時，寫入語句才多這兩欄（buildInsertSql({ retrainLink: true })）；
+// 沒有重練派題時語句與 0016 時完全相同。
 // ─────────────────────────────────────────────────────────────
 'use strict';
 
@@ -48,7 +58,10 @@ const COLUMNS = {
     score: 'numeric',
     error_types: 'text[]',
     response: 'text',
-    teacher_note: 'text'
+    teacher_note: 'text',
+    // 〔retrain PR-2〕0017
+    retrain_item_id: 'bigint',
+    retrain_step: 'smallint'
 };
 
 /** `db` 可以是 config/db.js 的 query 函式，也可以是 pool／client（有 .query 方法）。 */
@@ -61,19 +74,20 @@ function runnerOf(db) {
 /**
  * 產生寫入語句（純函式）。$1 = rows 的 JSON。
  * 派題 id 先用 identity 序號發好（nextval），派題與作答同一句寫入，作答只建給「實際寫進去」的派題。
- * @param {{skipExisting?:boolean}} [opts]
+ * @param {{skipExisting?:boolean, retrainLink?:boolean}} [opts]
+ *   retrainLink：〔retrain PR-2〕多寫 retrain_item_id、retrain_step 兩欄（這一批有重練派題時才用）
  * @returns {string}
  */
-function buildInsertSql({ skipExisting = false } = {}) {
+function buildInsertSql({ skipExisting = false, retrainLink = false } = {}) {
     const cols = Object.entries(COLUMNS).map(([k, t]) => `${k} ${t}`).join(', ');
     return `WITH src AS MATERIALIZED (
     SELECT nextval(pg_get_serial_sequence('assignments', 'id')) AS aid, r.*
       FROM jsonb_to_recordset($1::jsonb) AS r(${cols})
 ), ins AS (
-    INSERT INTO assignments (id, student_id, question_id, paper_id, assigned_at, purpose)
+    INSERT INTO assignments (id, student_id, question_id, paper_id, assigned_at, purpose${retrainLink ? ', retrain_item_id, retrain_step' : ''})
     OVERRIDING SYSTEM VALUE
     SELECT aid, student_id, question_id, paper_id,
-           COALESCE(assigned_at, CURRENT_DATE - COALESCE(days_ago, 0)), COALESCE(purpose, 'new')
+           COALESCE(assigned_at, CURRENT_DATE - COALESCE(days_ago, 0)), COALESCE(purpose, 'new')${retrainLink ? ', retrain_item_id, retrain_step' : ''}
       FROM src
     ${skipExisting ? `ON CONFLICT (student_id, question_id) WHERE purpose = 'new' DO NOTHING` : ''}
     RETURNING id
@@ -103,9 +117,49 @@ async function insertAttempts(db, rows, opts = {}) {
         }
     }
     const run = runnerOf(db);
-    const res = await run(buildInsertSql(opts), [JSON.stringify(rows)]);
+    // 〔retrain PR-2〕有重練派題時補上所屬項目與關卡（見檔頭）
+    const retrainLink = rows.some(r => r.purpose === 'retrain');
+    const payload = retrainLink ? await linkRetrainRows(run, rows) : rows;
+    const res = await run(buildInsertSql({ ...opts, retrainLink }), [JSON.stringify(payload)]);
     // 序號依輸入順序發號，排序後即輸入順序
     return res.rows.map(r => Number(r.assignment_id)).sort((a, b) => a - b);
+}
+
+/**
+ * 〔retrain PR-2〕重練派題沒給 retrain_item_id 時，找（或建）同生同題的排程項目；retrain_step 預設 1。
+ * @returns {Promise<Array<object>>} 補好欄位的 rows（不改動輸入）
+ */
+async function linkRetrainRows(run, rows) {
+    const need = rows.filter(r => r.purpose === 'retrain' && (r.retrain_item_id === undefined || r.retrain_item_id === null));
+    const itemOf = new Map();
+    if (need.length) {
+        const pairs = JSON.stringify(need.map(r => ({ student_id: r.student_id, question_id: r.question_id })));
+        await run(
+            `INSERT INTO retrain_items (student_id, question_id, source_assignment_id, reason, entered_on, due_on)
+             SELECT a.student_id, a.question_id, a.id, 'manual', a.assigned_at, a.assigned_at + 1
+               FROM (SELECT DISTINCT student_id, question_id
+                       FROM jsonb_to_recordset($1::jsonb) AS w(student_id int, question_id int)) w
+               JOIN assignments a ON a.student_id = w.student_id AND a.question_id = w.question_id AND a.purpose = 'new'
+             ON CONFLICT (student_id, question_id) DO NOTHING`, [pairs]);
+        const { rows: items } = await run(
+            `SELECT i.id, i.student_id, i.question_id FROM retrain_items i
+               JOIN jsonb_to_recordset($1::jsonb) AS w(student_id int, question_id int)
+                 ON w.student_id = i.student_id AND w.question_id = i.question_id`, [pairs]);
+        for (const it of items) itemOf.set(`${it.student_id}:${it.question_id}`, Number(it.id));
+        const orphan = need.find(r => !itemOf.has(`${r.student_id}:${r.question_id}`));
+        if (orphan) {
+            throw new Error(`insertAttempts：重練派題（學生 ${orphan.student_id}、題目 ${orphan.question_id}）`
+                + '需要同生同題先有一筆新題派題（不變量 I1）');
+        }
+    }
+    return rows.map(r => {
+        if (r.purpose !== 'retrain') return r;
+        return {
+            ...r,
+            retrain_item_id: r.retrain_item_id ?? itemOf.get(`${r.student_id}:${r.question_id}`),
+            retrain_step: r.retrain_step ?? 1
+        };
+    });
 }
 
 /**
@@ -117,4 +171,4 @@ async function insertAttempt(db, row, opts = {}) {
     return id ?? null;
 }
 
-module.exports = { insertAttempts, insertAttempt, buildInsertSql, COLUMNS };
+module.exports = { insertAttempts, insertAttempt, buildInsertSql, linkRetrainRows, COLUMNS };

@@ -4,6 +4,8 @@ const { pickPaperUnits, nearestReachableCounts, sortForPaperGrouped } = require(
 // remedialService 只在 defaultDeps() 裡才 require 本檔，載入時不成環。
 const { findIncompleteFollowUpGroups, incompleteFollowUpGroupsMessage } = require('../utils/followUpPaperCheck');
 const { buildItemLookupQuery } = require('../services/remedialService');
+// 〔retrain PR-2〕刪卷時的排程項目處理（第 3.9 節）。retrainService 不 require 本檔，載入時不成環。
+const retrainService = require('../services/retrainService');
 // 〔stage5 WS-D〕pg 序列化查詢參數的同一支函式（pg 的 package.json exports 公開 ./lib/*）：
 // 單章路徑用它把 chapter 轉成與抽出前 `q.chapter = $2` 相同的比對字串（見 selectPaperQuestions）
 const { prepareValue } = require('pg/lib/utils');
@@ -844,19 +846,31 @@ exports.confirmPaper = async (req, res, next) => {
 // 新題候選池（檢視 attempts 只看新題派題），違反「重練派題一定有同生同題的新題派題」（不變量 I1）。
 // 這種情形回 409，請老師先刪那些重練卷。沒有任何重練資料時，檢查查不到東西，行為與拆表前逐字相同。
 // deleted_attempts 維持「刪掉幾筆派題」的語意（拆表前一筆 attempts＝一筆派題）。
-// 排程項目（M2 的 retrain_items）的處理由錯題重練第二階段補上。
+//
+// 〔retrain PR-2〕migrations/0017 之後改依排程項目判斷（第 3.9 節）：
+//   - 卷上某題的新題派題是某個排程項目的來源，而那個項目在別張卷已經有重練派題 → 409（訊息與形狀同 PR-1）；
+//   - 項目還沒被重練過 → 連項目一起刪（老師的「要重練」勾選跟著那張卷一起消失）；
+//   - 刪的是重練卷 → 受影響的項目依剩下的作答歷史重算（等於那次重練沒發生過）。
+// 先鎖住相關項目再查擋路的重練派題（services/retrainService.js 的 lockItemsForPaper），同一交易內刪除與重算。
+// 沒有任何重練資料時，查不到項目、也沒有擋路的派題，行為與回應與拆表前逐字相同。
 // ─────────────────────────────────────────────────────────────
 
 /**
- * 擋刪卷的重練派題（純函式；$1 paperId）：這張卷上每一題「新題」派題，同生同題在**別張卷**的重練派題。
- * 回 { question_id, retrain_paper_ids }，retrain_paper_ids 只列有卷號的（依卷號排序；全部沒有卷號時為 NULL）。
+ * 擋刪卷的重練派題（純函式；$1 paperId）：這張卷上每一題「新題」派題，以它為來源的排程項目
+ * 在**別張卷**的重練派題。回 { question_id, retrain_paper_ids }，retrain_paper_ids 只列有卷號的
+ * （依卷號排序；全部沒有卷號時為 NULL）。
+ *
+ * 〔retrain PR-2〕改依排程項目判斷：新題派題 n → 以它為來源的項目 i（retrain_items_source_fk）→ 屬於 i 的重練派題 r
+ * （assignments_retrain_item_fk）。r 與 n 同生同題由那兩個複合外鍵保證（不變量 I1），條件照舊寫出來只是讓語意一目了然。
  * @returns {string}
  */
 function buildRetrainBlockersSql() {
     return `SELECT n.question_id,
                    array_agg(DISTINCT r.paper_id ORDER BY r.paper_id) FILTER (WHERE r.paper_id IS NOT NULL) AS retrain_paper_ids
               FROM assignments n
-              JOIN assignments r ON r.student_id = n.student_id AND r.question_id = n.question_id
+              JOIN retrain_items i ON i.source_assignment_id = n.id
+              JOIN assignments r ON r.retrain_item_id = i.id
+                                AND r.student_id = n.student_id AND r.question_id = n.question_id
                                 AND r.purpose = 'retrain' AND r.paper_id IS DISTINCT FROM n.paper_id
              WHERE n.paper_id = $1 AND n.purpose = 'new'
              GROUP BY n.question_id
@@ -884,19 +898,22 @@ exports.deletePaper = async (req, res, next) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
+        // 〔retrain PR-2〕先鎖住這張卷相關的排程項目，再查擋路的重練派題（等鎖之後的查詢看得到剛提交的重練派題）
+        await retrainService.lockItemsForPaper(client, id);
         const { rows: blockers } = await client.query(buildRetrainBlockersSql(), [id]);
         if (blockers.length > 0) {
             await client.query('ROLLBACK');
             return res.status(409).json(retrainBlockedBody(blockers));
         }
-        const a = await client.query('DELETE FROM assignments WHERE paper_id = $1', [id]);
+        // 重練派題 → 以卷上新題派題為來源的項目 → 其餘派題，最後重算受影響的項目（services/retrainService.js）
+        const a = await retrainService.deletePaperAssignments(client, id);
         const p = await client.query('DELETE FROM exam_papers WHERE id = $1', [id]);
         if (p.rowCount === 0) {
             await client.query('ROLLBACK');
             return res.status(404).json({ message: '找不到該試卷' });
         }
         await client.query('COMMIT');
-        res.status(200).json({ deleted_attempts: a.rowCount });
+        res.status(200).json({ deleted_attempts: a.deleted });
     } catch (err) {
         try { await client.query('ROLLBACK'); } catch (e) { /* 不覆蓋原始錯誤 */ }
         next(err);

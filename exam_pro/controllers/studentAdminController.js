@@ -22,6 +22,8 @@
 // ─────────────────────────────────────────────────────────────
 const { pool, query } = require('../config/db');
 const { PROFILE_FIELDS, parseProfile, profileOptions } = require('../config/studentProfile');
+// 〔retrain PR-2〕刪學生、合併學生時的排程項目處理（docs/retrain-and-review.md 第 3.9 節）
+const retrainService = require('../services/retrainService');
 
 /** 〔stage5 審查修正〕PostgreSQL INT（int4）上限：超過的 id 在這裡擋成 400，不讓 PG 回 out of range 的 500 */
 const INT4_MAX = 2147483647;
@@ -116,12 +118,16 @@ exports.renameStudent = async (req, res, next) => {
 // 一句 DELETE 刪掉該生**全部**派題（新題與重練一起，不會留下缺了新題派題的重練列）；
 // 回應的 deleted.attempts 維持「刪掉幾筆派題」的語意（拆表前一筆 attempts＝一筆派題），
 // 沒有重練資料時數字與拆表前相同（docs/retrain-and-review.md 第 3.9 節）。
+// 〔retrain PR-2〕migrations/0017 之後同一交易依序刪：重練派題 → 排程項目 → 其餘派題 → 卷 → 學生
+// （反著刪會撞 assignments_retrain_item_fk、retrain_items_source_fk 與 retrain_items.student_id 的外鍵）。
+// deleted.attempts 仍是派題筆數（重練派題＋其餘派題）。
 exports.deleteStudent = async (req, res, next) => {
     const id = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(id) || id < 1 || id > INT4_MAX) return res.status(400).json({ message: '學生 id 無效。' });
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
+        const retrainRows = await retrainService.deleteStudentRetrainData(client, id);
         const a = await client.query('DELETE FROM assignments WHERE student_id = $1', [id]);
         const p = await client.query('DELETE FROM exam_papers WHERE student_id = $1', [id]);
         const s = await client.query('DELETE FROM students WHERE id = $1', [id]);
@@ -130,7 +136,7 @@ exports.deleteStudent = async (req, res, next) => {
             return res.status(404).json({ message: STUDENT_NOT_FOUND });
         }
         await client.query('COMMIT');
-        res.status(200).json({ deleted: { attempts: a.rowCount, papers: p.rowCount } });
+        res.status(200).json({ deleted: { attempts: retrainRows + a.rowCount, papers: p.rowCount } });
     } catch (err) {
         try { await client.query('ROLLBACK'); } catch (e) { /* 不覆蓋原始錯誤 */ }
         next(err);
@@ -148,7 +154,12 @@ exports.deleteStudent = async (req, res, next) => {
 // 衝突題在來源側的**全部**派題（新題與重練）與作答一起刪，這一題只留目標側的紀錄——
 // 只刪來源側的新題派題會留下缺了「第一次」的重練列。其餘派題（含重練）整批搬到目標學生。
 // moved_attempts／dropped_conflicts 是搬走／刪掉的派題筆數；沒有重練資料時與拆表前的
-// attempts 筆數相同（一筆 attempts＝一筆新題派題）。排程項目（M2）的搬移與重算由第二階段補上。
+// attempts 筆數相同（一筆 attempts＝一筆新題派題）。
+//
+// 〔retrain PR-2〕排程項目（migrations/0017）跟著同一條規則：衝突題在來源側的項目一起刪，其餘項目搬到目標學生，
+// 最後重算目標學生搬過來的項目。派題與項目的 student_id 要同時改，兩個複合外鍵在交易內
+// SET CONSTRAINTS … DEFERRED，到 COMMIT 才檢查（services/retrainService.js 的 deferRetrainConstraints）。
+// 回應的三個數字語意不變（派題筆數與卷數）。
 exports.mergeStudent = async (req, res, next) => {
     const from = Number.parseInt(req.params.id, 10);
     const into = Number.parseInt(req.body?.into_id, 10);
@@ -165,6 +176,8 @@ exports.mergeStudent = async (req, res, next) => {
             await client.query('ROLLBACK');
             return res.status(404).json({ message: STUDENT_NOT_FOUND });
         }
+        // 〔retrain PR-2〕派題與排程項目的 student_id 要一起改：兩個複合外鍵延到 COMMIT 才檢查
+        await retrainService.deferRetrainConstraints(client);
         // ① 衝突題（目標已有這一題的新題派題）→ 刪來源側這一題的全部派題（作答跟著 CASCADE）
         const dropped = await client.query(
             `DELETE FROM assignments a
@@ -173,6 +186,9 @@ exports.mergeStudent = async (req, res, next) => {
                              WHERE b.student_id = $2 AND b.question_id = a.question_id AND b.purpose = 'new')`,
             [from, into]
         );
+        // 〔retrain PR-2〕排程項目：衝突題的來源側項目刪掉、其餘搬到目標。
+        // 必須在②之前：「目標有沒有這一題的新題派題」只能看目標原本的派題（搬完再看，來源搬過去的也會算成衝突）。
+        const movedItemQids = await retrainService.mergeRetrainItems(client, from, into);
         // ② 其餘搬家（衝突已排除，UPDATE 不會撞新題的部分唯一索引）
         const moved = await client.query(
             'UPDATE assignments SET student_id = $2 WHERE student_id = $1', [from, into]
@@ -181,6 +197,8 @@ exports.mergeStudent = async (req, res, next) => {
         const papers = await client.query(
             'UPDATE exam_papers SET student_id = $2 WHERE student_id = $1', [from, into]
         );
+        // 〔retrain PR-2〕最後重算目標學生搬過來的項目（同一交易）
+        await retrainService.recompute(client, into, movedItemQids);
         // ④ 刪來源學生
         await client.query('DELETE FROM students WHERE id = $1', [from]);
         await client.query('COMMIT');

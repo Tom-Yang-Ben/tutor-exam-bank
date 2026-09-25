@@ -224,9 +224,14 @@ function countsAsInFlight(entry, enteredOn) {
  *   6. 最後套老師的手動決定（優先於作答歷史）：retired＝移出；mastered＝判定已會
  *      （本來就已練到會時保留原本的 mastered_on）。
  *   7. 卡關＝進行中而且錯的次數 ≥ stuckLapses；只是提醒，狀態、關卡、到期日都不變。
+ *   8. 〔PR-2 追加，可選〕entered_after_assignment_id：起算（重新加入）當下這位學生這一題已有的最大派題編號。
+ *      有給時，派題日＝起算日、而且派題編號 ≤ 它的重練／回測派題也算「重新加入之前那一輪」（只累計錯的次數）。
+ *      解決設計稿第 4.4 節的已知邊界「同一天先批改當天的重練、再按重新加入，那一筆會算進新一輪」。
+ *      沒給（undefined／null）時行為與加這個輸入之前完全相同；它不影響「已派出」的判斷（countsAsInFlight）。
  *
  * @param {{entered_on:string, teacher_override?:('retired'|'mastered'|null),
- *          override_on?:(string|null), history?:HistoryEntry[]}} input
+ *          override_on?:(string|null), entered_after_assignment_id?:(number|null),
+ *          history?:HistoryEntry[]}} input
  * @param {{stepDays:ReadonlyArray<number>, masteryStreak:number, stuckLapses:number,
  *          correctThreshold:number}} [params] 預設 config/retrain.js 的 DEFAULTS
  * @returns {RetrainState}
@@ -242,6 +247,12 @@ function computeRetrainState(input, params = DEFAULTS) {
         throw new TypeError(`retrainSchedule：teacher_override 只能是 retired、mastered 或 null，收到 ${JSON.stringify(override)}。`);
     }
     if (override !== null) assertDate(input.override_on, 'override_on');
+
+    // 〔PR-2 追加〕可選的起算切點（見規則 8）；沒給＝沒有切點，行為與之前相同
+    const cutoff = isBlank(input.entered_after_assignment_id) ? null : Number(input.entered_after_assignment_id);
+    if (cutoff !== null && !(Number.isSafeInteger(cutoff) && cutoff >= 0)) {
+        throw new TypeError(`retrainSchedule：entered_after_assignment_id 必須是非負整數或 null，收到 ${JSON.stringify(input.entered_after_assignment_id)}。`);
+    }
 
     const history = input.history === undefined || input.history === null ? [] : input.history;
     if (!Array.isArray(history)) throw new TypeError('retrainSchedule：history 必須是陣列。');
@@ -282,6 +293,8 @@ function computeRetrainState(input, params = DEFAULTS) {
         if (!ok) lapses += 1;
         lastAttemptOn = e.assigned_at;
         if (e.assigned_at < enteredOn) continue;  // 重新加入之前那一輪：只累計錯的次數
+        // 〔PR-2 追加〕起算日當天、重新加入之前就已經有的重練派題也屬於前一輪（規則 8）
+        if (cutoff !== null && e.assigned_at === enteredOn && Number(e.assignment_id) <= cutoff) continue;
 
         if (ok) {
             if (status === 'mastered') continue;  // 已練到會又答對：維持
