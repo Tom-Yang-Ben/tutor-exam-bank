@@ -573,7 +573,7 @@ function dedup1InMemory({ fields, source, fixture, emb, buildEmbedText }) {
         const { embedFromFixture } = require('../../services/llm/fixture');
         const text = buildEmbedText(fields);
         const res = embedFromFixture({
-            model: process.env.EMBED_MODEL || 'gemini-embedding-001',
+            model: require('./localMode').embedModelFromEnv(),   // 〔本機模式 L4〕沒設時是本機預設
             texts: [text],
             dim: Number(process.env.EMBED_DIM || 768)
         });
@@ -602,7 +602,8 @@ function makeCtx({ llm, models, offtopicSimMin }) {
                 usage.calls += 1;
                 if (pricing && typeof pricing.estimateCost === 'function') {
                     const spec = String(opts.model || '');
-                    const modelId = spec.includes(':') ? spec.split(':').pop() : spec;
+                    // 只切第一個冒號（config/models.js 的 parseModel 同一條規則）：'ollama:qwen3:8b' 的裸 ID 是 'qwen3:8b'
+                    const modelId = require('./localMode').modelIdOf(spec);
                     const c = pricing.estimateCost({
                         modelId,
                         tokenIn: res.usage?.tokenIn ?? 0,

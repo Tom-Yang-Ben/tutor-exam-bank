@@ -10,6 +10,7 @@
 //   services/llm/fake.js      generateJson／generateText（LLM_MODE=replay 的唯一出入口）
 //   services/llm/fixture.js   embedFromFixture（EMBED_MODE=fixture 的唯一出入口）
 //   eval/lib/embeddings.js    loadEmbeddings（retrieval／variant 直接讀向量檔的那條路）
+//   services/ocr/index.js     ocrPdf（〔本機模式 L4〕本機 OCR 的 cassette；檔案不存在就不包）
 // 被包住的函式**行為一個字都沒變**（回傳值、丟的錯、訊息都原樣），只是多寫一行紀錄。
 // 不另造回放機制：miss 仍是 fake.js 的凍結訊息，判斷仍走 eval/lib/replayMiss.js。
 //
@@ -158,6 +159,63 @@ function wrapLoadEmbeddings(embeddings) {
 }
 
 /**
+ * 〔本機模式 L4〕包住 services/ocr 的 ocrPdf（docs/local-mode.md 第 4 條第 2 點）。
+ *
+ * OCR 的回放不經 fake.js（它讀的是 agent＝ocr 的 cassette），所以另外包；miss 的訊息與 LLM 同一種格式
+ * （契約明訂），照樣用 replayMiss 撈 agent 與 key。命中時的鍵：
+ *   1. 回傳帶 cassetteKey（與 fake.js 的回傳同一個慣例）就用它；
+ *   2. 否則照契約的公式算一次：cassetteKey({agent:'ocr', modelId:'paddleocr@<engineVersion>', template:'ocr.v1',
+ *      cacheKeyParts:{pdfSha256, fromPage, toPage, dpi}})，而且那支檔案真的存在才算數；
+ *   3. 兩者都不成立就記成「miss 以外的錯誤」——cassettes:prune 會因此拒絕刪除，
+ *      寧可不清，也不要把 CI 讀得到的 OCR cassette 當成過期刪掉。
+ * 被包住的函式行為不變（回傳值、丟的錯原樣）。
+ *
+ * @param {object} ocr require('services/ocr') 的匯出物件（就地替換 ocrPdf）
+ * @param {{record?:Function, exists?:(agent:string, key:string)=>boolean, env?:object}} [opts] 測試注入點
+ */
+function wrapOcr(ocr, opts = {}) {
+    const original = ocr && ocr.ocrPdf;
+    if (typeof original !== 'function' || original.__probed) return;
+    const rec = opts.record || record;
+    const env = opts.env || process.env;
+    const { cassetteKey, cassettePath } = require(path.join(APP_DIR, 'services', 'llm', 'cassette.js'));
+    const exists = opts.exists || ((agent, key) => fs.existsSync(cassettePath(agent, key)));
+    const { isReplayMiss, parseReplayMiss } = require('./replayMiss');
+    const probed = async function probedOcrPdf(args = {}) {
+        const cacheKeyParts = {
+            pdfSha256: args.pdfSha256 == null ? null : args.pdfSha256,
+            fromPage: args.fromPage == null ? null : args.fromPage,
+            toPage: args.toPage == null ? null : args.toPage,
+            dpi: Number(env.OCR_DPI) || 200
+        };
+        const base = { kind: 'llm', method: 'ocrPdf', agent: 'ocr', template: 'ocr.v1' };
+        let res;
+        try {
+            res = await original.call(this, args);
+        } catch (err) {
+            if (isReplayMiss(err)) {
+                const { key } = parseReplayMiss(err);
+                rec({ ...base, model: null, key, hit: false, cacheKeyParts });
+            } else {
+                rec({ ...base, model: null, key: null, hit: false, error: String(err && err.message).split('\n')[0] });
+            }
+            throw err;
+        }
+        const model = res && res.engineVersion ? `paddleocr@${res.engineVersion}` : null;
+        let key = res && res.cassetteKey ? res.cassetteKey : null;
+        if (!key && model) {
+            const computed = cassetteKey({ agent: 'ocr', modelId: model, template: 'ocr.v1', cacheKeyParts });
+            if (exists('ocr', computed)) key = computed;
+        }
+        if (key) rec({ ...base, model, key, hit: true });
+        else rec({ ...base, model, key: null, hit: true, error: 'OCR 回放命中，但算不出是哪一支 cassette（services/ocr 請在回傳帶 cassetteKey）' });
+        return res;
+    };
+    probed.__probed = true;
+    ocr.ocrPdf = probed;
+}
+
+/**
  * 啟動探針（--require 時自動呼叫；測試也可以直接呼叫）。
  * @param {string} dir 紀錄目錄
  */
@@ -167,6 +225,8 @@ function install(dir) {
     wrapFake(require(path.join(APP_DIR, 'services', 'llm', 'fake.js')));
     wrapFixtureEmbed(require(path.join(APP_DIR, 'services', 'llm', 'fixture.js')));
     wrapLoadEmbeddings(require(path.join(APP_DIR, 'eval', 'lib', 'embeddings.js')));
+    const ocrIndex = path.join(APP_DIR, 'services', 'ocr', 'index.js');
+    if (fs.existsSync(ocrIndex)) wrapOcr(require(ocrIndex));
     record({ kind: 'start', argv: process.argv.slice(1).map(a => path.basename(a)).join(' ') });
     process.on('exit', (code) => record({ kind: 'exit', code }));
 }
@@ -175,4 +235,4 @@ if (process.env.EVAL_PROBE_DIR && !logFile) {
     install(path.resolve(process.env.EVAL_PROBE_DIR));
 }
 
-module.exports = { install, readProbeDir, wrapFake, wrapFixtureEmbed, wrapLoadEmbeddings, PROBE_PATH: __filename };
+module.exports = { install, readProbeDir, wrapFake, wrapFixtureEmbed, wrapLoadEmbeddings, wrapOcr, PROBE_PATH: __filename };

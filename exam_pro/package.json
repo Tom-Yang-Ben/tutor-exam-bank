@@ -25,6 +25,7 @@
     "eval:sample-pdf": "node eval/fixtures/make_sample_pdf.js",
     "cassettes:rerecord": "node eval/tools/rerecord_all.js",
     "cassettes:prune": "node eval/tools/prune_cassettes.js",
+    "ocr:selftest": "node eval/tools/ocr_selftest.js",
     "compare:legacy": "node eval/compare_pipeline.js --method legacy",
     "compare:pipeline": "node --env-file=eval/.env.replay eval/compare_pipeline.js --method pipeline",
     "embed:backfill": "node scripts/backfill_embeddings.js",

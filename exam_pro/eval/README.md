@@ -262,8 +262,8 @@ npm run check:html
 
 ```powershell
 cd exam_pro
-npm run cassettes:rerecord -- --dry-run     # 只回放、不連網：每個 suite 缺多少 cassette、預估呼叫次數與費用
-npm run cassettes:rerecord                  # 同一份盤點印完之後輸入 yes 才開始錄（會呼叫 Gemini、會產生費用）
+npm run cassettes:rerecord -- --dry-run     # 只回放、不連網：每個 suite 缺多少 cassette、預估呼叫次數與費用（本機模型：預估時間）
+npm run cassettes:rerecord                  # 同一份盤點印完之後輸入 yes 才開始錄（CI 的模型是 Gemini 時會產生費用）
 npm run cassettes:prune                     # 列出 CI 已經不會再讀到的 cassette（不刪）
 npm run cassettes:prune -- --apply          # 確認清單後刪除
 ```
@@ -303,6 +303,19 @@ npm run cassettes:prune -- --apply          # 確認清單後刪除
 怎麼知道「讀了哪些」：兩支工具以 `node --require eval/lib/cassetteProbe.js` 啟動各 suite 的**既有入口**。
 探針包住 `services/llm/fake.js`（回放）與 `services/llm/fixture.js`（向量）的查表點，記下每一次命中與 miss，行為一個字都不改。
 範圍只有 extract／classify／lint／verify／nlq／variant 六個 agent，化學（`*_chem`）、tutor、voice 與其他目錄一律不碰。
+
+〔本機模式 L4，`docs/local-mode.md` 第 6 條〕`ci.yml` 的模型改成 `ollama:…` 之後：
+
+- **錄製在 Owner 的電腦上用本機模型跑**，不需要 `GEMINI_API_KEY`、不花錢，但 CPU 上很慢；盤點表的費用欄改成「預估時間」
+  （呼叫次數 × 每次秒數的**粗估**，依據與覆寫方式在 `eval/lib/localMode.js` 的 `SEC_PER_CALL`：`RERECORD_TIME_SCALE`、`RERECORD_SEC_PER_CALL_<AGENT>`、`RERECORD_SEC_PER_EMBED`）。
+- **問 yes 之前先做錄前檢查**，任一項沒過就停：Ollama 連得上而且需要的模型都已 `ollama pull`（`GET {OLLAMA_HOST}/api/tags`）、
+  要錄 pipeline 且 `OCR_ENGINE=paddle` 時 `ocr_service/ocr_pdf.py --selftest` 通過、測試庫已套 migration。
+- 子行程照 `ci.yml` 的 `MODEL_EXTRACT`／`MODEL_VERIFY` 以及有寫的 `EMBED_MODEL`、`MODEL_NLQ`、`OCR_ENGINE`、`OCR_DPI`；
+  錄製時另外放行 `OLLAMA_*`、`OCR_PYTHON`、`OCR_TIMEOUT_MS`，並帶本機的長逾時（`JOB_NODE_TIMEOUT_MS=2700000`、`NLQ_TIMEOUT_MS=1800000`；不進鍵）。
+- 本機拆題新增的 cassette 目錄 `ocr`、`extract_vision`、`extract_ocr` 納入盤點與清除（化學版照舊不碰）；OCR 的回放由探針包住 `services/ocr` 的 `ocrPdf`。
+- 向量檔名的模型段把 `:`、`/`、`\` 換成 `-`：`embeddings.ollama-qwen3-embedding-0.6b.768.json`；Gemini 的檔名不變。
+- Windows 上直接雙擊 `scripts\windows\record_local.bat`（`db:up` → `migrate:test` → 本指令，自動輸入 yes，log 在 `data\local_ai\`）。
+- 換成本機模型後，原本 Gemini 錄的 cassette 會出現在 `cassettes:prune` 的清單上；還想讓 CI 能切回 Gemini 就先不要 `--apply`。
 
 ---
 
@@ -473,6 +486,9 @@ eval/
   tools/rerecord_all.js     npm run cassettes:rerecord（章節重整後一次重錄；第 3f 節）
   tools/prune_cassettes.js  npm run cassettes:prune（清掉 CI 讀不到的 cassette；第 3f 節）
   lib/cassetteProbe.js  cassetteAudit.js  cassettePlan.js  suiteProcess.js   兩支工具共用（探針、盤點、估算、CI 環境）
+  lib/localMode.js          本機模式：這一輪用到哪些模型、錄前檢查（Ollama／OCR）、預估時間（第 3f 節）
+  tools/ocr_selftest.js     npm run ocr:selftest（ocr_service/ocr_pdf.py --selftest；本機模式）
+  tools/tee_run.js          Windows 腳本用：輸出同時印畫面與寫 log（scripts/windows/*.bat）
   lib/chapterGate.js        硬閘門的章節白名單來源（預設 config/chapters.js；測試可注入新清單）
   CHAPTER_RELABEL-2026-09.md  章節重整的改標清單（題號、舊章、新章、理由）
   reports/                  報表輸出（.gitignore）

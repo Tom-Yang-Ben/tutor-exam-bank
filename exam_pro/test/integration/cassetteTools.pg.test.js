@@ -85,8 +85,9 @@ function runSuite() {
             first = JSON.parse(res.stdout);
             const e2e = first.summary.suites.e2e;
             assert.equal(e2e.ran, true, 'e2e 子行程沒有跑起來');
-            assert.ok(e2e.llmCalls > 0, 'e2e 至少會回放一次 extract（樣卷第 1 塊）');
-            assert.ok([...e2e.hitKeys, ...e2e.missKeys].some(k => k.startsWith('extract/')), '沒有 extract 的紀錄');
+            assert.ok(e2e.llmCalls > 0, 'e2e 至少會回放一次拆題（樣卷第 1 塊）');
+            // 〔本機模式 L4〕CI 的拆題模型是 ollama: 時走本機路徑，第一個呼叫是 ocr（OCR_ENGINE=none 時是 extract_vision）
+            assert.ok([...e2e.hitKeys, ...e2e.missKeys].some(k => /^(extract|ocr|extract_vision|extract_ocr)\//.test(k)), '沒有拆題的紀錄');
             const disk = onDisk();
             for (const k of e2e.hitKeys) assert.ok(disk.has(k), `命中的 ${k} 不在暫存目錄`);
             for (const k of e2e.missKeys) assert.ok(!disk.has(k), `miss 的 ${k} 竟然在暫存目錄`);
@@ -97,9 +98,11 @@ function runSuite() {
             const { summary } = first;
             assert.equal(summary.unhit.length, summary.cassettes.total - summary.cassettes.hit);
             const hit = new Set(summary.suites.e2e.hitKeys);
+            const { IN_SCOPE_AGENTS } = require(path.join(APP_DIR, 'eval', 'lib', 'cassetteAudit'));
             for (const u of summary.unhit) {
                 assert.ok(!hit.has(`${u.agent}/${u.key}`));
-                assert.ok(['extract', 'classify', 'lint', 'verify', 'nlq', 'variant'].includes(u.agent), u.agent);
+                assert.ok(IN_SCOPE_AGENTS.includes(u.agent), u.agent);
+                assert.ok(!/_chem$/.test(u.agent) && !['tutor', 'voice'].includes(u.agent), u.agent);
             }
         });
 

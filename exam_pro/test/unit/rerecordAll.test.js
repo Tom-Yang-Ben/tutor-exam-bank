@@ -15,7 +15,19 @@ const path = require('node:path');
 const rerecord = require('../../eval/tools/rerecord_all');
 const sp = require('../../eval/lib/suiteProcess');
 const audit = require('../../eval/lib/cassetteAudit');
+const local = require('../../eval/lib/localMode');
 const models = require('../../config/models');
+
+/** 〔本機模式 L4〕Gemini 路徑的測試明寫 CI 的模型（repo 的 ci.yml 已改成本機預設） */
+const GEMINI_CI = Object.freeze({
+    MODEL_EXTRACT: 'gemini:gemini-3.5-flash', MODEL_VERIFY: 'gemini:gemini-3.1-pro-preview',
+    EMBED_MODEL: 'gemini-embedding-001', MODEL_NLQ: 'gemini:gemini-3.5-flash', source: 'test'
+});
+/** 本機模式的 CI 設定（與 docs/local-mode.md 第 2 條、repo 的 ci.yml 相同） */
+const LOCAL_CI = Object.freeze({
+    MODEL_EXTRACT: 'ollama:qwen3-vl:8b', MODEL_VERIFY: 'ollama:qwen3:8b',
+    EMBED_MODEL: 'ollama:qwen3-embedding:0.6b', MODEL_NLQ: 'ollama:qwen3:8b', source: 'test'
+});
 
 let tmp;
 before(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rerecord-test-')); });
@@ -160,7 +172,33 @@ describe('ciEnv：子行程一律照 CI 的設定', () => {
         assert.equal(Number(sp.CI_EFFECTIVE_DEFAULTS.JOB_COST_BUDGET_USD), resolveBudgetUsd(undefined, {}));
     });
 
-    test('readCiModels：repo 的 ci.yml 與 config/models.js 的預設一致；讀不到就退回預設', () => {
+    test('readCiModels：repo 的 ci.yml 是本機預設（docs/local-mode.md 第 2 條）；讀不到就退回預設；選填的鍵有寫才出現', () => {
+        const ci = sp.readCiModels();
+        assert.equal(ci.MODEL_EXTRACT, local.LOCAL_DEFAULTS.MODEL_EXTRACT);
+        assert.equal(ci.MODEL_VERIFY, local.LOCAL_DEFAULTS.MODEL_VERIFY);
+        assert.equal(ci.EMBED_MODEL, local.LOCAL_DEFAULTS.EMBED_MODEL);
+        assert.deepEqual({ MODEL_EXTRACT: sp.FALLBACK_CI_MODELS.MODEL_EXTRACT, MODEL_VERIFY: sp.FALLBACK_CI_MODELS.MODEL_VERIFY },
+            { MODEL_EXTRACT: local.LOCAL_DEFAULTS.MODEL_EXTRACT, MODEL_VERIFY: local.LOCAL_DEFAULTS.MODEL_VERIFY });
+
+        const yml = path.join(tmp, 'ci.yml');
+        fs.writeFileSync(yml, 'env:\n  MODEL_EXTRACT: gemini:abc\n  MODEL_VERIFY: "gemini:def"   \n', 'utf8');
+        assert.deepEqual({ ...sp.readCiModels(yml), source: null }, { MODEL_EXTRACT: 'gemini:abc', MODEL_VERIFY: 'gemini:def', source: null },
+            '沒寫 EMBED_MODEL／MODEL_NLQ 就不出現（子行程設成空字串＝程式預設）');
+        const yml2 = path.join(tmp, 'ci2.yml');
+        fs.writeFileSync(yml2, 'env:\n  MODEL_EXTRACT: ollama:qwen3-vl:8b\n  MODEL_VERIFY: ollama:qwen3:8b\n' +
+            '  # EMBED_MODEL: 註解裡的不算\n  EMBED_MODEL: ollama:qwen3-embedding:0.6b\n  MODEL_NLQ: \'ollama:qwen3:8b\'\n', 'utf8');
+        const two = sp.readCiModels(yml2);
+        assert.equal(two.EMBED_MODEL, 'ollama:qwen3-embedding:0.6b', '只切第一段、保留模型 ID 裡的冒號');
+        assert.equal(two.MODEL_NLQ, 'ollama:qwen3:8b');
+        assert.ok(!('OCR_ENGINE' in two));
+        const fallback = sp.readCiModels(path.join(tmp, '沒有這個檔.yml'));
+        assert.equal(fallback.MODEL_EXTRACT, sp.FALLBACK_CI_MODELS.MODEL_EXTRACT);
+        assert.match(fallback.source, /預設值/);
+    });
+
+    test('readCiModels：repo 的 ci.yml 與 config/models.js 的預設一致', {
+        skip: models.VENDORS.includes('ollama') ? false : 'config/models.js 還沒有 ollama 供應商（本機模式 L1 尚未合入）；合入後這一則自動恢復執行'
+    }, () => {
         const ci = sp.readCiModels();
         const saved = { e: process.env.MODEL_EXTRACT, v: process.env.MODEL_VERIFY };
         delete process.env.MODEL_EXTRACT; delete process.env.MODEL_VERIFY;
@@ -171,12 +209,38 @@ describe('ciEnv：子行程一律照 CI 的設定', () => {
             if (saved.e !== undefined) process.env.MODEL_EXTRACT = saved.e;
             if (saved.v !== undefined) process.env.MODEL_VERIFY = saved.v;
         }
-        const yml = path.join(tmp, 'ci.yml');
-        fs.writeFileSync(yml, 'env:\n  MODEL_EXTRACT: gemini:abc\n  MODEL_VERIFY: "gemini:def"   \n', 'utf8');
-        assert.deepEqual({ ...sp.readCiModels(yml), source: null }, { MODEL_EXTRACT: 'gemini:abc', MODEL_VERIFY: 'gemini:def', source: null });
-        const fallback = sp.readCiModels(path.join(tmp, '沒有這個檔.yml'));
-        assert.equal(fallback.MODEL_EXTRACT, sp.FALLBACK_CI_MODELS.MODEL_EXTRACT);
-        assert.match(fallback.source, /預設值/);
+    });
+
+    test('〔本機模式 L4〕回放：ci.yml 的 EMBED_MODEL／MODEL_NLQ 照 CI；.env 的 OCR_*／OLLAMA_*／長逾時一律設成空字串', () => {
+        const ciLocal = { MODEL_EXTRACT: 'ollama:ci-vl', MODEL_VERIFY: 'ollama:ci-text', EMBED_MODEL: 'ollama:ci-embed', MODEL_NLQ: 'ollama:ci-nlq' };
+        const dotenv = {
+            EMBED_MODEL: 'gemini-embedding-001', MODEL_NLQ: 'gemini:x', OCR_ENGINE: 'none', OCR_DPI: '300', OCR_PYTHON: 'C:/py.exe',
+            OLLAMA_HOST: 'http://127.0.0.1:11434', OLLAMA_NUM_CTX: '8192', JOB_NODE_TIMEOUT_MS: '999', NLQ_TIMEOUT_MS: '5'
+        };
+        const env = sp.ciEnv({ base: { ...base, ...dotenv }, models: ciLocal, envFileKeys: Object.keys(dotenv) });
+        assert.equal(env.EMBED_MODEL, 'ollama:ci-embed');
+        assert.equal(env.MODEL_NLQ, 'ollama:ci-nlq');
+        for (const k of ['OCR_ENGINE', 'OCR_DPI', 'OCR_PYTHON', 'OLLAMA_HOST', 'OLLAMA_NUM_CTX', 'JOB_NODE_TIMEOUT_MS', 'NLQ_TIMEOUT_MS']) {
+            assert.equal(env[k], '', `${k} 回放時不得照 .env`);
+        }
+        // shell 裡設的（不在 .env）也一樣擋
+        const shell = sp.ciEnv({ base: { ...base, OCR_ENGINE: 'none', OLLAMA_HOST: 'x' }, models: ciLocal, envFileKeys: [] });
+        assert.equal(shell.OCR_ENGINE, '');
+        assert.equal(shell.OLLAMA_HOST, '');
+    });
+
+    test('〔本機模式 L4〕錄製：放行 OLLAMA_* 與 OCR_PYTHON／OCR_TIMEOUT_MS（不進鍵）；OCR_ENGINE／OCR_DPI 仍照 CI（會改鍵或流程）', () => {
+        const ciLocal = { MODEL_EXTRACT: 'ollama:ci-vl', MODEL_VERIFY: 'ollama:ci-text', OCR_DPI: '200' };
+        const dotenv = {
+            OLLAMA_HOST: 'http://127.0.0.1:11500', OLLAMA_CONCURRENCY: '1', OLLAMA_TIMEOUT_MS: '60000', OLLAMA_NUM_CTX: '8192',
+            OLLAMA_KEEP_ALIVE: '5m', OLLAMA_RPM: '10', OCR_PYTHON: 'C:/venv/python.exe', OCR_TIMEOUT_MS: '1000', OCR_ENGINE: 'none', OCR_DPI: '300'
+        };
+        const env = sp.ciEnv({ base: { ...base, ...dotenv }, models: ciLocal, envFileKeys: Object.keys(dotenv), llmMode: 'record', embedMode: 'record' });
+        for (const k of ['OLLAMA_HOST', 'OLLAMA_CONCURRENCY', 'OLLAMA_TIMEOUT_MS', 'OLLAMA_NUM_CTX', 'OLLAMA_KEEP_ALIVE', 'OLLAMA_RPM', 'OCR_PYTHON', 'OCR_TIMEOUT_MS']) {
+            assert.equal(env[k], dotenv[k], `${k} 錄製時要放行`);
+        }
+        assert.equal(env.OCR_ENGINE, '', 'OCR_ENGINE 照 CI（沒寫＝程式預設 paddle），不照 .env 的 none');
+        assert.equal(env.OCR_DPI, '200', 'OCR_DPI 照 ci.yml 的值');
     });
 
     test('suiteArgs：與 package.json 的 npm run eval／test:e2e 同一行', () => {
@@ -255,6 +319,7 @@ describe('yes 確認與驗證表', () => {
         const calls = [];
         await withEnv({ GEMINI_API_KEY: 'k', TEST_DATABASE_URL: 'postgres://x/y_test' }, async () => {
             const code = await rerecord.main(['--suites', 'classify'], {
+                readCiModels: () => GEMINI_CI,
                 analyze: async () => fakeAnalysis(),
                 askYes: async () => false,
                 checkTestDbSchema: async () => ({ ok: true }),
@@ -272,6 +337,7 @@ describe('yes 確認與驗證表', () => {
         let asked = 0;
         await withEnv({ GEMINI_API_KEY: 'k', TEST_DATABASE_URL: 'postgres://x/y_test', MODEL_EXTRACT: 'gemini:local-only' }, async () => {
             const code = await rerecord.main(['--suites', 'classify,e2e', '--no-similar'], {
+                readCiModels: () => GEMINI_CI,
                 analyze: async () => { analyzed += 1; return fakeAnalysis(); },
                 askYes: async () => { asked += 1; return true; },
                 checkTestDbSchema: async () => ({ ok: true }),
@@ -284,8 +350,9 @@ describe('yes 確認與驗證表', () => {
         assert.deepEqual(calls.map(c => c.args.slice(-1)[0]), ['classify', 'pipeline']);
         for (const c of calls) {
             assert.equal(c.env.LLM_MODE, 'record');
-            assert.equal(c.env.MODEL_EXTRACT, sp.readCiModels().MODEL_EXTRACT, '.env 的 MODEL_EXTRACT 不得帶進錄製');
+            assert.equal(c.env.MODEL_EXTRACT, GEMINI_CI.MODEL_EXTRACT, '.env 的 MODEL_EXTRACT 不得帶進錄製');
             assert.equal(c.env.GEMINI_API_KEY, 'k');
+            assert.equal(c.env.JOB_NODE_TIMEOUT_MS, '', 'Gemini 路徑不帶本機長逾時（照 CI）');
         }
     });
 
@@ -293,6 +360,7 @@ describe('yes 確認與驗證表', () => {
         t.mock.method(console, 'log', () => {});
         t.mock.method(console, 'error', () => {});
         const deps = {
+            readCiModels: () => GEMINI_CI,
             analyze: async () => fakeAnalysis(),
             askYes: async () => { throw new Error('不該問'); },
             checkTestDbSchema: async () => ({ ok: true }),
@@ -312,6 +380,7 @@ describe('yes 確認與驗證表', () => {
         const errors = [];
         t.mock.method(console, 'error', (m) => errors.push(String(m)));
         const base = {
+            readCiModels: () => GEMINI_CI,
             analyze: async () => fakeAnalysis(),
             askYes: async () => { throw new Error('不該問'); },
             runNode: async () => { throw new Error('不該錄'); }
@@ -322,5 +391,131 @@ describe('yes 確認與驗證表', () => {
         });
         assert.ok(errors.some(e => e.includes('attempts') && e.includes('migrate:test')), errors.join('\n'));
         assert.ok(errors.some(e => e.includes('ECONNREFUSED')), errors.join('\n'));
+    });
+
+    // ── 〔本機模式 L4〕docs/local-mode.md 第 6 條第 2 點 ──
+
+    /** 本機模式的注入：記下每一個錄前檢查的呼叫順序與參數 */
+    function localDeps(over = {}) {
+        const order = [];
+        const seen = { ollama: [], ocr: [], runs: [] };
+        const deps = {
+            readCiModels: () => LOCAL_CI,
+            analyze: async (o) => ({ ...fakeAnalysis(), models: o.models }),
+            askYes: async () => { order.push('ask'); return true; },
+            checkOllama: async (o) => { order.push('ollama'); seen.ollama.push(o); return { ok: true, reachable: true, installed: [], missing: [], error: null }; },
+            checkOcr: async (o) => { order.push('ocr'); seen.ocr.push(o); return { ok: true, engineVersion: '3.0.0' }; },
+            checkTestDbSchema: async () => { order.push('schema'); return { ok: true }; },
+            runNode: async (opts) => { seen.runs.push(opts); return { exitCode: 0, ms: 1, tail: [], reportFiles: [] }; },
+            ...over
+        };
+        return { deps, order, seen };
+    }
+
+    test('main（本機）：不需要 GEMINI_API_KEY；Ollama → OCR → migration 依序全過才問 yes；錄製帶本機逾時與連線設定', async (t) => {
+        t.mock.method(console, 'log', () => {});
+        const { deps, order, seen } = localDeps();
+        await withEnv({
+            GEMINI_API_KEY: undefined, TEST_DATABASE_URL: 'postgres://x/y_test', OLLAMA_HOST: '127.0.0.1:11434',
+            OCR_PYTHON: '/opt/venv/bin/python', OLLAMA_NUM_CTX: '8192'
+        }, async () => {
+            assert.equal(await rerecord.main(['--suites', 'classify,nlq,pipeline'], deps), 0);
+        });
+        assert.deepEqual(order, ['ollama', 'ocr', 'schema', 'ask']);
+        assert.equal(seen.ollama[0].host, 'http://127.0.0.1:11434', '沒寫 scheme 補 http://');
+        assert.deepEqual(seen.ollama[0].models, ['qwen3-vl:8b', 'qwen3:8b', 'qwen3-embedding:0.6b'], 'MODEL_NLQ 與 MODEL_VERIFY 同一個，只列一次');
+        assert.equal(seen.ocr[0].python, '/opt/venv/bin/python');
+        assert.deepEqual(seen.runs.map(r => r.args.slice(-1)[0]), ['--only-missing', 'classify', 'nlq', 'pipeline']);
+        for (const r of seen.runs) {
+            assert.equal(r.env.MODEL_EXTRACT, LOCAL_CI.MODEL_EXTRACT);
+            assert.equal(r.env.EMBED_MODEL, LOCAL_CI.EMBED_MODEL, 'EMBED_MODEL 照 ci.yml');
+            assert.equal(r.env.MODEL_NLQ, LOCAL_CI.MODEL_NLQ, 'MODEL_NLQ 照 ci.yml');
+            assert.equal(r.env.JOB_NODE_TIMEOUT_MS, String(local.LOCAL_NODE_TIMEOUT_MS), '一個節點可能跑二十分鐘（原則 5）');
+            assert.equal(r.env.NLQ_TIMEOUT_MS, String(local.LOCAL_NLQ_TIMEOUT_MS), 'NLQ 預設 4 秒在 CPU 上一定逾時，錄不到 cassette');
+            assert.equal(r.env.OLLAMA_HOST, '127.0.0.1:11434', '錄製時放行本機連線設定');
+            assert.equal(r.env.OLLAMA_NUM_CTX, '8192');
+            assert.equal(r.env.OCR_PYTHON, '/opt/venv/bin/python');
+        }
+    });
+
+    test('main（本機）：Ollama 連不上或缺模型 → 不問 yes、不錄，結束碼 1，提示開啟 Ollama／ollama pull', async (t) => {
+        t.mock.method(console, 'log', () => {});
+        const errors = [];
+        t.mock.method(console, 'error', (m) => errors.push(String(m)));
+        const noAsk = { askYes: async () => { throw new Error('不該問'); }, runNode: async () => { throw new Error('不該錄'); } };
+        await withEnv({ GEMINI_API_KEY: undefined, TEST_DATABASE_URL: 'postgres://x/y_test', OLLAMA_HOST: undefined }, async () => {
+            const down = localDeps({ ...noAsk, checkOllama: async () => ({ ok: false, reachable: false, installed: [], missing: ['qwen3:8b'], error: '連不上 Ollama（http://127.0.0.1:11434，ECONNREFUSED）' }) });
+            assert.equal(await rerecord.main(['--suites', 'classify'], down.deps), 1);
+            assert.ok(!down.order.includes('schema'), 'Ollama 沒過就不往下檢查');
+            const missing = localDeps({ ...noAsk, checkOllama: async () => ({ ok: false, reachable: true, installed: ['qwen3:8b'], missing: ['qwen3-vl:8b'], error: '還沒有 qwen3-vl:8b' }) });
+            assert.equal(await rerecord.main(['--suites', 'classify'], missing.deps), 1);
+        });
+        assert.ok(errors.some(e => e.includes('ECONNREFUSED')), errors.join('\n'));
+        assert.ok(errors.some(e => e.includes('開啟 Ollama')), errors.join('\n'));
+        assert.ok(errors.some(e => e.includes('ollama pull qwen3-vl:8b')), errors.join('\n'));
+    });
+
+    test('main（本機）：OCR 自我檢查沒過 → 結束碼 1，提示 setup_local_ai.bat；不錄 pipeline 或 ci.yml 設 OCR_ENGINE=none 時不檢查 OCR', async (t) => {
+        t.mock.method(console, 'log', () => {});
+        const errors = [];
+        t.mock.method(console, 'error', (m) => errors.push(String(m)));
+        await withEnv({ GEMINI_API_KEY: undefined, TEST_DATABASE_URL: 'postgres://x/y_test' }, async () => {
+            const bad = localDeps({
+                askYes: async () => { throw new Error('不該問'); },
+                checkOcr: async () => ({ ok: false, error: 'ocr_pdf.py --selftest 失敗：結束碼 1', detail: ['ModuleNotFoundError: paddleocr'] })
+            });
+            assert.equal(await rerecord.main(['--suites', 'pipeline'], bad.deps), 1);
+            assert.ok(!bad.order.includes('schema'));
+
+            const noPipeline = localDeps();
+            assert.equal(await rerecord.main(['--suites', 'classify'], noPipeline.deps), 0);
+            assert.ok(!noPipeline.order.includes('ocr'), '不錄 pipeline 就用不到 OCR');
+
+            const none = localDeps({ readCiModels: () => ({ ...LOCAL_CI, OCR_ENGINE: 'none' }) });
+            assert.equal(await rerecord.main(['--suites', 'pipeline'], none.deps), 0);
+            assert.ok(!none.order.includes('ocr'), 'OCR_ENGINE=none：只跑視覺模型');
+        });
+        assert.ok(errors.some(e => e.includes('ModuleNotFoundError')), errors.join('\n'));
+        assert.ok(errors.some(e => e.includes('setup_local_ai.bat')), errors.join('\n'));
+    });
+
+    test('main（混合）：MODEL_NLQ 仍走 Gemini 時要金鑰，訊息指名是哪一個', async (t) => {
+        t.mock.method(console, 'log', () => {});
+        const errors = [];
+        t.mock.method(console, 'error', (m) => errors.push(String(m)));
+        const mixed = localDeps({ readCiModels: () => ({ ...LOCAL_CI, MODEL_NLQ: undefined }), askYes: async () => { throw new Error('不該問'); } });
+        await withEnv({ GEMINI_API_KEY: undefined, TEST_DATABASE_URL: 'postgres://x/y_test' }, async () => {
+            assert.equal(await rerecord.main(['--suites', 'nlq'], mixed.deps), 1);
+        });
+        assert.ok(errors.some(e => e.includes('GEMINI_API_KEY') && e.includes(`MODEL_NLQ=${local.NLQ_CODE_DEFAULT}`)), errors.join('\n'));
+    });
+
+    test('main --dry-run --json（本機）：印出本機區塊（要下載的模型、要不要 OCR、預估秒數），不做任何錄前檢查', async (t) => {
+        const out = [];
+        t.mock.method(console, 'log', (m) => out.push(String(m)));
+        const { deps, order } = localDeps({ askYes: async () => { throw new Error('不該問'); } });
+        await withEnv({ GEMINI_API_KEY: undefined, TEST_DATABASE_URL: 'postgres://x/y_test' }, async () => {
+            assert.equal(await rerecord.main(['--dry-run', '--json', '--suites', 'classify,pipeline'], deps), 0);
+        });
+        assert.deepEqual(order, [], 'dry-run 不連 Ollama、不跑 Python');
+        const doc = JSON.parse(out.join('\n'));
+        assert.deepEqual(doc.local.ollamaModels, ['qwen3-vl:8b', 'qwen3:8b']);
+        assert.equal(doc.local.needOcr, true);
+        assert.equal(doc.local.needGeminiKey, false);
+        assert.ok(doc.local.estimateSec.upper >= doc.local.estimateSec.lower);
+    });
+
+    test('main（本機）：盤點表印預估時間、不印費用；確認訊息寫「不花錢」與粗估時間', async (t) => {
+        const out = [];
+        t.mock.method(console, 'log', (m) => out.push(String(m)));
+        const { deps } = localDeps({ askYes: async () => false });
+        await withEnv({ GEMINI_API_KEY: undefined, TEST_DATABASE_URL: 'postgres://x/y_test' }, async () => {
+            assert.equal(await rerecord.main(['--suites', 'classify'], deps), 0);
+        });
+        const text = out.join('\n');
+        assert.match(text, /預估時間（本機，粗估）/);
+        assert.match(text, /粗估/);
+        assert.match(text, /不連外、不花錢/);
+        assert.doesNotMatch(text, /會呼叫 Gemini、會產生費用/);
     });
 });

@@ -3,8 +3,9 @@
 //                              （npm run cassettes:rerecord；docs/chapter-restructure.md 第 3.2 條第 2 點、第 5 條）
 //
 // 給 Owner 在 Windows 的 exam_pro/ 底下執行：
-//   npm run cassettes:rerecord -- --dry-run    只回放、不連網：列出每個 suite 缺多少 cassette、預估呼叫次數與費用
-//   npm run cassettes:rerecord                 先印同一份盤點，輸入 yes 之後才開始錄（**會呼叫 Gemini、會產生費用**）
+//   npm run cassettes:rerecord -- --dry-run    只回放、不連網：列出每個 suite 缺多少 cassette、預估呼叫次數與費用（本機：時間）
+//   npm run cassettes:rerecord                 先印同一份盤點，輸入 yes 之後才開始錄
+//                                              （CI 的模型是 Gemini 時**會產生費用**；是 ollama: 時在本機跑，不花錢但很慢）
 //
 // 錄製**完全沿用 repo 既有的機制**，本檔只負責依序呼叫、把環境設對：
 //   1. 向量（只補缺的）   node eval/record_embeddings.js --only-missing           EMBED_MODE=live
@@ -18,12 +19,22 @@
 //                        時 e2e 需要這幾筆向量（docs/HANDOFF.md 第 8 節）。--no-similar 可略過。
 //   7. 驗證：以 CI 的設定（replay／fixture）把五個 eval 與 e2e 各跑一次，印出結果與門檻比較。
 //
-// 所有子行程的模型一律照 .github/workflows/ci.yml（MODEL_EXTRACT／MODEL_VERIFY），.env 裡的 MODEL_*、FEATURE_*
-// 不會帶進去：cassette 的鍵含模型 ID，照 .env 錄的鍵 CI 讀不到（見 eval/lib/suiteProcess.js 檔頭）。
-// 金鑰讀 exam_pro/.env 的 GEMINI_API_KEY；測試庫讀 TEST_DATABASE_URL（nlq 的 Recall@10 與 e2e 要用）。
+// 所有子行程的模型一律照 .github/workflows/ci.yml（MODEL_EXTRACT／MODEL_VERIFY，以及有寫的 EMBED_MODEL／MODEL_NLQ），
+// .env 裡的 MODEL_*、FEATURE_* 不會帶進去：cassette 的鍵含模型 ID，照 .env 錄的鍵 CI 讀不到（見 eval/lib/suiteProcess.js 檔頭）。
+// 金鑰讀 exam_pro/.env 的 GEMINI_API_KEY（只有模型走 Gemini 時才需要）；測試庫讀 TEST_DATABASE_URL（nlq 的 Recall@10 與 e2e 要用）。
 //
 // 門檻：驗證那一步若有 eval 低於 eval/thresholds.json，**不會**自動放寬——印出來，另開裁決
 // （docs/chapter-restructure.md 第 5 條第 4 點）。
+//
+// 〔本機模式 L4，docs/local-mode.md 第 6 條第 2 點〕ci.yml 的模型是 ollama: 時：
+//   - 不要求 GEMINI_API_KEY（只有真的有模型走 Gemini 才要）；
+//   - 問 yes 之前先做錄前檢查，任一項沒過就停、一次都不錄：
+//       ① Ollama 連得上（GET {OLLAMA_HOST}/api/tags），需要的模型都已下載（列出缺的，提示 ollama pull）；
+//       ② 要錄 pipeline 且 OCR_ENGINE=paddle 時，<OCR_PYTHON> ocr_service/ocr_pdf.py --selftest 通過；
+//       ③ 測試庫已套 migration（既有）；
+//   - 盤點的費用欄改成「預估時間」（粗估，eval/lib/localMode.js 檔頭有依據與覆寫方式）；
+//   - 錄製子行程多帶 JOB_NODE_TIMEOUT_MS／NLQ_TIMEOUT_MS 的本機值（一次呼叫可能十幾分鐘；不影響 cassette 的鍵）。
+// Windows 上可以直接雙擊 exam_pro\scripts\windows\record_local.bat（db:up → migrate:test → 本指令，自動輸入 yes、寫 log）。
 // ─────────────────────────────────────────────────────────────
 
 const fs = require('fs');
@@ -35,17 +46,19 @@ require('dotenv').config({ path: path.join(APP_DIR, '.env'), quiet: true });
 
 const { ALL_SUITES, EVAL_SUITES, ciEnv, suiteArgs, runNode, readCiModels } = require('../lib/suiteProcess');
 const { analyze, formatSummary, thresholdRows } = require('../lib/cassettePlan');
+const local = require('../lib/localMode');
 
 const USAGE = `用法：npm run cassettes:rerecord -- [選項]
 
-  --dry-run          只回放、不連網：列出每個 suite 缺多少 cassette、預估呼叫次數與費用
+  --dry-run          只回放、不連網：列出每個 suite 缺多少 cassette、預估呼叫次數與費用（本機模型：預估時間）
   --json             與 --dry-run 一起用：輸出機器可讀的 JSON（給測試與自動化）
   --suites <a,b>     只看／只錄這幾個 suite（預設全部：${ALL_SUITES.join(',')}）
   --no-similar       略過第 6 步（e2e 的 dedup1 向量；CI 用不到）
   --skip-verify      錄完不跑第 7 步的回放驗證
   -h, --help         顯示這段說明
 
-正式執行前會印出盤點結果，並要求輸入 yes 才開始呼叫 Gemini。`;
+正式執行前會印出盤點結果並做錄前檢查（本機模型：Ollama 與 OCR；Gemini：金鑰），
+要求輸入 yes 才開始呼叫模型。`;
 
 /**
  * @param {string[]} argv
@@ -202,22 +215,90 @@ function banner(text) {
     console.log(`\n══ ${text} ${'═'.repeat(Math.max(0, 60 - text.length))}`);
 }
 
+/** 〔本機模式 L4〕CI 沒寫這個變數時，子行程實際用的是什麼（給「.env 的值不會用到」那段提示） */
+const CI_UNSET_TEXT = Object.freeze({
+    MODEL_VARIANT: '未設，退回 MODEL_VERIFY',
+    MODEL_OCR_STRUCTURE: '未設，退回 MODEL_VERIFY',
+    MODEL_NLQ: `未設，services/nlqService.js 的預設 ${local.NLQ_CODE_DEFAULT}`,
+    EMBED_MODEL: `未設，程式預設 ${local.LOCAL_DEFAULTS.EMBED_MODEL}`,
+    OCR_ENGINE: `未設，程式預設 ${local.LOCAL_DEFAULTS.OCR_ENGINE}`
+});
+
+/**
+ * 〔本機模式 L4〕錄前檢查：金鑰（只有走 Gemini 才要）、測試庫、Ollama、OCR、測試庫的 migration。
+ * 任一項沒過就印原因與處置、回 false（呼叫端結束碼 1，一次都不錄）。
+ * @param {ReturnType<typeof local.recordingPlan>} plan
+ * @param {object} deps
+ * @returns {Promise<boolean>}
+ */
+async function preflight(plan, deps) {
+    if (plan.needGeminiKey && !String(process.env.GEMINI_API_KEY || '').trim()) {
+        const which = plan.gemini.map(u => `${u.key}=${u.spec}`).join('、');
+        console.error(`\n❌ exam_pro/.env 沒有 GEMINI_API_KEY：${which} 走 Gemini，錄製必須真的呼叫模型。`);
+        return false;
+    }
+    if (!String(process.env.TEST_DATABASE_URL || '').trim()) {
+        console.error('\n❌ 沒有 TEST_DATABASE_URL：nlq 的查詢句向量與 e2e 都要測試庫才錄得到。');
+        return false;
+    }
+    if (plan.ollama.length) {
+        const host = local.ollamaHost(process.env);
+        if (host.error) {
+            console.error(`\n❌ ${host.error}`);
+            return false;
+        }
+        if (!host.local) console.log(`⚠️ OLLAMA_HOST 指向本機以外的主機（${host.url}）：本機模式的原則是執行期不連外（docs/local-mode.md 第 1 條）。`);
+        const r = await deps.checkOllama({ host: host.url, models: plan.ollama });
+        if (!r.ok) {
+            console.error(`\n❌ ${r.error}`);
+            for (const line of local.ollamaAdvice(r, host.url)) console.error(`   ${line}`);
+            return false;
+        }
+        console.log(`✅ Ollama（${host.url}）已就緒，需要的模型都在：${plan.ollama.join('、')}`);
+    }
+    if (plan.needOcr) {
+        const python = local.ocrPython(process.env);
+        const r = await deps.checkOcr({ python });
+        if (!r.ok) {
+            console.error(`\n❌ ${r.error}`);
+            for (const line of r.detail || []) console.error(`   │ ${line}`);
+            for (const line of local.ocrAdvice(python)) console.error(`   ${line}`);
+            return false;
+        }
+        console.log(`✅ PaddleOCR 自我檢查通過（${r.engineVersion || '版本不明'}）`);
+    }
+    // 〔CR-8〕測試庫是 tmpfs，每次啟動都是空的；沒套 migration 時 nlq 的 Recall@10 會是 n/a（CR-7 ④ 實際發生過），
+    // 錄了也量不齊——花錢（本機：花好幾個小時）之前先擋下來。
+    const schema = await deps.checkTestDbSchema();
+    if (!schema.ok) {
+        const why = schema.error ? `連不上測試庫（${schema.error}）` : `測試庫缺資料表：${(schema.missing || []).join('、')}`;
+        console.error(`\n❌ ${why}。請先 npm run db:up，再 npm run migrate:test，之後重跑本指令。`);
+        return false;
+    }
+    return true;
+}
+
 /**
  * @param {string[]} [argv]
- * @param {{askYes?:Function, analyze?:Function, runNode?:Function, checkTestDbSchema?:Function}} [io] 測試注入點（預設就是真的那幾支）
+ * @param {{askYes?:Function, analyze?:Function, runNode?:Function, checkTestDbSchema?:Function,
+ *          readCiModels?:Function, checkOllama?:Function, checkOcr?:Function}} [io] 測試注入點（預設就是真的那幾支）
  * @returns {Promise<number>} 結束碼
  */
 async function main(argv = process.argv.slice(2), io = {}) {
-    const deps = { askYes, analyze, runNode, checkTestDbSchema, ...io };
+    const deps = {
+        askYes, analyze, runNode, checkTestDbSchema, readCiModels,
+        checkOllama: local.checkOllama, checkOcr: local.checkOcr, ...io
+    };
     const args = parseArgs(argv);
     if (args.help) { console.log(USAGE); return 0; }
 
-    const models = readCiModels();
+    const models = deps.readCiModels();
+    const plan = local.recordingPlan({ models, suites: args.suites, withSimilar: args.withSimilar });
     const notes = [];
-    for (const k of ['MODEL_EXTRACT', 'MODEL_VERIFY', 'MODEL_VARIANT']) {
-        const local = String(process.env[k] || '').trim();
+    for (const k of ['MODEL_EXTRACT', 'MODEL_VERIFY', 'MODEL_VARIANT', 'MODEL_OCR_STRUCTURE', 'MODEL_NLQ', 'EMBED_MODEL', 'OCR_ENGINE']) {
+        const mine = String(process.env[k] || '').trim();
         const ci = models[k] || '';
-        if (local && local !== ci) notes.push(`.env 的 ${k}=${local} 不會用到：錄製與回放一律照 CI（${ci || '未設，退回 MODEL_VERIFY'}），否則錄出來的鍵 CI 讀不到。`);
+        if (mine && mine !== ci) notes.push(`.env 的 ${k}=${mine} 不會用到：錄製與回放一律照 CI（${ci || CI_UNSET_TEXT[k] || '未設'}），否則錄出來的鍵 CI 讀不到。`);
     }
     if (!String(process.env.TEST_DATABASE_URL || '').trim()) {
         notes.push('沒有設 TEST_DATABASE_URL：retrieval 會退回記憶體引擎、nlq 量不到 Recall@10、e2e 整支跳過。請先啟動測試庫（啟動資料庫.bat）並在 .env 設好。');
@@ -228,15 +309,23 @@ async function main(argv = process.argv.slice(2), io = {}) {
         for (const n of notes) console.log(`⚠️ ${n}`);
         console.log(`依序以回放模式跑：${args.suites.join(' → ')}（每個 suite 要幾秒到幾分鐘）`);
     }
-    const before = await deps.analyze({ suites: args.suites, onStart: args.json ? undefined : (s) => console.log(`  · ${s} …`) });
+    const before = await deps.analyze({ suites: args.suites, models, onStart: args.json ? undefined : (s) => console.log(`  · ${s} …`) });
+    const time = plan.local ? local.estimateLocalTime(before.summary) : null;
 
     if (args.dryRun) {
         if (args.json) {
-            console.log(JSON.stringify({ models, notes, steps: recordSteps(args).map(s => s.name), summary: before.summary }, null, 2));
+            const localInfo = plan.local ? {
+                ollamaModels: plan.ollama, needGeminiKey: plan.needGeminiKey, needOcr: plan.needOcr,
+                estimateSec: { lower: Math.round(time.lowerSec), upper: Math.round(time.upperSec) }
+            } : null;
+            console.log(JSON.stringify({ models, notes, local: localInfo, steps: recordSteps(args).map(s => s.name), summary: before.summary }, null, 2));
         } else {
             console.log('');
             console.log(formatSummary(before));
             console.log(`\n正式錄製會依序執行：${recordSteps(args).map(s => s.label).join(' → ')}，再以回放驗證。`);
+            if (plan.local) {
+                console.log(`錄前會檢查：Ollama 與模型（${plan.ollama.join('、')}）${plan.needOcr ? '、PaddleOCR（ocr_pdf.py --selftest）' : ''}、測試庫的 migration。`);
+            }
             console.log('--dry-run 到此為止，沒有呼叫任何外部服務。');
         }
         return 0;
@@ -245,35 +334,24 @@ async function main(argv = process.argv.slice(2), io = {}) {
     console.log('');
     console.log(formatSummary(before));
 
-    if (!String(process.env.GEMINI_API_KEY || '').trim()) {
-        console.error('\n❌ exam_pro/.env 沒有 GEMINI_API_KEY：錄製必須真的呼叫模型。');
-        return 1;
-    }
-    if (!String(process.env.TEST_DATABASE_URL || '').trim()) {
-        console.error('\n❌ 沒有 TEST_DATABASE_URL：nlq 的查詢句向量與 e2e 都要測試庫才錄得到。');
-        return 1;
-    }
-    // 〔CR-8〕測試庫是 tmpfs，每次啟動都是空的；沒套 migration 時 nlq 的 Recall@10 會是 n/a（CR-7 ④ 實際發生過），
-    // 錄了也量不齊——花錢之前先擋下來。
-    const schema = await deps.checkTestDbSchema();
-    if (!schema.ok) {
-        const why = schema.error ? `連不上測試庫（${schema.error}）` : `測試庫缺資料表：${(schema.missing || []).join('、')}`;
-        console.error(`\n❌ ${why}。請先 npm run db:up，再 npm run migrate:test，之後重跑本指令。`);
-        return 1;
-    }
+    if (!(await preflight(plan, deps))) return 1;
 
     const steps = recordSteps(args);
-    console.log(`\n接下來會依序執行（會呼叫 Gemini、會產生費用）：\n${steps.map((s, i) => `  ${i + 1}. ${s.label}`).join('\n')}`);
+    const localEnv = local.localRecordEnv(plan);
+    const what = !plan.local ? '會呼叫 Gemini、會產生費用'
+        : `本機模型，不連外、不花錢；粗估 ${local.formatDuration(time.lowerSec)}～${local.formatDuration(time.upperSec)}，期間不要讓電腦睡眠` +
+          (plan.needGeminiKey ? `。⚠️ ${plan.gemini.map(u => u.key).join('、')} 仍走 Gemini，那一部分會產生費用` : '');
+    console.log(`\n接下來會依序執行（${what}）：\n${steps.map((s, i) => `  ${i + 1}. ${s.label}`).join('\n')}`);
     const ok = await deps.askYes('\n確定要開始錄製嗎？請輸入 yes：');
     if (!ok) {
-        console.log('已取消，沒有呼叫任何外部服務。');
+        console.log('已取消，沒有呼叫任何模型。');
         return 0;
     }
 
     const results = [];
     for (const [i, step] of steps.entries()) {
         banner(`${i + 1}/${steps.length} ${step.label}`);
-        const env = ciEnv({ llmMode: step.llmMode, embedMode: step.embedMode, extra: step.extra });
+        const env = ciEnv({ llmMode: step.llmMode, embedMode: step.embedMode, models, extra: { ...localEnv, ...step.extra } });
         const r = await deps.runNode({ args: step.args, env, echo: true });
         results.push({ step: step.name, exitCode: r.exitCode, ms: r.ms });
         console.log(`  → 結束碼 ${r.exitCode}，${Math.round(r.ms / 1000)} 秒` +
@@ -286,13 +364,14 @@ async function main(argv = process.argv.slice(2), io = {}) {
     }
 
     banner('回放驗證（CI 的設定：replay／fixture）');
-    const after = await deps.analyze({ suites: args.suites, onStart: (s) => console.log(`  · ${s} …`) });
+    const after = await deps.analyze({ suites: args.suites, models, onStart: (s) => console.log(`  · ${s} …`) });
     const v = verifyReport(after);
     console.log(v.lines.join('\n'));
     if (v.thresholdFailures.length) {
-        console.log(`\n門檻未達（不會自動放寬；請另開裁決，docs/chapter-restructure.md 第 5 條第 4 點）：\n  - ${v.thresholdFailures.join('\n  - ')}`);
+        console.log(`\n門檻未達（不會自動放寬；請另開裁決，docs/chapter-restructure.md 第 5 條第 4 點` +
+            `${plan.local ? '；換成本機模型後低於門檻由 Owner 另行裁決，docs/local-mode.md 第 6 條第 3 點' : ''}）：\n  - ${v.thresholdFailures.join('\n  - ')}`);
     }
-    console.log('\n錄製步驟：' + results.map(r => `${r.step}=${r.exitCode}`).join('、'));
+    console.log('\n錄製步驟：' + results.map(r => `${r.step}=${r.exitCode}（${Math.round(r.ms / 1000)} 秒）`).join('、'));
     console.log('\n下一步：');
     console.log('  1. git add eval/cassettes eval/fixtures/embeddings.*.json，commit、push。');
     console.log('  2. npm run cassettes:prune 先看要刪哪些過期檔，確認後 npm run cassettes:prune -- --apply，再 commit。');
@@ -307,4 +386,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { main, parseArgs, recordSteps, isYes, e2eCounts, verifyReport, USAGE };
+module.exports = { main, parseArgs, recordSteps, isYes, e2eCounts, verifyReport, preflight, USAGE };

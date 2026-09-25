@@ -6,8 +6,11 @@
 //   npm run cassettes:prune -- --apply    確認清單之後才真的刪
 //
 // 怎麼判斷「過期」：以回放探針（eval/lib/cassetteProbe.js）跑全部 suite，記下實際讀到的鍵；
-// 範圍內（extract／classify／lint／verify／nlq／variant）沒被讀到的檔就是過期。
-// 化學（*_chem）、tutor、voice 與其他沒見過的目錄**一律不碰**（第 3.2 條第 3 點）。
+// 範圍內（extract／classify／lint／verify／nlq／variant，〔本機模式 L4〕加上本機拆題的 ocr／extract_vision／extract_ocr，
+// docs/local-mode.md 第 6 條第 2 點）沒被讀到的檔就是過期。
+// 化學（*_chem，含 extract_vision_chem／extract_ocr_chem）、tutor、voice 與其他沒見過的目錄**一律不碰**（第 3.2 條第 3 點）。
+// 〔本機模式 L4〕從 Gemini 換成本機模型並重錄之後，舊的 Gemini cassette（鍵含 gemini-… 的模型 ID）CI 不會再讀到，
+// 會出現在清單上；要保留「切回 Gemini」的能力就先不要 --apply（切回去時要嘛保留它們、要嘛再用 Gemini 重錄）。
 //
 // --apply 的保護（任一條成立就拒絕刪除，只印原因）：
 //   1. 這一輪還有 replay miss——代表重錄還沒做完。這時刪掉舊檔，單元測試還在讀的那幾支

@@ -407,13 +407,22 @@ Gemini 已回傳 JSON，為何不直接入庫？
 ```bash
 cd exam_pro
 npm install
-cp .env.example .env      # 填入 GEMINI_API_KEY（DATABASE_URL 預設值即可用）
+cp .env.example .env      # 預設是本機模式，不需要金鑰（DATABASE_URL 預設值即可用）
 npm run db:up             # Docker 起 PostgreSQL 16 + pgvector（開發 5442 / 測試 5433）
 npm run migrate           # 套用 migrations/
 npm start                 # http://localhost:3000
 ```
 
 完整安裝步驟、環境變數表、API 一覽與維運工具說明，請見 **[`exam_pro/README.md`](./exam_pro/README.md)**。
+
+### 本機模式（預設）：不連外、不花錢〔2026-09-25〕
+
+所有 AI 步驟預設跑在自己的電腦上：Ollama 的 Qwen3 系列模型（拆題看圖、驗算、向量）＋ PaddleOCR，PDF 拆題由 OCR 與視覺模型**交叉驗證**，兩版不一致的題一律停在人工複核。執行期不連外、零費用；代價是只用 CPU 時**很慢**（一份考卷數小時）、品質低於 Gemini，語音提問關閉。Gemini 保留，改 `.env` 五行即可切回。
+
+- Windows 第一次使用：安裝 [Ollama](https://ollama.com/download) 與 Python 3.11／3.12，然後雙擊 `exam_pro\scripts\windows\setup_local_ai.bat`（下載三個模型、安裝 PaddleOCR、自我檢查，log 在 `exam_pro\data\local_ai\`）。
+- 要讓伺服器真的呼叫模型：`.env` 設 `LLM_MODE=live`、`EMBED_MODE=live`（範本預設只回放）。
+- CI 照舊零金鑰、不連網（只讀回放檔）；回放檔改以本機模型錄製，雙擊 `exam_pro\scripts\windows\record_local.bat`。
+- 使用說明、`.env` 範例、切回 Gemini、預期速度與品質、疑難排解：[`docs/local-mode.md`](./docs/local-mode.md) 第 10 條；決策紀錄：ADR-017。
 
 ## 階段 5：教學診斷平台——功能、旗標與給老師的快速開始
 

@@ -135,3 +135,188 @@
 ## 9. 裁決紀錄
 
 （LM-n 記於此。）
+
+---
+
+## 10. 使用說明（L4，給 Owner）
+
+> 本條以後是使用說明，不是契約；第 0～9 條的凍結介面以上面為準。速度的數字是依硬體規格推的**粗估，尚未在 Owner 的電腦上實測**，實測後請更新本條。
+
+### 10.1 本機模式是什麼、代價是什麼
+
+所有 AI 步驟都在這台電腦上跑：拆題（PaddleOCR 與視覺模型交叉驗證）、分類、公式 lint、驗算、出變式、找相似題的向量，全部由 Ollama 上的 Qwen3 系列模型與本機 PaddleOCR 完成。執行期**不連外、不產生任何費用**，題目與學生資料也不會離開這台電腦。
+
+代價有三個，先講清楚：
+
+1. **很慢**：i5-8265U 沒有獨立顯卡，模型只能用 CPU 跑，每秒只生成幾個字。一份考卷從上傳到拆完可能要好幾個小時（見 10.5）。
+2. **品質低於 Gemini**：8B 的本機模型在公式轉 LaTeX、章節分類、獨立驗算上都比 Gemini Flash／Pro 弱。系統用「PaddleOCR 與視覺模型各拆一次、互相比對」補回一部分可靠度，但兩版不一致的題**一律停在人工複核**（`extract_disagree`），不會自動入庫。預期複核佇列會比以前長。
+3. **少兩個功能**：語音提問關閉（`FEATURE_VOICE=true` 也不會掛載）；AI 家教沒有「用程式驗算」，回答不會宣稱已驗算。
+
+其他功能（題庫管理、組卷、Word 匯出、學生與批改、知識點、補救卷）都與模型無關，行為不變。
+
+| 功能 | 本機模式下 |
+|---|---|
+| PDF 拆題 | PaddleOCR（文字＋公式）與 `qwen3-vl:8b`（看頁面圖片）各拆一次、交叉比對；一次 2 頁 |
+| 分類、lint | `qwen3-vl:8b`（沿用 `MODEL_EXTRACT`） |
+| 驗算、出變式、OCR 結果整理 | `qwen3:8b`（`MODEL_VERIFY`） |
+| 找相似、hybrid 檢索的向量 | `qwen3-embedding:0.6b`（768 維，與資料庫的 `vector(768)` 相同） |
+| 自然語言查題 | 實際上只用規則：本機模型在 4 秒的逾時內回不來（要用 LLM 輔路徑見 10.3 的 `NLQ_TIMEOUT_MS`） |
+| 語音提問 | 關閉 |
+| AI 家教 | 可用，但沒有程式驗算、每次回答要幾分鐘 |
+
+### 10.2 安裝（第一次；大部分時間在下載）
+
+需要：Node.js 24 與 Docker Desktop（原本就有）、約 **15 GB** 可用磁碟空間、安裝時可連網。
+
+1. **安裝 Ollama**：到 <https://ollama.com/download> 下載 Windows 版安裝（免費）。裝好後會在背景執行，工作列右下角出現羊駝圖示。
+2. **安裝 Python 3.11 或 3.12（64 位元）**：<https://www.python.org/downloads/windows/>，安裝時勾選「Add python.exe to PATH」。（Windows 內建的 `python` 只是 Microsoft Store 的捷徑，不算安裝。）
+3. **雙擊 `exam_pro\scripts\windows\setup_local_ai.bat`**。它會依序：
+   1. 檢查 Ollama 已安裝而且在執行；
+   2. `ollama pull` 三個模型：`qwen3-vl:8b`、`qwen3:8b`、`qwen3-embedding:0.6b`（合計約 12 GB）；
+   3. 檢查 Python（先找 `py -3` 再找 `python`；要 3.9 以上、64 位元）；
+   4. 建立 `exam_pro\ocr_service\.venv`；
+   5. `pip install -r exam_pro\ocr_service\requirements.txt`（PaddlePaddle CPU 版、PaddleOCR、PyMuPDF）；
+   6. `ocr_pdf.py --warmup`（下載 PaddleOCR 的模型）；
+   7. `ocr_pdf.py --selftest`（確認都已就緒）。
+
+   任何一步失敗都會寫明原因並停下；重跑是安全的，已完成的步驟會很快跳過。完整輸出在 `exam_pro\data\local_ai\setup_<時間>.log`（`data\` 不進版控）。之後隨時可以用 `npm run ocr:selftest` 單獨檢查 OCR。
+4. **（建議）讓 Ollama 一次只放一個大模型**：「開始」搜尋「編輯您帳戶的環境變數」→ 新增 `OLLAMA_MAX_LOADED_MODELS`，值 `1` → 從工作列圖示結束 Ollama 再重新開啟。16 GB 記憶體同時放兩個 8B 模型會很吃緊。
+5. **改 `.env`**（10.3），然後重啟伺服器（`npm start`）。
+6. **既有題庫換向量**（10.6，一次性，免費但慢）。
+7. （選做）**以本機模型重錄 CI 的回放檔**（10.7）。
+
+### 10.3 `.env` 範例
+
+`exam_pro\.env.example` 已經是本機模式的預設，新裝的直接複製即可。**已經在用的 `.env` 通常明寫了 Gemini 的值，要自己改**——至少這幾行：
+
+```dotenv
+# 真的呼叫模型（範本預設 replay／fixture 只回放，什麼模型都不呼叫）
+LLM_MODE=live
+EMBED_MODE=live
+
+# 模型（docs/local-mode.md 第 2 條）
+MODEL_EXTRACT=ollama:qwen3-vl:8b
+MODEL_VERIFY=ollama:qwen3:8b
+MODEL_NLQ=ollama:qwen3:8b            # 不可留空：留空時程式預設是 Gemini，會連外
+EMBED_MODEL=ollama:qwen3-embedding:0.6b
+EMBED_DIM=768
+GEMINI_API_KEY=                      # 本機模式不需要
+
+# Ollama 與本機 OCR（以下都是預設值，可以不寫）
+OLLAMA_HOST=http://127.0.0.1:11434
+OLLAMA_CONCURRENCY=1
+OLLAMA_TIMEOUT_MS=1800000
+OLLAMA_NUM_CTX=16384
+OLLAMA_KEEP_ALIVE=10m
+OCR_ENGINE=paddle
+OCR_DPI=200
+OCR_TIMEOUT_MS=1800000
+
+# 一次處理一份 PDF（CPU 一次只跑得動一個模型）
+JOB_CONCURRENCY=1
+
+# 語音在本機模式下不提供
+FEATURE_VOICE=false
+```
+
+另外**刪掉（或在前面加 `#`）這兩行**——舊範本把它們寫死成 Gemini 用的值，明寫的值會蓋掉本機預設，結果是一次送 20 頁給視覺模型、每個節點 2 分鐘就逾時，本機拆題一定失敗：
+
+```dotenv
+#JOB_PDF_CHUNK_PAGES=20      ← 不寫時：本機 2 頁、Gemini 20 頁
+#JOB_NODE_TIMEOUT_MS=120000  ← 不寫時：本機 45 分、Gemini 2 分
+```
+
+想讓自然語言查題真的用上 LLM 輔路徑，把 `NLQ_TIMEOUT_MS` 改成 `120000`（每次查詢要等一兩分鐘；預設 4000 等於只用規則）。
+
+### 10.4 切回 Gemini
+
+改這幾行就好，其他設定不用動：
+
+```dotenv
+GEMINI_API_KEY=你的金鑰
+MODEL_EXTRACT=gemini:gemini-3.5-flash
+MODEL_VERIFY=gemini:gemini-3.1-pro-preview
+MODEL_NLQ=gemini:gemini-3.5-flash
+EMBED_MODEL=gemini-embedding-001
+JOB_CONCURRENCY=2                    # 選填
+```
+
+- `JOB_PDF_CHUNK_PAGES`、`JOB_NODE_TIMEOUT_MS` 保持不寫，拆題模型是 Gemini 時自動回到 20 頁、2 分鐘。`OLLAMA_*`、`OCR_*` 在 Gemini 模式下不會被讀到，留著無妨。
+- **換 embedding 模型（不論哪個方向）都要重算全部題目的向量**：照 10.6 的步驟再跑一次。只換 `MODEL_*`、不換 `EMBED_MODEL` 則不必。
+- 也可以只把某一個節點切回 Gemini（例如只改 `MODEL_VERIFY`），那一個節點就會連外、花錢，其餘仍在本機。
+- 語音提問只在 `MODEL_VOICE`（未設時沿用 `MODEL_EXTRACT`）是 `gemini:` 時可用。
+- **CI 讀哪一組回放檔不看 `.env`**，看 `.github/workflows/ci.yml` 的 `MODEL_EXTRACT`／`MODEL_VERIFY`／`EMBED_MODEL`／`MODEL_NLQ`。要讓 CI 也回到 Gemini，改那四行並用 Gemini 重錄（會花錢）；舊的 Gemini 回放檔若還沒被 `cassettes:prune` 刪掉，可以直接沿用（見 10.7）。
+
+### 10.5 預期速度與品質
+
+**速度（粗估，未實測；依 i5-8265U、8B Q4 模型「每秒約 3 個字生成、15 個字讀 prompt」推算）**：
+
+| 動作 | 粗估 |
+|---|---|
+| PaddleOCR 辨識一塊（2 頁，含公式） | 2～5 分鐘 |
+| 視覺模型拆一塊（2 頁） | 15～30 分鐘 |
+| OCR 結果整理成題目 | 10～20 分鐘 |
+| 每一題的分類／lint／驗算 | 各幾分鐘；驗算開思考，最久 |
+| **一份 4 頁、20 題的考卷，上傳到全部處理完** | **數小時**；建議晚上上傳、隔天看複核佇列 |
+| 一段文字的向量 | 約 1 秒；既有題庫 1,000 題換向量約 20～40 分鐘 |
+| 整套重錄 CI 回放檔（10.7） | 可能要一整天（20～30 小時），可以分次錄 |
+
+模型第一次載入（或 `OLLAMA_KEEP_ALIVE` 過期後再載入）要多等 1～2 分鐘。處理期間電腦會變慢，但可以照常使用；請接上電源、把睡眠設成「永不」。
+
+**品質**：
+
+- 公式、題幹的抄錯率會比 Gemini 高；交叉驗證只保證「兩版不一致的題會被攔下來」，不保證「兩版一致的題一定對」——複核時仍要抽看。
+- 交叉驗證不一致（`extract_disagree`）的題**一律停在人工複核**；另一版的題幹保留在該題的處理紀錄（payload 的 `alt_question_text`），複核時對照原卷改對再核准。
+- 章節分類、獨立驗算的準確率預期低於 Gemini；五個 eval 的門檻（`eval/thresholds.json`）是用 Gemini 量的，本機重錄後很可能有幾項未達。**門檻數字不會自動放寬**，由 Owner 另行裁決（多半是依本機模型重建基準；第 6 條第 3 點）。
+- 知識點自動標註、AI 家教的品質同樣會下降；家教沒有程式驗算。
+
+### 10.6 上線步驟：既有題庫換成本機的向量
+
+換 `EMBED_MODEL` 之後，資料庫裡既有題目的向量還是舊模型算的，找相似題與 hybrid 檢索會對不上（新舊模型的向量不能互相比）。在正式庫做一次（免費，但 CPU 上要一段時間）：
+
+1. `npm run db:backup`（先備份）。
+2. `.env` 設好 10.3 的值（`EMBED_MODE=live`、`EMBED_MODEL=ollama:qwen3-embedding:0.6b`），確認 Ollama 在執行。
+3. `npm run embed:backfill -- --dry-run` 看要算幾題 → `npm run embed:backfill`（全量對帳：`embedding_model` 與現在的模型不同的題都會重算；可中斷重跑）。
+4. `npm run search:reindex -- --dry-run` → `npm run search:reindex`。
+5. 重啟伺服器。
+
+在第 3 步跑完之前，不要用找相似題與變式題的檢索（結果沒有意義）。切回 Gemini 的 embedding 時同樣要再做一次。
+
+### 10.7 以本機模型重錄 CI 的回放檔（`record_local.bat`）
+
+CI 不裝 Ollama、不裝 Python，只讀 repo 裡錄好的回放檔（cassette）與向量檔。回放檔的鍵含模型名稱，`ci.yml` 改成本機模型之後，舊的 Gemini 回放檔一支都讀不到——**在 Owner 重錄之前，CI 的 e2e 與五個 eval 會因為缺回放檔、缺向量而紅燈**（第 8 條的預期）。
+
+1. 確認 10.2 的安裝已完成、Docker Desktop 在執行、`exam_pro\.env` 有 `TEST_DATABASE_URL`。
+2. **雙擊 `exam_pro\scripts\windows\record_local.bat`**：`npm run db:up` → `npm run migrate:test` → `npm run cassettes:rerecord`（自動輸入 yes）。輸出同時寫進 `exam_pro\data\local_ai\record_<時間>.log`。
+3. 開始錄之前，工具會：
+   - 以回放模式盤點每個 suite 缺多少回放檔，印出**預估時間**（本機模型費用一律 $0）；時間是「呼叫次數 × 每次秒數」的保守粗估，錄完後看 log 裡每一步實際花的秒數，可以在 `.env` 設 `RERECORD_TIME_SCALE`（整體倍率，例 `0.5`）或 `RERECORD_SEC_PER_CALL_<AGENT>`（例 `RERECORD_SEC_PER_CALL_VERIFY=400`）讓下次的估計準一點；
+   - 做錄前檢查，任一項沒過就停、一次都不錄：Ollama 連得上而且三個模型都在（缺的會列出 `ollama pull` 指令）、PaddleOCR 自我檢查通過、測試庫已套 migration；
+   - 模型一律照 `ci.yml`，`.env` 的 `MODEL_*` 不會帶進去（照 `.env` 錄的鍵 CI 讀不到）。
+4. 太久的話可以分次錄：在 `exam_pro\scripts\windows\` 開命令列執行 `record_local.bat classify,nlq`（逗號分隔、不加空白；等於 `--suites classify,nlq`）；或 `npm run cassettes:rerecord -- --dry-run` 先看盤點。
+5. 錄完：`git add eval/cassettes eval/fixtures/embeddings.*.json`，commit、push。本機的向量檔叫 `eval/fixtures/embeddings.ollama-qwen3-embedding-0.6b.768.json`（模型名裡的 `:` 換成 `-`，Windows 檔名不能有冒號）。
+6. `npm run cassettes:prune` 會把原本 Gemini 錄的回放檔列為「CI 不再讀到」。**還想保留讓 CI 切回 Gemini 的可能，就先不要 `--apply`**（刪掉之後要切回就得再用 Gemini 重錄、花錢）；確定不回頭再刪。
+7. 回放驗證有門檻未達時，照 10.5 最後一點：不放寬，交給 Owner 裁決。
+
+### 10.8 疑難排解
+
+| 看到什麼 | 原因 | 怎麼辦 |
+|---|---|---|
+| 「Ollama 沒有在執行，請先開啟 Ollama」、`ECONNREFUSED 127.0.0.1:11434` | Ollama 沒開，或 `OLLAMA_HOST` 指錯 | 從「開始」選單開啟 Ollama，等工作列出現羊駝圖示；`.env` 的 `OLLAMA_HOST` 應是 `http://127.0.0.1:11434` |
+| 訊息附上 `ollama pull <模型>`、「模型不存在」 | 模型沒下載，或 `.env` 的模型名打錯 | 照訊息執行 `ollama pull …`，或重跑 `setup_local_ai.bat`；`ollama list` 看已下載的模型 |
+| 電腦卡住、Ollama 回「model requires more system memory」、硬碟燈狂閃 | 記憶體不足（同時載入兩個 8B 模型，或瀏覽器分頁太多） | 設 `OLLAMA_MAX_LOADED_MODELS=1`（10.2 第 4 步）；`.env` 設 `OLLAMA_KEEP_ALIVE=2m`、`OLLAMA_NUM_CTX=8192`、`JOB_CONCURRENCY=1`；處理期間關掉不用的程式。仍不夠時才考慮換小一號的模型（例如 4B；換模型＝CI 回放檔要重錄） |
+| 拆題的節點 `error:timeout` | `.env` 還留著舊的 `JOB_NODE_TIMEOUT_MS=120000`，或考卷太長 | 刪掉那一行（本機預設 45 分）；仍逾時可調高 `JOB_NODE_TIMEOUT_MS` 與 `OLLAMA_TIMEOUT_MS` |
+| `setup_local_ai.bat` 停在第 5 步（pip install） | Python 版本太新而 PaddlePaddle 還沒有對應套件、網路中斷、防毒軟體攔截 | 改裝 Python 3.11 或 3.12（64 位元），刪掉 `exam_pro\ocr_service\.venv` 後重跑；錯誤細節在 log 的最後幾十行 |
+| 停在第 6 或第 7 步（`--warmup`／`--selftest`） | OCR 模型沒下載完整 | 重跑 `setup_local_ai.bat`；`npm run ocr:selftest` 單獨檢查。暫時修不好可以在 `.env` 設 `OCR_ENGINE=none`：只用視覺模型拆題、交叉驗證停用，所有題都停在人工複核 |
+| 「找不到 OCR 用的 Python」 | `.venv` 還沒建，或 `.env` 的 `OCR_PYTHON` 指錯 | 重跑 `setup_local_ai.bat`；`OCR_PYTHON` 不設就用 `.venv` 那一支 |
+| 很多題停在複核、原因是「拆題交叉驗證不一致」 | 預期中的行為（第 1 條第 6 點） | 在複核頁對照原卷改對後核准 |
+| 語音按鈕不見了 | 本機模式不提供語音 | 預期中的行為；要用語音只能切回 Gemini（10.4） |
+| GitHub Actions 的 e2e／eval 紅燈，訊息是 replay miss 或缺向量 | `ci.yml` 已改本機模型，回放檔還沒以本機模型重錄 | 照 10.7 重錄 |
+| `.bat` 視窗裡中文變亂碼 | 主控台字型不支援 | 不影響執行；log 檔是 UTF-8，用記事本開 |
+
+### 10.9 維護者備註（L4 的實作）
+
+- 錄前檢查、時間粗估與「這一輪用到哪些模型」的判斷在 `exam_pro/eval/lib/localMode.js`；`npm run cassettes:rerecord`（`eval/tools/rerecord_all.js`）與 `npm run ocr:selftest`（`eval/tools/ocr_selftest.js`）共用。每次秒數的預設值與依據寫在該檔的 `SEC_PER_CALL`。
+- 錄製子行程照 `ci.yml`：`MODEL_EXTRACT`／`MODEL_VERIFY`，以及有寫的 `EMBED_MODEL`、`MODEL_NLQ`、`OCR_ENGINE`、`OCR_DPI`（`eval/lib/suiteProcess.js` 的 `CI_OPTIONAL_KEYS`）。錄製時另外放行 `OLLAMA_*`、`OCR_PYTHON`、`OCR_TIMEOUT_MS`，並帶 `JOB_NODE_TIMEOUT_MS=2700000`、`NLQ_TIMEOUT_MS=1800000`（只影響逾時，不進 cassette 的鍵）。
+- 本機拆題新增的三個 cassette 目錄（`ocr`、`extract_vision`、`extract_ocr`）納入盤點與 `cassettes:prune`；化學版（`*_chem`）照舊不碰。OCR 的回放由探針包住 `services/ocr` 的 `ocrPdf`（`eval/lib/cassetteProbe.js`）。
+- Windows 腳本的輸出經 `eval/tools/tee_run.js` 同時印在畫面上並寫進 log（Windows 沒有 `tee`）。
+- 向量檔名的模型段把 `:`、`/`、`\` 換成 `-`（`eval/lib/embeddings.js` 的 `safeModelName`，與第 3 條第 6 點同一條規則）。repo 內錄好的向量目前只有 Gemini 那一份，讀錄好資料的單元測試明寫模型（`test/unit/lib/recordedData.js` 的 `RECORDED_EMBED_MODEL`）；本機重錄進版控後可以改成本機模型。

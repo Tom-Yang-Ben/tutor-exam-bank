@@ -1,6 +1,9 @@
 // scripts/record_cassettes.js — 錄製 extract／classify 的 cassette（WS-B / A-T3、A-T8、A-T9）
 //
-// ⚠ 這支腳本會**真的呼叫 Gemini 並產生費用**，只能在本機執行，CI 永遠是 LLM_MODE=replay。
+// ⚠ 這支腳本會**真的呼叫模型**，只能在本機執行，CI 永遠是 LLM_MODE=replay。
+//   〔本機模式 L4〕MODEL_EXTRACT 是 gemini: 時會產生費用、需要 GEMINI_API_KEY；是 ollama: 時在本機跑
+//   （不連外、不花錢，但 CPU 上一塊要十幾分鐘；Ollama 要開著、模型要先 ollama pull）。
+//   一次重錄全部 suite 請改用 npm run cassettes:rerecord（照 CI 的模型錄，這支照 .env）。
 // ⚠ 只錄公開素材（NOTICE 第 4 條）：
 //      extract  → eval/fixtures/sample_exam.pdf（**WS-D 的樣卷**，10 題，由 eval/fixtures/make_sample_pdf.js
 //                 從 questions.public.json 挑題排版而成；裁決 S2-15 定它為唯一的樣卷）
@@ -46,6 +49,30 @@ function parseArgs(argv) {
     return args;
 }
 
+/**
+ * 〔本機模式 L4〕模型字串的供應商（沒有冒號＝gemini；只切第一個冒號，與 config/models.js 的 parseModel 同一條規則）。
+ * @param {string} spec
+ * @returns {string}
+ */
+function vendorOf(spec) {
+    const raw = String(spec || '').trim();
+    const i = raw.indexOf(':');
+    return i === -1 ? 'gemini' : raw.slice(0, i).trim().toLowerCase();
+}
+
+/**
+ * 〔本機模式 L4〕一塊幾頁：明寫的 JOB_PDF_CHUNK_PAGES 優先；否則拆題模型是 ollama 時 2 頁、其他 20 頁
+ * （docs/local-mode.md 第 2 條，與 workers/jobRunner.js 的預設同一條規則）。
+ * @param {NodeJS.ProcessEnv|Record<string,string>} env
+ * @param {string} modelExtract
+ * @returns {number}
+ */
+function chunkPages(env, modelExtract) {
+    const n = Number.parseInt(String(env.JOB_PDF_CHUNK_PAGES || ''), 10);
+    if (Number.isInteger(n) && n > 0) return n;
+    return vendorOf(modelExtract) === 'ollama' ? 2 : 20;
+}
+
 /** 錄製用的最小 Ctx：db 一律 null（見檔頭說明），logger 直接印 */
 function buildCtx() {
     return {
@@ -62,7 +89,7 @@ function buildCtx() {
             models: { extract: models.MODEL_EXTRACT, verify: models.MODEL_VERIFY },
             thresholds: {
                 classifyMinConf: Number(process.env.CLASSIFY_MIN_CONF || 0.8),
-                pdfChunkPages: Number.parseInt(process.env.JOB_PDF_CHUNK_PAGES || '20', 10),
+                pdfChunkPages: chunkPages(process.env, models.MODEL_EXTRACT),
                 inlineMaxBytes: Number.parseInt(process.env.GEMINI_INLINE_MAX_BYTES || '15728640', 10)
             },
             features: {}
@@ -145,14 +172,16 @@ async function main() {
     const args = parseArgs(process.argv);
 
     if (!args.dryRun) {
-        if (!process.env.GEMINI_API_KEY || !process.env.GEMINI_API_KEY.trim()) {
-            throw new Error('缺少 GEMINI_API_KEY：錄製 cassette 必須真的呼叫模型（CI 請維持 LLM_MODE=replay）。');
+        // 〔本機模式 L4〕只有真的有模型走 Gemini 才要金鑰
+        const usesGemini = [models.MODEL_EXTRACT, models.MODEL_VERIFY].some(m => vendorOf(m) === 'gemini');
+        if (usesGemini && (!process.env.GEMINI_API_KEY || !process.env.GEMINI_API_KEY.trim())) {
+            throw new Error('缺少 GEMINI_API_KEY：MODEL_EXTRACT／MODEL_VERIFY 走 Gemini，錄製 cassette 必須真的呼叫模型（CI 請維持 LLM_MODE=replay）。');
         }
         process.env.LLM_MODE = 'record';
         // 2026-08-22 實測：免費層對 gemini-3.5-flash 的 generateContent 是
         // **每分鐘 5 次**（quotaId=GenerateRequestsPerMinutePerProjectPerModel-FreeTier）。
         // throttle 的預設 60 對這把金鑰太高，錄製時會一直撞 429 靠退避硬拗；這裡先壓到 5。
-        if (!process.env.GEMINI_RPM) process.env.GEMINI_RPM = '5';
+        if (usesGemini && !process.env.GEMINI_RPM) process.env.GEMINI_RPM = '5';
     } else {
         process.env.LLM_MODE = 'replay';
     }
@@ -179,4 +208,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { buildCtx, recordExtract, recordClassify };
+module.exports = { buildCtx, recordExtract, recordClassify, vendorOf, chunkPages };
