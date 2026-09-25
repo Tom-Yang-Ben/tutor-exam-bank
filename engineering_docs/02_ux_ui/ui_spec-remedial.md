@@ -1,6 +1,7 @@
 # UI 規格書：補救卷與題庫覆蓋率 (UI Spec – Remedial & Coverage) - 家教專用數理題庫系統
 
 > **版本:** v1.0 | **更新:** 2026-09-24 | **狀態:** 活躍（階段 5；實作於整合分支 `stage5/integration`，待併入 main）
+> 🛠 **2026-09-26 合併回填**（分支 `dec/docs-backfill-round1-merged`）：Owner 決策單 2026-09-25 B7（`confirm-paper` 伺服器端也檢查承上題整組）已合入 `local/integration`（`7dc14a0`）；§4 確認出卷、§5 狀態、§9 已知限制同步。本頁前端沒有改（伺服器的 400 訊息照既有 toast 路徑顯示）。B10（承上組湊不滿預設報錯）不影響補救卷草稿。修改處以〔修訂 2026-09-26 合併回填〕行內標記。
 > **Owner:** Ben（楊本顥）
 > **語域:** L2
 > **實例:** 每頁面一份（本篇涵蓋同一個 module `exam_pro/public/js/remedial.js` 建立的兩個子區塊：學生視圖內的 `<section id="remedial">` 與題庫視圖內的 `<section id="coverage">`）
@@ -72,7 +73,7 @@
 | 刪題／刪這組 | 卡片按鈕 | 從草稿移除該題；承上組整組移除（含鏈與分岔） | 同上 |
 | 用題目 ID 加題 | #remAddBtn（可逗號分隔多個） | 先 `GET /api/students/:id/remedial-paper/items?ids=` 取整組 → 組內全可出才**整組**加入「手動加入」組；任一題封存、已寫過、別科、查不到或已在草稿則不加並逐項提示 | 同上 |
 | 加入補救卷（跨區塊） | 「找相似」結果列按鈕（`public/js/variants.js`〔stage5 WS-D〕） | dispatch `document` 上的 `remedial:add`（`detail.question_id`，另帶 student_id、subject、chapter、difficulty、question_text）；remedial.js 監聽後走同一套整組加題規則；別科題 toast「補救卷不混科」 | 同上 |
-| 確認出卷 | #remConfirm | 前端先擋「前題不在草稿的承上題」→ 既有 `POST /api/confirm-paper { student_id, question_ids }`（同交易建卷＋attempts）→ toast「補救卷已出卷，並記入作答歷史。」並顯示下載鈕 | 同上 |
+| 確認出卷 | #remConfirm | 前端先擋「前題不在草稿的承上題」→ 既有 `POST /api/confirm-paper { student_id, question_ids }`（同交易建卷＋attempts）→ toast「補救卷已出卷，並記入作答歷史。」並顯示下載鈕。〔修訂 2026-09-26 合併回填 B7〕伺服器端也檢查承上題整組：半組（含組內題已封存或該生已寫過）回 400，toast 原樣顯示逐組缺題的訊息，草稿保留 | 同上 |
 | 下載 Word | #remDownload | 既有 `POST /api/download-word`，〔審查修正〕帶 #remWordEdition 選的 `edition`（standard／student／solution），檔名加「（學生版）」「（詳解版）」後綴，與組卷頁一致 | 同上 |
 | 看覆蓋率 | #covSubject／#covStudent 變更或 #covRefresh | `GET /api/coverage?subject=&student_id=` 重畫熱度表與知識點題數 | 同上 |
 
@@ -86,6 +87,7 @@
 | 不足量 | 目標列紅字＋`notes` 最後一句 | 「本草稿實際 N 題（要求 M 題）。不足的部分可以用題目 ID 手動加題，或到「題庫覆蓋率」看哪一章該補題。」 |
 | Error（API） | toast | 伺服器 `{message}` 原樣；連線失敗「與後端連線中斷」 |
 | 確認 409 | toast | 伺服器訊息（部分題目已被指派給該學生：草稿產生後又被出了其中某題，重新產生草稿即可） |
+| 確認 400：承上題組不完整〔修訂 2026-09-26 合併回填 B7〕 | toast | 伺服器訊息原樣，例「承上題必須與前題整組出卷，以下題組不完整：承上題組（#40、#41、#42）缺 #42。請把缺的題加回卷裡，或把整組刪掉後再確認。」；缺的題已封存或該生已寫過時另標「（已封存）」「（該生已寫過）」並提醒只能整組刪。前端的「承上題不能沒有前題」先擋，正常操作下很少走到這一道 |
 | 覆蓋率 Loading／Error | #covTable | 「載入中…」／「覆蓋率載入失敗：…」 |
 | 無知識點 | #covKc | 「還沒有載入任何知識點（FEATURE_KC 的知識點分頁載入後，這裡會列出每個知識點掛了幾題）。」 |
 | 旗標關閉 | 兩區塊整段不渲染；「加入補救卷」按鈕不出現 | — |
@@ -128,7 +130,7 @@
 | 元件對照 | 經 `window.ExamApp` 橋接 `apiFetch`／`showToast`／`renderMath` |
 | 本機預覽 | `?remedial=1` 手動開旗標（本機驗收用；API 在旗標關閉時仍回 404） |
 | 測試 | `test/unit/remedialUi.test.js`（檔案契約、純函式、miniDom：旗標關閉不渲染、產生草稿、前端擋不合法輸入、刪題加題、`remedial:add`、確認並下載、承上題整組、不混科、覆蓋率、variants.js 掛鉤） |
-| 已知限制 | 未在真瀏覽器驗證（Tailwind 版面、MathJax 題幹預覽）；確認後的卷名沿用 confirm-paper 規則（取第一題的章節），補救卷看起來像單章卷；跨章配額（blueprint）只有 API，組卷分頁沒有對應畫面；直接呼叫 confirm-paper 仍可送出半組承上題（把關只在本頁，裁決 S5-28） |
+| 已知限制 | 未在真瀏覽器驗證（Tailwind 版面、MathJax 題幹預覽）；確認後的卷名沿用 confirm-paper 規則（取第一題的章節），補救卷看起來像單章卷；跨章配額（blueprint）只有 API，組卷分頁沒有對應畫面；~~直接呼叫 confirm-paper 仍可送出半組承上題（把關只在本頁，裁決 S5-28）~~〔修訂 2026-09-26 合併回填 B7〕已解除：Owner 決策單 B7 改判 S5-28，confirm-paper 伺服器端也檢查承上題整組，直接呼叫 API 送半組會回 400 |
 
 ## 10. 追溯
 
