@@ -199,7 +199,11 @@ exports.batchSaveQuestions = async (req, res, next) => {
     const rejected = [];
     // PG 沒有 mysql2 的 `VALUES ?`（二維陣列）批次語法，改成「每欄一個陣列參數」餵給 unnest，
     // 因此這裡以「欄」為單位收集，而不是以「列」為單位。
-    const cols = { subject: [], chapter: [], question_type: [], difficulty: [], question_text: [], answer_text: [], source_type: [], source_detail: [] };
+    const cols = { subject: [], chapter: [], question_type: [], difficulty: [], question_text: [], answer_text: [], source_type: [], source_detail: [], question_img: [] };
+    // 〔Owner 決策單 2026-09-25 B21〕/analyze-pdf 補裁附圖後，每題可能多帶一個 question_img（/figures/<檔名>），
+    // 入庫到管線同一個欄位（docs/figures.md「舊流程 /analyze-pdf 的附圖」）。只收附圖目錄內的本機路徑
+    // （與 Word 匯出同一個判斷 resolveFigurePath）；其他值照補裁圖之前的行為忽略、落 NULL，不整題退回。
+    const { resolveFigurePath } = require('../services/wordService');
     questions.forEach((q, idx) => {
         const subject = q.subject;
         const chapter = (q.chapter || '').trim();
@@ -221,6 +225,7 @@ exports.batchSaveQuestions = async (req, res, next) => {
         cols.source_type.push(isValidSourceType(q.source_type) ? q.source_type : 'unknown');
         // 註記超長在此路徑不整題退回（值來自上傳區單一欄位、UI 已限長）；落 NULL 而非截斷
         cols.source_detail.push(normalizeSourceDetail(q.source_detail) ?? null);
+        cols.question_img.push(resolveFigurePath(q.question_img) ? q.question_img.trim() : null);
     });
 
     const savedCount = cols.subject.length;
@@ -241,9 +246,9 @@ exports.batchSaveQuestions = async (req, res, next) => {
 
     try {
         // AI 拆題入庫：origin / chapter_src 走 DDL 預設（'pdf' / 'ai'）
-        const sql = `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text, source_type, source_detail)
-                     SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::int[], $5::text[], $6::text[], $7::text[], $8::text[])`;
-        await query(sql, [cols.subject, cols.chapter, cols.question_type, cols.difficulty, cols.question_text, cols.answer_text, cols.source_type, cols.source_detail]);
+        const sql = `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text, source_type, source_detail, question_img)
+                     SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::int[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[])`;
+        await query(sql, [cols.subject, cols.chapter, cols.question_type, cols.difficulty, cols.question_text, cols.answer_text, cols.source_type, cols.source_detail, cols.question_img]);
         const message = rejected.length === 0
             ? `🎉 成功！已將共 ${savedCount} 題自動錄入資料庫！`
             : `已寫入 ${savedCount} 題；另有 ${rejected.length} 題未通過驗證（已在下方標紅），修正後可再次送出。`;
