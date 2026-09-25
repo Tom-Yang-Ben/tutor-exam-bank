@@ -12,7 +12,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const { CHAPTERS, QUESTION_TYPES, LEGACY_SUBJECTS, LEGACY_CHAPTERS } = require('../../config/chapters');
+const { CHAPTERS, SUBJECTS, QUESTION_TYPES, LEGACY_SUBJECTS, LEGACY_CHAPTERS } = require('../../config/chapters');
 
 /**
  * x-enum 的合法值 → 來源。全部來自 config/chapters.js，不得手抄。
@@ -26,12 +26,19 @@ const { CHAPTERS, QUESTION_TYPES, LEGACY_SUBJECTS, LEGACY_CHAPTERS } = require('
  * 〔章節重整 CH-A〕2026-09-25 起 LEGACY_CHAPTERS 是重整後的數學 52＋物理 34 章（docs/chapter-restructure.md）：
  * 這次是 Owner 定案、**刻意**讓數學／物理的值域改變，extract／classify／variant／nlq 的 cassette 因此失效，
  * 由 Owner 依該檔第 5 條一次重錄。化學的值域與 cassette 不受影響。
+ *
+ * 〔Owner 決策單 2026-09-25 B5〕subject_all／chapter_all：**三科**（SUBJECTS）的科目與章節（數學 → 物理 → 化學，
+ * 各科依 CHAPTERS 的順序攤平）。目前只有 nlq.json（NLQ 的 LLM 輔路徑，nlq.v2）用它：查題不分卷別，
+ * 模型要能在三科之間挑。新增的是**新的鍵**，subject／chapter 的值域一字未動，
+ * 所以 extract／classify／verify／lint／variant 的 schema 與 schemaHash 都不變。
  */
 const ENUM_SOURCES = {
     subject: LEGACY_SUBJECTS.slice(),
     chapter: LEGACY_CHAPTERS.slice(),
     question_type: QUESTION_TYPES,
-    answer_form: ['option', 'number', 'expression', 'text']
+    answer_form: ['option', 'number', 'expression', 'text'],
+    subject_all: SUBJECTS.slice(),
+    chapter_all: SUBJECTS.flatMap(subject => CHAPTERS[subject])
 };
 
 /**

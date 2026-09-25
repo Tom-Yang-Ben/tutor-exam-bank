@@ -31,13 +31,55 @@
 // （不連 DB、llm 由 deps 注入）底下載入——所以 db 延遲到**工具執行時**才 require。
 const query = (...args) => require('../config/db').query(...args);
 const weakness = require('./weaknessService');
-const { SUBJECTS } = require('../config/chapters');
+const { SUBJECTS, CHAPTERS, isValidChapter } = require('../config/chapters');
+const { CHAPTER_ALIASES, subjectOfChapter } = require('../config/chapterAliases');
 const { createPseudonymizer, loadPseudonymizer } = require('../utils/pseudonym');
+const { registerTemplate } = require('./llm/templates');
 
-const TEMPLATE = 'assistant.v1';
+// 〔Owner 決策單 2026-09-25 B5〕assistant.v1 → assistant.v2：工具說明書（SYSTEM 的一部分）的科目改由 SUBJECTS
+// 產生（數學|物理|化學），preview_paper 的章節改驗白名單。assistant.v1 從來沒有註冊原文，鍵裡的模板雜湊只是
+// sha256('assistant.v1')——SYSTEM 改了鍵也不會變，舊 cassette 會被誤讀成新說明書的回應。所以識別名升版，
+// 並依階段 5 的慣例註冊 SYSTEM + '\n---\n' + PROMPT_TEMPLATE（docs/interfaces-stage5.md 第 1.2 條）：之後說明書一改鍵就變。
+const TEMPLATE = 'assistant.v2';
 const DEFAULT_MAX_STEPS = 5;
 const MAX_MESSAGE_LEN = 500;
 const MAX_HISTORY = 8;
+
+/** 工具說明書裡的科目選項（〔Owner 決策單 2026-09-25 B5〕不寫死，讀 SUBJECTS） */
+const SUBJECT_CHOICES = SUBJECTS.join('|');
+/** preview_paper 章節不合法時最多建議幾個候選 */
+const MAX_CHAPTER_HINTS = 3;
+
+/**
+ * preview_paper 的章節驗證（〔Owner 決策單 2026-09-25 B5〕）。
+ *
+ * 原本只檢查「非空字串」：錯的章名（別名、打錯字、跨科）會一路送進 selectPaperQuestions，
+ * 撈不到任何題，回「新題目庫存不足…僅剩 0 題」——主控會以為真的沒題。改成執行前先過
+ * isValidChapter(subject, chapter)，錯的話在錯誤訊息裡給候選章名，讓主控下一步自己修正：
+ *   1. 別名（config/chapterAliases.js）對到的本科章節（「勒沙特列」→「勒沙特列原理」）；
+ *   2. 本科章名與輸入互為子字串者（依白名單順序）；
+ *   3. 這個章名其實屬於別科 → 直接說 subject 要填哪一科。
+ * 三科一視同仁：數學／物理的錯章名從此也在 validate 就擋下（原本同樣是到 run 才回「庫存不足」）。
+ * @param {string} subject 已驗過的合法科目
+ * @param {string} chapter trim 過的章名
+ * @returns {string|null}
+ */
+function chapterProblem(subject, chapter) {
+    if (isValidChapter(subject, chapter)) return null;
+    const other = subjectOfChapter(chapter);
+    if (other && other !== subject) return `chapter「${chapter}」是${other}的章節，subject 要填「${other}」`;
+    const hints = [];
+    const aliased = CHAPTER_ALIASES[chapter];
+    if (aliased && isValidChapter(subject, aliased)) hints.push(aliased);
+    for (const c of CHAPTERS[subject] || []) {
+        if (hints.length >= MAX_CHAPTER_HINTS) break;
+        if (!hints.includes(c) && (c.includes(chapter) || chapter.includes(c))) hints.push(c);
+    }
+    const tail = hints.length
+        ? `；可能是：${hints.map(c => `「${c}」`).join('、')}`
+        : '；章名要與白名單完全相同，可從 get_student_weakness 的 by_chapter 或 search_questions 結果的 chapter 取得';
+    return `chapter「${chapter}」不在${subject}的章節白名單內${tail}`;
+}
 
 // ───────────────────────── 工具註冊表 ─────────────────────────
 // name → { description（給主控看的說明書）, params（給主控看的參數說明）,
@@ -68,12 +110,13 @@ const TOOLS = {
 
     get_student_weakness: {
         description: '查某位學生的弱點：各章節錯誤率（by_chapter）與最近錯題（recent_wrong，最多 10 題含題目 id）。回答「某某最弱的章節」「最近錯哪些題」時用。',
-        params: '{ "student_name": "學生姓名（必填，要與 list_students 的姓名完全一致）", "subject": "數學|物理（選填）", "days": "統計天數 1~365（選填，預設 365）" }',
+        // 〔Owner 決策單 2026-09-25 B5〕科目選項由 SUBJECTS 產生（數學|物理|化學）
+        params: `{ "student_name": "學生姓名（必填，要與 list_students 的姓名完全一致）", "subject": "${SUBJECT_CHOICES}（選填）", "days": "統計天數 1~365（選填，預設 365）" }`,
         validate(args) {
             if (!args || typeof args.student_name !== 'string' || !args.student_name.trim()) return 'student_name 必填';
             if (args.days !== undefined && !(Number.isInteger(args.days) && args.days >= 1 && args.days <= 365)) return 'days 要是 1~365 的整數';
-            // 〔stage5 WS-B〕科目清單改讀 config/chapters.js 的 SUBJECTS（化學併入後三科）；
-            // params 說明書是 SYSTEM 的一部分，刻意不動（docs/interfaces-stage5.md 第 4.2 條、docs/chemistry.md）
+            // 〔stage5 WS-B〕科目清單改讀 config/chapters.js 的 SUBJECTS（化學併入後三科）。
+            // 〔Owner 決策單 2026-09-25 B5〕params 說明書（SYSTEM 的一部分）也改讀 SUBJECTS，主控知道可以查化學（原裁決 S5-13 不動說明書）
             if (args.subject !== undefined && !SUBJECTS.includes(args.subject)) return `subject 只接受 ${SUBJECTS.join('、')}`;
             return null;
         },
@@ -96,7 +139,8 @@ const TOOLS = {
     },
 
     search_questions: {
-        description: '用自然語言在題庫搜題（規則＋向量的 NLQ）。例如「牛頓第二定律的計算題，難度 4 以上」。回傳符合的題目與系統解析出的條件。',
+        // 〔Owner 決策單 2026-09-25 B5〕NLQ 的 LLM 輔路徑（nlq.v2）認得化學：說明書寫明三科都查得到，並給一個化學例句
+        description: `用自然語言在題庫搜題（規則＋向量的 NLQ；${SUBJECTS.join('、')}都查得到）。例如「牛頓第二定律的計算題，難度 4 以上」「緩衝溶液的計算題」。回傳符合的題目與系統解析出的條件。`,
         params: '{ "query": "要搜尋的一句話（必填）", "limit": "最多幾題（選填，預設 10）" }',
         validate(args) {
             if (!args || typeof args.query !== 'string' || !args.query.trim()) return 'query 必填';
@@ -137,11 +181,14 @@ const TOOLS = {
 
     preview_paper: {
         description: '替學生試算一張不重複的卷（**僅預覽、不寫入**——真的出卷要老師在組卷分頁按「確認出卷」）。會避開該生寫過的題並做家族互斥。',
-        params: '{ "student_name": "學生姓名（必填）", "subject": "數學|物理（必填）", "chapter": "精細章節名（必填）", "count": "題數 1~50（必填）" }',
+        // 〔Owner 決策單 2026-09-25 B5〕科目選項由 SUBJECTS 產生；章節要完全等於該科白名單（validate 會擋並給候選）
+        params: `{ "student_name": "學生姓名（必填）", "subject": "${SUBJECT_CHOICES}（必填）", "chapter": "精細章節名（必填，必須與該科章節白名單完全相同，例如化學的「勒沙特列原理」；可取自 get_student_weakness 的 by_chapter 或 search_questions 結果的 chapter）", "count": "題數 1~50（必填）" }`,
         validate(args) {
             if (!args || typeof args.student_name !== 'string' || !args.student_name.trim()) return 'student_name 必填';
             if (!SUBJECTS.includes(args.subject)) return `subject 只接受 ${SUBJECTS.join('、')}`;   // 〔stage5 WS-B〕
             if (typeof args.chapter !== 'string' || !args.chapter.trim()) return 'chapter 必填';
+            const badChapter = chapterProblem(args.subject, args.chapter.trim());   // 〔Owner 決策單 2026-09-25 B5〕
+            if (badChapter) return badChapter;
             if (!Number.isInteger(args.count) || args.count < 1 || args.count > 50) return 'count 要是 1~50 的整數';
             return null;
         },
@@ -204,23 +251,56 @@ const SYSTEM = [
     '學生一律以「學生#編號」的代號出現（例如「學生#3」）；工具參數與回覆裡照用代號即可，',
     '系統會自行換回姓名。需要學生代號時先用 list_students。出卷只能預覽（preview_paper），',
     '真的出卷要請老師自己到組卷分頁按「確認出卷」——回覆裡要講清楚這一點。',
+    // 〔Owner 決策單 2026-09-25 B5〕告訴主控題庫有哪幾科（讀 SUBJECTS，不寫死）
+    `題庫涵蓋${SUBJECTS.join('、')}共 ${SUBJECTS.length} 科；工具參數的 subject 只能填這幾個科目名，chapter 要與該科章節白名單完全相同。`,
     '',
     '可用的工具：',
     toolsManual()
 ].join('\n');
 
+/**
+ * buildPrompt 的固定字樣（〔Owner 決策單 2026-09-25 B5〕抽成常數，組成下面註冊的 PROMPT_TEMPLATE；
+ * 字串與 assistant.v1 時期的 buildPrompt 逐字相同，送出的 prompt 不變）。
+ */
+const PROMPT_PARTS = Object.freeze({
+    teacher: '老師',
+    assistant: '助教',
+    stepsHeader: '── 這一輪已經做過的工具呼叫（由舊到新）──',
+    call: '▶',
+    result: '◀',
+    ask: '請輸出下一步（call_tool 或 final）。'
+});
+
+/**
+ * 模板＝buildPrompt 挖空可變欄位後的骨架（services/llm/templates.js 的定義）：老師／助教各一輪、
+ * 一次工具呼叫與結果、最後的指示。對話幾輪、工具呼叫幾次只是重複這些行，由 cacheKeyParts 區分。
+ */
+const PROMPT_TEMPLATE = [
+    `【${PROMPT_PARTS.teacher}】{{TEXT}}`,
+    `【${PROMPT_PARTS.assistant}】{{TEXT}}`,
+    '',
+    PROMPT_PARTS.stepsHeader,
+    `${PROMPT_PARTS.call} {{TOOL}}({{ARGS_JSON}})`,
+    `${PROMPT_PARTS.result} {{RESULT_JSON}}`,
+    '',
+    PROMPT_PARTS.ask
+].join('\n');
+
+// 〔Owner 決策單 2026-09-25 B5〕SYSTEM（含工具說明書）進鍵：說明書一改，cassette 自然失效
+registerTemplate(TEMPLATE, `${SYSTEM}\n---\n${PROMPT_TEMPLATE}`);
+
 /** 把對話與工具軌跡組成這一步的 prompt（純文字，模型只看得到這些）。 */
 function buildPrompt(transcript, steps, mask = (s) => s) {
     const lines = [];
-    for (const t of transcript) lines.push(`【${t.role === 'user' ? '老師' : '助教'}】${mask(t.text)}`);
+    for (const t of transcript) lines.push(`【${t.role === 'user' ? PROMPT_PARTS.teacher : PROMPT_PARTS.assistant}】${mask(t.text)}`);
     if (steps.length) {
-        lines.push('', '── 這一輪已經做過的工具呼叫（由舊到新）──');
+        lines.push('', PROMPT_PARTS.stepsHeader);
         for (const s of steps) {
-            lines.push(`▶ ${s.tool}(${mask(JSON.stringify(s.args))})`);
-            lines.push(`◀ ${mask(JSON.stringify(s.result)).slice(0, 4000)}`);
+            lines.push(`${PROMPT_PARTS.call} ${s.tool}(${mask(JSON.stringify(s.args))})`);
+            lines.push(`${PROMPT_PARTS.result} ${mask(JSON.stringify(s.result)).slice(0, 4000)}`);
         }
     }
-    lines.push('', '請輸出下一步（call_tool 或 final）。');
+    lines.push('', PROMPT_PARTS.ask);
     return lines.join('\n');
 }
 
@@ -316,4 +396,8 @@ async function runAssistant({ message, history = [], deps = {} }) {
     };
 }
 
-module.exports = { runAssistant, TOOLS, SYSTEM, TEMPLATE, DECISION_SCHEMA, buildPrompt, maxSteps, MAX_MESSAGE_LEN, MAX_HISTORY };
+module.exports = {
+    runAssistant, TOOLS, SYSTEM, TEMPLATE, DECISION_SCHEMA, buildPrompt, maxSteps, MAX_MESSAGE_LEN, MAX_HISTORY,
+    // 〔Owner 決策單 2026-09-25 B5〕
+    PROMPT_TEMPLATE, PROMPT_PARTS, chapterProblem
+};

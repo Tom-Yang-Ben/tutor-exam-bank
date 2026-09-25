@@ -4,7 +4,8 @@
 //   - config/chapters.js：SUBJECTS 三科、化學 44 章、LEGACY_* 與併入前逐字相同、SUBJECT_GROUPS；
 //   - agents/schemas：buildSchema(name) 行為不變、buildSchema(name, {group:'chemistry'}) 給化學值域；
 //   - agents/promptParts：沒指定科目時只列數學與物理、resolveSubjectGroup 的判準順序；
-//   - 別名、few-shot 例句、分詞詞典、NLQ 規則路徑都把化學補齊；NLQ 的 LLM 輔路徑不碰化學；
+//   - 別名、few-shot 例句、分詞詞典、NLQ 規則路徑都把化學補齊；
+//     〔Owner 決策單 2026-09-25 B5〕NLQ 的 LLM 輔路徑（nlq.v2）也認得化學（原本不碰化學），細節另見 chemAssistantNlq.test.js；
 //   - POST /api/jobs 的 subject_group 解析、助教工具與題目驗證的科目清單。
 // 純單元測試：不連 DB、不連 LLM。執行：npm test
 
@@ -189,7 +190,8 @@ describe('化學的別名、few-shot 例句與分詞詞典', () => {
 
 // ───────────────────────── NLQ ─────────────────────────
 
-describe('NLQ：化學走規則路徑（第 4.2 條第 2 點）', () => {
+// 〔Owner 決策單 2026-09-25 B5〕標題原為「NLQ：化學走規則路徑」；改判後規則沒抓到章節的化學句子也走 LLM 輔路徑
+describe('NLQ：化學的規則路徑與 LLM 輔路徑（第 4.2 條第 2 點）', () => {
     beforeEach(() => nlq._resetCacheForTest());
 
     test('規則抓得到化學章節本名與別名，subject 反推為化學', () => {
@@ -210,13 +212,22 @@ describe('NLQ：化學走規則路徑（第 4.2 條第 2 點）', () => {
         assert.ok(CHEMISTRY_HINTS.includes('化學'));
     });
 
-    test('規則沒抓到章節但有化學線索：不呼叫 LLM，subject 設成化學，parse_path 是 rules', async () => {
+    // 〔Owner 決策單 2026-09-25 B5〕原本斷言「不呼叫 LLM、parse_path=rules」（nlq.v1 凍結為兩科，化學只走規則）。
+    // Owner 改判 LLM 輔路徑加上化學：這類句子照第 6.3 條交給 LLM；規則層的化學推定改當退路，
+    // LLM 科目與章節都沒給、或 LLM 失敗時 subject 仍是化學（檢索範圍與改判前相同）。
+    test('規則沒抓到章節但有化學線索：照樣呼叫 LLM（nlq.v2）；LLM 沒給科目或失敗時 subject 仍推定為化學', async () => {
         let called = 0;
         const llm = { generateJson: async () => { called += 1; return { data: {} }; } };
         const r = await nlq.parseOnly({ query: '有沒有化學的難題', llm, noCache: true });
-        assert.equal(called, 0, '化學句子不得走 LLM 輔路徑');
-        assert.equal(r.parse_path, 'rules');
+        assert.equal(called, 1, '化學句子也走 LLM 輔路徑');
+        assert.equal(r.parse_path, 'llm');
         assert.equal(r.filters.subject, '化學');
+
+        const failing = { generateJson: async () => { throw new Error('逾時'); } };
+        const f = await nlq.parseOnly({ query: '有沒有化學的難題', llm: failing, noCache: true });
+        assert.equal(f.parse_path, 'llm_failed');
+        assert.equal(f.filters.subject, '化學', 'LLM 失敗時退回規則層的化學推定');
+        assert.ok(f.warnings.includes(nlq.WARN.llmFailed));
     });
 
     test('數學／物理的句子照舊走 LLM 輔路徑（行為不變）', async () => {
@@ -256,13 +267,15 @@ describe('NLQ：化學走規則路徑（第 4.2 條第 2 點）', () => {
         assert.equal(r.filters.subject, '物理');
     });
 
-    test('沒有數理線索的化學句子仍只走規則（化合物、酸鹼、沉澱）', async () => {
+    // 〔Owner 決策單 2026-09-25 B5〕原本斷言「只走規則、不呼叫 LLM」；改判後走 LLM 輔路徑，
+    // LLM 空手（科目與章節都沒給）時 subject 仍推定為化學——subject 的斷言照舊。
+    test('沒有數理線索的化學句子（化合物、酸鹼、沉澱）：走 LLM 輔路徑，LLM 空手時 subject 仍是化學', async () => {
         for (const query of ['化合物的命名規則', '酸鹼的填充題', '哪些離子會產生沉澱']) {
             let called = 0;
             const llm = { generateJson: async () => { called += 1; return { data: {} }; } };
             const r = await nlq.parseOnly({ query, llm, noCache: true });
-            assert.equal(called, 0, query);
-            assert.equal(r.parse_path, 'rules', query);
+            assert.equal(called, 1, query);
+            assert.equal(r.parse_path, 'llm', query);
             assert.equal(r.filters.subject, '化學', query);
         }
     });
@@ -283,12 +296,18 @@ describe('NLQ：化學走規則路徑（第 4.2 條第 2 點）', () => {
         assert.equal(isChemistryOnlyQuery('斜面上物體受力平衡的題目', opts), false, '沒有化學線索');
     });
 
-    test('送給 LLM 的章節白名單只列數學與物理（nlq.v1 的既有 prompt）', () => {
+    // 〔Owner 決策單 2026-09-25 B5〕原本斷言「只列數學與物理、不含任何化學章節、subject enum 兩科」（nlq.v1）。
+    // 改判後 nlq.v2 列三科：化學一行、每章加「」；數學與物理兩行與 nlq.v1 逐字相同；schema 的 subject／chapter 值域是三科。
+    test('送給 LLM 的章節白名單列三科（nlq.v2）：化學每章加「」，數學／物理兩行與 nlq.v1 相同', () => {
         const text = nlq.chapterWhitelistText();
-        assert.ok(text.includes('數學：') && text.includes('物理：'));
-        assert.ok(!text.includes('化學：'));
-        for (const c of CHAPTERS['化學']) assert.ok(!text.includes(c), c);
-        assert.deepEqual(buildSchema('nlq').properties.subject.enum, ['數學', '物理']);
+        assert.ok(text.includes('數學：') && text.includes('物理：') && text.includes('化學：'));
+        assert.ok(text.includes(`數學：${CHAPTERS['數學'].join('、')}`));
+        assert.ok(text.includes(`物理：${CHAPTERS['物理'].join('、')}`));
+        assert.ok(text.includes(`化學：${CHAPTERS['化學'].map(c => `「${c}」`).join('、')}`));
+        for (const c of CHAPTERS['化學']) assert.ok(text.includes(`「${c}」`), c);
+        assert.deepEqual(buildSchema('nlq').properties.subject.enum, ['數學', '物理', '化學']);
+        assert.deepEqual(buildSchema('nlq').properties.chapters.items.enum,
+            [...CHAPTERS['數學'], ...CHAPTERS['物理'], ...CHAPTERS['化學']]);
     });
 });
 
@@ -305,7 +324,8 @@ describe('POST /api/jobs 的 subject_group 解析（第 4.2 條第 1 點）', ()
     });
 });
 
-describe('助教工具的科目驗證改讀 SUBJECTS（SYSTEM 不動）', () => {
+// 〔Owner 決策單 2026-09-25 B5〕標題原為「（SYSTEM 不動）」；改判後說明書（SYSTEM）也改讀 SUBJECTS，見 chemAssistantNlq.test.js
+describe('助教工具的科目驗證改讀 SUBJECTS', () => {
     test('化學合法、生物不合法', () => {
         assert.equal(TOOLS.get_student_weakness.validate({ student_name: '小明', subject: '化學' }), null);
         assert.match(TOOLS.get_student_weakness.validate({ student_name: '小明', subject: '生物' }), /數學、物理、化學/);

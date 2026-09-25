@@ -106,10 +106,11 @@ const clampLevel = (n) => Math.min(5, Math.max(1, n));
 /**
  * 「一看就是在問化學」的詞（docs/interfaces-stage5.md 第 4.2 條第 2 點）。
  *
- * 用途只有一個：規則一章都沒抓到（confident === false）時，決定**要不要跳過 LLM 輔路徑**。
- * NLQ 的 LLM 輔路徑本階段不支援化學——nlq.v1 的 prompt 與 schema 凍結為數學／物理兩科
- * （既有 cassette 不失效，第 1.1 條），送出去模型也只能在兩科裡硬挑一章。所以句子裡有
- * 這些詞、**而且沒有任何數理線索**（mentionsMathPhysics）時，才只用規則的結果、subject 設成化學。
+ * 用途只有一個：規則一章都沒抓到（confident === false）時，推定這句是不是在問化學。
+ * 〔stage5 WS-B〕原本拿來決定**要不要跳過 LLM 輔路徑**（nlq.v1 凍結為數學／物理兩科）。
+ * 〔Owner 決策單 2026-09-25 B5〕LLM 輔路徑（nlq.v2）加上化學之後不再跳過 LLM；推定改當退路——
+ * LLM 失敗、或 LLM 科目與章節都沒給時，subject 補成化學（見 chemistrySubjectPrior 與 nlqService.parseOnly）。
+ * 句子裡有這些詞、**而且沒有任何數理線索**（mentionsMathPhysics）時才推定為化學。
  *
  * 挑選原則：只收數學／物理題幾乎不會出現的詞。「平衡」（受力平衡）、「反應」（反應時間）、
  * 「離子」、「元素」（集合的元素）、「電位」這類跨科詞一律不收。
@@ -167,16 +168,48 @@ function mentionsMathPhysics(text, opts = {}) {
 }
 
 /**
- * 規則沒抓到章節時，這一句能不能直接當成「只查化學」（跳過 LLM、subject 設成化學）。純函式。
+ * 規則沒抓到章節時，這一句能不能直接當成「只查化學」。純函式。
+ * （〔stage5 WS-B〕原本等於「跳過 LLM、subject 設成化學」；〔Owner 決策單 2026-09-25 B5〕起只當
+ * chemistrySubjectPrior 的一半，LLM 照樣呼叫。）
  *
- * 有化學線索、**而且**沒有任何數理線索才算。拿不準就回 false，讓句子照舊走 LLM 輔路徑——
- * 那是這個分支加進來之前數學／物理句子的行為，化學句子頂多查得比較散，數理句子卻不會被鎖進化學。
+ * 有化學線索、**而且**沒有任何數理線索才算。拿不準就回 false——
+ * 化學句子頂多查得比較散，數理句子卻不會被鎖進化學。
  * @param {string} text
  * @param {{ mathPhysicsTerms?: readonly string[] }} [opts]
  * @returns {boolean}
  */
 function isChemistryOnlyQuery(text, opts = {}) {
     return mentionsChemistry(text) && !mentionsMathPhysics(text, { terms: opts.mathPhysicsTerms });
+}
+
+/**
+ * 老師明確點名化學（〔Owner 決策單 2026-09-25 B5〕規則層的科目偵測認得化學）。純函式。
+ *
+ * 句子裡有「化學」（「化學能」不算：那是物理「能量的形式與守恆」的用語，MATH_PHYSICS_COMPOUNDS），
+ * 而且**沒有**點名數學或物理（MATH_PHYSICS_SUBJECT_NAMES）。與 mentionsMathPhysics 的第 1 點對稱：
+ * 點名物理的句子不會被化學線索字鎖進化學；點名化學的句子也不因為出現數理名詞（密度、速率）就失去化學推定。
+ * 兩科都點名（「化學和物理的…」）→ false，交給 LLM。
+ * @param {string} text
+ * @returns {boolean}
+ */
+function namesChemistry(text) {
+    const s = String(text ?? '');
+    if (MATH_PHYSICS_SUBJECT_NAMES.some(w => s.includes(w))) return false;
+    return s.split('化學能').join(' ').includes('化學');
+}
+
+/**
+ * 規則層的化學科目推定（〔Owner 決策單 2026-09-25 B5〕）。純函式。
+ *
+ * isChemistryOnlyQuery（只有化學線索、沒有數理線索）或 namesChemistry（明確點名化學、沒點名數理）。
+ * 用途：nlqService.parseOnly 在規則沒抓到章節時，**LLM 失敗、或 LLM 科目與章節都沒給**才把 subject 補成化學；
+ * LLM 有給就以 LLM 為準。規則抓到章節的句子（confident）不看這個——subject 由章節反推（第 6.1 條）。
+ * @param {string} text
+ * @param {{ mathPhysicsTerms?: readonly string[] }} [opts]  同 isChemistryOnlyQuery
+ * @returns {boolean}
+ */
+function chemistrySubjectPrior(text, opts = {}) {
+    return isChemistryOnlyQuery(text, opts) || namesChemistry(text);
 }
 
 /**
@@ -466,11 +499,14 @@ module.exports = {
     STUDENT_RE,
     SUBJECT_OF_CHAPTER,
     trimFiller,
-    // 〔stage5 WS-B〕化學只走規則路徑（nlqService.parseOnly）
+    // 〔stage5 WS-B〕化學的科目線索（nlqService.parseOnly）
     CHEMISTRY_HINTS,
     MATH_PHYSICS_SUBJECT_NAMES,
     MATH_PHYSICS_COMPOUNDS,
     mentionsChemistry,
     mentionsMathPhysics,
-    isChemistryOnlyQuery
+    isChemistryOnlyQuery,
+    // 〔Owner 決策單 2026-09-25 B5〕LLM 輔路徑加上化學後，規則層的化學推定改當退路
+    namesChemistry,
+    chemistrySubjectPrior
 };
