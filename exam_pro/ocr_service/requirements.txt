@@ -8,7 +8,11 @@
 #
 # 全部是 CPU 版，版本全部固定：
 #   - paddlepaddle：PyPI 上的 paddlepaddle 就是 CPU 版（GPU 版叫 paddlepaddle-gpu）；
-#     3.3.1 有 Windows／Linux／macOS 的 cp39～cp313 wheel。
+#     3.2.2 有 Windows／Linux／macOS 的 cp39～cp313 wheel。
+#     ⚠ 不要升到 3.3.0／3.3.1（docs/local-mode.md LM-16）：CPU＋oneDNN 的執行路徑有框架錯誤，辨識第一頁就丟
+#       NotImplementedError: ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]
+#       （2026-09-25 在 Owner 的 Windows 實機重現；Paddle issue #77340、PaddleOCR issue #18162）。
+#       修正已併入 Paddle 的開發分支但還沒發布；等 PyPI 出了含修正的版本再升。
 #   - paddleocr[doc-parser]：PP-StructureV3（版面分析＋文字＋表格＋公式）需要 doc-parser 這組 extra。
 #   - paddlex：paddleocr 3.7.0 要求 paddlex>=3.7.0,<3.8.0，這裡釘死實測過的 3.7.2，
 #     ocr_pdf.py 的離線護欄用到它的內部結構。
@@ -16,7 +20,7 @@
 #
 # ⚠ services/ocr/index.js 從這個檔讀 paddleocr 的版本號，拼成 cassette 鍵的 modelId（paddleocr@<版本>）。
 #   升級 PaddleOCR 時改下面那一行，既有的 ocr cassette 會自動失效，要重錄。
-paddlepaddle==3.3.1
+paddlepaddle==3.2.2
 paddleocr[doc-parser]==3.7.0
 paddlex==3.7.2
 pymupdf==1.28.2

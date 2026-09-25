@@ -292,6 +292,15 @@ def result_markdown(res):
     return clean_markdown(md)
 
 
+def _paddle_version():
+    try:
+        import paddle
+
+        return getattr(paddle, "__version__", "?")
+    except Exception:  # noqa: BLE001 — 只是錯誤訊息裡的版本號
+        return "?"
+
+
 def ocr_images(pipeline, rendered):
     pages = []
     for page_no, image_path, arr in rendered:
@@ -301,7 +310,12 @@ def ocr_images(pipeline, rendered):
             missing = _find_models_missing(exc)
             if missing is not None:
                 raise OcrError(f"模型不在本機（{missing}）。請先執行 python ocr_pdf.py --warmup。", EXIT_NOT_READY)
-            raise OcrError(f"第 {page_no} 頁辨識失敗：{type(exc).__name__}: {exc}", EXIT_OCR)
+            hint = ""
+            if "ConvertPirAttribute2RuntimeAttribute" in str(exc):
+                # docs/local-mode.md LM-16：PaddlePaddle 3.3.0／3.3.1 在 CPU＋oneDNN 的已知錯誤
+                hint = (f"（PaddlePaddle {_paddle_version()} 的已知問題：requirements.txt 固定用 3.2.2，"
+                        "請重新執行 setup_local_ai.bat 讓它重裝套件）")
+            raise OcrError(f"第 {page_no} 頁辨識失敗：{type(exc).__name__}: {exc}{hint}", EXIT_OCR)
         markdown = "\n\n".join(result_markdown(r) for r in results).strip()
         pages.append({"page": page_no, "image": image_path, "markdown": markdown})
     return pages
