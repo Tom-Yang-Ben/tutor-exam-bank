@@ -147,7 +147,7 @@ function runSuite() {
         for (let i = 1; ; i++) {
             try {
                 await query('TRUNCATE job_events, job_questions, jobs CASCADE');
-                await query('TRUNCATE attempts, exam_papers, students, questions CASCADE');
+                await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions CASCADE');
                 return;
             } catch (err) {
                 if ((err.code !== '40P01' && err.code !== '55P03') || i >= 10) throw err;

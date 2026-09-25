@@ -51,6 +51,9 @@ const TOOLS = {
         params: '（不需要參數）',
         validate: () => null,
         async run() {
+            // 〔retrain PR-1〕出過幾題、批改了幾題是「卷層」數字：讀 assignment_attempts（全部派題，含日後的重練），
+            // 同 GET /api/students 的批改完成率（docs/retrain-and-review.md 第 2.3 節 C 類、第 7.1 節 R-11）。
+            // 沒有重練資料時與拆表前逐字相同，錄放帶的鍵不變。
             const { rows } = await query(
                 `SELECT s.id, s.name,
                         COALESCE(p.papers, 0)::int AS papers,
@@ -60,7 +63,7 @@ const TOOLS = {
                    LEFT JOIN (SELECT student_id, COUNT(*) AS papers FROM exam_papers GROUP BY student_id) p ON p.student_id = s.id
                    LEFT JOIN (SELECT student_id, COUNT(*) AS total,
                                      COUNT(*) FILTER (WHERE result IS NOT NULL) AS graded
-                                FROM attempts GROUP BY student_id) a ON a.student_id = s.id
+                                FROM assignment_attempts GROUP BY student_id) a ON a.student_id = s.id
                   ORDER BY s.name LIMIT 50`);
             return { students: rows };
         }

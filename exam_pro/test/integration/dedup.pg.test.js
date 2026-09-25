@@ -122,7 +122,7 @@ before(async () => {
     assert.ok(rows[0].q, '測試庫尚未套用 migrations，請先執行 npm run migrate:test');
     assert.ok(rows[0].jq, '測試庫缺少 job_questions（migrations/0003_jobs.sql 尚未套用）');
 
-    await pool.query('TRUNCATE job_events, job_questions, jobs, attempts, exam_papers, students, questions RESTART IDENTITY CASCADE');
+    await pool.query('TRUNCATE job_events, job_questions, jobs, attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE');
 
     for (const q of QUESTIONS) {
         const res = await pool.query(
@@ -182,7 +182,7 @@ after(async () => {
     }
     if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
     if (pool) {
-        await pool.query('TRUNCATE job_events, job_questions, jobs, attempts, exam_papers, students, questions RESTART IDENTITY CASCADE').catch(() => {});
+        await pool.query('TRUNCATE job_events, job_questions, jobs, attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE').catch(() => {});
         await pool.end();
     }
 });

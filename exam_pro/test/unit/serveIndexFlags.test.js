@@ -41,7 +41,9 @@ const INJECTIONS = [
     ['__FEATURE_KC__', 'FEATURE_KC'],
     ['__FEATURE_REMEDIAL__', 'FEATURE_REMEDIAL'],
     ['__FEATURE_TUTOR__', 'FEATURE_TUTOR'],
-    ['__FEATURE_VOICE__', 'FEATURE_VOICE']
+    ['__FEATURE_VOICE__', 'FEATURE_VOICE'],
+    // 錯題重練與間隔複習（docs/retrain-and-review.md 第 5.1 節；〔retrain PR-1〕新增，預設關）
+    ['__FEATURE_RETRAIN__', 'FEATURE_RETRAIN']
 ];
 
 describe('app.js 的 serveIndex — 階段 3 的四個 replaceAll（第 7.3 條 + S3-R25）', () => {

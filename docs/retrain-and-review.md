@@ -647,6 +647,27 @@ computeRetrainState({ reason, entered_on, teacher_override, history }, params) �
 | **PR-3 出卷整合** | API-5～9、API-12、組卷頁與補救卷掛鉤、Word 標示 | PR-1；PR-2 的純函式介面（先凍結，實作可用假資料）；R6～R8 | 與 PR-2 平行 |
 | **PR-4 畫面與成效** | `public/js/retrain.js`、批改卡徽章、學生清單徽章、API-13 | PR-2；R10 | PR-2 的 API 形狀凍結後即可用 mock 開工 |
 
+#### 5.6.1 實作狀態（第一階段：資料層）
+
+> **PR-1 已實作**（分支 `dec/retrain-p1-data-layer`，以本設計稿分支為起點）。只做 DEC-003 例外條款（選項 a）與 DEC-016 已核准的資料層；第 8 節 R1～R11 一題都沒有預設答案，程式裡沒有任何依賴它們的政策（哪些錯題進清單、怎樣算練到會、排程演算法等全部沒做）。
+>
+> **Migration 編號：M1 = `0016_assignment_attempt_split.sql`**（本分支上 `migrations/` 的最大號是 0015，所以用 0016；同一輪的 `dec/b20-backfill-figures-tool` 也可能用了 0016，整合時由整合任務重新編號，檔內與程式裡提到「0016」的註解要一起改）。M2（`retrain_items`）**還沒建**，留給 PR-2。
+
+| 項目 | 狀態 | 說明 |
+| :--- | :--- | :--- |
+| M1：`assignments`、`attempt_records`、兩個相容檢視、搬資料＋自我檢查、索引 | ✅ 已實作 | DDL 同第 3.2、3.3 節。冪等照 repo 慣例：`CREATE … IF NOT EXISTS`／`CREATE OR REPLACE`，搬資料整段只在 `attempts` 還是實體表時執行，已拆過的庫再套一次是 no-op；空庫照樣走完 |
+| 與第 3.2、3.7 節的差異 | ⚠️ 兩處 | ①索引名沿用舊表的三個名字（`idx_attempts_student_date`、`idx_attempts_question`、`idx_attempts_error_types`，分別建在 `assignments`、`assignments`、`attempt_records` 上），讓既有的 EXPLAIN 斷言（`students.pg.test.js`）與 README 一個字都不用改；②序號接續取「最大 id」與「舊序號已發到哪裡」的較大值＋1，最後幾筆被刪掉時不重用已發出去的 id |
+| D 類寫入點改寫 | ✅ 已實作 | `writePaper`（先寫派題、再替寫進去的派題建空白作答；閘門改指名 `assignments_first_exposure_key`，衝突照舊 409）、`deletePaper`、`deleteStudent`、`mergeStudent`、`PATCH /api/papers/:id/results`（改寫 `attempt_records`，經 `assignments` 以（卷, 題）對應）、`eval/lib/pgEngine.js` 的 TRUNCATE |
+| C 類讀取點改讀 `assignment_attempts` | ✅ 已實作 | 試卷明細（API-9 的讀法）、學生清單的批改完成率、試卷列表的已批改數、助教 `list_students`。**回應形狀不變**：API-9 要多帶的 `purpose`、`retrain_step` 留給 PR-3（`retrain_step` 是 M2 的欄位） |
+| A、B 類讀取 | ✅ 不動 | 讀相容檢視 `attempts`，SQL 一個字都沒改。唯一例外是刪題保護（`questionController.js` 兩處）改讀 `assignments`，語意是第 3.9 節的「有任何派題就只能封存」（有 I1 時兩者相同；M2 之前 I1 還沒有資料庫保證，直接讀實體表比較穩） |
+| 第 3.9 節：刪卷、刪學生、合併學生、刪題 | ✅ 已實作（不含排程項目） | 刪卷：這張卷的新題派題若同生同題在別張卷已有重練派題 → 409「這張卷有 N 題已經在錯題重練中（重練卷 #…），請先刪除那些重練卷。」（M2 之前 I1 由這裡守；項目的刪除與重算留給 PR-2）。刪學生：一句刪掉全部派題，`deleted.attempts` 是派題筆數。合併：衝突看目標側的新題派題，衝突題在來源側的新題與重練一起刪（計入 `dropped_conflicts`），其餘搬家（計入 `moved_attempts`）。沒有重練資料時四者的回應與拆表前逐字相同 |
+| 功能旗標 `FEATURE_RETRAIN`（第 5.1 節） | ✅ 已加，預設關 | `config/features.js` getter、`<meta name="feature-retrain">`、`app.js` 注入 `__FEATURE_RETRAIN__`。第一階段沒有任何東西讀它（拆表不受旗標管）；旗標關閉（或開啟）時系統行為與拆表前一致 |
+| 重練「再出同一題」 | ✅ 只在資料層 | 部分唯一索引只管 `purpose = 'new'`，同一題可以再寫 `purpose = 'retrain'` 的派題、每次作答各自一列。沒有任何 API 會寫重練派題（API-5～8 是 PR-3），測試以 `test/helpers/attempts.js` 直接寫入 |
+| 遷移驗證腳本（第 3.6 節第 5 點） | ✅ 已實作 | `node scripts/snapshot_attempt_views.js --out=before.json` → `npm run migrate` → `--out=after.json` → `--compare before.json after.json`（逐欄相同回 0）。只讀不寫；比的是作答逐列摘要與每位學生的弱點、知識點掌握度、補救卷基底、覆蓋率、新題候選池、每張卷的批改數 |
+| 一次性切換工具 | ✅ 已加註 | `migrate/import_pg.js`、`export_pg_delta.js`、`verify.js` 檔頭註明只適用於 0016 之前的 schema（第 3.6 節第 6 點） |
+| 測試 | ✅ 已實作 | 整合：`assignmentSplit.pg.test.js`（在暫用 schema 上套到 0015、灌舊資料再套 0016：空庫、筆數與 id 與逐欄內容、序號接續、冪等、自我檢查回滾、TC-036-3 黃金比對三百多支查詢、TC-036-4 EXPLAIN、驗證腳本）、`assignmentWrites.pg.test.js`（出卷寫入、新題組卷排除已作答、批改各自記錄、第 3.9 節四個動作、檢視唯讀）。單元：`noWritesToAttemptsView.test.js`（TC-036-6）、`assignmentSplit.test.js`。既有測試：`schema.test.js` 三條依第 6.4 節改寫並加註；夾具改用 `test/helpers/attempts.js`、清表改成 `TRUNCATE attempt_records, assignments, …`，斷言一條都沒改 |
+| M2、排程、API-1～13、CLI、畫面 | ⬜ 未做 | PR-2～PR-4；需要第 8 節的答案 |
+
 ---
 
 ## 6. 測試計畫與驗收

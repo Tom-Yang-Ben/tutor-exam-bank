@@ -58,5 +58,12 @@ module.exports = {
     get FEATURE_KC_TAGGING() { return isEnabled('FEATURE_KC_TAGGING'); },   // 入庫後自動標知識點（WS-C；會呼叫 LLM）
     get FEATURE_REMEDIAL() { return isEnabled('FEATURE_REMEDIAL'); },       // 依弱點出補救卷與題庫覆蓋率（WS-D）
     get FEATURE_TUTOR() { return isEnabled('FEATURE_TUTOR'); },             // AI 家教（WS-E）
-    get FEATURE_VOICE() { return isEnabled('FEATURE_VOICE'); }              // 按住說話（WS-E；需 FEATURE_TUTOR）
+    get FEATURE_VOICE() { return isEnabled('FEATURE_VOICE'); },             // 按住說話（WS-E；需 FEATURE_TUTOR）
+
+    // ── 錯題重練與間隔複習（docs/retrain-and-review.md 第 5.1 節；DEC-003 例外條款、DEC-016）──
+    // 預設關。管：新 API 是否掛載、畫面是否顯示、批改後是否自動建立重練項目、出卷 API 是否接受重練參數
+    // （以上都在第二階段之後才有）。不管：派題／作答拆表（migrations/0016，核心資料層，旗標關也生效）、
+    // 刪卷／刪學生／合併學生時對重練資料的處理（資料完整性，一律執行）。
+    // 名稱避開 review：/api/review 與 reviewController 已是拆題的「人工複核佇列」（FR-006）。
+    get FEATURE_RETRAIN() { return isEnabled('FEATURE_RETRAIN'); }
 };

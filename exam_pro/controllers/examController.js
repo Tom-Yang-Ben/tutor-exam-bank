@@ -23,15 +23,20 @@ const FOLLOW_UP_SHORTFALL_POLICY = 'note';
 //   1. 裁決 S4-1：**不再自動建學生**。收 student_id（優先）或 student_name（相容），
 //      查無此人一律 404——「打名字自動建學生」正是垃圾人名（小／名／華）分裂
 //      不重複出題紀錄的根因，建學生從此只有 POST /api/students 一個入口。
-//   2. dry_run: true → 走完全相同的選題邏輯但**整段不寫庫**（不建卷、不寫 attempts），
+//   2. dry_run: true → 走完全相同的選題邏輯但**整段不寫庫**（不建卷、不寫派題與作答），
 //      回預覽。前端的「生成」一律先走這裡，看過才確認。
 //   3. exclude_ids: int[] → 候選池額外排除（「換一題」把那題加進來再叫一次；
 //      「整卷重抽」同參數重叫，洗牌自然給出不同組合）。
 //
 // 舊有的硬閘門不變：
 //   候選池   NOT EXISTS (SELECT 1 FROM attempts …)（不是 NOT IN，NULL 語意才不會咬人）
-//   寫入     UNIQUE (student_id, question_id)＋rowCount 檢查——兩個請求同時抽到同一題時，
+//   寫入     「新題每生每題一次」＋rowCount 檢查——兩個請求同時抽到同一題時，
 //            後者整筆交易回滾並回 409，而不是悄悄少記一題。
+//
+// 〔retrain PR-1〕migrations/0016 把 attempts 拆成 assignments（派題）與 attempt_records（作答），
+// attempts 改成唯讀相容檢視（只含「新題」派題，每生每題最多一列＝舊表的語意），所以候選池的
+// NOT EXISTS 一個字都不用改，新題組卷照舊排除該生寫過的題。寫入的閘門搬到 assignments 的部分唯一索引
+// assignments_first_exposure_key（只管 purpose = 'new'），見 buildInsertNewAssignmentsSql。
 // ─────────────────────────────────────────────────────────────
 
 /**
@@ -332,7 +337,7 @@ exports.generatePaper = async (req, res, next) => {
             });
         }
 
-        // ── 真出卷：建卷＋attempts 同一交易 ──
+        // ── 真出卷：建卷＋派題＋作答同一交易 ──
         const outcome = await writePaper({
             studentId: student.id, paperTitle, questionIds: finalSortedIds, todayStr
         });
@@ -582,7 +587,27 @@ async function generateBlueprintPaper(req, res, next) {
 exports._blueprintInternals = { parseBlueprint, parseExcludeIds, parseSourceTypes, shortfallReason, blueprintPolicyError, blueprintTitle, MAX_BLUEPRINT_ROWS };
 
 /**
- * 建卷＋寫 attempts（generate 與 confirm 共用；同一交易、rowCount 硬閘門）。
+ * 「新題」派題＋空白作答的寫入語句（〔retrain PR-1〕migrations/0016；純函式，參數 $1 studentId、$2 questionIds、
+ * $3 paperId、$4 assignedAt）。
+ *
+ * 先有派題、作答掛在派題下：同一句 SQL 先寫 assignments（purpose = 'new'），再替**實際寫進去的**
+ * 每一筆派題建一筆空白作答（attempt_records）。DEC-003 的硬閘門從舊表的 UNIQUE (student_id, question_id)
+ * 搬到部分唯一索引 assignments_first_exposure_key：ON CONFLICT 指名同一組欄位與 WHERE purpose = 'new'，
+ * 撞到的題 DO NOTHING、不會建作答，外層的 rowCount（＝建了幾筆作答＝寫進幾筆派題）因此照舊少於題數 → 409。
+ * @returns {string}
+ */
+function buildInsertNewAssignmentsSql() {
+    return `WITH ins AS (
+               INSERT INTO assignments (student_id, question_id, paper_id, assigned_at, purpose)
+               SELECT $1::int, x, $3::int, $4::date, 'new' FROM unnest($2::int[]) AS x
+               ON CONFLICT (student_id, question_id) WHERE purpose = 'new' DO NOTHING
+               RETURNING id
+           )
+           INSERT INTO attempt_records (assignment_id) SELECT id FROM ins`;
+}
+
+/**
+ * 建卷＋寫派題與作答（generate 與 confirm 共用；同一交易、rowCount 硬閘門）。
  * @returns {Promise<{paperId:number|null, conflict:boolean}>}
  */
 async function writePaper({ studentId, paperTitle, questionIds, todayStr }) {
@@ -594,9 +619,7 @@ async function writePaper({ studentId, paperTitle, questionIds, todayStr }) {
             [paperTitle, studentId, questionIds]
         );
         const ins = await client.query(
-            `INSERT INTO attempts (student_id, question_id, paper_id, assigned_at)
-             SELECT $1::int, x, $3::int, $4::date FROM unnest($2::int[]) AS x
-             ON CONFLICT (student_id, question_id) DO NOTHING`,
+            buildInsertNewAssignmentsSql(),
             [studentId, questionIds, paper.id, todayStr]
         );
         // 寫入筆數少於題數 ⇒ 有題目在選完之後被別的請求指派給同一位學生（或預覽已過期）
@@ -619,7 +642,7 @@ async function writePaper({ studentId, paperTitle, questionIds, todayStr }) {
 //
 // 收 { student_id, question_ids }——題目就是 dry_run 預覽選出的那批，所以這裡
 // **不重跑**家族互斥與抽題，只重驗「題目還在、沒封存」，然後走與 generate 相同的
-// 寫入閘門：attempts 的 ON CONFLICT DO NOTHING + rowCount 檢查——預覽過期
+// 寫入閘門：新題派題的 ON CONFLICT DO NOTHING + rowCount 檢查——預覽過期
 // （這段時間內有人把同一題指派給同一位學生）會回 409 而不是悄悄少記。
 // 回應形狀與 generate-paper 成功時一致，前端共用同一段渲染與 Word 匯出。
 // ─────────────────────────────────────────────────────────────
@@ -676,16 +699,60 @@ exports.confirmPaper = async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────
 // DELETE /api/papers/:id（W1-2 的「後悔藥」；裁決 S4-3）
 //
-// 同一交易刪該卷的 attempts 與卷本身——被這張卷「燒掉」的題目回到該生的候選池。
+// 同一交易刪該卷的派題（作答跟著 ON DELETE CASCADE）與卷本身——被這張卷「燒掉」的題目回到該生的候選池。
 // ⚠ 已批改的紀錄會一併消失（弱點面板的分母會變小）；前端警告文案明說，這裡不再多問。
+//
+// 〔retrain PR-1〕docs/retrain-and-review.md 第 3.9 節：這張卷上某題的「新題」派題，若同一位學生的
+// 同一題已經有重練派題（在別張卷），刪掉它會讓那些重練紀錄失去「第一次」——那一題就會重新進入
+// 新題候選池（檢視 attempts 只看新題派題），違反「重練派題一定有同生同題的新題派題」（不變量 I1）。
+// 這種情形回 409，請老師先刪那些重練卷。沒有任何重練資料時，檢查查不到東西，行為與拆表前逐字相同。
+// deleted_attempts 維持「刪掉幾筆派題」的語意（拆表前一筆 attempts＝一筆派題）。
+// 排程項目（M2 的 retrain_items）的處理由錯題重練第二階段補上。
 // ─────────────────────────────────────────────────────────────
+
+/**
+ * 擋刪卷的重練派題（純函式；$1 paperId）：這張卷上每一題「新題」派題，同生同題在**別張卷**的重練派題。
+ * 回 { question_id, retrain_paper_ids }，retrain_paper_ids 只列有卷號的（依卷號排序；全部沒有卷號時為 NULL）。
+ * @returns {string}
+ */
+function buildRetrainBlockersSql() {
+    return `SELECT n.question_id,
+                   array_agg(DISTINCT r.paper_id ORDER BY r.paper_id) FILTER (WHERE r.paper_id IS NOT NULL) AS retrain_paper_ids
+              FROM assignments n
+              JOIN assignments r ON r.student_id = n.student_id AND r.question_id = n.question_id
+                                AND r.purpose = 'retrain' AND r.paper_id IS DISTINCT FROM n.paper_id
+             WHERE n.paper_id = $1 AND n.purpose = 'new'
+             GROUP BY n.question_id
+             ORDER BY n.question_id`;
+}
+
+/**
+ * 刪卷被重練擋下時的 409 回應（純函式）。
+ * @param {Array<{question_id:number, retrain_paper_ids:number[]|null}>} rows buildRetrainBlockersSql 的結果（至少一列）
+ * @returns {{message:string, question_ids:number[], retrain_paper_ids:number[]}}
+ */
+function retrainBlockedBody(rows) {
+    const paperIds = [...new Set(rows.flatMap(r => r.retrain_paper_ids || []))].sort((a, b) => a - b);
+    const where = paperIds.length > 0 ? `（重練卷 ${paperIds.map(p => `#${p}`).join('、')}）` : '';
+    return {
+        message: `這張卷有 ${rows.length} 題已經在錯題重練中${where}，請先刪除那些重練卷。`,
+        question_ids: rows.map(r => r.question_id),
+        retrain_paper_ids: paperIds
+    };
+}
+
 exports.deletePaper = async (req, res, next) => {
     const id = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ message: '試卷 id 無效。' });
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        const a = await client.query('DELETE FROM attempts WHERE paper_id = $1', [id]);
+        const { rows: blockers } = await client.query(buildRetrainBlockersSql(), [id]);
+        if (blockers.length > 0) {
+            await client.query('ROLLBACK');
+            return res.status(409).json(retrainBlockedBody(blockers));
+        }
+        const a = await client.query('DELETE FROM assignments WHERE paper_id = $1', [id]);
         const p = await client.query('DELETE FROM exam_papers WHERE id = $1', [id]);
         if (p.rowCount === 0) {
             await client.query('ROLLBACK');
@@ -700,3 +767,6 @@ exports.deletePaper = async (req, res, next) => {
         client.release();
     }
 };
+
+// 〔retrain PR-1〕純函式給單元測試
+exports._assignmentInternals = { buildInsertNewAssignmentsSql, buildRetrainBlockersSql, retrainBlockedBody };

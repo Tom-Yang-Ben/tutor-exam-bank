@@ -32,6 +32,8 @@ function runSuite() {
     const request = require('supertest');
     const app = require(path.join(APP_DIR, 'app'));
     const { query, pool } = require(path.join(APP_DIR, 'config', 'db'));
+    // 〔retrain PR-1〕attempts 是唯讀檢視（migrations/0016），夾具改用 helper 寫派題＋作答
+    const { insertAttempts } = require(path.join(APP_DIR, 'test', 'helpers', 'attempts'));
     const exam = require(path.join(APP_DIR, 'controllers', 'examController'));
     const { TOOLS } = require(path.join(APP_DIR, 'services', 'assistantService'));
 
@@ -95,7 +97,7 @@ function runSuite() {
         });
 
         beforeEach(async () => {
-            await query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE');
+            await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE');
         });
 
         after(async () => {
@@ -155,8 +157,7 @@ function runSuite() {
 
             // ① 前題已作答（承上題沒寫過）
             const answered = await addChain(1);
-            await query(`INSERT INTO attempts (student_id, question_id, assigned_at) VALUES ($1, $2, CURRENT_DATE)`,
-                [studentId, answered[0]]);
+            await insertAttempts(query, [{ student_id: studentId, question_id: answered[0] }]);
             // ② 承上題在排除清單（換這題）
             const excluded = await addChain(1);
             // ③ 承上題已封存

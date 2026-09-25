@@ -72,6 +72,7 @@ function runSuite() {
     const app = loadApp('true');
     const { query, pool } = require(path.join(APP_DIR, 'config', 'db'));
     const weakness = require(path.join(APP_DIR, 'services', 'weaknessService'));
+    const { insertAttempts } = require(path.join(APP_DIR, 'test', 'helpers', 'attempts'));
 
     // ─────────────────── 日期輔助（全部走 UTC 算術）───────────────────
     // config/db.js 已把 DATE 的 type parser 設成回 'YYYY-MM-DD' 字串，
@@ -144,22 +145,19 @@ function runSuite() {
     /**
      * 批次寫 attempts。`assigned_at` 一律用 `CURRENT_DATE - offset_days` 產生，
      * 這樣 JS 端只要記 offset 就能算出同樣的時間窗，完全不必猜資料庫的今天是哪天。
+     * 〔retrain PR-1〕attempts 是唯讀檢視（migrations/0016）：改由 test/helpers/attempts.js 寫派題＋作答，
+     * 欄位與語意同舊寫法（已批改的 graded_at = now()）。
      * @param {Array<{studentId:number, questionId:number, offsetDays:number, result:number|null, paperId?:number|null}>} rows
      */
     async function seedAttempts(rows) {
-        await query(
-            `INSERT INTO attempts (student_id, question_id, paper_id, assigned_at, result, graded_at)
-             SELECT s, q, p, CURRENT_DATE - off, r,
-                    CASE WHEN r IS NULL THEN NULL ELSE now() END
-               FROM unnest($1::int[], $2::int[], $3::int[], $4::int[], $5::smallint[]) AS t(s, q, p, off, r)`,
-            [
-                rows.map(r => r.studentId),
-                rows.map(r => r.questionId),
-                rows.map(r => r.paperId ?? null),
-                rows.map(r => r.offsetDays),
-                rows.map(r => r.result)
-            ]
-        );
+        await insertAttempts(query, rows.map(r => ({
+            student_id: r.studentId,
+            question_id: r.questionId,
+            paper_id: r.paperId ?? null,
+            days_ago: r.offsetDays,
+            result: r.result,
+            graded_at: r.result === null || r.result === undefined ? null : 'now'
+        })));
     }
 
     /** 建一張卷（question_ids 保留傳入順序）。 */
@@ -274,7 +272,7 @@ function runSuite() {
         });
 
         beforeEach(async () => {
-            await query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE');
+            await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE');
         });
 
         after(async () => {
@@ -980,7 +978,9 @@ function runSuite() {
             beforeEach(async () => {
                 await seedWeaknessFixture();
                 // 沒有統計值時 planner 只能亂猜，EXPLAIN 的結果沒有意義
-                await query('ANALYZE attempts');
+                // 〔retrain PR-1〕attempts 是檢視（ANALYZE 檢視只會略過），統計的是底下兩張實體表
+                await query('ANALYZE assignments');
+                await query('ANALYZE attempt_records');
                 await query('ANALYZE questions');
             });
 

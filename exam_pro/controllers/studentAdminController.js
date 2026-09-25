@@ -3,8 +3,8 @@
 //
 //   POST   /api/students             建立（唯一合法的「新學生」入口，裁決 S4-1）
 //   PATCH  /api/students/:id         改名
-//   DELETE /api/students/:id         刪除（連 attempts 與 exam_papers，一個交易）
-//   POST   /api/students/:id/merge   併入另一位學生（處理 (student_id, question_id) 唯一鍵）
+//   DELETE /api/students/:id         刪除（連派題、作答與 exam_papers，一個交易）
+//   POST   /api/students/:id/merge   併入另一位學生（處理「新題每生每題一次」的唯一鍵）
 //
 // 為什麼要有這一支：組卷原本「打名字自動建學生」——名字打得稍微不一樣就靜默分裂
 // 不重複出題的紀錄（students 表曾出現「小」「名」「華」）。階段 4 把「建學生」變成
@@ -110,15 +110,19 @@ exports.renameStudent = async (req, res, next) => {
 };
 
 // ─────────────────── DELETE /api/students/:id ───────────────────
-// 連同該生的 attempts 與 exam_papers 一起刪（順序：attempts → papers → student，
+// 連同該生的派題（作答跟著 ON DELETE CASCADE）與 exam_papers 一起刪（順序：派題 → papers → student，
 // 反著刪會撞 FK）。不可逆——UI 端要二次確認，這裡不再多問。
+// 〔retrain PR-1〕migrations/0016 之後作答歷史在 assignments＋attempt_records（檢視 attempts 是唯讀的）。
+// 一句 DELETE 刪掉該生**全部**派題（新題與重練一起，不會留下缺了新題派題的重練列）；
+// 回應的 deleted.attempts 維持「刪掉幾筆派題」的語意（拆表前一筆 attempts＝一筆派題），
+// 沒有重練資料時數字與拆表前相同（docs/retrain-and-review.md 第 3.9 節）。
 exports.deleteStudent = async (req, res, next) => {
     const id = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(id) || id < 1 || id > INT4_MAX) return res.status(400).json({ message: '學生 id 無效。' });
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        const a = await client.query('DELETE FROM attempts WHERE student_id = $1', [id]);
+        const a = await client.query('DELETE FROM assignments WHERE student_id = $1', [id]);
         const p = await client.query('DELETE FROM exam_papers WHERE student_id = $1', [id]);
         const s = await client.query('DELETE FROM students WHERE id = $1', [id]);
         if (s.rowCount === 0) {
@@ -136,9 +140,15 @@ exports.deleteStudent = async (req, res, next) => {
 };
 
 // ─────────────────── POST /api/students/:id/merge ───────────────────
-// 把 :id（來源）併入 into_id（目標）。attempts 有 UNIQUE (student_id, question_id)：
+// 把 :id（來源）併入 into_id（目標）。「新題」派題每生每題一次（assignments_first_exposure_key）：
 // 兩邊都寫過同一題時**保留目標側**（目標的批改紀錄比較可信——來源通常是打錯字
 // 產生的分身），來源側那幾列直接刪除並計入 dropped_conflicts。
+//
+// 〔retrain PR-1〕docs/retrain-and-review.md 第 3.9 節：衝突看「目標側有沒有這一題的新題派題」；
+// 衝突題在來源側的**全部**派題（新題與重練）與作答一起刪，這一題只留目標側的紀錄——
+// 只刪來源側的新題派題會留下缺了「第一次」的重練列。其餘派題（含重練）整批搬到目標學生。
+// moved_attempts／dropped_conflicts 是搬走／刪掉的派題筆數；沒有重練資料時與拆表前的
+// attempts 筆數相同（一筆 attempts＝一筆新題派題）。排程項目（M2）的搬移與重算由第二階段補上。
 exports.mergeStudent = async (req, res, next) => {
     const from = Number.parseInt(req.params.id, 10);
     const into = Number.parseInt(req.body?.into_id, 10);
@@ -155,17 +165,17 @@ exports.mergeStudent = async (req, res, next) => {
             await client.query('ROLLBACK');
             return res.status(404).json({ message: STUDENT_NOT_FOUND });
         }
-        // ① 衝突列（目標已寫過同一題）→ 刪來源側
+        // ① 衝突題（目標已有這一題的新題派題）→ 刪來源側這一題的全部派題（作答跟著 CASCADE）
         const dropped = await client.query(
-            `DELETE FROM attempts a
+            `DELETE FROM assignments a
               WHERE a.student_id = $1
-                AND EXISTS (SELECT 1 FROM attempts b
-                             WHERE b.student_id = $2 AND b.question_id = a.question_id)`,
+                AND EXISTS (SELECT 1 FROM assignments b
+                             WHERE b.student_id = $2 AND b.question_id = a.question_id AND b.purpose = 'new')`,
             [from, into]
         );
-        // ② 其餘搬家（衝突已排除，UPDATE 不會撞唯一鍵）
+        // ② 其餘搬家（衝突已排除，UPDATE 不會撞新題的部分唯一索引）
         const moved = await client.query(
-            'UPDATE attempts SET student_id = $2 WHERE student_id = $1', [from, into]
+            'UPDATE assignments SET student_id = $2 WHERE student_id = $1', [from, into]
         );
         // ③ 考卷搬家（exam_papers 沒有唯一鍵問題）
         const papers = await client.query(
