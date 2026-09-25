@@ -4,6 +4,7 @@
 > 🛠 **2026-08-29 修訂**（PR #3/#6/#7 程式碼同步）：§2 版面配置整節重寫為 5 個 `.app-view` 視圖＋hash 路由（原「Topbar＋Hero」「右欄 #paper lg:sticky」ASCII 圖已刪除——Hero 區塊於 commit 995f444 自程式碼移除）；§1 入口／出口改為視圖切換語意（「先切視圖再捲動」）；§3 章節欄位改科目→冊→單元三層選單並新增 #volume／#paper_volume 列；§3 新增 source_type 三欄位（#source_type／#pdf_source_type／#paper_source_scope）與題庫卡片來源徽章；§4 編輯 Modal 補題目來源改標；§8 刪除「導覽列 md 以下隱藏」與「組卷卡 lg:sticky」，改橫向捲動與獨立視圖；§10 補 FR-017。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
 > 🛠 **2026-09-15g 修訂**（feat/follow-up-paper-group，FR-019 PR2）：§3 組卷預覽列補「承上 #id」標示、「換這組」按鈕與少出題附註。修改處以〔修訂 2026-09-15g〕行內標記。
 > 🛠 **2026-09-24 修訂**（階段 5 整合回填，分支 `stage5/int-docs`）：只補階段 5 在本頁的最小掛鉤（WS-A、WS-B，標〔stage5 WS-X〕）——科目下拉改讀 API（含化學）、上傳區「卷別」選單、題目編輯 modal 的「文字詳解」欄、題庫卡片「有詳解」徽章、Word 匯出版本選單、MathJax 載入 mhchem。其餘內容未重掃。修改處以〔修訂 2026-09-24〕行內標記。
+> 🛠 **2026-09-26 合併回填**（分支 `dec/docs-backfill-round1-merged`；Owner 決策單 2026-09-25 B7、B10 已合入 `local/integration` `7dc14a0`）：§3 組卷預覽、§4 確認出卷、§5 Error、§6 換這題／確認出卷補上「承上組湊不滿預設 400」與「確認出卷擋半組承上題」。前端程式沒有改（既有的錯誤顯示路徑已涵蓋）。修改處以〔修訂 2026-09-26 合併回填〕行內標記。
 > **Owner:** Ben（楊本顥）
 > **語域:** L2
 > **實例:** 每頁面一份（`ui_spec-<page>.md`）
@@ -66,7 +67,7 @@ view-assistant（:588） ─ #assistant 空錨點（:589）
 | 題目內容／標準答案 | textarea／input | `question_text`／`answer_text` | 支援 `$…$` LaTeX，MathJax 即時渲染 |
 | 學生（#student_select） | select | `GET /api/students` → `items[]` | 顯示 `姓名（N 張卷）`；姓名另存 `dataset.name`（裁決 S4-1：學生用選的不用打的） |
 | 題庫卡片 | card | `GET /api/questions?page&limit=10`（來源篩選 #mgr_source :558-566 帶 `source_type` 參數 :829） | `#id`＋學科·章節＋題型＋★難度＋**來源徽章**（`SOURCE_TYPE_LABEL`／`SOURCE_TYPE_BADGE` 對照 :693-700，渲染 :852）＋題幹＋答案；每頁 10 筆〔修訂 2026-08-29〕 |
-| 組卷預覽（#resultBox） | panel | `POST /api/generate-paper`（`dry_run:true`） | 每題含題號、題型、★難度、`#id`、題幹、參考答案、「換這題」；承上題標「承上 #前題 id」，承上組成員的按鈕改為「換這組」（排除任一題＝整組換掉）；回應帶 `note`（承上組湊不滿題數而少出題）時於預覽說明下方以紅字「⚠ …」顯示，確認出卷後的結果區同樣列出〔修訂 2026-09-15g〕 |
+| 組卷預覽（#resultBox） | panel | `POST /api/generate-paper`（`dry_run:true`） | 每題含題號、題型、★難度、`#id`、題幹、參考答案、「換這題」；承上題標「承上 #前題 id」，承上組成員的按鈕改為「換這組」（排除任一題＝整組換掉）；回應帶 `note`（承上組湊不滿題數而少出題）時於預覽說明下方以紅字「⚠ …」顯示，確認出卷後的結果區同樣列出〔修訂 2026-09-15g〕。〔修訂 2026-09-26 合併回填 B10〕預設政策（`FOLLOW_UP_SHORTFALL_POLICY=error`）下，承上組湊不滿題數不再少出題，而是 400：#resultBox 的出題失敗區顯示「❌ 出題失敗原因：承上題須與前題整組出題，「{章}」要 N 題無法剛好湊滿（…），請把題數改成 a 題或 b 題。」，老師改題數再生成；上述紅字 `note` 只在 `.env` 設 `note` 時出現 |
 
 ## 4. 使用者操作 (Actions)
 
@@ -78,7 +79,7 @@ view-assistant（:588） ─ #assistant 空錨點（:589）
 | 新增學生 | ＋ 新增 → 建立 | `POST /api/students`；成功後選單重載並選中新學生 | 同上 |
 | 生成試卷（草稿） | 生成專屬特訓試卷 | `dry_run:true`，整段不寫庫；渲染預覽卡 | 同上 |
 | 換這題／整卷重抽 | 預覽卡按鈕 | 加入 `exclude_ids` 重新 dry_run／排除清單歸零重抽；皆不「燒題」 | 同上 |
-| 確認出卷 | ✔ 確認出卷 | `POST /api/confirm-paper` 建卷並寫 attempts；成功後顯示下載與「立即批改」 | 同上 |
+| 確認出卷 | ✔ 確認出卷 | `POST /api/confirm-paper` 建卷並寫 attempts；成功後顯示下載與「立即批改」。〔修訂 2026-09-26 合併回填 B7〕伺服器會擋半組承上題（400，訊息逐組列出缺哪幾題）；預覽本來就整組抽，正常流程不會碰到，碰到時以 error toast 顯示訊息、不寫任何東西 | 同上 |
 | 下載 Word | 下載 Word 考卷 | `POST /api/download-word` → Blob 下載 `.docx` | 同上 |
 | 編輯／刪除題目 | 題卡 ✏️／🗑️ | Modal 內 `PUT /api/questions/:id`；`confirm()` 後 `DELETE`；Modal 於共用編輯器外額外掛「題目來源」改標列（:908-917，不動 `createQuestionEditor`，FR-017）〔修訂 2026-08-29〕 | 同上 |
 
@@ -88,7 +89,7 @@ view-assistant（:588） ─ #assistant 空錨點（:589）
 | :--- | :--- | :--- |
 | Loading | 章節下拉「-- 載入中 --」；學生下拉「-- 載入學生中… --」；#pdfStatus 靛藍字 | 「⏳ 正在分析整份 PDF 所有題目，AI 計算答案中...」 |
 | Empty | 題庫列表虛線框空狀態卡；學生下拉引導文案 | 「沒有符合條件的題目」＋「調整上方篩選條件後再試一次」；「-- 還沒有學生，先按『＋ 新增』 --」 |
-| Error | #pdfStatus 轉紅；組卷失敗顯示於 #resultBox；其餘走 toast（error 色調） | 「❌ 分析失敗：{message}」「❌ 出題失敗原因：{message}」「連線失敗，請確認伺服器狀態」 |
+| Error | #pdfStatus 轉紅；組卷失敗顯示於 #resultBox；其餘走 toast（error 色調） | 「❌ 分析失敗：{message}」「❌ 出題失敗原因：{message}」「連線失敗，請確認伺服器狀態」。〔修訂 2026-09-26 合併回填 B10／B7〕承上組湊不滿題數的 400（預設政策）走「出題失敗原因」；確認出卷的承上題組不完整 400 走 toast |
 | 進行中（草稿） | #resultBox 琥珀色提示列 | 「尚未寫入——換題、重抽都不會扣掉題庫池；按『確認出卷』才會建卷並記入不重複紀錄。」 |
 | 部分失敗 | 未通過題卡加 `ring-rose` 標紅、前置原因列；通過題自清單移除 | 「⚠ 未寫入：{reason}」 |
 | Success | toast（success 色調）；確認出卷後標題「✨ {paper_title}」 | 「題目已成功儲存」「🎉 所有題目已成功寫入資料庫！」 |
@@ -98,8 +99,8 @@ view-assistant（:588） ─ #assistant 空錨點（:589）
 | 元素 | Hover | Disabled | Loading | 錯誤反應 |
 | :--- | :--- | :--- | :--- | :--- |
 | 上傳／入庫／儲存／確認按鈕 | 色階加深 | 請求期間 `disabled = true`（防重複點擊），`finally` 復原 | 文案不變，狀態列顯示進度 | toast＋狀態列轉紅 |
-| 換這題 | 底色變化 | — | 失敗（多為庫存不足 400）時把排除退回、預覽維持原狀 | 沿用 dry_run 失敗顯示 |
-| 確認出卷 | — | 請求期間 disabled | — | 409（預覽過期）自動重新 dry_run 一份新預覽 |
+| 換這題 | 底色變化 | — | 失敗（多為庫存不足 400；〔修訂 2026-09-26 合併回填 B10〕預設政策下也可能是換掉一組後承上組湊不滿的 400）時把排除退回、預覽維持原狀 | 沿用 dry_run 失敗顯示 |
+| 確認出卷 | — | 請求期間 disabled | — | 409（預覽過期）自動重新 dry_run 一份新預覽；〔修訂 2026-09-26 合併回填 B7〕400（含承上題組不完整）只顯示 toast，不自動重新預覽 |
 | 立即批改 | — | FEATURE_STUDENTS 關閉或回應無 `paper_id` 時整顆隱藏 | — | 由 students.js 接手（`examapp:grade-paper` 事件） |
 | 編輯器即時預覽 | — | — | 輸入 debounce 350ms 後同步並 MathJax 渲染 | — |
 

@@ -1833,6 +1833,7 @@ agent 管線、RAG 檢索、NLQ、變式、複核佇列、eval 與門檻——�
 
 **以下 13–24 項為 2026-09-15 收斂的已知問題與待決策清單**〔修訂 2026-09-15g〕。
 〔修訂 2026-09-26 決策單〕Owner 2026-09-25「出題系統決策單」第一輪已答第 13（B1，核准欄仍待簽核）、14（B10）、19（B20）、20（B21）項，就地加註；總表見 [`HANDOFF.md`](HANDOFF.md) §0.00。
+〔修訂 2026-09-26 合併回填〕第 14（B10）、20（B21）項已合入 `local/integration`（`7dc14a0`）；第 19 項的 X2 已答。〔修訂 2026-09-26 決策單第二、三輪〕新增第 25 項：錯題重練與間隔複習的 R1～R12（第三輪已答）；第二、三輪總表見 [`HANDOFF.md`](HANDOFF.md) §0.00a。
 狀態用語：**待決策**＝需要 owner 拍板；**進行中**＝已有分支或 PR、尚未合併；**暫緩**＝有觸發條件、條件未成立前不做；
 **已知限制**＝目前刻意不處理，記錄以免誤判為缺陷。
 
@@ -1845,6 +1846,9 @@ agent 管線、RAG 檢索、NLQ、變式、複核佇列、eval 與門檻——�
    選 A 的理由：老師要的是一份能用的考卷，少一兩題比整份出不來好；選 B 的理由：題數是老師明確指定的數字。
    做法：PR #33 已把選項做成單一切換點（`FOLLOW_UP_SHORTFALL_POLICY`），owner 拍板後改一行。
    〔修訂 2026-09-26 決策單 B10〕Owner 選 B：承上題湊不滿時直接報錯、請老師改題數。由分支 `dec/b10-shortfall-error` 實作（`FOLLOW_UP_SHORTFALL_POLICY` 改為 B；依裁決 S5-29 這個開關也管跨章配額 blueprint），合併之前程式仍是選項 A。
+   〔修訂 2026-09-26 合併回填〕**已合入 `local/integration`（`7dc14a0`）**：`FOLLOW_UP_SHORTFALL_POLICY` 改成環境變數、預設 `error`（未設、空白、打錯字都當 `error`），
+   400 訊息說出哪一章（blueprint 為哪一列）要幾題、承上題整組最多湊得到幾題、建議改成幾題；單章、blueprint、助教試算同一個開關；
+   `.env` 設 `note` 可切回選項 A。補救卷草稿不受影響。同輪 B7 也已合入：`confirm-paper` 伺服器端檢查承上題整組（半組回 400）。
 15. ~~刪除被當作變式題藍本的題回 500~~ → **已修（2026-09-16，PR #32 併入 main `27f56ab`）**〔修訂 2026-09-16b〕。
    `jobs.source_question_id` 外鍵衝突改比照 `job_questions` 回 409 並帶 `job_ids`，提示改用封存。
 16. ~~預算用盡時零成本節點的失敗原因被改寫~~ → **已修（2026-09-16，PR #31 併入 main `ef787d4`）**〔修訂 2026-09-16b〕。
@@ -1861,10 +1865,14 @@ agent 管線、RAG 檢索、NLQ、變式、複核佇列、eval 與門檻——�
    且需逐題人工確認對應；估 1 人日。待 owner 決定是否值得做、以及做哪幾份卷。
    〔修訂 2026-09-26 決策單 B20〕Owner 選「做」。補圖工具由分支 `dec/b20-backfill-figures-tool` 實作（仍需逐題人工確認對應、寫正式庫前先備份）；
    **做哪幾份卷在第二輪 X2 待答**，答覆之前不對正式庫執行。
+   〔修訂 2026-09-26 決策單第二、三輪 X2〕Owner 選 1：各校考卷整個資料夾先跑「只列出」（dry-run 只產提議檔與預覽），再逐題確認後才 `--apply`。
+   工具修正中（`dec/b20-backfill-figures-tool-fix`），尚未合入 `local/integration`；合入之前仍不對正式庫執行。
 20. ~~**待決策：`/analyze-pdf` 舊流程不裁附圖**~~ → **已決策（2026-09-25 Owner 決策單 B21）：選項 B，保留並補裁圖**〔修訂 2026-09-26 決策單〕。新流程（`POST /api/jobs` 管線）已涵蓋上傳拆題；
    選項 A：退役舊端點（前端改走新流程後移除），選項 B：舊流程補裁圖。建議 A——兩條拆題路徑長期並存會重複維護。
    〔修訂 2026-09-26 決策單 B21〕Owner 選 B（不採上面的建議 A）：`/analyze-pdf` 保留，補上附圖裁切；由分支 `dec/b21-legacy-analyze-pdf-figures` 實作。
    代價照原分析：兩條拆題路徑並存、要重複維護。
+   〔修訂 2026-09-26 合併回填〕**已合入 `local/integration`（`7dc14a0`）**：舊流程重用管線的 `services/figureService.js` 裁圖（檔名 `legacy-<請求編號>-<idx>.png`），
+   有圖的題多一個 `question_img` 鍵、批次入庫寫進 `questions.question_img`；裁圖失敗只記警告、題目照回。細節見 `docs/figures.md`；化學仍只走新管線（`docs/chemistry.md` 第 9 節）。
 21. **已知限制（操作）：本機以 `npm run dev`（nodemon）執行時的升級順序**。2026-09-15 `git pull` 帶入
    0008／0009 時 nodemon 先以新程式重啟、當下 schema 尚未更新；當時無進行中的拆題工作，未造成影響。
    規則：含新 migration 的版本要先停服務或先 `npm run migrate`，再拉程式／重啟。
@@ -1878,6 +1886,16 @@ agent 管線、RAG 檢索、NLQ、變式、複核佇列、eval 與門檻——�
    依 #31 → #30 → #32 → #33 合併：#31、#30 無衝突；#32、#33 各自先把 main 併回分支，衝突全在文件
    （FR-018／FR-019 與 ACPT／TC 列、修訂 banner），改寫成同時涵蓋兩側後重跑 CI 綠才合。
    合併後 main `8072795`，CI 單元 1,613／整合 317／e2e 11；無新 migration，正式服務重啟即可生效。
+25. ~~**待決策：錯題重練與間隔複習的 12 個設計問題（R1～R12）**~~ → **已決策（2026-09-26 Owner「重練與收尾決策單」第三輪）**〔修訂 2026-09-26 決策單第二、三輪〕。
+   需求：DEC-003 例外條款、DEC-016（2026-09-25 已核准）；開發順序依 B22（錯題重練 → 間隔複習 → …）。
+   設計與每題的背景、選項原文見 `docs/retrain-and-review.md` 第 8 節（依該節「選完之後本檔凍結」，設計已凍結；檔案在錯題重練分支上，尚未合入 `local/integration`）。結果：
+   - R1 選 2：只有老師在批改卡上勾「要重練」的題才進清單，清單上可手動加入或移出；R2 選 1：只有全對才算對；
+   - R3 選 2：對 3 次才算會（重做、隔 1 週、再隔 2 週）；R4 選 1：錯了回第一關，錯滿 3 次標「卡關」、仍留在清單；R5 選 1：固定關卡；
+   - R6 選 1：出新卷時可勾選附上到期題（上限新題數的三成、可改），也能單獨出重練卷；R7 選 1：學生卷面不標、老師版與批改卡標「重練」；
+   - R8 選 1：重練題不佔變式家族名額；R9 選 1：用原題；R10 選 1：弱點只算第一次作答，另做重練成效表；
+   - R11 選 3：不補建以前的錯題，從開啟那天起算；R12 選 2：重練題組放不進卷時直接報錯（和新題的 B10 一致）。
+   實作：第一階段（派題與作答拆表，migration 0016）在 `dec/retrain-p1-data-layer`、排程純函式在 `dec/retrain-schedule`，都尚未合入；
+   重練規則、API、畫面在之後。分支與進度見 [`HANDOFF.md`](HANDOFF.md) §0.00a。
 
 ---
 
@@ -1885,4 +1903,4 @@ agent 管線、RAG 檢索、NLQ、變式、複核佇列、eval 與門檻——�
 
 ## §7 階段 5（2026-09-24）〔修訂 2026-09-24〕
 
-階段 5 把系統從出卷工具轉成教學診斷平台（DEC-014～019：錯因與部分給分、學生檔案、文字詳解、化學、知識點與口語版、依弱點出補救卷、題庫覆蓋率、經程式驗算的 AI 家教與按住說話），由五條程式 workstream 與三組知識點內容依凍結契約平行施工；契約、分工與裁決 S5-1～S5-39 見 [`interfaces-stage5.md`](interfaces-stage5.md)，各功能見 [`grading-and-profile.md`](grading-and-profile.md)、[`chemistry.md`](chemistry.md)、[`knowledge-components.md`](knowledge-components.md)、[`remedial.md`](remedial.md)、[`tutor.md`](tutor.md)，交接與 Owner 待辦見 [`HANDOFF.md`](HANDOFF.md)。〔修訂 2026-09-26 決策單〕Owner 2026-09-25 決策單第一輪的結果（含階段 5 的待確認裁決與下一輪開發順序）見 [`HANDOFF.md`](HANDOFF.md) §0.00。
+階段 5 把系統從出卷工具轉成教學診斷平台（DEC-014～019：錯因與部分給分、學生檔案、文字詳解、化學、知識點與口語版、依弱點出補救卷、題庫覆蓋率、經程式驗算的 AI 家教與按住說話），由五條程式 workstream 與三組知識點內容依凍結契約平行施工；契約、分工與裁決 S5-1～S5-39 見 [`interfaces-stage5.md`](interfaces-stage5.md)，各功能見 [`grading-and-profile.md`](grading-and-profile.md)、[`chemistry.md`](chemistry.md)、[`knowledge-components.md`](knowledge-components.md)、[`remedial.md`](remedial.md)、[`tutor.md`](tutor.md)，交接與 Owner 待辦見 [`HANDOFF.md`](HANDOFF.md)。〔修訂 2026-09-26 決策單〕Owner 2026-09-25 決策單第一輪的結果（含階段 5 的待確認裁決與下一輪開發順序）見 [`HANDOFF.md`](HANDOFF.md) §0.00。〔修訂 2026-09-26 決策單第二、三輪〕第二輪知識點審定單、第三輪重練與收尾決策單的結果見 [`HANDOFF.md`](HANDOFF.md) §0.00a；錯題重練的 R1～R12 另見上方 §6.5 第 25 項。

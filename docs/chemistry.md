@@ -193,7 +193,7 @@ npm run eval:classify-chem
 
 | 項目 | 狀態 | 理由 |
 | :--- | :--- | :--- |
-| 舊版單呼叫拆題 `services/aiService.js`（`/api/analyze-pdf`） | 維持原狀，只拆數學／物理 | 契約要求不動；前端選化學時直接擋下並提示改用新版管線 |
+| 舊版單呼叫拆題 `services/aiService.js`（`/api/analyze-pdf`） | ~~維持原狀，只拆數學／物理~~ 〔修訂 2026-09-26 合併回填 B21〕仍只拆數學／物理；Owner 決策單 2026-09-25 B21 保留這條舊流程並補上附圖裁切（已合入 `local/integration` `7dc14a0`，重用管線的 `figureService`，見 `docs/figures.md`），化學範圍不變 | 契約要求不動；前端選化學時直接擋下並提示改用新版管線（B21 沒有改這一點） |
 | NLQ 的 LLM 輔路徑 | 〔Owner 決策單 2026-09-25 B5〕已支援化學（`nlq.v2`） | 見第 7 節；原本（裁決 S5-13）不支援。`nlq.v2` 的 cassette 需重錄 |
 | 助教（`services/assistantService.js`） | 〔Owner 決策單 2026-09-25 B5〕工具說明書與驗證都接受化學（`assistant.v2`） | 見第 7.1 節；原本說明書仍寫「數學\|物理」（裁決 S5-13）。`preview_paper` 的章節改驗白名單 |
 | embedding 文本（`utils/embedText.js`） | 未改 | `\ce{H2O}` 會轉成「ce H2O」這類字樣；改規則會讓全部向量作廢（該檔檔頭警告） |
