@@ -2,7 +2,8 @@
 //
 // 釘住的東西：
 //   - utils/nlqHeuristics.js 的證據檢查：題型／難度字眼、平面／空間線索、空間章 ↔ 同名平面章的對照表；
-//   - nlqService.mergeLlm 帶原句時：句子沒提到的題型／難度／學生不採用、明講平面或空間時換成同名的另一章，
+//   - nlqService.mergeLlm 帶原句時：句子沒提到的題型／難度／學生不採用、只明講平面或只明講空間時換成同名的另一章
+//     （同名的另一章模型也列了、或句子兩種都講時不換——〔dec/x-nlq-improve-fix〕審查意見），
 //     被擋下或換掉的項目記在 adjustments；不帶原句時行為與改版前相同；
 //   - parseOnly：adjustments 進解析結果與 log，不產生新的 warning（第 6 條的回應形狀不變）；
 //   - nlq.v2 模板：【容易混淆的章】裡的章名都在白名單、【範例】合 schema 且與證據檢查一致、
@@ -50,6 +51,13 @@ describe('mentionsQuestionType／mentionsDifficulty：句子有沒有講到題�
         }
     });
 
+    test('題型：計算題的別稱「演算題」「運算題」與「非選題」也算有講（規則層不認得，也不含「計算」兩字）', () => {
+        for (const q of ['等比級數出幾題演算題', '對數的運算題', '圓錐曲線的非選題']) {
+            assert.equal(mentionsQuestionType(q), true, q);
+        }
+        for (const w of ['演算', '運算', '非選']) assert.ok(QUESTION_TYPE_CUES.includes(w), w);
+    });
+
     test('題型：「求…」「是多少」「怎麼算」不是題型', () => {
         for (const q of ['求拋物線的焦點', '兩車相遇的時間是多少', '鹽類的溶解度怎麼算', '單擺週期跟擺長的關係']) {
             assert.equal(mentionsQuestionType(q), false, q);
@@ -62,7 +70,7 @@ describe('mentionsQuestionType／mentionsDifficulty：句子有沒有講到題�
     });
 
     test('難度：模糊講法（難一點、有挑戰性、簡單、基礎、進階、N 星）算有講；沒講就 false', () => {
-        for (const q of ['來幾題難一點的', '有挑戰性的', '簡單的暖身題', '基礎觀念', '進階一點', '3 星的']) {
+        for (const q of ['來幾題難一點的', '有挑戰性的', '簡單的暖身題', '基礎觀念', '進階一點', '3 星的', '深一點的', '高階一點的']) {
             assert.equal(mentionsDifficulty(q), true, q);
         }
         for (const q of ['球從桌邊水平滾出去落地點多遠', '鐵釘放進硫酸銅溶液會怎樣']) {
@@ -94,10 +102,56 @@ describe('dimensionCue／alignChapterDimension：句子明講平面或空間時�
         assert.equal(dimensionCue('過三點的平面方程式'), null, '單一個「平面」不算平面線索');
     });
 
-    test('平面線索：空間章換成同名平面章、去重、順序不變；沒有對應的章原樣保留', () => {
-        const r = alignChapterDimension(['空間向量內積', '向量內積', '外積'], '平面上兩向量的夾角');
-        assert.deepEqual(r.chapters, ['向量內積', '外積']);
+    test('dimensionCue：有空間線索、又另外講了「平面」→ 兩個維度都要 → null（審查意見：原本判成 space）', () => {
+        for (const q of [
+            '兩向量互相垂直求未知數，平面和空間的都要',
+            '向量夾角的題，平面跟空間各來幾題',
+            '求兩直線交點，平面和空間的都要',
+            '平面或立體的都可以',
+            '二維和三維的都要'
+        ]) {
+            assert.equal(dimensionCue(q), null, q);
+        }
+    });
+
+    test('dimensionCue：空間句子裡「平面」是空間單元的題材（平面方程式、過…的平面、點到平面、兩平面、法向量）→ 仍是 space', () => {
+        for (const q of [
+            '空間中過三點的平面方程式',
+            '空間中點到平面的距離',
+            '空間中兩平面的夾角',
+            '空間中平面與平面的夾角',
+            '空間中平面的法向量'
+        ]) {
+            assert.equal(dimensionCue(q), 'space', q);
+        }
+    });
+
+    test('平面線索：空間章換成同名平面章、順序不變；沒有對應的章原樣保留', () => {
+        const r = alignChapterDimension(['向量的加減與係數積', '空間向量內積', '外積'], '平面上兩向量的夾角');
+        assert.deepEqual(r.chapters, ['向量的加減與係數積', '向量內積', '外積']);
         assert.deepEqual(r.changes, [{ from: '空間向量內積', to: '向量內積' }]);
+    });
+
+    test('模型重複列同一章：只留一個、changes 只記一次', () => {
+        const r = alignChapterDimension(['空間向量內積', '空間向量內積'], '平面上兩向量的夾角');
+        assert.deepEqual(r.chapters, ['向量內積']);
+        assert.deepEqual(r.changes, [{ from: '空間向量內積', to: '向量內積' }]);
+    });
+
+    test('同名的另一章已經在清單裡：不換、兩章都留（即使句子只明講一個維度）', () => {
+        assert.deepEqual(alignChapterDimension(['空間向量內積', '向量內積'], '平面上兩向量的夾角'),
+            { chapters: ['空間向量內積', '向量內積'], changes: [] });
+        assert.deepEqual(alignChapterDimension(['直線方程式', '空間直線方程式'], '空間中兩直線的交點'),
+            { chapters: ['直線方程式', '空間直線方程式'], changes: [] });
+    });
+
+    test('句子平面、空間都要（審查意見的例句）：兩章都列 → 兩章都留；只列一章 → 也不換', () => {
+        assert.deepEqual(alignChapterDimension(['向量內積', '空間向量內積'], '兩向量互相垂直求未知數，平面和空間的都要'),
+            { chapters: ['向量內積', '空間向量內積'], changes: [] });
+        assert.deepEqual(alignChapterDimension(['直線方程式', '空間直線方程式'], '求兩直線交點，平面和空間的都要'),
+            { chapters: ['直線方程式', '空間直線方程式'], changes: [] });
+        assert.deepEqual(alignChapterDimension(['向量內積'], '向量夾角的題，平面跟空間各來幾題'),
+            { chapters: ['向量內積'], changes: [] });
     });
 
     test('空間線索：平面章換成同名空間章', () => {
@@ -210,6 +264,21 @@ describe('parseOnly：證據檢查接在 LLM 之後、白名單再驗之前', ()
         assert.equal(r.parse_path, 'llm');
         assert.deepEqual(r.filters.chapters, ['向量內積']);
         assert.equal(r.filters.subject, '數學');
+    });
+
+    test('平面、空間都要（審查意見）：規則抓不到章節、走 LLM；LLM 兩章都回 → 兩章都留、沒有 adjustments', async () => {
+        for (const [query, chapters] of [
+            ['兩向量互相垂直求未知數，平面和空間的都要', ['向量內積', '空間向量內積']],
+            ['向量夾角的題，平面跟空間各來幾題', ['向量內積', '空間向量內積']],
+            ['求兩直線交點，平面和空間的都要', ['直線方程式', '空間直線方程式']]
+        ]) {
+            const llm = fakeLlm({ subject: '數學', chapters, question_types: [], semantic_text: query, keywords: [] });
+            const r = await nlq.parseOnly({ query, llm, noCache: true });
+            assert.equal(llm.calls.length, 1, `${query}：應走 LLM 輔路徑`);
+            assert.equal(r.parse_path, 'llm', query);
+            assert.deepEqual(r.filters.chapters, chapters, query);
+            assert.deepEqual(r.adjustments, [], query);
+        }
     });
 
     test('規則路徑（抓到章節）與 LLM 失敗：adjustments 為空陣列', async () => {
