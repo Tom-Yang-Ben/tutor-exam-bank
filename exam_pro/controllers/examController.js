@@ -1,5 +1,5 @@
 const { pool, query } = require('../config/db');
-const { pickPaperUnits, sortForPaperGrouped } = require('../utils/paperGroups');
+const { pickPaperUnits, nearestReachableCounts, sortForPaperGrouped } = require('../utils/paperGroups');
 // 〔stage5 WS-D〕pg 序列化查詢參數的同一支函式（pg 的 package.json exports 公開 ./lib/*）：
 // 單章路徑用它把 chapter 轉成與抽出前 `q.chapter = $2` 相同的比對字串（見 selectPaperQuestions）
 const { prepareValue } = require('pg/lib/utils');
@@ -8,13 +8,65 @@ const MAX_QUESTIONS = 50; // 單次抽題上限，避免一次撈整章
 const MAX_EXCLUDE = 200;  // 換一題／重抽的排除清單上限（roadmap-plan.md §6.2.2）
 
 /**
- * 承上題整組抽取湊不到剛好 N 題時的政策（FR-019 PR2；**待 owner 決定**，單點切換）：
- *   'note'  （預設）少出題，200 回應附 shortfall＋note 說明實際題數與原因
- *   'error' 回 400，請老師調整題數
+ * 承上題整組抽取湊不到剛好 N 題時的政策（FR-019 PR2；單點切換，單章路徑與 blueprint 分支都聽它）：
+ *   'error'（預設；〔Owner 決策單 2026-09-25 B10〕「直接報錯，請老師改題數」）
+ *           回 400，訊息具體說出哪一章（blueprint 則是哪一列）要幾題、承上題整組最多湊得到幾題、
+ *           建議改成幾題（離原題數最近、剛好湊得滿的上下兩個題數，見 utils/paperGroups.js nearestReachableCounts）
+ *   'note'  少出題，200 回應附 shortfall＋note 說明實際題數與原因（決策前的預設，保留可切回）
  * 例：要 5 題，抽到 4 題後剩下的組都是 2 題一組。
- * 「真的庫存不足」（可用題數 < N）不受此政策影響，照舊回 400。
+ * 「真的庫存不足」（可用題數 < N）不受此政策影響：單章照舊回 400，blueprint 照舊逐列附註。
+ *
+ * 由環境變數 FOLLOW_UP_SHORTFALL_POLICY（note／error）切換，每次組卷時才讀（測試可直接改 process.env）：
+ * 未設／空白＝'error'；非法值也退回 'error'，並警告一次（同一個非法值只警告一次）——
+ * 打錯字時寧可擋下請老師改題數，也不要悄悄少出題。
  */
-const FOLLOW_UP_SHORTFALL_POLICY = 'note';
+const FOLLOW_UP_SHORTFALL_POLICIES = ['note', 'error'];
+const DEFAULT_FOLLOW_UP_SHORTFALL_POLICY = 'error';
+const warnedShortfallPolicy = new Set();
+
+/**
+ * 讀 FOLLOW_UP_SHORTFALL_POLICY（〔Owner 決策單 2026-09-25 B10〕）。不分大小寫、去頭尾空白。
+ * @param {object} [env]
+ * @returns {'note'|'error'}
+ */
+function resolveFollowUpShortfallPolicy(env = process.env) {
+    const raw = String(env.FOLLOW_UP_SHORTFALL_POLICY ?? '').trim().toLowerCase();
+    if (!raw) return DEFAULT_FOLLOW_UP_SHORTFALL_POLICY;
+    if (FOLLOW_UP_SHORTFALL_POLICIES.includes(raw)) return raw;
+    if (!warnedShortfallPolicy.has(raw)) {
+        warnedShortfallPolicy.add(raw);
+        console.warn(`[exam] FOLLOW_UP_SHORTFALL_POLICY 只接受 note／error，收到「${env.FOLLOW_UP_SHORTFALL_POLICY}」，`
+            + '改用 error（承上題整組湊不滿題數時回 400，請老師改題數）。');
+    }
+    return DEFAULT_FOLLOW_UP_SHORTFALL_POLICY;
+}
+
+/** 測試用：清掉「非法值已警告過」的記憶 */
+function _resetShortfallPolicyWarningForTest() {
+    warnedShortfallPolicy.clear();
+}
+
+/**
+ * 承上題整組湊不滿時給老師的一句話（純函式；單章路徑與 blueprint 各列共用，不含句尾標點）。
+ * 〔Owner 決策單 2026-09-25 B10〕要說清楚：哪一章（或哪一列）要幾題、承上題整組最多湊得到幾題、題數改成多少。
+ * 不帶學生姓名（訊息可能被助教工具轉述、也可能進 log）。
+ *
+ * @param {object} p
+ * @param {string} p.label  例：'「向量內積」'、'第 2 列「實數」'
+ * @param {number} p.wanted 要求題數
+ * @param {number} p.got    不超過 wanted 的最大可達題數（＝'note' 政策下實際會出的題數）
+ * @param {{below:number|null, above:number|null}|null} [p.suggest] nearestReachableCounts 的結果
+ * @param {number|null} [p.minUnitSize] got 為 0 時用來說明原因（可用的題組每組至少幾題）
+ * @returns {string}
+ */
+function followUpShortfallText({ label, wanted, got, suggest = null, minUnitSize = null }) {
+    const why = got > 0
+        ? `${wanted} 題以內最多只能湊到 ${got} 題`
+        : (minUnitSize ? `可用的題組每組至少 ${minUnitSize} 題，一題都湊不出來` : '一題都湊不出來');
+    const options = suggest ? [suggest.below, suggest.above].filter(n => Number.isInteger(n) && n > 0) : [];
+    const advice = options.length ? `請把題數改成 ${options.map(n => `${n} 題`).join('或 ')}` : '請調整題數';
+    return `${label}要 ${wanted} 題無法剛好湊滿（${why}），${advice}`;
+}
 
 // ─────────────────────────────────────────────────────────────
 // 智慧組卷（D-D4 重寫；階段 4 W1-1/W1-2 改契約，docs/roadmap-plan.md §6.2.2）
@@ -156,6 +208,8 @@ async function fetchCandidatePool(opts) {
  * pickPaperUnits 會依「組內任一題不可用，整組不抽」把它丟掉（不會出孤兒承上題）。
  *
  * 不足量不在這裡判斷對錯，只回報每段的 got 與 availableCount，由呼叫端決定要 400 還是附註。
+ * unitSizes（該段家族互斥後每個可用組的題數）給 blueprint 在承上組湊不滿時算「改成幾題湊得滿」
+ * （〔Owner 決策單 2026-09-25 B10〕）；補救卷不讀它。
  *
  * @param {object} p
  * @param {number} p.studentId
@@ -165,14 +219,14 @@ async function fetchCandidatePool(opts) {
  * @param {number[]} [p.excludeIds]
  * @param {string[]|null} [p.sourceTypes]
  * @param {(items:Array)=>Array} [p.shuffleFn]
- * @returns {Promise<Array<{ids:number[], got:number, availableCount:number}>>} 與 quotas 一一對應
+ * @returns {Promise<Array<{ids:number[], got:number, availableCount:number, unitSizes:number[]}>>} 與 quotas 一一對應
  */
 async function pickByQuotas({ studentId, subject, quotas, excludeIds = [], sourceTypes = null, shuffleFn }) {
     const usedIds = new Set();
     const usedFamilies = new Set();
     const results = [];
     for (const quota of quotas) {
-        if (!(quota.count > 0)) { results.push({ ids: [], got: 0, availableCount: 0 }); continue; }
+        if (!(quota.count > 0)) { results.push({ ids: [], got: 0, availableCount: 0, unitSizes: [] }); continue; }
         const { candidates, related } = await fetchCandidatePool({
             subject, studentId, excludeIds, sourceTypes,
             chapters: quota.pool.chapters ?? null,
@@ -189,7 +243,7 @@ async function pickByQuotas({ studentId, subject, quotas, excludeIds = [], sourc
             usedIds.add(id);
             usedFamilies.add(byId.get(id).variant_of ?? id);
         }
-        results.push({ ids: picked.ids, got: picked.actual, availableCount: picked.availableCount });
+        results.push({ ids: picked.ids, got: picked.actual, availableCount: picked.availableCount, unitSizes: picked.unitSizes });
     }
     return results;
 }
@@ -203,13 +257,14 @@ async function pickByQuotas({ studentId, subject, quotas, excludeIds = [], sourc
  * 抽到就整組相鄰出現、整組算多題。**組內任一題不在候選池（已作答、exclude_ids、
  * 已封存、source_types 不符、科目或章節不同）時整組不抽**，避免孤兒承上題。
  *
- * @param {'note'|'error'} [shortfallPolicy] 湊不滿 N 題時的政策，預設 FOLLOW_UP_SHORTFALL_POLICY
+ * @param {'note'|'error'} [shortfallPolicy] 湊不滿 N 題時的政策；不帶＝呼叫當下的環境變數
+ *        FOLLOW_UP_SHORTFALL_POLICY（預設 'error'，〔Owner 決策單 2026-09-25 B10〕）。'note' 以外一律當 'error'。
  * @returns {Promise<{error:{status:number,message:string}}|
  *                   {sortedQuestions:object[], finalSortedIds:number[], paperTitle:string, todayStr:string,
  *                    shortfall:{requested:number,actual:number,reason:'follow_up_group'}|null, note:string|null}>}
  */
 async function selectPaperQuestions({ studentId, studentName, subject, chapter, limitCount, excludeIds = [], sourceTypes = null,
-    shortfallPolicy = FOLLOW_UP_SHORTFALL_POLICY }) {
+    shortfallPolicy = resolveFollowUpShortfallPolicy() }) {
     // 候選池：同學科同章、未封存、該生沒寫過、且不在排除清單內；
     // sourceTypes（0006 題源過濾）為 null 時不限制——助教工具與既有呼叫端行為不變。
     // 〔stage5 WS-D〕SQL 與承上組查詢抽到 fetchCandidatePool（與 blueprint／補救卷共用），
@@ -230,15 +285,18 @@ async function selectPaperQuestions({ studentId, studentName, subject, chapter, 
         return { error: { status: 400, message: `新題目庫存不足！該章節 [${studentName}] 沒寫過的題目僅剩 ${picked.availableCount} 題。` } };
     }
 
-    // 庫存夠、但承上題組塞不進剩下的名額 → 依政策少出題並附註，或回 400
+    // 庫存夠、但承上題組塞不進剩下的名額 → 依政策回 400（預設）或少出題並附註
     let shortfall = null;
     let note = null;
     if (picked.actual < limitCount) {
         if (picked.actual === 0) {
             return { error: { status: 400, message: `承上題須與前題整組出題，可用的題組每組至少 ${picked.minUnitSize} 題，無法湊出 ${limitCount} 題，請調高題數。` } };
         }
-        if (shortfallPolicy === 'error') {
-            return { error: { status: 400, message: `承上題須與前題整組出題，無法剛好湊滿 ${limitCount} 題（最多可出 ${picked.actual} 題），請調整題數。` } };
+        if (shortfallPolicy !== 'note') {
+            // 〔Owner 決策單 2026-09-25 B10〕直接報錯：說出哪一章要幾題、最多湊到幾題、改成幾題湊得滿
+            const suggest = nearestReachableCounts(picked.unitSizes, limitCount, MAX_QUESTIONS);
+            const text = followUpShortfallText({ label: `「${chapter}」`, wanted: limitCount, got: picked.actual, suggest });
+            return { error: { status: 400, message: `承上題須與前題整組出題，${text}。` } };
         }
         shortfall = { requested: limitCount, actual: picked.actual, reason: 'follow_up_group' };
         note = `承上題須與前題整組出題，無法剛好湊滿 ${limitCount} 題，本卷實際 ${picked.actual} 題。`;
@@ -256,7 +314,15 @@ async function selectPaperQuestions({ studentId, studentName, subject, chapter, 
 }
 // 給助教工具（services/assistantService.js）內部共用，不是路由
 exports.selectPaperQuestions = selectPaperQuestions;
-exports.FOLLOW_UP_SHORTFALL_POLICY = FOLLOW_UP_SHORTFALL_POLICY;
+// 〔Owner 決策單 2026-09-25 B10〕舊的常數改成讀環境變數：保留同名唯讀屬性（讀的是「當下」生效的政策），
+// 另外公開解析函式與預設值給測試
+Object.defineProperty(exports, 'FOLLOW_UP_SHORTFALL_POLICY', {
+    enumerable: true,
+    get: () => resolveFollowUpShortfallPolicy()
+});
+exports.DEFAULT_FOLLOW_UP_SHORTFALL_POLICY = DEFAULT_FOLLOW_UP_SHORTFALL_POLICY;
+exports.resolveFollowUpShortfallPolicy = resolveFollowUpShortfallPolicy;
+exports._resetShortfallPolicyWarningForTest = _resetShortfallPolicyWarningForTest;
 exports.resolveStudentInternal = resolveStudent;
 // 〔stage5 WS-D〕給補救卷（services/remedialService.js）與單元測試共用，不是路由
 exports.buildCandidatePoolQuery = buildCandidatePoolQuery;
@@ -361,7 +427,10 @@ exports.generatePaper = async (req, res, next) => {
 // 選題：逐列跑 pickByQuotas（同一段候選池 SQL、同一個 pickPaperUnits），跨列維持家族互斥與不重複。
 // 不足量：**不回 400**，逐列回報 wanted／got，照抽到的題出卷並附 note；
 //         全部列都抽不到任何一題時才回 400（出一張空卷沒有意義）。
-//         例外：FOLLOW_UP_SHORTFALL_POLICY 切成 'error' 時，承上題湊不滿的列同單章路徑回 400（blueprintPolicyError）。
+//         例外：FOLLOW_UP_SHORTFALL_POLICY 為 'error'（〔Owner 決策單 2026-09-25 B10〕起的預設）時，
+//         承上題湊不滿的列同單章路徑回 400（blueprintPolicyError），訊息逐列給建議題數；
+//         這個檢查排在「全部列都抽不到」之前——承上組塞不進才抽不到時，告訴老師改幾題比「庫存不足」有用。
+//         切回 'note' 時與決策前逐字相同。
 // 回應形狀同單章路徑，另外多 blueprint（逐列 wanted／got）與 shortfalls（只列不足的列）。
 // ─────────────────────────────────────────────────────────────
 
@@ -448,22 +517,51 @@ function shortfallReason(r, wanted) {
 /**
  * FOLLOW_UP_SHORTFALL_POLICY 在 blueprint 分支的效果（純函式）。
  *
- * 那個常數是「承上題整組湊不滿 N 題時怎麼辦」的**單點切換**（待 owner 決定）：切成 'error' 時，
+ * 那個政策是「承上題整組湊不滿 N 題時怎麼辦」的**單點切換**：為 'error'（〔Owner 決策單 2026-09-25 B10〕起的預設）時，
  * 單章路徑回 400，blueprint 也必須跟著回 400，否則同一個政策在兩條組卷路徑上不一致。
  * 只看 reason 為 follow_up_group 的列——「庫存不足」在 blueprint 本來就是逐列附註、不回 400
  * （docs/remedial.md 第 2.3 節），不受這個政策影響，同單章路徑「真的庫存不足不受此政策影響」。
+ * 'note' 以外的值一律當 'error'（同環境變數的非法值退回 'error'）。
  *
  * @param {Array<{row:number, chapter:string, wanted:number, got:number, reason:string}>} shortfalls
  * @param {'note'|'error'} policy
+ * @param {Object<number, {below:number|null, above:number|null, minUnitSize:number|null}>} [hints]
+ *        逐列（鍵＝row）的建議題數（blueprintShortfallHints）；缺的列訊息只說「請調整題數」
  * @returns {string|null} 要回 400 的訊息；政策是 'note' 或沒有承上題不足時為 null
  */
-function blueprintPolicyError(shortfalls, policy) {
-    if (policy !== 'error') return null;
+function blueprintPolicyError(shortfalls, policy, hints = {}) {
+    if (policy === 'note') return null;
     const bad = shortfalls.filter(s => s.reason === 'follow_up_group');
     if (bad.length === 0) return null;
     return '承上題須與前題整組出題，blueprint '
-        + bad.map(s => `第 ${s.row} 列「${s.chapter}」無法剛好湊滿 ${s.wanted} 題（最多可出 ${s.got} 題）`).join('；')
-        + '，請調整題數。';
+        + bad.map(s => {
+            const h = hints[s.row] || null;
+            return followUpShortfallText({
+                label: `第 ${s.row} 列「${s.chapter}」`, wanted: s.wanted, got: s.got,
+                suggest: h, minUnitSize: h ? h.minUnitSize : null
+            });
+        }).join('；')
+        + '。';
+}
+
+/**
+ * blueprint 承上組不足列的建議題數（純函式；〔Owner 決策單 2026-09-25 B10〕）。
+ * 只改這一列、其他列不動時，這一列改成幾題能剛好湊滿；往上的建議不得讓整張卷超過 MAX_QUESTIONS。
+ *
+ * @param {Array<{row:number, wanted:number, reason:string}>} shortfalls
+ * @param {Array<{unitSizes?:number[]}>} results pickByQuotas 的結果（與 blueprint 列一一對應）
+ * @param {number} requested blueprint 的題數總和
+ * @returns {Object<number, {below:number|null, above:number|null, minUnitSize:number|null}>}
+ */
+function blueprintShortfallHints(shortfalls, results, requested) {
+    const hints = {};
+    for (const s of shortfalls) {
+        if (s.reason !== 'follow_up_group') continue;
+        const sizes = (results[s.row - 1] && results[s.row - 1].unitSizes) || [];
+        const cap = MAX_QUESTIONS - (requested - s.wanted);
+        hints[s.row] = { ...nearestReachableCounts(sizes, s.wanted, cap), minUnitSize: sizes.length ? Math.min(...sizes) : null };
+    }
+    return hints;
 }
 
 /**
@@ -518,6 +616,12 @@ async function generateBlueprintPaper(req, res, next) {
         const shortfalls = report
             .map((r, i) => ({ row: i + 1, ...r, reason: shortfallReason(results[i], r.wanted) }))
             .filter(r => r.got < r.wanted);
+        const requested = parsed.rows.reduce((s, r) => s + r.count, 0);
+        // 承上題湊不滿的政策與單章路徑同一個開關（〔Owner 決策單 2026-09-25 B10〕預設 'error'：逐列說明並給建議題數；
+        // 'note' 時 policyError 恆為 null，以下與決策前逐字相同）
+        const policyError = blueprintPolicyError(shortfalls, resolveFollowUpShortfallPolicy(),
+            blueprintShortfallHints(shortfalls, results, requested));
+        if (policyError) return res.status(400).json({ message: policyError, blueprint: report, shortfalls });
         const ids = results.flatMap(r => r.ids);
         if (ids.length === 0) {
             return res.status(400).json({
@@ -525,9 +629,6 @@ async function generateBlueprintPaper(req, res, next) {
                 blueprint: report, shortfalls
             });
         }
-        // 承上題湊不滿的政策與單章路徑同一個開關（預設 'note'：不回 400，照下面附 note）
-        const policyError = blueprintPolicyError(shortfalls, FOLLOW_UP_SHORTFALL_POLICY);
-        if (policyError) return res.status(400).json({ message: policyError, blueprint: report, shortfalls });
 
         const { rows: fullQuestions } = await query(
             `SELECT id, question_text, question_type, difficulty, answer_text, source_type, source_detail, follows_question_id
@@ -538,7 +639,6 @@ async function generateBlueprintPaper(req, res, next) {
         const finalSortedIds = sortedQuestions.map(q => q.id);
         const { titleDate, todayStr } = localDates();
         const paperTitle = blueprintTitle(student.name, parsed.rows.map(r => r.chapter), titleDate);
-        const requested = parsed.rows.reduce((s, r) => s + r.count, 0);
         const extra = {
             blueprint: report,
             shortfalls,
@@ -579,7 +679,8 @@ async function generateBlueprintPaper(req, res, next) {
     }
 }
 // 純函式給單元測試
-exports._blueprintInternals = { parseBlueprint, parseExcludeIds, parseSourceTypes, shortfallReason, blueprintPolicyError, blueprintTitle, MAX_BLUEPRINT_ROWS };
+exports._blueprintInternals = { parseBlueprint, parseExcludeIds, parseSourceTypes, shortfallReason, blueprintPolicyError,
+    blueprintShortfallHints, followUpShortfallText, blueprintTitle, MAX_BLUEPRINT_ROWS };
 
 /**
  * 建卷＋寫 attempts（generate 與 confirm 共用；同一交易、rowCount 硬閘門）。
