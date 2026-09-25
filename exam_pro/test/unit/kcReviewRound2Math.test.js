@@ -1,6 +1,7 @@
 // kcReviewRound2Math.test.js — 釘住〔知識點審定單 2026-09-26〕第二輪 Owner 對數學的決定
 //
-// 對應 docs/kc-review-數學.md 第 10 節。只讀 config/kc/數學.json、code-maps 與 config/chapterAliases.js，
+// 對應 docs/kc-review-數學.md 第 10 節；〔重練與收尾決策單 2026-09-26〕K8–K10 對應第 10.6 節。
+// 只讀 config/kc/數學.json、code-maps 與 config/chapterAliases.js，
 // 不連 DB、不連 LLM。之後 Owner 改變決定時，連同本檔的斷言與註記一起改。
 // 執行：npm test
 const { describe, test } = require('node:test');
@@ -122,6 +123,34 @@ describe('〔知識點審定單 2026-09-26〕數學種子檔', () => {
         const targets = new Set(Object.values(mapR2));
         const unmapped = seed.components.map(c => c.code).filter(c => !targets.has(c));
         assert.deepEqual(unmapped.sort(), ['MATH.集合與計數原理.06', 'MATH.集合與計數原理.07', 'MATH.複數的幾何意涵.06'].sort());
+    });
+});
+
+describe('〔重練與收尾決策單 2026-09-26〕數學種子檔', () => {
+    test('K8：邏輯 2 條維持在集合運算之後、計數原理之前', () => {
+        const ch = seed.components.filter(c => c.chapter === '集合與計數原理');
+        assert.deepEqual(ch.map(c => [c.code, c.sort]), [
+            ['MATH.集合與計數原理.01', 1],
+            ['MATH.集合與計數原理.02', 2],
+            ['MATH.集合與計數原理.06', 3],
+            ['MATH.集合與計數原理.07', 4],
+            ['MATH.集合與計數原理.03', 5],
+            ['MATH.集合與計數原理.04', 6],
+            ['MATH.集合與計數原理.05', 7]
+        ]);
+    });
+
+    test('K9：幾何分布的口語版也不講期望值，改用「第 3 次才出現 6」當例子', () => {
+        const g = byCode.get('MATH.二項分布與幾何分布.05');
+        assert.ok(!/期望值|p 分之 1|平均要擲/.test(g.spoken_text));
+        assert.ok(g.spoken_text.includes('第 3 次才出現'));
+    });
+
+    test('K10：複數乘除的幾何意義拿掉「和角與差角公式」這個先備，其他先備保留', () => {
+        assert.deepEqual(byCode.get('MATH.複數的幾何意涵.03').prereqs, [
+            'MATH.複數的幾何意涵.01',
+            'MATH.廣義角與極坐標.04'
+        ]);
     });
 });
 
