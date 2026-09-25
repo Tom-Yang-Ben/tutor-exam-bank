@@ -192,7 +192,7 @@ LLM_MODE=record GEMINI_RPM=5 node eval/run.js --suite pipeline     # 樣卷 10 �
 | `config/chapters.js` 的章節白名單 | **全部**（schemaHash 變） |
 | `agents/schemas/*.json` | 該 agent 全部 |
 | agent 的 `PROMPT_TEMPLATE` | 該 agent 全部（記得把識別名版號 +1） |
-| `config/chapterExamples.js` 的例句 | 該科的 classify 全部。鍵只含 few-shot 的 id，不含例句文字，所以**一定要把分類模板的識別名版號 +1**（數學／物理：`classify.vN`；化學：`classify_chem.vN`）。不升版的話，回放拿到的是舊例句錄的答案（〔CR-9〕，`docs/chapter-restructure.md` 第 8 條） |
+| 分類的例句（`config/chapterExamples.js`）或界線規則（`agents/classify.js` 的 `SUBJECT_RULES`，只有數學、物理有） | 數學或物理的例句／界線規則改了 → **數學＋物理**的 classify 全部（兩科共用同一個識別名 `classify.vN`：只改數學的一句，物理的 cassette 也跟著失效）；化學的例句改了 → `classify_chem` 全部（數學、物理不受影響）。鍵只含模板原文（界線規則是挖空後才填進去的）、題幹與 few-shot 的 id，不含例句與規則的文字，所以**一定要把識別名的版號 +1**（`classify.vN` 或 `classify_chem.vN`）；不升版的話，回放拿到的是舊例句、舊規則錄的答案（〔CR-9〕，`docs/chapter-restructure.md` 第 8 條） |
 | `MODEL_EXTRACT` / `MODEL_VERIFY` | 該模型的全部 |
 | `eval/fixtures/sample_exam.pdf` | `eval/cassettes/extract/**`（`pdfSha256` 變） |
 | `eval/fixtures/questions.public.json` 的題幹 | `eval/cassettes/classify/**`（`questionText` 變） |

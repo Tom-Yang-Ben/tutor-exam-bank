@@ -298,11 +298,18 @@ describe('〔CR-9〕指數與對數的分冊界線（決策單 A5）', () => {
         return JSON.parse(fs.readFileSync(file, 'utf8')).entries.filter(e => e.subject === '數學');
     }
 
-    test('數學／物理模板寫明兩章的界線；化學模板不含這條', () => {
-        const t = classify.PROMPT_TEMPLATE;
+    // 〔CR-9 審查〕原為「數學／物理模板寫明兩章的界線」並斷言 classify.PROMPT_TEMPLATE 含這些字：
+    // 界線規則已從共用模板移到只給數學看的 SUBJECT_RULES（物理題不該看到數學章名），
+    // 同一組字串改對「數學的第 5 條規則」斷言，一條都沒少；共用模板改斷言「不含」。
+    test('數學的規則 5 寫明兩章的界線；共用模板與化學模板都不含這條', () => {
+        const math = classify.subjectRulesText('數學');
+        assert.ok(math.startsWith('5. 冊別依 108 課綱。'), `數學的界線規則要從第 5 條開始：${math.slice(0, 20)}`);
+        const rule5 = math.split('\n')[0];
         for (const s of [`第一冊「${FIRST}」`, `第三冊「${THIRD}」`, '以 10 為底的常用對數', '底數不是 10 的對數', '換底公式', '指數或對數方程式']) {
-            assert.ok(t.includes(s), `模板缺「${s}」`);
+            assert.ok(rule5.includes(s), `數學的規則 5 缺「${s}」`);
         }
+        assert.ok(!classify.PROMPT_TEMPLATE.includes(THIRD), '共用模板不該寫死數學的分冊界線');
+        assert.ok(!classify.PROMPT_TEMPLATE.includes('底數不是 10 的對數'), '共用模板不該寫死數學的分冊界線');
         assert.ok(!classify.PROMPT_TEMPLATE_CHEM.includes(THIRD), '化學模板不該出現數學的分冊界線');
     });
 
@@ -340,6 +347,158 @@ describe('〔CR-9〕指數與對數的分冊界線（決策單 A5）', () => {
                 for (const seg of segments) assert.ok(!e.question_text.includes(seg), `${chapter} 的例句含 ${e.id} 的算式 ${seg}`);
             }
         }
+    });
+});
+
+// ───────────────── 〔CR-9 審查〕界線規則只給該科看 ─────────────────
+//
+// 規則 5 原本寫在數學與物理共用的 PROMPT_TEMPLATE，物理題也會看到「指數函數與對數函數」。
+// 改成模板只留 {{SUBJECT_RULES}} 占位，由 classify.js 依科目填入該科的規則（agents/classify.js 的 SUBJECT_RULES）。
+// 同時補上已有書面原則的界線：數學 6（平面／空間向量內積，章名本身的定義）、
+// 物理 5～7（eval/CHAPTER_RELABEL-2026-09.md 第 8.0 節）。
+
+describe('〔CR-9 審查〕界線規則只給該科看', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const { isValidChapter } = require('../../config/chapters');
+    const { sha256Hex } = require('../../services/llm/templates');
+
+    async function promptFor(subject, questionText) {
+        const { ctx, calls } = fakeCtx({ data: { chapter: CHAPTERS[subject][0], confidence: 0.9, rationale: 'r' } });
+        await classify.run(ctx, { subject, chapter: null, chapter_confidence: 0, question_text: questionText });
+        assert.equal(calls.length, 1);
+        return calls[0].parts[0].text;
+    }
+
+    /** 兩段文字最長的共同子字串（逐字；給去洩題檢查用） */
+    function longestCommon(a, b) {
+        let best = '';
+        for (let i = 0; i < a.length; i++) {
+            for (let j = i + best.length + 1; j <= a.length; j++) {
+                if (b.includes(a.slice(i, j))) best = a.slice(i, j);
+                else break;
+            }
+        }
+        return best;
+    }
+
+    test('共用模板只留占位：不含任何一科的章名界線', () => {
+        const t = classify.PROMPT_TEMPLATE;
+        assert.ok(t.includes('\n{{SUBJECT_RULES}}\n'), '模板要有獨立一行的 {{SUBJECT_RULES}} 占位');
+        assert.ok(t.includes('\n4. confidence'), '共用規則是 1～4，各科規則從 5 接下去');
+        assert.ok(!/\n5\. /.test(t), '共用模板不該再寫死第 5 條');
+        for (const subject of ['數學', '物理']) {
+            for (const rule of classify.SUBJECT_RULES[subject]) {
+                assert.ok(!t.includes(rule), `共用模板不該含${subject}的界線規則：${rule.slice(0, 20)}…`);
+            }
+        }
+        assert.ok(!classify.PROMPT_TEMPLATE_CHEM.includes('{{SUBJECT_RULES}}'), '化學模板（classify_chem.v1）逐字不變，沒有這個占位');
+    });
+
+    test('物理題的 prompt 不含數學的界線規則與章名，帶著物理自己的規則 5～7', async () => {
+        const prompt = await promptFor('物理', '一顆球在水平面上滾動，求它的動能。');
+        for (const s of ['指數函數與對數函數', '指數與對數', '底數不是 10 的對數', '空間向量內積', '冊別依 108 課綱']) {
+            assert.ok(!prompt.includes(s), `物理題的 prompt 不該出現「${s}」`);
+        }
+        const rules = classify.subjectRulesText('物理').split('\n');
+        assert.equal(rules.length, 3);
+        rules.forEach((rule, i) => {
+            assert.ok(rule.startsWith(`${5 + i}. `), rule);
+            assert.ok(prompt.includes(`\n${rule}\n`), `物理題的 prompt 缺第 ${5 + i} 條`);
+        });
+        assert.ok(!prompt.includes('{{SUBJECT_RULES}}'));
+    });
+
+    test('數學題的 prompt 含規則 5（指數與對數的分冊界線）與規則 6（平面／空間向量內積），不含物理的規則', async () => {
+        const prompt = await promptFor('數學', '已知兩向量的坐標，求它們的內積。');
+        const rules = classify.subjectRulesText('數學').split('\n');
+        assert.equal(rules.length, 2);
+        assert.ok(prompt.includes(`\n4. confidence`) && prompt.includes(`\n${rules[0]}\n${rules[1]}\n`), '數學的規則 5、6 要緊接在共用規則 4 後面');
+        assert.ok(rules[0].startsWith('5. ') && rules[0].includes('第三冊「指數函數與對數函數」'));
+        assert.ok(rules[1].startsWith('6. ') && rules[1].includes('第三冊「向量內積」') && rules[1].includes('第四冊「空間向量內積」'));
+        assert.ok(rules[1].includes('二維') && rules[1].includes('三維'), '平面與空間的分別要寫出維度');
+        for (const s of ['摩擦力與向心力', '電場與電位', '直線運動', '庫侖定律']) {
+            assert.ok(!prompt.includes(s), `數學題的 prompt 不該出現物理的「${s}」`);
+        }
+        assert.ok(!prompt.includes('{{SUBJECT_RULES}}'));
+    });
+
+    test('物理的三條規則照第 8.0 節：必修／直線運動、平面運動／摩擦力與向心力、靜電學／電場與電位', () => {
+        const [r5, r6, r7] = classify.SUBJECT_RULES['物理'];
+        assert.ok(/「物體的運動（速度與加速度）」.*定性說明.*「直線運動」/.test(r5) && r5.includes('等加速度公式') && r5.includes('從圖求數值'), r5);
+        assert.ok(r6.includes('向心加速度') && r6.includes('歸「平面運動」') && r6.includes('向心力、張力或摩擦力') && r6.includes('歸「摩擦力與向心力」'), r6);
+        assert.ok(r7.includes('兩個電荷之間的力') && r7.includes('歸「靜電學」') && r7.includes('等位面') && r7.includes('歸「電場與電位」'), r7);
+        // 第 8.0 節沒有涵蓋直線運動／平面運動的分界（CHAPTER_RELABEL 第 8.6 節第 3 點，待 Owner）：不得自己發明。
+        // 下面兩組「不含」是在記錄「還沒有書面原則」；Owner 定了原則、寫進 SUBJECT_RULES 時連同這裡一起改。
+        for (const rule of classify.SUBJECT_RULES['物理']) {
+            assert.ok(!(rule.includes('「直線運動」') && rule.includes('「平面運動」')), `直線運動／平面運動的分界尚無書面原則：${rule}`);
+            assert.ok(!rule.includes('相對'), `相對運動／相對速度的歸屬尚無書面原則：${rule}`);
+        }
+        // 直角三角形的邊角關係／三角函數的疊合也尚無書面原則（docs/chapter-restructure.md、chapterExamples 都沒有；待 Owner）
+        for (const rule of classify.SUBJECT_RULES['數學']) {
+            assert.ok(!rule.includes('三角函數的疊合') && !rule.includes('直角三角形的邊角關係'), rule);
+        }
+    });
+
+    test('規則裡「」括起來的都是該科的章名（打錯字或跨科會紅燈），每條只寫一句', () => {
+        for (const subject of ['數學', '物理']) {
+            const other = subject === '數學' ? '物理' : '數學';
+            for (const rule of classify.SUBJECT_RULES[subject]) {
+                const quoted = [...rule.matchAll(/「([^」]+)」/g)].map(m => m[1]);
+                assert.ok(quoted.length >= 2, `每條界線至少要點名兩章：${rule}`);
+                for (const name of quoted) {
+                    assert.ok(isValidChapter(subject, name), `「${name}」不是${subject}的章名`);
+                    assert.ok(!isValidChapter(other, name), `「${name}」也是${other}的章名`);
+                }
+                // 數學規則 5 沿用 CR-9 的原文（前面兩句是前言），其餘每條一句
+                if (!rule.startsWith('冊別依 108 課綱。')) {
+                    assert.equal((rule.match(/。/g) || []).length, 1, `一條規則一句：${rule}`);
+                    assert.ok(rule.endsWith('。'), rule);
+                }
+                assert.ok(!rule.includes('$'), '界線規則不用 LaTeX');
+            }
+        }
+        assert.equal(classify.subjectRulesText('化學'), '', '化學沒有界線規則（走 classify_chem.v1，模板逐字不變）');
+        assert.equal(classify.subjectRulesText('不存在的科目'), '');
+        assert.equal(classify.subjectRulesText('constructor'), '', '只認自己的鍵，不讀原型鏈');
+    });
+
+    test('沒有界線規則的科目：占位連同換行一起拿掉，不留空行', () => {
+        const filled = classify.fillSubjectRules(classify.PROMPT_TEMPLATE, '化學');
+        assert.ok(!filled.includes('{{SUBJECT_RULES}}'));
+        assert.ok(filled.includes('便宜得多。\n\n{{FEW_SHOT}}'), '規則 4 後面直接接原本的空行與 few-shot');
+        assert.equal(classify.fillSubjectRules(classify.PROMPT_TEMPLATE_CHEM, '化學'), classify.PROMPT_TEMPLATE_CHEM, '化學模板原樣回傳');
+    });
+
+    test('界線規則不洩漏 golden 題幹（不為特定題寫死文字）', () => {
+        const file = path.join(__dirname, '..', '..', 'eval', 'golden', 'classify.json');
+        const golden = JSON.parse(fs.readFileSync(file, 'utf8')).entries;
+        const LIMIT = 8;
+        // 量尺自我檢查：規則若抄進一段題幹，一定抓得到
+        const sample = golden.find(e => e.subject === '物理');
+        assert.ok(longestCommon(`規則${sample.question_text.slice(0, LIMIT)}`, sample.question_text).length >= LIMIT, '量尺抓不到抄進去的題幹');
+        for (const subject of ['數學', '物理']) {
+            for (const rule of classify.SUBJECT_RULES[subject]) {
+                // 章名本身不算洩題（題幹可能正好提到章名）：先把該科章名挖掉再比
+                const stripped = CHAPTERS[subject].reduce((s, name) => s.split(name).join('｜'), rule);
+                for (const e of golden) {
+                    const common = longestCommon(stripped, e.question_text);
+                    assert.ok(common.length < LIMIT, `${subject}的規則與 ${e.id} 共用了一段 ${common.length} 字的文字：「${common}」`);
+                }
+            }
+        }
+    });
+
+    test('界線規則改了要升版：規則文字的雜湊與模板識別名一起釘住', () => {
+        // 規則文字不進 cassette 的鍵（templates.js 註冊的是挖空後的模板；第 5.2 條的 cacheKeyParts 也沒有它），
+        // 只改規則不升版的話，回放會拿到用舊規則錄的答案。所以改了 SUBJECT_RULES 就要：
+        //   ① 把 agents/classify.js 的 TEMPLATE 版號 +1（數學＋物理的 classify cassette 全部重錄，docs/llm.md）；
+        //   ② 再把這裡改成新版號與新雜湊。只改雜湊、不升版，等於讓回放拿舊答案。
+        const PINNED = { template: 'classify.v2', sha256: '19640b2fe610087a64de3759a559b31b45e0eb15ce3dcc6b606f10b85ab461d8' };
+        assert.deepEqual(
+            { template: classify.TEMPLATE, sha256: sha256Hex(JSON.stringify(classify.SUBJECT_RULES)) },
+            PINNED,
+            '界線規則或識別名變了：改規則要把 classify.vN 的版號 +1，再更新這裡');
     });
 });
 
