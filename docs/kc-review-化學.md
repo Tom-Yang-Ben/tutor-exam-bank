@@ -1,6 +1,6 @@
 # docs/kc-review-化學.md — 化學知識點種子檔抽查紀錄
 
-> 版本 v1.3｜2026-09-26｜v1.1 分支 `stage5/kc-chem`；v1.2 分支 `stage5/ch-d`（章節重整 CH-D）；v1.3 分支 `dec/r2-chem-kc`（知識點審定單第二輪落實）＋ `dec/r2-chem-kc2`（C4 改回原代碼、只改 sort；補註維持現狀的 C1、C2、C12、C15）｜對應：`docs/interfaces-stage5.md` 第 3.4、3.5、4.6 條、DEC-015、`docs/chapter-restructure.md` 第 3.4 條第 2 點
+> 版本 v1.4｜2026-09-26｜v1.1 分支 `stage5/kc-chem`；v1.2 分支 `stage5/ch-d`（章節重整 CH-D）；v1.3 分支 `dec/r2-chem-kc`（知識點審定單第二輪落實）＋ `dec/r2-chem-kc2`（C4 改回原代碼、只改 sort；補註維持現狀的 C1、C2、C12、C15）；v1.4 分支 `dec/r2-chem-kc3`（重練與收尾決策單 K1、K11）｜對應：`docs/interfaces-stage5.md` 第 3.4、3.5、4.6 條、DEC-015、`docs/chapter-restructure.md` 第 3.4 條第 2 點
 > 受檢檔：`exam_pro/config/kc/化學.json`（`subject: 化學`、`version: 2`）
 > 本檔給 Owner 審定用：列出 AI 最沒把握的條目、需要 Owner 決定的章節切法，以及跨科先備的整合核對清單。
 > **v1.2 摘要**：
