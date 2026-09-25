@@ -62,7 +62,7 @@ const res = await generateJson({
 2. `tokenCached` 在沒有快取命中時**整個鍵不存在**（不是 0），這一層一律 `?? 0` 補上。
 3. `raw` 在 `replay` 模式是 `null`。**agent 不得依賴 `raw`**。
 4. `schemaFallback` 是額外多出來的鍵（介面第 5.1 條的回傳形狀之外），`true` 代表這次走了「不含 enum 的 schema + prompt 列舉」的退路，runner 應該把它記進 `job_events.detail`。
-5. 供應商目前只有 `gemini`。`anthropic` / `openai` 給 A-T17 預留，現在傳進去會直接丟錯（不是靜默改用 gemini）。
+5. 供應商有 `gemini` 與 `ollama`（〔修訂 2026-09-26〕本機模式，2026-09-25 起為預設；轉接層 `services/llm/ollama.js`，回傳形狀與 `gemini.js` 相同，契約與裁決見 [`docs/local-mode.md`](local-mode.md) 第 3 條與 LM-1、LM-10）。`anthropic` / `openai` 給 A-T17 預留，現在傳進去會直接丟錯（不是靜默改用 gemini）。
 6. **`maxOutputTokens` 的額度包含思考 token**。對 thinking 模型（Pro 系列）只設 `maxOutputTokens`
    而不設 `thinkingBudget`，難題的思考會把額度吃光，JSON 寫到一半被截斷——症狀是
    「Unterminated string in JSON」被歸類成 `schema_invalid`，退避重試把整份任務拖慢數倍

@@ -2,11 +2,11 @@
 
 [![CI](https://github.com/Tom-Yang-Ben/tutor-exam-bank/actions/workflows/ci.yml/badge.svg)](https://github.com/Tom-Yang-Ben/tutor-exam-bank/actions/workflows/ci.yml)
 
-以 **Node.js 24 + Express 5 + PostgreSQL 16（pgvector）+ Google Gemini** 建置的家教題庫系統。
+以 **Node.js 24 + Express 5 + PostgreSQL 16（pgvector）** 建置的家教題庫系統；AI 預設跑在本機（**Ollama 的 Qwen3 系列＋PaddleOCR**，執行期不連外、零費用），可切回 **Google Gemini**〔修訂 2026-09-26〕。
 上傳考卷 PDF 後由**多 Agent 管線**拆題入庫（七個 sub-agent、硬閘門、原卷文字層比對、部分入庫、人工複核）；
 組卷依作答紀錄排除學生已練習的題目（先預覽、確認後寫入），並匯出含 Word 原生方程式的考卷；
 在此基礎上另建 **RAG**（相似題／變式題／自然語言查題／檢索式分類）與**對話式助教**（主控 agent＋唯讀工具）。
-〔修訂 2026-09-24〕階段 5「教學診斷平台」加上錯因診斷、知識點、依弱點出補救卷、化學，以及經程式驗算的 AI 家教與按住說話；已完成開發、在整合分支 `stage5/integration` 待併入 main，新功能全部預設關閉（見[階段 5](#階段-5教學診斷平台)）。
+〔修訂 2026-09-24〕階段 5「教學診斷平台」加上錯因診斷、知識點、依弱點出補救卷、化學，以及經程式驗算的 AI 家教與按住說話；〔修訂 2026-09-26〕已於 2026-09-25 併入 main（PR #38），新功能全部預設關閉（見[階段 5](#階段-5教學診斷平台)）。章節重整與本機模式在 `local/integration`，尚未併入 main。
 
 > 🧭 **技術選型（RAG 與多 Agent 的採用理由、限制與替代方案評估）**見
 > [根目錄 README](../README.md) 的技術選型 ①② 兩章，完整版本見
@@ -31,7 +31,7 @@
 | **批改細節與錯因分布**〔修訂 2026-09-24〕 | 按「錯」可點錯因（十種白名單、可複選）、計算／證明題可部分給分、記學生答案與註記；弱點面板多「錯因分布」（階段 5，`docs/grading-and-profile.md`） |
 | **學生檔案、文字詳解、Word 版本**〔修訂 2026-09-24〕 | 年級／類組／目標考試／學校／教材版本；拆題時驗算一致的解題摘要自動存成詳解、老師可改寫；Word 另出學生版與詳解版（同上） |
 | **化學**〔修訂 2026-09-24〕 | 上傳選「化學」卷別，走化學專用模板與 44 章白名單；數學／物理的 prompt 與 cassette 一字不動；`\ce{…}` 化學式轉 Word 原生方程式；答案比對看單位與化學式（`docs/chemistry.md`） |
-| **知識點與口語版**〔修訂 2026-09-24〕 | 三科 637 個知識點（AI 草擬、Owner 審定），各有一段上課講給學生聽的口語版；可朗讀、審定、替題目標知識點，入庫可自動標（`docs/knowledge-components.md`） |
+| **知識點與口語版**〔修訂 2026-09-24〕 | 三科 686 個知識點（AI 草擬、Owner 審定；章節重整後的數字〔修訂 2026-09-26〕），各有一段上課講給學生聽的口語版；可朗讀、審定、替題目標知識點，入庫可自動標（`docs/knowledge-components.md`） |
 | **補救卷與題庫覆蓋率**〔修訂 2026-09-24〕 | 依知識點掌握度（Wilson 下界）一鍵產生補救卷草稿（補救／先備／延伸配比），確認才寫入；跨章配額組卷；章 × 難度熱度表（`docs/remedial.md`） |
 | **AI 家教與按住說話**〔修訂 2026-09-24〕 | 直接講解或引導式；數值由 Gemini code execution 驗算並攤開程式與輸出；按住說話轉逐字稿與公式，老師確認才送出；每日花費上限（`docs/tutor.md`） |
 
@@ -51,6 +51,8 @@
 >
 > 量測環境一律是**公開層**（自製 fixture 與自編 golden、`LLM_MODE=replay`、`EMBED_MODE=fixture`），
 > 不連外、不需要金鑰。私有層（真題庫）的數字不進版控。
+>
+> 〔修訂 2026-09-26〕下表的模型數字都是 **Gemini 時期、章節重整之前**（2026-08）量的。本機模式（Qwen3 系列）重錄後的量測現況與門檻對照見[根 README「怎麼驗證品質」](../README.md#-怎麼驗證品質)。
 
 | 功能 | 問題（引行號／章節） | 決策 | 數字（eval 輸出，含日期與模型 ID） |
 |---|---|---|---|
@@ -238,7 +240,8 @@ cp .env.example .env
 |------|------|------|
 | `PORT` | 服務埠 | `3000` |
 | `GEMINI_API_KEY` | Google Gemini 金鑰；〔2026-09-25〕本機模式不需要，切回 Gemini 才填 | 空 |
-| `MODEL_EXTRACT` / `MODEL_VERIFY` / `MODEL_NLQ`〔2026-09-25〕 | 拆題／驗算／自然語言查題的模型（`vendor:model-id`）；`MODEL_NLQ` 的程式預設是 Gemini，本機模式要明寫 | `ollama:qwen3-vl:8b` / `ollama:qwen3:8b` / `ollama:qwen3:8b`（`.env.example`） |
+| `MODEL_EXTRACT` / `MODEL_VERIFY` / `MODEL_NLQ`〔2026-09-25〕 | 拆題／驗算／自然語言查題的模型（`vendor:model-id`）；〔修訂 2026-09-26〕`MODEL_NLQ` 未設時的程式預設已改成本機（LM-7） | `ollama:qwen3-vl:8b` / `ollama:qwen3:8b` / `ollama:qwen3:8b` |
+| `MODEL_TEXT`〔修訂 2026-09-26〕 | 分類、公式 lint、知識點標註、主控助教的模型（LM-15）；未設時拆題模型是 `ollama` 就＝`MODEL_VERIFY`，否則＝`MODEL_EXTRACT` | —（本機模式即 `ollama:qwen3:8b`） |
 | `OLLAMA_*` / `OCR_*`〔2026-09-25〕 | 本機模型伺服器（只允許本機位址）與本機 OCR 的設定 | 見 `.env.example` 與 `docs/local-mode.md` 第 2 條 |
 | `DATABASE_URL` | PostgreSQL 連線（階段 1 起的正式資料庫）| `postgres://exam:exam@localhost:5442/tutor_exam_bank` |
 | `TEST_DATABASE_URL` | 整合測試專用的 PostgreSQL；**資料庫名必須以 `_test` 結尾**，否則 `migrate.js` 拒絕執行 | `postgres://exam:exam@localhost:5433/tutor_exam_bank_test` |
@@ -252,7 +255,7 @@ cp .env.example .env
 | `NODE_ENV` | `production` 時錯誤不外洩細節 | `development` |
 | `SOURCE_CHECK_MODE` | 拆題結果對照原卷文字層：`off` 不比對／`shadow` 只記錄不攔／`enforce` 題幹與原卷不符即進複核；非法值一律 `enforce`（`docs/source-check.md`）| `enforce` |
 | `FEATURE_KC` / `FEATURE_KC_TAGGING`〔修訂 2026-09-24〕 | 知識點分頁與 API／入庫後自動標知識點（會呼叫 LLM） | `false` |
-| `KC_TAG_MIN_CONFIDENCE` / `MODEL_KC_TAG`〔修訂 2026-09-24〕 | 自動標註的信心門檻／模型（未設沿用 `MODEL_EXTRACT`） | `0.6` / — |
+| `KC_TAG_MIN_CONFIDENCE` / `MODEL_KC_TAG`〔修訂 2026-09-24〕 | 自動標註的信心門檻／模型（未設沿用 `MODEL_TEXT`〔修訂 2026-09-26〕） | `0.6` / — |
 | `FEATURE_REMEDIAL`〔修訂 2026-09-24〕 | 知識點弱點、補救卷、題庫覆蓋率（補救卷區塊需同時開 `FEATURE_STUDENTS`） | `false` |
 | `FEATURE_TUTOR` / `FEATURE_VOICE`〔修訂 2026-09-24〕 | AI 家教／按住說話（`FEATURE_VOICE` 需同時開 `FEATURE_TUTOR`；兩者都會呼叫 LLM） | `false` |
 | `MODEL_TUTOR` / `MODEL_VOICE`〔修訂 2026-09-24〕 | 家教模型（未設沿用 `MODEL_VERIFY`）／語音轉寫模型（未設沿用 `MODEL_EXTRACT`） | — |
@@ -293,7 +296,7 @@ npm run dev    # 開發（nodemon 熱重載）
 
 ### 6. 本機模式（預設；不連外、不花錢）〔2026-09-25〕
 
-所有 AI 步驟跑在這台電腦上：Ollama（`qwen3-vl:8b` 拆題與分類、`qwen3:8b` 驗算與出變式、`qwen3-embedding:0.6b` 向量）＋ PaddleOCR。PDF 拆題由 OCR 與視覺模型交叉驗證，不一致的題一律停在人工複核。只用 CPU 時很慢（一份考卷數小時）、品質低於 Gemini、語音提問關閉；Gemini 保留，改 `.env` 五行即可切回。
+所有 AI 步驟跑在這台電腦上：Ollama（`qwen3-vl:8b` 看頁面拆題；`qwen3:8b` 整理 OCR 結果、分類、公式 lint、驗算、出變式〔修訂 2026-09-26，LM-15〕；`qwen3-embedding:0.6b` 向量）＋ PaddleOCR。PDF 拆題由 OCR 與視覺模型交叉驗證，不一致的題一律停在人工複核。只用 CPU 時很慢（一份考卷數小時）、品質低於 Gemini、語音提問關閉；Gemini 保留，改 `.env` 五行即可切回。
 
 1. 安裝 Ollama 與 Python 3.11／3.12（64 位元），雙擊 `scripts\windows\setup_local_ai.bat`：檢查 Ollama → `ollama pull` 三個模型（約 12 GB）→ 建 `ocr_service\.venv` → `pip install` → 下載 OCR 模型 → 自我檢查。每一步失敗都會寫明原因並停下，log 在 `data\local_ai\`。之後可用 `npm run ocr:selftest` 單獨檢查 OCR。
 2. `.env` 設 `LLM_MODE=live`、`EMBED_MODE=live`；舊 `.env` 若明寫了 Gemini 的模型或 `JOB_PDF_CHUNK_PAGES=20`／`JOB_NODE_TIMEOUT_MS=120000`，照 [`docs/local-mode.md`](../docs/local-mode.md) 第 10.3 條改掉。
@@ -584,8 +587,8 @@ fixture 擴 120 題、A-T16 新舊管線前後對照、A-T17 異家（Anthropic�
 
 ### 階段 5：教學診斷平台
 
-〔修訂 2026-09-24〕狀態：開發完成，併入整合分支 `stage5/integration`（完整 CI 全綠），**尚未併入 main**；整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠。
-需求 DEC-014～019（核准欄待 Owner 簽核）→ 功能需求 FR-021～035；契約與裁決 [`docs/interfaces-stage5.md`](../docs/interfaces-stage5.md)；功能與旗標總表見[根 README 的階段 5 專節](../README.md#階段-5教學診斷平台功能旗標與給老師的快速開始)。
+〔修訂 2026-09-26〕狀態：經整合分支 `stage5/integration`（當時完整 CI 全綠）於 2026-09-25 併入 main（PR #38）。
+需求 DEC-014～019（已在 main 登錄為核准，`7184f53`）→ 功能需求 FR-021～035；契約與裁決 [`docs/interfaces-stage5.md`](../docs/interfaces-stage5.md)；功能與旗標總表見[根 README 的階段 5 專節](../README.md#階段-5教學診斷平台功能旗標與給老師的快速開始)。
 
 **給老師的快速開始**（升級一次；步驟 1–5 不呼叫 AI、不花錢，完整說明見 [`engineering_docs/06_ops/deployment_and_operations.md`](../engineering_docs/06_ops/deployment_and_operations.md) §3.4）：
 
@@ -595,7 +598,7 @@ fixture 擴 120 題、A-T16 新舊管線前後對照、A-T17 異家（Anthropic�
 4. **必跑** `npm run search:reindex -- --dry-run` → `npm run search:reindex`（化學詞彙改變了分詞，不跑的話部分舊數理題用關鍵字查不到）。
 5. `npm run solution:backfill -- --dry-run` → `--limit 20` 試補、讀幾題 → 全部補。
 6. `npm start`，在瀏覽器試批改卡的錯因與部分給分、學生檔案、題目詳解欄、Word 三種版本、化學卷上傳。
-7. `.env` 一次開一個旗標並重啟：`FEATURE_KC` → `FEATURE_REMEDIAL` → `FEATURE_TUTOR`（需 `LLM_MODE=live` 與金鑰）→ `FEATURE_VOICE`（桌機、localhost）→ 補標舊題 `npm run kc:backfill -- --dry-run` → 最後 `FEATURE_KC_TAGGING`。
+7. `.env` 一次開一個旗標並重啟：`FEATURE_KC` → `FEATURE_REMEDIAL` → `FEATURE_TUTOR`（需 `LLM_MODE=live`；走 Gemini 時另需金鑰，本機模式不做程式驗算）→ `FEATURE_VOICE`（桌機、localhost；只在 Gemini 模式）→ 補標舊題 `npm run kc:backfill -- --dry-run` → 最後 `FEATURE_KC_TAGGING`。
 
 尚未做到：錯題重練與間隔複習、訂正卷、學習路徑與學習報告、學生端；AI 家教、語音與知識點標註都還沒對真的 Gemini 跑過，化學的拆題與分類品質也還沒量測（`npm run eval:classify-chem` 待錄製）。Owner 待辦見 [`docs/HANDOFF.md`](../docs/HANDOFF.md)。
 
