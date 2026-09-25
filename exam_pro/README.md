@@ -220,7 +220,8 @@ flowchart TD
 ### 1. 前置需求
 - **Node.js 20+**（`@google/genai` 於 `package.json` 宣告 `engines: node >= 20`；CI 亦以 20.x / 22.x 驗證）
 - **Docker Desktop**（WSL2 後端）——資料庫是容器裡的 PostgreSQL 16 + pgvector（2026-08-21 起正式使用；MySQL 已退役）
-- 一組 [Google Gemini API 金鑰](https://aistudio.google.com/apikey)
+- 〔2026-09-25 本機模式〕**本機模式（預設）**：[Ollama](https://ollama.com/download) 與 Python 3.11／3.12（64 位元），由 `scripts\windows\setup_local_ai.bat` 一鍵安裝模型與 PaddleOCR（見下方第 6 節）
+- （選用）一組 [Google Gemini API 金鑰](https://aistudio.google.com/apikey)——只有切回 Gemini 時才需要
 
 ### 2. 安裝相依套件
 ```bash
@@ -236,11 +237,13 @@ cp .env.example .env
 | 變數 | 說明 | 預設 |
 |------|------|------|
 | `PORT` | 服務埠 | `3000` |
-| `GEMINI_API_KEY` | Google Gemini 金鑰（**必填**）| — |
+| `GEMINI_API_KEY` | Google Gemini 金鑰；〔2026-09-25〕本機模式不需要，切回 Gemini 才填 | 空 |
+| `MODEL_EXTRACT` / `MODEL_VERIFY` / `MODEL_NLQ`〔2026-09-25〕 | 拆題／驗算／自然語言查題的模型（`vendor:model-id`）；`MODEL_NLQ` 的程式預設是 Gemini，本機模式要明寫 | `ollama:qwen3-vl:8b` / `ollama:qwen3:8b` / `ollama:qwen3:8b`（`.env.example`） |
+| `OLLAMA_*` / `OCR_*`〔2026-09-25〕 | 本機模型伺服器（只允許本機位址）與本機 OCR 的設定 | 見 `.env.example` 與 `docs/local-mode.md` 第 2 條 |
 | `DATABASE_URL` | PostgreSQL 連線（階段 1 起的正式資料庫）| `postgres://exam:exam@localhost:5442/tutor_exam_bank` |
 | `TEST_DATABASE_URL` | 整合測試專用的 PostgreSQL；**資料庫名必須以 `_test` 結尾**，否則 `migrate.js` 拒絕執行 | `postgres://exam:exam@localhost:5433/tutor_exam_bank_test` |
 | `PG_PASSWORD` | docker-compose 容器密碼（選填，預設 `exam`）。只在 volume 初始化時生效；改了要同步改上面兩條連線字串，既有 volume 需 `docker compose down -v` 重建 | `exam` |
-| `EMBED_MODEL` / `EMBED_DIM` / `EMBED_RPM` / `EMBED_BATCH` / `EMBED_MODE` | embedding 模型與限速；`EMBED_DIM` 在 I0 釘死為 **768** | gemini-embedding-001 / 768 / 60 / 32 / fixture |
+| `EMBED_MODEL` / `EMBED_DIM` / `EMBED_RPM` / `EMBED_BATCH` / `EMBED_MODE` | embedding 模型與限速；`EMBED_DIM` 在 I0 釘死為 **768**；〔2026-09-25〕沒有 `vendor:` 前綴的舊值視為 Gemini，換模型要 `embed:backfill` 全部題目＋`search:reindex` | ollama:qwen3-embedding:0.6b / 768 / 60 / 32 / fixture |
 | `LLM_MODE` | `live` / `record` / `replay`；CI 恆為 `replay` | `replay` |
 | `FEATURE_SIMILAR` / `FEATURE_HYBRID_SEARCH` | 新功能旗標，預設全關 | `false` |
 | `API_KEY` | 後端存取金鑰；留空則**停用**認證。⚠️ 此金鑰會被注入前端頁面，僅適用本機自用，**不可作為對外部署的存取控制**（見[安全注意事項](#-安全注意事項)）| 空 |
@@ -287,6 +290,17 @@ npm start      # 正式
 npm run dev    # 開發（nodemon 熱重載）
 ```
 啟動後開啟 <http://localhost:3000>。
+
+### 6. 本機模式（預設；不連外、不花錢）〔2026-09-25〕
+
+所有 AI 步驟跑在這台電腦上：Ollama（`qwen3-vl:8b` 拆題與分類、`qwen3:8b` 驗算與出變式、`qwen3-embedding:0.6b` 向量）＋ PaddleOCR。PDF 拆題由 OCR 與視覺模型交叉驗證，不一致的題一律停在人工複核。只用 CPU 時很慢（一份考卷數小時）、品質低於 Gemini、語音提問關閉；Gemini 保留，改 `.env` 五行即可切回。
+
+1. 安裝 Ollama 與 Python 3.11／3.12（64 位元），雙擊 `scripts\windows\setup_local_ai.bat`：檢查 Ollama → `ollama pull` 三個模型（約 12 GB）→ 建 `ocr_service\.venv` → `pip install` → 下載 OCR 模型 → 自我檢查。每一步失敗都會寫明原因並停下，log 在 `data\local_ai\`。之後可用 `npm run ocr:selftest` 單獨檢查 OCR。
+2. `.env` 設 `LLM_MODE=live`、`EMBED_MODE=live`；舊 `.env` 若明寫了 Gemini 的模型或 `JOB_PDF_CHUNK_PAGES=20`／`JOB_NODE_TIMEOUT_MS=120000`，照 [`docs/local-mode.md`](../docs/local-mode.md) 第 10.3 條改掉。
+3. 既有題庫換向量：`npm run embed:backfill`（全部題目）→ `npm run search:reindex`。
+4. （選做）以本機模型重錄 CI 的回放檔：雙擊 `scripts\windows\record_local.bat`（`db:up` → `migrate:test` → `cassettes:rerecord`，自動輸入 yes；錄前檢查 Ollama、模型、OCR，印出粗估時間）。
+
+切回 Gemini、預期速度與品質、疑難排解見 [`docs/local-mode.md`](../docs/local-mode.md) 第 10 條；決策見 ADR-017。
 
 ---
 
@@ -525,6 +539,8 @@ fs.writeFileSync('.tmp_inline.js',b)" && node --check .tmp_inline.js && echo "JS
 |--------|------|
 | `執行公式健檢.bat` | 掃描題庫公式問題 → 產生 `公式健檢報告.html` |
 | `預覽公式修正.bat` / `套用公式修正.bat` | 公式自動修正（套用前備份為 `formulas_backup_*.json`）|
+| `scripts\windows\setup_local_ai.bat`〔2026-09-25〕 | 本機模式一鍵安裝：Ollama 檢查、下載三個模型、PaddleOCR 虛擬環境與模型、自我檢查（log 在 `data\local_ai\`）|
+| `scripts\windows\record_local.bat`〔2026-09-25〕 | 以本機模型重錄 CI 的回放檔：`db:up` → `migrate:test` → `cassettes:rerecord`（自動輸入 yes；log 在 `data\local_ai\`）|
 
 灌入示範題（題庫為空時）：
 

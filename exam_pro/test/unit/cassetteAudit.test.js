@@ -80,6 +80,27 @@ describe('inventory：範圍內六個 agent，化學與 tutor／voice 不碰', (
         assert.equal(classify.model, MODEL);
     });
 
+    test('〔本機模式 L4〕本機拆題的 ocr／extract_vision／extract_ocr 也在範圍內；化學版照舊不碰', () => {
+        const dir = path.join(tmp, 'inv-local');
+        const parts = { template: 'extract_vision.v1', chunkNo: 1, pdfSha256: 'f'.repeat(64) };
+        writeCassette(dir, { agent: 'extract_vision', model: 'qwen3-vl:8b', template: 'extract_vision.v1', schema: buildSchema('extract'), cacheKeyParts: parts });
+        writeCassette(dir, { agent: 'extract_ocr', model: 'qwen3:8b', template: 'extract_ocr.v1', schema: buildSchema('extract'), cacheKeyParts: { ...parts, template: 'extract_ocr.v1', ocrSha256: 'a'.repeat(64) } });
+        writeCassette(dir, { agent: 'ocr', model: 'paddleocr@3.0.0', template: 'ocr.v1', schema: undefined, cacheKeyParts: { pdfSha256: 'f'.repeat(64), fromPage: 1, toPage: 2, dpi: 200 } });
+        for (const chem of ['extract_vision_chem', 'extract_ocr_chem']) {
+            writeCassette(dir, { agent: chem, template: 'x', schema: {}, cacheKeyParts: { chem } });
+        }
+        const inv = audit.inventory(dir);
+        assert.deepEqual(inv.entries.map(e => e.agent).sort(), ['extract_ocr', 'extract_vision', 'ocr']);
+        const skipped = Object.fromEntries(inv.skipped.map(s => [s.name, s.reason]));
+        assert.match(skipped.extract_vision_chem, /化學/);
+        assert.match(skipped.extract_ocr_chem, /化學/);
+
+        // 靜態稽核：視覺版與 OCR 版用 extract 的 schema、ocr 沒有 schema——照契約的公式重算，鍵都有效
+        const audited = Object.fromEntries(audit.auditKeys(inv.entries).map(e => [e.agent, e.keyValid]));
+        assert.deepEqual(audited, { extract_ocr: true, extract_vision: true, ocr: true });
+        assert.ok(audit.IN_SCOPE_AGENTS.includes('ocr') && audit.NO_SCHEMA_AGENTS.includes('ocr'));
+    });
+
     test('目錄不存在時回空盤點（不是錯誤）', () => {
         const inv = audit.inventory(path.join(tmp, 'nope'));
         assert.deepEqual(inv.entries, []);

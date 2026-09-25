@@ -1,16 +1,23 @@
 // ─────────────────────────────────────────────────────────────
 // eval/record_embeddings.js — D-V0：對公開 fixture 錄一次向量
 //
-// 用法（**只在本機、由開發者本人執行**，需要 GEMINI_API_KEY）：
+// 用法（**只在本機、由開發者本人執行**）：
 //   npm run eval:record
 //   node eval/record_embeddings.js --dry-run     只印會送出幾題、花多少字，不呼叫 API
 //   node eval/record_embeddings.js --only-missing 只錄向量檔裡還沒有的題（章節重整後改標的題；
 //                                                 npm run cassettes:rerecord 的第一步就是這一行）
+//   node eval/record_embeddings.js --model gemini-embedding-001   指定模型（預設 EMBED_MODEL）
+//
+// 〔本機模式 L4〕模型照 EMBED_MODEL，沒設是本機預設 ollama:qwen3-embedding:0.6b（docs/local-mode.md 第 2 條）：
+//   ollama:… → 要 Ollama 在跑、已 ollama pull 該模型，不需金鑰、不花錢；
+//   沒有前綴（gemini-embedding-001 這種舊值）→ Gemini，需要 GEMINI_API_KEY。
 //
 // 輸出：eval/fixtures/embeddings.<model>.<dim>.json
 //   格式凍結於 docs/interfaces-stage1.md 第 4 條：{ "<sha256(embed_text)>": [ … dim 個小數 6 位 … ] }
+//   〔本機模式 L4〕<model> 裡的 `:`、`/`、`\` 換成 `-`（第 3 條第 6 點；Windows 檔名不能有冒號）：
+//   ollama:qwen3-embedding:0.6b → embeddings.ollama-qwen3-embedding-0.6b.768.json；Gemini 的檔名不變。
 //
-// CI **永遠只讀這個檔**（EMBED_MODE=fixture），不呼叫 Gemini、不需要任何 secret。
+// CI **永遠只讀這個檔**（EMBED_MODE=fixture），不呼叫任何模型、不需要任何 secret。
 // 這是「CI 仍零 secrets，任何人 fork 都跑得出同一張表」這條性質的來源。
 //
 // 〔章節重整 CH-B〕寫檔改成「併入」既有的向量檔（鍵依字典序，與 services/llm/fixture.js 的
@@ -25,6 +32,7 @@
 //      規則一差一個字元，錄出來的表在 WS-C 合入後全部查不到。
 //   2. EMBED_MODE=fixture —— 那是「讀 fixture」模式，用它錄等於拿舊表抄一份新表。
 //   3. fixture 沒過章節硬閘門 —— 錯的題不值得花 API 額度。
+//   4. 〔本機模式 L4〕Gemini 模型卻沒有 GEMINI_API_KEY —— 先擋下來，不要跑到一半才被 SDK 拒絕。
 // ─────────────────────────────────────────────────────────────
 
 require('dotenv').config();
@@ -35,6 +43,7 @@ const path = require('path');
 const { loadFixture } = require('./lib/fixtures');
 const { buildEmbedText, embedTextSource, embedHash, isStub: embedTextIsStub } = require('./lib/embedText');
 const { fixturePath, DEFAULT_MODEL, DEFAULT_DIM } = require('./lib/embeddings');
+const { vendorOf } = require('./lib/localMode');
 
 const ROOT = path.resolve(__dirname, '..');
 const DECIMALS = 6;   // interfaces 第 4 條：小數 6 位
@@ -50,7 +59,26 @@ function parseArgs(argv) {
             default: throw new Error(`未知的參數「${argv[i]}」`);
         }
     }
+    if (!String(args.model || '').trim()) throw new Error('--model 後面要接模型名稱（例：ollama:qwen3-embedding:0.6b、gemini-embedding-001）');
     return args;
+}
+
+/**
+ * 〔本機模式 L4〕錄製前的供應商檢查（真的要呼叫模型時才做；--dry-run 不做）。純函式。
+ * 只擋「一定會失敗」的情況，Ollama 連不連得上交給 services/llm（錯誤訊息會寫「請先開啟 Ollama」）。
+ * @param {string} model
+ * @param {NodeJS.ProcessEnv|Record<string,string>} [env]
+ * @returns {string|null} 拒絕的理由；null＝可以錄
+ */
+function vendorProblem(model, env = process.env) {
+    const vendor = vendorOf(model);
+    if (vendor === 'gemini' && !String(env.GEMINI_API_KEY || '').trim()) {
+        return `模型 ${model} 走 Gemini，但 .env 沒有 GEMINI_API_KEY。要用本機模型請設 EMBED_MODEL=ollama:qwen3-embedding:0.6b（或加 --model）。`;
+    }
+    if (vendor !== 'gemini' && vendor !== 'ollama') {
+        return `不支援的 embedding 供應商「${vendor}」（${model}）：只接受 ollama:… 或沒有前綴的 Gemini 模型。`;
+    }
+    return null;
 }
 
 /**
@@ -167,6 +195,11 @@ async function main() {
         console.log('\n✅ 向量檔已涵蓋全部 fixture 題，不需要錄製。');
         return;
     }
+    const problem = vendorProblem(args.model);
+    if (problem) throw new Error(problem);
+    if (vendorOf(args.model) === 'ollama') {
+        console.log('本機模型：不連外、不花錢；CPU 上一段約 1 秒上下（Ollama 要先開著，模型要先 ollama pull）。');
+    }
 
     const embed = requireEmbed();
     const keys = [...unique.keys()];
@@ -195,7 +228,7 @@ async function main() {
 
     const kb = Math.round(fs.statSync(out).size / 1024);
     console.log(`\n✅ 已錄 ${Object.keys(table).length} 筆向量，檔案共 ${Object.keys(merged).length} 筆（${kb} KB），tokenIn=${tokenIn}`);
-    console.log('   這個檔要進版控：CI 只讀它，不呼叫 Gemini。');
+    console.log('   這個檔要進版控：CI 只讀它，不呼叫任何模型。');
     console.log('   fixture 題幹或 buildEmbedText() 規則一改，embed_hash 就變，必須重跑本腳本並在 PR 說明。');
 }
 
@@ -203,4 +236,4 @@ if (require.main === module) {
     main().catch(err => { console.error(`\n❌ ${err.message}`); process.exit(1); });
 }
 
-module.exports = { main, round6, parseArgs, embedTargets, selectTargets, mergeTable, readTable };
+module.exports = { main, round6, parseArgs, embedTargets, selectTargets, mergeTable, readTable, vendorProblem };

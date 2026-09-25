@@ -4,7 +4,7 @@
 > 讀完本檔後，第一件事通常是執行 §6 的「看進度」流程。
 > 配套：`~/.claude/projects/.../memory/` 裡有 `roadmap-master-plan.md`、`stage1-status.md`、`stage2-status.md`、`stage3-status.md`（系統會自動載入索引）。
 >
-> 〔修訂 2026-09-24〕**最新狀態先看 §0（階段 5 交接）**；〔修訂 2026-09-25〕章節重整的交接在 §0.0。§1–§9 是 2026-08-24 階段 1–4 的交接快照，角色與流程仍適用，但其中的分支、數字與待辦已過時。
+> 〔修訂 2026-09-24〕**最新狀態先看 §0（階段 5 交接）**；〔修訂 2026-09-25〕章節重整的交接在 §0.0，本機模式（Ollama＋PaddleOCR、預設不連外）在 §0.0a。§1–§9 是 2026-08-24 階段 1–4 的交接快照，角色與流程仍適用，但其中的分支、數字與待辦已過時。
 
 ---
 
@@ -18,6 +18,19 @@
 - **合併順序**：先合 `stage5/integration`（階段 5 PR）→ Owner 在 `stage5/chapters` 上重錄（`chapter-restructure.md` 第 5 條，Owner 的 Windows 本機執行，金鑰不離開本機）→ 主控核對門檻（低於門檻另開裁決，不自動放寬）→ 開 `stage5/chapters` 的 PR。
 - 〔修訂 2026-09-25 CR-7／CR-8〕第一次重錄因 Gemini 預付額度用完而中斷，量到 classify 低於門檻；根因（例句與分冊矛盾）已修（CR-7），並在不呼叫 Gemini 的前提下完成全面審查與 Owner 裁決的 golden 改標、白名單分冊（CR-8）。**Owner 決定延後重錄**：`stage5/chapters` 暫不合併，等補額度後一次重錄（`npm run db:up` → `npm run migrate:test` → `npm run cassettes:rerecord`，約 US$0.75～2.82），主控再核對門檻。
 - **上線**多兩步（已寫進下方 0.2 第 7 項）：`migrate` 之後 `chapters:migrate`（提議檔 → 老師確認 → `--apply`）、`embed:backfill`。
+
+### 0.0a 本機模式（2026-09-25）〔修訂 2026-09-25 本機模式〕
+
+- **範圍**：Owner 要求「所有步驟、功能都純地端、不連出去、不產生額外費用」。預設改成本機 Ollama（`qwen3-vl:8b` 拆題／分類／lint、`qwen3:8b` 驗算／變式／OCR 結果整理、`qwen3-embedding:0.6b` 向量）＋ PaddleOCR；PDF 拆題由 OCR 與視覺模型交叉驗證，不一致的題一律停在人工複核；語音關閉；Gemini 保留，改 `.env` 五行即可切回。契約與使用說明 [`local-mode.md`](local-mode.md)（使用說明在第 10 條）、ADR-017（狀態：提議）。
+- **分支：`local/base`**（基底 `stage5/chapters` 的 522f81c）→ L1（Ollama 轉接層）、L2（本機 OCR 與交叉驗證）、L3（前端離線化）、L4（eval、CI、Windows 腳本、文件）→ 主控整合。
+- **CI**：`.github/workflows/ci.yml` 的 `MODEL_EXTRACT`／`MODEL_VERIFY`／`EMBED_MODEL`／`MODEL_NLQ` 改成本機模型；CI 仍是 replay＋fixture，不裝 Ollama、不裝 Python。Owner 以本機模型重錄之前，e2e 與五個 eval 只會因缺 cassette／缺向量紅燈（契約第 8 條）。**若本機模式先合入，§0.0 的章節重整重錄就改用本機模型做，不必補 Gemini 額度**（仍照 `cassettes:rerecord`，只是不花錢、慢很多）。
+- **Owner 待辦（依序；步驟細節見 `local-mode.md` 第 10 條）**：
+  1. 安裝 Ollama 與 Python 3.11／3.12（64 位元）→ 雙擊 `exam_pro\scripts\windows\setup_local_ai.bat`（拉三個模型約 12 GB、建 `ocr_service\.venv`、下載 OCR 模型、自我檢查；log 在 `exam_pro\data\local_ai\`）。
+  2. 改 `.env`（第 10.3 條）：舊 `.env` 明寫了 Gemini 的模型，要改；**刪掉 `JOB_PDF_CHUNK_PAGES=20`、`JOB_NODE_TIMEOUT_MS=120000`**（舊範本寫死的 Gemini 值會蓋掉本機預設，本機拆題一定逾時）。
+  3. 正式庫換向量（第 10.6 條，免費但慢）：`npm run embed:backfill`（全部題目；模型不同的都會重算）→ `npm run search:reindex`。
+  4. 雙擊 `exam_pro\scripts\windows\record_local.bat` 以本機模型重錄 CI 的回放檔（db:up → migrate:test → `cassettes:rerecord` 自動輸入 yes；錄前檢查 Ollama、模型、OCR、測試庫；印粗估時間，可能要一整天，可分次）；commit、push。舊的 Gemini cassette 先不要 `cassettes:prune -- --apply`，除非確定不讓 CI 切回 Gemini。
+  5. 回放驗證若有 eval 低於門檻：`eval/thresholds.json` 的數字不動，由 Owner 另行裁決（契約第 6 條第 3 點）。
+- **已知限制**：CPU 上很慢（一份 4 頁考卷粗估數小時，**未實測**）；品質低於 Gemini、複核佇列會變長；自然語言查題的 LLM 輔路徑在預設 4 秒逾時下實際上用不到；家教沒有程式驗算；語音關閉。
 
 > 本節取代同日稍早版本（`129d941`）。那一版寫於「整合補測」與「最終審查」併入之前，§0.3 有多項已修好，§0.2 以「類型」分組、順序有依賴問題。本版依最終 HEAD `936a6b5` 的實況重寫。
 

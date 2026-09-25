@@ -17,6 +17,7 @@
 > 🛠 **2026-09-16 修訂**（feat/follow-up-protect-badge，FR-019 PR3）：FR-019 列狀態補 PR3 已實作範圍。修改處以〔修訂 2026-09-16〕行內標記。
 > 🛠 **2026-09-16b 修訂**（主線同步，PR #30–#33 合併後）：NFR-003 單元測試數同步為 1,613（PR #30–#33 併入 main 後 CI 實測）。修改處以〔修訂 2026-09-16b〕行內標記。
 > 🛠 **2026-09-24 修訂**（階段 5 整合回填，分支 `stage5/int-docs`）：§1 新增 FR-021～035 共 15 列（狀態：已實作於整合分支 `stage5/integration`，待併入 main）；§2 NFR-002／003／006 更新、新增 NFR-007～009；NFR-003 測試數寫為「整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠」；§3 ADR 索引補 ADR-010～015；§4 追溯；§5.1 熱點補階段 5 衝突點、新增 §5.5 階段 5 平行開發實績。修改處以〔修訂 2026-09-24〕行內標記。
+> 🛠 **2026-09-25 修訂**（本機模式 L4，分支 `local/base`）：§3 ADR 索引補 ADR-017（本機優先推論，狀態：提議；契約與使用說明見 `docs/local-mode.md`）。修改處以〔修訂 2026-09-25 本機模式〕行內標記。
 
 ## 目錄
 
@@ -104,6 +105,7 @@
 | ADR-014-remedial-paper-wilson-quota〔修訂 2026-09-24〕 | 小樣本不等於精熟（Wilson 下界）；補救卷與組卷共用同一段選題程式，不另寫會漂移的排除邏輯；草稿不寫庫 |
 | ADR-015-grading-detail-and-solution-provenance〔修訂 2026-09-24〕 | 錯因以 attempts 加欄＋伺服器端白名單記錄；詳解分來源標示可信度，以 verify 摘要零成本回填（原 WS-A 自取 014，整合改號，裁決 S5-1） |
 | ADR-016-chapter-whitelist-restructure〔修訂 2026-09-25〕 | 數學／物理白名單整份換成對齊 108 龍騰目錄的 52＋34 章（`config/chapterPlan.js`）；刻意讓數學／物理 cassette 失效、由 Owner 一次重錄；舊題以規則提議＋老師確認遷移（`npm run chapters:migrate`，不呼叫 LLM；新表 `chapter_migration_log`＝migration 0014，契約未預列，主控已核准＝`docs/chapter-restructure.md` CR-3） |
+| ADR-017-local-first-inference〔修訂 2026-09-25 本機模式〕 | 狀態：提議。Owner 要求全部步驟與功能純地端、不連外、零費用：預設改成 Ollama（`qwen3-vl:8b`／`qwen3:8b`／`qwen3-embedding:0.6b`）＋PaddleOCR，拆題以 OCR 與視覺模型交叉驗證、不一致一律人工複核；仍只有 `services/llm` 一個轉接點，Gemini 路徑逐位元不變、改 `.env` 即可切回；CI 照舊 replay＋fixture，只換模型名、由 Owner 以本機模型重錄（`docs/local-mode.md`） |
 
 ## 4. 追溯
 

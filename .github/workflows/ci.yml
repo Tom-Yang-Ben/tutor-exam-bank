@@ -11,6 +11,10 @@ name: CI
 #   integration  Node 24 + pgvector/pgvector:pg16 的 service container。
 #                跑 migrations、整合測試與五個 eval suite；同樣不需要 secrets——
 #                embedding 走 fixture（EMBED_MODE=fixture）、LLM 走 replay。
+#
+# 本機模式（docs/local-mode.md，2026-09-25）：模型預設改成本機 Ollama，cassette 與 embedding fixture
+# 由 Owner 在自己的電腦上以本機模型錄（npm run cassettes:rerecord，照本檔下方的模型）。
+# CI 本身**不裝 Ollama、不裝 Python、不連任何模型**：仍然只讀 cassette（replay）與向量檔（fixture）。
 on:
   push:
     branches: [main]
@@ -78,9 +82,18 @@ jobs:
       EMBED_MODE: fixture
       LLM_MODE: replay
       # cassette 的鍵含模型 ID：CI 沒有 .env，這裡明寫錄製時用的模型（interfaces-stage2 裁決 S0-5／S2-29），
-      # 與 config/models.js 的預設值一致；換模型＝重錄 cassette 並同步改這兩行。
-      MODEL_EXTRACT: gemini:gemini-3.5-flash
-      MODEL_VERIFY: gemini:gemini-3.1-pro-preview
+      # 與 config/models.js 的預設值一致；換模型＝重錄 cassette 並同步改這幾行。
+      # 本機模式（docs/local-mode.md 第 2 條、第 6 條第 1 點）：拆題＝視覺模型、驗算＝純文字模型，都跑在 Owner 的電腦上。
+      # npm run cassettes:rerecord 的子行程照這裡錄（eval/lib/suiteProcess.js 的 readCiModels），
+      # 所以這幾行就是「CI 讀哪一組 cassette」的單一真相。切回 Gemini：改回 gemini:… 並用 Gemini 重錄。
+      MODEL_EXTRACT: ollama:qwen3-vl:8b
+      MODEL_VERIFY: ollama:qwen3:8b
+      # 向量檔 eval/fixtures/embeddings.<模型>.768.json 的模型段（`:`、`/`、`\` 換成 `-`）：
+      # 這一行對應 embeddings.ollama-qwen3-embedding-0.6b.768.json。沒有前綴的舊值（gemini-embedding-001）視為 Gemini。
+      EMBED_MODEL: ollama:qwen3-embedding:0.6b
+      # 自然語言查題的 LLM 輔路徑。services/nlqService.js 沒設時的預設仍是 Gemini，
+      # 不寫這行的話本機重錄 nlq 會去呼叫雲端；與 MODEL_VERIFY 同一個本機純文字模型。
+      MODEL_NLQ: ollama:qwen3:8b
       # fork PR 的 replay miss 降為 warning（規劃 §5.3.3、介面第 5.2 條）。
       # 判斷本身在 eval/lib/replayMiss.js（介面明說「這個判斷不在 services/llm 裡」）；
       # 這裡只負責把 GitHub 的事實傳進去。同 repo 分支與 main 上這個值是空的＝不降級。

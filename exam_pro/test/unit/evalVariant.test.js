@@ -12,11 +12,13 @@ const fs = require('node:fs');
 
 const suite = require('../../eval/lib/suiteVariant');
 const { loadFixture } = require('../../eval/lib/fixtures');
-const { fixtureVectorGap } = require('./lib/recordedData');
+const { fixtureVectorGap, RECORDED_EMBED_MODEL } = require('./lib/recordedData');
 
 // eval 的三個模式旗標：單元測試一律 fixture／replay（與 eval/.env.replay 一致）
 process.env.EMBED_MODE = process.env.EMBED_MODE || 'fixture';
 process.env.LLM_MODE = process.env.LLM_MODE || 'replay';
+// 〔本機模式 L4〕eval 的預設 embedding 模型改成本機之後，這支檔讀的仍是 repo 內錄好的那一份向量（recordedData.js）
+process.env.EMBED_MODEL = RECORDED_EMBED_MODEL;
 
 describe('eval/golden/variant.json 的硬閘門（第 8.4 條）', () => {
     const fixture = loadFixture();
@@ -81,7 +83,7 @@ describe('eval/golden/variant.json 的硬閘門（第 8.4 條）', () => {
 describe('retrieveInMemory（第 3.1 條的候選條件）', () => {
     const fixture = loadFixture();
     const { loadEmbeddings } = require('../../eval/lib/embeddings');
-    const emb = loadEmbeddings({ questions: fixture.questions });
+    const emb = loadEmbeddings({ questions: fixture.questions, model: RECORDED_EMBED_MODEL });
     // 〔章節重整 CH-B〕retrieveInMemory 的前提是「每個候選都有向量」（suite 先 assertComplete 才呼叫它）。
     // 改標後有幾題的向量要等 Owner 重錄；這四則驗的是候選條件與排序，所以只餵有向量的題。
     // 向量齊全時這個 filter 不會拿掉任何一題，斷言與原本逐字相同。

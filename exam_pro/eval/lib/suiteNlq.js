@@ -179,7 +179,7 @@ function rate(rows, field = 'exact') {
  */
 function queryVectorsAvailable(rows) {
     const { fixturePath, sha256Hex } = require('../../services/llm/fixture');
-    const model = process.env.EMBED_MODEL || 'gemini-embedding-001';
+    const model = require('./localMode').embedModelFromEnv();   // 〔本機模式 L4〕沒設時是本機預設（docs/local-mode.md 第 2 條）
     const dim = Number(process.env.EMBED_DIM || 768);
     const file = fixturePath(model, dim);
     if (!fs.existsSync(file)) return { available: false, missing: rows.map(r => ({ id: r.id, text: r.queryText })) };

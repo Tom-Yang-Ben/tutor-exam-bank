@@ -72,7 +72,8 @@ describe('cassetteProbe', () => {
                 try { await llm.generateText({ ...base, schema: undefined, cacheKeyParts: { template: 'probe_test.v1', n: 3 } }); } catch (e) { out.textErr = e.message; }
                 try { await llm.embed({ texts: ['甲', '乙'], model: 'probe-model', dim: 2 }); } catch (e) { out.embedErr = e.message; }
                 const q = { id: 999, subject: '數學', chapter: '向量內積', question_type: '計算', difficulty: 1, question_text: '探針測試：不存在的題' };
-                out.loadMissing = loadEmbeddings({ questions: [q], optional: true }).missing;
+                // 〔本機模式 L4〕eval 的預設 embedding 模型改成本機後，明寫讀 repo 內錄好的那一份（Gemini）
+                out.loadMissing = loadEmbeddings({ questions: [q], model: 'gemini-embedding-001', optional: true }).missing;
                 out.noFile = loadEmbeddings({ questions: [q], model: '不存在的模型', optional: true }).available;
                 process.stdout.write(JSON.stringify(out));
             })().catch(e => { console.error(e); process.exit(2); });
@@ -114,6 +115,49 @@ describe('cassetteProbe', () => {
         const loaded = events.filter(e => e.kind === 'embed' && e.via === 'eval/lib/embeddings.js');
         assert.deepEqual(loaded.map(e => [e.questionId, e.hit]), [[999, false]]);
         assert.ok(events.some(e => e.kind === 'embed-file-missing'));
+    });
+
+    test('〔本機模式 L4〕wrapOcr：OCR 的回放 miss／命中都記下來（agent=ocr），回傳與丟的錯不變', async () => {
+        const events = [];
+        const pdfSha256 = 'e'.repeat(64);
+        const hitKey = cassetteKey({ agent: 'ocr', modelId: 'paddleocr@3.0.0', template: 'ocr.v1', cacheKeyParts: { pdfSha256, fromPage: 1, toPage: 2, dpi: 200 } });
+        const missKey = 'f'.repeat(64);
+        const result = { engine: 'paddleocr', engineVersion: '3.0.0', pages: [{ page: 1, markdown: '# 題 1', imagePath: null }] };
+        const missErr = new Error(`${REPLAY_MISS_PREFIX}（agent=ocr key=${missKey}）。請在本機執行 npm run eval:record -- --suite <suite>`);
+        const mod = {
+            ocrPdf: async ({ fromPage }) => {
+                if (fromPage === 3) throw missErr;
+                if (fromPage === 5) throw new Error('cassette 格式錯誤（不是合法 JSON）');
+                return fromPage === 7 ? { ...result, cassetteKey: 'a'.repeat(64) } : result;
+            }
+        };
+        probe.wrapOcr(mod, { record: (e) => events.push(e), env: {}, exists: (agent, key) => agent === 'ocr' && key === hitKey });
+        assert.equal(mod.ocrPdf.__probed, true);
+
+        assert.deepEqual(await mod.ocrPdf({ pdfSha256, fromPage: 1, toPage: 2 }), result, '命中照樣回原本的結果');
+        await assert.rejects(() => mod.ocrPdf({ pdfSha256, fromPage: 3, toPage: 4 }), (err) => err === missErr);
+        await assert.rejects(() => mod.ocrPdf({ pdfSha256, fromPage: 5, toPage: 6 }), /格式錯誤/);
+        await mod.ocrPdf({ pdfSha256, fromPage: 7, toPage: 8 });
+
+        assert.deepEqual(events.map(e => [e.agent, e.hit, e.key]), [
+            ['ocr', true, hitKey],          // 照契約的公式算出來、檔案也在
+            ['ocr', false, missKey],        // miss 訊息與 LLM 同一種格式
+            ['ocr', false, null],           // miss 以外的錯誤
+            ['ocr', true, 'a'.repeat(64)]   // 回傳帶 cassetteKey 就用它
+        ]);
+        assert.equal(events[0].model, 'paddleocr@3.0.0');
+        assert.deepEqual(events[1].cacheKeyParts, { pdfSha256, fromPage: 3, toPage: 4, dpi: 200 });
+        assert.match(events[2].error, /格式錯誤/);
+
+        // 算不出是哪一支（檔案不在、回傳也沒帶鍵）：記成錯誤，cassettes:prune 會因此拒絕刪除
+        const unknown = [];
+        const mod2 = { ocrPdf: async () => result };
+        probe.wrapOcr(mod2, { record: (e) => unknown.push(e), env: { OCR_DPI: '300' }, exists: () => false });
+        await mod2.ocrPdf({ pdfSha256, fromPage: 1, toPage: 2 });
+        assert.equal(unknown[0].key, null);
+        assert.match(unknown[0].error, /cassetteKey/);
+        const s = require('../../eval/lib/cassetteAudit').summarize({ events: unknown.map(e => ({ ...e, suite: 'pipeline' })), entries: [], suites: ['pipeline'] });
+        assert.equal(s.suites.pipeline.errors.length, 1, '會進「miss 以外的錯誤」，prune 的保護條件擋得住');
     });
 
     test('readProbeDir 略過壞行並標成 corrupt（不讓一行壞資料讓整個盤點失敗）', () => {

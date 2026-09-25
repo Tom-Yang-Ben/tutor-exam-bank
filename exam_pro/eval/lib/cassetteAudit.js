@@ -5,7 +5,8 @@
 // （docs/chapter-restructure.md 第 3.2 條第 2、3 點）。三件事：
 //
 //   1. inventory()      盤點 eval/cassettes/ 底下「在範圍內」的 cassette。
-//                       範圍＝五個 eval 與 e2e 會回放的六個 agent：extract／classify／lint／verify／nlq／variant。
+//                       範圍＝五個 eval 與 e2e 會回放的六個 agent：extract／classify／lint／verify／nlq／variant，
+//                       〔本機模式 L4〕加上本機拆題的 ocr／extract_vision／extract_ocr（docs/local-mode.md 第 6 條）。
 //                       化學（*_chem）、tutor、voice 依第 3.2 條第 3 點**不在範圍內**；
 //                       其他沒見過的目錄也一律不碰（寧可少清，不可誤刪別人的錄音）。
 //   2. auditKeys()      靜態稽核：拿 cassette 自己記下的 meta.model／meta.template／request.cacheKeyParts，
@@ -28,8 +29,12 @@ const { estimateCost } = require('../../config/pricing');
 
 const APP_DIR = path.resolve(__dirname, '..', '..');
 
-/** 五個 eval 與 e2e 會回放的 agent（第 3.2 條第 3 點的清除範圍） */
-const IN_SCOPE_AGENTS = Object.freeze(['extract', 'classify', 'lint', 'verify', 'nlq', 'variant']);
+/**
+ * 五個 eval 與 e2e 會回放的 agent（第 3.2 條第 3 點的清除範圍）。
+ * 〔本機模式 L4〕docs/local-mode.md 第 6 條第 2 點：本機拆題新增的三個 cassette 目錄
+ * （ocr、extract_vision、extract_ocr；第 4 條第 2、3 點）一併納入盤點與清除。化學版（*_chem）照舊不碰。
+ */
+const IN_SCOPE_AGENTS = Object.freeze(['extract', 'classify', 'lint', 'verify', 'nlq', 'variant', 'ocr', 'extract_vision', 'extract_ocr']);
 
 /** 不呼叫 LLM 的 suite（只讀向量檔）：缺向量不會「擋住下游的 LLM 呼叫」 */
 const NO_LLM_SUITES = Object.freeze(['retrieval']);
@@ -39,10 +44,19 @@ const NO_LLM_SUITES = Object.freeze(['retrieval']);
  */
 const EMBED_TOLERANT_SUITES = Object.freeze(['e2e']);
 
-/** agent 目錄 → schema 檔名（agents/schemas/<name>.json） */
+/**
+ * agent 目錄 → schema 檔名（agents/schemas/<name>.json）。
+ * 〔本機模式 L4〕視覺版與 OCR 版拆題用與 extract「同一份」schema（docs/local-mode.md 第 4 條第 3 點）。
+ */
 const SCHEMA_OF_AGENT = Object.freeze({
-    extract: 'extract', classify: 'classify', lint: 'lint', verify: 'verify', nlq: 'nlq', variant: 'variant'
+    extract: 'extract', classify: 'classify', lint: 'lint', verify: 'verify', nlq: 'nlq', variant: 'variant',
+    extract_vision: 'extract', extract_ocr: 'extract'
 });
+/**
+ * 〔本機模式 L4〕沒有 schema 的 agent：鍵的 schemaHash 是空字串的雜湊（services/llm/cassette.js）。
+ * ocr 的鍵＝cassetteKey({agent:'ocr', modelId:'paddleocr@<版本>', template:'ocr.v1', cacheKeyParts})（第 4 條第 2 點）。
+ */
+const NO_SCHEMA_AGENTS = Object.freeze(['ocr']);
 
 /**
  * 這個 agent 目錄為什麼不在範圍內；在範圍內回 null。
@@ -160,7 +174,11 @@ function schemaFor(name, chapters) {
 }
 
 let templatesLoaded = false;
-/** 載入六個 agent 的模組，讓模板註冊表（services/llm/templates.js）有原文可以雜湊 */
+/**
+ * 載入六個 agent 的模組，讓模板註冊表（services/llm/templates.js）有原文可以雜湊。
+ * 〔本機模式 L4〕本機拆題的兩份模板（extract_vision.v1、extract_ocr.v1）由 agents/extract.js 註冊；
+ * services/ocr 若註冊了 ocr.v1 也一併載入（檔案不存在＝本機 OCR 還沒合入，略過）。
+ */
 function ensureTemplatesRegistered() {
     if (templatesLoaded) return;
     require('../../agents/extract');
@@ -169,6 +187,8 @@ function ensureTemplatesRegistered() {
     require('../../agents/verify');
     require('../../agents/generateVariant');
     require('../../services/nlqService');
+    const ocrIndex = path.join(APP_DIR, 'services', 'ocr', 'index.js');
+    if (fs.existsSync(ocrIndex)) require(ocrIndex);
     templatesLoaded = true;
 }
 
@@ -191,12 +211,13 @@ function auditKeys(entries, opts = {}) {
         return schemas.get(name);
     };
     return entries.map((e) => {
-        if (e.error || !SCHEMA_OF_AGENT[e.agent]) return { ...e, expectedKey: null, keyValid: false };
+        const noSchema = NO_SCHEMA_AGENTS.includes(e.agent);
+        if (e.error || (!SCHEMA_OF_AGENT[e.agent] && !noSchema)) return { ...e, expectedKey: null, keyValid: false };
         const expectedKey = cassetteKey({
             agent: e.agent,
             modelId: e.model || '',
             template: e.template || undefined,
-            schema: schemaOf(e.agent),
+            schema: noSchema ? undefined : schemaOf(e.agent),
             cacheKeyParts: e.cacheKeyParts ?? {}
         });
         return { ...e, expectedKey, keyValid: expectedKey === e.key };
@@ -393,7 +414,7 @@ function summarize({ events, entries, suites, runs = {}, extraEmbedGaps = [] }) 
 }
 
 module.exports = {
-    IN_SCOPE_AGENTS, SCHEMA_OF_AGENT, NO_LLM_SUITES, EMBED_TOLERANT_SUITES, outOfScopeReason,
+    IN_SCOPE_AGENTS, SCHEMA_OF_AGENT, NO_SCHEMA_AGENTS, NO_LLM_SUITES, EMBED_TOLERANT_SUITES, outOfScopeReason,
     inventory, auditKeys, schemaFor, injectEnums, enumSources,
     summarize, averageUsage, callCost, embedCost, displayPath
 };

@@ -22,6 +22,15 @@ const { loadEmbeddings } = require('../../../eval/lib/embeddings');
 const RERECORD_HINT = '請 Owner 執行 npm run cassettes:rerecord 重錄（docs/chapter-restructure.md 第 5 條），錄好後這一則自動恢復執行';
 
 /**
+ * 〔本機模式 L4〕repo 內錄好的向量檔是哪一個模型的。
+ * eval 的預設 embedding 模型改成本機 ollama:qwen3-embedding:0.6b（docs/local-mode.md 第 2 條），
+ * 但 repo 裡目前只有 Gemini 錄的 embeddings.gemini-embedding-001.768.json；拿「錄好的資料」跑 suite 的單元測試
+ * 明寫讀這一份，斷言與之前逐字相同（不因換預設而變成 skip）。
+ * Owner 以本機模型重錄、embeddings.ollama-qwen3-embedding-0.6b.768.json 進版控之後，主控可改成本機模型。
+ */
+const RECORDED_EMBED_MODEL = 'gemini-embedding-001';
+
+/**
  * 公開 fixture 的每一題在向量檔裡都查得到嗎？
  * 向量檔整個不存在時照舊丟錯（那不是「待重錄」，是檔案不見了）。
  * @returns {{complete:boolean, missing:number[], file:string, reason:string|false}}
@@ -29,7 +38,7 @@ const RERECORD_HINT = '請 Owner 執行 npm run cassettes:rerecord 重錄（docs
  */
 function fixtureVectorGap() {
     const fixture = loadFixture();
-    const emb = loadEmbeddings({ questions: fixture.questions });
+    const emb = loadEmbeddings({ questions: fixture.questions, model: RECORDED_EMBED_MODEL });
     const complete = emb.missing.length === 0;
     return {
         complete,
@@ -40,4 +49,4 @@ function fixtureVectorGap() {
     };
 }
 
-module.exports = { fixtureVectorGap, RERECORD_HINT };
+module.exports = { fixtureVectorGap, RERECORD_HINT, RECORDED_EMBED_MODEL };
