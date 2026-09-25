@@ -374,5 +374,5 @@ K7 清掉的 3 條先備（只改 `prereqs`；代碼、名稱、description、�
 ### 8.1 驗證
 
 - `npm run kc:validate`：0 error。物理 198 個知識點、34 章；化學 236、數學 254 不變。
-- `bash ci.sh <exam_pro> tutor_phys3_test quick`：unit 2716 個測試，2714 通過、0 失敗（未計入通過的 2 個與第 7.2 節相同）；`check:html` 通過。
+- `bash ci.sh <exam_pro> tutor_phys3_test quick`：unit 2716 個測試，2714 通過、0 失敗、2 個 skip（已重跑確認：標 SKIP 的都是等本機重錄 cassette 或向量的回放測試——extract／classify 回放、pipeline 兩則、runVariantSuite——與本分支無關）；`check:html` 通過。
 - `validateAliases()`：0 個問題；`chapterAliases.js` 沒有改。
