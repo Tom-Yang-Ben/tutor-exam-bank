@@ -1,5 +1,9 @@
 const { pool, query } = require('../config/db');
 const { pickPaperUnits, nearestReachableCounts, sortForPaperGrouped } = require('../utils/paperGroups');
+// 〔Owner 決策單 2026-09-25 B7〕confirm-paper 的承上題整組檢查（純函式＋與補救卷手動加題同一段成員查詢）。
+// remedialService 只在 defaultDeps() 裡才 require 本檔，載入時不成環。
+const { findIncompleteFollowUpGroups, incompleteFollowUpGroupsMessage } = require('../utils/followUpPaperCheck');
+const { buildItemLookupQuery } = require('../services/remedialService');
 // 〔stage5 WS-D〕pg 序列化查詢參數的同一支函式（pg 的 package.json exports 公開 ./lib/*）：
 // 單章路徑用它把 chapter 轉成與抽出前 `q.chapter = $2` 相同的比對字串（見 selectPaperQuestions）
 const { prepareValue } = require('pg/lib/utils');
@@ -719,11 +723,35 @@ async function writePaper({ studentId, paperTitle, questionIds, todayStr }) {
 // POST /api/confirm-paper（W1-2 的「確認」；docs/roadmap-plan.md §6.2.3）
 //
 // 收 { student_id, question_ids }——題目就是 dry_run 預覽選出的那批，所以這裡
-// **不重跑**家族互斥與抽題，只重驗「題目還在、沒封存」，然後走與 generate 相同的
+// **不重跑**家族互斥與抽題，只重驗「題目還在、沒封存」與「承上題整組」，然後走與 generate 相同的
 // 寫入閘門：attempts 的 ON CONFLICT DO NOTHING + rowCount 檢查——預覽過期
 // （這段時間內有人把同一題指派給同一位學生）會回 409 而不是悄悄少記。
 // 回應形狀與 generate-paper 成功時一致，前端共用同一段渲染與 Word 匯出。
+//
+// 〔Owner 決策單 2026-09-25 B7〕承上題整組改由伺服器也檢查（裁決 S5-28 原本只靠前端把關）：
+// 卷裡有某個承上組的任何一題，整組都要在卷裡，否則 400 並逐組列出缺哪幾題（題目 id）。
+// 組內不在卷裡的成員是已封存或該生已寫過的，比照前端「組內有封存或已寫過的題就不加」＝這一組不能出；
+// 規則與原因標記見 utils/followUpPaperCheck.js。順序不必由呼叫端排：底下一律用 sortForPaper 重排，
+// 整組都在時必然相鄰且依承接順序。回 400 時不寫任何東西、訊息不含學生姓名。
 // ─────────────────────────────────────────────────────────────
+
+/**
+ * 卷裡只放了一部分的承上組（〔Owner 決策單 2026-09-25 B7〕）。
+ * 承上組成員用 remedialService.buildItemLookupQuery 查——與補救卷「用題目 ID 加題」前的查詢同一段
+ * （同一段無向遞迴，含封存與該生已寫過的旗標），前後端對「整組」與「能不能出」的判斷才不會漂移。
+ * 在寫入交易之外查，與上面的封存檢查同一層級：查完到寫入之間恰好有人封存或重綁同組題的競態不處理
+ * （單一使用者系統；綁定是 runner／複核重算的衍生資料，封存檢查本來也是這樣）。
+ *
+ * @param {number} studentId
+ * @param {number[]} questionIds
+ * @returns {Promise<ReturnType<typeof findIncompleteFollowUpGroups>>}
+ */
+async function incompleteFollowUpGroupsInPaper(studentId, questionIds) {
+    const { text, values } = buildItemLookupQuery(questionIds, studentId);
+    const { rows } = await query(text, values);
+    return findIncompleteFollowUpGroups(questionIds, rows);
+}
+
 exports.confirmPaper = async (req, res, next) => {
     const { student_id, question_ids } = req.body;
     const id = Number.parseInt(student_id, 10);
@@ -748,8 +776,16 @@ exports.confirmPaper = async (req, res, next) => {
             return res.status(400).json({ message: '部分題目已不存在或已封存，請重新預覽。' });
         }
 
-        // 承上題組依承接順序相鄰（與預覽同一個排序函式）。這裡不重驗組是否完整：
-        // 題目就是預覽整組抽出的那批；呼叫端自行拼湊 question_ids 時照給的題出卷。
+        // 〔Owner 決策單 2026-09-25 B7〕承上題必須整組：缺題就 400，列出哪一組缺了哪幾題
+        const incomplete = await incompleteFollowUpGroupsInPaper(student.id, question_ids);
+        if (incomplete.length > 0) {
+            return res.status(400).json({
+                message: incompleteFollowUpGroupsMessage(incomplete),
+                incomplete_groups: incomplete
+            });
+        }
+
+        // 承上題組依承接順序相鄰（與預覽同一個排序函式）；呼叫端給的順序不影響出題順序
         const sortedQuestions = sortForPaper(fullQuestions);
         const finalSortedIds = sortedQuestions.map(q => q.id);
         const { titleDate, todayStr } = localDates();
