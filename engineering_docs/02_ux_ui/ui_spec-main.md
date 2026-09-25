@@ -13,7 +13,7 @@
 ## 目錄
 
 - [1. 頁面目的 (Page Purpose)](#1-頁面目的-page-purpose)
-- [2. 版面配置 (Layout)](#2-版面配置-layout)
+- [2. 版面配置 (Layout)](#2-版面配置-layout修訂-2026-08-29)
 - [3. 欄位與元件 (Fields / Components)](#3-欄位與元件-fields--components)
 - [4. 使用者操作 (Actions)](#4-使用者操作-actions)
 - [5. UI 狀態 (States)](#5-ui-狀態-states)

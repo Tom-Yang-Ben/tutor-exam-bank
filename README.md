@@ -198,7 +198,7 @@ exam_pro/
 | [`variants.md`](./docs/variants.md) ／ [`retrieval.md`](./docs/retrieval.md) ／ [`llm.md`](./docs/llm.md) ／ [`formulas.md`](./docs/formulas.md) | 變式題九道閘門與閾值校準／檢索設計／LLM 層 |
 | [`HANDOFF.md`](./docs/HANDOFF.md) | 交接檔：角色、狀態、標準流程、踩過的坑；階段 5 交接〔修訂 2026-09-24〕 |
 | [`local-mode.md`](./docs/local-mode.md)〔2026-09-25〕 | 本機模式的凍結契約、裁決 LM-1～LM-16 與給 Owner 的使用說明（安裝、`.env`、切回 Gemini、速度與品質、疑難排解） |
-| [`chapter-restructure.md`](./docs/chapter-restructure.md)〔2026-09-25〕 | 數學／物理章節重整的契約、裁決 CR-1～CR-8 與舊題搬章步驟 |
+| [`chapter-restructure.md`](./docs/chapter-restructure.md)〔2026-09-25〕 | 數學／物理章節重整的契約、裁決 CR-1～~~CR-8~~ CR-9〔整合 2026-09-26〕與舊題搬章步驟 |
 | [`interfaces-stage5.md`](./docs/interfaces-stage5.md)〔修訂 2026-09-24〕 | 階段 5 凍結介面與裁決 S5-1～S5-39 |
 | [`grading-and-profile.md`](./docs/grading-and-profile.md) ／ [`chemistry.md`](./docs/chemistry.md) ／ [`knowledge-components.md`](./docs/knowledge-components.md) ／ [`remedial.md`](./docs/remedial.md) ／ [`tutor.md`](./docs/tutor.md)〔修訂 2026-09-24〕 | 階段 5 五份功能文件（API、設計取捨、給老師的操作說明）；知識點內容抽查紀錄 `kc-review-*.md` |
 | [`archive/`](./docs/archive) | 已結案的歷史紀錄：`cutover-runbook.md`（MySQL→PG 切換之夜，2026-08-21 已執行）、`stage*-parallel-prompts.md` ／ `questions*-ws*.md`（四條平行 workstream 的分工提示詞與提問裁決）——**多人（多 agent）協作制度的完整紀錄**，索引見該資料夾 README |
@@ -459,7 +459,7 @@ LLM 的輸出每次都可能不同，所以品質靠三層固定下來。CI 全�
 - Gemini 欄：retrieval 是 2026-08-22（`a02f7e4`）量的，其餘四個 suite 是 2026-08-24（`f4a15ca`）。
 - 本機欄是 2026-09-25 在 Owner 電腦上以本機模型（`ollama:qwen3:8b`）重錄 classify 與 nlq 後的實測，報表是 `eval/reports/classify-2026-09-25-7b7065c.json` 與 `eval/reports/nlq-2026-09-25-7b7065c.json`（留在 Owner 電腦，不在 repo）。其他三個 suite 還在錄或待重錄，一律寫「待補」。
 - 低於門檻的有四項：classify 的 accuracy 與 macro-F1，以及 nlq LLM 輔路徑的 filters_exact 與 recall@10。nlq 規則路徑的三項都達標。Owner 的決定是**門檻不放寬**，之後改善再量。
-- 之後會依 CR-9（classify 的分冊界線修正，裁決表在 [`docs/chapter-restructure.md`](./docs/chapter-restructure.md)）與 NLQ LLM 輔路徑的改善重錄，本欄數字屆時更新。
+- 之後會依 CR-9（classify 的分冊界線修正，裁決表在 [`docs/chapter-restructure.md`](./docs/chapter-restructure.md#8-裁決紀錄) 第 8 條；〔整合 2026-09-26〕CR-9 已隨 `dec/r2-classify-explog3` 合入 `dec/integration-r23`）與 NLQ LLM 輔路徑的改善重錄，本欄數字屆時更新。
 - 兩欄的條件不同：中間同時換了模型（Gemini → 本機 8B）與章節白名單（數學 34→52 章、物理 32→34 章，golden 隨之改標，ADR-016；classify golden 由 90 筆變為 92 筆），所以差距不能全算在模型上。
 - 本機模型的 cassette 與向量檔還沒進版控，CI 目前重現不了本機欄的數字。2026-09-26 在 `local/integration`（`7b7065c`）上實跑（以下是 `7b7065c` 當時的數字，合併後由整合者更新）：unit 2,716 項（2,714 過、2 略過）、`check:html`、migrate、integration 503 項全綠；e2e 11 項中 3 項與五個 eval 紅燈，原因全是缺本機回放檔或向量檔（[`docs/local-mode.md`](./docs/local-mode.md) 第 8 條的預期）。等回放檔進版控後，上面未達門檻的四項會讓 CI 的 eval 步驟維持紅燈，直到改善為止。
 - Gemini 時期每個功能的「問題 → 決策 → 數字」逐條對照（含量測日期、模型 ID、commit、重跑指令）在 [`exam_pro/README.md`](./exam_pro/README.md) 的「問題 → 決策 → 數字」章。

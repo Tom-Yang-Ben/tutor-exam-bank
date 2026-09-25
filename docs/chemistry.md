@@ -3,7 +3,7 @@
 > 版本 v1.0 | 2026-09-24 | 分支 `stage5/ws-b` | 對應：`docs/interfaces-stage5.md` 第 3.2、3.3、4.2 條、ADR-010、DEC-019、缺口 G01
 > 本檔是化學支援的功能文件：API、資料、排版子集、答案比對、eval 與給老師的操作說明。共用文件（api_spec、openapi、db_design、srs、各 tracker）由整合階段依本檔回填（第 1.7 條）。
 > 章節表（`exam_pro/config/chemistryChapters.js`，44 章）是 ~~**AI 草擬、待 Owner 對照教科書定稿**~~ 〔修訂 2026-09-26 決策單 A11〕**Owner 2026-09-25 定稿**（決策單：照目前草案定稿，依龍騰；章名一字未改）；本檔所有例句、golden 與別名同樣是 AI 自撰，不取自任何出版社教材或考卷（這些仍是 AI 草擬，待 Owner 抽查）。
-> 〔修訂 2026-09-26〕〔Owner 決策單 2026-09-25 B5〕NLQ 的 LLM 輔路徑與助教改為支援化學（原裁決 S5-13 維持不支援）：`nlq.v1` → `nlq.v2`、`assistant.v1` → `assistant.v2`，兩者的 cassette 需重錄。見第 7、9、10、11 節。
+> 〔修訂 2026-09-26〕〔Owner 決策單 2026-09-25 B5〕NLQ 的 LLM 輔路徑與助教改為支援化學（原裁決 S5-13 維持不支援）：`nlq.v1` → `nlq.v2`、`assistant.v1` → `assistant.v2`，兩者的 cassette 需重錄。見第 7、9、10、11 節。〔整合 2026-09-26 更正〕助教沒有入庫的 cassette（`eval/cassettes/` 底下沒有 `assistant`），實際要重錄的只有 `nlq.v2`（nlq eval 的 LLM 路徑 8 句）；另見 `docs/HANDOFF.md` §0.00 B5 那一列。
 
 ## 1. 一句話
 

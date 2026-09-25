@@ -6,7 +6,7 @@
 >
 > 〔修訂 2026-09-24〕**最新狀態先看 §0（階段 5 交接）**；〔修訂 2026-09-25〕章節重整的交接在 §0.0，本機模式（Ollama＋PaddleOCR、預設不連外）在 §0.0a。§1–§9 是 2026-08-24 階段 1–4 的交接快照，角色與流程仍適用，但其中的分支、數字與待辦已過時。
 > 〔修訂 2026-09-26 決策單〕Owner 2026-09-25 在「出題系統決策單」的第一輪答案整理在 **§0.00**（含第二輪審定單待答項目）；§0.0、§0.0a、§0.2 被決定的項目已就地加註，原文保留。
-> 〔修訂 2026-09-26 合併回填〕第一輪的 B5、B7、B10、B21 已合入 `local/integration`（`7dc14a0`，尚未推上 GitHub）；§0.00、§0.2、§0.3、§0.4 就地更新。〔修訂 2026-09-26 決策單第二、三輪〕Owner 2026-09-26 在第二輪「知識點審定單」與第三輪「重練與收尾決策單」的答覆登錄在 **§0.00a**（重點與實作分支；實作分支都還沒合入）。
+> 〔修訂 2026-09-26 合併回填〕第一輪的 B5、B7、B10、B21 已合入 `local/integration`（`7dc14a0`，尚未推上 GitHub）；§0.00、§0.2、§0.3、§0.4 就地更新。〔修訂 2026-09-26 決策單第二、三輪〕Owner 2026-09-26 在第二輪「知識點審定單」與第三輪「重練與收尾決策單」的答覆登錄在 **§0.00a**（重點與實作分支；實作分支都還沒合入）。〔整合 2026-09-26〕§0.00a 的實作分支（錯題重練除外）、B20 修正分支與 `dec/x-nlq-improve-fix`、`dec/x-local-perf-tool-fix`、`dec/x-readme-architecture-fix` 已合入 `dec/integration-r23`（待併 `local/integration`）；各處狀態見 §0.00a 最後的表與 §0.4 第 4 項。
 
 ---
 
@@ -35,7 +35,7 @@
 | B2 | ADR-014、ADR-015 接受；ADR-017 等本機實測後再定 | 已定 | ADR-014、ADR-015 狀態改為已接受；ADR-017 維持提議並註明原因 |
 | B3 | 補救卷選題參數（S5-30）維持 | 已定 | 不改程式 |
 | B4 | S5-11 文字型答案的單位衝突維持送複核（uncertain） | 已定 | 不改 `compareText` |
-| B5 | S5-13 改為支援化學（助教工具說明書與 NLQ 的 LLM 輔路徑；需重錄） | ~~實作中（`dec/b5-chem-assistant-nlq`）~~ 〔修訂 2026-09-26 合併回填〕**已合入 `local/integration`（`7dc14a0`）** | 兩者的 cassette 要重錄（`nlq.v2`、`assistant.v2`；本機模型重錄前 nlq eval 的 LLM 路徑 8 句會 replay miss） |
+| B5 | S5-13 改為支援化學（助教工具說明書與 NLQ 的 LLM 輔路徑；需重錄） | ~~實作中（`dec/b5-chem-assistant-nlq`）~~ 〔修訂 2026-09-26 合併回填〕**已合入 `local/integration`（`7dc14a0`）** | 兩者的 cassette 要重錄（`nlq.v2`~~、`assistant.v2`~~；本機模型重錄前 nlq eval 的 LLM 路徑 8 句會 replay miss）〔整合 2026-09-26 更正〕助教沒有入庫的 cassette（`eval/cassettes/` 底下沒有 `assistant`，CI 也不回放助教），`assistant.v2` 不必重錄；B5 要重錄的只有 `nlq.v2`（nlq eval 的 LLM 路徑 8 句）。整合後另有 CR-9 的 `classify.v2`（數學＋物理 classify 全部）要重錄，合起來是 `nlq.v2` 與 `classify.v2` 兩個 |
 | B6 | S5-26「加入補救卷」按鈕位置維持 | 已定 | — |
 | B7 | S5-28 confirm-paper 伺服器端也檢查承上題整組 | ~~實作中（`dec/b7-followup-server-check`）~~ 〔修訂 2026-09-26 合併回填〕**已合入 `local/integration`（`7dc14a0`）** | 直接呼叫 API 送半組承上題會被擋下（400＋`incomplete_groups`；`interfaces-stage1.md` 第 7.1 條、`remedial.md` 第 2.2 節） |
 | B8 | S5-7 維持 | 已定 | — |
@@ -50,7 +50,7 @@
 | B17 | 化學別名優先：維持 | 已定 | 「碰撞學說」「原子結構」仍要打完整章名（§0.3） |
 | B18 | 本機拆題的限制：上傳幾份卷後再看 | 待決（實測後） | `local-mode.md` LM-12 |
 | B19 | 本機家教：試幾題難題後再定 | 待決（試用後） | 本機家教沒有程式驗算（§0.0a 已知限制） |
-| B20 | 舊題補附圖（roadmap 第 19 項）：做 | 工具實作中（`dec/b20-backfill-figures-tool`）；做哪幾份卷→第二輪 X2 待答。〔修訂 2026-09-26 決策單第二、三輪〕X2 已答：各校考卷整個資料夾先跑「只列出」、再逐題確認；工具修正中（`dec/b20-backfill-figures-tool-fix`），尚未合入 | 會寫正式庫、逐題人工確認對應 |
+| B20 | 舊題補附圖（roadmap 第 19 項）：做 | 工具實作中（`dec/b20-backfill-figures-tool`）；做哪幾份卷→第二輪 X2 待答。〔修訂 2026-09-26 決策單第二、三輪〕X2 已答：各校考卷整個資料夾先跑「只列出」、再逐題確認；工具修正中（`dec/b20-backfill-figures-tool-fix`），尚未合入。〔整合 2026-09-26〕含第二輪修正的 `dec/b20-backfill-figures-tool-fix2` 已合入 `dec/integration-r23`（待併 `local/integration`） | 會寫正式庫、逐題人工確認對應 |
 | B21 | `/analyze-pdf` 舊流程（roadmap 第 20 項）：保留並補裁圖（Owner 選 B，不採原建議 A） | ~~實作中（`dec/b21-legacy-analyze-pdf-figures`）~~ 〔修訂 2026-09-26 合併回填〕**已合入 `local/integration`（`7dc14a0`）** | 兩條拆題路徑並存（舊流程重用管線的 `figureService` 裁圖，見 `docs/figures.md`；化學仍只走新管線） |
 | B22 | 下一輪開發順序照建議：錯題重練 → 間隔複習 → 診斷報告 → 入班診斷卷 → 學習路徑與提示 → 學生端 | 已定 | §0.2 第 20 項 |
 | C | 本機模式暫不適用：補 Gemini 額度重錄、刪 Gemini cassette、語音與家教費用設定、標註費用未計入預算 | 本機模式下暫緩 | §0.0 的 Gemini 重錄、LM-14 的 `cassettes:prune -- --apply`、§0.2 第 13 項、§0.3 的標註費用 |
@@ -69,6 +69,7 @@
 > 來源：Owner（Ben）2026-09-26 在第二輪「知識點審定單」（59 題：數學 M1～M21、物理 P1～P20、化學 C1～C16、X1、X2）與第三輪「重練與收尾決策單」（23 題：R1～R12、K1～K11）填的答案，由 AI 登錄（分支 `dec/docs-backfill-round1-merged`，只改文件）。
 > 本節只寫重點與交叉引用。完整結果在 claude.ai 專案文件 `claude/owner-decisions-2026-09-26.md`（在專案裡，不在 repo）；知識點每一項的做法在各實作分支的 `docs/kc-review-{數學,物理,化學}.md`；R1～R12 的背景與選項原文在 `docs/retrain-and-review.md` 第 8 節。
 > **實作分支都還沒合入 `local/integration`**（截至 `7dc14a0`）：合入之前，種子檔、分類模板與程式仍是第一輪之後的狀態，`kc:load` 也還不能載入新版。
+> 〔整合 2026-09-26〕錯題重練以外的實作分支已合入 `dec/integration-r23`（待併 `local/integration`）；狀態見本節最後的表。
 > AI 不代填任何「核准」欄：DEC-013 仍待 Owner 明示簽核；知識點的逐條 `approved` 仍只有數學 4 條（第二輪改的是內容與歸屬，不是逐條審定）。
 
 **X 項（第二輪）**
@@ -139,17 +140,18 @@
 - K10 選 1：數學「複數乘除的幾何意義」拿掉和角公式這個先備。
 - K11 選 1：化學「醛與酮」不加錯離子先備。
 
-**由哪些分支實作（都尚未合入 `local/integration`）**
+**由哪些分支實作（都尚未合入 `local/integration`）**〔整合 2026-09-26〕錯題重練以外的分支已合入 `dec/integration-r23`（待併 `local/integration`），逐列標在「狀態」欄。
 
 | 範圍 | 分支 | 狀態（2026-09-26） |
 |---|---|---|
-| 數學 M1～M21、K8～K10 | `dec/r2-math-kc` → `dec/r2-math-kc2`（M15、M17 補答、勘根定理改寫）→ `dec/r2-math-kc3`（K8～K10） | 已 commit，待合併 |
-| 物理 P1～P20、K4～K7 | `dec/r2-phys-content`（P1～P15）→ `dec/r2-phys-spoken`（P20 口語版全面重寫）→ `dec/r2-phys-kc3`（K4～K7） | 已 commit，待合併 |
-| 化學 C1～C16、K1、K11 | `dec/r2-chem-kc` → `dec/r2-chem-kc2`（C4 改回原代碼、只改排序）→ `dec/r2-chem-kc3`（K1、K11） | kc3 進行中 |
-| 分類界線 K2、K3（連同 CR-9 指數與對數分冊界線，分類模板升 `classify.v2`） | `dec/r2-classify-explog2` → `dec/r2-classify-explog3` | explog3 進行中；`classify.v2` 需以本機模型補錄 |
-| X2（B20 舊題補附圖） | `dec/b20-backfill-figures-tool`（修正分支 `dec/b20-backfill-figures-tool-fix`） | 修正中；合入前不對正式庫執行 |
-| R1～R12 錯題重練 | `dec/design-retrain-spaced-fix`（設計稿 `docs/retrain-and-review.md`）、`dec/retrain-p1-data-layer`（第一階段：派題與作答拆表，migration 0016，相容檢視）、`dec/retrain-schedule`（排程純函式與 ADR-018／019） | 設計稿與第一階段已 commit；排程進行中；重練規則、API、畫面在之後 |
+| 數學 M1～M21、K8～K10 | `dec/r2-math-kc` → `dec/r2-math-kc2`（M15、M17 補答、勘根定理改寫）→ `dec/r2-math-kc3`（K8～K10） | ~~已 commit，待合併~~ 〔整合 2026-09-26〕**已合入 `dec/integration-r23`（待併 `local/integration`）**；三條一起合入，種子檔 `version` 維持 3 |
+| 物理 P1～P20、K4～K7 | `dec/r2-phys-content`（P1～P15）→ `dec/r2-phys-spoken`（P20 口語版全面重寫）→ `dec/r2-phys-kc3`（K4～K7） | ~~已 commit，待合併~~ 〔整合 2026-09-26〕**已合入 `dec/integration-r23`（待併 `local/integration`）** |
+| 化學 C1～C16、K1、K11 | `dec/r2-chem-kc` → `dec/r2-chem-kc2`（C4 改回原代碼、只改排序）→ `dec/r2-chem-kc3`（K1、K11） | ~~kc3 進行中~~ 〔整合 2026-09-26〕**已合入 `dec/integration-r23`（待併 `local/integration`）** |
+| 分類界線 K2、K3（連同 CR-9 指數與對數分冊界線，分類模板升 `classify.v2`） | `dec/r2-classify-explog2` → `dec/r2-classify-explog3` | ~~explog3 進行中~~ 〔整合 2026-09-26〕**已合入 `dec/integration-r23`（待併 `local/integration`）**；`classify.v2` 需以本機模型補錄 |
+| X2（B20 舊題補附圖） | `dec/b20-backfill-figures-tool`（修正分支 `dec/b20-backfill-figures-tool-fix`；〔整合 2026-09-26〕第二輪修正 `dec/b20-backfill-figures-tool-fix2`） | ~~修正中；合入前不對正式庫執行~~ 〔整合 2026-09-26〕**已合入 `dec/integration-r23`（待併 `local/integration`）**（兩輪修正都在內）；併入 `local/integration` 之前仍不對正式庫執行 |
+| R1～R12 錯題重練 | `dec/design-retrain-spaced-fix`（設計稿 `docs/retrain-and-review.md`）、`dec/retrain-p1-data-layer`（第一階段：派題與作答拆表，migration 0016，相容檢視）、`dec/retrain-schedule`（排程純函式與 ADR-018／019） | 設計稿與第一階段已 commit；排程進行中；重練規則、API、畫面在之後。〔整合 2026-09-26〕**另一條工作進行中**（`dec/retrain-*` 與設計稿分支都不在 `dec/integration-r23`） |
 | X1 | 不改程式 | 開 A8 的 PR 時適用 |
+| 〔整合 2026-09-26〕不在決策單上、同批合入的分支 | `dec/x-nlq-improve-fix`（查題證據檢查與平面／空間對齊、`nlq.v2` 模板，`docs/retrieval.md` §9）、`dec/x-local-perf-tool-fix`（`npm run perf:local`，B18 實測用）、`dec/x-readme-architecture-fix`（README、sad.md §7.1）、`dec/docs-backfill-round1-merged`（本節的登錄） | **已合入 `dec/integration-r23`（待併 `local/integration`）** |
 
 ### 0.0 章節重整（2026-09-25）〔修訂 2026-09-25 章節重整〕
 
@@ -222,7 +224,7 @@
 
 **F. 用過 2–4 週再決定**
 
-17. 補救卷選題參數（`remedial.md` 第 3 節）與裁決 S5-11（文字型答案單位衝突）、S5-13（助教與 NLQ 的 LLM 路徑支援化學，需重錄）、S5-26、S5-28、S5-7（API 只送 `result` 時保留部分給分）。〔修訂 2026-09-26 決策單 B3～B8〕Owner 已答（不等 2–4 週）：補救卷參數 S5-30 維持；S5-11 維持送複核；**S5-13 改為支援化學**（`dec/b5-chem-assistant-nlq` 實作中，需重錄）；S5-26 維持；**S5-28 改為伺服器也檢查承上題整組**（`dec/b7-followup-server-check` 實作中）；S5-7 維持。〔修訂 2026-09-26 合併回填〕B5、B7 已合入 `local/integration`（`7dc14a0`）；B5 的 `nlq.v2`、`assistant.v2` 仍待本機模型重錄。
+17. 補救卷選題參數（`remedial.md` 第 3 節）與裁決 S5-11（文字型答案單位衝突）、S5-13（助教與 NLQ 的 LLM 路徑支援化學，需重錄）、S5-26、S5-28、S5-7（API 只送 `result` 時保留部分給分）。〔修訂 2026-09-26 決策單 B3～B8〕Owner 已答（不等 2–4 週）：補救卷參數 S5-30 維持；S5-11 維持送複核；**S5-13 改為支援化學**（`dec/b5-chem-assistant-nlq` 實作中，需重錄）；S5-26 維持；**S5-28 改為伺服器也檢查承上題整組**（`dec/b7-followup-server-check` 實作中）；S5-7 維持。〔修訂 2026-09-26 合併回填〕B5、B7 已合入 `local/integration`（`7dc14a0`）；B5 的 `nlq.v2`~~、`assistant.v2`~~ 仍待本機模型重錄。〔整合 2026-09-26 更正〕助教沒有入庫的 cassette（`eval/cassettes/` 底下沒有 `assistant`），`assistant.v2` 不必重錄；要以本機模型重錄的是 `nlq.v2`（LLM 路徑 8 句）與 CR-9 的 `classify.v2`（`docs/chapter-restructure.md` 第 8 條）。
 18. 管線既有設計「error 退避期間該列已解鎖、可被別的槽立刻重跑」要不要修（會改變管線行為，S5-40）。〔修訂 2026-09-26 決策單 B9〕Owner：維持，不修。
 19. （選做）錄 20–30 題家教問答建立家教 eval；人工標一批題目→知識點 golden 以量測標註準確率。
 
@@ -245,8 +247,8 @@
 
 1. 交付 `stage5/integration`：推上 GitHub（需把 repo 加入工作階段的授權來源），或放進 Owner 本機 repo 由 Owner 推送。〔修訂 2026-09-25〕Owner 已推送；`7184f53` 待推。
 2. 〔修訂 2026-09-25〕`stage5/chapters` 以 git bundle 放進 Owner 本機 repo；Owner 重錄後，主控核對五個 eval 的量測值與門檻（`eval/thresholds.json`），確認 unit 的略過數歸零（CR-4），再開 PR。〔修訂 2026-09-26 決策單 A8／A7〕改為 `local/integration` 以本機模型重錄後開一個 PR 到 main；低於門檻的 eval 門檻不動、照實紅燈，是否可帶紅燈合併等第二輪 X1。〔修訂 2026-09-26 決策單第二、三輪 X1〕已答：只限 eval 分數可紅燈合併；unit、integration、e2e 必須綠；PR 說明列出未達的 eval 項目與數字。
-3. 合併後依 Owner 回饋處理第 0.2 節 F、G。〔修訂 2026-09-26 決策單〕F 項已在決策單第一輪答完（§0.00 的 B3～B9）；G 項照 B22 的順序。實作中的分支：`dec/b5-chem-assistant-nlq`、`dec/b7-followup-server-check`、`dec/b10-shortfall-error`、`dec/b20-backfill-figures-tool`、`dec/b21-legacy-analyze-pdf-figures`。〔修訂 2026-09-26 合併回填〕B5、B7、B10、B21 已合入 `local/integration`（`7dc14a0`；合併時主控實跑 unit、integration 全綠，文件回填在 `dec/docs-backfill-round1-merged`）；B20 仍在修正（`dec/b20-backfill-figures-tool-fix`）。第二、三輪的實作分支見 §0.00a 最後的表。
-4. 〔修訂 2026-09-26 合併回填〕待辦：①把 §0.00a 的實作分支與 B20 修正分支合入 `local/integration`，跑完整 `ci.sh`；②`local/integration` 還沒推上 GitHub（雲端推送不通時由 Owner 的電腦推），推送時機由 Owner 決定；③Owner 以本機模型重錄後，照 A8 開一個 PR 到 main，依 X1 只有 eval 分數可以紅燈；④錯題重練的其餘部分（重練規則、API、畫面）依 `docs/retrain-and-review.md` 與 R1～R12 施工。
+3. 合併後依 Owner 回饋處理第 0.2 節 F、G。〔修訂 2026-09-26 決策單〕F 項已在決策單第一輪答完（§0.00 的 B3～B9）；G 項照 B22 的順序。實作中的分支：`dec/b5-chem-assistant-nlq`、`dec/b7-followup-server-check`、`dec/b10-shortfall-error`、`dec/b20-backfill-figures-tool`、`dec/b21-legacy-analyze-pdf-figures`。〔修訂 2026-09-26 合併回填〕B5、B7、B10、B21 已合入 `local/integration`（`7dc14a0`；合併時主控實跑 unit、integration 全綠，文件回填在 `dec/docs-backfill-round1-merged`）；B20 仍在修正（`dec/b20-backfill-figures-tool-fix`）。〔整合 2026-09-26〕B20（含兩輪修正，`dec/b20-backfill-figures-tool-fix2`）已合入 `dec/integration-r23`（待併 `local/integration`）。第二、三輪的實作分支見 §0.00a 最後的表。
+4. 〔修訂 2026-09-26 合併回填〕待辦：①把 §0.00a 的實作分支與 B20 修正分支（〔整合 2026-09-26〕補列：以及 `dec/x-nlq-improve-fix`、`dec/x-local-perf-tool-fix`、`dec/x-readme-architecture-fix`）合入 `local/integration`，跑完整 `ci.sh`〔整合 2026-09-26〕錯題重練以外的上述分支與 `dec/docs-backfill-round1-merged` 已合入 `dec/integration-r23`（待併 `local/integration`），完整 `ci.sh` 的結果見該分支最後一個 commit 的說明；錯題重練（`dec/retrain-*`）另一條工作進行中；②`local/integration` 還沒推上 GitHub（雲端推送不通時由 Owner 的電腦推），推送時機由 Owner 決定；③Owner 以本機模型重錄後，照 A8 開一個 PR 到 main，依 X1 只有 eval 分數可以紅燈；④錯題重練的其餘部分（重練規則、API、畫面）依 `docs/retrain-and-review.md` 與 R1～R12 施工。
 
 ---
 

@@ -352,7 +352,7 @@ sequenceDiagram
 | 分詞詞典改變使既有 `search_tsv` 過期〔修訂 2026-09-24〕 | 已發生（化學詞彙） | 部分既有數理題的關鍵字檢索查不到 | 上線步驟必跑 `npm run search:reindex`（不呼叫 LLM）；之後改詞典或章名都要再跑 |
 | 家教每日預算只在程序內〔修訂 2026-09-24〕 | 中 | 重啟歸零、多實例不共享；最後一次呼叫可能略超 | 單機單人可接受；要跨重啟累計需新表（預留 0017 未用） |
 | 知識點與口語版為 AI 草擬〔修訂 2026-09-24〕 | 已存在 | 內容錯誤會直接進家教講法 | 審查已修正一輪數理化錯誤；draft 在 prompt 內標明「僅供參考」；Owner 逐章審定 |
-| 本機模型的量測低於門檻〔修訂 2026-09-26 本機模式〕 | 已發生 | 2026-09-25 在 Owner 電腦上以本機模型（`ollama:qwen3:8b`）重錄 classify 與 nlq（報表 `eval/reports/classify-2026-09-25-7b7065c.json`、`nlq-2026-09-25-7b7065c.json`，不在 repo）：classify accuracy 0.8370（77/92，門檻 0.87）、macro-F1 0.7419（門檻 0.8956），兩項未達；nlq LLM 輔路徑 filters_exact 0.6250（門檻 0.72）、recall@10 0.7500（門檻 0.845），兩項未達；nlq 規則路徑 rule_coverage 0.84、filters_exact 1、recall@10 1，都達標。retrieval、pipeline、variant 待補。本機回放檔進版控後，CI 的 eval 會因這四項維持紅燈 | `thresholds.json` 的數字不動（LM-14），Owner 決定不放寬門檻、改善後重量；之後會依 CR-9（`docs/chapter-restructure.md`）與 NLQ LLM 輔路徑的改善重錄，數字會更新。注意這些數字與 Gemini 時期的差距同時包含換模型與章節重整（ADR-016）兩個因素 |
+| 本機模型的量測低於門檻〔修訂 2026-09-26 本機模式〕 | 已發生 | 2026-09-25 在 Owner 電腦上以本機模型（`ollama:qwen3:8b`）重錄 classify 與 nlq（報表 `eval/reports/classify-2026-09-25-7b7065c.json`、`nlq-2026-09-25-7b7065c.json`，不在 repo）：classify accuracy 0.8370（77/92，門檻 0.87）、macro-F1 0.7419（門檻 0.8956），兩項未達；nlq LLM 輔路徑 filters_exact 0.6250（門檻 0.72）、recall@10 0.7500（門檻 0.845），兩項未達；nlq 規則路徑 rule_coverage 0.84、filters_exact 1、recall@10 1，都達標。retrieval、pipeline、variant 待補。本機回放檔進版控後，CI 的 eval 會因這四項維持紅燈 | `thresholds.json` 的數字不動（LM-14），Owner 決定不放寬門檻、改善後重量；之後會依 CR-9（[`docs/chapter-restructure.md` 第 8 條](../../docs/chapter-restructure.md#8-裁決紀錄)；〔整合 2026-09-26〕已隨 `dec/r2-classify-explog3` 合入 `dec/integration-r23`）與 NLQ LLM 輔路徑的改善重錄，數字會更新。注意這些數字與 Gemini 時期的差距同時包含換模型與章節重整（ADR-016）兩個因素 |
 | CPU 推論速度未實測〔修訂 2026-09-26 本機模式〕 | 中 | 一份考卷可能超過一夜、長節點逾時 | 逾時與租約依供應商調整、`JOB_NODE_TIMEOUT_MS`／`OLLAMA_TIMEOUT_MS` 可調（LM-12 ②）；Owner 實測後更新使用說明，若無法接受即觸發 ADR-017 的重新評估 |
 | 交叉驗證的門檻與盲點〔修訂 2026-09-26 本機模式〕 | 已存在 | 0.85 未校準，複核比例可能偏高；跨頁題可能兩版一致地殘缺而自動入庫 | 本機重錄後依實測校準（LM-12 ③）；複核時留意跨頁題，之後可加一頁前瞻（LM-12 ①） |
 | PaddlePaddle／PaddleOCR 上游版本問題〔修訂 2026-09-26 本機模式〕 | 已發生（LM-16） | 安裝後辨識第一頁即失敗 | 版本全部釘死、錯誤訊息附處理方式；升級 PaddleOCR＝OCR cassette 失效要重錄 |
@@ -365,7 +365,7 @@ sequenceDiagram
 | :--- | :--- |
 | 上游 | DEC-001～009、DEC-013〔修訂 2026-09-15f〕、DEC-014～019〔修訂 2026-09-24〕、FR-001～016、FR-020〔修訂 2026-09-15f〕、FR-021～035〔修訂 2026-09-24〕、NFR-001～009〔修訂 2026-09-24〕（[`../01_requirements/requirements_tracker.md`](../01_requirements/requirements_tracker.md)） |
 | 決策 | ADR-001～009（[`adr/`](./adr/)；ADR-009 原卷文字層比對〔修訂 2026-09-15f〕）；ADR-010～015（階段 5：化學卷別分流、知識點模型、AI 家教、語音、補救卷、批改細節與詳解）〔修訂 2026-09-24〕；ADR-016（章節白名單重整）、ADR-017（本機優先推論，提議）〔修訂 2026-09-26 本機模式〕 |
-| 契約與裁決〔修訂 2026-09-26 本機模式〕 | [`docs/local-mode.md`](../../docs/local-mode.md)（第 0～8 條凍結介面、第 9 條 LM-1～LM-16、第 10 條使用說明）；[`docs/chapter-restructure.md`](../../docs/chapter-restructure.md)（CR-1～CR-8） |
+| 契約與裁決〔修訂 2026-09-26 本機模式〕 | [`docs/local-mode.md`](../../docs/local-mode.md)（第 0～8 條凍結介面、第 9 條 LM-1～LM-16、第 10 條使用說明）；[`docs/chapter-restructure.md`](../../docs/chapter-restructure.md#8-裁決紀錄)（CR-1～~~CR-8~~ CR-9〔整合 2026-09-26〕） |
 | 下游 | `../04_design/lld.md`（Code 層）、`../04_design/api_spec.md`／`db_design.md`（契約）、[`engineering_tracker.md`](./engineering_tracker.md)、`../06_ops/`（runbook 四份） |
 
 本文件是架構契約：模組未在此出現即視為不存在；他文件提及而本文未載者，屬本文件之缺陷。
