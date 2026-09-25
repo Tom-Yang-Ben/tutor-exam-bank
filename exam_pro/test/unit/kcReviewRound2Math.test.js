@@ -161,8 +161,22 @@ describe('〔知識點審定單 2026-09-26〕查題別名', () => {
     });
 
     test('M4：邏輯相關別名指向「集合與計數原理」', () => {
-        for (const a of ['邏輯', '命題', '充分條件', '必要條件', '充分必要條件']) {
+        // 〔整合 2026-09-26 審查〕「命題」換成「且或非」，理由見下一個測試與 config/chapterAliases.js 的註解。
+        for (const a of ['邏輯', '且或非', '充分條件', '必要條件', '充分必要條件']) {
             assert.equal(aliases.CHAPTER_ALIASES[a], '集合與計數原理', a);
         }
+    });
+
+    test('〔整合 2026-09-26 審查〕「命題」不是別名：老師口中的「段考命題」是出題，不能被規則判成「集合與計數原理」', () => {
+        const { parseQuery } = require('../../utils/nlqHeuristics');
+        assert.equal(Object.hasOwn(aliases.CHAPTER_ALIASES, '命題'), false);
+        for (const list of Object.values(aliases.ALIASES_BY_CHAPTER)) {
+            assert.ok(!list.includes('命題'));
+        }
+        const chaptersOf = q => parseQuery(q, { aliases: aliases.CHAPTER_ALIASES }).filters.chapters;
+        assert.deepEqual(chaptersOf('給我段考命題的題目'), []);
+        assert.deepEqual(chaptersOf('幫我找段考命題用的等差數列題目'), ['數列與遞迴關係']);
+        assert.deepEqual(chaptersOf('命題與且或非的題目'), ['集合與計數原理']);
+        assert.deepEqual(chaptersOf('充分必要條件的題目'), ['集合與計數原理']);
     });
 });

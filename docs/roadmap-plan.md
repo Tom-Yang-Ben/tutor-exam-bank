@@ -1867,6 +1867,7 @@ agent 管線、RAG 檢索、NLQ、變式、複核佇列、eval 與門檻——�
    **做哪幾份卷在第二輪 X2 待答**，答覆之前不對正式庫執行。
    〔修訂 2026-09-26 決策單第二、三輪 X2〕Owner 選 1：各校考卷整個資料夾先跑「只列出」（dry-run 只產提議檔與預覽），再逐題確認後才 `--apply`。
    工具修正中（`dec/b20-backfill-figures-tool-fix`），尚未合入 `local/integration`；合入之前仍不對正式庫執行。
+   〔整合 2026-09-26〕含第二輪修正的 `dec/b20-backfill-figures-tool-fix2` 已合入 `dec/integration-r23`（待併 `local/integration`）；併入之前仍不對正式庫執行。
 20. ~~**待決策：`/analyze-pdf` 舊流程不裁附圖**~~ → **已決策（2026-09-25 Owner 決策單 B21）：選項 B，保留並補裁圖**〔修訂 2026-09-26 決策單〕。新流程（`POST /api/jobs` 管線）已涵蓋上傳拆題；
    選項 A：退役舊端點（前端改走新流程後移除），選項 B：舊流程補裁圖。建議 A——兩條拆題路徑長期並存會重複維護。
    〔修訂 2026-09-26 決策單 B21〕Owner 選 B（不採上面的建議 A）：`/analyze-pdf` 保留，補上附圖裁切；由分支 `dec/b21-legacy-analyze-pdf-figures` 實作。

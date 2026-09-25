@@ -175,7 +175,7 @@ exam_pro/
 │   ├─ fixtures/              #   60 題自製 fixture、樣卷 PDF、embedding 向量
 │   └─ thresholds.json        #   門檻（首測 −0.03、只升不降）
 │
-├─ test/                      # 項數為 2026-09-26 在 local/integration 實跑，是 7b7065c 當時的數字（合併後由整合者更新）
+├─ test/                      # 項數為 2026-09-26 在 local/integration 實跑，是 7b7065c 當時的數字（合併後由整合者更新）〔整合 2026-09-26〕延後到錯題重練合入後統一更新，見「技術棧」的測試列
 │   ├─ unit/                  #   2,716 項：不連網、不連庫、零 secrets
 │   ├─ integration/           #   503 項：對 tmpfs 測試庫（_test 後綴強制）
 │   └─ e2e/                   #   11 項：HTTP 全路徑（上傳→部分入庫；組卷→Word 公式）
@@ -434,7 +434,7 @@ Gemini 已回傳 JSON，為何不直接入庫？
 - **AI（可切回：Gemini）**：`@google/genai`——拆題／分類／變式 `gemini-3.5-flash`、獨立驗答 `gemini-3.1-pro-preview`、embedding `gemini-embedding-001`（768 維）；階段 5 另用 code execution（AI 家教驗算）與音訊輸入（語音轉寫），這兩項只在 Gemini 模式可用。模型 ID 單一真相在 [`exam_pro/config/models.js`](./exam_pro/config/models.js)（`vendor:model-id`）。
 - **文件**：`docx`（自製 LaTeX → OOXML 數學公式轉換）
 - **前端**：單頁 HTML + Tailwind + MathJax（〔修訂 2026-09-25 本機模式〕兩者與字型、GSAP 都改從本機 `/vendor/` 載入，見 `docs/local-mode.md`） + 五個 ES module 分頁（零打包器）；階段 5 另加三個 module（知識點、補救卷與覆蓋率、AI 家教），MathJax 載入 mhchem〔修訂 2026-09-24〕
-- **測試／量測**：`node:test`（unit 2,716／integration 503／e2e 11，2026-09-26 於 `local/integration` 實跑，是 `7b7065c` 當時的數字，合併後由整合者更新）＋五個 eval suite（golden＋ratchet 門檻）＋ LLM 與 OCR 的 record/replay cassette——CI 全程零金鑰、零網路、零成本
+- **測試／量測**：`node:test`（unit 2,716／integration 503／e2e 11，2026-09-26 於 `local/integration` 實跑，是 `7b7065c` 當時的數字，合併後由整合者更新。〔整合 2026-09-26〕全域測試數等錯題重練合入後統一更新；`dec/integration-r23`（`c65909e`）實跑：unit 2,929（2,927 過、2 略過）／integration 528／e2e 11）＋五個 eval suite（golden＋ratchet 門檻）＋ LLM 與 OCR 的 record/replay cassette——CI 全程零金鑰、零網路、零成本
 
 ---
 
@@ -461,7 +461,7 @@ LLM 的輸出每次都可能不同，所以品質靠三層固定下來。CI 全�
 - 低於門檻的有四項：classify 的 accuracy 與 macro-F1，以及 nlq LLM 輔路徑的 filters_exact 與 recall@10。nlq 規則路徑的三項都達標。Owner 的決定是**門檻不放寬**，之後改善再量。
 - 之後會依 CR-9（classify 的分冊界線修正，裁決表在 [`docs/chapter-restructure.md`](./docs/chapter-restructure.md#8-裁決紀錄) 第 8 條；〔整合 2026-09-26〕CR-9 已隨 `dec/r2-classify-explog3` 合入 `dec/integration-r23`）與 NLQ LLM 輔路徑的改善重錄，本欄數字屆時更新。
 - 兩欄的條件不同：中間同時換了模型（Gemini → 本機 8B）與章節白名單（數學 34→52 章、物理 32→34 章，golden 隨之改標，ADR-016；classify golden 由 90 筆變為 92 筆），所以差距不能全算在模型上。
-- 本機模型的 cassette 與向量檔還沒進版控，CI 目前重現不了本機欄的數字。2026-09-26 在 `local/integration`（`7b7065c`）上實跑（以下是 `7b7065c` 當時的數字，合併後由整合者更新）：unit 2,716 項（2,714 過、2 略過）、`check:html`、migrate、integration 503 項全綠；e2e 11 項中 3 項與五個 eval 紅燈，原因全是缺本機回放檔或向量檔（[`docs/local-mode.md`](./docs/local-mode.md) 第 8 條的預期）。等回放檔進版控後，上面未達門檻的四項會讓 CI 的 eval 步驟維持紅燈，直到改善為止。
+- 本機模型的 cassette 與向量檔還沒進版控，CI 目前重現不了本機欄的數字。2026-09-26 在 `local/integration`（`7b7065c`）上實跑（以下是 `7b7065c` 當時的數字，合併後由整合者更新；〔整合 2026-09-26〕全域測試數等錯題重練合入後統一更新，`dec/integration-r23`（`c65909e`）實跑是 unit 2,929 項（2,927 過、2 略過）、integration 528 項，其餘狀態與下文相同）：unit 2,716 項（2,714 過、2 略過）、`check:html`、migrate、integration 503 項全綠；e2e 11 項中 3 項與五個 eval 紅燈，原因全是缺本機回放檔或向量檔（[`docs/local-mode.md`](./docs/local-mode.md) 第 8 條的預期）。等回放檔進版控後，上面未達門檻的四項會讓 CI 的 eval 步驟維持紅燈，直到改善為止。
 - Gemini 時期每個功能的「問題 → 決策 → 數字」逐條對照（含量測日期、模型 ID、commit、重跑指令）在 [`exam_pro/README.md`](./exam_pro/README.md) 的「問題 → 決策 → 數字」章。
 
 ---

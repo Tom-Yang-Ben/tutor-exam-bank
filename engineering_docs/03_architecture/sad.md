@@ -277,7 +277,7 @@ sequenceDiagram
 | 環境 | Deployment 模式 | 資料庫 | 備份／監控 |
 | :--- | :--- | :--- | :--- |
 | 開發（唯一運行環境） | 本機 `npm start`＋`docker compose up` | postgres :5442（volume 持久化） | `exam_pro/scripts/` 備份腳本；`npm run report:jobs` 成本報表 |
-| 測試（本機） | 同機，另指 TEST_DATABASE_URL | postgres_test :5433（tmpfs，`_test` 後綴強制） | 整合 317〔修訂 2026-09-16b〕／e2e 11，`--test-concurrency=1`；整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠（主控合併後更新數字）〔修訂 2026-09-24〕；`local/integration`（`7b7065c`）2026-09-26 實跑：unit 2716（2 略過）、integration 503 全綠，e2e 11 項中 3 項與五個 eval 因缺本機模型的回放檔／向量檔紅燈（契約第 8 條的預期）；這些是 `7b7065c` 當時的數字，合併後由整合者更新〔修訂 2026-09-26 本機模式〕 |
+| 測試（本機） | 同機，另指 TEST_DATABASE_URL | postgres_test :5433（tmpfs，`_test` 後綴強制） | 整合 317〔修訂 2026-09-16b〕／e2e 11，`--test-concurrency=1`；整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠（主控合併後更新數字）〔修訂 2026-09-24〕；`local/integration`（`7b7065c`）2026-09-26 實跑：unit 2716（2 略過）、integration 503 全綠，e2e 11 項中 3 項與五個 eval 因缺本機模型的回放檔／向量檔紅燈（契約第 8 條的預期）；這些是 `7b7065c` 當時的數字，合併後由整合者更新〔修訂 2026-09-26 本機模式〕；〔整合 2026-09-26〕全域測試數等錯題重練合入後統一更新，`dec/integration-r23`（`c65909e`）實跑：unit 2929（2 略過）、integration 528 全綠，e2e 與 eval 紅燈的種類同上 |
 | CI（GitHub Actions） | workflow 起 pg16 service | 臨時容器 | `LLM_MODE=replay`＋`EMBED_MODE=fixture`，零金鑰零網路；〔修訂 2026-09-26 本機模式〕`ci.yml` 明寫本機模型名（決定讀哪一組 cassette），不裝 Ollama、不裝 Python |
 
 - 開發埠取 5442 而非 5432：開發機原生 PostgreSQL 17 服務占用 5432，同埠並存會產生誤導性的驗證失敗（`exam_pro/README.md` 安裝節）。
