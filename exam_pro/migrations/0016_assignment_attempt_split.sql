@@ -150,3 +150,7 @@ COMMENT ON VIEW attempts IS
     '唯讀相容檢視：只含「新題」派題（每生每題第一次），欄位同 0016 之前的 attempts 表。不含重練；寫入請寫 assignments 與 attempt_records';
 COMMENT ON VIEW assignment_attempts IS
     '唯讀檢視：全部派題（含重練）與其作答。卷層讀取（試卷明細、批改、批改完成率）用這一個（0016）';
+
+-- 大量搬資料後立刻更新統計，避免在 autoanalyze 之前，弱點面板與候選池經由檢視查新表時只能用預設估計（審查意見）
+ANALYZE assignments;
+ANALYZE attempt_records;
