@@ -212,6 +212,141 @@ function chemistrySubjectPrior(text, opts = {}) {
     return isChemistryOnlyQuery(text, opts) || namesChemistry(text);
 }
 
+// ───────────────── LLM 輔路徑的證據檢查（〔dec/x-nlq-improve〕2026-09-26）─────────────────
+//
+// 用途：nlqService.mergeLlm 合併 LLM 的結果時，**句子裡找不到證據的條件不採用**（見 docs/retrieval.md 第 9 條）。
+// 規則層只認得 TYPE_ALIASES 與 DIFFICULTY_RULES 的固定寫法；走到 LLM 輔路徑時，那兩欄若規則沒抓到，
+// 原本一律照收 LLM 的值。2026-09-25 本機模型（qwen3:8b）重錄時，LLM 路徑 8 句裡有 2 句句子完全沒提到題型，
+// 模型卻因為「求…」「…是多少」回了「計算」——題型是硬篩選，多一個題型就把老師要的填空題整批排除。
+// 模板規則 4 早就要求「沒提到的條件不要輸出」，這裡是伺服器端的同一條規則：模型有沒有照做，由句子本身來驗。
+//
+// 這兩張表是「寬」的：多收一個字只會讓閘門少擋一次（退回原本照收 LLM 的行為），少收一個字卻會丟掉老師真的講過的條件。
+
+/**
+ * 題型的證據字。TYPE_ALIASES 的寫法規則層本來就抓得到（抓到時規則的題型優先，LLM 的不看）；
+ * 這裡另外收規則層不處理、但老師確實在講題型的說法：「選擇」「非選」「選項」都含「選」、「填格子」含「填」、
+ * 「試證」「求證」含「證」，以及白名單以外的題型名（問答、申論、論述、簡答、是非、應用題）——
+ * 後者 LLM 可能對到最接近的白名單題型，對不上的再由 validateFilters 丟掉並附警告。
+ * 「演算題」「運算題」是計算題的別稱（規則層不認得、也不含「計算」兩字），「非選」已含「選」，列出來是讓表一眼看得懂。
+ * 刻意不收「算」：「怎麼算」「求…」「是多少」是題目本身在問的東西，不是老師指定的題型。
+ * （「運算」也會出現在「向量的運算」這類單元名稱裡；那是寬的一側——只會讓檢查少擋一次，見上方說明。）
+ */
+const QUESTION_TYPE_CUES = Object.freeze([
+    '選', '非選', '填', '計算', '演算', '運算', '證', '問答', '申論', '論述', '簡答', '是非', '應用題', '題型'
+]);
+
+/**
+ * 難度的證據字。schema 允許「難一點」「有挑戰性」這類模糊講法（nlq.json 的 difficulty_min 說明），
+ * 所以收的是會出現在這類講法裡的字；「星」「級」對應規則層的「N 星」「N 級」，「深」「高階」對應「深一點」「高階一點」。
+ * （「深」也會出現在「水深」，「易」在「容易」，「級」在「年級」——都是寬的一側，只會讓檢查少擋一次。）
+ */
+const DIFFICULTY_CUES = Object.freeze([
+    '難', '易', '簡單', '基礎', '基本', '進階', '高階', '挑戰', '程度', '送分', '入門', '中等', '普通',
+    '頂標', '前標', '均標', '後標', '艱深', '深', '輕鬆', '星', '級'
+]);
+
+/**
+ * 句子裡有沒有講到題型。純函式。
+ * @param {string} text
+ * @returns {boolean}
+ */
+function mentionsQuestionType(text) {
+    const s = String(text ?? '');
+    return QUESTION_TYPE_CUES.some(w => s.includes(w));
+}
+
+/**
+ * 句子裡有沒有講到難度。純函式。
+ * @param {string} text
+ * @returns {boolean}
+ */
+function mentionsDifficulty(text) {
+    const s = String(text ?? '');
+    return DIFFICULTY_CUES.some(w => s.includes(w));
+}
+
+/**
+ * 平面／空間的線索（數學的向量與直線各有平面、空間兩章）。
+ * 平面只收「明講平面坐標系」的寫法：單一個「平面」不算——「平面方程式」「過三點的平面」是空間單元的題材。
+ * 空間收「空間」「三維」「立體」與第三個坐標軸。比對前去掉空白、轉小寫（「xy 平面」「Z 軸」）。
+ */
+const PLANE_CUES = Object.freeze(['平面上', '平面向量', '坐標平面', '座標平面', '平面坐標', '平面座標', '二維', 'xy平面']);
+const SPACE_CUES = Object.freeze(['空間', '三維', '立體', 'xyz', 'z軸', 'z坐標', 'z座標']);
+
+/**
+ * 「平面」兩字指的是一個幾何物件（空間單元的題材）、不是在講二維的寫法：平面方程式、過…的平面、點到平面、
+ * 平面的法向量、兩平面、平面與平面；物理的平面運動、平面鏡、平面波也在內（與數學章的維度無關）。
+ * dimensionCue 判斷「有空間線索的句子是不是也講了平面」之前，先把這些拿掉。
+ */
+const SPATIAL_PLANE_OBJECT = /平面方程式?|過[^，。、,；;！？!?]*?的平面|(?:點|直線|線)到平面|平面的?法向量|[兩二]平面|平面[與和跟及][^，。、,；;]{0,3}平面|平面(?:運動|鏡|波)/g;
+
+/**
+ * 句子明講的是平面還是空間。純函式。
+ *
+ * 回 null（不換任何章）的情況：
+ *   - 兩種線索都沒有；
+ *   - 兩種線索都有（「空間中的平面上一點」「二維和三維的都要」）；
+ *   - 有空間線索，句子**另外**還出現「平面」兩字、而且不是 SPATIAL_PLANE_OBJECT 那類空間題材——
+ *     「平面和空間的都要」「平面跟空間各來幾題」是兩個維度都要。單一個「平面」不算平面線索（見 PLANE_CUES），
+ *     但出現在有空間線索的句子裡時足以說明句子不是只講空間。寧可不換（退回模型自己的選擇），
+ *     也不要把老師要的那一章換掉（〔dec/x-nlq-improve-fix〕審查意見）。
+ * @param {string} text
+ * @returns {'plane'|'space'|null}
+ */
+function dimensionCue(text) {
+    const s = String(text ?? '').replace(/\s+/g, '').toLowerCase();
+    const plane = PLANE_CUES.some(w => s.includes(w));
+    const space = SPACE_CUES.some(w => s.includes(w));
+    if (plane && space) return null;
+    if (plane) return 'plane';
+    if (!space) return null;
+    return s.replace(SPATIAL_PLANE_OBJECT, '').includes('平面') ? null : 'space';
+}
+
+/**
+ * 空間章 → 同名的平面章：數學白名單裡「空間 + X」而且 X 本身也是數學章節的那幾對
+ * （2026-09-26 為「空間向量內積 → 向量內積」「空間直線方程式 → 直線方程式」）。
+ * 由 CHAPTERS 動態算，章節改名時不必改這裡；沒有同名平面章的空間章（外積、平面方程式、空間概念與座標系）不在表內。
+ */
+const SPACE_TO_PLANE = Object.freeze(Object.fromEntries(
+    (CHAPTERS['數學'] || [])
+        .filter(c => c.startsWith('空間') && (CHAPTERS['數學'] || []).includes(c.slice(2)))
+        .map(c => [c, c.slice(2)])
+));
+const PLANE_TO_SPACE = Object.freeze(Object.fromEntries(Object.entries(SPACE_TO_PLANE).map(([s, p]) => [p, s])));
+
+/**
+ * 依句子明講的平面／空間，把 LLM 挑錯維度的章換成同名的另一章。純函式。
+ *
+ * 只在句子**明講**單一維度時才換（dimensionCue 不是 null），而且只換 SPACE_TO_PLANE 表內有對應的章；
+ * 其餘原樣保留、順序不變、去重。
+ * **同名的另一章已經在清單裡就不換**：模型把平面、空間兩章都列出來，可能就是老師要兩個都要
+ * （句子判斷漏掉的講法），換掉會把老師要的那一章刪掉、候選集少一半；兩章都留著最多只是多混進一章的題，
+ * 不會丟掉相關題（〔dec/x-nlq-improve-fix〕審查意見）。所以這裡只修「模型只挑了錯的那一個維度」。
+ * 為什麼需要：golden nlq-042 的原句沒講平面或空間，Owner 裁決（CR-8 之二）改寫為「平面上…」消除歧義，
+ * 2026-09-25 本機模型重錄仍回了「空間向量內積」（沒有同時回「向量內積」）——句子已經講清楚的事，不該讓模型再猜一次。
+ *
+ * @param {string[]} chapters LLM 給的章節（尚未過白名單）
+ * @param {string} text 老師的原句
+ * @returns {{chapters:string[], changes:Array<{from:string, to:string}>}}
+ */
+function alignChapterDimension(chapters, text) {
+    const list = Array.isArray(chapters) ? chapters : [];
+    const cue = dimensionCue(text);
+    const table = cue === 'plane' ? SPACE_TO_PLANE : cue === 'space' ? PLANE_TO_SPACE : null;
+    const out = [];
+    const changes = [];
+    for (const chapter of list) {
+        const counterpart = table && typeof chapter === 'string' && Object.prototype.hasOwnProperty.call(table, chapter)
+            ? table[chapter] : null;
+        const mapped = counterpart !== null && !list.includes(counterpart) ? counterpart : chapter;
+        if (out.includes(mapped)) continue;   // 模型重複列同一章：只留一個、也只記一次
+        out.push(mapped);
+        if (mapped !== chapter) changes.push({ from: chapter, to: mapped });
+    }
+    return { chapters: out, changes };
+}
+
 /**
  * 在 marks 全是 FREE 的區段裡找 needle 的第一個位置。
  * 已經被吃掉的字元不得再參與比對，否則「摩擦力」會在「靜摩擦力」被吃掉之後又命中一次。
@@ -508,5 +643,17 @@ module.exports = {
     isChemistryOnlyQuery,
     // 〔Owner 決策單 2026-09-25 B5〕LLM 輔路徑加上化學後，規則層的化學推定改當退路
     namesChemistry,
-    chemistrySubjectPrior
+    chemistrySubjectPrior,
+    // 〔dec/x-nlq-improve〕LLM 輔路徑的證據檢查（nlqService.mergeLlm）
+    QUESTION_TYPE_CUES,
+    DIFFICULTY_CUES,
+    PLANE_CUES,
+    SPACE_CUES,
+    SPATIAL_PLANE_OBJECT,
+    SPACE_TO_PLANE,
+    PLANE_TO_SPACE,
+    mentionsQuestionType,
+    mentionsDifficulty,
+    dimensionCue,
+    alignChapterDimension
 };

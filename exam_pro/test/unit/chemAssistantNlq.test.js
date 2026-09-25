@@ -178,7 +178,9 @@ describe('NLQ 的 LLM 輔路徑（nlq.v2）支援化學', () => {
 
     test('非法章名仍被擋：打錯的章名、跨科的章名丟掉那一個並附警告，合法的留下', async () => {
         const llm = fakeLlm({ subject: '化學', chapters: ['化學平衡', '向量內積', '勒沙特列原理'], question_types: ['計算', '論述'], semantic_text: '反應進行的方向', keywords: [] });
-        const r = await nlq.parseOnly({ query: '化學 反應進行的方向', llm, noCache: true });
+        // 〔dec/x-nlq-improve〕mergeLlm 起，句子沒提到題型時 LLM 的題型不採用（原句「化學 反應進行的方向」沒有題型字眼）。
+        // 句尾補「要論述題」：規則層不認得「論述」（不是白名單題型），題型仍由 LLM 給，這個測試照舊測白名單再驗。
+        const r = await nlq.parseOnly({ query: '化學 反應進行的方向，要論述題', llm, noCache: true });
         assert.equal(llm.calls.length, 1, '規則沒抓到章節，走 LLM');
         assert.equal(r.filters.subject, '化學');
         assert.deepEqual(r.filters.chapters, ['勒沙特列原理']);

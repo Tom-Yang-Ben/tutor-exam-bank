@@ -5,22 +5,30 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "keywords",
     "chapters",
     "question_types",
-    "semantic_text",
-    "keywords"
+    "semantic_text"
   ],
   "propertyOrdering": [
+    "keywords",
     "subject",
     "chapters",
     "question_types",
     "difficulty_min",
     "difficulty_max",
     "exclude_student_name",
-    "semantic_text",
-    "keywords"
+    "semantic_text"
   ],
   "properties": {
+    "keywords": {
+      "type": "array",
+      "maxItems": 8,
+      "description": "最先寫這一欄：列出這句話裡的關鍵名詞，再依這些名詞判斷學科與章節。供除錯與前端顯示用；不影響 SQL。",
+      "items": {
+        "type": "string"
+      }
+    },
     "subject": {
       "type": "string",
       "x-enum": "subject_all",
@@ -29,7 +37,7 @@
     "chapters": {
       "type": "array",
       "maxItems": 3,
-      "description": "最相關的精細章節，最多 3 個，依相關性由高到低。每個都必須完全等於白名單中的字串（化學章名在白名單裡以「」框起，輸出時不要帶「」）。想不到任何一章就回空陣列，不要硬填。",
+      "description": "解這類題主要用到的精細章節，依相關性由高到低，通常 1 個，最多 3 個；只有另一章的觀念也同樣是解題主角時才多列。每個都必須完全等於白名單中的字串（化學章名在白名單裡以「」框起，輸出時不要帶「」）。想不到任何一章就回空陣列，不要硬填。",
       "items": {
         "type": "string",
         "x-enum": "chapter_all"
@@ -38,7 +46,7 @@
     "question_types": {
       "type": "array",
       "maxItems": 5,
-      "description": "使用者指定的題型。沒有指定就回空陣列——空陣列的意思是「不限題型」，不是「找不到」。",
+      "description": "使用者指定的題型。沒有指定就回空陣列——空陣列的意思是「不限題型」，不是「找不到」。「求…」「…是多少」「怎麼算」是題目在問的東西，不算指定題型。",
       "items": {
         "type": "string",
         "x-enum": "question_type"
@@ -62,15 +70,7 @@
     },
     "semantic_text": {
       "type": "string",
-      "description": "拿去做向量檢索的查詢字串：把口語的贅字（幫我、有沒有、題目、麻煩）拿掉，只留下概念詞與名詞，以空白分隔。例如「幫我找一些斜面上物體受力平衡的計算題」→「斜面上物體受力平衡」。不要加上章節名以外的自創術語。"
-    },
-    "keywords": {
-      "type": "array",
-      "maxItems": 8,
-      "description": "這句話裡的關鍵名詞，供除錯與前端顯示用；不影響 SQL。",
-      "items": {
-        "type": "string"
-      }
+      "description": "拿去做向量檢索的查詢字串：保留老師描述題目內容的原話與語序，只拿掉口語贅字（幫我、有沒有、題目、麻煩）與已經放進其他欄位的條件（難度、題型、學生）。不要改寫成關鍵字清單，也不要加上句子裡沒有的術語。例如「幫我找一些球從桌邊水平滾出去落地點多遠的計算題，難度 3 以上」→「球從桌邊水平滾出去落地點多遠」。"
     }
   }
 }
