@@ -1,6 +1,7 @@
 name: CI
 
-# 這個 repo 有 exam / exam_pro 兩個子專案，測試在 exam_pro 底下，
+# 系統本體與測試都在 exam_pro 底下（舊版原型 exam/ 已於 2026-09-27 從主線移除，
+# 原始碼保留在 tag v1-mysql），
 # 因此所有 run 步驟都設定 working-directory: exam_pro。
 #
 # 兩個 job（規劃 §5.3.4）：

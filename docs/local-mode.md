@@ -157,7 +157,7 @@
 | LM-6 | L2 補的契約空白：化學 OCR 模板 `extract_ocr_chem.v1`；每題 `cross_check.picked`、outcome 的 `cross_check_summary`；採 OCR 版時圖表欄位仍取視覺版；`OCR_ENGINE` 非法值退回 `paddle` | 全部核准 |
 | LM-7 | `services/nlqService.js` 沒設 `MODEL_NLQ` 時寫死 Gemini（會連外） | 預設改成 `ollama:qwen3:8b`；`eval/lib/localMode.js` 的 `NLQ_CODE_DEFAULT` 同步。執行期 `NLQ_TIMEOUT_MS` 仍是 4000（實際上只用規則解析，查詢不會卡一兩分鐘）；錄製時由 rerecord 帶長逾時 |
 | LM-8 | 預設改本機後，專測 Gemini 路徑的整合測試（`chemistry.pg`、`jobs.pg`、`tutor.pg`）與 `agentExtract` 的一則單元測試走到本機路徑 | 這些測試在自己的行程內明寫 Gemini 模型（每個測試檔是獨立行程，不外溢）；斷言一條都不改。本機路徑由 `localExtract.pg.test.js`、`llmOllama*.test.js`、`extractLocal*.test.js` 覆蓋 |
-| LM-9 | 契約外仍寫死 Gemini 的地方 | 全部改讀 `config/models.js`：`scripts/backfill_embeddings.js`（EMBED_MODEL）、`eval/lib/pipelineDriver.js`（extract、ocrStructure、一塊頁數與 runner 同規則）、`workers/jobRunner.js`（估價用 `parseModel().id`，`ollama:qwen3:8b` 不再被截成 `8b`；模組缺失時的退路字面值）。刻意不改：`services/legacy/analyzePdf.js`（凍結快照）、`scripts/spike_genai.js`、舊版 `exam/` |
+| LM-9 | 契約外仍寫死 Gemini 的地方 | 全部改讀 `config/models.js`：`scripts/backfill_embeddings.js`（EMBED_MODEL）、`eval/lib/pipelineDriver.js`（extract、ocrStructure、一塊頁數與 runner 同規則）、`workers/jobRunner.js`（估價用 `parseModel().id`，`ollama:qwen3:8b` 不再被截成 `8b`；模組缺失時的退路字面值）。刻意不改：`services/legacy/analyzePdf.js`（凍結快照）、`scripts/spike_genai.js`、舊版 `exam/`。〔2026-09-27 `dec/cleanup-exam-legacy`〕舊版 `exam/` 已從主線移除，原始碼保留在 tag [`v1-mysql`](https://github.com/Tom-Yang-Ben/tutor-exam-bank/tree/v1-mysql/exam)，這一項已不適用 |
 | LM-10 | L1 的實作判斷：schema 欄位說明附加到 system（Ollama 看不到 schema 的 description）；模型不支援 thinking 時去掉 `think` 重試一次；`OLLAMA_HOST=0.0.0.0`／`::` 視為本機；embedding 與 LLM 共用 Ollama 併發桶；估價以 `ollama:` 前綴或 `name:tag` 判定為本機 | 全部核准。已知風險：Ollama 沒有 thinking 預算，`num_predict` 含思考 token，結構化輸出可能被截斷——出現 `MAX_TOKENS` 時先調大 `maxOutputTokens` |
 | LM-11 | 家教：本機模板 `tutor.*.local.v1` 只改「驗算」那幾句；回覆仍宣稱跑過程式時附更正提醒 | 核准；Gemini 路徑不動 |
 | LM-12 | 已知限制（不在這一輪處理） | ①一塊 2 頁會切到跨頁的題，兩個引擎看到同一個被切斷的題可能「一致」而自動入庫——之後可加一頁前瞻；②45 分鐘節點逾時在 i5-8265U 上可能不夠（`JOB_NODE_TIMEOUT_MS` 可調大）；③相似度門檻 0.85 會讓複核比例偏高，本機重錄後再校準；④PaddleOCR 在含中文的 Windows 路徑可能載不到模型，`OCR_MODEL_HOME` 設成純英文路徑；⑤舊的同步 `/analyze-pdf` 在本機模式不實用；⑥PaddleOCR 還沒在實機跑過（雲端 container 下載不到模型），第一次在 Owner 電腦上執行 `setup_local_ai.bat` 才算驗證。〔修訂 2026-09-26 決策單 B18／B21〕Owner 2026-09-25 決策單：本機拆題的限制等上傳幾份卷後再看（待決）；⑤的 `/analyze-pdf` 保留並補裁圖（由 `dec/b21-legacy-analyze-pdf-figures` 實作），本機模式下仍慢。〔Owner 決策單 2026-09-26 第四輪 V1～V4〕②：Owner 的 `.env` 直接放寬（V1，10.11）、本機拆題逾時只重試 1 次（V3）；⑤：`/analyze-pdf` 本機模式沒寫 `JOB_PDF_CHUNK_PAGES` 時改為每塊 2 頁（V4）——仍是同步請求，一塊一塊依序跑，4 頁卷仍要等兩塊的時間 |
@@ -276,7 +276,20 @@ JOB_CONCURRENCY=2                    # 選填
 - 也可以只把某一個節點切回 Gemini（例如只改 `MODEL_VERIFY`），那一個節點就會連外、花錢，其餘仍在本機。
 - `MODEL_TEXT`（分類、公式重寫等純文字工作）不寫時自動跟著走：拆題模型改回 Gemini 就等於 `MODEL_EXTRACT`。若 `.env` 裡明寫了 `MODEL_TEXT=ollama:…`，要一併刪掉或改掉，否則這幾個節點仍在本機。
 - 語音提問只在 `MODEL_VOICE`（未設時沿用 `MODEL_EXTRACT`）是 `gemini:` 時可用。
-- **CI 讀哪一組回放檔不看 `.env`**，看 `.github/workflows/ci.yml` 的 `MODEL_EXTRACT`／`MODEL_VERIFY`／`EMBED_MODEL`／`MODEL_NLQ`。要讓 CI 也回到 Gemini，改那四行並用 Gemini 重錄（會花錢）；舊的 Gemini 回放檔若還沒被 `cassettes:prune` 刪掉，可以直接沿用（見 10.7）。
+- **CI 讀哪一組回放檔不看 `.env`**，看 `.github/workflows/ci.yml` 的 `MODEL_EXTRACT`／`MODEL_VERIFY`／`EMBED_MODEL`／`MODEL_NLQ`。要讓 CI 也回到 Gemini，改那四行並用 Gemini 重錄（會花錢）；~~舊的 Gemini 回放檔若還沒被 `cassettes:prune` 刪掉，可以直接沿用（見 10.7）。~~
+  〔修訂 2026-09-27 `dec/cleanup-exam-legacy`〕**舊的 Gemini 回放檔大多已經不能直接沿用**。2026-09-27 以 `eval/lib/cassetteAudit.js` 的 `auditKeys`（用現在的模板與 schema 重算每支 cassette 的鍵）對 `889d18f` 盤點，並用上面這組 Gemini 設定、CI 的回放模式（`LLM_MODE=replay`、`EMBED_MODE=fixture`）把五個 eval 各跑一次，結果如下（Gemini 回放檔一支都沒刪，照決策單 C 暫緩）：
+
+  | 回放檔（Gemini） | 鍵還有效 | 切回 Gemini 時 | 原因 |
+  |---|---|---|---|
+  | `classify`（`classify.v1`） | 0／181 | **要重錄**：classify suite 92 筆全部 replay miss | 模板已升 `classify.v2`（本機錄的 `classify.v1` 92 支也一樣失效） |
+  | `nlq`（`nlq.v1`） | 0／16 | **要重錄**：nlq 的 LLM 路徑 8 句全部 replay miss；規則路徑不呼叫 LLM，不受影響 | 模板已升 `nlq.v2`（本機錄的 8 支也一樣失效） |
+  | `variant`（`variant.v1`） | 0／87 | **要重錄** | 這批最晚一支錄於 2026-09-24 22:05（UTC），早於 `522f81c`（章節白名單依冊別分組），鍵已對不上；本機 9/25 錄的 60 支有效 |
+  | `extract`（`extract.v2`） | 0／1 | **要重錄**：pipeline 的 extract 一開始就 replay miss，e2e 用同一份樣卷、同一組呼叫 | 2026-09-15 錄的，之後模板或 schema 改過 |
+  | `verify`（`verify.v1`） | 58／58 | 鍵有效，但實際讀不讀得到要看上游：題幹來自 extract（pipeline／e2e）或出變式（variant），上游重錄後題幹只要差一個字就是新鍵 | — |
+  | `lint`（`lint.v2`） | 1／1 | 同 verify | — |
+  | 向量檔 `embeddings.gemini-embedding-001.768.json` | 62 題缺 5 題（id 51、53、54、55、62） | **要補向量**：retrieval 與 variant 在第一步就停，nlq 的 `recall10` 是 n/a；`npm run cassettes:rerecord` 的第一步（`eval/record_embeddings.js --only-missing`）只補缺的、只呼叫 embedding，費用很小 | 向量檔以 `embed_text` 的雜湊當鍵：#62 是 `49256a0` 新增的干擾題，#51、#53、#54、#55 在同一個 commit 改了章（章名在 `embed_text` 裡），檔裡沒有這 5 段新文字的 Gemini 向量 |
+
+  所以切回 Gemini 後要用 Gemini 做的是：補 5 題向量，重錄 classify、nlq、variant、pipeline＋e2e，也就是 `npm run cassettes:rerecord` 的全部步驟。還能用的只有 verify、lint 那 59 支的鍵，但 `LLM_MODE=record` 每一次呼叫都會真的打模型、同鍵覆寫（`services/llm/index.js`），重錄 pipeline 時它們還是會被重新呼叫，**省不到錢**。要估費用，先把 `ci.yml` 那四行改成 Gemini，再跑 `npm run cassettes:rerecord -- --dry-run` 看盤點。這張表是 2026-09-27 的快照，之後再改模板或 schema 就會變；重算方法：在 `exam_pro/` 執行 `node -e "const a=require('./eval/lib/cassetteAudit');for(const e of a.auditKeys(a.inventory().entries))console.log(e.keyValid?'有效':'失效',e.agent,e.model,e.template)"`。
 
 ### 10.5 預期速度與品質
 
@@ -328,7 +341,7 @@ CI 不裝 Ollama、不裝 Python，只讀 repo 裡錄好的回放檔（cassette�
    - 模型一律照 `ci.yml`，`.env` 的 `MODEL_*` 不會帶進去（照 `.env` 錄的鍵 CI 讀不到）。
 4. 太久的話可以分次錄：在 `exam_pro\scripts\windows\` 開命令列執行 `record_local.bat classify,nlq`（逗號分隔、不加空白；等於 `--suites classify,nlq`）；或 `npm run cassettes:rerecord -- --dry-run` 先看盤點。
 5. 錄完：`git add eval/cassettes eval/fixtures/embeddings.*.json`，commit、push。本機的向量檔叫 `eval/fixtures/embeddings.ollama-qwen3-embedding-0.6b.768.json`（模型名裡的 `:` 換成 `-`，Windows 檔名不能有冒號）。
-6. `npm run cassettes:prune` 會把原本 Gemini 錄的回放檔列為「CI 不再讀到」。**還想保留讓 CI 切回 Gemini 的可能，就先不要 `--apply`**（刪掉之後要切回就得再用 Gemini 重錄、花錢）；確定不回頭再刪。
+6. `npm run cassettes:prune` 會把原本 Gemini 錄的回放檔列為「CI 不再讀到」。**還想保留讓 CI 切回 Gemini 的可能，就先不要 `--apply`**（刪掉之後要切回就得再用 Gemini 重錄、花錢）；確定不回頭再刪。〔修訂 2026-09-27〕保留下來的 Gemini 回放檔大多已經讀不到（見 10.4 的表）：就算不刪，切回 Gemini 也還是要重錄 classify、nlq、variant、pipeline＋e2e，並補 5 題向量。刪不刪由 Owner 決定（決策單 C 暫緩）。
 7. 回放驗證有門檻未達時，照 10.5 最後一點：不放寬，交給 Owner 裁決。〔修訂 2026-09-26 決策單 A7〕Owner 已裁決：門檻不放寬、照實紅燈，之後改善；帶紅燈的 PR 能否合併等第二輪 X1。
    〔整合 2026-09-26〕X1 已答（見 [`HANDOFF.md` §0.00a](HANDOFF.md#000a-owner-決策單第二三輪2026-09-26修訂-2026-09-26-決策單第二三輪)）：只有 eval 分數可以紅燈合併，unit、integration、e2e 必須綠，PR 說明列出未達項。
 8. **〔2026-09-26 修正〕variant 那一步最後報「dedup1 取不到變式題的向量（EMBED_MODE=fixture）：embedding fixture 查無此文本」、`gate_pass_rate` n/a**：舊版 `eval/lib/suiteVariant.js` 的 dedup1 寫死去讀向量檔，不看 `EMBED_MODE`（訊息裡的「EMBED_MODE=fixture」也是寫死的字，子行程其實是 record）。平常查得到，是因為出變式的跑題檢查剛剛才把**同一段文字**錄進檔；classify 換了章、或 lint 改寫了題幹（例：模型寫 `\overrightarrow`、lint 改成 `\vec`）的那幾題，dedup1 要的那一段沒有人錄過。`dec/fix-variant-embed-record` 已修正：錄製時 dedup1 也呼叫 embedding 模型並寫進向量檔。

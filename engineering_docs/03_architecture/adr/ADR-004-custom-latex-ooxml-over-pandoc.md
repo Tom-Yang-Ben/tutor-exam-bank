@@ -1,6 +1,6 @@
 # ADR-004: 自製 LaTeX→OOXML 轉換而非採用 pandoc (Custom LaTeX to OOXML over Pandoc) - 家教專用數理題庫系統
 
-> **版本:** v1.1 | **更新:** 2026-08-29 | **狀態:** 活躍
+> **版本:** v1.2 | **更新:** 2026-09-27 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L3（工程）
 > **實例:** 每決策一份（`ADR-NNN-<slug>.md`）
@@ -8,6 +8,7 @@
 > **定位:** 本文件回答「Word 匯出的公式引擎為何自製解析器而非 pandoc」；AI 輸出的 LaTeX 白名單約束見 ADR-005，系統全貌歸 sad。
 
 > 🛠 **2026-08-29 修訂**（PR #3–#7 程式碼同步）：文末新增「後續（2026-08-29 記）」——矩陣升級為原生 OMML 二維排版（PR #4/#5）；不改 §3 決策內文。本輪所有修改處均以〔修訂 2026-08-29〕行內標記。
+> 🛠 **2026-09-27 修訂**（dec/cleanup-exam-legacy）：舊版原型 `exam/` 已從主線刪除；§2 與 §5 提到的 `exam/server.js` 加註原始碼位置（tag `v1-mysql`）。決策內文不變。修改處以〔修訂 2026-09-27〕行內標記。
 
 ## 目錄
 
@@ -31,7 +32,7 @@
 | 方案 | 優勢 | 限制 | 未採用的原因 |
 |---|---|---|---|
 | **pandoc** | 文件轉換業界標準，LaTeX 覆蓋率遠勝自製解析器 | 單位是整份文件；外部二進位相依，每次請求需 `spawn`，部署環境須另裝執行檔；產檔後無法再回頭程式化插入版面元素 | 輸入是 DB 題目列而非 LaTeX 文件；交付物需以 `docx` 物件模型逐段建構 |
-| **temml：LaTeX→MathML→字串包裝 OMML**（原型 `exam/server.js` 實際採用後淘汰） | 實作快 | 本質是「MathML 標籤穿 OOXML 外衣」，Word 不保證接受 | 中介方案已試過並淘汰；無法保證產出可編輯的原生方程式 |
+| **temml：LaTeX→MathML→字串包裝 OMML**（原型 `exam/server.js` 實際採用後淘汰；〔修訂 2026-09-27〕原型已從主線移除，原始碼見 tag `v1-mysql` 的 [`exam/server.js`](https://github.com/Tom-Yang-Ben/tutor-exam-bank/blob/v1-mysql/exam/server.js)） | 實作快 | 本質是「MathML 標籤穿 OOXML 外衣」，Word 不保證接受 | 中介方案已試過並淘汰；無法保證產出可編輯的原生方程式 |
 | **公式貼圖** | 迴避 OOXML 複雜度 | 紙本列印品質差；學生端無法得到直式分數的可編輯公式 | 違反 DEC-002 核心約束 |
 | **自製 tokenizer＋遞迴下降解析器 → `docx` 原生 Math 物件**（採納） | 零外部相依；版面完全可控；失敗可局部降級 | 僅支援 LaTeX 語法子集 | — |
 
@@ -63,7 +64,7 @@
 | :--- | :--- |
 | 觸發來源 | DEC-001、DEC-002、FR-009 |
 | 影響範圍 | FR-003（公式 lint 與解析器對齊）、NFR-001（圖片插入防 SSRF）；api_spec（download-word） |
-| 取代關係 | Supersedes：原型 temml→MathML 方案（`exam/server.js`，ARCHIVED）；Superseded-by 無 |
+| 取代關係 | Supersedes：原型 temml→MathML 方案（`exam/server.js`，ARCHIVED；〔修訂 2026-09-27〕2026-09-27 從主線移除，原始碼保留在 tag [`v1-mysql`](https://github.com/Tom-Yang-Ben/tutor-exam-bank/blob/v1-mysql/exam/server.js)）；Superseded-by 無 |
 | 相關 ADR | ADR-005（LaTeX 白名單為本解析器的前置防線） |
 
 ## 後續（2026-08-29 記）〔修訂 2026-08-29〕

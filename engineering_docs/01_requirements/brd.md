@@ -1,12 +1,13 @@
 # 商業需求文件 (BRD) - 家教專用數理題庫系統
 
-> **版本:** v1.1 | **更新:** 2026-09-15 | **狀態:** 活躍
+> **版本:** v1.2 | **更新:** 2026-09-27 | **狀態:** 活躍
 > **Owner:** Ben（楊本顥）
 > **語域:** L2（業務／需求）
 > **實例:** 單例（整個系統一份）
 > **定位:** 本文件回答「為何建置此系統、商業層要達成什麼、以何標準驗收」；不含功能規格與技術方案（前者見 [`srs.md`](./srs.md)，後者見 [`../03_architecture/adr/`](../03_architecture/adr/)）。
 
 > 🛠 **2026-09-15b 修訂**（feat/pseudonymize-student-names 程式碼同步）：DEC-009 補「學生姓名不出境」子句——原決策文字未涵蓋 NLQ 與助教兩條會把姓名送進 prompt 的路徑，本輪以代號化實作補齊。修改處以〔修訂 2026-09-15b〕行內標記。
+> 🛠 **2026-09-27 修訂**（dec/cleanup-exam-legacy）：Owner 決定把舊版原型 `exam/` 從主線刪除；§3 過渡期並行策略與 §5 原型那一列加註原始碼的新位置（tag `v1-mysql`）。商業規則與里程碑內容不變。修改處以〔修訂 2026-09-27〕行內標記。
 
 ## 目錄
 
@@ -48,7 +49,7 @@ flowchart LR
 ```
 
 - 與 As-Is 的關鍵差異：拆題與入庫全自動（含分類、公式修復、獨立驗答、去重；有疑慮的題目進人工複核佇列而不阻塞其餘題目）；已作答排除由資料庫（attempts）取代人工記憶；公式排版由自製 LaTeX→OOXML 轉換取代手動操作。
-- 過渡期並行策略：原型 `exam/` 封存（ARCHIVED）僅作重構對照，實際執行一律使用 `exam_pro/`；資料層由 MySQL 切換至 PostgreSQL 16 + pgvector，於 2026-08-21 依 `docs/archive/cutover-runbook.md` 切換上線並定義回滾界線。
+- 過渡期並行策略：原型 `exam/` 封存（ARCHIVED）僅作重構對照，實際執行一律使用 `exam_pro/`（〔修訂 2026-09-27〕舊版原型已於 2026-09-27 從主線移除，原始碼保留在 tag [`v1-mysql`](https://github.com/Tom-Yang-Ben/tutor-exam-bank/tree/v1-mysql/exam)）；資料層由 MySQL 切換至 PostgreSQL 16 + pgvector，於 2026-08-21 依 `docs/archive/cutover-runbook.md` 切換上線並定義回滾界線。
 - 成功標準：上傳 PDF → 自動拆題入庫 → 選學生一鍵組卷 → 匯出可直接列印的 Word，全程零手動排版；同一學生保證不會拿到寫過的題目（來源：根 README「成功標準」）。
 
 ## 4. 業務規則：需求決策的商業層對應 (Business Rules)
@@ -71,7 +72,7 @@ flowchart LR
 
 | 階段 | 主題 | 商業層交付 | 狀態 |
 | :--- | :--- | :--- | :--- |
-| 原型 | `exam/` 單檔驗證 | 驗證「AI 拆題＋組卷＋匯出」核心流程可行 | ARCHIVED（保留當重構對照） |
+| 原型 | `exam/` 單檔驗證 | 驗證「AI 拆題＋組卷＋匯出」核心流程可行 | ARCHIVED；〔修訂 2026-09-27〕2026-09-27 從主線移除，原始碼保留在 tag [`v1-mysql`](https://github.com/Tom-Yang-Ben/tutor-exam-bank/tree/v1-mysql/exam)（重構對照） |
 | 重構 | `exam_pro/` v1 | 可對外部署的系統：白名單硬驗證、LaTeX→OOXML 公式引擎、認證、限流、交易 | ✅ |
 | 階段 1 | 資料層（MySQL→PG16+pgvector） | 學生／作答正規化、hybrid 檢索、eval 體系；2026-08-21 切換上線 | ✅ |
 | 階段 2 | Agent 管線 | 拆題全自動化：硬閘門、部分入庫、人工複核佇列、cassette | ✅ |

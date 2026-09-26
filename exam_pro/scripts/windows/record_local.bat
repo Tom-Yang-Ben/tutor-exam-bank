@@ -83,7 +83,9 @@ echo.
 echo 下一步（在 exam_pro 資料夾）：
 echo   1. git add eval/cassettes eval/fixtures/embeddings.*.json，commit、push。
 echo   2. npm run cassettes:prune 會列出 CI 不再讀到的舊檔，包括原本 Gemini 錄的 cassette；
-echo      還想保留切回 Gemini 的可能就先不要 --apply（見 docs\local-mode.md 第 10 條）。
+echo      先不要 --apply（Owner 決定暫緩刪除）。但就算留著，切回 Gemini 時 classify、nlq、
+echo      variant、pipeline 與 e2e 仍要用 Gemini 重錄，現有的 Gemini 回放檔大多已讀不到
+echo      （模板或 schema 改過；見 docs\local-mode.md 10.4）。
 echo.
 echo 完整輸出：%LOG%
 pause
