@@ -34,12 +34,20 @@
 //
 // ⚠ 錄 cassette 與跑 eval 時 **ctx.db 一律為 null**（裁決 S2-8）：cassette 的鍵含 fewShotIds，
 //   接了資料庫錄出來的鍵帶著一串題目 id，CI 沒有那個庫、fewShotIds 會是 []，鍵對不上、全部 miss。
+//
+// 〔dec/local-classify-nlq-prep〕2026-09-26 第二層的輸出多一道**程式後處理**（postProcessChapter，
+//   規則在 utils/chapterPostRules.js；docs/local-mode.md 10.12）：名稱容錯，以及題幹有 Owner 規則寫明的證據時
+//   在相鄰兩章之間換章（A5 的指數／對數分冊、平面／空間、靜電學／電場與電位、K2 的一維／二維相對速度、
+//   自由落體的數值題）。後處理在 generateJson 之後，**不進 cassette 的鍵**：模板、schema、cacheKeyParts 一個字都沒動，
+//   classify.v2 的版號不變；回放照樣吃得到後處理（改規則不必重錄）。
 
 const { CHAPTERS, SUBJECTS, isValidChapter, isValidSubject } = require('../config/chapters');
 const { getChapterExample } = require('../config/chapterExamples');
 const { buildSchema } = require('./schemas');
 const { chapterWhitelistText, resolveSubjectGroup } = require('./promptParts');
 const { registerTemplate } = require('../services/llm/templates');
+// 〔dec/local-classify-nlq-prep〕模型挑的章的後處理：名稱容錯＋相鄰兩章的界線（與 services/nlqService.js 共用）
+const { canonicalChapter, boundaryTarget } = require('../utils/chapterPostRules');
 
 // 〔章節重整整合 CR-9〕2026-09-26 v1 → v2（docs/chapter-restructure.md 第 8 條 CR-9）：
 //   ① 規則 5 補上「指數與對數」（第一冊）／「指數函數與對數函數」（第三冊）的分冊界線（決策單 A5）；
@@ -243,6 +251,31 @@ function nearestChapters(subject, value, k = 2) {
 function invalidChapterFeedback(subject, value) {
     const near = nearestChapters(subject, value, 2);
     return `「${value}」不在白名單內，最接近的是${near.map(c => `「${c}」`).join('')}`;
+}
+
+/**
+ * 〔dec/local-classify-nlq-prep〕第二層 LLM 的章節後處理（utils/chapterPostRules.js；docs/local-mode.md 10.12）：
+ *   ① 名稱容錯（canonicalChapter 已在呼叫端做完，這裡只記錄）；
+ *   ② 相鄰兩章的界線：題幹有 Owner 規則寫明的證據時（A5 的底數、K2 的一維相對速度…），把模型挑的章換成另一章。
+ * 換過章時 rationale 前面加一句說明（複核的人才看得懂為什麼理由寫的是另一章），並回傳 adjustments。
+ * 只套在第二層（source='llm'）：零成本閘門與 kNN 投票照舊（kNN 的票來自人工標籤，不該被字面規則推翻）。
+ * @param {string} subject
+ * @param {unknown} rawChapter 模型原本回的字串
+ * @param {string} chapter 名稱容錯後的白名單章名
+ * @param {string} questionText
+ * @returns {{chapter:string, note:string, adjustments:Array<{rule:string, from:string, to:string, evidence?:string}>}}
+ */
+function postProcessChapter(subject, rawChapter, chapter, questionText) {
+    const adjustments = [];
+    if (chapter !== rawChapter) adjustments.push({ rule: 'chapter_name', from: String(rawChapter), to: chapter });
+    const hit = boundaryTarget(chapter, questionText);
+    if (!hit || !isValidChapter(subject, hit.to)) return { chapter, note: '', adjustments };
+    adjustments.push({ rule: hit.rule, from: chapter, to: hit.to, evidence: hit.evidence });
+    return {
+        chapter: hit.to,
+        note: `〔界線規則：模型選「${chapter}」，依題幹的「${hit.evidence}」改為「${hit.to}」〕`,
+        adjustments
+    };
 }
 
 /** rationale 太長就截斷（schema 不設 maxLength：那會讓「話多」變成整題失敗，代價不成比例） */
@@ -553,7 +586,9 @@ async function run(ctx, input = {}) {
         });
 
         const data = res.data || {};
-        if (!isValidChapter(subject, data.chapter)) {
+        // 〔dec/local-classify-nlq-prep〕名稱容錯：只差空白、引號、全形半形的章名對回白名單（utils/chapterPostRules.js）
+        const chapter = canonicalChapter(subject, data.chapter);
+        if (chapter === null) {
             return {
                 kind: 'fail',
                 reason: 'chapter_invalid',
@@ -568,16 +603,17 @@ async function run(ctx, input = {}) {
             };
         }
 
-        return {
-            kind: 'pass',
-            data: {
-                chapter: data.chapter,
-                confidence: Number.isFinite(Number(data.confidence)) ? Number(data.confidence) : 0,
-                rationale: clampRationale(data.rationale),
-                source: 'llm',
-                few_shot_ids: fewShotIds
-            }
+        const post = postProcessChapter(subject, data.chapter, chapter, questionText);
+        const out = {
+            chapter: post.chapter,
+            confidence: Number.isFinite(Number(data.confidence)) ? Number(data.confidence) : 0,
+            rationale: clampRationale(post.note ? `${post.note}${String(data.rationale ?? '').trim()}` : data.rationale),
+            source: 'llm',
+            few_shot_ids: fewShotIds
         };
+        // 有改過才多這個鍵：沒改的題 outcome.data 與改版前逐鍵相同
+        if (post.adjustments.length) out.adjustments = post.adjustments;
+        return { kind: 'pass', data: out };
     } catch (err) {
         return {
             kind: 'error',
@@ -598,6 +634,8 @@ module.exports = {
     SUBJECT_RULES, subjectRulesText, fillSubjectRules,
     // 〔重練與收尾決策單 2026-09-26〕註冊的模板文字（PROMPT_TEMPLATE＋'\n---\n'＋序列化的 SUBJECT_RULES）
     REGISTERED_TEMPLATE,
+    // 〔dec/local-classify-nlq-prep〕第二層的章節後處理
+    postProcessChapter,
     FEW_SHOT_K, KNN_VOTE_N, KNN_VOTE_MIN_HUMAN, DEFAULT_KNN_VOTE_SIM,
     // 〔stage5 WS-B〕化學題
     AGENT_CHEM, TEMPLATE_CHEM, SYSTEM_CHEM, PROMPT_TEMPLATE_CHEM
