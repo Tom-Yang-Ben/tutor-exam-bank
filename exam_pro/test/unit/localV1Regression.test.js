@@ -24,6 +24,8 @@ const { parseQuery } = require('../../utils/nlqHeuristics');
 const { CHAPTER_ALIASES } = require('../../config/chapterAliases');
 const metrics = require('../../eval/lib/metrics');
 const { filtersExact } = require('../../eval/lib/suiteNlq');
+// 正式回放路徑是 services/llm.generateJson 先補回 LaTeX 反斜線再交給 agent；替身照做，量的才是「現行程式」
+const { applyToResult: repairLatex } = require('../../services/llm/latexEscapeRepair');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const RAW = JSON.parse(fs.readFileSync(path.join(ROOT, 'eval', 'fixtures', 'local_raw_2026-09-25.json'), 'utf8'));
@@ -76,7 +78,7 @@ function rawLlm(calls) {
             calls.push(opts);
             const data = byQuestion.get(opts.cacheKeyParts.questionText);
             assert.ok(data !== undefined, `原始回應裡沒有這一題：${opts.cacheKeyParts.questionText.slice(0, 20)}`);
-            return { data: clone(data), usage: { tokenIn: 0, tokenOut: 0, tokenThinking: 0, tokenCached: 0 }, latencyMs: 0, raw: null };
+            return repairLatex({ data: clone(data), usage: { tokenIn: 0, tokenOut: 0, tokenThinking: 0, tokenCached: 0 }, latencyMs: 0, raw: null });
         },
         embed: async () => { throw new Error('不該呼叫 embed'); }
     };
@@ -134,6 +136,32 @@ describe('原始回應檔的完整性', () => {
         const strings = (v) => (typeof v === 'string' ? [v] : v && typeof v === 'object' ? Object.values(v).flatMap(strings) : []);
         assert.ok(RAW.nlq.every(r => strings(r.data).every(s => !ctrl.test(s))), 'nlq 8 句都沒有');
         assert.ok(strings(RAW.classify[0].data).length >= 2, '量尺自我檢查：走得到字串值');
+    });
+});
+
+describe('替身與正式回放路徑一致：先補 LaTeX 反斜線再交給 agent', () => {
+    test('classify：10 筆 rationale 經修復改變，chapter 一筆都不變；修不回來的都記在 latexRepair.unresolved', async () => {
+        const ctrl = /[\x08\x09\x0C\x0D]/;
+        const llm = rawLlm([]);
+        let changed = 0;
+        for (const r of RAW.classify) {
+            const res = await llm.generateJson({ cacheKeyParts: { questionText: r.questionText } });
+            assert.equal(res.data.chapter, r.data.chapter, `${r.id} 的章節欄不該被修復改動`);
+            if (res.data.rationale !== r.data.rationale) {
+                changed++;
+                assert.ok(res.latexRepair && res.latexRepair.repaired > 0, `${r.id} 改了卻沒有 latexRepair 摘要`);
+            }
+            if (ctrl.test(res.data.rationale || '')) {
+                assert.ok(res.latexRepair && res.latexRepair.unresolved.length > 0, `${r.id} 留下控制字元卻沒列在 unresolved`);
+            }
+        }
+        assert.equal(changed, 10);
+    });
+
+    test('nlq：8 句經修復後與原始回應完全相同', () => {
+        for (const r of RAW.nlq) {
+            assert.equal(repairLatex({ data: clone(r.data) }).latexRepair, undefined, r.query);
+        }
     });
 });
 
@@ -198,7 +226,7 @@ describe('nlq：2026-09-25 的原始回應（llm 欄 8 句）', () => {
                 assert.equal(opts.template, 'nlq.v2');
                 const data = byQuery.get(opts.cacheKeyParts.query);
                 assert.ok(data !== undefined);
-                return { data: clone(data), usage: { tokenIn: 0, tokenOut: 0, tokenThinking: 0, tokenCached: 0 }, latencyMs: 0, raw: null };
+                return repairLatex({ data: clone(data), usage: { tokenIn: 0, tokenOut: 0, tokenThinking: 0, tokenCached: 0 }, latencyMs: 0, raw: null });
             },
             embed: async () => { throw new Error('不該呼叫 embed'); }
         };

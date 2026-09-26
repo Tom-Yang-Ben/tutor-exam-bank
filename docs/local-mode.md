@@ -1011,7 +1011,7 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 4. **零成本閘門沒有套**：拆題模型（qwen3-vl）給的高信心章節不經第二層，相鄰章的錯照樣入庫（LC-3）。classify suite 刻意跳過閘門，量不到這一塊。
 5. **信心沒有鑑別力**：本機模型幾乎只給 0.95 與 1，「信心低就送人工」這條路在本機模式等於不存在（第 2 點最後）。
 6. **nlq-036** 的計分與模板規則 6 互相拉扯（LC-4），重錄後這一句很可能仍算錯，吃掉 nlq llm 欄唯一的一句餘裕。
-7. **反斜線損壞**：`dec/latex-escape-repair` 還在審查。〔整合 2026-09-27 `dec/integration-final5`〕已併入：classify 的 `rationale` 回放時也會補回反斜線；`chapter` 欄不受影響，這兩個 suite 的分數不變。不影響這兩個 suite 的分數（只壞在 classify 的 `rationale`），但沒併之前，複核頁看到的分類理由仍會有「rac」「an」這種殘字。
+7. **反斜線損壞**：`dec/latex-escape-repair` 還在審查。不影響這兩個 suite 的分數（只壞在 classify 的 `rationale`），但沒併之前，複核頁看到的分類理由仍會有「rac」「an」這種殘字。〔整合 2026-09-27 `dec/integration-final5`〕已併入：classify 的 `rationale` 回放時也會補回反斜線；`chapter` 欄不受影響，這兩個 suite 的分數不變。〔整合審查 2026-09-27 `dec/integration-final5-fix`〕加註移到本點末尾（原文不動）。`test/unit/localV1Regression.test.js` 的替身與 `eval/tools/local_v1_counterfactual.js` 的 `installRawLlm` 原本直接回傳原始回應、沒經過 LaTeX 修復，現在回傳前都先過 `latexEscapeRepair.applyToResult`，與正式回放路徑一致。實測：修復改動 10 支 classify 的 `rationale`，`chapter` 與 nlq 8 支都不變，分數與既有斷言不受影響；其中 cls-fx-027 有一處 `\f` 後接 `dg` 判不出指令，留在 `latexRepair.unresolved`，那一支的理由仍有一個控制字元。
 8. 圓周運動與 K3 兩題（cls-fx-046、cls-dr-008）只能靠模型（LC-1、LC-2）。
 
 #### 6. 決策草稿（請 Owner 決定；本分支都沒有做）

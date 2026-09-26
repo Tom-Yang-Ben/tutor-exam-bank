@@ -18,6 +18,8 @@
 // replay miss 的凍結訊息丟錯，兩個 suite 照原本的規則把整欄印成 n/a。
 //
 // 不呼叫任何模型、不讀寫 cassette、不寫報表檔；只在自己的行程裡把 services/llm 的 generateJson 換掉。
+// 替身回傳前照正式路徑先過 LaTeX 反斜線修復（services/llm/latexEscapeRepair.js 的 applyToResult），
+// 所以 classify 的 rationale 也是現行程式看到的樣子；chapter 欄與 nlq 不受修復影響（docs/local-mode.md 10.15 第 7 點）。
 // ─────────────────────────────────────────────────────────────
 
 const path = require('path');
@@ -42,6 +44,7 @@ function parseArgs(argv) {
  */
 function installRawLlm(raw) {
     const llm = require('../../services/llm');
+    const { applyToResult: repairLatex } = require('../../services/llm/latexEscapeRepair');
     const byQuestion = new Map(raw.classify.map(r => [r.questionText, r.data]));
     const byQuery = new Map(raw.nlq.map(r => [r.query, r.data]));
     const original = llm.generateJson;
@@ -53,12 +56,13 @@ function installRawLlm(raw) {
             // 與 services/llm/fake.js 同一個凍結前綴：suite 會把它算成 replay miss，不當成模型答錯
             throw new Error(`LLM_MODE=replay 找不到 cassette（agent=${opts.agent} key=反事實回放：原始回應裡沒有這一題）。請在本機執行 npm run eval:record -- --suite <suite>`);
         }
-        return {
+        // 與 services/llm/index.js 的 replay 相同：先修 LaTeX 反斜線再交給 agent
+        return repairLatex({
             data: JSON.parse(JSON.stringify(data)),
             usage: { tokenIn: 0, tokenOut: 0, tokenThinking: 0, tokenCached: 0 },
             latencyMs: 0,
             raw: null
-        };
+        });
     };
     return () => { llm.generateJson = original; };
 }
