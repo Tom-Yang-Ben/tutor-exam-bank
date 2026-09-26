@@ -109,7 +109,8 @@ function runSuite() {
             // 下一輪的 dedup 會踩到它們——實際發生過，症狀是「第二次跑就 0 題入庫」。
             await query('TRUNCATE job_events, job_questions, jobs CASCADE');
             if (createdQuestionIds.length) {
-                await query('DELETE FROM attempts WHERE question_id = ANY($1::int[])', [createdQuestionIds]);
+                // 〔retrain PR-1〕attempts 是唯讀檢視（migrations/0016）：刪派題，作答跟著 ON DELETE CASCADE
+                await query('DELETE FROM assignments WHERE question_id = ANY($1::int[])', [createdQuestionIds]);
                 await query('DELETE FROM questions WHERE id = ANY($1::int[])', [createdQuestionIds]);
             }
             if (jobId !== null) fs.rmSync(path.join(JOBS_DIR, `${jobId}.pdf`), { force: true });

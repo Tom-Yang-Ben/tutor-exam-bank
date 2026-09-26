@@ -8,7 +8,7 @@
 // 測的是「pgvector/pgvector:pg16 這個映像上，0001+0002 真的能從零套起來，
 // 而且套出來的結構就是 interfaces 第 1 條寫的那個」。這些在單元層完全測不到：
 // 中文 CHECK 值在 Linux 上的編碼、vector(768) 的維度、HNSW 索引建不建得起來、
-// attempts 的唯一約束擋不擋得住重複指派，都只有真 PG 會告訴你。
+// 新題派題（assignments）的唯一索引擋不擋得住重複指派，都只有真 PG 會告訴你。
 // ─────────────────────────────────────────────────────────────
 
 const { test, describe, before, after } = require('node:test');
@@ -40,15 +40,24 @@ describe('migrations 套用結果', { skip: SKIP }, () => {
         assert.ok(versions.includes('0002_vector.sql'), `schema_migrations：${versions.join(', ')}`);
     });
 
-    test('四張表都在', async () => {
+    // 〔Owner 決策單 2026-09-25 B22；DEC-003 例外條款〕依 Owner 決策改變的行為（docs/retrain-and-review.md 第 6.4 節）：
+    // migrations/0016 把 attempts 拆成 assignments（派題）＋attempt_records（作答），attempts 改成唯讀相容檢視。
+    // 原本驗「attempts 是實體表」，改驗兩張新實體表＋attempts 是檢視（斷言變多，沒有放寬）。
+    test('四張表都在（attempts 拆成派題與作答兩張表＋相容檢視）', async () => {
         const { rows } = await client.query(
             `SELECT table_name FROM information_schema.tables
              WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`
         );
         const names = rows.map(r => r.table_name);
-        for (const t of ['questions', 'students', 'exam_papers', 'attempts']) {
+        for (const t of ['questions', 'students', 'exam_papers', 'assignments', 'attempt_records']) {
             assert.ok(names.includes(t), `缺少資料表 ${t}；實際有：${names.join(', ')}`);
         }
+        assert.ok(!names.includes('attempts'), 'attempts 應該是檢視，不是實體表');
+        const { rows: views } = await client.query(
+            `SELECT table_name FROM information_schema.views
+              WHERE table_schema = 'public' AND table_name IN ('attempts', 'assignment_attempts')
+              ORDER BY table_name`);
+        assert.deepEqual(views.map(v => v.table_name), ['assignment_attempts', 'attempts']);
     });
 
     test('embedding 是 vector(768)——EMBED_DIM 釘死 768（interfaces 裁決 4）', async () => {
@@ -106,13 +115,17 @@ describe('migrations 套用結果', { skip: SKIP }, () => {
         }
     });
 
-    test('attempts 的 UNIQUE(student_id, question_id) 擋得住重複指派', async () => {
+    // 〔Owner 決策單 2026-09-25 B22；DEC-003 例外條款〕依 Owner 決策改變的行為（docs/retrain-and-review.md 第 6.4 節）：
+    // 「不重複出題」的硬閘門從 attempts 的 UNIQUE (student_id, question_id) 搬到 assignments 的部分唯一索引
+    // assignments_first_exposure_key（只管 purpose = 'new'）。同一件事（第二次以新題派同一題會被擋）照驗；
+    // 另加 Owner 核准的例外：重練派題（purpose = 'retrain'）可以重複，且每次作答各自一列。
+    test('新題派題的部分唯一索引擋得住重複指派；重練派題可重複（DEC-003 例外條款）', async () => {
         await client.query('BEGIN');
         try {
             // students.name 有 UNIQUE 約束，而同一顆測試庫上還有別的整合測試檔
             // （hybrid.pg.test.js 也建一個叫「整合測試學生」的學生，且不在交易裡）。
             // 用同一個名字直接 INSERT 會**先死在 students_name_key 上**，
-            // 於是這一題真正要驗的 attempts 唯一約束根本沒測到，
+            // 於是這一題真正要驗的唯一約束根本沒測到，
             // 而失敗訊息指向另一個約束，看起來像 DDL 寫錯。
             // 兩層保險：名字帶檔名前綴不與別人共用，再加 ON CONFLICT 讓重跑也不受影響。
             const s = await client.query(
@@ -124,25 +137,78 @@ describe('migrations 套用結果', { skip: SKIP }, () => {
                 `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text)
                  VALUES ('物理', '直線運動', '計算', 2, '約束檢查', '通過') RETURNING id`
             );
-            await client.query('INSERT INTO attempts (student_id, question_id) VALUES ($1, $2)', [s.rows[0].id, q.rows[0].id]);
+            const sid = s.rows[0].id, qid = q.rows[0].id;
+            await client.query('INSERT INTO assignments (student_id, question_id) VALUES ($1, $2)', [sid, qid]);
+            await client.query('SAVEPOINT dup');
             await assert.rejects(
-                client.query('INSERT INTO attempts (student_id, question_id) VALUES ($1, $2)', [s.rows[0].id, q.rows[0].id]),
+                client.query('INSERT INTO assignments (student_id, question_id) VALUES ($1, $2)', [sid, qid]),
+                err => /duplicate key value/i.test(err.message) && err.constraint === 'assignments_first_exposure_key'
+            );
+            await client.query('ROLLBACK TO SAVEPOINT dup');
+            // 明寫 purpose = 'new' 也一樣被擋
+            await assert.rejects(
+                client.query(`INSERT INTO assignments (student_id, question_id, purpose) VALUES ($1, $2, 'new')`, [sid, qid]),
                 /duplicate key value/i
             );
+            await client.query('ROLLBACK TO SAVEPOINT dup');
+
+            // 重練派題：同一題可以再派（兩次），每次作答各自一列
+            // 〔retrain PR-2〕夾具：migrations/0017 之後重練派題必須屬於同生同題的排程項目（assignments_retrain_link_check、
+            // assignments_retrain_item_fk），所以先替這一題的新題派題建一個項目、重練派題帶上 retrain_item_id 與 retrain_step。
+            // 斷言不變（docs/retrain-and-review.md 第 6.4 節：只動準備資料的程式）。
+            const { rows: [src] } = await client.query(
+                `SELECT id FROM assignments WHERE student_id = $1 AND question_id = $2 AND purpose = 'new'`, [sid, qid]);
+            const { rows: [item] } = await client.query(
+                `INSERT INTO retrain_items (student_id, question_id, source_assignment_id, reason, due_on)
+                 VALUES ($1, $2, $3, 'manual', CURRENT_DATE + 1) RETURNING id`, [sid, qid, src.id]);
+            const r1 = await client.query(
+                `INSERT INTO assignments (student_id, question_id, purpose, retrain_item_id, retrain_step)
+                 VALUES ($1, $2, 'retrain', $3, 1) RETURNING id`, [sid, qid, item.id]);
+            const r2 = await client.query(
+                `INSERT INTO assignments (student_id, question_id, purpose, retrain_item_id, retrain_step)
+                 VALUES ($1, $2, 'retrain', $3, 1) RETURNING id`, [sid, qid, item.id]);
+            await client.query('INSERT INTO attempt_records (assignment_id, result) VALUES ($1, 0), ($2, 1)',
+                [r1.rows[0].id, r2.rows[0].id]);
+            const { rows: all } = await client.query(
+                'SELECT purpose, result FROM assignment_attempts WHERE student_id = $1 AND question_id = $2 ORDER BY assignment_id',
+                [sid, qid]);
+            assert.deepEqual(all.map(r => [r.purpose, r.result]), [['new', null], ['retrain', 0], ['retrain', 1]]);
+            // 檢視 attempts 照舊每生每題一列（只含新題派題）
+            const { rows: first } = await client.query(
+                'SELECT COUNT(*)::int AS n FROM attempts WHERE student_id = $1 AND question_id = $2', [sid, qid]);
+            assert.equal(first[0].n, 1);
+
+            // purpose 只收 new／retrain
+            await client.query('SAVEPOINT bad');
+            await assert.rejects(
+                client.query(`INSERT INTO assignments (student_id, question_id, purpose) VALUES ($1, $2, 'review')`, [sid, qid]),
+                /violates check constraint/i
+            );
+            await client.query('ROLLBACK TO SAVEPOINT bad');
         } finally {
             await client.query('ROLLBACK');
         }
     });
 
-    test('attempts.question_id 是 ON DELETE RESTRICT（interfaces 裁決 1，不是 CASCADE）', async () => {
+    // 〔Owner 決策單 2026-09-25 B22；DEC-003 例外條款〕依 Owner 決策改變的行為（docs/retrain-and-review.md 第 6.4 節）：
+    // 題目外鍵從 attempts 搬到 assignments；「作答紀錄不能隨題目消失」照驗（M2 的 retrain_items 之後再加）。
+    test('assignments.question_id 是 ON DELETE RESTRICT（interfaces 裁決 1，不是 CASCADE）', async () => {
         // 作答紀錄是階段 3 弱點面板的基底，不能隨題目消失。刪題改走 archived_at 軟刪。
         const { rows } = await client.query(
             `SELECT confdeltype FROM pg_constraint
-             WHERE conrelid = 'attempts'::regclass AND contype = 'f'
+             WHERE conrelid = 'assignments'::regclass AND contype = 'f'
                AND confrelid = 'questions'::regclass`
         );
         assert.equal(rows.length, 1);
         assert.equal(rows[0].confdeltype, 'r', 'confdeltype 應為 r（RESTRICT）');
+        // 作答跟著派題走（派題刪掉，作答一起刪）
+        const { rows: rec } = await client.query(
+            `SELECT confdeltype FROM pg_constraint
+             WHERE conrelid = 'attempt_records'::regclass AND contype = 'f'
+               AND confrelid = 'assignments'::regclass`
+        );
+        assert.equal(rec.length, 1);
+        assert.equal(rec[0].confdeltype, 'c', 'attempt_records → assignments 應為 c（CASCADE）');
     });
 
     test('兩個 VIEW 都在，且都帶 archived_at IS NULL（interfaces 裁決 7）', async () => {

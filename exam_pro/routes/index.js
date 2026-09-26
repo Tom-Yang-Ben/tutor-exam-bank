@@ -278,4 +278,23 @@ if (featuresS5E.FEATURE_TUTOR) {
     }
 }
 
+// ── 錯題重練與間隔複習 第二階段（docs/retrain-and-review.md 第 5.2 節 API-1～5、API-13）──
+// FEATURE_RETRAIN 關閉時這六條都不掛載（落到 Express 預設 404，與其他旗標同一種做法）。
+// 全部不呼叫 LLM，不套限流（同裁決 S5-25）。批改（API-10）、試卷明細（API-9）、刪卷（API-11）、
+// 出卷整合（API-6～8、API-12）是既有端點的擴充，改在原本的 controller。
+// 變數名帶 Retrain 後綴，理由同上方 featuresWs3A：合併後不會撞到別的區塊的 const。
+const featuresRetrain = require('../config/features');
+if (featuresRetrain.FEATURE_RETRAIN) {
+    const retrainController = require('../controllers/retrainController');
+    router.get('/students/:id/retrain-items', retrainController.listItems);
+    router.post('/students/:id/retrain-items', retrainController.addItems);
+    router.patch('/students/:id/retrain-items/:itemId', retrainController.patchItem);
+    router.get('/retrain/summary', retrainController.summary);
+    // 〔retrain PR-3〕API-5：出一份重練卷的草稿（只讀；確認走既有的 POST /confirm-paper 加 retrain_question_ids）。
+    // API-6～8、API-12 是既有端點的擴充，改在原本的 controller（examController、remedialController、wordController）。
+    router.post('/students/:id/retrain-paper', retrainController.retrainPaper);
+    // 〔retrain PR-4〕API-13 重練成效（第 5.2 節；R10 選 1）。同一個旗標、同一種掛法。
+    router.get('/students/:id/retrain-stats', retrainController.stats);
+}
+
 module.exports = router;

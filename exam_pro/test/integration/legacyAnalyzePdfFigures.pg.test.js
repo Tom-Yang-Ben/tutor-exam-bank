@@ -74,14 +74,14 @@ function runSuite() {
         });
         beforeEach(async () => {
             figuresDir = fs.mkdtempSync(path.join(os.tmpdir(), 'b21-int-figures-'));
-            await query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE');
+            await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE');
         });
         afterEach(() => {
             aiService._setDepsForTest();
             fs.rmSync(figuresDir, { recursive: true, force: true });
         });
         after(async () => {
-            await query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE');
+            await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE');
             await pool.end();
         });
 

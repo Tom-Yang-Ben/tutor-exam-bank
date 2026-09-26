@@ -279,6 +279,7 @@ docker compose down           # 停止（加 -v 才會刪掉 pgdata）
 - 映像固定為 `pgvector/pgvector:pg16`（官方 pgvector，內含 PG contrib 的 `pg_trgm`），本機、CI、正式環境同一顆。
 - `migrate.js` 只前進、不做 down；每一支 SQL 與它的 `schema_migrations` 紀錄在同一交易內，重跑是 no-op。
 - **升級到含新 migration 的版本時，先停服務或先 `npm run migrate`，再拉程式／重啟**：`npm run dev`（nodemon）在 `git pull` 帶入新程式時會立即重啟，新程式在舊 schema 上寫入新的 state／review_reason 會違反 CHECK。
+- 〔修訂 2026-09-26 錯題重練第二階段〕**含錯題重練的版本（0016～0018）即使 `FEATURE_RETRAIN` 關閉也必須先套完 migration**：批改、刪卷、刪學生、合併學生都會讀寫 `retrain_items`，沒套會 500。步驟（先停服務）：`npm run db:backup` → `node scripts/snapshot_attempt_views.js --out=before.json` → `npm run migrate` → `node scripts/snapshot_attempt_views.js --out=after.json` → `node scripts/snapshot_attempt_views.js --compare before.json after.json`（回 0「完全相同」才啟動；有差異先別用，留下輸出與兩個檔案）。細節見 [`docs/retrain-and-review.md`](../docs/retrain-and-review.md) 第 5.6.6 節。
 - **套用 0008 之後補綁舊題的承上題關係**（FR-019）：先 `npm run follow:backfill -- --dry-run --report eval/local/follow_ups.json` 看報告（整批跑完即 ROLLBACK、不寫入），確認無誤再 `npm run follow:backfill`。可重複跑，已綁好的與人工綁定（`follows_src='human'`）不會被覆寫；沒有拆題紀錄可推前題的舊題只列在報告裡，不猜。加 `--test` 改打測試庫。
 - **中文路徑的 bind mount 已實測可用**（Docker Desktop 29.6.2 / WSL2，專案路徑含「期中專案」），`docker-compose.yml` 因此把 `./migrations` 唯讀掛進容器。萬一在別台機器上掛載失敗，退路是不經 `migrate.js` 直接餵檔：
   ```bash

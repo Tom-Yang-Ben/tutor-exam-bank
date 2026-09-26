@@ -125,7 +125,7 @@ function runSuite() {
 
     async function seed() {
         await query('TRUNCATE question_kcs, kc_prerequisites, knowledge_components RESTART IDENTITY CASCADE');
-        await query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE');
+        await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE');
         ids.rename = await insertQ({ subject: '數學', chapter: '多項式除法', question_text: '自製題：以綜合除法求 $x^3+2x-1$ 除以 $x-1$ 的餘式。' });
         ids.fold = await insertQ({ subject: '數學', chapter: '正弦與餘弦定理', question_text: '自製題：把 $\\sin x+\\cos x$ 疊合成單一個正弦函數。' });
         ids.stay = await insertQ({ subject: '數學', chapter: '正弦與餘弦定理', question_text: '自製題：三角形兩邊長 $3$、$5$，夾角 $60^\\circ$，求第三邊長。' });
@@ -154,7 +154,7 @@ function runSuite() {
 
     after(async () => {
         await query('TRUNCATE question_kcs, kc_prerequisites, knowledge_components RESTART IDENTITY CASCADE');
-        await query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE');
+        await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE');
         fs.rmSync(TMP, { recursive: true, force: true });
         await pool.end();
     });
@@ -222,7 +222,7 @@ function runSuite() {
         });
 
         test('沒有需要處理的題：不寫提議檔', async () => {
-            await query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE');
+            await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE');
             await insertQ({ subject: '數學', chapter: '向量內積', question_text: '自製題：內積。' });
             const out = path.join(TMP, 'empty.csv');
             const r = await mig.dryRun({ db, outPath: out });

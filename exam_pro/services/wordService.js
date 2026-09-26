@@ -159,17 +159,35 @@ function buildSolutionParagraphs(q) {
     })];
 }
 
+// 〔retrain PR-3〕重練題的標示（docs/retrain-and-review.md 第 5.2 節 API-12；〔Owner 決策單 2026-09-26 R7 選 1〕）：
+// 學生的卷面不標；老師的標準版答案區、詳解版標。題目區（會印給學生的卷面）在任何版本都不標、學生版完全不標，
+// 所以標示只加在參考答案區每一題的題號後面：「第 3 題（重練）答案：」。
+const RETRAIN_MARK = '（重練）';
+
+/**
+ * 答案區一題的題號（純函式）。沒有重練題時與 PR-3 之前逐字相同。
+ * @param {number} n 題號（1 起）
+ * @param {boolean} retrain
+ * @returns {string}
+ */
+function answerHeading(n, retrain) {
+    return `第 ${n} 題${retrain ? RETRAIN_MARK : ''}答案：`;
+}
+
 /**
  * @param {string} paperTitle
  * @param {string} studentName
  * @param {Array<object>} sortedQuestions
- * @param {{figuresDir?:string, logger?:object, edition?:string}} [options]  測試可注入附圖目錄與 logger；
- *        edition 見上方 EDITIONS（〔stage5 WS-A〕；省略＝standard，與原本逐位元相同的產生路徑）
+ * @param {{figuresDir?:string, logger?:object, edition?:string, retrainQuestionIds?:Iterable<number>}} [options]
+ *        測試可注入附圖目錄與 logger；edition 見上方 EDITIONS（〔stage5 WS-A〕；省略＝standard，與原本逐位元相同的產生路徑）；
+ *        〔retrain PR-3〕retrainQuestionIds：這張卷上的重練題（wordController 依 paper_id 查），答案區的題號後加「（重練）」；
+ *        省略或空＝不標，產生的內容與 PR-3 之前逐位元相同
  */
 exports.generateExamPaperDocx = async (paperTitle, studentName, sortedQuestions, options = {}) => {
     const { figuresDir = FIGURES_DIR, logger = console } = options;
     const edition = parseEdition(options.edition);
     if (edition === null) throw new Error(`不支援的 Word 匯出版本：${options.edition}`);
+    const retrainIds = new Set(options.retrainQuestionIds || []);
     const childrenElements = [];
 
     childrenElements.push(new Paragraph({ text: paperTitle, heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER }));
@@ -226,7 +244,7 @@ exports.generateExamPaperDocx = async (paperTitle, studentName, sortedQuestions,
         sortedQuestions.forEach((q, index) => {
             childrenElements.push(new Paragraph({
                 children: [
-                    new TextRun({ text: `第 ${index + 1} 題答案：`, bold: true }),
+                    new TextRun({ text: answerHeading(index + 1, retrainIds.has(q.id)), bold: true }),
                     new TextRun({ text: "  " }),
                     ...buildParagraphComponents(q.answer_text, { color: "E53E3E", bold: true }),
                     new TextRun({ text: "  " })
@@ -254,3 +272,6 @@ exports.DEFAULT_EDITION = DEFAULT_EDITION;
 exports.NO_SOLUTION_TEXT = NO_SOLUTION_TEXT;
 exports.UNREVIEWED_SOLUTION_NOTE = UNREVIEWED_SOLUTION_NOTE;
 exports.parseEdition = parseEdition;
+// 〔retrain PR-3〕重練題的標示
+exports.RETRAIN_MARK = RETRAIN_MARK;
+exports.answerHeading = answerHeading;

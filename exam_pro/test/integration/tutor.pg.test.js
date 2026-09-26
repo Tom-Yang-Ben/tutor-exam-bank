@@ -89,6 +89,8 @@ function runSuite() {
     });
 
     const { query, pool } = require(path.join(APP_DIR, 'config', 'db'));
+    // 〔retrain PR-1〕attempts 是唯讀檢視（migrations/0016），夾具改用 helper 寫派題＋作答
+    const { insertAttempts } = require(path.join(APP_DIR, 'test', 'helpers', 'attempts'));
     const tutorService = require(path.join(APP_DIR, 'services', 'tutorService'));
     const voiceService = require(path.join(APP_DIR, 'services', 'voiceService'));
     const cassette = require(path.join(APP_DIR, 'services', 'llm', 'cassette'));
@@ -111,9 +113,11 @@ function runSuite() {
         // 題 1 兩個都標；題 3 不標（家教要退回同章）
         await query(`INSERT INTO question_kcs (question_id, kc_id, weight, src) VALUES (1, 1, 1, 'human'), (1, 2, 0.5, 'human')`);
         // 王小明：向量內積 2 題錯（錯因 calc、concept）、牛頓 1 題對
-        await query(
-            `INSERT INTO attempts (student_id, question_id, result, error_types, graded_at)
-             VALUES (1, 1, 0, '{calc,concept}', now()), (1, 3, 0, '{calc}', now()), (1, 2, 1, '{}', now())`);
+        await insertAttempts(query, [
+            { student_id: 1, question_id: 1, result: 0, error_types: ['calc', 'concept'], graded_at: 'now' },
+            { student_id: 1, question_id: 3, result: 0, error_types: ['calc'], graded_at: 'now' },
+            { student_id: 1, question_id: 2, result: 1, error_types: [], graded_at: 'now' }
+        ]);
     }
 
     /** 以 prepareTutorRequest 算出正式請求會用的鍵，寫一支 cassette */
@@ -162,7 +166,7 @@ function runSuite() {
         });
 
         beforeEach(async () => {
-            await query(`TRUNCATE question_kcs, kc_prerequisites, knowledge_components, attempts, exam_papers, students, questions
+            await query(`TRUNCATE question_kcs, kc_prerequisites, knowledge_components, attempt_records, assignments, exam_papers, students, questions
                          RESTART IDENTITY CASCADE`);
             await seed();
         });
