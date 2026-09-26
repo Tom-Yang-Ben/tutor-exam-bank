@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T15:35:51.538Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4034,
+        "sha256": "7b8ed30031d9aecf3f7433b4744c99124d328d53686964c551513a5055e30436"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "依單位圓的定義，寫出 $\\cos 240^\\circ$ 之值。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "confidence": 0.95,
+      "rationale": "題目涉及單位圓與角度的定義，屬於廣義角與極坐標章節的範疇。"
+    },
+    "usage": {
+      "tokenIn": 3606,
+      "tokenOut": 59,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 57105
+  }
+}

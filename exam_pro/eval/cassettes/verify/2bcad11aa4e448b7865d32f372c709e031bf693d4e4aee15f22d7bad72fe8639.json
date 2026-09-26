@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-25T19:37:51.327Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 89,
+        "sha256": "39a8fcc5e8102e9d355f91a9fb48436ab5c6cbbf02bed77175bbbb9ab5e6117d"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "一顆石頭從 $30$ m 高的橋上被拋出，做自由落體運動，求它落地所需的時間（取 $g = 10$ m/s$^2$，不計空氣阻力）。",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "√6 s",
+      "answer_form": "expression",
+      "steps_summary": "使用自由落體公式 s = 1/2 g t²，代入 s = 30 m、g = 10 m/s²，解得 t = √(2s/g) = √(60/10) = √6 s。"
+    },
+    "usage": {
+      "tokenIn": 311,
+      "tokenOut": 952,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 480868
+  }
+}

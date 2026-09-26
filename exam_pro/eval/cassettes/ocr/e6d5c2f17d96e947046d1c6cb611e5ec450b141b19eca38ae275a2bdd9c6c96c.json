@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "agent": "ocr",
+    "model": "paddleocr@3.7.0",
+    "template": "ocr.v1",
+    "kind": "ocr",
+    "recorded_at": "2026-09-25T20:42:38.009Z",
+    "fixtureHash": null
+  },
+  "request": {
+    "pdf": {
+      "bytes": 35814,
+      "sha256": "f1a15d77282523b60f88d12fa65b45f21ad46ae708bc0eb92963af9f00fc3622"
+    },
+    "cacheKeyParts": {
+      "pdfSha256": "f1a15d77282523b60f88d12fa65b45f21ad46ae708bc0eb92963af9f00fc3622",
+      "fromPage": 1,
+      "toPage": 1,
+      "dpi": 200
+    }
+  },
+  "response": {
+    "engine": "paddleocr",
+    "engine_version": "3.7.0",
+    "dpi": 200,
+    "pages": [
+      {
+        "page": 1,
+        "markdown": "## 高中數學・物理 綜合練習卷 (評估用自製樣卷)\n\n本卷10題全部由本專案作者自行編寫，用於展示與评估系統流程，不取自任何特定考卷、題本或出版品。\n\n## 1 ． (數學·單選)\n\nlog_28+log_24之值为何?\n\n(A) 5 (B) 6 (C) 7 (D) 12\n\n### 2. (數學·計算)\n\n設平面向量$\\alpha\\to=(3,4)\\setminus b\\to=(1,2)$ ，求$\\underset{\\triangle}{\\rightarrow}\\cdot\\underset{\\triangle}{\\triangleright}\\rightarrow\\circ$ \n\n### 3. (數學·填空)\n\n設平面向量$\\begin{array}{r}{\\mathbb{g}\\longrightarrow=\\mathbb{\\Omega},}\\end{array}$ 、,k)與${\\mathsf{b}}{\\rightarrow}=(3,6)$ 互相垂直，求k。\n\n### 4. (數學·單選)\n\nsin^2 40^{ +cos^2} 40^\\{之值为何?\n\n(A)1(B)0(C)(1)/(2)(D)需查表才能得知\n\n### 5. (物理·計算)\n\n質量2kg的物體受到合力10N，求其加速度。\n\n### 6. (物理·計算)\n\n長1ｍ的輕繩繫住質量2kg的小球，在光滑水平面上以3m/s的速率作等速圓周運動，求繩的張力。\n\n### 7. (物理·計算)\n\n物體由靜止出發，以2m/s^2的等加速度直線前進，求5秒後的位移。\n\n### 8. (數學·單選)\n\n已知log_102=0.3010，利用log_105=log_10frac102求log_105之近似值。(A) 0.6990(B)0.3010(C) 0.1505(D)1.6990\n\n### 9. (物理·單選)\n\n馬拉車前進時，馬對車的作用力F^與車對馬的反作用力，兩者的關係為何？\n\n(A)馬對車的力較大(B) 大小相等、方向相反 （C)車對馬的力較大(D)視速度而定\n\n### 10. (物理・多選)\n\n關於等速圓周運動，下列敘述何者正確？ (複選)\n\n(A) 速率不變（B) 速度不變 （C) 加速度指向圓心(D) 合力為零"
+      }
+    ],
+    "latencyMs": 273141
+  }
+}

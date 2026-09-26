@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T16:17:56.365Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1925,
+        "sha256": "9d7816621158febbca2981fd573d9673a3b28769df982242ff22701bb575a394"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 9,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        10,
+        17,
+        18,
+        24,
+        61
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "設平面向量 $\textbf{a} = (2, 5)$、$\textbf{b} = (-3, 1)$，求 $\textbf{a} \bullet \textbf{b}$。",
+      "answer_text": "$\textbf{a} \bullet \textbf{b} = 2 \times (-3) + 5 \times 1 = -6 + 5 = -1$。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2021,
+      "tokenOut": 143,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 62739
+  }
+}

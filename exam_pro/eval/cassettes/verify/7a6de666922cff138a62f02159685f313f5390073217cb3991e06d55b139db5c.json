@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-25T18:48:34.791Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 144,
+        "sha256": "553d47f73ac39d64a2202c4179f1832e7d9c08ea69b7221ed0de8cd745c87508"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "質量 $8$ kg 的物體置於傾角 $37^\\circ$ 的斜面上（$\\tan 37^\\circ = \\frac{3}{4}$），與斜面間的動摩擦係數 $\\mu = 0.2$，求物體沿斜面下滑的加速度（取 $g = 10$ m/s$^2$）。",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "4.4",
+      "answer_form": "number",
+      "steps_summary": "將物體受力分解為沿斜面與垂直斜面方向。重力分力為mgsinθ，摩擦力為μmgcosθ。加速度a = g(sinθ - μcosθ)。利用tan37°=3/4得sinθ=3/5、cosθ=4/5，代入計算得a=10×(3/5 - 0.2×4/5)=4.4 m/s²。"
+    },
+    "usage": {
+      "tokenIn": 340,
+      "tokenOut": 772,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 342670
+  }
+}

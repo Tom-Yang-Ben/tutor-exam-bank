@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-25T18:12:17.832Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 83,
+        "sha256": "825025344a5b1dbe2838519a4e0c1219672c3b74f9766e563f3447535571f90d"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "當列車突然啟動時，乘客的身體會向後傾，主要原因為何？ (A) 慣性　(B) 向心力　(C) 摩擦力變小　(D) 重力變小",
+      "questionType": "單選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(A)",
+      "answer_form": "option",
+      "steps_summary": "當列車啟動時，乘客的腳因摩擦力與列車一起加速，但上半身因慣性保持原有靜止狀態，導致身體向後傾。此現象由牛頓第一定律（慣性）解釋。向心力（B）僅適用於圓周運動，與直線啟動無關；摩擦力變小（C）並非主因，且重力變小（D）與題意無關。因此正確答案為(A)。"
+    },
+    "usage": {
+      "tokenIn": 311,
+      "tokenOut": 383,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 174941
+  }
+}

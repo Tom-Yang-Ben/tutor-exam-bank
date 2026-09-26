@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T15:13:44.672Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2607,
+        "sha256": "d62e97f35beeae4e24824495c607ca0268bca581337169c92950d819e509c9a8"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "在量值 $E = 500$ N/C 的均勻電場中，將電量 $q = 2 \\times 10^{-6}$ C 的電荷沿電場方向移動 $0.2$ m，求電場力所作的功。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "電場與電位",
+      "confidence": 0.95,
+      "rationale": "題目涉及電場力作功的計算，需使用電場與電位的觀念，特別是電場力作功的公式 $ W = qEd $，屬於電場與電位章節的內容。"
+    },
+    "usage": {
+      "tokenIn": 2522,
+      "tokenOut": 80,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 52071
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-25T19:13:34.845Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 71,
+        "sha256": "593bf0ec350ab99d10c5e5d93a72582f493495c615edb0dcbe39b3adfaf63a23"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "一輛自行車由靜止出發，以 $4$ m/s$^2$ 的等加速度沿直線前進，求 $6$ 秒後的位移。",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "72",
+      "answer_form": "number",
+      "steps_summary": "使用匀加速直线运动位移公式 s = ut + ½at²，其中初速度u=0，加速度a=4 m/s²，时间t=6秒。代入计算得 s = 0 + 0.5*4*(6)² = 72 米。验证通过平均速度法（(0+24)/2 *6=72）确认结果正确。"
+    },
+    "usage": {
+      "tokenIn": 299,
+      "tokenOut": 381,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 171705
+  }
+}

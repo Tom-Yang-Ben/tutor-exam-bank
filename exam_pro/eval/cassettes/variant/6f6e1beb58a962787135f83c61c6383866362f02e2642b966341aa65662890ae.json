@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T19:52:26.517Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1482,
+        "sha256": "a6cfc9cc008904b0618c93beffd408a94a28ed6275fa678098c7e3372bd6f731"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 53,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        38,
+        39
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "物體的運動（速度與加速度）",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 1,
+      "question_text": "自行車騎士在競賽中使用速度計，該速度計顯示的是下列哪一種物理量？\n(A) 平均速度　(B) 平均速率　(C) 瞬時速率　(D) 位移",
+      "answer_text": "(C)。速度計顯示的是該瞬間的速率大小，不含方向資訊，也不是整段行程的平均值。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 1750,
+      "tokenOut": 141,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 161283
+  }
+}

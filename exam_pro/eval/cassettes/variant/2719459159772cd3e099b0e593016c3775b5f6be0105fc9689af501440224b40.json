@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T17:33:47.643Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1675,
+        "sha256": "0be2c8bef4a71ecd95357a011f3e1caa941d3b1887f41f73d44efdc09fb04827"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 25,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        1,
+        2,
+        26
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "直角三角形的邊角關係",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 1,
+      "question_text": "某座橋的斜拉索與水平方向形成 $30^\bullet$ 的角度，若斜拉索的長度為 $20$ 公尺，則此斜拉索在水平方向的投影長度為何？ (A) $10\text{ 公尺}$ (B) $15\text{ 公尺}$ (C) $17.32\text{ 公尺}$ (D) $20\text{ 公尺}$",
+      "answer_text": "(A)。由餘弦定義，水平投影長度為 $20 \times \frac{\root{3}}{2} = 10$ 公尺。",
+      "figure_desc": "圖中顯示一座橋的斜拉索與水平方向形成 $30^\bullet$ 的角度，斜拉索長度為 $20$ 公尺，水平投影長度為 $10$ 公尺。"
+    },
+    "usage": {
+      "tokenIn": 1884,
+      "tokenOut": 255,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 123662
+  }
+}

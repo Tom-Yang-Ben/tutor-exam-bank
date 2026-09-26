@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T20:19:53.528Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1816,
+        "sha256": "797d996c6a1d00bdce1378c925b6eb3cff6cfebc1b2654f80b4f75e17c0df320"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 57,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        32,
+        33,
+        56,
+        59,
+        62
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "電場與電位",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "一個點電荷 $Q = 3 \times 10^{-6}$ C 在距離 $0.4$ m 處產生的電場量值為何（取 $k = 9 \times 10^9$ N·m$^2$/C$^2$）？",
+      "answer_text": "(A) $E = k \frac{Q}{r^2} = 9 \times 10^9 \times \frac{3 \times 10^{-6}}{0.16} = 1.6875 \times 10^5$ N/C，方向沿徑向向外。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 1981,
+      "tokenOut": 193,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 92625
+  }
+}

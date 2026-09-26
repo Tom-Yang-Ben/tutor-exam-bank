@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T14:21:22.519Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4023,
+        "sha256": "40d99ff9930ef3183078e4768aab8e5195b034b15ed65e716597ad22b43289ca"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "解方程式 $2^{x+1} = 32$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "confidence": 0.95,
+      "rationale": "題目涉及指數方程，需使用指數與對數的性質進行解題，屬於指數與對數章節。"
+    },
+    "usage": {
+      "tokenIn": 3600,
+      "tokenOut": 62,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 51061
+  }
+}

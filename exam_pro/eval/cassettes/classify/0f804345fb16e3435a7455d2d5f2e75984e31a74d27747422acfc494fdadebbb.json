@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T15:23:55.026Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4095,
+        "sha256": "a08a17171f9a6cae67631ca56874b846acdcd427a51cc873290389567ab6499c"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "不查表，直接寫出 $\\sin^2 40^\\circ$ 與 $\\cos^2 40^\\circ$ 的和。\n(A) $1$　(B) $0$　(C) $\\frac{1}{2}$　(D) 需查表",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "三角函數的疊合",
+      "confidence": 0.95,
+      "rationale": "題目涉及 $\tan\theta$ 與 $\theta$ 的關係，並要求計算 $\tan\theta$ 的值，屬於廣義角與極坐標章節。"
+    },
+    "usage": {
+      "tokenIn": 3646,
+      "tokenOut": 72,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 62286
+  }
+}

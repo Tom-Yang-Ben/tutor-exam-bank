@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T14:41:23.102Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4090,
+        "sha256": "4b04c544f4ac4475d422cacef939df486cc878b4dbba0a483d27e9ff0e611c08"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "$\\sin^2 40^\\circ + \\cos^2 40^\\circ$ 之值為何？\n(A) $1$　(B) $0$　(C) $\\frac{1}{2}$　(D) 需查表才能得知",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "直角三角形的邊角關係",
+      "confidence": 0.95,
+      "rationale": "題目涉及 $\tan\theta$ 與 $\theta$ 的關係，屬於直角三角形的邊角關係章節。"
+    },
+    "usage": {
+      "tokenIn": 3641,
+      "tokenOut": 63,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 49565
+  }
+}

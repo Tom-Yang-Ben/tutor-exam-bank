@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T14:20:31.450Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4067,
+        "sha256": "855f3973aa0a769ef02c104b4a113383eef7a40e122fa52cfff45343ace369c8"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "$\\log_{3} 27 + \\log_{3} 9$ 之值為何？\n(A) $3$　(B) $4$　(C) $5$　(D) $6$",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "confidence": 0.95,
+      "rationale": "題目涉及對數運算，需使用對數的性質進行計算，屬於指數與對數章節。"
+    },
+    "usage": {
+      "tokenIn": 3630,
+      "tokenOut": 58,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 60159
+  }
+}

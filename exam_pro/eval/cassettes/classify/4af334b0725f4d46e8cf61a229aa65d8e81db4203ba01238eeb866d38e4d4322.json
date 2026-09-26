@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T15:25:43.864Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2565,
+        "sha256": "3539ada9f495b61ecc92c9f4248dd2d5b4fac4b1730e801e827c8cc799a6fac8"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "一個 $2$ kg 的物體，其所受合力為 $10$ N，試問它的加速度量值為何？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "confidence": 0.95,
+      "rationale": "題目涉及合力與加速度的關係，需應用牛頓第二運動定律 F=ma，屬於牛頓運動定律章節。"
+    },
+    "usage": {
+      "tokenIn": 2488,
+      "tokenOut": 59,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 45783
+  }
+}

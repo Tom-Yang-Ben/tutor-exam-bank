@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T17:22:38.697Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1791,
+        "sha256": "6793dd87cc406a483111fd2f608dc8e0b5102a976471c6ad1bd5653bcdde84de"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 21,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        13,
+        14,
+        19,
+        20,
+        23
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "空間向量內積",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 3,
+      "question_text": "設空間向量 $\tilde{a} = (k, 3, -2)$ 與 $\tilde{b} = (4, 1, 5)$ 互相垂直，求 $k$。",
+      "answer_text": "垂直即內積為 $0$：$k \times 4 + 3 \times 1 + (-2) \times 5 = 0$，得 $4k + 3 - 10 = 0$，$4k = 7$，$k = \frac{7}{4}$。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 1970,
+      "tokenOut": 175,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 81623
+  }
+}

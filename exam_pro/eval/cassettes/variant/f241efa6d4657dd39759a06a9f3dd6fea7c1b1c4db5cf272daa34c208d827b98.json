@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T18:34:21.373Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1877,
+        "sha256": "7d86f6c36a56a42a5ac50972b636eec30e337e9b14cf2959df71aa8cdbf8188c"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 41,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        34,
+        35,
+        40,
+        42,
+        43
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "摩擦力與向心力",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 3,
+      "question_text": "質量 $8$ kg 的物體置於傾角 $37^\rcirc$ 的斜面上（$\tan 37^\rcirc = \frac{3}{4}$），與斜面間的動摩擦係數 $\nu = 0.2$，求物體沿斜面下滑的加速度（取 $g = 10$ m/s$^2$）。",
+      "answer_text": "$a = g\\left(\\sin 37^\rcirc - \\nu \\cos 37^\rcirc\\right) = 10 \\times \\frac{3}{5} \\times \\left(1 - 0.2\\right) = 10 \\times 0.6 \\times 0.8 = 4.8$ m/s$^2$，方向沿斜面向下。",
+      "figure_desc": "斜面上的物體，標註斜面傾角 $37^\rcirc$，物體質量 $8$ kg，動摩擦係數 $0.2$，重力加速度 $10$ m/s$^2$。"
+    },
+    "usage": {
+      "tokenIn": 2001,
+      "tokenOut": 286,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 141687
+  }
+}

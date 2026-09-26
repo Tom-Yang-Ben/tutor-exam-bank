@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T16:12:02.856Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1791,
+        "sha256": "980c6577967e5de9ae40105e46434101ff894106715a3249da2248fc10b4b705"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 7,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        11,
+        12,
+        19,
+        20,
+        21
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數函數與對數函數",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 3,
+      "question_text": "已知 $\\log_{5} 2 \\times \\log_{2} 25$ 之值為何？",
+      "answer_text": "$3$。換底後 $\\frac{\\log 2}{\\log 5} \\times \\frac{\\log 25}{\\log 2} = \\frac{\\log 25}{\\log 5} = \\log_{5} 25 = 3$。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 1954,
+      "tokenOut": 154,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 171373
+  }
+}

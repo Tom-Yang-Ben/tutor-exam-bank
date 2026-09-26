@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T14:32:13.027Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4094,
+        "sha256": "a7e4558dcd2e74b1a0d6bb9a4ee1ca7fb8ba22a102fe4c9b571fa19769ffc047"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "求 $\\vec{a} = (3, 4)$ 在 $\\vec{b} = (1, 0)$ 上的正射影長度 $\\frac{\\vec{a} \\cdot \\vec{b}}{|\\vec{b}|$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "confidence": 0.95,
+      "rationale": "題目涉及向量內積的計算，並直接使用公式 $\frac{\bar{a} \bullet \bar{b}}{|\bar{b}|}$，屬於向量內積章節的核心內容。"
+    },
+    "usage": {
+      "tokenIn": 3639,
+      "tokenOut": 76,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 56852
+  }
+}

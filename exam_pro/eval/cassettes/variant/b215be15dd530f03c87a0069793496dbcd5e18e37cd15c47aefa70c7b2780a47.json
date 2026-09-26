@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T16:07:56.786Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1646,
+        "sha256": "f081e38e708f465027045ab63df94075402be1bbc46fc5ef372a95ccf0a33519"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 5,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        6,
+        15,
+        22
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 4,
+      "question_text": "已知 $\text{log}_{10} 3 = 0.4771$，求 $3^{60}$ 是幾位數的整數。",
+      "answer_text": "$\\log_{10} 3^{60} = 60 \\times 0.4771 = 28.626$，即 $10^{28} < 3^{60} < 10^{29}$，故 $3^{60}$ 為 $29$ 位數。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 1872,
+      "tokenOut": 170,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 203391
+  }
+}

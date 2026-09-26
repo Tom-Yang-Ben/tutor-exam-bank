@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T14:42:12.041Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4090,
+        "sha256": "18b03ef4e60cf64b513770cf68c48695a403b8321d614d043c01850c3c147e83"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "$\\sin^2 25^\\circ + \\cos^2 25^\\circ$ 之值為何？\n(A) $0$　(B) $\\frac{1}{2}$　(C) $1$　(D) 需查表才能得知",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "直角三角形的邊角關係",
+      "confidence": 0.95,
+      "rationale": "題目涉及 $\tan\theta$ 與 $\theta$ 的關係，屬於直角三角形的邊角關係章節。"
+    },
+    "usage": {
+      "tokenIn": 3641,
+      "tokenOut": 63,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 48935
+  }
+}

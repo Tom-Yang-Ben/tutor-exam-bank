@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T16:53:15.416Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1802,
+        "sha256": "61a6efa6a7063ed7f87e670811119a43672c8ecf56a1b4b2440b51eea974c227"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 17,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        9,
+        10,
+        18,
+        24,
+        28
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "空間向量內積",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "設空間向量 $\tilde{a} = (4, -1, 2)$、$\tilde{b} = (-2, 3, 5)$，求 $\tilde{a} \times \tilde{b}$ 的結果。",
+      "answer_text": "$\tilde{a} \times \tilde{b} = \begin{vmatrix} \boldsymbol{i} & \boldsymbol{j} & \boldsymbol{k} \\ 4 & -1 & 2 \\ -2 & 3 & 5 \\\\"
+    },
+    "usage": {
+      "tokenIn": 1951,
+      "tokenOut": 166,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 178465
+  }
+}

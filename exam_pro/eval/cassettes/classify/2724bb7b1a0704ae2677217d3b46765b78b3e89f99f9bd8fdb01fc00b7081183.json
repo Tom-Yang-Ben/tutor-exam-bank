@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T14:54:06.239Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2598,
+        "sha256": "e1a214786c663ef8733a2d0e17cca6ae7d42cb463eaaa045c64df63e5109d487"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "質量 $60$ kg 的人站在體重計上，電梯以 $3$ m/s$^2$ 的加速度向上加速，求體重計的讀數（取 $g = 10$ m/s$^2$）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "confidence": 0.95,
+      "rationale": "題目涉及電梯加速度與人體受力的關係，需應用牛頓第二定律計算體重計讀數，屬於牛頓運動定律章節。"
+    },
+    "usage": {
+      "tokenIn": 2514,
+      "tokenOut": 66,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 43788
+  }
+}

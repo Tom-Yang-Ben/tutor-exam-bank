@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T19:14:39.823Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1619,
+        "sha256": "574aa156bc9eb5ecf3521e0fb4d6bd35daf9f6b083904952322d5c1325aadf13"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 47,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        32,
+        48,
+        49,
+        50,
+        51
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "直線運動",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "一輛自行車由靜止出發，以 $4$ m/s$^2$ 的等加速度沿直線前進，求 $6$ 秒後的位移。",
+      "answer_text": "$s = v_0 t + \\frac{1}{2} a t^2 = 0 + \\frac{1}{2} \\times 4 \\times 6^2 = 72$ m。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 1832,
+      "tokenOut": 141,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 64942
+  }
+}

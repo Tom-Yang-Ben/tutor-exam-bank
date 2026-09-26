@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-25T16:42:00.758Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 83,
+        "sha256": "a7e23c767e9c8d80bc6e1c68d4bda80024c1f8b7feb199bdbbf1cbd1ba037812"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "設平面向量 $\tilde{u} = (k, 4)$ 與 $\tilde{v} = (-2, 1)$ 互相垂直，求 $k$。",
+      "questionType": "填空",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "2",
+      "answer_form": "number",
+      "steps_summary": "根據向量垂直的條件，兩向量點積為零。計算 $ \tilde{u} \bullet \tilde{v} = k \times (-2) + 4 \times 1 = -2k + 4 $，令其等於零解得 $ -2k + 4 = 0 $，解得 $ k = 2 $。"
+    },
+    "usage": {
+      "tokenIn": 301,
+      "tokenOut": 373,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 148393
+  }
+}

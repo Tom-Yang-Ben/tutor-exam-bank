@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-25T20:18:20.885Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 121,
+        "sha256": "7d4a442ba59f548baf3f8dc41b8d35e0d2984c3d4784b00af2aef28918d70103"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "一顆帶電的金屬球，其電荷量為 $Q = 3 \times 10^{-6}$ C，距離該球 $0.4$ m 處的電場強度為多少？（取 $k = 9 \times 10^9$ N·m$^2$/C$^2$）",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "2.8125e5",
+      "answer_form": "number",
+      "steps_summary": "使用電場強度公式 E = kQ/r²，代入 Q=3e-6 C、r=0.4 m、k=9e9 N·m²/C²。計算得 E = (9e9 * 3e-6) / (0.4²) = 2.8125e5 N/C。"
+    },
+    "usage": {
+      "tokenIn": 337,
+      "tokenOut": 787,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 373530
+  }
+}

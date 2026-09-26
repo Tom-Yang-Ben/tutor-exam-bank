@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-25T20:24:25.025Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 112,
+        "sha256": "fcec0902ed507a003c3c66c1ae139533ff450902418ad86856b0670fd18e7bd2"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "一個點電荷 $Q = 3 \times 10^{-6}$ C 在距離 $0.4$ m 處產生的電場量值為何（取 $k = 9 \times 10^9$ N·m$^2$/C$^2$）？",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "1.6875e5",
+      "answer_form": "number",
+      "steps_summary": "使用電場公式 E = kQ/r²，代入 Q = 3×10⁻⁶ C、r = 0.4 m、k = 9×10⁹ N·m²/C²。計算分子 9×10⁹ × 3×10⁻⁶ = 2.7×10⁴，分母 0.4² = 0.16。最終結果為 2.7×10⁴ / 0.16 = 1.6875×10⁵ N/C。"
+    },
+    "usage": {
+      "tokenIn": 326,
+      "tokenOut": 599,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 265235
+  }
+}

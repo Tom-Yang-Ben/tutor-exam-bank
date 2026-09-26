@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T17:45:46.984Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1822,
+        "sha256": "5332d6db5f5d3f602e76ff84a5f5e77d49adae08fb2a09fe31506d49904d298f"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 29,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        9,
+        27,
+        28,
+        31,
+        61
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "某座摩天大樓的觀景台在 $500^\fdg$ 的方位角上觀察到一輛車，求與此方位角同界的最小正角為何？(A) $140^\fdg$　(B) $100^\fdg$　(C) $260^\fdg$　(D) $380^\fdg$",
+      "answer_text": "(B)。$500^\fdg - 360^\fdg = 140^\fdg$，故最小正同界角為 $140^\fdg$。",
+      "figure_desc": "圖中顯示摩天大樓觀景台與車輛的方位角為 $500^\fdg$，需找出與之同界的最小正角。"
+    },
+    "usage": {
+      "tokenIn": 1968,
+      "tokenOut": 227,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 124398
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T14:54:51.488Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2605,
+        "sha256": "6d76e7986ee7b90631c95380099d09e68997d7c33a276c89095bf621aed833b5"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "光滑定滑輪兩端以輕繩懸掛 $3$ kg 與 $5$ kg 的物體，由靜止釋放後求系統的加速度與繩張力（取 $g = 10$ m/s$^2$，繩與滑輪質量不計）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "confidence": 0.95,
+      "rationale": "題目涉及兩個物體通過繩子連接並受重力作用，需應用牛頓第二定律與張力分析，屬於牛頓運動定律章節。"
+    },
+    "usage": {
+      "tokenIn": 2528,
+      "tokenOut": 67,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 45242
+  }
+}

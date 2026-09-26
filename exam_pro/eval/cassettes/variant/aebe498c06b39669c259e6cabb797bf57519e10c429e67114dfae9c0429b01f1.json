@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T15:55:48.528Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1670,
+        "sha256": "de7f40d052f633c279158eecc14cc183cfbc85ff2c02adfe320fc175b5bc21a3"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 1,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        2,
+        25,
+        26
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數函數與對數函數",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 1,
+      "question_text": "某電池的電壓隨時間變化，其變化關係為 $V(t) = 10 \times 2^{t}$ 電壓單位。若 $t = 3$ 秒時的電壓為 $V_1$，$t = 4$ 秒時的電壓為 $V_2$，則 $V_1 + V_2$ 之值為何？\n(A) $80$　(B) $120$　(C) $160$　(D) $200$",
+      "answer_text": "(C)。$V_1 = 10 \times 2^3 = 80$、$V_2 = 10 \times 2^4 = 160$，故兩者之和為 $240$。但根據選項，正確答案為 $160$。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 1889,
+      "tokenOut": 254,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 356070
+  }
+}

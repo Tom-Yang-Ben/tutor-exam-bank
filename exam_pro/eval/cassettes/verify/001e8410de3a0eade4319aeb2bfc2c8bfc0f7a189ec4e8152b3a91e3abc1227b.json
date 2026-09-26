@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-25T20:38:03.136Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 106,
+        "sha256": "a2410403986725ddafb755a69348f01d81f104a9492fcaa1597f418e871620e8"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "在靜電平衡狀態下，電場線與等位面的關係為何？（提示：電場沿等位面方向的分量）\n(A) 互相平行　(B) 互相垂直　(C) 夾 $45^\theta$　(D) 無固定關係",
+      "questionType": "單選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(B)",
+      "answer_form": "option",
+      "steps_summary": "在靜電平衡狀態下，電場線方向為電勢降低最快的方向，即電場強度方向。等位面處處電勢相同，電場線必垂直於等位面。因電場線方向為電勢梯度方向，而等位面梯度方向即電場方向，故電場線與等位面垂直。選項(B)正確。"
+    },
+    "usage": {
+      "tokenIn": 323,
+      "tokenOut": 491,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 227764
+  }
+}

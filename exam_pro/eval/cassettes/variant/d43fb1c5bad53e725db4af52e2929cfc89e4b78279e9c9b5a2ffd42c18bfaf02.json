@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T16:04:31.046Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1759,
+        "sha256": "29449b4ef6f46320d0d107c931626cbcdd3a428ff8d36d3f51c1e7b0bfcfbab2"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 3,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        4,
+        8,
+        9,
+        10,
+        18
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數函數與對數函數",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "某種細菌每小時繁殖的數量為原來的 $5$ 倍，若初始時有 $125$ 個細菌，求經過 $t$ 小時後細菌總數為 $625$ 個時，$t$ 的值為多少？",
+      "answer_text": "根據題意，細菌數量遵循指數增長模型 $N = N_0 \times 5^t$，其中 $N_0 = 125$，$N = 625$。代入得 $625 = 125 \times 5^t$，化簡得 $5^t = 5$，故 $t = 1$。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 1952,
+      "tokenOut": 216,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 117286
+  }
+}

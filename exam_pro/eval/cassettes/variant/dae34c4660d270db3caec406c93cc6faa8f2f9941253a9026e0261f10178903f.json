@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T17:31:41.338Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1675,
+        "sha256": "0be2c8bef4a71ecd95357a011f3e1caa941d3b1887f41f73d44efdc09fb04827"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 25,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        1,
+        2,
+        26
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "直角三角形的邊角關係",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 1,
+      "question_text": "某座橋的斜坡與水平面的夾角為 $30^\bullet$，若此斜坡的長度為 $10$ 公尺，則此斜坡的垂直高度為多少公尺？ (A) $5$ (B) $5\frac{\root{3}}{2}$ (C) $5\frac{\root{3}}{3}$ (D) $5\frac{\root{3}}{6}$",
+      "answer_text": "(A)。由直角三角形的邊角關係，垂直高度 $h = 10 \times \frac{1}{2} = 5$ 公尺。",
+      "figure_desc": "直角三角形，標註角度 $30^\bullet$，斜邊長 $10$ 公尺，垂直高度為 $h$，水平距離為 $d$。"
+    },
+    "usage": {
+      "tokenIn": 1884,
+      "tokenOut": 240,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 216837
+  }
+}

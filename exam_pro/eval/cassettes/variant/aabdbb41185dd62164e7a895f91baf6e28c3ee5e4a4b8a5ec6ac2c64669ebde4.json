@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T17:39:14.977Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1870,
+        "sha256": "5ce4cd4996a9a15a32ccf8ad97108bc788c6ef8b47243d036eff8fc65b7da06a"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 27,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        10,
+        28,
+        29,
+        31,
+        61
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 2,
+      "question_text": "某座摩天大樓的觀景台在 $240^\fdg$ 方向上觀測到一輛車，請問該車所在方向的參考角為何？",
+      "answer_text": "$120^\fdg$。$240^\fdg$ 在第三象限、參考角為 $240^\fdg - 180^\fdg = 60^\fdg$，但參考角應為 $180^\fdg - 60^\fdg = 120^\fdg$。",
+      "figure_desc": "圖中顯示一個以原點為中心的極坐標系，標示出 $240^\fdg$ 方向與參考角 $120^\fdg$ 的位置。"
+    },
+    "usage": {
+      "tokenIn": 1995,
+      "tokenOut": 220,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 106666
+  }
+}

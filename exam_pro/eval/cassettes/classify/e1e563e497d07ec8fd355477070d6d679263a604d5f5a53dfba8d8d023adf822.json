@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T15:33:51.906Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4043,
+        "sha256": "708f6023a591085fb564d94fe4dce635d69302e5bbed74bbd23da4b9b70aa26c"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "利用對數律化簡 $\\log_{5} 25 + \\log_{5} 5$，並求其值。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "confidence": 0.95,
+      "rationale": "題目使用對數律化簡並求值，屬於指數與對數章節的計算內容。"
+    },
+    "usage": {
+      "tokenIn": 3613,
+      "tokenOut": 55,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 50033
+  }
+}
