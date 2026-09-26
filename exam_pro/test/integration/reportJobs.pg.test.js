@@ -76,6 +76,32 @@ function runSuite() {
             assert.equal(/NaN|undefined/.test(md), false);
         });
 
+        // 〔整合 2026-09-26 dec/integration-r5〕collect 的回傳在合併時兩邊都加了欄位（本分支 verify.rerun、
+        // dec/local-ocr-first-fix 的 ocrFigures）：同一次 collect 兩個都要算得對，報表兩節都印。
+        test('〔整合 r5〕同一次 collect 同時帶 verify.rerun 與 ocrFigures，報表兩節都印', async () => {
+            const { rows } = await query('SELECT job_id FROM job_questions ORDER BY id LIMIT 1');
+            const jobId = rows[0].job_id;
+            const figures = { detected: 3, assigned: 2, hinted: 1, layout: 'ok', truncated: false };
+            await query(
+                `INSERT INTO job_events (job_id, jq_id, node, attempt, latency_ms, outcome, detail)
+                 VALUES ($1, NULL, 'extract', 1, 1000, 'pass', $2)`,
+                [jobId, JSON.stringify({ cross_check: { mode: 'ocr', figures } })]);
+            // cross 模式的拆題事件不算進 OCR 版面配圖
+            await query(
+                `INSERT INTO job_events (job_id, jq_id, node, attempt, latency_ms, outcome, detail)
+                 VALUES ($1, NULL, 'extract', 1, 1000, 'pass', $2)`,
+                [jobId, JSON.stringify({ cross_check: { mode: 'cross' } })]);
+            const r = await collect(db, parseSince('1d'));
+            assert.deepEqual({ ...r.verify.rerun }, { reruns: 3, rerun_pass: 1, rerun_mismatch: 1, rerun_other: 1, no_next: 2 });
+            assert.deepEqual({ ...r.ocrFigures }, { chunks: 1, detected: 3, assigned: 2, hinted: 1, no_layout: 0, truncated: 0 });
+            const md = renderMarkdown(r);
+            assert.ok(md.includes('| 　重跑後通過 | 1 |'), md);
+            assert.ok(md.includes('要不要關掉見 docs/local-mode.md 第 10.14 條'), md);
+            assert.ok(md.includes('## OCR 版面配圖（LOCAL_EXTRACT_MODE=ocr）'), md);
+            assert.ok(md.includes('| 自動配到題目 | 2 |'), md);
+            assert.equal(/NaN|undefined/.test(md), false);
+        });
+
         test('期間外的事件不算', async () => {
             await query(`UPDATE job_events SET created_at = now() - interval '3 days'`);
             const r = await collect(db, parseSince('1d'));
