@@ -248,5 +248,77 @@ function runSuite() {
                 assert.ok(r.calls >= 2, `預期被重跑，實際 ${r.calls} 次——這個對照組量不到風險，上一個測試就沒有意義`);
             });
         });
+
+        // 〔Owner 決策單 2026-09-26 第四輪 V3〕拆題模型是 ollama 時，拆題一塊逾時只重試 1 次（共跑 2 次）；
+        // 其他錯誤類別與 Gemini 模式仍是 3 次（docs/local-mode.md 10.11 表 #4）。假 extract 讀「假 PDF」裡的劇本。
+        describe('〔第四輪 V3〕本機拆題逾時只重試 1 次', () => {
+            const fakeExtract = require(path.join(FAKE_AGENTS_DIR, 'extract.js'));
+            const JOBS_DIR = path.join(APP_DIR, 'data', 'jobs');
+            const written = [];
+
+            before(() => { fs.mkdirSync(JOBS_DIR, { recursive: true }); });
+            beforeEach(() => { fakeExtract.resetCounts(); });
+            after(() => { for (const f of written) fs.rmSync(f, { force: true }); });
+
+            async function seedPdfJob(plan) {
+                const { rows } = await query(
+                    `INSERT INTO jobs (kind, pdf_sha256, state, budget_usd, page_count)
+                     VALUES ('pdf', $1, 'queued', 0.5, 2) RETURNING id`, [crypto.randomBytes(32).toString('hex')]);
+                const jobId = rows[0].id;
+                const file = path.join(JOBS_DIR, `${jobId}.pdf`);
+                fs.writeFileSync(file, JSON.stringify(plan), 'utf8');
+                written.push(file);
+                await query('UPDATE jobs SET pdf_path = $2 WHERE id = $1', [jobId, path.posix.join('data', 'jobs', `${jobId}.pdf`)]);
+                return jobId;
+            }
+
+            /** 跑到拆題結束；回 jobs 那一列與拆題事件 */
+            async function runExtract(jobId, localExtract) {
+                const runner = makeRunner({ localExtract, concurrency: 1 });
+                await runner.tick();
+                while (runner.inFlight > 0) await new Promise(r => setTimeout(r, 10));
+                const { rows } = await query('SELECT state, error, pdf_path FROM jobs WHERE id = $1', [jobId]);
+                const { rows: ev } = await query(
+                    `SELECT attempt, outcome, error_class FROM job_events WHERE job_id = $1 AND node = 'extract' ORDER BY attempt`, [jobId]);
+                const { rows: jq } = await query('SELECT COUNT(*)::int AS n FROM job_questions WHERE job_id = $1', [jobId]);
+                return { job: rows[0], events: ev.map(e => [e.attempt, e.outcome, e.error_class]), created: jq[0].n };
+            }
+
+            test('本機模式、每次都逾時：共 2 次拆題事件就讓整份卷 failed，error 註明只重試 1 次，PDF 留著', async () => {
+                const jobId = await seedPdfJob({ questions: [payload(1)], perChunk: { 1: { kind: 'error', errorClass: 'timeout' } } });
+                const r = await runExtract(jobId, true);
+                assert.equal(r.job.state, 'failed');
+                assert.equal(r.job.error, '拆題連續失敗（chunk 1）：假 extract 供應商錯誤（本機模式逾時只重試 1 次）');
+                assert.deepEqual(r.events, [[1, 'error', 'timeout'], [2, 'error', 'timeout']]);
+                assert.equal(r.created, 0);
+                assert.ok(r.job.pdf_path, '失敗時 pdf_path 不清空（與原本相同）');
+                assert.ok(fs.existsSync(path.join(JOBS_DIR, `${jobId}.pdf`)));
+            });
+
+            test('本機模式、逾時 1 次後成功：那 1 次重試照常拆完、建列', async () => {
+                const jobId = await seedPdfJob({ questions: [payload(1)], perChunk: { 1: { kind: 'error', errorClass: 'timeout', times: 1 } } });
+                const r = await runExtract(jobId, true);
+                assert.ok(['processing', 'done'].includes(r.job.state), r.job.state);
+                assert.deepEqual(r.events, [[1, 'error', 'timeout'], [2, 'pass', null]]);
+                assert.equal(r.created, 1);
+                assert.equal(r.job.pdf_path, null);
+            });
+
+            test('本機模式的其他錯誤類別不變：provider_error 仍是 4 次事件（重試 3 次）', async () => {
+                const jobId = await seedPdfJob({ questions: [payload(1)], perChunk: { 1: { kind: 'error', errorClass: 'provider_error' } } });
+                const r = await runExtract(jobId, true);
+                assert.equal(r.job.state, 'failed');
+                assert.equal(r.job.error, '拆題連續失敗（chunk 1）：假 extract 供應商錯誤');
+                assert.deepEqual(r.events.map(e => e[0]), [1, 2, 3, 4]);
+            });
+
+            test('Gemini 模式不變：逾時仍是 4 次事件（重試 3 次），error 與原本逐字相同', async () => {
+                const jobId = await seedPdfJob({ questions: [payload(1)], perChunk: { 1: { kind: 'error', errorClass: 'timeout' } } });
+                const r = await runExtract(jobId, false);
+                assert.equal(r.job.state, 'failed');
+                assert.equal(r.job.error, '拆題連續失敗（chunk 1）：假 extract 供應商錯誤');
+                assert.deepEqual(r.events, [1, 2, 3, 4].map(a => [a, 'error', 'timeout']));
+            });
+        });
     });
 }

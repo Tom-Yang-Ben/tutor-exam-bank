@@ -17,6 +17,10 @@
 //      存同一個 data/figures/，路徑以**新增**的 `question_img` 鍵回傳（就是 questions 表的欄位名；
 //      前端把整筆送回 batch-save-questions 入庫）。沒有附圖的題仍然只有那六個鍵，逐位元不變。
 //      裁圖失敗只記 warn：題目照回、該題沒有 question_img（docs/figures.md「舊流程 /analyze-pdf 的附圖」）。
+//   5. 〔Owner 決策單 2026-09-26 第四輪 V4〕本機模式（拆題模型是 ollama）且 .env 沒明寫 JOB_PDF_CHUNK_PAGES 時，
+//      每塊頁數與新流程（管線）相同：workers/jobRunner.js 的 LOCAL_PDF_CHUNK_PAGES（共用同一個常數，本檔不寫第二份數字）。
+//      原本沒寫時一律 20 頁，本機一次送 4 頁卷比管線更容易逾時（docs/local-mode.md 10.11 表 #6、LM-12 ⑤）。
+//      Gemini 模式逐字不變（沒寫時仍是 20 頁）；明寫的正整數一律優先，亂填（非正整數）與沒寫相同（intFromEnv 的既有慣例）。
 //
 // services/legacy/analyzePdf.js 是 A-T8 之前的凍結快照（eval 對照用），**不是**這支；本次沒有動它。
 
@@ -60,8 +64,20 @@ function _setDepsForTest(overrides = {}) {
     Object.assign(depsOverride, overrides || {});
 }
 
+/**
+ * 〔Owner 決策單 2026-09-26 第四輪 V4〕.env 沒明寫 JOB_PDF_CHUNK_PAGES 時的每塊頁數。
+ * 本機模式的判斷與拆題 agent 決定走哪條路徑用的是同一支（agents/extract.js 的 isLocalExtract，看 ctx 的拆題模型），
+ * 本機預設直接讀 workers/jobRunner.js 匯出的 LOCAL_PDF_CHUNK_PAGES——與管線共用同一個常數。
+ * @param {{extract?:string}} modelsCfg ctx.config.models
+ */
+function defaultChunkPages(modelsCfg) {
+    const local = extractAgent.isLocalExtract({ config: { models: modelsCfg } });
+    return local ? require('../workers/jobRunner').LOCAL_PDF_CHUNK_PAGES : DEFAULT_CHUNK_PAGES;
+}
+
 /** 組一個最小的 Ctx 給 agent 用（agent 自己不讀 process.env，第 3.1 條） */
 function buildCtx(d = deps()) {
+    const modelsCfg = d.models || { extract: models.MODEL_EXTRACT, verify: models.MODEL_VERIFY, text: models.MODEL_TEXT };   // 〔LM-15〕
     return {
         llm: d.llm,
         db: null,
@@ -69,9 +85,9 @@ function buildCtx(d = deps()) {
         jq: null,
         logger: d.logger,
         config: {
-            models: d.models || { extract: models.MODEL_EXTRACT, verify: models.MODEL_VERIFY, text: models.MODEL_TEXT },   // 〔LM-15〕
+            models: modelsCfg,
             thresholds: {
-                pdfChunkPages: intFromEnv('JOB_PDF_CHUNK_PAGES', DEFAULT_CHUNK_PAGES),
+                pdfChunkPages: intFromEnv('JOB_PDF_CHUNK_PAGES', defaultChunkPages(modelsCfg)),   // 〔第四輪 V4〕
                 inlineMaxBytes: intFromEnv('GEMINI_INLINE_MAX_BYTES', DEFAULT_INLINE_MAX_BYTES)
             }
         },

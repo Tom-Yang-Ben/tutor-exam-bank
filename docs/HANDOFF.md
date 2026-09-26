@@ -8,6 +8,7 @@
 > 〔修訂 2026-09-26 決策單〕Owner 2026-09-25 在「出題系統決策單」的第一輪答案整理在 **§0.00**（含第二輪審定單待答項目）；§0.0、§0.0a、§0.2 被決定的項目已就地加註，原文保留。
 > 〔修訂 2026-09-26 合併回填〕第一輪的 B5、B7、B10、B21 已合入 `local/integration`（`7dc14a0`，尚未推上 GitHub）；§0.00、§0.2、§0.3、§0.4 就地更新。〔修訂 2026-09-26 決策單第二、三輪〕Owner 2026-09-26 在第二輪「知識點審定單」與第三輪「重練與收尾決策單」的答覆登錄在 **§0.00a**（重點與實作分支；實作分支都還沒合入）。〔整合 2026-09-26〕§0.00a 的實作分支（錯題重練除外）、B20 修正分支與 `dec/x-nlq-improve-fix`、`dec/x-local-perf-tool-fix`、`dec/x-readme-architecture-fix` 已合入 ~~`dec/integration-r23`~~ `dec/integration-all`（待併 `local/integration`）；各處狀態見 §0.00a 最後的表與 §0.4 第 4 項。
 > 〔整合 2026-09-26〕`dec/integration-r23` 之後又整合了一次：`dec/integration-final`（r23＋審查修正 `dec/integration-r23-fix`＋variant 向量修正 `dec/fix-variant-embed-record`）再依序併入錯題重練全部（`dec/retrain-phase2-fix`）與本機看圖逾時（`dec/local-vision-timeout`），成為 **`dec/integration-all`**（待併 `local/integration`）。本檔原寫「已合入 `dec/integration-r23`」的地方一律改為「已合入 ~~`dec/integration-r23`~~ `dec/integration-all`」（r23 的內容都在裡面），錯題重練原本的「另一條工作進行中」也改為已合入。完整 `ci.sh` 結果在 §0.4 第 5 項；Owner 接下來要做的事與待裁決清單在 §0.4 第 6、7 項。
+> 〔修訂 2026-09-26 決策單第四輪〕Owner 2026-09-26 在第四輪「上線與本機速度決策單」（U1～U3、V1～V5、T1～T3、Q1～Q4）的答覆登錄在 **§0.00b**（每題的答覆與落實位置）；程式改動在分支 `dec/r4-decisions`（V3、V4、Q1、Q3）。§0.00 的 B18、§0.00a 的 M4、§0.4 第 6、7 項已就地加註，原文保留。
 
 ---
 
@@ -49,7 +50,7 @@
 | B15 | 三科知識點逐章審定：找時間一次審完 | 第二輪待答。〔修訂 2026-09-26 決策單第二、三輪〕知識點審定單已答（§0.00a）；逐條 `approved` 仍只有數學 4 條，物理口語版依 P20 全面重寫後待 Ben 逐章核對。〔整合 2026-09-26〕三科種子檔的實作分支已合入 ~~`dec/integration-r23`~~ `dec/integration-all`（待併 `local/integration`）；逐條審定數不變 | 取代 §0.2 第 11 項「本週教哪章就審哪章」 |
 | B16 | 未收錄的主題：之後需要再補 | 已定（暫不補） | — |
 | B17 | 化學別名優先：維持 | 已定 | 「碰撞學說」「原子結構」仍要打完整章名（§0.3） |
-| B18 | 本機拆題的限制：上傳幾份卷後再看 | 待決（實測後）。〔整合 2026-09-26〕Owner 重錄 pipeline 時看圖拆題在 30 分逾時；逾時清單、量測指令與四個加速選項已由 `dec/local-vision-timeout` 補上（已合入 `dec/integration-all`），選哪一個待 Owner 決定（§0.4 第 7 項） | `local-mode.md` LM-12 |
+| B18 | 本機拆題的限制：上傳幾份卷後再看 | 待決（實測後）。〔整合 2026-09-26〕Owner 重錄 pipeline 時看圖拆題在 30 分逾時；逾時清單、量測指令與四個加速選項已由 `dec/local-vision-timeout` 補上（已合入 `dec/integration-all`），選哪一個待 Owner 決定（§0.4 第 7 項）。〔修訂 2026-09-26 決策單第四輪 V1～V4〕逾時的處理已定：Owner 的 `.env` 直接放寬（V1）、沒有獨立顯示卡（V2）、本機拆題逾時只重試 1 次（V3）、`/analyze-pdf` 本機預設每塊 2 頁（V4），見 §0.00b；「上傳幾份卷後再看」的其餘限制仍待決 | `local-mode.md` LM-12 |
 | B19 | 本機家教：試幾題難題後再定 | 待決（試用後） | 本機家教沒有程式驗算（§0.0a 已知限制） |
 | B20 | 舊題補附圖（roadmap 第 19 項）：做 | 工具實作中（`dec/b20-backfill-figures-tool`）；做哪幾份卷→第二輪 X2 待答。〔修訂 2026-09-26 決策單第二、三輪〕X2 已答：各校考卷整個資料夾先跑「只列出」、再逐題確認；工具修正中（`dec/b20-backfill-figures-tool-fix`），尚未合入。〔整合 2026-09-26〕含第二輪修正的 `dec/b20-backfill-figures-tool-fix2` 已合入 ~~`dec/integration-r23`~~ `dec/integration-all`（待併 `local/integration`） | 會寫正式庫、逐題人工確認對應 |
 | B21 | `/analyze-pdf` 舊流程（roadmap 第 20 項）：保留並補裁圖（Owner 選 B，不採原建議 A） | ~~實作中（`dec/b21-legacy-analyze-pdf-figures`）~~ 〔修訂 2026-09-26 合併回填〕**已合入 `local/integration`（`7dc14a0`）** | 兩條拆題路徑並存（舊流程重用管線的 `figureService` 裁圖，見 `docs/figures.md`；化學仍只走新管線） |
@@ -81,7 +82,7 @@
 **數學（M1～M21）**：要改的 9 項，其餘 M1、M2、M6、M7、M9、M11～M14、M16、M18、M20 維持現狀。
 
 - M3：勘根定理搬到選修「函數的極限」（`.07`），改寫成連續函數版本，和中間值定理分工。
-- M4：「集合與計數原理」加邏輯兩條（命題與且、或、非；充分條件與必要條件）。〔整合 2026-09-26 審查〕實作時加的查題別名「命題」會把「段考命題」（出題）判成本章，已換成「且或非」；「邏輯」有同樣的問題，是否保留待 Owner 決定（`kc-review-數學.md` 第 10.3 節第 7 點）。
+- M4：「集合與計數原理」加邏輯兩條（命題與且、或、非；充分條件與必要條件）。〔整合 2026-09-26 審查〕實作時加的查題別名「命題」會把「段考命題」（出題）判成本章，已換成「且或非」；「邏輯」有同樣的問題，是否保留待 Owner 決定（`kc-review-數學.md` 第 10.3 節第 7 點）。〔修訂 2026-09-26 決策單第四輪 Q1／Q2〕Owner：拿掉「邏輯」（改由 LLM 判斷）、「且或非」保留；`dec/r4-decisions` 已改（§0.00b）。
 - M5：空間向量坐標運算搬到「空間概念與座標系」（`空間向量內積.01` → `空間概念與座標系.06`）。
 - M8：標準差只寫除以 n，不提 n−1。
 - M10：刪「二項分布中機率最大的次數」那一條，幾何分布刪 E(X)=1/p（K9：口語版一起改）。
@@ -155,6 +156,31 @@
 | 〔整合 2026-09-26〕本機看圖拆題逾時（Owner 重錄 pipeline 時 `extract_vision` 30 分逾時） | `dec/local-vision-timeout`（`e7a4bad`） | **已合入 `dec/integration-all`（待併 `local/integration`）**：重錄 pipeline／e2e 時單次呼叫與節點逾時放寬到 3 小時、Ollama 長呼叫可印進度（`OLLAMA_PROGRESS_MS`）、`usage.timing` 進回放檔、`npm run local:bench-vision`、`VISION_MAX_EDGE_PX`（預設不縮）；預設值一個都沒改。加速選項待 Owner 決定（`local-mode.md` 10.11；§0.4 第 7 項） |
 | X1 | 不改程式 | 開 A8 的 PR 時適用 |
 | 〔整合 2026-09-26〕不在決策單上、同批合入的分支 | `dec/x-nlq-improve-fix`（查題證據檢查與平面／空間對齊、`nlq.v2` 模板，`docs/retrieval.md` §9）、`dec/x-local-perf-tool-fix`（`npm run perf:local`，B18 實測用）、`dec/x-readme-architecture-fix`（README、sad.md §7.1）、`dec/docs-backfill-round1-merged`（本節的登錄） | **已合入 ~~`dec/integration-r23`~~ `dec/integration-all`（待併 `local/integration`）** |
+
+### 0.00b Owner 決策單第四輪（2026-09-26）〔修訂 2026-09-26 決策單第四輪〕
+
+> 來源：Owner（Ben）2026-09-26 在第四輪「上線與本機速度決策單」（15 題：U1～U3 上線與重錄、V1～V5 本機速度、T1～T3 錯題重練、Q1～Q4 知識點與查題）填的答案，備註欄全空；由 AI 登錄並落實（分支 `dec/r4-decisions`，起點 `local/integration` 的 `4bdaf87`）。
+> 程式與內容只改四項（V3、V4、Q1、Q3），其餘只登錄。V1 的逾時放寬只改 Owner 電腦上的 `.env`，程式預設不變。AI 不代填任何「核准」欄：DEC-013 仍待 Owner 明示簽核。
+
+| 題號 | 答覆 | 落實在哪 |
+|---|---|---|
+| U1 | 選 1：現在就做——先存錄好的檔 → 合併新版 → 備份資料庫 → 升級到 0018 並核對 → 推到 GitHub | 不改程式。由 AI 在 Owner 電腦上執行；升級照 §0.4 第 6 項①（`deployment_and_operations.md` §3.6）；本分支併入 `local/integration` 後一起送過去 |
+| U2 | 選 1：9/24 用 Gemini 錄的 131 個檔一起存（與本機錄的分開兩個 commit） | 不改程式；在 Owner 電腦上 commit。之後要清再用 `cassettes:prune` |
+| U3 | 選 2：更新後先只跑 1 頁看圖量測，其餘重錄等看完數字再說 | 不改程式；§0.4 第 6 項②③ 加註；`local-mode.md` 10.11 第 3 點「Owner 的選擇」 |
+| V1 | 選 2：直接放寬——`OLLAMA_TIMEOUT_MS=5400000`（90 分）、`JOB_NODE_TIMEOUT_MS=7200000`（2 小時） | 只改 Owner 的 `.env`；程式預設（30 分、45 分）與 `.env.example` 不變；(a) 一塊 1 頁、(b) 縮圖這次不採用。`local-mode.md` 10.11 第 3 點 |
+| V2 | 選 3：沒有獨立顯示卡，只有內顯 | 不改程式；選項 (d) 不適用（`local-mode.md` 10.11 第 3 點） |
+| V3 | 選 2：本機模式逾時只重試 1 次 | **程式**：`workers/jobRunner.js` 的 `runExtractChunk`＋常數 `LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES = 1`（檔頭註明出處）。拆題模型是 ollama 時，拆題一塊 `timeout` 只重試 1 次（共跑 2 次），`jobs.error` 註明「（本機模式逾時只重試 1 次）」；其他錯誤類別與 Gemini 模式仍重試 3 次（逾時也算進這 3 次）；逐題的節點照狀態機原規則。測試：`test/unit/localRound4Decisions.test.js`、`test/integration/localExtract.pg.test.js`。`local-mode.md` 10.11 表 #4 |
+| V4 | 選 1：舊流程 `/analyze-pdf` 本機模式預設跟新流程一樣每塊 2 頁 | **程式**：`services/aiService.js` 的 `buildCtx`——拆題模型是 ollama 且 `.env` 沒明寫（或不是正整數）`JOB_PDF_CHUNK_PAGES` 時，用 `workers/jobRunner.js` 的 `LOCAL_PDF_CHUNK_PAGES`（同一個常數）；Gemini 模式仍 20 頁。測試：`test/unit/localRound4Decisions.test.js`。`local-mode.md` 10.11 表 #6 |
+| V5 | 選 1：重錄後依本機向量分布提出三個餘弦門檻的新值與依據，Owner 核准後才改 | 這次不改任何門檻（程式預設、`eval/thresholds.json` 都不動）；`local-mode.md` 10.7 第 9 點；§0.4 第 7 項 |
+| T1 | 選 1：「判定已會」的題被承上組帶出又答錯，維持已會、只提示 | 不改程式（凍結的純函式照舊）；`retrain-and-review.md` 第 5.6.6 節 |
+| T2 | 選 1：錯題重練實作細節 ①～⑧ 全部照現狀 | 不改程式；`retrain-and-review.md` 第 5.6.5 節彙總表之前（①～⑧ 逐條列出） |
+| T3 | 選 1：Word 詳解版只在答案與詳解段標「（重練）」，題目段不標 | 不改程式；同上 |
+| Q1 | 選 1：拿掉查題別名「邏輯」（改由 LLM 輔路徑判斷） | **程式**：`config/chapterAliases.js`；`test/unit/kcReviewRound2Math.test.js`（M4 改釘其餘四個別名，另加一案：「邏輯推理的機率題」規則抓不到章、`confident` 為假）。`kc-review-數學.md` 第 10.3 節第 7 點 |
+| Q2 | 選 1：別名「且或非」保留（「命題」不加回） | 不改程式；同上 |
+| Q3 | 選 1：`CHEM.溶解度.05` 的 description 改成「氫氧化物多難溶（含 Ca(OH)₂），鹼金屬與 Ba 的除外」，其餘照現在 | **內容**：`config/kc/化學.json` 只改這一處（199 → 198 字），口語版不動；`npm run kc:validate` 通過；`test/unit/kcReviewChem.test.js` 新增一案。`kc-review-化學.md` 第 10 節 |
+| Q4 | 選 1：舊題補附圖的候選排序維持「數字一致」在「出處註記」之前 | 不改程式；`figures.md`「候選題」一段加註 |
+
+**本分支的完整 `ci.sh`**（測試庫 `tutor_r4dec_test`）：unit 3,261（3,259 過、2 略過；比 `local/integration` 多 17 案）、`check:html`、migrate（到 0018）、integration 597（多 4 案）全綠。e2e 12 項中 3 項紅、五個 eval 紅——與 `local/integration`（`4bdaf87`）在同一環境逐項比對，失敗的測試與 eval 輸出相同（缺本機 ocr cassette；classify 92、pipeline 1、nlq 8 筆 replay miss；retrieval 未達門檻；variant 缺向量 fixture），全是本機回放檔／向量檔還沒重錄。沒有改 `eval/thresholds.json`、golden、cassette，也沒有弱化任何既有測試。
 
 ### 0.0 章節重整（2026-09-25）〔修訂 2026-09-25 章節重整〕
 
@@ -255,18 +281,19 @@
 5. 〔整合 2026-09-26〕**`dec/integration-all` 的狀態**：`dec/integration-final`（`fab8eb8`）依序以 `--no-ff` 併入 `dec/retrain-phase2-fix`（`43cf5fc`）與 `dec/local-vision-timeout`（`e7a4bad`）。完整 `ci.sh`：unit 3,244（3,242 過、2 略過）、`check:html`、migrate（到 0018）、integration 593 全綠；e2e 12 項中 3 項紅（缺本機 ocr cassette）、五個 eval 紅（classify 92、pipeline 1、nlq 8 筆 replay miss，retrieval 未達門檻，variant 缺向量 fixture）——種類與筆數和兩條來源分支相同，全是本機回放檔／向量檔還沒重錄。整合時只改了一處測試夾具：`figureBackfill.pg.test.js`（B20，寫在拆表之前）的 `TRUNCATE attempts, …` 改成 `TRUNCATE attempt_records, assignments, …`（對檢視 TRUNCATE 會報錯；斷言不動）。任何「核准」欄都沒有動，DEC-013 仍待 Owner 簽核。
 6. 〔整合 2026-09-26〕**Owner 需要做的事**（依序）：
    - ① 更新程式後 migrate 到 0018：照 `engineering_docs/06_ops/deployment_and_operations.md` §3.6（正式庫已在 0015：2026-09-25 本機模式上線時已從 0009 套到 0015，章名遷移、換向量、`search:reindex` 也做完了，這些不要重做）先停服務 → 更新程式 → `npm run db:backup` → `node scripts/snapshot_attempt_views.js --out=before.json` → `npm run migrate` → `--out=after.json` → `--compare before.json after.json` 回 0 才啟動。`FEATURE_RETRAIN` 關閉也一定要套。§0.2 第 7 項是從 0015 之前一路升上來的完整路徑（還沒升到 0015 的庫才照它從頭走）；它列的步驟裡 Owner 還沒做的只有 `kc:load`（併入 `local/integration` 之後才跑）與 `solution:backfill`，照第 7 項的規則做。
+   - 〔修訂 2026-09-26 決策單第四輪 U1～U3〕Owner 選：①（連同存錄製檔、推送）現在就做、由 AI 在 Owner 電腦上執行（U1），9/24 Gemini 錄的 131 個檔一起存、與本機錄的分開 commit（U2）；更新後**先只做 ③ 的 1 頁量測**，② 的重錄等看完數字再決定（U3）。`.env` 另照 V1 放寬 `OLLAMA_TIMEOUT_MS=5400000`、`JOB_NODE_TIMEOUT_MS=7200000`（§0.00b）。
    - ② 以本機模型重錄（[`local-mode.md`](local-mode.md) 10.7）：`classify.v2`（CR-9 與 K2、K3，classify 全部 92 筆；`record_local.bat classify`）、`nlq.v2`（LLM 路徑 8 句；`record_local.bat nlq`）、variant 補向量（10.7 第 8 點：LLM 全部回放、只呼叫 embedding 模型）、pipeline＋e2e（`record_local.bat pipeline,e2e`；本版起這兩步的單次呼叫與節點逾時放寬到 3 小時、每 5 分鐘印進度，10.11 第 2 點）。錄完先 `npm run cassettes:rerecord -- --dry-run` 看盤點（缺 cassette、缺向量應為 0），再 commit、push。
    - ③ `npm run local:bench-vision`（10.8、10.11：先卸載模型、只看 1 頁，印載入／讀圖／輸出各花多久與逾時建議；可再加 `-- --max-edge 1600` 比一次），結果貼回來，當作第 7 項加速選項的依據。
    - ④ 重錄之後 `npm run perf:local`（10.10：每一步實際秒數、每頁讀圖秒數與逾時建議）。
    - ⑤（要用錯題重練時）`.env` 設 `FEATURE_RETRAIN=true` 重啟，在瀏覽器實際走一遍：批改卡勾「要重練」→ 錯題重練卡 → 出一份重練卷 → 下載 Word（這些畫面只以 miniDom 與一次性 Playwright 冒煙測過）。
 7. 〔整合 2026-09-26〕**待 Owner 裁決**（AI 不代為決定；背景、選項與代價在各條的出處）：
-   - 「判定已會」的題被承上組帶著出又答錯：維持練到會（目前的行為，批改卡會另外提示），還是回第 1 關（要改凍結的純函式）——[`retrain-and-review.md`](retrain-and-review.md) 第 5.6.6 節「待 Owner 裁決」。
-   - 查題別名「邏輯」保留或拿掉（「邏輯推理的機率題」目前被規則判成「集合與計數原理」、不走 LLM）——[`kc-review-數學.md`](kc-review-數學.md) 第 10.3 節第 7 點。
-   - 本機向量的三個餘弦門檻要不要依 `qwen3-embedding:0.6b` 重新校準：`VARIANT_RETRIEVE_SIM_MIN` 0.80、`VARIANT_OFFTOPIC_SIM_MIN` 0.90、`DEDUP_DUP_THRESHOLD` 0.97（都照 Gemini 向量定的；variant 的 `retrieved_coverage` 本機重錄實測 0.2333）——[`local-mode.md`](local-mode.md) 10.7 第 9 點。
-   - 看圖拆題加速選項：(a) 一塊 1 頁、(b) 送出前縮圖 `VISION_MAX_EDGE_PX`、(c) 同時放寬 `OLLAMA_TIMEOUT_MS` 與 `JOB_NODE_TIMEOUT_MS`、(d) 獨立顯示卡；建議先做第 6 項③的量測——[`local-mode.md`](local-mode.md) 10.11 第 3 點。
-   - 本機拆題逾時要不要改成不重試（現在逾時算錯誤、退避後重試 3 次，一塊真的做不完時最壞要 4 × 節點逾時才讓整份卷失敗），以及舊流程 `/analyze-pdf` 在 `.env` 沒寫 `JOB_PDF_CHUNK_PAGES` 時一次送 20 頁（比管線的 2 頁更容易逾時，LM-12 ⑤）——[`local-mode.md`](local-mode.md) 10.11 第 1 點的表（#4、#6）與選項 (c) 的代價一。
-   - 錯題重練實作時自行決定、列給 Owner 確認的各條：第 5.6.2 節 ①～⑬（排程核心：重新加入的同日邊界、API 回應多的鍵、勾選與取消的承上組規則等）、第 5.6.3 節 ①～⑪（出卷：R12 建議題數、附帶只挑同科、Word 只標答案區等）、第 5.6.4 節 ①～⑪（畫面與成效）、第 5.6.6 節 ①～⑥（審查修正：移出的來源、刪卷時的承上組、仍然不同的邊界等），彙總在第 5.6.5 節——[`retrain-and-review.md`](retrain-and-review.md)。
-   - 既有仍待決：DEC-013 核准欄待 Owner 明示簽核；A3（nlq-036 計分，等重錄）、B18（本機拆題限制，見上面加速選項）、B19（本機家教）、ADR-017（等本機實測）——§0.00。
+   - ~~「判定已會」的題被承上組帶著出又答錯：維持練到會（目前的行為，批改卡會另外提示），還是回第 1 關（要改凍結的純函式）——[`retrain-and-review.md`](retrain-and-review.md) 第 5.6.6 節「待 Owner 裁決」。~~ 〔修訂 2026-09-26 決策單第四輪 T1〕已決定：維持練到會、只提示，不改程式（§0.00b）。
+   - ~~查題別名「邏輯」保留或拿掉（「邏輯推理的機率題」目前被規則判成「集合與計數原理」、不走 LLM）——[`kc-review-數學.md`](kc-review-數學.md) 第 10.3 節第 7 點。~~ 〔修訂 2026-09-26 決策單第四輪 Q1〕已決定：拿掉，`dec/r4-decisions` 已改（「且或非」依 Q2 保留）。
+   - ~~本機向量的三個餘弦門檻要不要依 `qwen3-embedding:0.6b` 重新校準：`VARIANT_RETRIEVE_SIM_MIN` 0.80、`VARIANT_OFFTOPIC_SIM_MIN` 0.90、`DEDUP_DUP_THRESHOLD` 0.97（都照 Gemini 向量定的；variant 的 `retrieved_coverage` 本機重錄實測 0.2333）——[`local-mode.md`](local-mode.md) 10.7 第 9 點。~~ 〔修訂 2026-09-26 決策單第四輪 V5〕已決定要重新校準（選 1）：重錄後依本機向量分布提出三個門檻的新值與依據，**新值仍待 Owner 核准**；這次不改任何門檻。
+   - ~~看圖拆題加速選項：(a) 一塊 1 頁、(b) 送出前縮圖 `VISION_MAX_EDGE_PX`、(c) 同時放寬 `OLLAMA_TIMEOUT_MS` 與 `JOB_NODE_TIMEOUT_MS`、(d) 獨立顯示卡；建議先做第 6 項③的量測——[`local-mode.md`](local-mode.md) 10.11 第 3 點。~~ 〔修訂 2026-09-26 決策單第四輪 V1、V2〕已決定：(c) 直接放寬 Owner 的 `.env`（90 分／2 小時，程式預設不變）；沒有獨立顯示卡，(d) 不適用；(a)(b) 這次不採用；先量 1 頁（U3）。
+   - ~~本機拆題逾時要不要改成不重試（現在逾時算錯誤、退避後重試 3 次，一塊真的做不完時最壞要 4 × 節點逾時才讓整份卷失敗），以及舊流程 `/analyze-pdf` 在 `.env` 沒寫 `JOB_PDF_CHUNK_PAGES` 時一次送 20 頁（比管線的 2 頁更容易逾時，LM-12 ⑤）——[`local-mode.md`](local-mode.md) 10.11 第 1 點的表（#4、#6）與選項 (c) 的代價一。~~ 〔修訂 2026-09-26 決策單第四輪 V3、V4〕已決定並已改（`dec/r4-decisions`）：本機拆題逾時只重試 1 次（V3 選 2）；`/analyze-pdf` 本機模式預設每塊 2 頁（V4 選 1）。
+   - ~~錯題重練實作時自行決定、列給 Owner 確認的各條：第 5.6.2 節 ①～⑬（排程核心：重新加入的同日邊界、API 回應多的鍵、勾選與取消的承上組規則等）、第 5.6.3 節 ①～⑪（出卷：R12 建議題數、附帶只挑同科、Word 只標答案區等）、第 5.6.4 節 ①～⑪（畫面與成效）、第 5.6.6 節 ①～⑥（審查修正：移出的來源、刪卷時的承上組、仍然不同的邊界等），彙總在第 5.6.5 節——[`retrain-and-review.md`](retrain-and-review.md)。~~ 〔修訂 2026-09-26 決策單第四輪 T2、T3〕已決定：Owner 確認決策單列的 ①～⑧（T2）與 Word 詳解版只在答案與詳解段標「（重練）」（T3）都照現狀，不改程式；其餘各條照現狀運作（§0.00b、`retrain-and-review.md` 第 5.6.5 節）。
+   - 既有仍待決：DEC-013 核准欄待 Owner 明示簽核；A3（nlq-036 計分，等重錄）、B18（本機拆題限制，見上面加速選項）、B19（本機家教）、ADR-017（等本機實測）——§0.00。〔修訂 2026-09-26 決策單第四輪〕B18 裡逾時的處理已由 V1～V4 決定（§0.00b），其餘限制仍等上傳幾份卷後再看；新增待核准：V5 的三個門檻新值（重錄之後才提出）。
 
 ---
 

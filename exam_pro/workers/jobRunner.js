@@ -17,6 +17,10 @@
 //
 // 崩潰／nodemon 重啟的重跑保證＝租約過期後該列會被重新認領；extract 重跑靠
 // job_questions 的 UNIQUE (job_id, idx) + ON CONFLICT DO NOTHING 保證不會重複建列。
+//
+// 〔Owner 決策單 2026-09-26 第四輪 V3〕選 2「本機模式逾時只重試 1 次」：拆題模型是 ollama 時，
+// 拆題一塊（runExtractChunk）的錯誤類別是 timeout 的只重試 LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES（1）次、共跑 2 次；
+// 其他錯誤類別與 Gemini 模式的重試次數（DEFAULT_LIMITS.maxErrorRetries）完全不變（docs/local-mode.md 10.11 表 #4）。
 // ─────────────────────────────────────────────────────────────
 const fs = require('fs');
 const path = require('path');
@@ -168,6 +172,14 @@ const LOCAL_NODE_TIMEOUT_MS = 2700000;
 const LOCAL_PDF_CHUNK_PAGES = 2;
 /** 拆題模型是 ollama 時的工作槽數：CPU 一次只跑得動一個模型，兩個槽只會讓 PaddleOCR 與 Ollama 搶記憶體 */
 const LOCAL_CONCURRENCY = 1;
+/**
+ * 〔Owner 決策單 2026-09-26 第四輪 V3〕拆題模型是 ollama 時，拆題一塊逾時（error_class='timeout'）最多重試幾次。
+ * 本機逾時多半是這台電腦就是跑不完，重試只會再等同樣久（45 分節點逾時 × 4 次＝最壞白跑 3 小時才知道失敗）；
+ * Owner 選「只重試 1 次」（共跑 2 次）。只管 runExtractChunk 的 timeout：其他錯誤類別仍是 DEFAULT_LIMITS.maxErrorRetries，
+ * 而且逾時的重試也算進那個總數（總上限不變）；Gemini 模式完全不受影響。
+ * 沒有開放 .env 覆寫：原本的錯誤重試次數（DEFAULT_LIMITS.maxErrorRetries）就沒有覆寫設定，照同一個慣例寫成常數。
+ */
+const LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES = 1;
 /** 續租間隔的下限（租約設得再短，也不要每幾毫秒打一次 DB） */
 const RENEW_MIN_INTERVAL_MS = 1000;
 
@@ -1116,10 +1128,14 @@ function createRunner(opts = {}) {
         }
     }
 
-    /** 單一 chunk 的拆題（含 fail 重試 1 次與 error 退避），成功時建 job_questions。 */
+    /**
+     * 單一 chunk 的拆題（含 fail 重試 1 次與 error 退避），成功時建 job_questions。
+     * 〔第四輪 V3〕本機模式（config.localExtract）的 timeout 另有上限 LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES（見常數的說明）。
+     */
     async function runExtractChunk(job, chunk) {
         let failRetries = 0;
         let errorRetries = 0;
+        let timeoutRetries = 0;   // 〔第四輪 V3〕其中幾次是 timeout（只在本機模式用來設上限）
 
         for (; ;) {
             const { rows } = await db.query('SELECT cost_usd::float8 AS cost_usd FROM jobs WHERE id = $1', [job.id]);
@@ -1190,12 +1206,20 @@ function createRunner(opts = {}) {
                 return { ok: false, error: `拆題失敗（chunk ${chunk.no}）：${outcome.reason}` };
             }
             // error：退避後重試，用盡就讓整份 job failed
-            if (errorRetries < DEFAULT_LIMITS.maxErrorRetries) {
+            // 〔第四輪 V3〕本機模式的 timeout 用過 LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES 次就不再重試；總上限仍是 maxErrorRetries
+            const localTimeoutCapped = config.localExtract === true && outcome.errorClass === 'timeout'
+                && timeoutRetries >= LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES;
+            if (!localTimeoutCapped && errorRetries < DEFAULT_LIMITS.maxErrorRetries) {
                 await sleep(backoffMs(errorRetries));
                 errorRetries += 1;
+                if (outcome.errorClass === 'timeout') timeoutRetries += 1;
                 continue;
             }
-            return { ok: false, error: `拆題連續失敗（chunk ${chunk.no}）：${outcome.message || outcome.errorClass}` };
+            return {
+                ok: false,
+                error: `拆題連續失敗（chunk ${chunk.no}）：${outcome.message || outcome.errorClass}` +
+                    (localTimeoutCapped ? `（本機模式逾時只重試 ${LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES} 次）` : '')
+            };
         }
     }
 
@@ -1582,6 +1606,7 @@ module.exports = {
     // 〔本機模式 L2〕
     loadLocalModeConfig, renewIntervalFor, crossCheckStopReason,
     LOCAL_NODE_TIMEOUT_MS, LOCAL_PDF_CHUNK_PAGES, LOCAL_CONCURRENCY, RENEW_MIN_INTERVAL_MS,
+    LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES,   // 〔第四輪 V3〕
     ADVANCEABLE_STATES, FREE_NODES, AGENT_MODULE_FOR_NODE, ERROR_CLASSES, SOURCE_CHECK_MODES,
     RENEW_INTERVAL_MS, BACKOFF_BASE_MS, BACKOFF_MAX_MS, EXTRACT_MAX_RETRIES
 };

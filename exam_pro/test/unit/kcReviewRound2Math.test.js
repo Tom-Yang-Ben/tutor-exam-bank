@@ -162,9 +162,37 @@ describe('〔知識點審定單 2026-09-26〕查題別名', () => {
 
     test('M4：邏輯相關別名指向「集合與計數原理」', () => {
         // 〔整合 2026-09-26 審查〕「命題」換成「且或非」，理由見下一個測試與 config/chapterAliases.js 的註解。
-        for (const a of ['邏輯', '且或非', '充分條件', '必要條件', '充分必要條件']) {
+        // 〔Owner 決策單 2026-09-26 第四輪 Q1〕「邏輯」拿掉（下面「第四輪 Q1」的測試）；其餘四個照留（Q2：「且或非」保留）。
+        for (const a of ['且或非', '充分條件', '必要條件', '充分必要條件']) {
             assert.equal(aliases.CHAPTER_ALIASES[a], '集合與計數原理', a);
         }
+        assert.deepEqual(
+            aliases.ALIASES_BY_CHAPTER['集合與計數原理'].filter(a => ['邏輯', '命題', '且或非', '充分條件', '必要條件', '充分必要條件'].includes(a)),
+            ['且或非', '充分條件', '必要條件', '充分必要條件'],
+            '本章的邏輯類別名恰好是這四個');
+    });
+
+    test('〔Owner 決策單 2026-09-26 第四輪 Q1〕「邏輯」不是別名：「邏輯推理的機率題」規則抓不到章、不再被判成「集合與計數原理」，改走 LLM 輔路徑', () => {
+        const { parseQuery } = require('../../utils/nlqHeuristics');
+        assert.equal(Object.hasOwn(aliases.CHAPTER_ALIASES, '邏輯'), false);
+        for (const list of Object.values(aliases.ALIASES_BY_CHAPTER)) {
+            assert.ok(!list.includes('邏輯'));
+        }
+        const parse = q => parseQuery(q, { aliases: aliases.CHAPTER_ALIASES });
+        // 審查時的例子：之前規則直接判成「集合與計數原理」、confident 為真而不走 LLM
+        const vague = parse('邏輯推理的機率題');
+        assert.deepEqual(vague.filters.chapters, []);
+        assert.equal(vague.confident, false, 'confident 為假＝交給 LLM 輔路徑判斷');
+        // 只寫「邏輯」也一樣交給 LLM（Owner 接受的代價：拿掉只是改由 LLM 判斷）
+        assert.equal(parse('給我邏輯的題目').confident, false);
+        // 其餘四個別名仍由規則直接對到本章
+        for (const q of ['且或非的題目', '充分條件的題目', '必要條件的題目', '充分必要條件的題目']) {
+            const r = parse(q);
+            assert.deepEqual(r.filters.chapters, ['集合與計數原理'], q);
+            assert.equal(r.confident, true, q);
+        }
+        // 句子裡另有章節詞時照常由那個詞決定，不受影響
+        assert.deepEqual(parse('邏輯推理的古典機率題').filters.chapters, ['古典機率']);
     });
 
     test('〔整合 2026-09-26 審查〕「命題」不是別名：老師口中的「段考命題」是出題，不能被規則判成「集合與計數原理」', () => {

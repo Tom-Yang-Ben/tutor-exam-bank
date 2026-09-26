@@ -4,6 +4,7 @@
 > 本檔是 L1～L4 四條平行工作的**凍結介面**。各 WS 發現契約有問題，寫在自己的回報裡，不要自行改契約；由主控裁決，登錄在第 9 條（LM-n）。
 > 〔修訂 2026-09-26 決策單〕依 Owner 2026-09-25「出題系統決策單」第一輪答覆，在第 6 條第 3 點、LM-12、LM-14、10.5、10.7 就地加註（A7：門檻不動、未達就紅燈；C：刪 Gemini cassette 暫緩；B18、B21）；總表見 [`HANDOFF.md`](HANDOFF.md) §0.00。
 > 〔2026-09-26 `dec/local-vision-timeout`〕Owner 實機重錄時看圖拆題一塊超過 30 分而逾時：10.5、10.8、10.9、10.10 就地加註，新增 10.11（逾時清單、進度、`npm run local:bench-vision`、加速選項）。第 0～9 條沒有改。
+> 〔Owner 決策單 2026-09-26 第四輪〕依 Owner 2026-09-26「上線與本機速度決策單」答覆（分支 `dec/r4-decisions`）：第 2 條的表、LM-12、10.7 第 9 點、10.11 的逾時表（#4、#6）、加速選項表與 (a)(c) 的細節就地加註（V1～V5）；程式改了兩處（V3 本機拆題逾時只重試 1 次、V4 舊流程 `/analyze-pdf` 本機預設每塊 2 頁），其餘預設值不變。總表見 [`HANDOFF.md`](HANDOFF.md) §0.00b。
 
 ## 0. Owner 裁決（2026-09-25，對話中）
 
@@ -44,7 +45,7 @@
 | `OCR_PYTHON` | Windows：`exam_pro\ocr_service\.venv\Scripts\python.exe`；其他：`exam_pro/ocr_service/.venv/bin/python` | 跑 `ocr_pdf.py` 的 Python |
 | `OCR_DPI` | `200` | PDF 頁面轉圖片的解析度 |
 | `OCR_TIMEOUT_MS` | `1800000` | 單次 OCR 逾時 |
-| `JOB_PDF_CHUNK_PAGES` | 拆題模型是 `ollama` 時預設 `2` | 一次送給視覺模型幾頁 |
+| `JOB_PDF_CHUNK_PAGES` | 拆題模型是 `ollama` 時預設 `2` | 一次送給視覺模型幾頁。〔Owner 決策單 2026-09-26 第四輪 V4〕舊流程 `/analyze-pdf` 也照這個預設（同一個常數 `LOCAL_PDF_CHUNK_PAGES`），原本沒寫時是 20 頁 |
 | `JOB_NODE_TIMEOUT_MS` | 拆題模型是 `ollama` 時預設 `2700000`（45 分） | 明寫在 `.env` 的值一律優先 |
 | `JOB_LEASE_MS` | 必須大於節點逾時，或在節點執行中續約 | 不得讓長節點的租約過期而被別的槽重跑（S5-40） |
 
@@ -152,7 +153,7 @@
 | LM-9 | 契約外仍寫死 Gemini 的地方 | 全部改讀 `config/models.js`：`scripts/backfill_embeddings.js`（EMBED_MODEL）、`eval/lib/pipelineDriver.js`（extract、ocrStructure、一塊頁數與 runner 同規則）、`workers/jobRunner.js`（估價用 `parseModel().id`，`ollama:qwen3:8b` 不再被截成 `8b`；模組缺失時的退路字面值）。刻意不改：`services/legacy/analyzePdf.js`（凍結快照）、`scripts/spike_genai.js`、舊版 `exam/` |
 | LM-10 | L1 的實作判斷：schema 欄位說明附加到 system（Ollama 看不到 schema 的 description）；模型不支援 thinking 時去掉 `think` 重試一次；`OLLAMA_HOST=0.0.0.0`／`::` 視為本機；embedding 與 LLM 共用 Ollama 併發桶；估價以 `ollama:` 前綴或 `name:tag` 判定為本機 | 全部核准。已知風險：Ollama 沒有 thinking 預算，`num_predict` 含思考 token，結構化輸出可能被截斷——出現 `MAX_TOKENS` 時先調大 `maxOutputTokens` |
 | LM-11 | 家教：本機模板 `tutor.*.local.v1` 只改「驗算」那幾句；回覆仍宣稱跑過程式時附更正提醒 | 核准；Gemini 路徑不動 |
-| LM-12 | 已知限制（不在這一輪處理） | ①一塊 2 頁會切到跨頁的題，兩個引擎看到同一個被切斷的題可能「一致」而自動入庫——之後可加一頁前瞻；②45 分鐘節點逾時在 i5-8265U 上可能不夠（`JOB_NODE_TIMEOUT_MS` 可調大）；③相似度門檻 0.85 會讓複核比例偏高，本機重錄後再校準；④PaddleOCR 在含中文的 Windows 路徑可能載不到模型，`OCR_MODEL_HOME` 設成純英文路徑；⑤舊的同步 `/analyze-pdf` 在本機模式不實用；⑥PaddleOCR 還沒在實機跑過（雲端 container 下載不到模型），第一次在 Owner 電腦上執行 `setup_local_ai.bat` 才算驗證。〔修訂 2026-09-26 決策單 B18／B21〕Owner 2026-09-25 決策單：本機拆題的限制等上傳幾份卷後再看（待決）；⑤的 `/analyze-pdf` 保留並補裁圖（由 `dec/b21-legacy-analyze-pdf-figures` 實作），本機模式下仍慢 |
+| LM-12 | 已知限制（不在這一輪處理） | ①一塊 2 頁會切到跨頁的題，兩個引擎看到同一個被切斷的題可能「一致」而自動入庫——之後可加一頁前瞻；②45 分鐘節點逾時在 i5-8265U 上可能不夠（`JOB_NODE_TIMEOUT_MS` 可調大）；③相似度門檻 0.85 會讓複核比例偏高，本機重錄後再校準；④PaddleOCR 在含中文的 Windows 路徑可能載不到模型，`OCR_MODEL_HOME` 設成純英文路徑；⑤舊的同步 `/analyze-pdf` 在本機模式不實用；⑥PaddleOCR 還沒在實機跑過（雲端 container 下載不到模型），第一次在 Owner 電腦上執行 `setup_local_ai.bat` 才算驗證。〔修訂 2026-09-26 決策單 B18／B21〕Owner 2026-09-25 決策單：本機拆題的限制等上傳幾份卷後再看（待決）；⑤的 `/analyze-pdf` 保留並補裁圖（由 `dec/b21-legacy-analyze-pdf-figures` 實作），本機模式下仍慢。〔Owner 決策單 2026-09-26 第四輪 V1～V4〕②：Owner 的 `.env` 直接放寬（V1，10.11）、本機拆題逾時只重試 1 次（V3）；⑤：`/analyze-pdf` 本機模式沒寫 `JOB_PDF_CHUNK_PAGES` 時改為每塊 2 頁（V4）——仍是同步請求，一塊一塊依序跑，4 頁卷仍要等兩塊的時間 |
 | LM-13 | Windows 腳本的行尾；L3 的離線檢查沒進 `check:html` | `.gitattributes` 加 `exam_pro/scripts/windows/*.bat -text`（CRLF 原樣進出，不受 autocrlf 影響）；`check:html` 串上 `scripts/check_html_offline.js`（`evalStage3.test.js` 的 scripts 斷言同步） |
 | LM-14 | 門檻與 cassette 清理 | `eval/thresholds.json` 的數字不動；本機重錄後若低於門檻，由 Owner 另行裁決~~（多半依本機模型重建基準）~~。本機重錄後 `cassettes:prune` 會把 Gemini 的 cassette 列為過期：確定不切回 Gemini 之前不要 `--apply`。〔修訂 2026-09-26 決策單 A7〕Owner 2026-09-25 決策單：**門檻數字不動，未達就讓它紅燈，之後再改善**；不依本機模型重建基準。帶著紅燈的 PR（`local/integration` → main，A8）能不能合併，在第二輪 X1 待答。〔整合 2026-09-26〕X1 已答（見 [`HANDOFF.md` §0.00a](HANDOFF.md#000a-owner-決策單第二三輪2026-09-26修訂-2026-09-26-決策單第二三輪)）：只有 eval 分數可以紅燈合併，unit、integration、e2e 必須綠，PR 說明列出未達項。〔修訂 2026-09-26 決策單 C〕刪 Gemini cassette（`cassettes:prune -- --apply`）在本機模式下暫緩 |
 | LM-15 | 16 GB 的電腦同時只放得下一個 8B 模型；分類、lint、知識點標註、主控助教原本沿用「extract 模型」（視覺的 qwen3-vl），一份考卷的流程會在 qwen3-vl 與 qwen3:8b 之間來回換載（每次 1～2 分鐘） | Owner 2026-09-25 選方案 A：新增 `MODEL_TEXT`（`config/models.js` 的 getter），拆題模型是 `ollama` 時預設＝`MODEL_VERIFY`，否則＝`MODEL_EXTRACT`。`agents/classify.js`、`agents/lint.js` 讀 `ctx.config.models.text`（沒給退回 `extract`）；`tagKc` 的退回順序 `kcTag → text → extract`；`MODEL_KC_TAG`、`MODEL_ASSISTANT` 未設時沿用 `MODEL_TEXT`。runner、eval 的 ctx 都帶 `text`。Gemini 模式下 `MODEL_TEXT`＝`MODEL_EXTRACT`，cassette 的鍵與費用一字不差；本機的分類／lint cassette 反正要重錄（LM-14），這時改不浪費任何錄製。`MODEL_VOICE` 維持沿用 `MODEL_EXTRACT`（語音要聽音訊，且只在 Gemini 可用）。代價：分類與驗算同一個模型——分類不是驗算的獨立檢查，不影響「拆題 ≠ 驗算」的異級驗證 |
@@ -351,7 +352,7 @@ CI 不裝 Ollama、不裝 Python，只讀 repo 裡錄好的回放檔（cassette�
    node -e "const s=require('./eval/lib/suiteVariant'),f=require('./eval/lib/fixtures').loadFixture(),e=require('./eval/lib/embeddings').loadEmbeddings({questions:f.questions});for(const x of s.loadVariantGolden({fixtureById:f.byId}).entries){const h=s.retrieveInMemory({source:f.byId.get(x.source_question_id),questions:f.questions,vectorOf:e.vectorOf,simMin:-1});console.log(x.id,x.chapter,h.slice(0,2).map(r=>r.cosine.toFixed(3)).join(' '))}"
    ```
 
-   每行是一個藍本與「最近、第 2 近」的餘弦；第 2 個數字 ≥ 門檻的藍本才算覆蓋。要不要依本機向量重新校準 `VARIANT_RETRIEVE_SIM_MIN`（以及跑題的 `VARIANT_OFFTOPIC_SIM_MIN` 0.90、去重的 `DEDUP_DUP_THRESHOLD` 0.97，同樣是照 Gemini 定的）由 Owner 裁決。
+   每行是一個藍本與「最近、第 2 近」的餘弦；第 2 個數字 ≥ 門檻的藍本才算覆蓋。要不要依本機向量重新校準 `VARIANT_RETRIEVE_SIM_MIN`（以及跑題的 `VARIANT_OFFTOPIC_SIM_MIN` 0.90、去重的 `DEDUP_DUP_THRESHOLD` 0.97，同樣是照 Gemini 定的）由 Owner 裁決。〔Owner 決策單 2026-09-26 第四輪 V5〕Owner 選 1：要重新校準——重錄之後用本機向量跑分布分析，提出三個門檻的新值與依據，Owner 核准後才改；**這次不改任何門檻**（`.env.example`、程式預設、`eval/thresholds.json` 都不動）。
 
 ### 10.8 疑難排解
 
@@ -455,9 +456,9 @@ node eval/tools/local_bench_vision.js --baseline
 | 1 | `OLLAMA_TIMEOUT_MS` | 1800000（30 分），`.env` 可改 | **單次** Ollama 呼叫；從拿到併發槽起算（排隊不算）。Owner 這次就是被它切掉的 | `services/llm/ollama.js` 的 `callApi` |
 | 2 | `OCR_TIMEOUT_MS` | 1800000（30 分） | 單次 PaddleOCR（一塊的 OCR） | `services/ocr/index.js` |
 | 3 | 節點逾時 `JOB_NODE_TIMEOUT_MS` | 拆題模型是 ollama 且 `.env` 沒寫時 2700000（45 分，`LOCAL_NODE_TIMEOUT_MS`） | 正式上傳時**一塊**的拆題節點＝OCR＋看圖＋OCR 整理**依序**跑，含排隊等 Ollama；到時間整個節點中止（還在跑的 Ollama 呼叫一起中止） | `workers/jobRunner.js` 的 `invokeNode` |
-| 4 | 錯誤重試 | 逾時算「錯誤」，退避後重試 3 次（`DEFAULT_LIMITS.maxErrorRetries`） | 同一塊最多跑 4 次才讓整份卷 `failed`；每次都被 #1 在 30 多分鐘時切掉，一塊就白跑兩個多小時 | `workers/jobRunner.js` 的 `runExtractChunk` |
+| 4 | 錯誤重試 | 逾時算「錯誤」，退避後重試 3 次（`DEFAULT_LIMITS.maxErrorRetries`） | 同一塊最多跑 4 次才讓整份卷 `failed`；每次都被 #1 在 30 多分鐘時切掉，一塊就白跑兩個多小時。〔Owner 決策單 2026-09-26 第四輪 V3〕Owner 選 2：拆題模型是 ollama 時，錯誤類別是 `timeout` 的只重試 1 次（共跑 2 次，常數 `LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES`）；其他錯誤類別仍重試 3 次、逾時也算進這 3 次；Gemini 模式不變。`jobs.error` 會多註明「（本機模式逾時只重試 1 次）」。只管拆題一塊；逐題的節點（分類、lint、驗算…）照狀態機原本的規則 | `workers/jobRunner.js` 的 `runExtractChunk` |
 | 5 | 整份卷 | **沒有**總逾時；租約 `JOB_LEASE_MS`（3 分）在節點執行中每 30 秒續租，不會切斷 | 一塊一塊依序拆，拆完才逐題分類、lint、驗算 | `workers/jobRunner.js` |
-| 6 | 舊流程 `/analyze-pdf`（`FEATURE_PIPELINE=false` 時的上傳） | 沒有節點逾時，只受 #1；伺服器與瀏覽器都沒有回應逾時 | ⚠️ 每塊頁數讀 `JOB_PDF_CHUNK_PAGES`，**沒寫時是 20 頁**（不是本機的 2 頁）：4 頁卷一次送 4 頁，比管線更容易被 #1 切掉（LM-12 ⑤） | `services/aiService.js` |
+| 6 | 舊流程 `/analyze-pdf`（`FEATURE_PIPELINE=false` 時的上傳） | 沒有節點逾時，只受 #1；伺服器與瀏覽器都沒有回應逾時 | ⚠️ 每塊頁數讀 `JOB_PDF_CHUNK_PAGES`，**沒寫時是 20 頁**（不是本機的 2 頁）：4 頁卷一次送 4 頁，比管線更容易被 #1 切掉（LM-12 ⑤）。〔Owner 決策單 2026-09-26 第四輪 V4〕Owner 選 1：拆題模型是 ollama 且 `.env` 沒明寫（或不是正整數）時改為 2 頁，與管線共用 `workers/jobRunner.js` 的 `LOCAL_PDF_CHUNK_PAGES`；Gemini 模式仍是 20 頁；明寫的值照舊優先 | `services/aiService.js` |
 | 7 | eval 的 pipeline suite（重錄第 5 步） | `thresholds.nodeTimeoutMs` 讀 `JOB_NODE_TIMEOUT_MS`（重錄時 2700000），但**只記在報表、不計時**（`signal: undefined`） | 所以重錄時真正會切斷的是 #1 與 #2 | `eval/lib/pipelineDriver.js` |
 | 8 | 重錄的子行程 | 沒有逾時（`runNode`）；錄前檢查另有 OCR 自我檢查 600 秒、Ollama 連線 5 秒 | — | `eval/lib/suiteProcess.js`、`eval/lib/localMode.js` |
 | 9 | e2e 測試本身 | runner 的節點逾時寫死 30 秒（LLM 一律回放；重錄第 6 步錄 dedup1 向量時 embedding 呼叫也受它限）；`node --test` 沒設逾時；`drain` 最多 120 輪 | 〔本分支〕改讀 `E2E_NODE_TIMEOUT_MS`，沒設時仍是 30 秒（CI 不變） | `test/e2e/pipeline.e2e.test.js` |
@@ -479,15 +480,27 @@ node eval/tools/local_bench_vision.js --baseline
 |---|---|---|---|---|
 | (a) 一塊 1 頁 | `.env` 加 `JOB_PDF_CHUNK_PAGES=1` | 每一次看圖呼叫只看 1 頁，比較容易在逾時內做完；失敗時重跑的少 | 跨頁題變多（4 頁卷的切點從 1 處變 3 處）；每一塊都要重讀固定的提示詞、重新載入視覺模型，**整份卷的總時間通常不會變短** | 多頁 PDF 的回放檔要（塊號、頁碼範圍變了）；CI 的樣卷只有 1 頁、而且重錄不讀 `.env` 的這個值，所以只改 `.env` 不影響 CI |
 | (b) 送出前縮圖 | `.env` 加 `VISION_MAX_EDGE_PX=1600` | 讀圖（prompt eval）變快：讀圖的 token 數大致跟像素成正比，A4＠200 DPI（1654×2339）縮到長邊 1600 約剩 47% 的像素 | 小字、上下標、分式、根號、化學式下標可能看不清 → 視覺版抄錯、交叉驗證不一致（停人工複核）的題變多 | 不必（鍵不含圖片） |
-| (c) 放寬逾時 | `.env` 調大 `OLLAMA_TIMEOUT_MS` **與** `JOB_NODE_TIMEOUT_MS` | 不改拆題方式、不影響品質 | 真的卡住時要等更久才發現；逾時會重試 3 次（最壞 4 × 節點逾時）；一份卷在背景跑更久 | 不必 |
+| (c) 放寬逾時 | `.env` 調大 `OLLAMA_TIMEOUT_MS` **與** `JOB_NODE_TIMEOUT_MS` | 不改拆題方式、不影響品質 | 真的卡住時要等更久才發現；逾時會重試 3 次（最壞 4 × 節點逾時）；一份卷在背景跑更久。〔第四輪 V3〕本機模式逾時改為只重試 1 次（最壞 2 × 節點逾時） | 不必 |
 | (d) 獨立顯示卡 | 換／加硬體，程式不用改 | 讀圖與輸出通常都快很多，逾時與頁數可能都不必動 | 要花錢；筆電多半不能加；顯示卡記憶體要放得下模型 | 不必（重錄出來的內容可能與 CPU 錄的有細微差異） |
+
+〔Owner 決策單 2026-09-26 第四輪〕**Owner 的選擇**（背景與選項原文在決策單；總表 [`HANDOFF.md`](HANDOFF.md) §0.00b）：
+
+| 題號 | Owner 選擇 | 落實 |
+|---|---|---|
+| V1 | 選 2「直接放寬」＝選項 (c)：單次呼叫 90 分鐘、一塊 2 小時 | **只改 Owner 的 `.env`**：`OLLAMA_TIMEOUT_MS=5400000`、`JOB_NODE_TIMEOUT_MS=7200000`；程式預設（30 分、45 分）不變。(a)(b) 這次不採用（`JOB_PDF_CHUNK_PAGES` 不寫、`VISION_MAX_EDGE_PX` 不設）。照 (c) 的算法，一份 4 頁卷（2 塊）看圖這一步最壞約 2 × 2 小時；逾時的最壞情形見 V3 |
+| V2 | 選 3：沒有獨立顯示卡，只有內顯 | (d) 不適用；Ollama 用 CPU 跑（i5-8265U 的 Intel 內顯 Ollama 預設不會用，見下面 (d)） |
+| V3 | 選 2：本機模式逾時只重試 1 次 | 程式（`dec/r4-decisions`）：上面逾時表 #4；配合 V1，一塊真的做不完時最壞 2 × 2 小時＝4 小時就讓整份卷 `failed`（原本 4 × 節點逾時） |
+| V4 | 選 1：舊流程 `/analyze-pdf` 本機預設每塊 2 頁 | 程式（`dec/r4-decisions`）：上面逾時表 #6 |
+| V5 | 選 1：三個餘弦門檻依本機向量重新校準 | 重錄之後提出新值與依據給 Owner 核准；這次不改（10.7 第 9 點） |
+
+另外 U3 選 2：Owner 的電腦更新後**先只跑 1 頁的看圖量測**（`npm run local:bench-vision`，10.8），其餘重錄等看完數字再決定。
 
 **(a) 一塊 1 頁（`JOB_PDF_CHUNK_PAGES=1`）的細節**
 
 - 每一塊的時間≈載入模型＋讀固定的提示詞＋1 頁（圖片＋輸出），比 2 頁的一塊短，但不是一半：固定的部分每塊都要付一次，4 頁卷的看圖總時間通常反而變長（bench 的「一塊 1 頁」×4 與「一份 4 頁卷」可以直接比）。
 - 跨頁題：每一頁的交界都切開。LM-12 ①：被切斷的題兩個引擎看到的是同一段殘缺，可能「一致」而自動入庫；後半段在下一塊開頭會被當成「延續過來的殘段」丟掉（本機模板的【頁面邊界】規則）。跨頁的附圖也拆不到。
 - 回放檔：塊號（`cacheKeyParts.chunkNo`）與頁碼範圍跟著變——多頁 PDF 的 OCR（鍵含 `fromPage／toPage`）、`extract_vision`／`extract_ocr`（鍵含 `chunkNo`，後者還有 OCR 文字的 `ocrSha256`）都是新鍵，對應的回放檔要重錄（例如 `eval/private` 裡 `compare:pipeline` 用的多頁考卷；eval 的 pipeline 驅動只拆第 1 塊，塊變小就只量得到第 1 頁）。CI 用的 `sample_exam.pdf` 只有 1 頁，鍵不變；重錄時 `.env` 的 `JOB_PDF_CHUNK_PAGES` 被擋掉（照 CI＝本機預設 2 頁），所以只改 `.env` 不會動到 CI。要連重錄一起改得改程式預設 `LOCAL_PDF_CHUNK_PAGES`（第 2 條的契約值，另行裁決）。
-- 舊流程 `/analyze-pdf` 讀同一個變數；`.env` 明寫 1 之後它也一次 1 頁（沒寫時是 20 頁，上表 #6）。
+- 舊流程 `/analyze-pdf` 讀同一個變數；`.env` 明寫 1 之後它也一次 1 頁（沒寫時是 20 頁，上表 #6）。〔第四輪 V4〕沒寫時改為：本機模式 2 頁（與管線相同）、Gemini 模式 20 頁。
 
 **(b) 送出前縮圖（`VISION_MAX_EDGE_PX`）的細節**
 
@@ -499,7 +512,7 @@ node eval/tools/local_bench_vision.js --baseline
 **(c) 放寬逾時：放寬到多少、一份卷跑多久可以接受**
 
 - 依 bench 的「一塊 N 頁（目前的 `JOB_PDF_CHUNK_PAGES`）」估計 T：`OLLAMA_TIMEOUT_MS` ≥ 2T（bench 會印出建議值，與 `perf:local` 同一條「2 × 最長」規則，進位到分）；`JOB_NODE_TIMEOUT_MS` ≥ `OLLAMA_TIMEOUT_MS`＋OCR＋OCR 整理（重錄後 `perf:local` 看得到；沒數字時先多抓 1 小時）。例：T＝1 小時 → `OLLAMA_TIMEOUT_MS=7200000`、`JOB_NODE_TIMEOUT_MS=10800000`。
-- 代價一：卡住的呼叫要等到逾時才失敗，而且逾時會退避重試 3 次（上表 #4），一塊真的做不完時最壞要 4 × 節點逾時才讓整份卷 `failed`（節點 3 小時＝最壞 12 小時）。要不要改成「本機拆題逾時不重試」是另一個決定，本分支沒改。
+- 代價一：卡住的呼叫要等到逾時才失敗，而且逾時會退避重試 3 次（上表 #4），一塊真的做不完時最壞要 4 × 節點逾時才讓整份卷 `failed`（節點 3 小時＝最壞 12 小時）。要不要改成「本機拆題逾時不重試」是另一個決定，本分支沒改。〔Owner 決策單 2026-09-26 第四輪 V3〕Owner 選「逾時只重試 1 次」（`dec/r4-decisions` 已改）：本機模式一塊真的做不完時最壞 2 × 節點逾時（Owner 的 `.env` 放寬到 2 小時後＝4 小時）。
 - 代價二：一份卷在背景跑更久。4 頁卷＝2 塊 ×（OCR＋看圖＋OCR 整理）＋每題的分類、lint、驗算；拿 bench 的數字代入，看圖一步就可能要兩小時以上，整份可能要大半天。請 Owner 決定「晚上上傳、隔天看複核佇列」能不能接受，還是要搭配 (a)／(b)／(d)。
 - 期間伺服器行程要一直開著、電腦不能睡眠（`JOB_RUNNER=inline` 時 worker 就在伺服器行程裡）。
 - 建議同時設 `OLLAMA_PROGRESS_MS=300000`，才分得出慢還是卡住。
@@ -510,4 +523,4 @@ node eval/tools/local_bench_vision.js --baseline
 - 顯示卡記憶體要放得下模型與上下文（`qwen3-vl:8b` 在 6 GB 上下，`OLLAMA_NUM_CTX` 越大要越多）；只放得下一部分時，其餘層在 CPU 上跑，加速有限。
 - 換了硬體之後用 bench 重量一次：逾時、每塊頁數、縮圖多半都可以回到預設。GPU 與 CPU 的數值不完全相同，之後重錄的回放檔內容可能與 CPU 錄的有細微差異（鍵不變，CI 照樣回放）。
 
-**建議的決定順序（只是建議）**：① 先照 10.8 量一頁，把結果貼回來；② 讀 prompt（看圖）占大半 → 試 (b) `--max-edge 1600` 再量，題目沒變差就在 `.env` 開；③ 一塊仍超過 30 分 → (c) 依 bench 的建議同時調 `OLLAMA_TIMEOUT_MS` 與 `JOB_NODE_TIMEOUT_MS`；④ 單次呼叫仍太長、或 bench 提醒 `OLLAMA_NUM_CTX` 放不下 → (a)；⑤ 有預算換硬體 → (d)。重錄 CI 的回放檔不受這些選項影響（(b) 除外：錄的是你開著的設定），拉新版後直接 `record_local.bat pipeline,e2e` 即可。
+**建議的決定順序（只是建議）**〔Owner 決策單 2026-09-26 第四輪〕已由 Owner 決定：先照 V1 放寬 `.env`、先量 1 頁（U3），見本節第 3 點的「Owner 的選擇」：① 先照 10.8 量一頁，把結果貼回來；② 讀 prompt（看圖）占大半 → 試 (b) `--max-edge 1600` 再量，題目沒變差就在 `.env` 開；③ 一塊仍超過 30 分 → (c) 依 bench 的建議同時調 `OLLAMA_TIMEOUT_MS` 與 `JOB_NODE_TIMEOUT_MS`；④ 單次呼叫仍太長、或 bench 提醒 `OLLAMA_NUM_CTX` 放不下 → (a)；⑤ 有預算換硬體 → (d)。重錄 CI 的回放檔不受這些選項影響（(b) 除外：錄的是你開著的設定），拉新版後直接 `record_local.bat pipeline,e2e` 即可。
