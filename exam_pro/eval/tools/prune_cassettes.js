@@ -183,10 +183,19 @@ async function main(argv = process.argv.slice(2)) {
     return out.skipped.length ? 1 : 0;
 }
 
+/**
+ * 等 stdout 寫完再結束。stdout 接管線時（spawnSync、`| more`）Node 的寫出是非同步的，console.log 之後直接
+ * process.exit 會把還沒寫出去的部分丟掉——--json 的整段 JSON 在十幾萬字處被截斷，
+ * test/integration/cassetteTools.pg.test.js 解析失敗（Unterminated string in JSON）。
+ */
+function exitAfterFlush(code) {
+    process.stdout.write('', () => process.exit(code));
+}
+
 if (require.main === module) {
-    main().then(code => process.exit(code)).catch(err => {
+    main().then(code => exitAfterFlush(code)).catch(err => {
         console.error(`\n❌ ${err.message}`);
-        process.exit(1);
+        exitAfterFlush(1);
     });
 }
 

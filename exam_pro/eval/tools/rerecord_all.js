@@ -417,10 +417,18 @@ async function main(argv = process.argv.slice(2), io = {}) {
     return v.ok ? 0 : 1;
 }
 
+/**
+ * 等 stdout 寫完再結束（同 eval/tools/prune_cassettes.js）：stdout 接管線時直接 process.exit 會把
+ * --dry-run --json 的 JSON 截斷，test/integration/cassetteTools.pg.test.js 解析失敗。
+ */
+function exitAfterFlush(code) {
+    process.stdout.write('', () => process.exit(code));
+}
+
 if (require.main === module) {
-    main().then(code => process.exit(code)).catch(err => {
+    main().then(code => exitAfterFlush(code)).catch(err => {
         console.error(`\n❌ ${err.message}`);
-        process.exit(1);
+        exitAfterFlush(1);
     });
 }
 
