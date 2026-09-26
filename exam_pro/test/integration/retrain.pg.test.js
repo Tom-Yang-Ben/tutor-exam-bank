@@ -879,6 +879,85 @@ function runSuite() {
             assert.equal(m.n, 1);
         });
 
+        /** 這顆測試庫裡正在等鎖的連線數（pg_stat_activity 依資料庫篩，別的測試庫的連線不算）。 */
+        async function lockWaiters() {
+            const { rows: [w] } = await query(
+                `SELECT COUNT(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`);
+            return w.n;
+        }
+        async function waitForLockWaiters(n, what) {
+            for (let i = 0; i < 400; i++) {
+                if ((await lockWaiters()) >= n) return;
+                await new Promise(r => setTimeout(r, 25));
+            }
+            assert.fail(`等不到 ${n} 個等鎖的連線（${what}）`);
+        }
+
+        test('併發：API-3 與批改同時動同一個承上組——一律依 id 的順序一次鎖完，不會死結，兩邊都成功（審查意見：API-3 的加鎖順序）', async () => {
+            // 承上組 {g1, g2}：勾 g1 → g1（flagged）、g2（group）兩個項目，id 小的是 g1
+            const [g1, g2] = await seedGroup(2);
+            const s = await createStudent('併發動作批改生');
+            const p1 = await confirmPaper(s, [g1, g2]);
+            // g2 也要批改：那一筆新題派題沒批改的話算「已派出」（第 4.4 節），出不了重練卷
+            const first = await patch(appOn, p1, [{ question_id: g1, result: 0, retrain: true }, { question_id: g2, result: 1 }]);
+            assert.equal(first.status, 200, JSON.stringify(first.body));
+            const i1 = (await itemOf(s, g1)).id;
+            const i2 = (await itemOf(s, g2)).id;
+            assert.ok(Number(i1) < Number(i2), '夾具：g1 的項目 id 比較小');
+            const made = await retrainPaper(s, [g1, g2], today);
+            assert.equal(made.conflict, undefined, JSON.stringify(made.conflict));
+            const r1 = made.paperId;
+
+            // 先用第三條連線卡住 id 小的那一列，讓兩邊依序排隊：批改（一句鎖 i1、i2）先排在 i1 後面，
+            // 再對 id 大的 g2 送 API-3。修正前 API-3 會先鎖住 i2 再去等 i1：放開之後批改拿到 i1、等 i2，
+            // API-3 等 i1——PostgreSQL 回 40P01（deadlock detected），其中一邊 500。
+            const c0 = await pool.connect();
+            let grading;
+            let action;
+            try {
+                await c0.query('BEGIN');
+                await c0.query('SELECT id FROM retrain_items WHERE id = $1 FOR UPDATE', [i1]);
+                grading = patch(appOn, r1, [{ question_id: g1, result: 1 }, { question_id: g2, result: 1 }]).then(r => r);
+                await waitForLockWaiters(1, '批改等 i1');
+                action = act(s, i2, { action: 'retire' }).then(r => r);
+                await waitForLockWaiters(2, 'API-3 也在等');
+                await c0.query('COMMIT');
+            } finally {
+                c0.release();
+            }
+            const [g, a] = await Promise.all([grading, action]);
+            assert.deepEqual([g.status, a.status], [200, 200], `批改：${JSON.stringify(g.body)}；API-3：${JSON.stringify(a.body)}`);
+            assert.deepEqual(g.body.retrain, { entered: 0, advanced: 2, mastered: 0, reset: 0 }, '批改先拿到鎖：兩題都升一關');
+            assert.deepEqual([a.body.status, a.body.group_changed], ['retired', [{ item_id: Number(i1), question_id: g1 }]],
+                'API-3 後拿到鎖：看到的是批改之後的項目，整組移出');
+            for (const q of [g1, g2]) {
+                const it = await assertCacheMatchesHistory(s, q, `題 ${q}`);
+                assert.deepEqual([it.status, it.teacher_override, it.streak], ['retired', 'retired', 1]);
+            }
+
+            // 反過來也一樣：API-3（重新加入）先排隊、批改後排隊
+            assert.equal((await act(s, i1, { action: 'reactivate' })).status, 200);
+            const made2 = await retrainPaper(s, [g1, g2], today);
+            assert.equal(made2.conflict, undefined, JSON.stringify(made2.conflict));
+            const r2 = made2.paperId;
+            assert.equal((await act(s, i2, { action: 'retire' })).status, 200);
+            const c1 = await pool.connect();
+            try {
+                await c1.query('BEGIN');
+                await c1.query('SELECT id FROM retrain_items WHERE id = $1 FOR UPDATE', [i1]);
+                action = act(s, i2, { action: 'reactivate' }).then(r => r);
+                await waitForLockWaiters(1, 'API-3 等 i1');
+                grading = patch(appOn, r2, [{ question_id: g1, result: 0 }, { question_id: g2, result: 0 }]).then(r => r);
+                await waitForLockWaiters(2, '批改也在等');
+                await c1.query('COMMIT');
+            } finally {
+                c1.release();
+            }
+            const [a2, g2res] = await Promise.all([action, grading]);
+            assert.deepEqual([a2.status, g2res.status], [200, 200], `API-3：${JSON.stringify(a2.body)}；批改：${JSON.stringify(g2res.body)}`);
+            for (const q of [g1, g2]) await assertCacheMatchesHistory(s, q, `反過來 題 ${q}`);
+        });
+
         // ───────────────────── TC-039-3：刪卷、刪學生、合併學生（第 3.9 節）─────────────────────
 
         test('刪卷：原卷的題已在重練中 → 409（依排程項目判斷）；刪重練卷後重算；沒重練過的項目隨原卷一起刪', async () => {
@@ -919,6 +998,152 @@ function runSuite() {
             const draft = await request(appOn).post('/api/generate-paper')
                 .send({ student_id: s, subject: '數學', chapter: '向量內積', count: 3, dry_run: true });
             assert.deepEqual([...draft.body.question_ids].sort((a, b) => a - b), [q1, q2, q3]);
+        });
+
+        test('刪重練卷＝那次重練沒發生過：批改卡取消勾選時因為重練過而移出的項目，重練全刪光之後跟著刪；清單上按的「移出」照樣保留（審查意見：刪重練卷後項目沒回到原狀）', async () => {
+            const [q1, q2] = await seedQuestions(2);
+            const [g1, g2] = await seedGroup(2);
+            const s = await createStudent('刪重練卷還原生');
+            const p1 = await confirmPaper(s, [q1, q2, g1, g2]);
+            await patch(appOn, p1, [{ question_id: q1, result: 0, retrain: true }, { question_id: q2, result: 0, retrain: true },
+                { question_id: g1, result: 0, retrain: true }, { question_id: g2, result: 1 }]);
+            const oldQ1 = await itemOf(s, q1);
+            // q1 重練兩次（兩張重練卷）；q2、承上組 {g1, g2} 各一次
+            const ra = await retrainPaper(s, [q1, q2, g1, g2], today);
+            assert.equal(ra.conflict, undefined, JSON.stringify(ra.conflict));
+            await patch(appOn, ra.paperId, [{ question_id: q1, result: 1 }]);
+            const rb = await retrainPaper(s, [q1], today);
+            assert.equal(rb.conflict, undefined, JSON.stringify(rb.conflict));
+
+            // q1、g1 在 P1 取消勾選：重練過 → 移出（g1 同組沒有勾選了，g2 一起移出）；q2 在清單上按「移出」（API-3）
+            const un = await patch(appOn, p1, [{ question_id: q1, result: 0, retrain: false }, { question_id: g1, result: 0, retrain: false }]);
+            assert.equal(un.status, 200, JSON.stringify(un.body));
+            for (const q of [q1, g1, g2]) assert.equal((await itemOf(s, q)).status, 'retired', `題 ${q} 取消勾選 → 移出`);
+            assert.equal((await act(s, (await itemOf(s, q2)).id, { action: 'retire' })).status, 200);
+            const byUnflag = async () => (await query(
+                'SELECT question_id, retired_by_unflag FROM retrain_items WHERE student_id = $1 ORDER BY question_id', [s])).rows
+                .map(r => [r.question_id, r.retired_by_unflag]);
+            assert.deepEqual(await byUnflag(), [[q1, true], [q2, false], [g1, true], [g2, true]],
+                'migrations/0018：勾選消失才移出的記 true；清單上按的「移出」是 false');
+
+            // 刪 rb：q1 還有 ra 那一筆重練 → 仍是「重練過」，維持移出
+            const d1 = await request(appOn).delete(`/api/papers/${rb.paperId}`);
+            assert.deepEqual([d1.status, d1.body], [200, { deleted_attempts: 1 }]);
+            const still = await assertCacheMatchesHistory(s, q1);
+            assert.deepEqual([still.status, still.teacher_override], ['retired', 'retired']);
+
+            // 刪 ra：q1、g1、g2 都沒有重練了＝取消勾選當時就會直接刪掉 → 刪；q2 是清單上的「移出」（老師的決定）→ 保留
+            const d2 = await request(appOn).delete(`/api/papers/${ra.paperId}`);
+            assert.deepEqual([d2.status, d2.body], [200, { deleted_attempts: 4 }]);
+            for (const q of [q1, g1, g2]) assert.equal(await itemOf(s, q), null, `題 ${q} 的項目應該跟著刪`);
+            const kept = await assertCacheMatchesHistory(s, q2);
+            assert.deepEqual([kept.status, kept.teacher_override, kept.reason], ['retired', 'retired', 'flagged']);
+            const all = await list(s, '?status=all');
+            assert.deepEqual(all.body.items.map(i => i.question_id), [q2]);
+
+            // 之後在 P1 重新勾 q1：走「進清單」重建（新項目、起算日＝P1 的派題日），不是「重新加入」
+            const re = await patch(appOn, p1, [{ question_id: q1, result: 0, retrain: true }]);
+            assert.deepEqual(re.body.retrain, { entered: 1, advanced: 0, mastered: 0, reset: 0 });
+            const rebuilt = await assertCacheMatchesHistory(s, q1);
+            assert.notEqual(rebuilt.id, oldQ1.id, '新建的項目');
+            assert.deepEqual([rebuilt.reason, rebuilt.entered_on, rebuilt.entered_after_assignment_id, rebuilt.step, rebuilt.due_on],
+                ['flagged', oldQ1.entered_on, null, 1, day(1)]);
+        });
+
+        test('勾選消失才移出的項目，老師之後重新勾回、按「重新加入」或「判定已會」→ 不再是勾選消失的狀態，刪重練卷時保留（retired_by_unflag 清回 false）', async () => {
+            const [q1, q2, q3] = await seedQuestions(3);
+            const s = await createStudent('移出來源清除生');
+            const p1 = await confirmPaper(s, [q1, q2, q3]);
+            await patch(appOn, p1, [q1, q2, q3].map(q => ({ question_id: q, result: 0, retrain: true })));
+            const r = await retrainPaper(s, [q1, q2, q3], today);
+            assert.equal(r.conflict, undefined, JSON.stringify(r.conflict));
+            await patch(appOn, p1, [q1, q2, q3].map(q => ({ question_id: q, result: 0, retrain: false })));
+            const marks = async () => (await query(
+                'SELECT question_id, retired_by_unflag, teacher_override FROM retrain_items WHERE student_id = $1 ORDER BY question_id', [s])).rows
+                .map(x => [x.question_id, x.retired_by_unflag, x.teacher_override]);
+            assert.deepEqual(await marks(), [[q1, true, 'retired'], [q2, true, 'retired'], [q3, true, 'retired']]);
+
+            // q1 在批改卡勾回來（重新加入）、q2 在清單上按「重新加入」、q3 在清單上按「判定已會」
+            const re = await patch(appOn, p1, [{ question_id: q1, result: 0, retrain: true }]);
+            assert.equal(re.status, 200, JSON.stringify(re.body));
+            assert.equal((await act(s, (await itemOf(s, q2)).id, { action: 'reactivate' })).status, 200);
+            assert.equal((await act(s, (await itemOf(s, q3)).id, { action: 'mark_mastered' })).status, 200);
+            assert.deepEqual(await marks(), [[q1, false, null], [q2, false, null], [q3, false, 'mastered']]);
+
+            const d = await request(appOn).delete(`/api/papers/${r.paperId}`);
+            assert.deepEqual([d.status, d.body], [200, { deleted_attempts: 3 }]);
+            for (const q of [q1, q2, q3]) await assertCacheMatchesHistory(s, q, `題 ${q} 保留並重算`);
+            assert.deepEqual((await Promise.all([q1, q2, q3].map(q => itemOf(s, q)))).map(i => i.status), ['active', 'active', 'mastered']);
+        });
+
+        test('刪掉被勾選題所在的卷：同組已經沒有勾選時，別張卷來源的 group 項目一起離開（沒重練過刪、重練過移出）；同組還有勾選就不動（審查意見：刪卷後 group 項目留在清單）', async () => {
+            // 事後才綁定的承上組：A 在 P1、B 在 P2（都是新題），之後才把 B 綁成承上 A（follow:backfill、舊資料）
+            const [a, b, c, d, e, x, y, m, n, o] = await seedQuestions(10);
+            const s = await createStudent('刪卷承上組生');
+            const pA = await confirmPaper(s, [a]);
+            await confirmPaper(s, [b]);
+            const pC = await confirmPaper(s, [c]);
+            await confirmPaper(s, [d]);
+            const pE = await confirmPaper(s, [e]);
+            const pX = await confirmPaper(s, [x, y]);
+            const pM = await confirmPaper(s, [m]);
+            const pN = await confirmPaper(s, [n]);
+            await confirmPaper(s, [o]);
+            const bind = (child, parent) => query(`UPDATE questions SET follows_question_id = $1, follows_src = 'human' WHERE id = $2`, [parent, child]);
+            await bind(b, a);
+            await bind(d, c);
+            await bind(e, d);
+            await bind(y, x);
+            await bind(n, m);
+            await bind(o, n);
+
+            // ① A 錯並勾 → A（flagged）、B（group，來源在 P2）；刪 P1 → A 刪、B 沒重練過 → 一起刪
+            await patch(appOn, pA, [{ question_id: a, result: 0, retrain: true }]);
+            assert.equal((await itemOf(s, b)).reason, 'group');
+            const d1 = await request(appOn).delete(`/api/papers/${pA}`);
+            assert.deepEqual([d1.status, d1.body], [200, { deleted_attempts: 1 }]);
+            assert.equal(await itemOf(s, a), null);
+            assert.equal(await itemOf(s, b), null, 'B 沒有勾選、也沒重練過 → 跟著離開清單');
+
+            // ② C 錯並勾 → C（flagged）、D、E（group）；E 重練過（批改完 P5 才出得了重練卷）；刪 P3 → C 刪、D 刪、E 移出
+            await patch(appOn, pC, [{ question_id: c, result: 0, retrain: true }]);
+            await patch(appOn, pE, [{ question_id: e, result: 1 }]);
+            const rE = await retrainPaper(s, [e], today);
+            assert.equal(rE.conflict, undefined, JSON.stringify(rE.conflict));
+            const d2 = await request(appOn).delete(`/api/papers/${pC}`);
+            assert.deepEqual([d2.status, d2.body], [200, { deleted_attempts: 1 }]);
+            assert.equal(await itemOf(s, c), null);
+            assert.equal(await itemOf(s, d), null);
+            const eItem = await assertCacheMatchesHistory(s, e);
+            assert.deepEqual([eItem.status, eItem.teacher_override, eItem.reason], ['retired', 'retired', 'group'], '重練過 → 移出（保留紀錄）');
+            // 再刪 E 的重練卷：那次重練也沒發生過 → E 也刪
+            const d3 = await request(appOn).delete(`/api/papers/${rE.paperId}`);
+            assert.deepEqual([d3.status, d3.body], [200, { deleted_attempts: 1 }]);
+            assert.equal(await itemOf(s, e), null);
+
+            // ③ X、Y 都勾（同一張卷）→ 刪卷兩個都刪
+            await patch(appOn, pX, [{ question_id: x, result: 0, retrain: true }, { question_id: y, result: 0, retrain: true }]);
+            assert.deepEqual([(await itemOf(s, x)).reason, (await itemOf(s, y)).reason], ['flagged', 'flagged']);
+            const d4 = await request(appOn).delete(`/api/papers/${pX}`);
+            assert.deepEqual([d4.status, d4.body], [200, { deleted_attempts: 2 }]);
+            assert.equal(await itemCount(s), 0);
+
+            // ④ 對照：M、N 各自勾（不同卷）→ O 是 group；刪 M 的卷，同組還有 N 勾著 → N、O 不動
+            await patch(appOn, pM, [{ question_id: m, result: 0, retrain: true }]);
+            await patch(appOn, pN, [{ question_id: n, result: 0, retrain: true }]);
+            assert.deepEqual([(await itemOf(s, m)).reason, (await itemOf(s, n)).reason, (await itemOf(s, o)).reason], ['flagged', 'flagged', 'group']);
+            const d5 = await request(appOn).delete(`/api/papers/${pM}`);
+            assert.deepEqual([d5.status, d5.body], [200, { deleted_attempts: 1 }]);
+            assert.equal(await itemOf(s, m), null);
+            const [nItem, oItem] = [await itemOf(s, n), await itemOf(s, o)];
+            assert.deepEqual([nItem.reason, nItem.status, oItem.reason, oItem.status], ['flagged', 'active', 'group', 'active'],
+                '同組還有 N 勾著：O 留在清單上');
+            // 旗標關閉時照樣處理（資料完整性不受旗標管）：刪 N 的卷 → N 刪、O 沒重練過 → 刪
+            await withRetrain(false, async app => {
+                const d6 = await request(app).delete(`/api/papers/${pN}`);
+                assert.deepEqual([d6.status, d6.body], [200, { deleted_attempts: 1 }]);
+            });
+            assert.equal(await itemCount(s), 0);
         });
 
         test('刪學生：重練派題 → 排程項目 → 其餘派題 → 卷 → 學生；deleted.attempts 是派題筆數；別人的項目不動', async () => {

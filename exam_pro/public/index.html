@@ -1565,8 +1565,24 @@
             const box = document.getElementById('retrainAttach');
             const input = document.getElementById('retrainAttachCount');
             if (!box || !input || !box.checked) return null;
-            // 不合法的數字照送（JSON 裡是 null），由伺服器回 400 說明範圍，訊息顯示在結果區
+            // 題數不合法時 requestPreview 會先以 retrainAttachError 提示、不送出；這裡照原樣換成數字
             return { count: Number(String(input.value).trim()) };
+        }
+
+        /**
+         * 〔retrain 審查修正〕勾了「附上到期的重練題」、題數卻不是 0–50 的整數（含清空）時的提示文字；其餘回 ''。
+         * 比照補救卷那一列（public/js/remedial.js 的 retrainCountOf）：由 requestPreview 提示、不送出——
+         * 以前清空會變成 count 0、靜默不附帶，老師以為附了其實沒有。新題＋重練 ≤ 50 仍由伺服器檢查（400 顯示在結果區）。
+         */
+        function retrainAttachError() {
+            if (!retrainOn()) return '';
+            const box = document.getElementById('retrainAttach');
+            const input = document.getElementById('retrainAttachCount');
+            if (!box || !input || !box.checked) return '';
+            const s = String(input.value ?? '').trim();
+            const n = Number(s);
+            return s !== '' && Number.isInteger(n) && n >= 0 && n <= RETRAIN_MAX_PAPER
+                ? '' : `附上的重練題數要是 0–${RETRAIN_MAX_PAPER} 的整數。`;
         }
 
         /** 預覽卡上重練題的徽章（R7：學生卷面不標，這是老師看的畫面）。 */
@@ -1643,6 +1659,9 @@
             const countInput = document.getElementById('count');
             if (!student) { showToast('請先選擇學生（或先新增）', 'error'); return null; }
             if (!chapterSelect.value) { showToast('請選擇出題章節', 'error'); return null; }
+            // 〔retrain〕勾了「附上到期的重練題」但題數不合法（含清空）：提示、不送出（同補救卷那一列）
+            const retrainErr = retrainAttachError();
+            if (retrainErr) { showToast(retrainErr, 'error'); return null; }
             const data = {
                 student_id: student.id,
                 subject: document.getElementById('paper_subject').value,

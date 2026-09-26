@@ -765,6 +765,108 @@ describe('批改卡（students.js 最小掛鉤）', () => {
         assert.ok(toasts().includes('已儲存 1 題的批改結果。'), '既有提示不變');
         assert.ok(toasts().includes('3 題進入重練清單、1 題練到會。這次有 1 題答錯但沒勾「要重練」，不會進清單。'), toasts().join('|'));
     });
+
+    // 〔retrain 審查修正〕「答錯但沒勾，不會進清單」要對照儲存後的清單（API-1）：承上組同組題被勾、之前手動加入過的題其實在清單上
+    const ITEMS_AFTER = extra => (body, url) => {
+        assert.equal(new URL(url, 'http://x').searchParams.get('status'), 'all', '對照全部項目（含練到會、移出）');
+        return [200, { ...LIST, items: [...LIST.items, ...extra] }];
+    };
+
+    test('答錯沒勾的題若因承上組同組題被勾而進了清單（reason = group），不說「不會進清單」（審查意見的重現）', async () => {
+        const api = fakeApi({
+            'PATCH /api/papers/41/results': body => [200, { updated: body.results.length, retrain: { entered: 3, advanced: 0, mastered: 0, reset: 0 } }],
+            'GET /api/students/3/retrain-items': ITEMS_AFTER([item({ item_id: 90, question_id: 14, reason: 'group', group_ids: [11, 14] })])
+        });
+        await mount({ api });
+        const card = await openPaper();
+        resultBtn(card, 3, '錯').click();   // 第 14 題改成錯、沒勾（同組的 11 這次勾了）
+        const box = card.querySelectorAll('[data-retrain-flag="11"]')[0];
+        box.checked = true;
+        box.dispatchEvent({ type: 'change', target: box });
+        saveBtn(card).click();
+        await settle(6);
+        assert.ok(toasts().includes('3 題進入重練清單。'), toasts().join('|'));
+        assert.ok(!toasts().some(t => t.includes('沒勾')), toasts().join('|'));
+    });
+
+    test('答錯沒勾的題本來就有手動加入的項目：不提醒；已移出的項目算不在清單上：照樣提醒', async () => {
+        for (const [extra, expect] of [
+            [[item({ item_id: 91, question_id: 14, reason: 'manual' })], '1 題升一關。'],
+            [[item({ item_id: 92, question_id: 14, status: 'retired', due_on: null, teacher_override: 'retired', override_on: '2026-10-06' })],
+                '1 題升一關。這次有 1 題答錯但沒勾「要重練」，不會進清單。']
+        ]) {
+            if (env) env.restore();
+            const api = fakeApi({
+                'PATCH /api/papers/41/results': body => [200, { updated: body.results.length, retrain: { entered: 0, advanced: 1, mastered: 0, reset: 0 } }],
+                'GET /api/students/3/retrain-items': ITEMS_AFTER(extra)
+            });
+            await mount({ api });
+            const card = await openPaper();
+            resultBtn(card, 3, '錯').click();
+            saveBtn(card).click();
+            await settle(6);
+            assert.ok(toasts().includes(expect), toasts().join('|'));
+        }
+    });
+
+    test('對照清單失敗時不斷言「不會進清單」；沒有答錯的改動就不多打 API-1', async () => {
+        const api = fakeApi({
+            'PATCH /api/papers/41/results': body => [200, { updated: body.results.length, retrain: { entered: 0, advanced: 0, mastered: 0, reset: 0 } }],
+            'GET /api/students/3/retrain-items': [500, { message: '壞了' }]
+        });
+        await mount({ api });
+        let card = await openPaper();
+        const hintReads = () => api.calls.filter(c => /retrain-items$/.test(c.path) && /[?&]status=all\b/.test(c.url)).length;
+        const before = hintReads();
+        resultBtn(card, 3, '錯').click();
+        saveBtn(card).click();
+        await settle(6);
+        assert.ok(toasts().includes('這次有 1 題答錯但沒勾「要重練」。'), toasts().join('|'));
+        assert.equal(hintReads(), before + 1);
+
+        resultBtn(card, 3, '對').click();   // 改成對：沒有答錯的候選題
+        saveBtn(card).click();
+        await settle(6);
+        assert.equal(hintReads(), before + 1, '沒有候選題就不讀清單');
+    });
+
+    test('「判定已會」的重練題被帶著出又答錯：提示答錯不改狀態（仍是練到會）', async () => {
+        const api = fakeApi({
+            'PATCH /api/papers/41/results': body => [200, { updated: body.results.length, retrain: { entered: 0, advanced: 0, mastered: 0, reset: 0 } }],
+            'GET /api/students/3/retrain-items': ITEMS_AFTER([item({ item_id: 93, question_id: 13, status: 'mastered', step: 2, due_on: null,
+                mastered_on: '2026-10-05', teacher_override: 'mastered', override_on: '2026-10-05' })])
+        });
+        await mount({ api });
+        const card = await openPaper();
+        resultBtn(card, 2, '錯').click();   // 第 13 題（重練題）改成錯
+        saveBtn(card).click();
+        await settle(6);
+        assert.ok(toasts().includes('有 1 題重練題已「判定已會」，答錯不改狀態（仍是練到會；要再練請到錯題重練卡按「重新加入」）。'),
+            toasts().join('|'));
+    });
+});
+
+describe('批改提示的純函式（審查修正）', () => {
+    test('retrainHintCounts：在清單上（沒移出）的不算答錯沒勾；判定已會的重練題另外算', async () => {
+        const { retrainHintCounts } = await loadFresh('students.js');
+        const items = [
+            item({ question_id: 1, reason: 'group' }),
+            item({ question_id: 2, status: 'retired', teacher_override: 'retired' }),
+            item({ question_id: 3, status: 'mastered', teacher_override: 'mastered' }),
+            item({ question_id: 4, status: 'mastered', teacher_override: null })
+        ];
+        assert.deepEqual(retrainHintCounts(items, { wrongUnflagged: [1, 2, 5], wrongRetrain: [3, 4] }), { wrongUnflagged: 2, masteredKept: 1 });
+        assert.deepEqual(retrainHintCounts([], {}), { wrongUnflagged: 0, masteredKept: 0 });
+    });
+
+    test('retrainSaveMessage：沒能確認清單時只說答錯沒勾；判定已會答錯另外一句；舊的兩參數呼叫逐字不變', async () => {
+        const { retrainSaveMessage } = await loadFresh('students.js');
+        const zero = { entered: 0, advanced: 0, mastered: 0, reset: 0 };
+        assert.equal(retrainSaveMessage(zero, 2), '這次有 2 題答錯但沒勾「要重練」，不會進清單。');
+        assert.equal(retrainSaveMessage(zero, 2, { unverified: true }), '這次有 2 題答錯但沒勾「要重練」。');
+        assert.equal(retrainSaveMessage({ ...zero, advanced: 1 }, 0, { masteredKept: 2 }),
+            '1 題升一關。有 2 題重練題已「判定已會」，答錯不改狀態（仍是練到會；要再練請到錯題重練卡按「重新加入」）。');
+    });
 });
 
 describe('學生清單的「到期 N」（API-4）', () => {

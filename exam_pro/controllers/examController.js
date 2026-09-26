@@ -952,9 +952,14 @@ exports.confirmPaper = async (req, res, next) => {
         const { titleDate, todayStr } = localDates();
         // 預覽是單一章節出的；混章時取排序後第一題的章節（標題本來就只是人看的）
         // 〔retrain PR-3〕純重練卷（每一題都是重練題）的卷名是「<姓名>-錯題重練卷(日期)」（第 5.2 節 API-5、第 5.4 節）
+        // 〔retrain 審查修正〕附帶重練題的混合卷：重練題只限同科、不限章節（第 5.6.3 節 ③），排序後第一題可能是別章的重練題，
+        // 所以取「排序後第一個新題」的章節——與預覽（paper_title_preview）、API-6 直接寫入的卷名相同。沒帶 retrain_question_ids 時照舊。
+        const titleQuestion = retrainIds === null
+            ? sortedQuestions[0]
+            : (sortedQuestions.find(q => !retrainIds.includes(q.id)) || sortedQuestions[0]);
         const paperTitle = retrainSelect.isPureRetrain(finalSortedIds, retrainIds)
             ? retrainSelect.retrainPaperTitle(student.name, titleDate)
-            : `${student.name}-${sortedQuestions[0].chapter}特訓卷(${titleDate})`;
+            : `${student.name}-${titleQuestion.chapter}特訓卷(${titleDate})`;
 
         const outcome = await writePaper({
             studentId: student.id, paperTitle, questionIds: finalSortedIds, todayStr,

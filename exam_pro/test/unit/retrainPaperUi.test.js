@@ -91,7 +91,7 @@ function mountPaperPage({ retrain = 'true', ratio, student = '3', count = '20', 
         const o = s.options.find(x => x.value === s.value);
         return s.value && o ? { id: Number(s.value), name: o.getAttribute('data-name') } : null;
     };
-    const api = new Function('selectedStudent', 'apiFetch', `${FEATURE_ON}\n${BLOCK}\nreturn { syncRetrainAttach, retrainAttachRequest,
+    const api = new Function('selectedStudent', 'apiFetch', `${FEATURE_ON}\n${BLOCK}\nreturn { syncRetrainAttach, retrainAttachRequest, retrainAttachError,
         retrainCapForAttach, retrainAttachRatio, removeRetrainFromPreview, retrainConfirmKeys, retrainBadgeNodes, retrainSummaryNodes };`)(
         selectedStudent, apiFetch);
     return { ...api, fetches, doc, slot, countInput, sel };
@@ -158,6 +158,31 @@ describe('組卷頁〔retrain〕：附上到期的重練題（R6、R7）', () =>
         assert.deepEqual(p.retrainAttachRequest(), { count: 9 });
         $('retrainAttachCount').value = 'abc';
         assert.ok(Number.isNaN(p.retrainAttachRequest().count), '不合法的數字照送（JSON 裡是 null），由伺服器回 400');
+    });
+
+    test('〔審查修正〕勾了但題數清空或不合法：提示「附上的重練題數要是 0–50 的整數。」、不送出（同補救卷那一列）；沒勾或旗標關閉不提示', async () => {
+        const p = mountPaperPage({ count: '20' });
+        p.syncRetrainAttach();
+        await settle();
+        assert.equal(p.retrainAttachError(), '', '沒勾不檢查');
+        $('retrainAttach').checked = true;
+        for (const v of ['', '  ', 'abc', '-1', '2.5', '51', '1e1x']) {
+            $('retrainAttachCount').value = v;
+            assert.equal(p.retrainAttachError(), '附上的重練題數要是 0–50 的整數。', `「${v}」`);
+        }
+        for (const v of ['0', '6', ' 12 ', '50']) {
+            $('retrainAttachCount').value = v;
+            assert.equal(p.retrainAttachError(), '', `「${v}」`);
+            assert.deepEqual(p.retrainAttachRequest(), { count: Number(v.trim()) });
+        }
+        env.restore(); env = null;
+        const off = mountPaperPage({ retrain: 'false' });
+        off.syncRetrainAttach();
+        assert.equal(off.retrainAttachError(), '', '旗標關閉：那一列不存在，不檢查');
+        // requestPreview：在組 body、打 generate-paper 之前先擋（showToast 在抽出來的那一段外面）
+        const rp = HTML.slice(HTML.indexOf('async function requestPreview()'), HTML.indexOf('async function generatePaper()'));
+        assert.match(rp, /const retrainErr = retrainAttachError\(\);\s*if \(retrainErr\) \{ showToast\(retrainErr, 'error'\); return null; \}/);
+        assert.ok(rp.indexOf('retrainAttachError()') < rp.indexOf("apiFetch('/api/generate-paper'"), '不合法就不送出');
     });
 
     test('比例讀 <meta name="retrain-attach-ratio">（RETRAIN_ATTACH_RATIO）；沒注入或不合法退回 0.3', async () => {

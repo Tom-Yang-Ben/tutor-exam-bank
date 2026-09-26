@@ -6,6 +6,7 @@
 > 〔修訂 2026-09-26 凍結〕Owner 在「重練與收尾決策單」第三輪逐題答覆了第 8 節的 R1～R12（答覆與日期寫在各題下方，總表在第 8 節開頭）。依答覆改寫的段落：第 0 節；第 1.2 節；第 2.5 節；第 3.4 節（`reason` 改成 `flagged`／`group`／`manual`，`override_at` 改成 `override_on`）；第 3.6 節（R11 不補建，取消補建步驟）；第 3.8 節；第 4.3～4.8 節（R1 由老師勾選、R2～R5 的參數、R12 報錯）；第 5.1～5.6 節（旗標管的事、設定檔、`retrain:rebuild` 改成只重算的 `retrain:recompute`、R6／R7／R12 的 API 行為、操作說明）；第 6 節（FR-036～FR-040、ACPT 定稿，測試計畫）；第 7.1 節；第 9 節。Owner 選的與原建議不同的有三題：**R1**（選 2，老師勾選才進清單）、**R11**（選 3，不補建）、**R12**（選 2，放不下就報錯）。
 > 〔修訂 2026-09-26 凍結〕分支 `dec/retrain-schedule` 同時交付排程的純函式與設定：`exam_pro/config/retrain.js`、`exam_pro/services/retrainSchedule.js`，單元測試 `test/unit/retrainSchedule.test.js`、`retrainScheduleProperty.test.js`、`retrainConfig.test.js`（TC-038-1、TC-038-2、TC-038-4、TC-038-5）。沒有碰資料表、migration、API 與畫面。
 > 〔修訂 2026-09-26 凍結後審查，分支 `dec/retrain-schedule-fix`〕更正「已派出、還沒批改」的範圍（第 4.4、4.6、4.7、5.2、5.5、6.2、6.3、9.1 節）：重練派題沒批改一律算；**新題派題只有派題日 ≥ 起算日才算**。原寫法「任何一筆派題還沒批改」會讓手動加入的以前的題（R11 選 3 唯一的加入方式）永遠不到期：MySQL 時期匯入的舊紀錄 `result` 全是 NULL、對不上卷的 `paper_id` 也是 NULL，批改不了。純函式與測試同步修正（新增 `countsAsInFlight`）。另外：第 4.6 節與 TC-038-4 的隨機測試說明改成如實描述（逐筆批改改驗每一個中間歷史都與參考實作相同；不變量 I7 在 I/O 層的部分由整合測試驗）；第 4.4 節補上「重新加入當天已批改的重練派題」這個邊界。Owner 的答覆與決定沒有變。
+> 〔修訂 2026-09-26 第二階段審查修正，分支 `dec/retrain-phase2-fix`〕只新增第 5.6.6 節（審查意見的處理、新 migration `0018_retrain_unflag_marker.sql`、升級步驟、待 Owner 裁決的「判定已會的題被帶著出又答錯」）；其餘各節原文不動。
 > **需求來源**：DEC-003 例外條款（錯題重練與間隔複習可再出同一題、每次作答各自記錄；資料層拆「派題」與「作答」，Owner 選 a：拆表）、DEC-016（錯過的題要練到會為止、依間隔複習排程回測）；兩者 2026-09-25 已核准。開發順序依 Owner 決策單 B22（錯題重練 → 間隔複習 → 診斷報告 → …；`docs/HANDOFF.md` 第 0.2 節 G 段）。缺口編號 G11、G13 出自 2026-09-24 缺口分析第 5 節「缺口總表」P1，`engineering_docs/01_requirements/srs.md` 第 1 節「尚未分配 FR」一條也以這兩個編號引用。
 > **決策紀錄**：ADR-018（派題與作答拆表，以相容檢視保留既有讀法）、ADR-019（間隔複習採固定關卡、排程為作答歷史的純函式），在 `engineering_docs/03_architecture/adr/`。
 > **編號**：功能需求 FR-036～FR-040、驗收 ACPT-036～ACPT-040 依 Owner 答覆**在本檔定稿**（第 6.1、6.2 節）；`engineering_docs/01_requirements/srs.md` 等共用文件的同步由其他分支辦理。migration 寫成「0016 之後的下一號」（0016 可能被同一輪的其他分支用掉），本檔以 **M1**、**M2** 代稱，預計是 0017、0018。
@@ -924,6 +925,64 @@ capForAttach(newCount, ratio) ：R6，floor(新題數 × 比例)，且新題＋�
 - `retrainService.todayLocal` 與 `examController.localDates` 是兩份同樣的「本地今天」實作，還沒合併。
 - NFR-010 只有上面那一次手動量測，沒有進 CI；`srs.md`、`engineering_tracker.md`、`HANDOFF.md` 的同步照第 9.2 節由文件整合任務處理。
 - 既有的紅燈不變（不是本功能造成、這一輪也不修）：e2e 缺 ocr cassette 3 敗、五個 eval 缺 cassette 與向量 fixture，失敗清單與 `dec/retrain-base` 相同。
+
+#### 5.6.6 實作狀態（第二階段審查修正）
+
+> **分支 `dec/retrain-phase2-fix`**，起點 `dec/retrain-phase2`（`3285213`）。依第二階段整合的審查意見（六條 minor）與主控另外要求的三件 info 修正；第 5.6.1～5.6.5 節原文不動，與它們不同之處以本節為準。
+>
+> **新 migration：`0018_retrain_unflag_marker.sql`**（0017 已凍結，照它檔頭的約定走新檔）：`retrain_items` 多一欄 `retired_by_unflag BOOLEAN NOT NULL DEFAULT false` 與約束 `retrain_items_unflag_check`（只有 `teacher_override = 'retired'` 的項目可以是 true；寫成 `IS NOT DISTINCT FROM`，`teacher_override` 是 NULL 時 CHECK 才不會放行）。可重複套用（`ADD COLUMN IF NOT EXISTS`、DO 區塊判斷約束），空庫可從 0001 套到 0018；不搬資料，既有項目一律 false（照舊保留）。凍結介面（`config/retrain.js`、`services/retrainSchedule.js`、0016、0017、`test/helpers/attempts.js`、`utils/followUpPaperCheck.js`、`FOLLOW_UP_SHORTFALL_POLICY`）一個字都沒動，也沒有發現它們的 bug。
+
+**審查意見逐條**
+
+| # | 審查意見 | 處理 | 測試（修正前確認會失敗） |
+| :--- | :--- | :--- | :--- |
+| 1 | API-3 加鎖順序與批改相反，同時操作會死結（40P01） | ✅ 修：`applyAction` 先**不加鎖**讀出目標的題號、用 `lookupGroups` 找同組，再用一句 `WHERE i.student_id = $1 AND (i.id = $2 OR i.question_id = ANY($3)) ORDER BY i.id FOR UPDATE` 把目標與同組一次鎖完；鎖到之後再確認目標還在、還屬於這位學生（等鎖期間被刪卷刪掉或被合併搬走 → 404）。`mark_mastered` 只鎖目標。檔頭「依 id 排序，鎖的順序一致」現在對所有路徑都成立 | `retrain.pg.test.js`「併發：API-3 與批改同時動同一個承上組」：第三條連線先卡住 id 小的項目，讓批改與 API-3 依序排隊，修正前批改回 500（deadlock detected），修正後兩邊 200、快取＝歷史重算；反過來排隊也驗 |
+| 2 | 刪重練卷後，取消勾選時因「重練過」而移出的項目沒有回到「那次重練沒發生過」 | ✅ 修（需要 0018）：批改卡取消勾選（以及下一列刪卷時承上組跟著離開）而移出的項目記 `retired_by_unflag = true`；老師在清單上按「移出」（API-3）是 false。刪重練卷重算之後，**重練派題全刪光、而且 `retired_by_unflag`** 的項目刪掉（取消勾選當時就會直接刪）；清單上按的「移出」照樣保留。重新加入（批改卡勾回、API-3 `reactivate`）與「判定已會」把它清回 false | `retrain.pg.test.js`「刪重練卷＝那次重練沒發生過」（兩張重練卷逐張刪、承上組、API-3 的移出保留、之後勾回走重建：新項目、起算日＝原卷派題日、`entered_after_assignment_id` 為 NULL）、「勾選消失才移出的項目……清回 false」；`retrainMigration.pg.test.js` 0018；`retrainService.test.js` 0018 靜態檢查 |
+| 3 | 刪掉被勾選題所在的卷，別張卷來源的 group 項目留在清單上 | ✅ 修：刪卷刪掉老師勾的（`flagged`、沒移出）項目之後，對它的承上組套用與取消勾選相同的規則（第 5.6.2 節 ⑥）：同組已經沒有勾選 → `group` 項目還沒重練過刪、重練過移出（記 `retired_by_unflag`）；同組還有別題勾著就不動；`manual` 不動。這些同組項目由 `lockItemsForPaper` 先不加鎖查出、與其他項目在同一句 `ORDER BY i.id FOR UPDATE` 一次鎖完（不破壞第 1 條的加鎖順序）。旗標關閉時照樣處理（資料完整性不受旗標管） | `retrain.pg.test.js`「刪掉被勾選題所在的卷：同組已經沒有勾選時……」：事後綁定的承上組（沒重練過 → 刪；重練過 → 移出，之後刪它的重練卷 → 刪）、同一張卷整組勾、對照組（同組還有勾選 → 不動）、旗標關閉 |
+| 4 | 混合卷確認後的卷名變成別章重練題的章節，與預覽、API-6 直接寫入不同 | ✅ 修：`confirm-paper` 帶了 `retrain_question_ids`、又不是純重練卷時，卷名取「排序後第一個**新題**」的章節；沒帶 `retrain_question_ids` 時一個字都沒變（取排序後第一題） | `retrainPaper.pg.test.js`「混合卷的卷名跟著新題的章節」：重練題（向量內積、單選、難度 1）排第一題，預覽、確認的回應、`exam_papers` 的那一列、非 dry_run 直接寫入四處卷名相同；沒帶重練題時照舊 |
+| 5 | 批改後「答錯但沒勾，不會進清單」的提示可能與伺服器結果相反（承上組同組題被勾、已有手動或 group 項目） | ✅ 修（前端）：API-10 的回應形狀不動（既有測試逐字比對整個回應，而且第 5.2 節凍結了 `retrain` 摘要的四個鍵）。批改卡先挑出「這次改成錯、沒勾」的新題當候選；儲存成功而且有候選題時，讀一次 API-1（`status=all`）對照清單現況，**在清單上（有項目而且沒移出）的不算**。讀不到清單時改說「這次有 N 題答錯但沒勾「要重練」。」，不斷言「不會進清單」。沒有候選題就不多打 API | `retrainUi.test.js`：承上組重現（審查意見的例子）、手動加入的不提醒／已移出的照樣提醒、對照失敗與不多打 API、純函式 `retrainHintCounts`；`retrainFlow.pg.test.js`「批改卡的提示與伺服器實際結果一致」用真的伺服器跑審查意見的例子（`entered = 3`，提示只算不在任何組的那一題） |
+| 6 | ACPT-040-3 沒有端點層的斷言（弱點面板、知識點掌握度） | ✅ 補測試（行為本來就對） | `retrainPaper.pg.test.js`「ACPT-040-3（R10 選 1）」：有知識點標註與錯因的夾具，出重練卷前後、答對與答錯（含錯因、部分給分）之後，`/weakness` 與 `/weakness/kc`（四組查詢參數）逐欄 `deepEqual`。另以「把檢視 `attempts` 改成含重練派題」做過一次突變檢查，這條測試會失敗 |
+
+**主控另外要求的三件**
+
+| # | 項目 | 處理 |
+| :--- | :--- | :--- |
+| (1) | 組卷頁勾了「附上到期的重練題」但題數清空或不合法時，送出 `count: 0`（或 null）、靜默不附帶 | ✅ 比照補救卷那一列：新增 `retrainAttachError()`（在〔retrain〕掛鉤區塊內），勾了而題數不是 0～50 的整數（含清空）時，`requestPreview` 提示「附上的重練題數要是 0–50 的整數。」、不送出；新題＋重練 ≤ 50 仍由伺服器檢查（400 顯示在結果區）。明確填 0 照送（同補救卷允許 0）。`retrainAttachRequest()` 本身的回傳不變（既有斷言照舊成立）。測試：`retrainPaperUi.test.js` 新增一案 |
+| (2) | 部署說明：新程式在旗標關閉時也要求資料庫已套 0017（現在是 0018） | ✅ 見下方「升級步驟」；`docs/HANDOFF.md` 第 0.2 節 C.7 與 `exam_pro/README.md` 第 4 節的升級注意事項同步加註 |
+| (3) | 「判定已會」的題被承上組帶著出又答錯時維持練到會（第 4.4 節兩列規則衝突） | ⏸ **待 Owner 裁決**，純函式不改（見下）。批改摘要不會誤導：這一題不算 `reset`（狀態沒變）；批改卡儲存後另外提示「有 N 題重練題已「判定已會」，答錯不改狀態（仍是練到會；要再練請到錯題重練卡按「重新加入」）。」（與第 5 條同一次 API-1 對照，不改 API-10 的回應形狀）。測試：`retrainUi.test.js`、`retrainFlow.pg.test.js` |
+
+**待 Owner 裁決：「判定已會」的題被帶著出又答錯**
+
+第 4.4 節有兩列規則在這個情形互相衝突：「承上題」那一列寫「已練到會的同組題被帶著出時……答錯就重新進行中（回第 1 關）」；「老師移出／判定已會／重新加入」那一列寫 `teacher_override`「重算時優先」。凍結的純函式照後者：老師「判定已會」（`teacher_override = 'mastered'`）的題，被同組帶著出又答錯，**仍是練到會**（錯的次數照樣＋1）；自然練到會（沒有 override）的題答錯則回第 1 關。兩種選擇：
+
+- 維持現狀（override 優先）：老師的判斷不會被一次答錯推翻；要再練就按「重新加入」。批改卡已提示。
+- 改成答錯就重新進行中：要改凍結的純函式（例如答錯時清掉 `mastered` 的 override），並補純函式與整合測試。
+
+**升級步驟（旗標關閉也一樣）**
+
+新程式在 `FEATURE_RETRAIN` 關閉時也會讀寫錯題重練的資料表：批改（`PATCH /api/papers/:id/results` 先鎖 `retrain_items` 再重算）、刪卷、刪學生、合併學生都會碰 `retrain_items` 與 `retired_by_unflag`，資料庫沒套到 0018 就會 500。所以更新程式一定要連 migration 一起做（沿用 0016 的驗證流程，第 3.6 節、第 5.6.1 節）：
+
+1. 先停服務（`npm run dev` 的 nodemon 會在拉下新程式時立刻重啟）。
+2. 更新程式（`git pull`／checkout）。
+3. `npm run db:backup`。
+4. `node scripts/snapshot_attempt_views.js --out=before.json`（套之前拍一張）。
+5. `npm run migrate`（0016 拆表、0017 排程項目、0018 移出的來源；`node migrate.js status` 應全部顯示已套用）。
+6. `node scripts/snapshot_attempt_views.js --out=after.json`。
+7. `node scripts/snapshot_attempt_views.js --compare before.json after.json`：回 0「完全相同」才啟動；有差異就先別用，把輸出與兩個檔案留給開發者（還原用第 3 步的備份）。
+8. 啟動。要用錯題重練時再在 `.env` 設 `FEATURE_RETRAIN=true` 並重啟（清單從那天起由老師勾選，第 5.5 節）。
+
+**與設計稿（凍結版）不同、或設計稿沒寫而由本次實作決定之處**（列給 Owner 確認）
+
+| # | 項目 | 實作 |
+| :--- | :--- | :--- |
+| ① | 移出的來源 | 多一欄 `retired_by_unflag`（0018）。「勾選消失」（批改卡取消勾選、刪了勾選所在的卷）才移出的是 true，老師在清單上按的「移出」是 false；只有前者在重練卷刪光之後跟著刪。0018 之前已經因取消勾選而移出的項目分不出來源，一律當成老師的「移出」保留 |
+| ② | 刪卷時承上組的 group 項目 | 第 3.9 節只寫「項目還沒被重練過就連項目一起刪」；本次比照取消勾選（5.6.2 ⑥）處理同組、別張卷來源的 `group` 項目 |
+| ③ | 仍然不同的邊界 | 「勾 → 出重練卷 → 取消勾選（移出）→ 再勾回來（重新加入）→ 刪重練卷」：項目留在「重新加入」的樣子（起算日＝勾回那天），而不是「那次重練沒發生過時」的重建（起算日＝原卷派題日）。只差起算日與到期日，沒有處理 |
+| ④ | 混合卷的卷名 | 取排序後第一個新題的章節（第 5.4 節「沿用現有規則」的前提是單章預覽；附帶的重練題可能是別章）。blueprint（跨章）卷的確認本來就取排序後第一題的章節，與 API-6 blueprint 直接寫入的「多章」卷名不同，這一點與重練無關、照舊 |
+| ⑤ | 批改卡的補充提示 | 儲存後多讀一次 API-1（只在有「改成錯沒勾」的新題或「改成錯」的重練題時）。「在清單上」＝有項目而且沒移出（進行中或練到會）；讀不到時不斷言「不會進清單」 |
+| ⑥ | 組卷頁題數的前端檢查 | 0～50 的整數（含 0；清空不再當 0）；合計上限仍交給伺服器 |
+
+**本次新增的測試**：整合 `retrain.pg.test.js` 四案（API-3 與批改併發、刪重練卷還原、移出來源清回、刪卷時承上組）、`retrainMigration.pg.test.js` 一案（0018）、`retrainPaper.pg.test.js` 兩案（卷名、ACPT-040-3）、`retrainFlow.pg.test.js` 一案（批改提示與伺服器一致、判定已會答錯）；單元 `retrainUi.test.js` 六案、`retrainPaperUi.test.js` 一案、`retrainService.test.js` 一案。`retrainFlow.pg.test.js` 的 `gradeOnCard` 夾具改成照批改卡的新做法算提示（對照 API-1），既有斷言一條沒改。完整 CI：unit 3,025 → 3,033 案、integration 576 → 584 案，全綠；check:html、migrate（到 0018）綠。既有紅燈不變（與起點 `3285213` 逐項相同）：e2e 缺 ocr cassette 3 敗；classify 92、pipeline 1、nlq 8 筆 replay miss；retrieval 未達門檻；variant 缺向量 fixture。
 
 ---
 

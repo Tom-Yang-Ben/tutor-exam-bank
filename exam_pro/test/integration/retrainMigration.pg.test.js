@@ -12,6 +12,8 @@
 //      assignments_retrain_link_check、retrain_items.question_id 是 RESTRICT；兩個複合外鍵可以延後到 COMMIT 檢查。
 //   3. 重複套用：再套一次 0017 是 no-op（約束與索引數量不變、資料不動）。
 //   4. 有資料的 0016 庫：套 0017 不動既有派題；若已有沒有項目的重練派題 → RAISE、整支回滾。
+//   5. 〔審查修正〕0018（retrain_items.retired_by_unflag）：有資料的 0017 庫套上去既有項目一律 false、約束只允許
+//      移出的項目是 true、重複套用 no-op。
 // ─────────────────────────────────────────────────────────────
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
@@ -260,6 +262,42 @@ function runSuite() {
                 assert.deepEqual((await client.query('SELECT * FROM attempts ORDER BY id')).rows, firstBefore, '相容檢視 attempts 內容不變');
                 const { rows: [n] } = await client.query('SELECT COUNT(*)::int AS n FROM retrain_items');
                 assert.equal(n.n, 0, '不補建（R11 選 3）');
+            });
+        });
+    });
+
+    describe('0018 移出的來源（審查修正）', () => {
+        const M3 = '0018_retrain_unflag_marker.sql';
+        const M3_SQL = fs.readFileSync(path.join(MIGRATIONS_DIR, M3), 'utf8');
+
+        test('有資料的 0017 庫：既有項目一律 false（照舊保留）；只有移出的項目可以是 true；再套一次是 no-op', async () => {
+            const S = 'm3retrain_data';
+            await withScratchSchema(S, async client => {
+                await applyFiles(client, ALL.filter(f => f <= M2));
+                const fx = await seedBasics(client);
+                await client.query(
+                    `INSERT INTO retrain_items (student_id, question_id, source_assignment_id, reason, entered_on, status, due_on, teacher_override, override_on)
+                     VALUES ($1, $2, $3, 'flagged', '2026-09-01', 'retired', NULL, 'retired', '2026-09-05'),
+                            ($1, $4, $5, 'manual', '2026-09-01', 'active', '2026-09-02', NULL, NULL)`,
+                    [fx.s, fx.q1, fx.a1, fx.q2, fx.a2]);
+
+                await applySql(client, M3_SQL);
+                assert.deepEqual((await columns(client, S, 'retrain_items')).slice(-1), ['retired_by_unflag'], '往後加一欄');
+                const { rows } = await client.query('SELECT question_id, retired_by_unflag FROM retrain_items ORDER BY question_id');
+                assert.deepEqual(rows.map(r => r.retired_by_unflag), [false, false], '既有項目分不出來源：一律 false（刪重練卷時照舊保留）');
+
+                await client.query('UPDATE retrain_items SET retired_by_unflag = true WHERE question_id = $1', [fx.q1]);
+                await reject(client.query('UPDATE retrain_items SET retired_by_unflag = true WHERE question_id = $1', [fx.q2]),
+                    '23514', 'retrain_items_unflag_check');
+                await reject(client.query(
+                    `UPDATE retrain_items SET teacher_override = 'mastered', override_on = '2026-09-06' WHERE question_id = $1`, [fx.q1]),
+                    '23514', 'retrain_items_unflag_check');
+
+                const beforeCons = [...(await constraints(client, S, 'retrain_items')).keys()];
+                await applySql(client, M3_SQL);
+                assert.deepEqual([...(await constraints(client, S, 'retrain_items')).keys()], beforeCons);
+                const { rows: [kept] } = await client.query('SELECT retired_by_unflag FROM retrain_items WHERE question_id = $1', [fx.q1]);
+                assert.equal(kept.retired_by_unflag, true, '重複套用不動資料');
             });
         });
     });

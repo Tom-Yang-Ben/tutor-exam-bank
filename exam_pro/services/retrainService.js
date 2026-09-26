@@ -69,7 +69,8 @@ const D = col => `to_char(${col}, 'YYYY-MM-DD')`;
 const ITEM_COLUMNS = `i.id, i.student_id, i.question_id, i.source_assignment_id, i.reason,
        ${D('i.entered_on')} AS entered_on, i.status, i.step, ${D('i.due_on')} AS due_on, i.streak, i.lapses,
        ${D('i.last_attempt_on')} AS last_attempt_on, ${D('i.mastered_on')} AS mastered_on,
-       i.teacher_override, ${D('i.override_on')} AS override_on, i.note, i.entered_after_assignment_id`;
+       i.teacher_override, ${D('i.override_on')} AS override_on, i.note, i.entered_after_assignment_id,
+       i.retired_by_unflag`;
 
 function toItemRow(r) {
     return {
@@ -641,7 +642,7 @@ async function reactivateItems(run, itemIds, today) {
     if (!itemIds.length) return;
     await run(
         `UPDATE retrain_items i
-            SET teacher_override = NULL, override_on = NULL, entered_on = $2::date,
+            SET teacher_override = NULL, override_on = NULL, retired_by_unflag = false, entered_on = $2::date,
                 entered_after_assignment_id = (SELECT COALESCE(MAX(a.id), 0) FROM assignments a
                                                 WHERE a.student_id = i.student_id AND a.question_id = i.question_id),
                 updated_at = now()
@@ -649,13 +650,17 @@ async function reactivateItems(run, itemIds, today) {
         [itemIds, today]);
 }
 
-/** 移出：teacher_override = retired（已經移出的不動，保留原本的日期）。 */
-async function retireItems(run, itemIds, today) {
+/**
+ * 移出：teacher_override = retired（已經移出的不動，保留原本的日期與來源）。
+ * byUnflag＝true：移出是因為勾選消失（批改卡取消勾選、刪了勾選所在的卷），記在 retired_by_unflag（migrations/0018）——
+ * 刪重練卷之後重練派題全刪光時，這種項目跟著刪（等於那次重練沒發生過，第 3.9 節）；老師在清單上按的「移出」（API-3）是 false、照樣保留。
+ */
+async function retireItems(run, itemIds, today, byUnflag = false) {
     if (!itemIds.length) return;
     await run(
-        `UPDATE retrain_items SET teacher_override = 'retired', override_on = $2::date, updated_at = now()
+        `UPDATE retrain_items SET teacher_override = 'retired', override_on = $2::date, retired_by_unflag = $3, updated_at = now()
           WHERE id = ANY($1::bigint[]) AND teacher_override IS DISTINCT FROM 'retired'`,
-        [itemIds, today]);
+        [itemIds, today, byUnflag]);
 }
 
 // ───────────────────────── 批改（API-10）─────────────────────────
@@ -774,7 +779,8 @@ async function applyGrading(client, { studentId, questionIds, plan = null, today
                             .filter(it => it && it.reason === 'group' && it.teacher_override !== 'retired')
                     ].map(it => it.id);
                     const retrained = await retrainedItemIds(run, leaving);
-                    await retireItems(run, leaving.filter(id => retrained.has(id)), today);
+                    // 重練過 → 移出，並記下「是勾選消失才移出的」（刪重練卷後可以還原成刪掉，第 3.9 節；migrations/0018）
+                    await retireItems(run, leaving.filter(id => retrained.has(id)), today, true);
                     const toDelete = leaving.filter(id => !retrained.has(id));
                     if (toDelete.length) await run('DELETE FROM retrain_items WHERE id = ANY($1::bigint[])', [toDelete]);
                 }
@@ -866,17 +872,27 @@ async function addManual(client, studentId, questionIds, { today = todayLocal(),
  */
 async function applyAction(client, studentId, itemId, { action, hasNote = false, note = null }, { today = todayLocal(), params = loadRetrainConfig() } = {}) {
     const run = runnerOf(client);
-    const { rows: [raw] } = await run(
-        `SELECT ${ITEM_COLUMNS} FROM retrain_items i WHERE i.id = $1 AND i.student_id = $2 FOR UPDATE`, [itemId, studentId]);
-    if (!raw) return { status: 404 };
-    const item = toItemRow(raw);
-
-    let groupItems = [];
+    // 加鎖順序與批改（lockForGrading）、出卷（insertRetrainAssignments）、刪卷（lockItemsForPaper）一致：
+    // 先**不加鎖**找出這一題與同組的題，再用一句 `ORDER BY i.id FOR UPDATE` 把目標與同組項目一次鎖完。
+    // 若先鎖目標、再另外鎖同組，目標 id 較大時會與「一句依 id 鎖完」的批改交錯而死結（審查意見：API-3 的加鎖順序）。
+    const { rows: [peek] } = await run(
+        'SELECT i.question_id FROM retrain_items i WHERE i.id = $1 AND i.student_id = $2', [itemId, studentId]);
+    if (!peek) return { status: 404 };
+    const questionId = Number(peek.question_id);
+    let groupQids = [questionId];
     if (action !== 'mark_mastered') {
-        const { groupOf } = await lookupGroups(run, [item.question_id], studentId);
-        const others = (groupOf.get(item.question_id) || [item.question_id]).filter(q => q !== item.question_id);
-        groupItems = [...(await lockItems(run, studentId, others)).values()];
+        const { groupOf } = await lookupGroups(run, [questionId], studentId);
+        groupQids = groupOf.get(questionId) || [questionId];
     }
+    const { rows: lockedRaw } = await run(
+        `SELECT ${ITEM_COLUMNS} FROM retrain_items i
+          WHERE i.student_id = $1 AND (i.id = $2 OR i.question_id = ANY($3::int[]))
+          ORDER BY i.id FOR UPDATE`, [studentId, itemId, groupQids]);
+    const locked = lockedRaw.map(toItemRow);
+    // 鎖到之後再確認一次：等鎖期間項目可能被刪（刪卷）或搬到別的學生（合併），那就當成不存在
+    const item = locked.find(it => it.id === Number(itemId));
+    if (!item) return { status: 404 };
+    const groupItems = action === 'mark_mastered' ? [] : locked.filter(it => it.id !== item.id);
 
     const changed = [];
     if (action === 'retire') {
@@ -886,7 +902,8 @@ async function applyAction(client, studentId, itemId, { action, hasNote = false,
     } else if (action === 'mark_mastered') {
         if (item.teacher_override !== 'mastered') {
             await run(
-                `UPDATE retrain_items SET teacher_override = 'mastered', override_on = $2::date, updated_at = now()
+                `UPDATE retrain_items SET teacher_override = 'mastered', override_on = $2::date, retired_by_unflag = false,
+                        updated_at = now()
                   WHERE id = $1`, [item.id, today]);
         }
     } else if (action === 'reactivate') {
@@ -967,35 +984,128 @@ async function insertRetrainAssignments(client, { studentId, paperId, assignedAt
 // ───────────────────────── 刪卷、刪學生、合併（第 3.9 節）─────────────────────────
 
 /**
- * 刪卷前先鎖住這張卷相關的項目（以卷上新題派題為來源的、卷上重練派題所屬的），再查擋路的重練派題：
- * 等鎖之後的查詢看得到別的交易剛提交的重練派題，不會刪掉一個剛被重練的項目。
+ * 這些 (學生, 題目) 所在承上組的全部成員（含自己；沒有綁定的題就是自己）。只讀、不加鎖。
+ * @param {Function} run
+ * @param {Array<{student_id:number, question_id:number}>} pairs
+ * @returns {Promise<Array<{student_id:number, question_id:number, group_ids:number[]}>>} 每一個輸入各一筆（group_ids 依承接順序）
  */
-async function lockItemsForPaper(client, paperId) {
-    await runnerOf(client)(
-        `SELECT i.id FROM retrain_items i
+async function groupsOfPairs(run, pairs) {
+    const out = [];
+    const byStudent = new Map();
+    for (const p of pairs) {
+        const sid = Number(p.student_id);
+        if (!byStudent.has(sid)) byStudent.set(sid, []);
+        byStudent.get(sid).push(Number(p.question_id));
+    }
+    for (const [sid, qids] of byStudent) {
+        const { groupOf } = await lookupGroups(run, qids, sid);
+        for (const q of qids) out.push({ student_id: sid, question_id: q, group_ids: groupOf.get(q) || [q] });
+    }
+    return out;
+}
+
+/** 以這張卷的新題派題為來源、老師勾的（flagged）項目的 (學生, 題目)。只讀、不加鎖。 */
+async function flaggedSourcedFrom(run, paperId) {
+    const { rows } = await run(
+        `SELECT i.student_id, i.question_id FROM retrain_items i
           WHERE i.source_assignment_id IN (SELECT id FROM assignments WHERE paper_id = $1 AND purpose = 'new')
-             OR i.id IN (SELECT retrain_item_id FROM assignments WHERE paper_id = $1 AND purpose = 'retrain')
-          ORDER BY i.id FOR UPDATE`, [paperId]);
+            AND i.reason = 'flagged'`, [paperId]);
+    return rows;
 }
 
 /**
- * 刪掉一張卷的全部派題（作答跟著 CASCADE）與以卷上新題派題為來源的項目，並重算受影響的項目。
- * 呼叫前必須已經確認沒有擋路的重練派題（examController 的 buildRetrainBlockersSql），所以這些項目都還沒重練過
- * （老師的勾選跟著那張卷一起消失）。刪的是重練卷時，受影響的項目依剩下的作答歷史重算（等於那次重練沒發生過）。
+ * 刪卷前先鎖住這張卷相關的項目（以卷上新題派題為來源的、卷上重練派題所屬的，以及前者裡老師勾的題的**同組項目**），
+ * 再查擋路的重練派題：等鎖之後的查詢看得到別的交易剛提交的重練派題，不會刪掉一個剛被重練的項目。
+ * 同組項目（刪卷後同組沒有勾選時要一起離開，見 deletePaperAssignments）先不加鎖查出來，再與其餘項目在同一句
+ * `ORDER BY i.id FOR UPDATE` 一次鎖完——與批改、出卷、API-3 一樣依 id 的順序加鎖，不會交錯死結。
+ */
+async function lockItemsForPaper(client, paperId) {
+    const run = runnerOf(client);
+    const members = (await groupsOfPairs(run, await flaggedSourcedFrom(run, paperId)))
+        .flatMap(g => g.group_ids.map(q => ({ student_id: g.student_id, question_id: q })));
+    await run(
+        `SELECT i.id FROM retrain_items i
+          WHERE i.source_assignment_id IN (SELECT id FROM assignments WHERE paper_id = $1 AND purpose = 'new')
+             OR i.id IN (SELECT retrain_item_id FROM assignments WHERE paper_id = $1 AND purpose = 'retrain')
+             OR (i.student_id, i.question_id) IN (SELECT * FROM unnest($2::int[], $3::int[]))
+          ORDER BY i.id FOR UPDATE`,
+        [paperId, members.map(m => m.student_id), members.map(m => m.question_id)]);
+}
+
+/**
+ * 刪卷時，老師勾的項目（flagged）隨卷一起刪掉之後，同組的 group 項目比照批改卡「取消勾選」（第 5.6.2 節 ⑥）：
+ * 同組已經沒有任何勾選（沒移出的 flagged）→ group 項目一起離開清單：還沒重練過刪掉、重練過移出（記 retired_by_unflag，
+ * 之後它的重練卷也刪光時跟著刪）。同組還有別題勾著就不動；manual 與已移出的項目不動。
+ * 同組項目已由 lockItemsForPaper 鎖住。
  *
- * @param {object} client 已 BEGIN
+ * @param {Function} run
+ * @param {Array<{student_id:number, question_id:number}>} goneFlagged 剛刪掉的、沒移出的 flagged 項目
+ * @param {string} today
+ * @returns {Promise<Array<{student_id:number, question_id:number}>>} 這一步移出的項目（呼叫端要重算）
+ */
+async function releaseOrphanedGroups(run, goneFlagged, today) {
+    const retiredPairs = [];
+    const seen = new Set();
+    for (const g of await groupsOfPairs(run, goneFlagged)) {
+        const key = `${g.student_id}:${g.group_ids.join(',')}`;
+        if (seen.has(key) || g.group_ids.length < 2) continue;
+        seen.add(key);
+        const current = await lockItems(run, g.student_id, g.group_ids);   // 剩下的同組項目（剛刪掉的已不在）
+        if ([...current.values()].some(isActiveFlag)) continue;
+        const leaving = [...current.values()].filter(it => it.reason === 'group' && it.teacher_override !== 'retired');
+        if (!leaving.length) continue;
+        const retrained = await retrainedItemIds(run, leaving.map(it => it.id));
+        const toRetire = leaving.filter(it => retrained.has(it.id));
+        await retireItems(run, toRetire.map(it => it.id), today, true);
+        const toDelete = leaving.filter(it => !retrained.has(it.id)).map(it => it.id);
+        if (toDelete.length) await run('DELETE FROM retrain_items WHERE id = ANY($1::bigint[])', [toDelete]);
+        retiredPairs.push(...toRetire.map(it => ({ student_id: it.student_id, question_id: it.question_id })));
+    }
+    return retiredPairs;
+}
+
+/**
+ * 刪掉一張卷的全部派題（作答跟著 CASCADE）與以卷上新題派題為來源的項目，並重算受影響的項目（第 3.9 節）。
+ * 呼叫前必須已經確認沒有擋路的重練派題（examController 的 buildRetrainBlockersSql），所以這些項目都還沒重練過
+ * （老師的勾選跟著那張卷一起消失）。
+ *
+ * 目標是「這張卷沒出過」的樣子：
+ *   - 刪的是重練卷：受影響的項目依剩下的作答歷史重算（那次重練沒發生過）。其中因為「勾選消失」才移出的項目
+ *     （retired_by_unflag，migrations/0018）若重練派題已經全刪光，取消勾選當時就會直接刪掉 → 刪掉。
+ *     老師在清單上按的「移出」（API-3）是老師的決定，照樣保留。
+ *   - 刪掉的項目裡有老師勾的（flagged）：同組已經沒有勾選時，同組 group 項目比照取消勾選一起離開（releaseOrphanedGroups）。
+ *     B7 讓同一組一般都出在同一張卷，這只發生在事後綁定（follow:backfill、followUpLinker）或舊資料上。
+ *
+ * @param {object} client 已 BEGIN（lockItemsForPaper 已鎖住相關項目）
  * @param {number} paperId
+ * @param {{today?:string, params?:object}} [opts]
  * @returns {Promise<{deleted:number}>} 刪掉幾筆派題（deleted_attempts 的語意）
  */
-async function deletePaperAssignments(client, paperId, { params = loadRetrainConfig() } = {}) {
+async function deletePaperAssignments(client, paperId, { today = todayLocal(), params = loadRetrainConfig() } = {}) {
     const run = runnerOf(client);
     const retrain = await run(
-        `DELETE FROM assignments WHERE paper_id = $1 AND purpose = 'retrain' RETURNING student_id, question_id`, [paperId]);
-    await run(
+        `DELETE FROM assignments WHERE paper_id = $1 AND purpose = 'retrain' RETURNING student_id, question_id, retrain_item_id`, [paperId]);
+    const { rows: gone } = await run(
         `DELETE FROM retrain_items
-          WHERE source_assignment_id IN (SELECT id FROM assignments WHERE paper_id = $1 AND purpose = 'new')`, [paperId]);
+          WHERE source_assignment_id IN (SELECT id FROM assignments WHERE paper_id = $1 AND purpose = 'new')
+          RETURNING student_id, question_id, reason, teacher_override`, [paperId]);
     const rest = await run('DELETE FROM assignments WHERE paper_id = $1', [paperId]);
-    await recomputePairs(client, retrain.rows.map(r => ({ student_id: r.student_id, question_id: r.question_id })), { params });
+
+    // 那次重練沒發生過：勾選消失才移出、重練派題已全刪光的項目 → 刪
+    const touched = [...new Set(retrain.rows.map(r => Number(r.retrain_item_id)))];
+    if (touched.length) {
+        await run(
+            `DELETE FROM retrain_items i
+              WHERE i.id = ANY($1::bigint[]) AND i.retired_by_unflag
+                AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.retrain_item_id = i.id)`, [touched]);
+    }
+    // 勾選跟著卷一起消失：同組沒有勾選了 → group 項目一起離開
+    const released = await releaseOrphanedGroups(run, gone.filter(isActiveFlag), today);
+
+    await recomputePairs(client, [
+        ...retrain.rows.map(r => ({ student_id: r.student_id, question_id: r.question_id })),
+        ...released
+    ], { params });
     return { deleted: retrain.rowCount + rest.rowCount };
 }
 

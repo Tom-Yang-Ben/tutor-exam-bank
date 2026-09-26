@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// test/unit/retrainService.test.js — services/retrainService.js 的純函式、CLI 參數、0017 的靜態檢查
+// test/unit/retrainService.test.js — services/retrainService.js 的純函式、CLI 參數、0017 與 0018 的靜態檢查
 // （〔retrain PR-2〕docs/retrain-and-review.md 第 4.4、4.7、5.2 節）
 //
 // I/O 的部分（鎖、交易、重算寫回）在 test/integration/retrain.pg.test.js。
@@ -189,5 +189,17 @@ describe('migrations/0017 的靜態檢查（冪等寫法）', () => {
     test('兩個複合外鍵是 DEFERRABLE INITIALLY IMMEDIATE（合併學生時延後檢查）', () => {
         assert.equal((M2.match(/DEFERRABLE INITIALLY IMMEDIATE/g) || []).length, 2);
         assert.deepEqual(svc.DEFERRABLE_CONSTRAINTS, ['assignments_retrain_item_fk', 'retrain_items_source_fk']);
+    });
+});
+
+describe('migrations/0018 的靜態檢查（審查修正：移出的來源；冪等寫法）', () => {
+    const raw = fs.readFileSync(path.join(__dirname, '..', '..', 'migrations', '0018_retrain_unflag_marker.sql'), 'utf8');
+    const sql = raw.split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
+    test('ADD COLUMN IF NOT EXISTS（預設 false：既有項目照舊保留）、約束先判斷再加；不搬資料、不動 0017', () => {
+        assert.match(sql, /ALTER TABLE retrain_items ADD COLUMN IF NOT EXISTS retired_by_unflag BOOLEAN NOT NULL DEFAULT false;/);
+        assert.match(sql, /IF NOT EXISTS \(SELECT 1 FROM pg_constraint\s+WHERE conrelid = 'retrain_items'::regclass AND conname = 'retrain_items_unflag_check'\)/);
+        assert.match(sql, /CHECK \(NOT retired_by_unflag OR teacher_override IS NOT DISTINCT FROM 'retired'\)/, 'teacher_override 是 NULL 時也要擋（CHECK 遇到 NULL 會放行）');
+        assert.doesNotMatch(sql, /\b(INSERT|UPDATE|DELETE)\b/, '只加欄位與約束');
+        assert.doesNotMatch(M2, /retired_by_unflag/, '0017 已凍結，沒被改動');
     });
 });

@@ -161,8 +161,22 @@ function runSuite() {
         }
         const results = studentsUi.diffResults(original, current);
         const res = await request(app).patch(`/api/papers/${paperId}/results`).send({ results });
-        const wrongUnflagged = current.filter((r, i) => 'retrain' in r && r.result === 0 && (original[i].result ?? null) !== 0 && !r.retrain).length;
-        const message = res.status === 200 && res.body.retrain ? studentsUi.retrainSaveMessage(res.body.retrain, wrongUnflagged) : null;
+        // 儲存後的提示照批改卡的做法（students.js 的 retrainSaveHint）：候選題先挑出來，有候選題才對照清單（API-1 status=all），
+        // 在清單上的不算「答錯沒勾」、判定已會的重練題答錯另外一句（審查修正）
+        const wrongUnflaggedIds = current.filter((r, i) => 'retrain' in r && r.result === 0 && (original[i].result ?? null) !== 0 && !r.retrain)
+            .map(r => r.question_id);
+        const wrongRetrainIds = detail.body.questions
+            .filter((q, i) => q.purpose === 'retrain' && current[i].result === 0 && (original[i].result ?? null) !== 0).map(q => q.question_id);
+        let message = null;
+        if (res.status === 200 && res.body.retrain) {
+            let hint = { wrongUnflagged: 0, masteredKept: 0 };
+            if (wrongUnflaggedIds.length || wrongRetrainIds.length) {
+                const listed = await request(app).get(`/api/students/${detail.body.student_id}/retrain-items?status=all`);
+                assert.equal(listed.status, 200, JSON.stringify(listed.body));
+                hint = studentsUi.retrainHintCounts(listed.body.items, { wrongUnflagged: wrongUnflaggedIds, wrongRetrain: wrongRetrainIds });
+            }
+            message = studentsUi.retrainSaveMessage(res.body.retrain, hint.wrongUnflagged, hint);
+        }
         return { body: { results }, res, message };
     }
 
@@ -586,6 +600,37 @@ function runSuite() {
             assert.deepEqual([...c2.body.retrain_question_ids].sort(num), [g1, g2, g3]);
             assert.deepEqual((await assignmentsOf(c2.body.paper_id)).filter(a => a.purpose === 'retrain').map(a => [a.question_id, a.retrain_step]),
                 [[g1, 2], [g2, 1], [g3, 2]], '各自記下當下的關卡');
+        });
+
+        test('批改卡的提示與伺服器實際結果一致：承上組同組題被勾時「答錯沒勾」的組員其實進了清單，不說「不會進清單」；判定已會的題被帶著出又答錯，說明不改狀態（審查修正）', async () => {
+            const [g1, g2, g3] = await seedGroup(3, { chapter: '空間向量內積' });
+            const [q4] = await seedQuestions(1, { chapter: '外積' });
+            const s = await createStudent('提示一致生');
+            const c1 = await confirm({ student_id: s, question_ids: [g1, g2, g3, q4] });
+            assert.equal(c1.status, 200, JSON.stringify(c1.body));
+            const P1 = c1.body.paper_id;
+
+            // 審查意見的重現：g1 錯沒勾、g2 錯並勾、g3 對；q4 錯沒勾（不在任何組 → 真的不會進清單）
+            const gr = await gradeOnCard(P1, { [g1]: { result: 0 }, [g2]: { result: 0, retrain: true }, [g3]: { result: 1 }, [q4]: { result: 0 } });
+            assert.deepEqual(gr.res.body, { updated: 4, retrain: { entered: 3, advanced: 0, mastered: 0, reset: 0 } });
+            assert.equal((await itemRow(s, g1)).reason, 'group', 'g1 沒勾也在清單上（同組 g2 勾了）');
+            assert.equal(await itemRow(s, q4), null);
+            assert.equal(gr.message, '3 題進入重練清單。這次有 1 題答錯但沒勾「要重練」，不會進清單。', '只算 q4，不算 g1');
+
+            // g1 判定已會（override）；10/02 整組到期出重練卷，g1 被帶著出又答錯 → override 優先仍是練到會（設計稿第 4.4 節兩列衝突，待 Owner 裁決）
+            const g1Item = (await itemRow(s, g1)).id;
+            assert.equal((await request(appOn).patch(`/api/students/${s}/retrain-items/${g1Item}`).send({ action: 'mark_mastered' })).status, 200);
+            travel('2026-10-02');
+            const dr = await draftOnCard(s, '提示一致生', { count: 3 });
+            assert.equal(dr.res.status, 200, JSON.stringify(dr.res.body));
+            assert.deepEqual(dr.res.body.question_ids, [g1, g2, g3], '已會的組員照樣被帶著出');
+            const cf = await confirmOnCard(dr.draft);
+            assert.equal(cf.res.status, 200, JSON.stringify(cf.res.body));
+            const g = await gradeOnCard(cf.paper.paper_id, { [g1]: { result: 0 }, [g2]: { result: 1 }, [g3]: { result: 0 } });
+            assert.deepEqual(g.res.body.retrain, { entered: 0, advanced: 1, mastered: 0, reset: 1 }, 'g1 不算 reset（狀態沒變）');
+            const after = await itemRow(s, g1);
+            assert.deepEqual([after.status, after.teacher_override], ['mastered', 'mastered']);
+            assert.equal(g.message, '1 題升一關、1 題答錯回到第 1 關。有 1 題重練題已「判定已會」，答錯不改狀態（仍是練到會；要再練請到錯題重練卡按「重新加入」）。');
         });
 
         test('旗標關閉：新 API 404、新參數 400；既有端點的回應只少了新鍵（有重練資料也一樣）；Word 帶 paper_id 逐位元不變', async () => {

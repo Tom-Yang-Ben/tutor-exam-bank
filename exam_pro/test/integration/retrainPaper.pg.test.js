@@ -388,6 +388,40 @@ function runSuite() {
             assert.deepEqual(detail.body.questions.filter(q => q.purpose === 'retrain').map(q => q.retrain_step), [1, 1]);
         });
 
+        test('混合卷的卷名跟著新題的章節：重練題（別章）排在第一題時，預覽、確認（API-7）、直接寫入（API-6）三條路徑卷名相同（審查意見：卷名變成重練題的章節）', async () => {
+            // 重練題：向量內積、單選、難度 1（依題型與難度排在最前面）；新題：外積、計算、難度 3
+            const [old] = await seedQuestions(1, { chapter: '向量內積', type: '單選', difficulty: 1 });
+            await seedQuestions(3, { chapter: '外積', type: '計算', difficulty: 3 });
+            const s = await createStudent('標題生');
+            await flaggedPaper(s, [old], day(-2));
+            const body = { student_id: s, subject: '數學', chapter: '外積', count: 3, retrain: { count: 1 } };
+
+            const draft = await generate({ ...body, dry_run: true });
+            assert.equal(draft.status, 200, JSON.stringify(draft.body));
+            assert.equal(draft.body.question_ids[0], old, '夾具：重練題排在第一題');
+            assert.equal(draft.body.paper_title_preview, `標題生-外積特訓卷(${titleDate})`);
+
+            const res = await confirm({ student_id: s, question_ids: draft.body.question_ids, retrain_question_ids: [old] });
+            assert.equal(res.status, 200, JSON.stringify(res.body));
+            assert.equal(res.body.question_ids[0], old);
+            assert.equal(res.body.paper_title, draft.body.paper_title_preview, '確認後的卷名與預覽相同（取第一個新題的章節）');
+            const { rows: [p] } = await query('SELECT title FROM exam_papers WHERE id = $1', [res.body.paper_id]);
+            assert.equal(p.title, draft.body.paper_title_preview);
+
+            // 非 dry_run 直接寫入：同一個卷名（刪掉剛才那張，讓重練題回到到期）
+            assert.equal((await request(appOn).delete(`/api/papers/${res.body.paper_id}`)).status, 200);
+            const direct = await generate({ ...body, dry_run: false });
+            assert.equal(direct.status, 200, JSON.stringify(direct.body));
+            assert.equal(direct.body.paper_title, draft.body.paper_title_preview);
+
+            // 沒有重練題的確認照舊取排序後第一題的章節（retrain_question_ids 沒帶，逐字不變）
+            const [c1] = await seedQuestions(1, { chapter: '向量內積', type: '單選', difficulty: 1 });
+            const [c2] = await seedQuestions(1, { chapter: '外積', type: '計算', difficulty: 3 });
+            const plain = await confirm({ student_id: s, question_ids: [c2, c1] });
+            assert.equal(plain.status, 200, JSON.stringify(plain.body));
+            assert.equal(plain.body.paper_title, `標題生-向量內積特訓卷(${titleDate})`);
+        });
+
         test('API-7 純重練卷：卷名「<姓名>-錯題重練卷(日期)」；批改後照排程升關；刪掉重練卷後重算（等於沒發生過）', async () => {
             const [a] = await seedQuestions(1);
             const s = await createStudent('純重練生');
@@ -657,6 +691,60 @@ function runSuite() {
             assert.deepEqual(after.body.blueprint.map(b => [b.bucket, b.target, b.rationale]),
                 firstOnly.body.blueprint.map(b => [b.bucket, b.target, b.rationale]), 'R10：重練答對不改變弱點排序與掌握度');
             assert.ok(after.body.items.every(i => pool.includes(i.question_id)), '新題候選池照舊排除寫過的題');
+        });
+
+        test('ACPT-040-3（R10 選 1）：重練答對與答錯之後，弱點面板（/weakness）與知識點掌握度（/weakness/kc）逐欄不變——只看每題第一次作答', async () => {
+            const [a, b] = await seedQuestions(2, { chapter: '向量內積', type: '計算', difficulty: 3 });
+            const [c] = await seedQuestions(1, { chapter: '外積', type: '填空', difficulty: 2 });
+            const [ok1] = await seedQuestions(1, { chapter: '外積', type: '計算', difficulty: 4 });
+            // 知識點標註：a、b 掛「內積」、c 與 ok1 掛「外積」（c 另掛內積 0.5）
+            const kc = async (code, chapter, name) => (await query(
+                `INSERT INTO knowledge_components (code, subject, chapter, name, status, sort) VALUES ($1, '數學', $2, $3, 'approved', 1)
+                 ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name RETURNING id`, [code, chapter, name])).rows[0].id;
+            const kIn = await kc('MATH.RT.ACPT0403.01', '向量內積', '重練驗收內積');
+            const kOut = await kc('MATH.RT.ACPT0403.02', '外積', '重練驗收外積');
+            for (const [q, k, w] of [[a, kIn, 1], [b, kIn, 1], [c, kOut, 1], [c, kIn, 0.5], [ok1, kOut, 1]]) {
+                await query(`INSERT INTO question_kcs (question_id, kc_id, weight, src) VALUES ($1, $2, $3, 'human')`, [q, k, w]);
+            }
+            const s = await createStudent('弱點不變生');
+            // 第一次作答：a、b、c 錯並勾「要重練」（錯因）、ok1 對
+            const first = await flaggedPaper(s, [a, b, c], day(-3));
+            await patch(first, [{ question_id: a, result: 0, error_types: ['concept'] }, { question_id: c, result: 0, error_types: ['calc'] }]);
+            const { rows: [po] } = await query(
+                'INSERT INTO exam_papers (title, student_id, question_ids) VALUES ($1, $2, $3::int[]) RETURNING id', ['對的卷', s, [ok1]]);
+            await insertAttempts(query, [{ student_id: s, question_id: ok1, paper_id: po.id, assigned_at: day(-3) }]);
+            assert.equal((await patch(po.id, [{ question_id: ok1, result: 1 }])).status, 200);
+
+            const snap = async () => {
+                const out = {};
+                for (const qs of ['', '?days=365', '?subject=數學', '?subject=數學&days=7']) {
+                    const w = await request(appOn).get(`/api/students/${s}/weakness${qs}`);
+                    const k = await request(appOn).get(`/api/students/${s}/weakness/kc${qs}`);
+                    assert.equal(w.status, 200, JSON.stringify(w.body));
+                    assert.equal(k.status, 200, JSON.stringify(k.body));
+                    out[qs] = { weakness: w.body, kc: k.body };
+                }
+                return out;
+            };
+            const before = await snap();
+            // 夾具有意義：面板與掌握度都看得到這三題的第一次作答
+            assert.ok(before[''].weakness.by_chapter.some(r => r.chapter === '向量內積'), JSON.stringify(before[''].weakness.by_chapter));
+            assert.ok(before[''].weakness.recent_wrong.length >= 3);
+            assert.ok(before[''].kc.rows.length >= 2, JSON.stringify(before[''].kc));
+
+            // 重練卷：a、c 答對，b 答錯（標錯因、部分給分）
+            const p = await confirm({ student_id: s, question_ids: [a, b, c], retrain_question_ids: [a, b, c] });
+            assert.equal(p.status, 200, JSON.stringify(p.body));
+            const g = await patch(p.body.paper_id, [{ question_id: a, result: 1 }, { question_id: b, result: 0, error_types: ['method'], score: 0.5 },
+                { question_id: c, result: 1 }]);
+            assert.deepEqual(g.body.retrain, { entered: 0, advanced: 2, mastered: 0, reset: 1 });
+            assert.deepEqual(await snap(), before, 'R10 選 1：重練的作答不進弱點面板與知識點掌握度');
+
+            // 再一輪：b 再出一次第 1 關並答對
+            const p2 = await confirm({ student_id: s, question_ids: [b], retrain_question_ids: [b] });
+            assert.equal(p2.status, 200, JSON.stringify(p2.body));
+            assert.equal((await patch(p2.body.paper_id, [{ question_id: b, result: 1 }])).status, 200);
+            assert.deepEqual(await snap(), before);
         });
 
         // ───────────────────── API-12 download-word（TC-039-4 的整合層）─────────────────────

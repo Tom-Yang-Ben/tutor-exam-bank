@@ -245,13 +245,20 @@ export function diffResults(original, current) {
 
 /**
  * 〔retrain PR-4〕批改儲存後的提示（API-10 回應的 retrain 摘要，第 5.3 節）：
- * 「3 題進入重練清單、1 題練到會。」；這次改成「錯」卻沒勾「要重練」的新題另外提醒（第 7.1 節風險 R-12）。
- * 沒有任何變化時回空字串（不提示）。
+ * 「3 題進入重練清單、1 題練到會。」；這次改成「錯」卻沒勾「要重練」、而且**儲存後確實不在清單上**的新題另外提醒
+ * （第 7.1 節風險 R-12）。沒有任何變化時回空字串（不提示）。
+ *
+ * 〔retrain 審查修正〕opts：
+ *   unverified   true＝沒能確認清單（儲存後讀 API-1 失敗）：只說「答錯但沒勾」，不斷言「不會進清單」
+ *                （承上組同組題被勾時、或這一題本來就有手動加入的項目時，它其實在清單上）。
+ *   masteredKept 這次改成「錯」的重練題裡，老師「判定已會」的題數：override 優先，答錯不改狀態（仍是練到會；
+ *                設計稿第 4.4 節兩列規則的衝突待 Owner 裁決，第 5.6.6 節），另外說一句，免得老師以為會回第 1 關。
  * @param {{entered?:number, advanced?:number, mastered?:number, reset?:number}|null|undefined} summary
- * @param {number} [wrongUnflagged] 這次改成「錯」而沒勾「要重練」的新題數
+ * @param {number} [wrongUnflagged] 這次改成「錯」、沒勾「要重練」、而且不在清單上的新題數
+ * @param {{unverified?:boolean, masteredKept?:number}} [opts]
  * @returns {string}
  */
-export function retrainSaveMessage(summary, wrongUnflagged = 0) {
+export function retrainSaveMessage(summary, wrongUnflagged = 0, { unverified = false, masteredKept = 0 } = {}) {
     const s = summary || {};
     const parts = [];
     if (s.entered > 0) parts.push(`${s.entered} 題進入重練清單`);
@@ -260,8 +267,31 @@ export function retrainSaveMessage(summary, wrongUnflagged = 0) {
     if (s.reset > 0) parts.push(`${s.reset} 題答錯回到第 1 關`);
     const out = [];
     if (parts.length) out.push(`${parts.join('、')}。`);
-    if (wrongUnflagged > 0) out.push(`這次有 ${wrongUnflagged} 題答錯但沒勾「要重練」，不會進清單。`);
+    if (wrongUnflagged > 0) {
+        out.push(unverified
+            ? `這次有 ${wrongUnflagged} 題答錯但沒勾「要重練」。`
+            : `這次有 ${wrongUnflagged} 題答錯但沒勾「要重練」，不會進清單。`);
+    }
+    if (masteredKept > 0) out.push(`有 ${masteredKept} 題重練題已「判定已會」，答錯不改狀態（仍是練到會；要再練請到錯題重練卡按「重新加入」）。`);
     return out.join('');
+}
+
+/**
+ * 〔retrain 審查修正〕儲存後的兩個補充提示要看清單現況（純函式；items＝API-1 `status=all` 的 items）：
+ *   wrongUnflagged  答錯沒勾的新題裡，**不在清單上**的（沒有項目，或項目已移出）。承上組同組題被勾時整組進清單
+ *                   （reason = group）、之前手動加入過的題（manual）都在清單上，不算。
+ *   masteredKept    答錯的重練題裡，項目是老師「判定已會」（teacher_override = mastered）的。
+ * @param {Array<{question_id:number, status:string, teacher_override:string|null}>} items
+ * @param {{wrongUnflagged?:number[], wrongRetrain?:number[]}} candidates 題號
+ * @returns {{wrongUnflagged:number, masteredKept:number}}
+ */
+export function retrainHintCounts(items, { wrongUnflagged = [], wrongRetrain = [] } = {}) {
+    const byQ = new Map((items || []).map(it => [Number(it.question_id), it]));
+    const inList = q => { const it = byQ.get(Number(q)); return Boolean(it) && it.status !== 'retired'; };
+    return {
+        wrongUnflagged: wrongUnflagged.filter(q => !inList(q)).length,
+        masteredKept: wrongRetrain.filter(q => { const it = byQ.get(Number(q)); return Boolean(it) && it.teacher_override === 'mastered'; }).length
+    };
 }
 
 /**
@@ -1059,9 +1089,15 @@ function gradingForm(app, detail, badge, onGraded, errorTypes = null) {
             return;
         }
         // 〔retrain PR-4〕這次改成「錯」卻沒勾「要重練」的新題（儲存後提醒；不會自動進清單，R1 選 2）
-        const wrongUnflagged = retrainOn
-            ? current.filter((r, i) => 'retrain' in r && r.result === 0 && (original[i].result ?? null) !== 0 && !r.retrain).length
-            : 0;
+        // 〔retrain 審查修正〕只是候選：儲存後對照清單（API-1），已在清單上的（承上組同組題被勾、手動加入過）不算；
+        // 另收這次改成「錯」的重練題，用來提醒「判定已會的題答錯不改狀態」。
+        const wrongUnflaggedIds = retrainOn
+            ? current.filter((r, i) => 'retrain' in r && r.result === 0 && (original[i].result ?? null) !== 0 && !r.retrain).map(r => r.question_id)
+            : [];
+        const wrongRetrainIds = retrainOn
+            ? detail.questions.filter((q, i) => q.purpose === 'retrain' && current[i].result === 0 && (original[i].result ?? null) !== 0)
+                .map(q => q.question_id)
+            : [];
         save.disabled = true;
         try {
             const res = await request(app, `/api/papers/${detail.id}/results`, {
@@ -1074,7 +1110,8 @@ function gradingForm(app, detail, badge, onGraded, errorTypes = null) {
             app.showToast(`已儲存 ${body.updated} 題的批改結果。`, 'success');
             // 〔retrain PR-4〕API-10 的 retrain 摘要（旗標開啟時伺服器才帶這個鍵）
             if (retrainOn && body.retrain) {
-                const text = retrainSaveMessage(body.retrain, wrongUnflagged);
+                const hint = await retrainSaveHint(app, detail.student_id, wrongUnflaggedIds, wrongRetrainIds);
+                const text = retrainSaveMessage(body.retrain, hint.wrongUnflagged, hint);
                 if (text) app.showToast(text, 'info');
             }
             for (let i = 0; i < current.length; i++) original[i] = copyRow(current[i]);
@@ -1091,6 +1128,30 @@ function gradingForm(app, detail, badge, onGraded, errorTypes = null) {
 
     wrap.append(list, markRestCorrect, save, note);
     return wrap;
+}
+
+/**
+ * 〔retrain 審查修正〕批改儲存後的補充提示要對照清單現況：有候選題時讀一次 API-1（`status=all`），交給 retrainHintCounts。
+ * 沒有候選題就不發請求（沒改成錯的儲存、旗標關閉都不會多打 API）。讀不到（連線失敗、非 2xx、學生 id 不明）時
+ * unverified：只說「答錯但沒勾」，不斷言「不會進清單」，也不提判定已會。
+ * @param {object} app
+ * @param {number} studentId API-9 的 student_id
+ * @param {number[]} wrongUnflaggedIds 這次改成「錯」、沒勾「要重練」的新題
+ * @param {number[]} wrongRetrainIds  這次改成「錯」的重練題
+ * @returns {Promise<{wrongUnflagged:number, masteredKept:number, unverified:boolean}>}
+ */
+async function retrainSaveHint(app, studentId, wrongUnflaggedIds, wrongRetrainIds) {
+    if (!wrongUnflaggedIds.length && !wrongRetrainIds.length) return { wrongUnflagged: 0, masteredKept: 0, unverified: false };
+    const sid = Number(studentId);
+    try {
+        if (!Number.isInteger(sid) || sid < 1) throw new Error('student_id');
+        const res = await request(app, `/api/students/${sid}/retrain-items?status=all`);
+        if (!res.ok) throw new Error(String(res.status));
+        const list = await res.json();
+        return { ...retrainHintCounts(list.items, { wrongUnflagged: wrongUnflaggedIds, wrongRetrain: wrongRetrainIds }), unverified: false };
+    } catch {
+        return { wrongUnflagged: wrongUnflaggedIds.length, masteredKept: 0, unverified: true };
+    }
 }
 
 /**
