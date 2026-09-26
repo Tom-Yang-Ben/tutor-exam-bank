@@ -301,3 +301,124 @@ const schema = buildSchema('extract');   // 深凍結、模組內快取
 | 只設 `responseMimeType`、沒有 schema，結尾直接 `JSON.parse` | `responseJsonSchema` + 伺服器端 `ajv` 逐元素驗證 |
 
 改 prompt 會連帶改掉 `legacyAdapter` 算出來的 `prompt_hash`，之前跑過的基準線就對不起來了。
+
+---
+
+## 10. LaTeX 反斜線被 JSON 跳脫吃掉的修復（`services/llm/latexEscapeRepair.js`，2026-09-26，`dec/latex-escape-repair`）
+
+### 症狀
+
+模型在 JSON 字串裡寫 LaTeX 時常常只寫一個反斜線。JSON 的合法跳脫 `\b \f \n \r \t` 剛好是五個 LaTeX 指令的開頭字母，
+`JSON.parse` 不會報錯，而是把它們變成控制字元：
+
+| 模型寫的 | `JSON.parse` 之後 | Word 匯出（`stripUnsafe`）看到的 |
+|---|---|---|
+| `\frac{1}{2}` | 換頁（U+000C）＋`rac{1}{2}` | 換頁被刪掉 → `rac12` |
+| `\times`、`\theta`、`\tan`、`\text` | 定位（U+0009）＋`imes`… | 定位當空白 → ` imes` |
+| `\beta`、`\bar`、`\boldsymbol`、`\bullet` | 退格（U+0008）＋`eta`… | 退格被刪掉 → `eta` |
+| `\rho`、`\right`、`\rightarrow` | 歸位（U+000D）＋`ho`… | 歸位變成換行，公式被切成兩行 |
+| `\neq`、`\nu`、`\nabla` | 換行＋`eq`… | 公式被切成兩行 |
+
+`parseLatexStrict` 看不出「`rac`」是壞掉的 `\frac`，公式閘門（`agents/lint.js` 的 `formulaFix`＋`formulaLint`）照樣放行：
+2026-09-25 的本機 cassette 裡，variant 60 支有 49 支帶這種字元，其中 **38 支帶著壞公式通過了公式閘門**。
+
+另一種變形是 Ollama 的 JSON 文法約束造成的：模型想寫 `\circ`，但 `\c` 不是合法跳脫，文法只允許 `b f n r t u " \ /`，
+模型被迫先吐一個合法字母再照原意寫完——解析後是「歸位＋`circ`」。
+
+### 修在哪裡
+
+`services/llm/index.js` 的 `generateJson`，**解析完 JSON 之後、交給 agent 之前**。三個模式、兩個供應商都套用：
+
+| 模式 | 行為 |
+|---|---|
+| `live` | Ollama／Gemini 回來的 `data` 修過才交給 agent |
+| `record` | agent 拿到修過的；**cassette 存模型的原始回應（修復前）**，`raw` 也不動 |
+| `replay` | 讀出來的原始回應修過才交給 agent——既有 cassette 不必重錄就吃得到修復 |
+
+- cassette 的鍵公式一個字都沒動（第 3 節）；修復只動回傳的 `data`，不動請求。
+- 有修到或有救不回來的時候，回傳物件多一個 `latexRepair: { repaired, commands: {frac: 3, …}, unresolved: [{path, at, char, letters, reason}] }`；什麼都沒碰時回傳物件與之前逐位元相同（沒有這個鍵）。
+- `generateText` 不經 `JSON.parse`，不套用。
+
+### 規則
+
+對 `data` 裡每一個字串值（物件的鍵不動），找「控制字元 C（`\b \f \n \r \t`）＋一串英文字母 W（取到最長）」，L 是 C 的跳脫字母：
+
+- **規則 A**：L＋W 是已知指令（換頁＋`rac` → `frac`）→ 換成 `\`＋L＋W。
+- **規則 B**：L＋W 不是、但 W 本身是已知指令（歸位＋`circ` → `circ`，Ollama 文法換掉字母的情形）→ 換成 `\`＋W。只在公式裡、不用在換行上。
+
+什麼時候才修（真的換行、真的定位不能誤改）：
+
+| 控制字元 | 在公式裡（`$…$`、`$$…$$`、`\(…\)`、`\[…\]`、結尾沒關的 `$` 之後） | 公式外 |
+|---|---|---|
+| 退格、換頁、歸位 | 修 | 規則 A 照修：這三個字元在模型輸出的文字裡沒有正當用途（Windows 換行是 `\r\n`，歸位後面接的是換行不是字母，碰不到） |
+| 定位 | 修 | 指令名後面緊接 `{ ( [ ^ _ \` 才修；緊接空白時 W 至少三個字母才修（「定位＋`an` 空白」「定位＋`o` 空白」跟真的定位＋英文單字分不開，所以公式外接空白的 `\tan`、`\to`、`\tau` 不修） |
+| 換行 | 行內公式裡一律修（行內公式本來就不能跨行）；展示公式或沒關的 `$` 裡 W 至少兩個字母才修（`\neq`、`\nabla` 修；`\nu`、`\ne`、`\ni` 跟「換行＋變數 u、e、i」分不開，不修） | **一律不修** |
+
+- 控制字元前面緊接反斜線（表格換列 `\\` 之後的換行）：意思不明，不修。
+- 公式區段跨行配對（與 `formulaLint` 的逐行 `mathSpans` 不同）：要找的正是「本來不該出現在行內公式裡的換行」。
+- 修過的再修一次不會再變（冪等）。
+
+### 指令表從哪裡來
+
+**從解析器產生，不手抄**：`utils/textFormatter.js` 新匯出 `supportedCommandNames()`＝對照表（`GREEK`、`SYMBOLS`、`FUNCTIONS`、`ACCENTS`、`EXTRA_SYMBOLS`、`STRETCH_ARROWS`）的鍵＋`PARSER_COMMANDS`（`parseCommand` 以 `name === '…'` 特判的名字）。
+`test/unit/latexEscapeRepair.test.js` 掃 `parseCommand` 的原始碼：新增一個 `name === '…'` 特判或一張新的對照表卻沒進清單，測試就紅燈；清單裡每個名字也都真的解析一次，確認不發 `unknown_command`。
+解析器之後多認得一個指令，修復的指令表自動跟上。
+
+另外加了一小份 `UNSUPPORTED_LATEX_COMMANDS`（`\bullet`、`\textbf`、`\big`、`\bigg`、`\norm`、`\root`——本機 cassette 實際出現的——與 `\binom`、`\boxed`、`\not`、`\textit` 等同樣開頭的常見寫法）：
+這些是真的 LaTeX 指令、但解析器不支援。還原它們不會讓 Word 變好，但會讓公式閘門**看得到**（`unknown_command`，交給 lint 重寫）；不還原的話，`ullet`、`extbf{…}` 這種壞字會安靜地通過閘門。
+
+### 救不回來的
+
+後面的字母湊不成任何指令時不猜，原樣保留、列進 `latexRepair.unresolved`：
+
+- 本機：換頁＋`dg`（`$240^\fdg$`，variant 3 支共 29 處、classify 1 處）；Gemini：歸位＋`d`（`$850^\rd$`，variant 1 支 13 處）。原意多半是度數 `^\circ`，但被文法換掉的字母與剩下的字母對不上任何指令，補一個 `\circ` 是猜的。
+- `\u` 開頭的（`\underline`、`\uparrow`、`\upsilon`）：`\u` 後面必須是四個十六進位數字，寫錯時 `JSON.parse` 直接丟錯（走 `schema_invalid`），寫成合法的四位數就變成別的字，事後分不出原意。
+
+### 回歸：repo 內的 cassette 修回後怎麼變
+
+`test/unit/latexEscapeRepair.test.js` 逐支釘住（這一批 cassette 重錄或清除後該組自動略過）。「帶控制字元」＝字串裡有換行以外的 C0 控制字元。
+
+| cassette | 支數 | 帶控制字元：修前 → 修後 | 修了幾處 | 剩下的 |
+|---|---:|---|---:|---|
+| 本機 variant（qwen3:8b，f77d1a3） | 60 | 49 → 3 | 386 | 換頁＋`dg` |
+| 本機 classify | 92 | 10 → 1 | 30（全在 `rationale`，章節不受影響） | 換頁＋`dg` |
+| 本機 verify | 20 | 1 → 0 | 5 | — |
+| Gemini variant（gemini-3.1-pro-preview） | 87 | 11 → 1 | 35 | 歸位＋`d` |
+| Gemini verify | 58 | 1 → 0 | 2 | — |
+| Gemini extract（gemini-3.5-flash） | 1 | 1 → 0 | 3 | — |
+
+真的換行一個都沒少：本機這一批只修了 7 處「換行＋指令」（`\neq` 4、`\norm` 2、`\nu` 1，全在行內公式裡）；Gemini 那一批的換行修前修後相同。
+
+**公式閘門**（variant 的題幹＋答案走 `agents/lint.js` 的 `gate`）：
+
+| | 通過／擋下 | 帶壞公式卻通過 |
+|---|---|---|
+| 本機 variant 修前 | 49／11 | 38 |
+| 本機 variant 修後 | 47／13 | 3（就是剩下「換頁＋`dg`」那 3 支） |
+| Gemini variant 修前 → 修後 | 86／1 → 86／1 | 10 → 0 |
+
+- 4 支由通過變擋下（`288f5abc`、`42633f8b`、`578ea572`、`fc040873`）：還原出來的 `\bullet`／`\textbf` 解析器不支援，閘門第一次看得到它們（之前 Word 會印出「ullet」「extbf」）。實際跑的時候會進 lint 的第三層請模型重寫。
+- 2 支由擋下變通過（`8144b7b7`、`f241efa6`）：歸位＋`circ` 還原成 `\circ`，原本被切斷的公式恢復正常。
+
+**只改字閘門**（`utils/variantTextGate.js`）：壞掉的 `\times`／`\theta` 讓 5 支本機變式看起來跟藍本差很多，其實是「只換數字」或「只改一個字」；修回後正確擋下（`numbers_only` 2 支、`too_close` 3 支）。
+
+### 對 eval 回放的影響（2026-09-26 實測，CI 的本機模型設定）
+
+| suite | 修前 | 修後 | 原因 |
+|---|---|---|---|
+| `eval:variant` | `retrieved_coverage` 0.2333、`gate_pass_rate` n/a（replay miss 2、缺向量 1） | `retrieved_coverage` 0.2333、`gate_pass_rate` n/a（replay miss 2、**缺向量 29**） | 變式題幹修好之後是新字串：向量檔以 `sha256(embed_text)` 查，錄的時候算的是壞字串，29 次生成在跑題檢查就查不到向量而停下。下游的 verify／lint cassette 鍵也含題幹，同樣對不上。replay miss 的 2 次與本修正無關（那 2 次生成本來就沒有 cassette）。另有 2 題（var-016、var-029）改停在只改字閘門——就是上面那 5 支「只換數字」的變式被正確擋下 |
+| `eval:classify` | 92／92 replay miss，n/a | 相同 | golden 走 `classify.v2`，本機 cassette 是 `classify.v1`，一支都讀不到；修復碰不到它（而且 classify 修到的只有 `rationale`） |
+| `eval:pipeline`、`eval:nlq`、e2e | 缺 `extract_vision`／nlq 的 cassette | 相同 | 修復碰不到 |
+| `eval:retrieval` | 通過 | 相同 | 不呼叫 LLM |
+
+也就是：**分數欄都沒有變**（紅的照紅、n/a 照 n/a），但 variant 這一輪能量到的部分變少了。這不是修復的副作用可以避開的：
+下游的向量與 cassette 是對著壞字串錄的，題幹一修好就對不上。要讓 variant 重新量得到，照 `docs/local-mode.md` 10.7 **整步重錄 variant**
+（`scripts\windows\record_local.bat variant`，上次 17292 秒）。只補向量（10.7 第 8 點的 `LLM_MODE=replay`、`EMBED_MODE=record`）不夠：
+verify 與 lint 的 cassette 鍵含題幹，還是會 replay miss。重錄時 cassette 照樣存模型的原始回應，回放時由本層修。
+
+### 沒有做、留給之後決定的
+
+1. **prompt 要求模型在 JSON 裡把反斜線寫兩次**：從源頭減少（尤其 `\circ`、`\cdot`、`\sqrt` 這種會被文法換字母、事後救不回來的）。改 prompt ＝ 模板雜湊變 ＝ 對應 agent 的 cassette 全部重錄。
+2. **公式閘門擋下殘留的控制字元**：「換頁＋`dg`」這種救不回來的，現在仍會安靜地通過 `formulaLint`（`stripUnsafe` 把控制字元刪掉，解析器看不出來）。要擋就是在 `formulaLint` 的 `ISSUE_RULES` 後面加一條新規則。
+3. **解析器支援 `\bullet`、`\textbf`**：上面 4 支由通過變擋下的就會回到通過（`\bullet` 的原意多半是內積的點或度數，不一定該照字面排）。要加在 `EXTRA_SYMBOLS` 這類只給 Word 匯出用的表，不要加進 `SYMBOLS`（會改到既有題目的 `embed_text`）。
+4. **`latexRepair` 摘要還沒進 `job_events`**：現在只在 `generateJson` 的回傳物件上，runner 沒有記。要追蹤「哪個模型、哪個節點最常被修」時再接。

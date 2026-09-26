@@ -30,6 +30,13 @@
 // 〔看圖拆題逾時〕ollama adapter 的 usage 可能多一個 timing（載入／讀 prompt／輸出的毫秒數）；
 // record 模式照樣把 usage 原樣寫進 cassette 的 response.usage（鍵不含 usage，不受影響），npm run perf:local 讀它。
 // replay（fake.js）只回四個 token 欄位，所以回放結果與之前相同。
+//
+// 〔dec/latex-escape-repair〕generateJson 在「解析完模型的 JSON 之後、交給 agent 之前」多一步：
+// 把被 JSON 跳脫吃掉的 LaTeX 反斜線補回去（\frac 的 \f 被 JSON.parse 當成換頁字元，留下「換頁＋rac」），
+// 規則見 services/llm/latexEscapeRepair.js 與 docs/llm.md 第 10 節。live／record／replay 三條路、Ollama 與 Gemini 都套用；
+// record 寫進 cassette 的是**模型的原始回應**（未修），cassette 的鍵一個字都沒動，回放時照樣修。
+// 有修到或有救不回來的時候，回傳物件多一個 latexRepair 摘要；什麼都沒碰時回傳物件與之前逐位元相同。
+// generateText 不經 JSON.parse，不受這個問題影響，不套用。
 
 const DEFAULT_DIM = 768;
 
@@ -150,17 +157,20 @@ async function embed({ model, texts, dim, taskType } = {}) {
  *        agent／cacheKeyParts／template 是階段 2 新增的三個選用欄位；
  *        record／replay 模式下 **agent 必填**（它是 cassette 的第一段鍵與子目錄名）。
  * @returns {Promise<{data:object, usage:{tokenIn,tokenOut,tokenThinking,tokenCached},
- *                    latencyMs:number, raw:any}>}
+ *                    latencyMs:number, raw:any, latexRepair?:{repaired:number, commands:object, unresolved:Array}}>}
+ *          data 已補回被 JSON 吃掉的 LaTeX 反斜線；latexRepair 只在有修到或有救不回來的時候才有（見檔頭）
  */
 async function generateJson(opts = {}) {
     const mode = llmMode();
     const { parseModel } = require('../../config/models');
     const models = require('../../config/models');
     const { vendor, id } = parseModel(opts.model || models.MODEL_EXTRACT);
+    // 〔dec/latex-escape-repair〕解析完 JSON、交給 agent 之前補回被吃掉的反斜線（見檔頭）
+    const { applyToResult: repairLatex } = require('./latexEscapeRepair');
 
     if (mode === 'replay') {
         const fake = require('./fake');
-        return fake.generateJson({ ...opts, model: id });
+        return repairLatex(fake.generateJson({ ...opts, model: id }));
     }
 
     const res = await adapterFor(vendor).generateJson({ ...opts, model: id });
@@ -186,12 +196,13 @@ async function generateJson(opts = {}) {
                 parts: cassette.summarizeParts(opts.parts),
                 cacheKeyParts: opts.cacheKeyParts ?? {}
             },
+            // 〔dec/latex-escape-repair〕存模型的原始回應（修復前）；回放時由 repairLatex 再修一次，結果與這裡回傳的相同
             response: { data: res.data, usage: res.usage, latencyMs: res.latencyMs }
         });
         console.log(`[llm:record] ${overwritten ? '覆寫' : '寫入'} cassette → ${file}`);
     }
 
-    return res;
+    return repairLatex(res);
 }
 
 /**

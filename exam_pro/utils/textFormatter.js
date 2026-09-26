@@ -836,10 +836,49 @@ const STRICT_EVENT_KINDS = Object.freeze([
     'parser_error', 'tokenize_error', 'bare_script'
 ]);
 
+// ───────────────────────── 解析器認得的指令名（dec/latex-escape-repair，只加匯出）─────────────────────────
+//
+// services/llm/latexEscapeRepair.js 要把「被 JSON 跳脫吃掉的反斜線」補回去（模型在 JSON 字串裡寫 \frac，
+// JSON.parse 把 \f 當成換頁字元，留下「換頁字元＋rac」）。它的指令表必須**從這裡產生、不能手抄**：
+// 解析器多認得一個指令，修復的指令表就自動跟上。
+//
+// 上面各張對照表的鍵直接拿；parseCommand 以 `name === '…'` 特判的名字不在任何一張表裡，列在 PARSER_COMMANDS。
+// test/unit/latexEscapeRepair.test.js 會掃 parseCommand 的原始碼，確認每一個 `name === '…'` 都列在這裡
+//（parseCommand 新增特判卻漏列就紅燈），並把每個名字真的解析一次，確認不會發 unknown_command。
+// 本段只新增匯出，上面任何既有輸出一個位元都沒動。
+
+/** parseCommand 以名字特判（不經對照表）的指令 */
+const PARSER_COMMANDS = Object.freeze([
+    'frac', 'dfrac', 'tfrac', 'sqrt', 'sum', 'int', 'lim', 'left', 'right',
+    'mathrm', 'text', 'mathbf', 'mathit', 'operatorname', 'mbox', 'ce', 'prescript',
+    'mathbb', 'mathcal', 'mathfrak', 'boldsymbol', 'hline', 'begin', 'end',
+    'matrix', 'pmatrix', 'bmatrix', 'cases', 'cr'
+]);
+
+let supportedNamesCache = null;
+
+/**
+ * 解析器（parseLatexStrict 用的同一個 parseCommand）認得的全部指令名，字典序、去重、凍結。
+ * 來源：GREEK、SYMBOLS、FUNCTIONS、ACCENTS、EXTRA_SYMBOLS、STRETCH_ARROWS 的鍵 ＋ PARSER_COMMANDS。
+ * BLACKBOARD 的鍵是字母（\mathbb{R} 的 R）、MATRIX_ENVS 的鍵是環境名，都不是指令，不收。
+ * @returns {ReadonlyArray<string>}
+ */
+function supportedCommandNames() {
+    if (supportedNamesCache) return supportedNamesCache;
+    const names = new Set([
+        ...Object.keys(GREEK), ...Object.keys(SYMBOLS), ...FUNCTIONS, ...Object.keys(ACCENTS),
+        ...Object.keys(EXTRA_SYMBOLS), ...Object.keys(STRETCH_ARROWS), ...PARSER_COMMANDS
+    ]);
+    supportedNamesCache = Object.freeze([...names].sort());
+    return supportedNamesCache;
+}
+
 module.exports = {
     buildParagraphComponents, xmlSafeClean, parseLatexToMath,
     parseLatexStrict, STRICT_EVENT_KINDS, foldDisplayMath,
     GREEK, SYMBOLS, FUNCTIONS, ACCENTS, BLACKBOARD,
     // 〔stage5 WS-B〕化學排版（只給 Word 匯出與測試用；embedText 不讀這兩張表）
-    EXTRA_SYMBOLS, STRETCH_ARROWS
+    EXTRA_SYMBOLS, STRETCH_ARROWS,
+    // 〔dec/latex-escape-repair〕services/llm/latexEscapeRepair.js 的指令表由這兩個產生
+    PARSER_COMMANDS, supportedCommandNames
 };
