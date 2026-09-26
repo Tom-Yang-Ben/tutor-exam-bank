@@ -27,6 +27,7 @@
     "cassettes:prune": "node eval/tools/prune_cassettes.js",
     "ocr:selftest": "node eval/tools/ocr_selftest.js",
     "perf:local": "node eval/tools/local_perf_report.js",
+    "local:bench-vision": "node eval/tools/local_bench_vision.js",
     "compare:legacy": "node eval/compare_pipeline.js --method legacy",
     "compare:pipeline": "node --env-file=eval/.env.replay eval/compare_pipeline.js --method pipeline",
     "embed:backfill": "node scripts/backfill_embeddings.js",

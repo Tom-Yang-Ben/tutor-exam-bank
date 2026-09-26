@@ -120,6 +120,8 @@ const VARIANTS = {
 //
 // 先跑 OCR 的理由：本機最容易沒裝好的是 PaddleOCR，先跑它可以在花二十分鐘跑視覺模型之前就失敗；
 // 而且視覺版直接用 ocr_pdf.py 轉好的 PNG，兩個引擎看的是同一批像素。
+// 〔看圖拆題逾時〕選用的 VISION_MAX_EDGE_PX（預設不縮）會在送給視覺模型之前把那幾張 PNG 的長邊縮小
+//（services/ocr/render.js 的 fitLongEdge）；OCR 已經用原圖跑完，不受影響。
 //
 // 模板＝把 Gemini 模板的段落拿來重組：開頭改成「附上的是頁面圖片／OCR 文字」、附圖那一段改成圖片版，
 // 其餘段落（白名單、題型、章節、公式規範、表格、題序；化學卷另有 subject 與週期表）逐字沿用。
@@ -539,7 +541,10 @@ function localDeps() {
         ocrPdf: localDepsOverride.ocrPdf || ((opts) => require('../services/ocr').ocrPdf(opts)),
         renderPages: localDepsOverride.renderPages || ((opts) => require('../services/ocr/render').renderPages(opts)),
         llmMode: localDepsOverride.llmMode || (() => require('../services/llm').llmMode()),
-        ocrConfig: localDepsOverride.ocrConfig || (() => require('../services/ocr').resolveOcrConfig())
+        ocrConfig: localDepsOverride.ocrConfig || (() => require('../services/ocr').resolveOcrConfig()),
+        // 〔看圖拆題逾時〕選項 b：送給視覺模型前縮圖（VISION_MAX_EDGE_PX，由 services/ocr/render 自己讀；未設＝0＝不縮）
+        visionMaxEdge: localDepsOverride.visionMaxEdge || (() => require('../services/ocr/render').visionMaxEdgeFromEnv()),
+        fitLongEdge: localDepsOverride.fitLongEdge || ((pngs, maxEdge) => require('../services/ocr/render').fitLongEdge(pngs, maxEdge))
     };
 }
 
@@ -635,6 +640,10 @@ async function runLocal(ctx, input, { bytes, pdfSha256, chunkNo, fromPage, toPag
             images = fromOcr
                 ? ocr.pages.map(p => fs.readFileSync(p.imagePath))
                 : await deps.renderPages({ pdfBytes: bytes, fromPage, toPage, dpi: ocrCfg.dpi || deps.ocrConfig().dpi });
+            // 〔看圖拆題逾時〕選項 b（預設關）：長邊上限 > 0 才縮；0 時連 fitLongEdge 都不呼叫，送出的位元組與之前相同。
+            // 圖片不在 cassette 的鍵裡（鍵是 template／chunkNo／pdfSha256），開了也不必重錄；OCR 用的是自己的原圖。
+            const maxEdge = Number.isInteger(ocrCfg.visionMaxEdge) ? ocrCfg.visionMaxEdge : deps.visionMaxEdge();
+            if (maxEdge > 0) images = await deps.fitLongEdge(images, maxEdge);
         }
         const visionRes = await ctx.llm.generateJson({
             model: models.extract || undefined,

@@ -11,6 +11,8 @@
 //      OCR_ENGINE=paddle 時 ocr_service/ocr_pdf.py --selftest 通過。兩支都可注入替身，單元測試不連網、不跑 Python。
 //   3. 錄製子行程的「本機長呼叫」環境：本機 8B 模型一次呼叫可能要十幾分鐘，
 //      eval 的 pipeline 驅動與 NLQ 的逾時預設（2 分、4 秒）撐不過去（原則 5）。
+//      〔看圖拆題逾時〕pipeline 與 e2e 兩步另外放寬到 3 小時並開串流進度（longCallRecordEnv）：
+//      實機上 qwen3-vl:8b 看一塊 2 頁就超過 OLLAMA_TIMEOUT_MS 的 30 分。
 //   4. 預估時間：ollama 的費用一律 $0，改印「呼叫次數 × 每次秒數」的**粗估**。
 //      每次秒數是依 i5-8265U 等級 CPU（無獨顯）、8B Q4 模型「每秒約 3 個 token 生成、15 個 token 讀 prompt」
 //      推的保守值，**未經 Owner 本機實測**；實測後用 RERECORD_TIME_SCALE（整體倍率）或
@@ -46,6 +48,17 @@ const NLQ_CODE_DEFAULT = 'ollama:qwen3:8b';   // 〔LM-7〕與 services/nlqServi
 const LOCAL_NODE_TIMEOUT_MS = 2_700_000;
 /** 本機錄 nlq 時 NLQ_TIMEOUT_MS 的值（＝OLLAMA_TIMEOUT_MS 的預設 30 分；預設 4 秒在 CPU 上一定逾時、錄不到 cassette） */
 const LOCAL_NLQ_TIMEOUT_MS = 1_800_000;
+/**
+ * 〔看圖拆題逾時〕錄 pipeline 與 e2e 兩步時，單次 Ollama 呼叫與節點的逾時（3 小時）。
+ * Owner 實機（i5-8265U、純 CPU）上 qwen3-vl:8b 看一塊 2 頁超過 30 分鐘，OLLAMA_TIMEOUT_MS 的 30 分把它切掉，
+ * extract_vision 的 cassette 就錄不到、e2e 跟著 replay miss。錄製一次要好幾個小時，寧可等久一點也要一次錄成。
+ * RERECORD_OLLAMA_TIMEOUT_MS／RERECORD_NODE_TIMEOUT_MS 可覆寫（毫秒）。只影響逾時，不進 cassette 的鍵。
+ */
+const RECORD_LONG_TIMEOUT_MS = 10_800_000;
+/** 〔看圖拆題逾時〕錄 pipeline 與 e2e 兩步時的串流進度間隔（5 分；.env 明寫 OLLAMA_PROGRESS_MS 時照它，0＝不印） */
+const RECORD_PROGRESS_MS = 300_000;
+/** 〔看圖拆題逾時〕要帶長逾時的錄製步驟（eval/tools/rerecord_all.js 的 recordSteps() 名稱） */
+const LONG_CALL_STEPS = Object.freeze(['pipeline', 'e2e-similar']);
 
 /** 會呼叫 LLM 的 suite（retrieval 只讀向量檔） */
 const LLM_SUITES = Object.freeze(['classify', 'nlq', 'variant', 'pipeline', 'e2e']);
@@ -163,6 +176,39 @@ function localRecordEnv(plan) {
         out.JOB_NODE_TIMEOUT_MS = String(LOCAL_NODE_TIMEOUT_MS);
     }
     if (vendorOf(m.MODEL_NLQ) === 'ollama') out.NLQ_TIMEOUT_MS = String(LOCAL_NLQ_TIMEOUT_MS);
+    return out;
+}
+
+/** 正整數才算數（毫秒）；其餘回 null */
+function positiveIntOrNull(v) {
+    const n = Number.parseInt(v, 10);
+    return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/**
+ * 〔看圖拆題逾時〕pipeline 與 e2e 兩步（LONG_CALL_STEPS）的錄製子行程額外要帶的環境。純函式。
+ * 疊在 localRecordEnv() 之後（同名的鍵以這裡為準），只在本機模型時才有：
+ *   OLLAMA_TIMEOUT_MS     RERECORD_OLLAMA_TIMEOUT_MS；沒寫就是 max(3 小時, .env 的 OLLAMA_TIMEOUT_MS)——.env 設得更長就照 .env
+ *   JOB_NODE_TIMEOUT_MS   RERECORD_NODE_TIMEOUT_MS；沒寫就是 3 小時（pipeline 驅動只記在報表、不計時；e2e 見下一行）
+ *   E2E_NODE_TIMEOUT_MS   同上；test/e2e/pipeline.e2e.test.js 的 runner 節點逾時（沒設時 30 秒，CI 與回放都是 30 秒）
+ *   OLLAMA_PROGRESS_MS    .env 沒寫時 5 分鐘印一次串流進度（已輸出幾個 token），分得出慢還是卡住；.env 明寫（含 0）照 .env
+ * 都不進 cassette 的鍵；回放（CI 與錄完的驗證）不帶這些（suiteProcess.ciEnv 擋成空字串＝程式預設）。
+ * @param {ReturnType<typeof recordingPlan>} plan
+ * @param {NodeJS.ProcessEnv|Record<string,string>} [env]  rerecord_all.js 的 process.env（已載入 .env）
+ * @returns {Record<string,string>}
+ */
+function longCallRecordEnv(plan, env = process.env) {
+    if (!plan || !plan.local) return {};
+    const ollamaMs = positiveIntOrNull(env.RERECORD_OLLAMA_TIMEOUT_MS)
+        || Math.max(RECORD_LONG_TIMEOUT_MS, positiveIntOrNull(env.OLLAMA_TIMEOUT_MS) || 0);
+    const nodeMs = positiveIntOrNull(env.RERECORD_NODE_TIMEOUT_MS) || RECORD_LONG_TIMEOUT_MS;
+    const out = {
+        OLLAMA_TIMEOUT_MS: String(ollamaMs),
+        JOB_NODE_TIMEOUT_MS: String(nodeMs),
+        E2E_NODE_TIMEOUT_MS: String(nodeMs)
+    };
+    const progressSet = env.OLLAMA_PROGRESS_MS !== undefined && String(env.OLLAMA_PROGRESS_MS).trim() !== '';
+    if (!progressSet) out.OLLAMA_PROGRESS_MS = String(RECORD_PROGRESS_MS);
     return out;
 }
 
@@ -487,8 +533,9 @@ function describeRates(agents, env = process.env) {
 
 module.exports = {
     APP_DIR, LOCAL_DEFAULTS, NLQ_CODE_DEFAULT, LOCAL_NODE_TIMEOUT_MS, LOCAL_NLQ_TIMEOUT_MS, LLM_SUITES, EMBED_SUITES,
+    RECORD_LONG_TIMEOUT_MS, RECORD_PROGRESS_MS, LONG_CALL_STEPS,
     OCR_SCRIPT, SEC_PER_CALL, DEFAULT_SEC_PER_CALL, DEFAULT_SEC_PER_EMBED, LOCAL_EXTRACT_CHAIN,
-    vendorOf, modelIdOf, embedModelFromEnv, effectiveModels, recordingPlan, isLocalRun, localRecordEnv,
+    vendorOf, modelIdOf, embedModelFromEnv, effectiveModels, recordingPlan, isLocalRun, localRecordEnv, longCallRecordEnv,
     ollamaHost, hasModel, checkOllama, ollamaAdvice,
     ocrPython, parseSelftest, checkOcr, ocrAdvice,
     secPerCall, secPerEmbed, estimateLocalTime, formatDuration, describeRates

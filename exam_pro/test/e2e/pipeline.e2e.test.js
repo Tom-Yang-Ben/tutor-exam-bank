@@ -64,12 +64,22 @@ function runSuite() {
     const TERMINAL = ['saved', 'needs_review', 'rejected'];
     const RUNNING = ['extracted', 'hashed', 'classified', 'linted', 'source_checked', 'verified', 'deduped'];
 
+    /**
+     * 節點逾時：30 秒（回放很快，卡住就該早點失敗）。
+     * 〔看圖拆題逾時〕只有 npm run cassettes:rerecord 錄 dedup1 向量那一步會帶 E2E_NODE_TIMEOUT_MS（本機 embedding 模型第一次載入可能很慢）；
+     * CI 與回放驗證都沒有這個變數（eval/lib/suiteProcess.js 擋成空字串），照舊 30 秒。
+     */
+    const NODE_TIMEOUT_MS = (() => {
+        const n = Number.parseInt(process.env.E2E_NODE_TIMEOUT_MS, 10);
+        return Number.isInteger(n) && n > 0 ? n : 30000;
+    })();
+
     /** 真 agents、真 services/llm（replay）、真狀態機；只把睡眠與 log 換掉。 */
     function makeRunner() {
         return createRunner({
             logger: { info() { }, warn() { }, error() { } },
             sleep: async () => { },                // 不真的睡退避的秒數
-            config: { nodeTimeoutMs: 30000, leaseMs: 120000, concurrency: 2 }
+            config: { nodeTimeoutMs: NODE_TIMEOUT_MS, leaseMs: 120000, concurrency: 2 }
         });
     }
 

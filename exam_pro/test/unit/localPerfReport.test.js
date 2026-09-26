@@ -610,3 +610,73 @@ describe('與原始程式一致', () => {
         assert.equal(pkg.scripts['perf:local'], 'node eval/tools/local_perf_report.js');
     });
 });
+
+// ── 〔看圖拆題逾時〕cassette 的 usage.timing（services/llm/ollama.js 在 record 模式寫的分段時間） ──
+
+describe('〔看圖拆題逾時〕分段時間：讀 prompt（含看圖）與輸出分開算', () => {
+    /**
+     * extract_vision 2 支（每支 2 張圖）：延遲 2000／2400 秒；Ollama 量的 載入 20 秒、讀 prompt 1200／1500 秒、輸出 700／800 秒、
+     * 合計 1920／2320 秒（延遲多出來的 80 秒是排隊與傳輸）；輸入 8000、輸出 1000 token。
+     * classify 1 支是舊的（沒有 timing）。
+     */
+    function timedFixture(root) {
+        const timing = (pe, ev) => ({ totalMs: (20 + pe + ev) * SEC, loadMs: 20 * SEC, promptEvalMs: pe * SEC, evalMs: ev * SEC });
+        for (const [i, [lat, pe, ev]] of [[2000, 1200, 700], [2400, 1500, 800]].entries()) {
+            writeCassette(root, 'extract_vision', `t${i}`, {
+                model: 'qwen3-vl:8b', latencyMs: lat * SEC, recordedAt: T0 + i * 3_000_000, parts: [text, img, img],
+                usage: { tokenIn: 8000, tokenOut: 1000, tokenThinking: 0, tokenCached: 0, timing: timing(pe, ev) },
+                cacheKeyParts: { template: 'extract_vision.v1', chunkNo: i + 1, pdfSha256: PDF }
+            });
+        }
+        writeCassette(root, 'classify', 'old', { model: 'qwen3:8b', latencyMs: 40 * SEC, recordedAt: T0 + 9_000_000, usage: { tokenIn: 2495, tokenOut: 56, tokenThinking: 0 } });
+    }
+
+    test('toEntry：讀 usage.timing；舊 cassette 沒有就是 null；只有 totalMs／loadMs、沒有讀 prompt 與輸出的也當作沒有', () => {
+        const base = { meta: { agent: 'extract_vision', model: 'qwen3-vl:8b' }, request: {}, response: { latencyMs: 1000 } };
+        assert.equal(perf.toEntry({ ...base, response: { ...base.response, usage: { tokenIn: 1, tokenOut: 1 } } }).timing, null);
+        assert.equal(perf.toEntry({ ...base, response: { ...base.response, usage: { tokenIn: 1, tokenOut: 1, timing: { totalMs: 5, loadMs: 1 } } } }).timing, null);
+        assert.deepEqual(perf.toEntry({ ...base, response: { ...base.response, usage: { tokenIn: 1, tokenOut: 1, timing: { promptEvalMs: 7, evalMs: 'x' } } } }).timing,
+            { totalMs: null, loadMs: null, promptEvalMs: 7, evalMs: null });
+    });
+
+    test('statsOf 的 timing：每頁讀圖秒數、讀 prompt／純輸出 token/秒、其他（排隊與傳輸）', () => {
+        const dir = path.join(tmp, '分段時間');
+        timedFixture(dir);
+        const groups = perf.summarizeGroups(perf.selectEntries(perf.readCassettes(dir).entries).selected);
+        const v = groups.find(g => g.agent === 'extract_vision').timing;
+        assert.equal(v.n, 2);
+        assert.equal(v.meanLoadMs, 20 * SEC);
+        assert.equal(v.meanPromptEvalMs, 1350 * SEC);
+        assert.equal(v.maxPromptEvalMs, 1500 * SEC);
+        assert.ok(Math.abs(v.promptTokensPerSec - 16000 / 2700) < 1e-9);
+        assert.equal(v.promptEvalSecPerPage, 2700 / 4, '每頁讀圖＝讀 prompt 的秒數合計 ÷ 頁數合計');
+        assert.equal(v.meanEvalMs, 750 * SEC);
+        assert.ok(Math.abs(v.evalTokensPerSec - 2000 / 1500) < 1e-9, '純輸出速度的分母只有生成的時間');
+        assert.equal(v.evalSecPerPage, 1500 / 4);
+        assert.equal(v.meanOtherMs, 80 * SEC);
+        assert.equal(groups.find(g => g.agent === 'classify').timing, null, '舊 cassette 沒有分段時間');
+    });
+
+    test('報告第 1.1 段：有分段時間的 agent 一列；沒有的 agent 不列', () => {
+        const dir = path.join(tmp, '分段時間');
+        const { markdown } = perf.buildReport(perf.parseArgs(['--cassettes', dir]), { env: {} });
+        assert.match(markdown, /### 1\.1 讀 prompt（含看圖）與輸出各花多久（Ollama 自己量的分段時間）/);
+        assert.match(markdown, /\| `extract_vision` \| `qwen3-vl:8b` \| 2 \| 20 秒 \| 22 分 30 秒／25 分 \| 5\.9 \| 11 分 15 秒 \| 12 分 30 秒／13 分 20 秒 \| 1\.3 \| 6 分 15 秒 \| 1 分 20 秒 \|/);
+        assert.ok(!/\| `classify` \| `qwen3:8b` \| 1 \| —/.test(markdown), '沒有分段時間的 agent 不列在 1.1');
+        assert.match(markdown, /VISION_MAX_EDGE_PX/);
+        assert.ok(!/\n{3,}/.test(markdown));
+    });
+
+    test('整批都沒有分段時間（舊版錄的）：1.1 照實說，指向 local:bench-vision', () => {
+        const { markdown } = perf.buildReport(perf.parseArgs(['--cassettes', cassetteDir]), { env: {} });
+        assert.match(markdown, /這批 cassette 沒有分段時間（`usage\.timing`；2026-09-26 之前的版本錄的不會有）/);
+        assert.match(markdown, /npm run local:bench-vision/);
+    });
+
+    test('重錄的提醒講明：pipeline 與 e2e 兩步帶 3 小時、eval 的 suite 不對節點計時、真正會切斷的是 OLLAMA_TIMEOUT_MS／OCR_TIMEOUT_MS', () => {
+        const { markdown } = perf.buildReport(perf.parseArgs(['--cassettes', cassetteDir]), { env: {} });
+        assert.match(markdown, new RegExp(`pipeline 與 e2e 兩步帶 ${local.RECORD_LONG_TIMEOUT_MS}（3 小時；\`RERECORD_NODE_TIMEOUT_MS\` 可改）`));
+        assert.match(markdown, /eval 的 suite 只把節點逾時記在報表、不真的計時（只有 e2e 的 runner 會）/);
+        assert.match(markdown, /`OLLAMA_TIMEOUT_MS` 至少 3 小時（`RERECORD_OLLAMA_TIMEOUT_MS` 可改；`\.env` 更長就照 `\.env`）/);
+    });
+});
