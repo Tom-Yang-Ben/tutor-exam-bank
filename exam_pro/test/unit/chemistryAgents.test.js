@@ -86,7 +86,10 @@ describe('化學模板的註冊字串 = SYSTEM + "\\n---\\n" + TEMPLATE', () => 
 
     test('既有模板的註冊內容不變（仍是模板原文本身，不含 SYSTEM——已知缺口，本階段不修）', () => {
         assert.equal(getTemplate(extract.TEMPLATE), extract.PROMPT_TEMPLATE);
-        assert.equal(getTemplate(classify.TEMPLATE), classify.PROMPT_TEMPLATE);
+        // 〔重練與收尾決策單 2026-09-26〕classify 原為「等於 PROMPT_TEMPLATE」：審查意見把界線規則（序列化的
+        //   SUBJECT_RULES）併進註冊的模板文字，改規則才會改 cassette 的鍵。仍是逐字比對，仍不含 SYSTEM（已知缺口不變）。
+        assert.equal(getTemplate(classify.TEMPLATE), `${classify.PROMPT_TEMPLATE}\n---\n${JSON.stringify(classify.SUBJECT_RULES)}`);
+        assert.ok(!getTemplate(classify.TEMPLATE).includes(classify.SYSTEM));
         assert.equal(getTemplate(lint.TEMPLATE), lint.PROMPT_TEMPLATE);
         assert.equal(getTemplate(verify.TEMPLATE), verify.PROMPT_TEMPLATE);
         assert.equal(getTemplate(generateVariant.TEMPLATE), generateVariant.PROMPT_TEMPLATE);
@@ -185,7 +188,8 @@ describe('classify：化學題', () => {
         const { ctx, calls } = fakeCtx({ responses: [{ chapter: '向量內積', confidence: 0.9, rationale: 'x' }], job: { subject_group: 'chemistry' } });
         await classify.run(ctx, { subject: '數學', question_text: '求向量夾角' });
         assert.equal(calls[0].agent, 'classify');
-        assert.equal(calls[0].template, 'classify.v1');
+        // 〔決策單 2026-09-26 A5／A7；CR-9〕原為 'classify.v1'：數學／物理的分類模板升版（化學的 classify_chem.v1 不變）
+        assert.equal(calls[0].template, 'classify.v2');
         assert.equal(calls[0].system, classify.SYSTEM);
         assert.equal(calls[0].schema, buildSchema('classify'));
     });

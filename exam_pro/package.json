@@ -26,6 +26,8 @@
     "cassettes:rerecord": "node eval/tools/rerecord_all.js",
     "cassettes:prune": "node eval/tools/prune_cassettes.js",
     "ocr:selftest": "node eval/tools/ocr_selftest.js",
+    "perf:local": "node eval/tools/local_perf_report.js",
+    "local:bench-vision": "node eval/tools/local_bench_vision.js",
     "compare:legacy": "node eval/compare_pipeline.js --method legacy",
     "compare:pipeline": "node --env-file=eval/.env.replay eval/compare_pipeline.js --method pipeline",
     "embed:backfill": "node scripts/backfill_embeddings.js",
@@ -34,6 +36,7 @@
     "chapters:migrate": "node scripts/migrate_chapters.js",
     "follow:backfill": "node scripts/backfill_follow_ups.js",
     "solution:backfill": "node scripts/backfill_solutions.js",
+    "figures:backfill": "node scripts/backfill_figures.js",
     "kc:load": "node scripts/load_kc.js",
     "kc:validate": "node scripts/validate_kc_seed.js",
     "kc:backfill": "node scripts/backfill_kc.js",
@@ -44,7 +47,8 @@
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
     "db:backup": "node scripts/backup.js",
-    "report:jobs": "node scripts/report_jobs.js"
+    "report:jobs": "node scripts/report_jobs.js",
+    "retrain:recompute": "node scripts/recompute_retrain.js"
   },
   "keywords": [
     "exam-bank",

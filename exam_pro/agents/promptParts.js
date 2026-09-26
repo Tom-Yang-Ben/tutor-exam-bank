@@ -120,4 +120,5 @@ function resolveSubjectGroup(ctx, input) {
     return group === 'chemistry' ? 'chemistry' : 'math_physics';
 }
 
-module.exports = { chapterWhitelistText, questionTypeText, LATEX_RULES, CHEM_LATEX_RULES, resolveSubjectGroup };
+// 〔Owner 決策單 2026-09-25 B5〕joinChapters 另外匯出給 services/nlqService.js 的三科白名單用（化學章名加「」的同一條規則）
+module.exports = { chapterWhitelistText, questionTypeText, joinChapters, LATEX_RULES, CHEM_LATEX_RULES, resolveSubjectGroup };

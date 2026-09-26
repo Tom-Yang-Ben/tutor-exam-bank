@@ -7,6 +7,10 @@
 >
 > 相關文件：`docs/roadmap-plan.md`（五章規劃）、`docs/interfaces*.md`（三份凍結介面與全部裁決）、
 > `docs/variants.md`（變式題專章）、`exam_pro/README.md`（「問題→決策→數字」表）。
+>
+> 〔修訂 2026-09-26〕本檔的模型名與數字都是 **Gemini 時期**（2026-08）的。2026-09-25 起預設改為本機模式
+> （Ollama 的 Qwen3 系列＋PaddleOCR，拆題改為 OCR／視覺雙路交叉驗證），RAG 與 agent 的架構不變、換的是模型與拆題的前段：
+> 見 `docs/local-mode.md`、ADR-017、`engineering_docs/03_architecture/sad.md` §7.1；本機模型的量測現況見根 README「怎麼驗證品質」。
 
 ---
 

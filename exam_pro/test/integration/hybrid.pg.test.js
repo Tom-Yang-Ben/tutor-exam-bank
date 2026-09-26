@@ -23,6 +23,8 @@ const embedService = require('../../services/embedService');
 const { buildEmbedText } = require('../../utils/embedText');
 const { tokenize } = require('../../utils/tokenize');
 const { saveToFixture, sha256Hex } = require('../../services/llm/fixture');
+// 〔retrain PR-1〕attempts 是唯讀檢視（migrations/0016），夾具改用 helper 寫派題＋作答
+const { insertAttempts } = require('../helpers/attempts');
 
 const DIM = 768;                       // migrations/0002_vector.sql 寫死 vector(768)
 const MODEL = 'integration-test-model';
@@ -106,7 +108,7 @@ before(async (t) => {
     assert.ok(rows[0].q && rows[0].a, '測試庫尚未套用 migrations，請先執行 npm run migrate:test');
 
     // 這是 _test 庫（上面已檢查後綴），可以放心清空
-    await pool.query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE');
+    await pool.query('TRUNCATE attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE');
 
     for (const q of QUESTIONS) {
         const res = await pool.query(
@@ -141,7 +143,7 @@ before(async (t) => {
     // 姓名刻意加上 WS-C 前綴：students.name 是 UNIQUE，用通用名字會跟別支整合測試的
     // 固定測試學生撞在一起（那支若沒有先 TRUNCATE，就會在插入時就先炸掉）。
     studentId = (await pool.query(`INSERT INTO students (name) VALUES ('WS-C 檢索整合測試學生') RETURNING id`)).rows[0].id;
-    await pool.query(`INSERT INTO attempts (student_id, question_id) VALUES ($1, $2)`, [studentId, idOf.dot2]);
+    await insertAttempts(pool, [{ student_id: studentId, question_id: idOf.dot2 }]);
 });
 
 after(async () => {
@@ -152,7 +154,7 @@ after(async () => {
     if (pool) {
         // 跑完把測試庫清乾淨：留著資料會讓後面跑的整合測試檔（它們共用同一個
         // postgres_test）撞到 students.name / questions 的既有列。
-        await pool.query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE').catch(() => {});
+        await pool.query('TRUNCATE attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE').catch(() => {});
         await pool.end();
     }
 });

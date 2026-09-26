@@ -119,12 +119,15 @@ function groupFollowUps(rows) {
  * @param {number} p.limitCount 要求題數
  * @param {(items:Array)=>Array} [p.shuffleFn]
  * @returns {{ ids:number[], actual:number, availableCount:number, minUnitSize:number|null,
- *             droppedGroups:number }}
+ *             droppedGroups:number, unitSizes:number[] }}
  *   ids            抽中的題（組內已相鄰且依承接順序；組間順序待 sortForPaperGrouped 決定）
  *   actual         ids.length（≤ limitCount）
  *   availableCount 家族互斥後可用的總題數（「庫存不足」的 n）
  *   minUnitSize    家族互斥後最小的一組題數（沒有可用組時為 null）
  *   droppedGroups  因組內有題不可用而整組不抽的組數（僅供附註／除錯）
+ *   unitSizes      家族互斥後每個可用組的題數（洗牌後順序；總和＝availableCount）。
+ *                  〔Owner 決策單 2026-09-25 B10〕湊不滿時回 400，訊息要建議老師改成哪個題數，
+ *                  呼叫端拿它給 nearestReachableCounts 算「剛好湊得滿」的題數
  */
 function pickPaperUnits({ candidates, related = [], limitCount, shuffleFn = shuffle }) {
     const candById = new Map(candidates.map(c => [c.id, c]));
@@ -158,9 +161,42 @@ function pickPaperUnits({ candidates, related = [], limitCount, shuffleFn = shuf
     const availableCount = available.reduce((n, u) => n + u.ids.length, 0);
     const minUnitSize = available.length ? Math.min(...available.map(u => u.ids.length)) : null;
 
-    const chosen = packUnits(available.map(u => u.ids.length), limitCount);
+    const unitSizes = available.map(u => u.ids.length);
+    const chosen = packUnits(unitSizes, limitCount);
     const ids = chosen.flatMap(i => available[i].ids);
-    return { ids, actual: ids.length, availableCount, minUnitSize, droppedGroups };
+    return { ids, actual: ids.length, availableCount, minUnitSize, droppedGroups, unitSizes };
+}
+
+/**
+ * 「改成幾題就剛好湊得滿」（子集和）：〔Owner 決策單 2026-09-25 B10〕承上題整組湊不滿 limit 題時
+ * 直接回 400，訊息要告訴老師把題數改成多少——這裡找離 limit 最近、由可用組剛好湊得出的兩個題數。
+ *
+ *   below  < limit 的最大可達題數（≥ 1）；沒有則 null。limit 本身湊不到時，它就是 packUnits 會抽的題數。
+ *   above  > limit 的最小可達題數，且不超過 cap（組卷單次上限，blueprint 則是扣掉其他列後剩下的名額）；沒有則 null。
+ *
+ * 可達與否只看組的大小（家族互斥之後的可用組），與實際抽中哪幾組無關；
+ * 家族互斥的代表是洗牌挑的，所以不同次呼叫的 sizes 可能略有不同，建議值以「這一次」為準。
+ *
+ * 複雜度 O(sizes.length × cap)；cap 為組卷題數上限，很小。
+ *
+ * @param {number[]} sizes 各組題數
+ * @param {number} limit   要求題數
+ * @param {number} cap     建議值的上限（含）
+ * @returns {{below:number|null, above:number|null}}
+ */
+function nearestReachableCounts(sizes, limit, cap) {
+    const max = Math.max(0, Math.min(cap, sizes.reduce((s, n) => s + n, 0)));
+    const reach = new Array(max + 1).fill(false);
+    reach[0] = true;
+    for (const size of sizes) {
+        if (!(size > 0)) continue;
+        for (let s = max; s >= size; s--) if (reach[s - size]) reach[s] = true;
+    }
+    let below = null;
+    for (let s = Math.min(limit - 1, max); s >= 1; s--) if (reach[s]) { below = s; break; }
+    let above = null;
+    for (let s = Math.max(limit + 1, 1); s <= max; s++) if (reach[s]) { above = s; break; }
+    return { below, above };
 }
 
 /**
@@ -223,4 +259,4 @@ function sortForPaperGrouped(questions) {
     return units.flat();
 }
 
-module.exports = { groupFollowUps, pickPaperUnits, packUnits, sortForPaperGrouped, TYPE_WEIGHTS };
+module.exports = { groupFollowUps, pickPaperUnits, packUnits, nearestReachableCounts, sortForPaperGrouped, TYPE_WEIGHTS };

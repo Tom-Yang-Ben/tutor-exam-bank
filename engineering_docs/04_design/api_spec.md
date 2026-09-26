@@ -16,6 +16,8 @@
 
 > 🛠 **2026-09-24 修訂**（階段 5 整合回填，分支 `stage5/int-docs`；FR-021～035）：依 `exam_pro/routes/index.js` 檔尾四個階段 5 區塊與各功能文件回填。新增端點 13 支：核心區 `GET /api/questions/:id`、`GET /api/student-profile-options`；`FEATURE_STUDENTS` 下 `GET /api/error-types`；`FEATURE_KC` 下 `GET /api/kc`、`PATCH /api/kc/:id`、`GET|PUT /api/questions/:id/kcs`；`FEATURE_REMEDIAL` 下 `GET /api/students/:id/weakness/kc`、`POST /api/students/:id/remedial-paper`、`GET /api/students/:id/remedial-paper/items`、`GET /api/coverage`；`FEATURE_TUTOR` 下 `POST /api/tutor`；`FEATURE_VOICE`＋`FEATURE_TUTOR` 下 `POST /api/voice/transcribe`。擴充既有端點 13 支（批改、試卷明細、弱點、學生列表／新增／修改、題目列表／新增／修改、組卷 `blueprint`、Word `edition`、jobs 建立與查詢的 `subject_group`）。§2.2 旗標表、§3 路由專屬錯誤處理、§4 限流表、§5、§6、§7 同步。OpenAPI 同輪更正兩處既有錯誤：`PATCH /papers/{id}/results` 的 body 鍵名依實作改為 `results`（原記 `items`）；`POST /questions/batch-source` 的 200 描述未加引號，使整份 YAML 無法解析（2026-08-29b 起），已加引號並以 PyYAML 解析驗證。修改處以〔修訂 2026-09-24〕行內標記。
 
+> 🛠 **2026-09-26 合併回填**（分支 `dec/docs-backfill-round1-merged`；Owner 決策單 2026-09-25 B7、B10 已合入 `local/integration` `7dc14a0`）：無新端點。§5.1 `POST /api/generate-paper` 承上題湊不滿的政策改為預設 400（`FOLLOW_UP_SHORTFALL_POLICY` 環境變數，`note` 可切回）；`POST /api/confirm-paper` 補伺服器端承上題整組檢查（400＋`incomplete_groups`）；§6 的 400 列同步。OpenAPI 同輪更新並以 PyYAML 解析驗證。修改處以〔修訂 2026-09-26 合併回填〕行內標記。
+
 ## 目錄
 
 - [1. 設計約定](#1-設計約定)
@@ -131,8 +133,8 @@ app.use((err, req, res, next) => {
 | `POST /api/students`、`PATCH /api/students/:id`、`DELETE /api/students/:id` | FR-014 | 建立（唯一新學生入口，裁決 S4-1）／改名／刪除；〔修訂 2026-09-24〕POST／PATCH 接受六個檔案欄位的任意子集（PATCH 沒送不動；空 body 400「至少要提供一個要修改的欄位（…）」），回應改為完整一列（只增不減；FR-023） |
 | `GET /api/student-profile-options`〔修訂 2026-09-24〕 | FR-023 | 學生檔案表單選項 `{grades, tracks, target_exams, textbook_versions, school_max_length, note_max_length}`（`config/studentProfile.js`；核心區不吃旗標） |
 | `POST /api/students/:id/merge` | FR-014 | 學生併名（衝突題保留目標側批改） |
-| `POST /api/generate-paper` | FR-008 | 組卷草稿（`dry_run` 預覽、`exclude_ids` 換題；attempts 排除已作答；`source_types` 題源過濾——空陣列或未帶＝不限制、含非法值 400，FR-017〔修訂 2026-08-29〕；承上題以組為單位整組抽、相鄰排列，組內任一題不可用整組不抽，湊不滿題數時預設 200 少出題並加 `shortfall`／`note`，`questions[]` 逐題加 `follows_question_id`，FR-019，契約見 `docs/interfaces-stage1.md` 第 7.1 條〔修訂 2026-09-15g〕）；〔修訂 2026-09-24〕另接受 `blueprint: [{chapter, count, difficulty_min?, difficulty_max?}]` 跨章配額（1–10 列、count 總和 ≤50；與 `chapter`／`count` 互斥，同送 400；回應多 `blueprint`、`shortfalls`，有不足時加 `note`；部分列不足仍 200、全部列抽不到才 400；不吃旗標；FR-032，`docs/remedial.md` §2.3）；不帶 `blueprint` 時回應逐字不變 |
-| `POST /api/confirm-paper` | FR-008 | 確認出卷（同一交易建卷＋attempts；預覽過期回 409；承上組依承接順序相鄰排序〔修訂 2026-09-15g〕） |
+| `POST /api/generate-paper` | FR-008 | 組卷草稿（`dry_run` 預覽、`exclude_ids` 換題；attempts 排除已作答；`source_types` 題源過濾——空陣列或未帶＝不限制、含非法值 400，FR-017〔修訂 2026-08-29〕；承上題以組為單位整組抽、相鄰排列，組內任一題不可用整組不抽，湊不滿題數時~~預設 200 少出題並加 `shortfall`／`note`~~〔修訂 2026-09-26 合併回填 B10〕預設 400（`FOLLOW_UP_SHORTFALL_POLICY=error`：訊息說出哪一章要幾題、最多湊到幾題、建議改成幾題；設 `note` 才照舊 200 少出題並加 `shortfall`／`note`），`questions[]` 逐題加 `follows_question_id`，FR-019，契約見 `docs/interfaces-stage1.md` 第 7.1 條〔修訂 2026-09-15g〕）；〔修訂 2026-09-24〕另接受 `blueprint: [{chapter, count, difficulty_min?, difficulty_max?}]` 跨章配額（1–10 列、count 總和 ≤50；與 `chapter`／`count` 互斥，同送 400；回應多 `blueprint`、`shortfalls`，有不足時加 `note`；部分列不足仍 200、全部列抽不到才 400；〔修訂 2026-09-26 合併回填 B10〕承上組湊不滿的列在預設政策下整份 400 並逐列給建議題數；不吃旗標；FR-032，`docs/remedial.md` §2.3）；不帶 `blueprint` 時回應逐字不變 |
+| `POST /api/confirm-paper` | FR-008 | 確認出卷（同一交易建卷＋attempts；預覽過期回 409；承上組依承接順序相鄰排序〔修訂 2026-09-15g〕；〔修訂 2026-09-26 合併回填 B7〕伺服器端檢查承上題整組：卷裡有某組的任一題、整組卻沒有全部在卷裡 → 400 `{message, incomplete_groups:[{group_ids, missing:[{question_id, reason}]}]}`，不寫卷、不寫 attempts；FR-019，契約見 `docs/interfaces-stage1.md` 第 7.1 條） |
 | `DELETE /api/papers/:id` | FR-008 | 刪卷連 attempts，題目回候選池（裁決 S4-3） |
 | `POST /api/analyze-pdf` | FR-001 | 舊版單呼叫拆題（保留）；限流 10/min、PDF 上限 15 MB |
 | `POST /api/download-word` | FR-009、FR-018、FR-025、FR-027 | 〔修訂 2026-09-24〕body 多 `edition`：`standard`（預設，行為不變）／`student`（不附答案）／`solution`（答案後接詳解）；其他值（含空字串）400；`\ce{…}` 化學式轉原生 OMML、`\mathrm` 正體。Word 匯出（LaTeX→OOXML，docx 原生 Math 物件）；`question_img` 為 `/figures/<檔名>` 的題嵌入本機裁圖，讀不到時該題放「（附圖遺失）」、整份仍回 200（`docs/figures.md`）〔修訂 2026-09-16〕 |
@@ -169,7 +171,7 @@ app.use((err, req, res, next) => {
 | :--- | :--- | :--- |
 | 200 | 成功 | 各查詢／更新端點；`variants` 檢索命中（`mode:'retrieved'`） |
 | 202 | 已受理，非同步處理中 | `POST /api/jobs`（回 `{job_id, existing}`）；`variants` 進入生成（`mode:'generating'`）；`POST /api/jobs/:id/retry` |
-| 400 | 參數無效或業務前置條件不足 | 組卷剩餘題數少於抽題數（家族互斥後計算）；batch-save 白名單驗證失敗；〔修訂 2026-09-24〕批改細節違反白名單、學生檔案值不合法、`edition`／`subject_group` 非法、`blueprint` 與 `chapter` 同送、知識點 PATCH 有不認得的鍵、PUT 別科知識點、錄音 mime 不合或 multipart 壞掉 |
+| 400 | 參數無效或業務前置條件不足 | 組卷剩餘題數少於抽題數（家族互斥後計算）；〔修訂 2026-09-26 合併回填〕承上組湊不滿題數（B10 預設）、`confirm-paper` 的承上題組不完整（B7，帶 `incomplete_groups`）；batch-save 白名單驗證失敗；〔修訂 2026-09-24〕批改細節違反白名單、學生檔案值不合法、`edition`／`subject_group` 非法、`blueprint` 與 `chapter` 同送、知識點 PATCH 有不認得的鍵、PUT 別科知識點、錄音 mime 不合或 multipart 壞掉 |
 | 401 | 認證失敗 | 缺少或錯誤的 `x-api-key`（僅 `API_KEY` 已設定時） |
 | 404 | 資源不存在，或旗標關閉的路由未掛載 | `generate-paper` 以 `student_name` 查無學生（不自動建）；`FEATURE_*` 關閉時的對應路徑；〔修訂 2026-09-24〕補救卷／知識點弱點的學生不存在（`:id` 不合法亦 404）、`PATCH /api/kc/:id` 查無此列、家教指定的題目或學生不存在 |
 | 409 | 狀態衝突 | `confirm-paper` 預覽過期／題目已被同學生作答；非 dry_run 組卷時題目被並發指派；`jobs/:id/retry` 狀態不允許；`variants` 來源題無 embedding |

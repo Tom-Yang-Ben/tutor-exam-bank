@@ -62,7 +62,7 @@ const res = await generateJson({
 2. `tokenCached` 在沒有快取命中時**整個鍵不存在**（不是 0），這一層一律 `?? 0` 補上。
 3. `raw` 在 `replay` 模式是 `null`。**agent 不得依賴 `raw`**。
 4. `schemaFallback` 是額外多出來的鍵（介面第 5.1 條的回傳形狀之外），`true` 代表這次走了「不含 enum 的 schema + prompt 列舉」的退路，runner 應該把它記進 `job_events.detail`。
-5. 供應商目前只有 `gemini`。`anthropic` / `openai` 給 A-T17 預留，現在傳進去會直接丟錯（不是靜默改用 gemini）。
+5. 供應商有 `gemini` 與 `ollama`（〔修訂 2026-09-26〕本機模式，2026-09-25 起為預設；轉接層 `services/llm/ollama.js`，回傳形狀與 `gemini.js` 相同，契約與裁決見 [`docs/local-mode.md`](local-mode.md) 第 3 條與 LM-1、LM-10）。`anthropic` / `openai` 給 A-T17 預留，現在傳進去會直接丟錯（不是靜默改用 gemini）。
 6. **`maxOutputTokens` 的額度包含思考 token**。對 thinking 模型（Pro 系列）只設 `maxOutputTokens`
    而不設 `thinkingBudget`，難題的思考會把額度吃光，JSON 寫到一半被截斷——症狀是
    「Unterminated string in JSON」被歸類成 `schema_invalid`，退避重試把整份任務拖慢數倍
@@ -192,6 +192,7 @@ LLM_MODE=record GEMINI_RPM=5 node eval/run.js --suite pipeline     # 樣卷 10 �
 | `config/chapters.js` 的章節白名單 | **全部**（schemaHash 變） |
 | `agents/schemas/*.json` | 該 agent 全部 |
 | agent 的 `PROMPT_TEMPLATE` | 該 agent 全部（記得把識別名版號 +1） |
+| 分類的例句（`config/chapterExamples.js`）或界線規則（`agents/classify.js` 的 `SUBJECT_RULES`，只有數學、物理有） | 數學或物理的例句／界線規則改了 → **數學＋物理**的 classify 全部（兩科共用同一個識別名 `classify.vN`：只改數學的一句，物理的 cassette 也跟著失效）；化學的例句改了 → `classify_chem` 全部（數學、物理不受影響）。鍵只含模板原文（界線規則是挖空後才填進去的）、題幹與 few-shot 的 id，不含例句與規則的文字〔整合 2026-09-26 註：「界線規則挖空後才填、鍵不含規則文字」是 `dec/r2-classify-explog2` 當時的狀態；自 `dec/r2-classify-explog3` 起規則已併進註冊的模板、會進鍵（見本格末段），現在不進鍵的只剩例句〕，所以**一定要把識別名的版號 +1**（`classify.vN` 或 `classify_chem.vN`）；不升版的話，回放拿到的是舊例句、舊規則錄的答案〔整合 2026-09-26 註：規則的部分現在是回放 miss、不會拿到舊答案，見本格末段；例句的部分照舊〕（〔CR-9〕，`docs/chapter-restructure.md` 第 8 條）。〔重練與收尾決策單 2026-09-26〕界線規則已併進註冊的模板文字（`agents/classify.js` 的 `REGISTERED_TEMPLATE`＝`PROMPT_TEMPLATE + '\n---\n' + JSON.stringify(SUBJECT_RULES)`）：改規則鍵會自己變，回放是 miss，不會拿到舊答案；仍照慣例把 `classify.vN` 的版號 +1（單元測試把規則雜湊與版號一起釘住）。例句仍不進鍵，上面的說明對例句照舊成立 |
 | `MODEL_EXTRACT` / `MODEL_VERIFY` | 該模型的全部 |
 | `eval/fixtures/sample_exam.pdf` | `eval/cassettes/extract/**`（`pdfSha256` 變） |
 | `eval/fixtures/questions.public.json` 的題幹 | `eval/cassettes/classify/**`（`questionText` 變） |

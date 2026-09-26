@@ -59,6 +59,8 @@ function runSuite() {
     const request = require('supertest');
     const app = require(path.join(APP_DIR, 'app'));
     const { query, pool } = require(path.join(APP_DIR, 'config', 'db'));
+    // 〔retrain PR-1〕attempts 是唯讀檢視（migrations/0016），夾具改用 helper 寫派題＋作答
+    const { insertAttempts } = require(path.join(APP_DIR, 'test', 'helpers', 'attempts'));
     const { saveToFixture, sha256Hex } = require(path.join(APP_DIR, 'services', 'llm', 'fixture'));
     const { buildTsvTokens } = require(path.join(APP_DIR, 'services', 'embedService'));
     const nlqService = require(path.join(APP_DIR, 'services', 'nlqService'));
@@ -99,7 +101,7 @@ function runSuite() {
     const idByKey = new Map();
 
     async function seed() {
-        await query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE');
+        await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE');
         idByKey.clear();
         for (const q of QUESTIONS) {
             const { chapterTokens, keywordTokens, stemTokens } = buildTsvTokens(q);
@@ -234,9 +236,7 @@ function runSuite() {
                     const { rows: pRows } = await query(
                         `INSERT INTO exam_papers (title, student_id, question_ids) VALUES ('測試卷', $1, $2::int[]) RETURNING id`,
                         [studentId, [written]]);
-                    await query(
-                        `INSERT INTO attempts (student_id, question_id, paper_id) VALUES ($1, $2, $3)`,
-                        [studentId, written, pRows[0].id]);
+                    await insertAttempts(query, [{ student_id: studentId, question_id: written, paper_id: pRows[0].id }]);
 
                     const res = await post({ query: '向量內積，小明沒寫過' });
                     assert.equal(res.body.filters.exclude_student_name, '小明');
@@ -296,7 +296,7 @@ function runSuite() {
             });
 
             test('level 2 走完仍是 0 筆 → results:[] 且 fallback_level:2（不是 3）', async () => {
-                await query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE');
+                await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE');
                 try {
                     const res = await post({ query: '向量內積' });
                     assert.deepEqual(res.body.results, []);

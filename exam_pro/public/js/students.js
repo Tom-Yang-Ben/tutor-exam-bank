@@ -35,6 +35,12 @@
 //   - 弱點面板多一張「錯因分布」表（by_error_type），最近錯題列出錯因與部分給分。
 //   - 學生管理可編輯檔案欄位（選項讀 GET /api/student-profile-options）。
 //   diffResults 仍然「只送改過的題」；四個新鍵只在真的改過時才出現在那一題裡。
+//
+// 〔retrain PR-4〕docs/retrain-and-review.md 第 5.3 節（FEATURE_RETRAIN；關閉時以下全部不渲染、不發任何新請求）：
+//   - 批改卡：新題的對錯按鈕旁多「要重練」勾選框（預設不勾，答錯也不自動勾；依 API-9 的 retrain_flagged 顯示已勾），
+//     重練題改標「重練・第 n 關」。勾選以 results[i].retrain 送出（只在改過時送），儲存後依 API-10 的 retrain 摘要提示。
+//   - 學生清單（下拉選單）名字旁「【到期 N】」（GET /api/retrain/summary）。
+//   - 與學生視圖的「錯題重練」卡（public/js/retrain.js）之間只有兩個 document 事件（STUDENT_VIEW_EVENT、RETRAIN_CHANGED_EVENT）。
 // ─────────────────────────────────────────────────────────────
 
 const DEFAULT_DAYS = 365;                    // 裁決 S4-4：家教是長期視角，預設一年（伺服器端第 1.5 條的 90 不動，本檔恆帶參數）
@@ -53,6 +59,12 @@ export const VARIANT_EVENT = 'examapp:variant-request';
 // index.html 組卷結果區的「立即批改」按鈕發的事件。詳情由 ExamApp.getPaperCache() 取，
 // 事件本身只是「使用者現在要批這張卷」的訊號（第 7.1 條的 getPaperCache 就是為此存在）。
 export const GRADE_EVENT = 'examapp:grade-paper';
+
+// 〔retrain PR-4〕與 public/js/retrain.js（學生視圖的「錯題重練」卡）之間的兩個事件，只在 FEATURE_RETRAIN 開啟時發與聽：
+//   STUDENT_VIEW_EVENT     本檔 → retrain.js：學生視圖載入了哪位學生（detail：student_id、student_name、subject、days）
+//   RETRAIN_CHANGED_EVENT  retrain.js → 本檔：清單變了 → 更新學生清單的「到期 N」；papers_changed 時連試卷列表一起重載
+export const STUDENT_VIEW_EVENT = 'examapp:student-view';
+export const RETRAIN_CHANGED_EVENT = 'examapp:retrain-changed';
 
 // ───────────────────────── 橋接與旗標 ─────────────────────────
 
@@ -100,7 +112,9 @@ export function parseBool(value) {
 const FEATURE_META = {
     students: 'meta[name="feature-students"]',
     similar: 'meta[name="feature-similar"]',
-    variants: 'meta[name="feature-variants"]'
+    variants: 'meta[name="feature-variants"]',
+    // 〔retrain PR-4〕批改卡的「要重練」勾選框與徽章、學生清單的到期徽章（docs/retrain-and-review.md 第 5.3 節）
+    retrain: 'meta[name="feature-retrain"]'
 };
 
 /**
@@ -129,6 +143,9 @@ function similarEnabled() { return featureOn('similar'); }
 
 /** @returns {boolean} FEATURE_VARIANTS 是否開啟（決定要不要畫「出變式」） */
 function variantsEnabled() { return featureOn('variants'); }
+
+/** @returns {boolean} 〔retrain PR-4〕FEATURE_RETRAIN 是否開啟（關閉時本檔的畫面、請求、PATCH body 與沒有這個功能時逐字相同） */
+function retrainEnabled() { return featureOn('retrain'); }
 
 /** @returns {boolean} 是否走本檔內的手寫假資料 */
 function mockEnabled() {
@@ -215,9 +232,78 @@ export function diffResults(original, current) {
                 changed = true;
             }
         }
+        // 〔retrain PR-4〕「要重練」勾選（API-10 的 results[i].retrain，R1 選 2）：只有列上有這個鍵（旗標開啟而且是新題）
+        // 而且與進來時不同才送——伺服器「沒送＝不動」。旗標關閉時列上沒有這個鍵，輸出與原本逐位元相同。
+        if ('retrain' in row && Boolean(prev.retrain) !== Boolean(row.retrain)) {
+            entry.retrain = Boolean(row.retrain);
+            changed = true;
+        }
         if (changed) out.push(entry);
     }
     return out;
+}
+
+/**
+ * 〔retrain PR-4〕批改儲存後的提示（API-10 回應的 retrain 摘要，第 5.3 節）：
+ * 「3 題進入重練清單、1 題練到會。」；這次改成「錯」卻沒勾「要重練」、而且**儲存後確實不在清單上**的新題另外提醒
+ * （第 7.1 節風險 R-12）。沒有任何變化時回空字串（不提示）。
+ *
+ * 〔retrain 審查修正〕opts：
+ *   unverified   true＝沒能確認清單（儲存後讀 API-1 失敗）：只說「答錯但沒勾」，不斷言「不會進清單」
+ *                （承上組同組題被勾時、或這一題本來就有手動加入的項目時，它其實在清單上）。
+ *   masteredKept 這次改成「錯」的重練題裡，老師「判定已會」的題數：override 優先，答錯不改狀態（仍是練到會；
+ *                設計稿第 4.4 節兩列規則的衝突待 Owner 裁決，第 5.6.6 節），另外說一句，免得老師以為會回第 1 關。
+ * @param {{entered?:number, advanced?:number, mastered?:number, reset?:number}|null|undefined} summary
+ * @param {number} [wrongUnflagged] 這次改成「錯」、沒勾「要重練」、而且不在清單上的新題數
+ * @param {{unverified?:boolean, masteredKept?:number}} [opts]
+ * @returns {string}
+ */
+export function retrainSaveMessage(summary, wrongUnflagged = 0, { unverified = false, masteredKept = 0 } = {}) {
+    const s = summary || {};
+    const parts = [];
+    if (s.entered > 0) parts.push(`${s.entered} 題進入重練清單`);
+    if (s.advanced > 0) parts.push(`${s.advanced} 題升一關`);
+    if (s.mastered > 0) parts.push(`${s.mastered} 題練到會`);
+    if (s.reset > 0) parts.push(`${s.reset} 題答錯回到第 1 關`);
+    const out = [];
+    if (parts.length) out.push(`${parts.join('、')}。`);
+    if (wrongUnflagged > 0) {
+        out.push(unverified
+            ? `這次有 ${wrongUnflagged} 題答錯但沒勾「要重練」。`
+            : `這次有 ${wrongUnflagged} 題答錯但沒勾「要重練」，不會進清單。`);
+    }
+    if (masteredKept > 0) out.push(`有 ${masteredKept} 題重練題已「判定已會」，答錯不改狀態（仍是練到會；要再練請到錯題重練卡按「重新加入」）。`);
+    return out.join('');
+}
+
+/**
+ * 〔retrain 審查修正〕儲存後的兩個補充提示要看清單現況（純函式；items＝API-1 `status=all` 的 items）：
+ *   wrongUnflagged  答錯沒勾的新題裡，**不在清單上**的（沒有項目，或項目已移出）。承上組同組題被勾時整組進清單
+ *                   （reason = group）、之前手動加入過的題（manual）都在清單上，不算。
+ *   masteredKept    答錯的重練題裡，項目是老師「判定已會」（teacher_override = mastered）的。
+ * @param {Array<{question_id:number, status:string, teacher_override:string|null}>} items
+ * @param {{wrongUnflagged?:number[], wrongRetrain?:number[]}} candidates 題號
+ * @returns {{wrongUnflagged:number, masteredKept:number}}
+ */
+export function retrainHintCounts(items, { wrongUnflagged = [], wrongRetrain = [] } = {}) {
+    const byQ = new Map((items || []).map(it => [Number(it.question_id), it]));
+    const inList = q => { const it = byQ.get(Number(q)); return Boolean(it) && it.status !== 'retired'; };
+    return {
+        wrongUnflagged: wrongUnflagged.filter(q => !inList(q)).length,
+        masteredKept: wrongRetrain.filter(q => { const it = byQ.get(Number(q)); return Boolean(it) && it.teacher_override === 'mastered'; }).length
+    };
+}
+
+/**
+ * 〔retrain PR-4〕學生清單（下拉選單）上的「到期 N」徽章（API-4）：接在名字後面；沒有到期的題就維持原文字。
+ * @param {string} base 原本的選項文字（以姓名開頭）
+ * @param {string} name 姓名
+ * @param {number} due 到期題數
+ * @returns {string}
+ */
+export function retrainOptionLabel(base, name, due) {
+    if (!(due > 0) || !String(base).startsWith(name)) return base;
+    return `${name}【到期 ${due}】${String(base).slice(name.length)}`;
 }
 
 /**
@@ -828,6 +914,10 @@ function paperCard(app, paper, onGraded) {
     const left = el('div', 'min-w-0');
     left.append(
         el('p', 'truncate text-sm font-extrabold text-slate-800', { textContent: paper.title }),
+        // 〔retrain PR-3〕卷名旁「含重練 N 題」（FEATURE_RETRAIN 開啟時 API 才帶 retrain_count；0 或沒有這個鍵就不渲染）
+        ...(Number(paper.retrain_count) > 0 ? [el('span', 'mt-0.5 inline-block rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700', {
+            textContent: `含重練 ${Number(paper.retrain_count)} 題`
+        })] : []),
         el('p', 'mt-0.5 text-[11px] text-slate-400', {
             textContent: `#${paper.paper_id}　·　${String(paper.created_at).slice(0, 10)}　·　已批改 ${paper.graded}／${paper.total} 題`
         })
@@ -900,6 +990,11 @@ function gradingForm(app, detail, badge, onGraded, errorTypes = null) {
     });
     const copyRow = r => ({ ...r, error_types: [...r.error_types] });
     const original = detail.questions.map(toRow);
+    // 〔retrain PR-4〕旗標開啟而且 API-9 帶了 purpose 的新題才有 retrain 鍵（勾選狀態＝retrain_flagged；預設不勾）
+    const retrainOn = retrainEnabled();
+    if (retrainOn) {
+        detail.questions.forEach((q, i) => { if (q.purpose === 'new') original[i].retrain = q.retrain_flagged === true; });
+    }
     const current = original.map(copyRow);
     const allTypes = errorTypes && Array.isArray(errorTypes.items) ? errorTypes.items : [];
     const maxTypes = errorTypes && Number.isInteger(errorTypes.max) ? errorTypes.max : 5;
@@ -954,6 +1049,9 @@ function gradingForm(app, detail, badge, onGraded, errorTypes = null) {
             group.appendChild(btn);
         }
         row.appendChild(group);
+        // 〔retrain PR-4〕對錯按鈕旁：新題的「要重練」勾選框／重練題的「重練・第 n 關」徽章（旗標關閉時什麼都不畫）
+        const retrainNode = retrainOn ? retrainGradingHook(q, current[i], i) : null;
+        if (retrainNode) row.appendChild(retrainNode);
         row.appendChild(detailUi.node);
         paint();
         repaints.push(paint);
@@ -990,6 +1088,16 @@ function gradingForm(app, detail, badge, onGraded, errorTypes = null) {
             app.showToast(`一次最多儲存 ${MAX_PATCH} 筆批改，這次有 ${results.length} 筆。`, 'error');
             return;
         }
+        // 〔retrain PR-4〕這次改成「錯」卻沒勾「要重練」的新題（儲存後提醒；不會自動進清單，R1 選 2）
+        // 〔retrain 審查修正〕只是候選：儲存後對照清單（API-1），已在清單上的（承上組同組題被勾、手動加入過）不算；
+        // 另收這次改成「錯」的重練題，用來提醒「判定已會的題答錯不改狀態」。
+        const wrongUnflaggedIds = retrainOn
+            ? current.filter((r, i) => 'retrain' in r && r.result === 0 && (original[i].result ?? null) !== 0 && !r.retrain).map(r => r.question_id)
+            : [];
+        const wrongRetrainIds = retrainOn
+            ? detail.questions.filter((q, i) => q.purpose === 'retrain' && current[i].result === 0 && (original[i].result ?? null) !== 0)
+                .map(q => q.question_id)
+            : [];
         save.disabled = true;
         try {
             const res = await request(app, `/api/papers/${detail.id}/results`, {
@@ -1000,6 +1108,12 @@ function gradingForm(app, detail, badge, onGraded, errorTypes = null) {
             if (!res.ok) { app.showToast(await messageOf(res), 'error'); return; }
             const body = await res.json();
             app.showToast(`已儲存 ${body.updated} 題的批改結果。`, 'success');
+            // 〔retrain PR-4〕API-10 的 retrain 摘要（旗標開啟時伺服器才帶這個鍵）
+            if (retrainOn && body.retrain) {
+                const hint = await retrainSaveHint(app, detail.student_id, wrongUnflaggedIds, wrongRetrainIds);
+                const text = retrainSaveMessage(body.retrain, hint.wrongUnflagged, hint);
+                if (text) app.showToast(text, 'info');
+            }
             for (let i = 0; i < current.length; i++) original[i] = copyRow(current[i]);
             const graded = current.filter(r => r.result !== null).length;
             badge.textContent = graded >= current.length ? '已批完' : '待批改';
@@ -1014,6 +1128,104 @@ function gradingForm(app, detail, badge, onGraded, errorTypes = null) {
 
     wrap.append(list, markRestCorrect, save, note);
     return wrap;
+}
+
+/**
+ * 〔retrain 審查修正〕批改儲存後的補充提示要對照清單現況：有候選題時讀一次 API-1（`status=all`），交給 retrainHintCounts。
+ * 沒有候選題就不發請求（沒改成錯的儲存、旗標關閉都不會多打 API）。讀不到（連線失敗、非 2xx、學生 id 不明）時
+ * unverified：只說「答錯但沒勾」，不斷言「不會進清單」，也不提判定已會。
+ * @param {object} app
+ * @param {number} studentId API-9 的 student_id
+ * @param {number[]} wrongUnflaggedIds 這次改成「錯」、沒勾「要重練」的新題
+ * @param {number[]} wrongRetrainIds  這次改成「錯」的重練題
+ * @returns {Promise<{wrongUnflagged:number, masteredKept:number, unverified:boolean}>}
+ */
+async function retrainSaveHint(app, studentId, wrongUnflaggedIds, wrongRetrainIds) {
+    if (!wrongUnflaggedIds.length && !wrongRetrainIds.length) return { wrongUnflagged: 0, masteredKept: 0, unverified: false };
+    const sid = Number(studentId);
+    try {
+        if (!Number.isInteger(sid) || sid < 1) throw new Error('student_id');
+        const res = await request(app, `/api/students/${sid}/retrain-items?status=all`);
+        if (!res.ok) throw new Error(String(res.status));
+        const list = await res.json();
+        return { ...retrainHintCounts(list.items, { wrongUnflagged: wrongUnflaggedIds, wrongRetrain: wrongRetrainIds }), unverified: false };
+    } catch {
+        return { wrongUnflagged: wrongUnflaggedIds.length, masteredKept: 0, unverified: true };
+    }
+}
+
+/**
+ * 〔retrain PR-4〕批改卡對錯按鈕旁的掛鉤（docs/retrain-and-review.md 第 5.3 節；只在 FEATURE_RETRAIN 開啟時呼叫）。
+ *   新題（purpose = new）  「要重練」勾選框：預設不勾（答錯也不自動勾，R1 選 2）；之前勾過的依 API-9 的 retrain_flagged 顯示已勾。
+ *                         改勾選只改 state.retrain，儲存時由 diffResults 決定要不要送（沒改就不送）。
+ *   重練題（purpose = retrain）不給勾選框，改標「重練・第 n 關」（要移出請到錯題重練清單上按）。
+ *   伺服器沒帶 purpose（舊後端或旗標兩邊不一致）→ 什麼都不畫，也就不會送出伺服器不收的 retrain。
+ * @param {object} q     GET /api/papers/:id 的一題
+ * @param {object} state gradingForm 的 current[i]
+ * @param {number} index 第幾題（0 起算）
+ * @returns {HTMLElement|null}
+ */
+function retrainGradingHook(q, state, index) {
+    if (q.purpose === 'retrain') {
+        return el('span', 'ml-2 inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 align-middle text-[11px] font-extrabold text-violet-700', {
+            textContent: `重練・第 ${q.retrain_step} 關`, 'data-retrain-badge': String(q.question_id)
+        });
+    }
+    if (q.purpose !== 'new' || !('retrain' in state)) return null;
+    const label = el('label', 'ml-3 inline-flex items-center gap-1 align-middle text-xs font-bold text-slate-600 cursor-pointer', {
+        title: '勾了才會進這位學生的錯題重練清單；答錯不會自動進。'
+    });
+    const box = el('input', 'accent-violet-600', {
+        type: 'checkbox', checked: state.retrain === true,
+        'data-retrain-flag': String(q.question_id), 'aria-label': `第 ${index + 1} 題要重練`
+    });
+    box.addEventListener('change', () => { state.retrain = Boolean(box.checked); });
+    label.append(box, el('span', '', { textContent: '要重練' }));
+    return label;
+}
+
+/**
+ * 〔retrain PR-4〕學生清單（#stuStudent 的選項）上的「到期 N」徽章：GET /api/retrain/summary（API-4，不回姓名，以 id 對應）。
+ * 原本的選項文字記在節點的 JS 屬性上（不是 DOM 屬性），重複更新不會疊字。失敗就維持原文字。
+ * @param {object} app
+ */
+async function refreshRetrainBadges(app) {
+    const sel = document.getElementById('stuStudent');
+    if (!sel) return;
+    let body;
+    try {
+        const res = await request(app, '/api/retrain/summary');
+        if (!res.ok) return;
+        body = await res.json();
+    } catch {
+        return;
+    }
+    const dueOf = new Map(((body && body.items) || []).map(r => [String(r.student_id), Number(r.due) || 0]));
+    for (const o of [...sel.options]) {
+        const name = o.getAttribute('data-name');
+        if (!name) continue;
+        if (o.__retrainBase === undefined) o.__retrainBase = o.textContent;
+        o.textContent = retrainOptionLabel(o.__retrainBase, name, dueOf.get(o.value) || 0);
+    }
+}
+
+/**
+ * 〔retrain PR-4〕通知錯題重練卡（retrain.js）：學生視圖載入了哪位學生，並更新到期徽章。
+ * @param {object} app
+ * @param {number|null} studentId
+ */
+function announceStudentView(app, studentId) {
+    const sel = document.getElementById('stuStudent');
+    const opt = sel ? [...sel.options].find(o => o.value === sel.value) : null;
+    document.dispatchEvent(new CustomEvent(STUDENT_VIEW_EVENT, {
+        detail: {
+            student_id: studentId,
+            student_name: studentId !== null && opt ? (opt.getAttribute('data-name') || '') : '',
+            subject: (document.getElementById('stuSubject') || {}).value || '',
+            days: Number((document.getElementById('stuDays') || {}).value) || DEFAULT_DAYS
+        }
+    }));
+    if (studentId !== null) refreshRetrainBadges(app).catch(() => {});
 }
 
 /** 詳解來源的說明（questions.solution_src）。 */
@@ -1545,6 +1757,8 @@ async function loadStudentView(app) {
     if (!papersBox || !weaknessBox) return;
     papersBox.innerHTML = '';
     weaknessBox.innerHTML = '';
+    // 〔retrain PR-4〕錯題重練卡跟著這裡選的學生走；順便更新學生清單的到期徽章（旗標關閉時不發事件、不打 API）
+    if (retrainEnabled()) announceStudentView(app, studentId);
     if (studentId === null) return;
     if (status) { status.classList.remove('hidden'); status.textContent = '載入中…'; }
 
@@ -1676,6 +1890,14 @@ export async function init() {
 
     mountStudentsSection(app, section);
     document.addEventListener(GRADE_EVENT, () => { handleGradeRequest(app).catch(() => {}); });
+    // 〔retrain PR-4〕錯題重練卡改了清單 → 更新到期徽章；出了重練卷 → 連試卷列表一起重載（新卷要能在這裡批改）
+    if (retrainEnabled()) {
+        document.addEventListener(RETRAIN_CHANGED_EVENT, (event) => {
+            const detail = (event && event.detail) || {};
+            if (detail.papers_changed && detail.student_id === currentStudentId()) loadStudentView(app).catch(() => {});
+            else refreshRetrainBadges(app).catch(() => {});
+        });
+    }
     loadErrorTypes(app);   // 〔stage5 WS-A〕先暖快取：展開試卷時錯因 chip 不必再等一次來回
 
     if (await loadStudents(app)) await loadStudentView(app);

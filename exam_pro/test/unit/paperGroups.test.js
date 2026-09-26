@@ -5,7 +5,7 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { groupFollowUps, pickPaperUnits, packUnits, sortForPaperGrouped } = require('../../utils/paperGroups');
+const { groupFollowUps, pickPaperUnits, packUnits, nearestReachableCounts, sortForPaperGrouped } = require('../../utils/paperGroups');
 const { pickOnePerFamily } = require('../../utils/pickOnePerFamily');
 
 const identity = (xs) => [...xs];
@@ -202,6 +202,68 @@ describe('pickPaperUnits — 整組抽取', () => {
                 if (pi !== -1) assert.ok(ids.includes(child), `第 ${i} 次：抽到 ${parent} 必須帶 ${child}`);
             }
             assert.ok(ids.length <= 6);
+        }
+    });
+});
+
+describe('〔Owner 決策單 2026-09-25 B10〕湊不滿時建議改成幾題：unitSizes 與 nearestReachableCounts', () => {
+    test('pickPaperUnits 回報家族互斥後每個可用組的題數（總和＝availableCount；整組不抽的組不算）', () => {
+        const candidates = [row(1), row(2, 1), row(3), row(4, 3), row(9)];
+        const out = pickPaperUnits({ candidates, related: candidates, limitCount: 3, shuffleFn: identity });
+        assert.deepEqual(out.unitSizes, [2, 2, 1]);
+        assert.equal(out.unitSizes.reduce((s, n) => s + n, 0), out.availableCount);
+
+        // 前題 1 不在候選池：組 [1,2] 整組不抽，也不出現在 unitSizes
+        const out2 = pickPaperUnits({ candidates: [row(2, 1), row(4), row(5)], related: [row(1), row(2, 1)], limitCount: 2, shuffleFn: identity });
+        assert.deepEqual(out2.unitSizes, [1, 1]);
+
+        // 家族互斥：[組 1-2, 變式 10] 只留一個代表
+        const fam = [row(1), row(2, 1), row(10, null, 1)];
+        const out3 = pickPaperUnits({ candidates: fam, related: fam, limitCount: 5, shuffleFn: identity });
+        assert.deepEqual(out3.unitSizes, [2]);
+        assert.deepEqual(pickPaperUnits({ candidates: [], limitCount: 3 }).unitSizes, []);
+    });
+
+    test('兩組 2 題要 3 題 → 改 2 或 4；[3,2] 要 4 → 3 或 5；名額比最小組還小 → 只有往上', () => {
+        assert.deepEqual(nearestReachableCounts([2, 2], 3, 50), { below: 2, above: 4 });
+        assert.deepEqual(nearestReachableCounts([3, 2], 4, 50), { below: 3, above: 5 });
+        assert.deepEqual(nearestReachableCounts([2], 1, 50), { below: null, above: 2 });
+        assert.deepEqual(nearestReachableCounts([3, 3], 4, 50), { below: 3, above: 6 });
+        assert.deepEqual(nearestReachableCounts([], 3, 50), { below: null, above: null });
+    });
+
+    test('往上的建議不超過 cap（組卷單次上限，blueprint 則是扣掉其他列後的名額）', () => {
+        assert.deepEqual(nearestReachableCounts([2, 2], 3, 3), { below: 2, above: null });
+        assert.deepEqual(nearestReachableCounts([2, 2], 3, 4), { below: 2, above: 4 });
+        assert.deepEqual(nearestReachableCounts([2, 2], 3, 0), { below: null, above: null });
+    });
+
+    test('往下的建議就是 packUnits 會抽的題數（limit 本身湊不到時）；隨機 2000 例對照暴力解', () => {
+        let a = 11;
+        const rand = (k) => { a = (Math.imul(a, 1103515245) + 12345) >>> 0; return (a >>> 8) % k; };
+        for (let t = 0; t < 2000; t++) {
+            const sizes = Array.from({ length: rand(7) }, () => 1 + rand(4));
+            const limit = 1 + rand(12);
+            const cap = rand(20);
+            const sums = new Set();
+            for (let mask = 0; mask < (1 << sizes.length); mask++) {
+                let s = 0;
+                for (let i = 0; i < sizes.length; i++) if (mask & (1 << i)) s += sizes[i];
+                sums.add(s);
+            }
+            const reachable = [...sums].filter(s => s >= 1 && s <= cap);
+            const lower = reachable.filter(s => s < limit);
+            const upper = reachable.filter(s => s > limit);
+            const expected = {
+                below: lower.length ? Math.max(...lower) : null,
+                above: upper.length ? Math.min(...upper) : null
+            };
+            assert.deepEqual(nearestReachableCounts(sizes, limit, cap), expected, `sizes ${sizes} limit ${limit} cap ${cap}`);
+
+            if (!sums.has(limit) && cap >= limit) {
+                const packed = packUnits(sizes, limit).reduce((s, i) => s + sizes[i], 0);
+                assert.equal(packed, expected.below ?? 0, `sizes ${sizes} limit ${limit}`);
+            }
         }
     });
 });

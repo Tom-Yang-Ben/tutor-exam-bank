@@ -170,6 +170,10 @@ exports.listStudents = async (req, res, next) => {
         // graded_ratio 在 SQL 裡算：round(numeric, 4) 是精確的，
         // 在 JS 端 Math.round(x*10000)/10000 會踩到浮點數的邊界。
         // 該生沒有任何 attempts 時 COALESCE 回 0（不是 null、不是 NaN）。
+        //
+        // 〔retrain PR-1〕批改完成率是「卷層」數字（docs/retrain-and-review.md 第 2.3 節 C 類）：
+        // 讀 assignment_attempts（全部派題，含日後的重練），不是只含新題派題的檢視 attempts。
+        // 沒有重練資料時兩者的列完全相同，數字不變。
         const { rows } = await query(
             // 〔stage5 WS-A〕學生檔案六欄接在既有四欄之後（第 4.1 條第 4 項）
             `SELECT s.id, s.name,
@@ -182,7 +186,7 @@ exports.listStudents = async (req, res, next) => {
                LEFT JOIN (SELECT student_id,
                                  COUNT(*)                                   AS total,
                                  COUNT(*) FILTER (WHERE result IS NOT NULL) AS graded
-                            FROM attempts GROUP BY student_id) a ON a.student_id = s.id
+                            FROM assignment_attempts GROUP BY student_id) a ON a.student_id = s.id
               ORDER BY s.name, s.id`
         );
         res.status(200).json({ items: rows });
@@ -204,18 +208,30 @@ exports.listStudentPapers = async (req, res, next) => {
         // total 直接數 question_ids 陣列（cardinality），不從 attempts 反推：
         // 兩者理論上相同，但 question_ids 才是「這張卷上有幾題」的定義來源。
         // 排序：最近出的卷在最上面——這是批改入口，不是歷史檔案（第 1.2 條）。
+        // 〔retrain PR-1〕已批改數是卷層數字，讀 assignment_attempts（這張卷上全部派題，含日後的重練）。
         const { rows } = await query(
             `SELECT p.id AS paper_id, p.title, p.created_at,
                     cardinality(p.question_ids) AS total,
                     COALESCE(g.graded, 0)::int  AS graded
                FROM exam_papers p
                LEFT JOIN (SELECT paper_id, COUNT(*) FILTER (WHERE result IS NOT NULL) AS graded
-                            FROM attempts WHERE paper_id IS NOT NULL GROUP BY paper_id) g
+                            FROM assignment_attempts WHERE paper_id IS NOT NULL GROUP BY paper_id) g
                       ON g.paper_id = p.id
               WHERE p.student_id = $1
               ORDER BY p.created_at DESC, p.id DESC`,
             [studentId]
         );
+        // 〔retrain PR-3〕docs/retrain-and-review.md 第 5.3 節「試卷列表：卷名旁『含重練 N 題』」：
+        // FEATURE_RETRAIN 開啟時每列多 retrain_count（這張卷上的重練派題數；另一條查詢，上面的 SQL 一個字都不動）。
+        // 旗標關閉時回應逐字不變。
+        if (require('../config/features').FEATURE_RETRAIN) {
+            const { rows: rc } = await query(
+                `SELECT paper_id, COUNT(*)::int AS n FROM assignments
+                  WHERE student_id = $1 AND purpose = 'retrain' AND paper_id IS NOT NULL GROUP BY paper_id`,
+                [studentId]);
+            const byPaper = new Map(rc.map(r => [r.paper_id, r.n]));
+            return res.status(200).json({ items: rows.map(r => ({ ...r, retrain_count: byPaper.get(r.paper_id) || 0 })) });
+        }
         res.status(200).json({ items: rows });
     } catch (err) {
         next(err);

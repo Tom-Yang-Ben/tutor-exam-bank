@@ -32,6 +32,20 @@
 //     在這裡轉成標準 JSON Schema，agents/schemas 本身不改。另外把欄位說明整理成一段附在 system 後面：
 //     Ollama 的 format 只拿 schema 做語法約束，模型本身**看不到** description（Gemini 看得到）。
 //     這一段只影響送給 Ollama 的內容，cassette 的鍵（agent／modelId／模板雜湊／schemaHash／cacheKeyParts）不受影響。
+//
+// 〔看圖拆題逾時，dec/local-vision-timeout〕長呼叫看得到進度、分得出「慢」還是「卡住」：
+//   - usage.timing：Ollama 回應裡的 load_duration／prompt_eval_duration／eval_duration／total_duration（奈秒）
+//     換成毫秒 { totalMs, loadMs, promptEvalMs, evalMs }。**只有回應帶了這幾個欄位才加**（沒有就與之前逐位元相同）。
+//     record 模式下 services/llm/index.js 把 usage 原樣寫進 cassette 的 response.usage——鍵不含 usage，所以鍵不變；
+//     replay（services/llm/fake.js）只取 usage 的四個 token 欄位，回放結果也不變。npm run perf:local 靠它算
+//     「讀圖（prompt eval）幾秒、純輸出幾 token/秒」。
+//   - 串流進度：OLLAMA_PROGRESS_MS（或呼叫端的 progressMs）> 0 時改送 stream:true，每隔這麼久印一行
+//     「已輸出 N token」「還沒輸出第一個 token（載入模型＋讀圖中）」「N 秒沒有新 token」，結束時印分段時間。
+//     串流的每一行在結束後組回與 stream:false 相同的回應物件（assembleStream），data／usage／raw 都相同，
+//     cassette 內容也相同（test/unit/llmOllamaStream.test.js 證明）。**未設＝0＝照舊 stream:false**，逐位元不變。
+//     讀 prompt（含看圖）那一段 Ollama 不回報進度，只能印「還沒輸出第一個 token」與經過時間；
+//     那一段要多久用 npm run local:bench-vision 量（docs/local-mode.md 第 10.11 條）。
+//   - 呼叫端可帶 timeoutMs 取代 OLLAMA_TIMEOUT_MS（只有本機量測工具用；agent 不帶）。
 
 const http = require('http');
 const https = require('https');
@@ -43,6 +57,10 @@ const DEFAULT_PORT = '11434';
 const DEFAULT_TIMEOUT_MS = 1_800_000;     // 第 2 條：30 分
 const DEFAULT_NUM_CTX = 16384;
 const DEFAULT_KEEP_ALIVE = '10m';
+/** 串流進度的間隔；0＝不串流（stream:false，與加這個功能之前逐位元相同） */
+const DEFAULT_PROGRESS_MS = 0;
+/** Ollama 的 *_duration 是奈秒 */
+const NS_PER_MS = 1e6;
 /** 第 2 條：OLLAMA_HOST 只允許這三個；其他主機名在啟動時警告（原則 1：執行期零外連） */
 const LOCAL_HOSTNAMES = ['localhost', '127.0.0.1', '::1'];
 /** 欄位說明裡，enum 值不超過這個數就逐一列出；更多（例如 86 個章節）只寫「N 個合法值之一」——白名單已在 prompt 裡 */
@@ -132,6 +150,15 @@ function numCtx(env = process.env) {
 }
 
 /**
+ * 串流進度的間隔（毫秒）：OLLAMA_PROGRESS_MS 是正整數才開，否則 0（不串流，與之前相同）。
+ * @param {object} [env]
+ * @returns {number}
+ */
+function progressIntervalMs(env = process.env) {
+    return positiveInt(env.OLLAMA_PROGRESS_MS, DEFAULT_PROGRESS_MS);
+}
+
+/**
  * keep_alive：'10m' 這類時間字串原樣送；純數字（'600'、'-1'、'0'）轉成數字（秒）——
  * Ollama 把字串一律當 Go 的 duration 解析，'600' 沒有單位會回 400。
  */
@@ -148,10 +175,10 @@ function tagged(message, errorClass, extra = {}) {
 }
 
 /** 連線層的失敗 → timeout（被中止或逾時）或 provider_error（連不上） */
-function transportError(err, { signal, timer, limitMs, target, label }) {
+function transportError(err, { signal, timer, limitMs, limitName = ' OLLAMA_TIMEOUT_MS', target, label }) {
     if (signal && signal.aborted) return tagged(`Ollama 呼叫已被中止（節點逾時）：${label}`, 'timeout', { cause: err });
     if (timer.aborted) {
-        return tagged(`Ollama 呼叫超過 OLLAMA_TIMEOUT_MS（${limitMs} ms）仍未完成：${label}`, 'timeout', { cause: err });
+        return tagged(`Ollama 呼叫超過${limitName}（${limitMs} ms）仍未完成：${label}`, 'timeout', { cause: err });
     }
     if (err && (err.name === 'AbortError' || err.name === 'TimeoutError')) return tagged(`Ollama 呼叫已被中止：${label}`, 'timeout', { cause: err });
     const code = err?.code || err?.cause?.code;
@@ -184,10 +211,12 @@ function responseError(status, text, { model, pathname }) {
  * 一次 POST（node:http／node:https；見檔頭「不用 fetch」的理由）。
  * @param {string} urlString
  * @param {object} payload 會 JSON.stringify
- * @param {{signal?:AbortSignal}} opts
+ * @param {{signal?:AbortSignal, onData?:(chunk:string)=>void}} opts
+ *        onData：〔串流進度〕每收到一段回應就呼叫一次（UTF-8 字串；一段不一定是完整的一行）。
+ *        回傳值照舊是整段本文，呼叫端最後仍以整段組結果——onData 只拿來印進度。
  * @returns {Promise<{status:number, text:string}>}
  */
-function httpPostJson(urlString, payload, { signal } = {}) {
+function httpPostJson(urlString, payload, { signal, onData } = {}) {
     return new Promise((resolve, reject) => {
         const url = new URL(urlString);
         const mod = url.protocol === 'https:' ? https : http;
@@ -205,7 +234,14 @@ function httpPostJson(urlString, payload, { signal } = {}) {
             headers: { 'content-type': 'application/json', 'content-length': body.length }
         }, (res) => {
             const chunks = [];
-            res.on('data', (c) => chunks.push(c));
+            // 多位元組字元可能被切在兩段之間：進度用的字串走 StringDecoder，整段本文照舊最後一次解碼
+            const decoder = onData ? new (require('string_decoder').StringDecoder)('utf8') : null;
+            res.on('data', (c) => {
+                chunks.push(c);
+                if (decoder) {
+                    try { onData(decoder.write(c)); } catch (_) { /* 進度只是 log，壞了不影響結果 */ }
+                }
+            });
             res.on('end', () => done(resolve, { status: res.statusCode, text: Buffer.concat(chunks).toString('utf8') }));
             res.on('error', (err) => done(reject, err));
             res.on('close', () => done(reject, Object.assign(new Error('連線在回應傳完之前中斷'), { code: 'ECONNRESET' })));
@@ -215,15 +251,17 @@ function httpPostJson(urlString, payload, { signal } = {}) {
     });
 }
 
-/** @type {(url:string, payload:object, opts:{signal?:AbortSignal}) => Promise<{status:number, text:string}>} */
+/** @type {(url:string, payload:object, opts:{signal?:AbortSignal, onData?:Function}) => Promise<{status:number, text:string}>} */
 let transport = httpPostJson;
 
 /**
  * 呼叫一個 API：排 throttle 的 ollama 桶 → POST → 檢查狀態碼 → 解析外層 JSON。
  * 逾時（OLLAMA_TIMEOUT_MS）從拿到併發槽之後起算：排隊等前一個呼叫跑完的時間不算在這一次頭上
  *（排隊本身仍受呼叫端的 signal 約束，見 throttle.acquire 的 signal）。
+ * 〔串流進度〕opts.onStart：拿到併發槽、開始計時的那一刻呼叫；opts.onData：交給傳輸層；
+ * opts.parse：取代 JSON.parse（串流時組回單一回應物件）；opts.timeoutMs：取代 OLLAMA_TIMEOUT_MS。
  */
-async function callApi(pathname, payload, { signal, model, label }) {
+async function callApi(pathname, payload, { signal, model, label, onStart, onData, parse, timeoutMs: limitOverride }) {
     let target;
     try {
         target = resolveHost();
@@ -231,25 +269,32 @@ async function callApi(pathname, payload, { signal, model, label }) {
         throw tagged(err.message, 'provider_error');
     }
     warnIfRemoteHost();
-    const limitMs = timeoutMs();
+    const override = positiveInt(limitOverride, 0);
+    const limitMs = override || timeoutMs();
+    // 訊息原文（「超過 OLLAMA_TIMEOUT_MS（…）」）被 npm run perf:local 的逾時計數與單元測試比對，前面的空白要保留
+    const limitName = override ? '這次指定的逾時' : ' OLLAMA_TIMEOUT_MS';
 
     const release = await throttle.acquire('ollama', { signal });
     // 逾時用一般的 setTimeout（finally 一定清掉），不用 AbortSignal.timeout：後者的計時器是 unref 的，
     // 行程裡若沒有別的 handle 撐著，事件迴圈會在逾時之前就先結束
     const timerCtl = new AbortController();
     const handle = setTimeout(() => {
-        timerCtl.abort(Object.assign(new Error(`超過 OLLAMA_TIMEOUT_MS（${limitMs} ms）`), { name: 'TimeoutError' }));
+        timerCtl.abort(Object.assign(new Error(`超過${limitName}（${limitMs} ms）`), { name: 'TimeoutError' }));
     }, limitMs);
     try {
+        if (onStart) {
+            try { onStart(); } catch (_) { /* 進度只是 log */ }
+        }
         const timer = timerCtl.signal;
         const combined = signal ? AbortSignal.any([signal, timer]) : timer;
         let res;
         try {
-            res = await transport(`${target.url}${pathname}`, payload, { signal: combined });
+            res = await transport(`${target.url}${pathname}`, payload, onData ? { signal: combined, onData } : { signal: combined });
         } catch (err) {
-            throw transportError(err, { signal, timer, limitMs, target, label });
+            throw transportError(err, { signal, timer, limitMs, limitName, target, label });
         }
         if (!(res.status >= 200 && res.status < 300)) throw responseError(res.status, res.text, { model, pathname });
+        if (parse) return parse(res.text);
         try {
             return JSON.parse(res.text);
         } catch (err) {
@@ -427,14 +472,218 @@ function finishReasonOf(res) {
     return String(r).toUpperCase();
 }
 
-/** 第 3 條第 2 點：tokenIn＝prompt_eval_count、tokenOut＝eval_count（含思考）、其餘恆 0 */
+/**
+ * Ollama 回應的分段時間（奈秒）→ 毫秒（四捨五入到整數）。四個欄位都沒有時回 null。
+ *   loadMs        載入模型（已在記憶體裡時接近 0）
+ *   promptEvalMs  讀 prompt：系統提示詞、題目文字，**視覺模型的圖片也在這一段**（本機看圖拆題最慢的一段）
+ *   evalMs        生成（含思考）；tokenOut ÷ evalMs 才是「純輸出速度」
+ *   totalMs       Ollama 自己量的整段；latencyMs 比它多出來的是排隊與傳輸
+ * @param {object} res
+ * @returns {{totalMs:number|null, loadMs:number|null, promptEvalMs:number|null, evalMs:number|null}|null}
+ */
+function timingOf(res) {
+    const ms = (v) => {
+        if (v === undefined || v === null || v === '') return null;
+        const n = Number(v);
+        return Number.isFinite(n) && n >= 0 ? Math.round(n / NS_PER_MS) : null;
+    };
+    const t = {
+        totalMs: ms(res?.total_duration),
+        loadMs: ms(res?.load_duration),
+        promptEvalMs: ms(res?.prompt_eval_duration),
+        evalMs: ms(res?.eval_duration)
+    };
+    return Object.values(t).some(v => v !== null) ? t : null;
+}
+
+/**
+ * 第 3 條第 2 點：tokenIn＝prompt_eval_count、tokenOut＝eval_count（含思考）、其餘恆 0。
+ * 〔看圖拆題逾時〕回應帶分段時間時多一個 timing（見 timingOf）；沒帶就與之前逐位元相同。
+ */
 function usageOf(res) {
-    return {
+    const usage = {
         tokenIn: Number(res?.prompt_eval_count) || 0,
         tokenOut: Number(res?.eval_count) || 0,
         tokenThinking: 0,
         tokenCached: 0
     };
+    const timing = timingOf(res);
+    if (timing) usage.timing = timing;
+    return usage;
+}
+
+// ───────────────────────── 串流（〔看圖拆題逾時〕進度） ─────────────────────────
+
+/**
+ * stream:true 的整段本文（NDJSON，一行一個物件）→ 與 stream:false 相同形狀的回應物件。
+ * 規則：各行 message.content 依序接起來、message.thinking 依序接起來（有思考才留這個鍵），
+ * 其餘欄位（done_reason、*_count、*_duration、model、created_at）取 done:true 那一行。
+ * @param {string} text
+ * @param {{pathname?:string}} [opts]
+ * @returns {object}
+ * @throws  provider_error：某一行不是 JSON、串流中途回報 error、沒有 done:true 那一行（連線提早結束）
+ */
+function assembleStream(text, { pathname = '/api/chat' } = {}) {
+    let content = '';
+    let thinking = '';
+    let done = null;
+    for (const raw of String(text ?? '').split('\n')) {
+        const line = raw.trim();
+        if (!line) continue;
+        let obj;
+        try {
+            obj = JSON.parse(line);
+        } catch (err) {
+            throw tagged(`Ollama 的串流回應有一行不是 JSON（${pathname}）：${line.slice(0, 200)}`, 'provider_error');
+        }
+        if (obj && typeof obj.error === 'string') {
+            throw tagged(`Ollama 回報錯誤（串流中）：${obj.error.slice(0, 500)}`, 'provider_error');
+        }
+        const m = obj && obj.message;
+        if (m && typeof m.content === 'string') content += m.content;
+        if (m && typeof m.thinking === 'string') thinking += m.thinking;
+        if (obj && obj.done === true) done = obj;
+    }
+    if (!done) throw tagged(`Ollama 的串流在完成之前就中斷了（${pathname}，沒有 done:true）`, 'provider_error');
+    const message = { ...(done.message || {}), role: (done.message && done.message.role) || 'assistant', content };
+    if (thinking) message.thinking = thinking; else delete message.thinking;
+    return { ...done, message };
+}
+
+/** 毫秒 → 「12 秒」「3 分 5 秒」「1 小時 20 分」（進度 log 用） */
+function fmtElapsed(ms) {
+    const s = Math.max(0, Math.round(Number(ms) / 1000) || 0);
+    if (s < 60) return `${s} 秒`;
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (h) return m ? `${h} 小時 ${m} 分` : `${h} 小時`;
+    return sec ? `${m} 分 ${sec} 秒` : `${m} 分`;
+}
+
+/** token／秒（一位小數）；分母是 0 時回 '—' */
+function fmtRate(tokens, ms) {
+    return ms > 0 ? (tokens / (ms / 1000)).toFixed(1) : '—';
+}
+
+/**
+ * 串流進度的記帳與文字（純邏輯；計時器由 chatStream 負責，時間可注入，單元測試不必真的等）。
+ * 一個串流片段（一行、帶非空的 content 或 thinking）大約就是一個 token；最後的精確數字以 eval_count 為準。
+ * @param {{label:string, log:(line:string)=>void, now?:()=>number}} opts
+ */
+function createProgressReporter({ label, log, now = Date.now }) {
+    const prefix = `[ollama] ${label}`;
+    const createdAt = now();
+    const st = { startedAt: null, firstAt: null, lastAt: null, tokens: 0, buf: '', lastTickAt: null, lastTickTokens: 0 };
+    const emit = (line) => { try { log(line); } catch (_) { /* 進度只是 log */ } };
+
+    function start() {
+        if (st.startedAt === null) st.startedAt = now();
+        st.lastTickAt = st.startedAt;
+    }
+
+    function onData(chunk) {
+        st.buf += String(chunk ?? '');
+        let idx;
+        while ((idx = st.buf.indexOf('\n')) !== -1) {
+            const line = st.buf.slice(0, idx).trim();
+            st.buf = st.buf.slice(idx + 1);
+            if (!line) continue;
+            let obj;
+            try { obj = JSON.parse(line); } catch (_) { continue; }   // 壞行由 assembleStream 處理
+            const m = obj && obj.message;
+            if (m && ((typeof m.content === 'string' && m.content) || (typeof m.thinking === 'string' && m.thinking))) {
+                const t = now();
+                st.tokens += 1;
+                st.lastAt = t;
+                if (st.firstAt === null) st.firstAt = t;
+            }
+        }
+    }
+
+    /** 每隔一段時間印一行；回傳印出的那一行（測試用） */
+    function tick() {
+        const t = now();
+        let line;
+        if (st.startedAt === null) {
+            line = `${prefix} 排隊中：等前一個 Ollama 呼叫跑完（OLLAMA_CONCURRENCY），已等 ${fmtElapsed(t - createdAt)}`;
+        } else if (st.tokens === 0) {
+            line = `${prefix} 已 ${fmtElapsed(t - st.startedAt)}：還沒輸出第一個 token——載入模型、讀 prompt（看圖）中；` +
+                '這一段 Ollama 不回報進度，要多久可用 npm run local:bench-vision 先量';
+        } else {
+            const since = t - (st.lastTickAt ?? st.startedAt);
+            const gained = st.tokens - st.lastTickTokens;
+            const head = `${prefix} 已 ${fmtElapsed(t - st.startedAt)}：已輸出 ${st.tokens} token（第一個 token 在第 ${fmtElapsed(st.firstAt - st.startedAt)}）`;
+            line = gained > 0
+                ? `${head}；最近 ${fmtElapsed(since)} 多了 ${gained} token，約 ${fmtRate(gained, since)} token/秒`
+                : `${head}；已經 ${fmtElapsed(t - st.lastAt)} 沒有新 token——持續不動的話可能卡住（看工作管理員裡 Ollama 的 CPU 使用率）`;
+        }
+        st.lastTickAt = t;
+        st.lastTickTokens = st.tokens;
+        emit(line);
+        return line;
+    }
+
+    /** 成功：印分段時間（Ollama 自己量的）與牆鐘 */
+    function finish(res) {
+        const t = now();
+        const tm = timingOf(res) || {};
+        const u = usageOf(res);
+        const sec = (ms) => (ms === null || ms === undefined ? '—' : fmtElapsed(ms));
+        const line = `${prefix} 完成：載入模型 ${sec(tm.loadMs)}；讀 prompt ${u.tokenIn} token 用 ${sec(tm.promptEvalMs)}` +
+            `（${fmtRate(u.tokenIn, tm.promptEvalMs)} token/秒）；輸出 ${u.tokenOut} token 用 ${sec(tm.evalMs)}` +
+            `（${fmtRate(u.tokenOut, tm.evalMs)} token/秒）；牆鐘 ${fmtElapsed(t - (st.startedAt ?? createdAt))}`;
+        emit(line);
+        return line;
+    }
+
+    function fail(err) {
+        const t = now();
+        const line = `${prefix} 失敗（${(err && err.errorClass) || 'error'}）：已 ${fmtElapsed(t - (st.startedAt ?? createdAt))}、` +
+            `已輸出 ${st.tokens} token——${String((err && err.message) || err).split('\n')[0].slice(0, 200)}`;
+        emit(line);
+        return line;
+    }
+
+    return { start, onData, tick, finish, fail, state: st };
+}
+
+/**
+ * 串流版的 /api/chat：送 stream:true，邊收邊記進度，每 intervalMs 印一行；收完用 assembleStream 組回與 stream:false 相同的物件。
+ * @param {object} body  chatBody() 的結果（stream:false 會被換成 true，其餘逐位元相同）
+ * @param {{signal?:AbortSignal, label:string, timeoutMs?:number, progress:{intervalMs:number, log:Function}}} opts
+ */
+async function chatStream(body, { signal, label, timeoutMs: limit, progress }) {
+    const reporter = createProgressReporter({ label, log: progress.log });
+    const handle = setInterval(() => reporter.tick(), progress.intervalMs);
+    if (typeof handle.unref === 'function') handle.unref();
+    try {
+        const res = await callApi('/api/chat', { ...body, stream: true }, {
+            signal, model: body.model, label, timeoutMs: limit,
+            onStart: () => reporter.start(),
+            onData: (chunk) => reporter.onData(chunk),
+            parse: (text) => assembleStream(text, { pathname: '/api/chat' })
+        });
+        reporter.finish(res);
+        return res;
+    } catch (err) {
+        reporter.fail(err);
+        throw err;
+    } finally {
+        clearInterval(handle);
+    }
+}
+
+/**
+ * 這一次呼叫要不要串流進度：呼叫端帶了 progressMs 就照它（0＝不要），沒帶就看 OLLAMA_PROGRESS_MS。
+ * @returns {{intervalMs:number, log:Function}|null}
+ */
+function resolveProgress(progressMs, onProgress) {
+    const intervalMs = progressMs === undefined || progressMs === null
+        ? progressIntervalMs()
+        : positiveInt(progressMs, 0);
+    if (!(intervalMs > 0)) return null;
+    return { intervalMs, log: typeof onProgress === 'function' ? onProgress : (line) => console.log(line) };
 }
 
 // ───────────────────────── /api/chat ─────────────────────────
@@ -455,14 +704,20 @@ function chatBody({ model, system, parts, maxOutputTokens, thinkingBudget }) {
     };
 }
 
-/** POST /api/chat；模型不支援思考（400）時拿掉 think 重送一次 */
-async function chat(body, { signal, label }) {
+/**
+ * POST /api/chat；模型不支援思考（400）時拿掉 think 重送一次。
+ * 〔看圖拆題逾時〕progress 不是 null 時走串流（chatStream），組回來的物件與 stream:false 相同。
+ */
+async function chat(body, { signal, label, timeoutMs: limit, progress = null }) {
+    const send = (b, l) => (progress
+        ? chatStream(b, { signal, label: l, timeoutMs: limit, progress })
+        : callApi('/api/chat', b, { signal, model: b.model, label: l, timeoutMs: limit }));
     try {
-        return await callApi('/api/chat', body, { signal, model: body.model, label });
+        return await send(body, label);
     } catch (err) {
         if (body.think === true && err.status === 400 && /does not support thinking/i.test(err.message)) {
             const { think, ...rest } = body;
-            return callApi('/api/chat', rest, { signal, model: body.model, label: `${label}（不思考）` });
+            return send(rest, `${label}（不思考）`);
         }
         throw err;
     }
@@ -471,12 +726,14 @@ async function chat(body, { signal, label }) {
 /**
  * 受限 JSON 生成（第 3 條第 2 點）。
  * @param {{model:string, system?:string, parts:Array<object>, schema?:object,
- *          maxOutputTokens?:number, thinkingBudget?:number, signal?:AbortSignal}} opts
+ *          maxOutputTokens?:number, thinkingBudget?:number, signal?:AbortSignal,
+ *          progressMs?:number, onProgress?:(line:string)=>void, timeoutMs?:number}} opts
  *        model 必須是**裸 ID**（qwen3:8b；vendor 前綴由 services/llm/index.js 剝掉）
- * @returns {Promise<{data:object, usage:{tokenIn,tokenOut,tokenThinking,tokenCached},
+ *        progressMs／onProgress／timeoutMs：〔看圖拆題逾時〕見檔頭；agent 不帶（progressMs 沒帶時看 OLLAMA_PROGRESS_MS）
+ * @returns {Promise<{data:object, usage:{tokenIn,tokenOut,tokenThinking,tokenCached,timing?},
  *                    latencyMs:number, raw:any, schemaFallback:false}>}
  */
-async function generateJson({ model, system, parts, schema, maxOutputTokens, thinkingBudget, signal }) {
+async function generateJson({ model, system, parts, schema, maxOutputTokens, thinkingBudget, signal, progressMs, onProgress, timeoutMs: limit }) {
     const startedAt = Date.now();
     const format = schema ? toOllamaSchema(schema) : 'json';
     const guide = schemaGuide(schema ? format : undefined);
@@ -487,7 +744,7 @@ async function generateJson({ model, system, parts, schema, maxOutputTokens, thi
     });
     body.format = format;
 
-    const res = await chat(body, { signal, label: `/api/chat(${model})` });
+    const res = await chat(body, { signal, label: `/api/chat(${model})`, timeoutMs: limit, progress: resolveProgress(progressMs, onProgress) });
     const usage = usageOf(res);
     let data;
     try {
@@ -505,14 +762,15 @@ async function generateJson({ model, system, parts, schema, maxOutputTokens, thi
 /**
  * 自由文字生成（第 3 條第 3 點）。tools.codeExecution 直接忽略（Ollama 沒有程式執行環境），codeRuns 恆為 []。
  * @param {{model:string, system?:string, parts:Array<object>, tools?:{codeExecution?:boolean},
- *          maxOutputTokens?:number, thinkingBudget?:number, signal?:AbortSignal}} opts
+ *          maxOutputTokens?:number, thinkingBudget?:number, signal?:AbortSignal,
+ *          progressMs?:number, onProgress?:(line:string)=>void, timeoutMs?:number}} opts
  * @returns {Promise<{text:string, codeRuns:[], finishReason:string|null,
- *                    usage:{tokenIn,tokenOut,tokenThinking,tokenCached}, latencyMs:number, raw:any}>}
+ *                    usage:{tokenIn,tokenOut,tokenThinking,tokenCached,timing?}, latencyMs:number, raw:any}>}
  */
-async function generateText({ model, system, parts, maxOutputTokens, thinkingBudget, signal }) {
+async function generateText({ model, system, parts, maxOutputTokens, thinkingBudget, signal, progressMs, onProgress, timeoutMs: limit }) {
     const startedAt = Date.now();
     const body = chatBody({ model, system, parts, maxOutputTokens, thinkingBudget });
-    const res = await chat(body, { signal, label: `/api/chat(${model}, text)` });
+    const res = await chat(body, { signal, label: `/api/chat(${model}, text)`, timeoutMs: limit, progress: resolveProgress(progressMs, onProgress) });
     return {
         text: stripThink(res?.message?.content),
         codeRuns: [],
@@ -549,9 +807,20 @@ async function embed({ model, texts, dim }) {
     return { vectors, usage: { tokenIn: Number(res?.prompt_eval_count) || 0 } };
 }
 
+/**
+ * 〔看圖拆題逾時〕把模型從 Ollama 的記憶體卸載（POST /api/generate {model, keep_alive:0}；Ollama 官方的卸載寫法）。
+ * 只給本機量測工具（eval/tools/local_bench_vision.js）用：先卸載，量到的時間才含模型載入、也不會用到上一次的快取，
+ * 與正式拆題時每一塊都要重新載入視覺模型的情況相同。
+ * @param {{model:string, timeoutMs?:number}} opts  model 是裸 ID
+ * @returns {Promise<object>} Ollama 的回應（done_reason:'unload'）
+ */
+async function unloadModel({ model, timeoutMs: limit } = {}) {
+    return callApi('/api/generate', { model, keep_alive: 0 }, { model, label: `/api/generate(${model}, 卸載)`, timeoutMs: limit });
+}
+
 // ───────────────────────── 測試用 ─────────────────────────
 
-/** 測試用：注入假的傳輸（(url, payload, {signal}) => Promise<{status, text}>）。傳 null 換回 node:http。 */
+/** 測試用：注入假的傳輸（(url, payload, {signal, onData?}) => Promise<{status, text}>）。傳 null 換回 node:http。 */
 function _setTransportForTest(fn) {
     transport = fn || httpPostJson;
 }
@@ -563,9 +832,10 @@ function _resetForTest() {
 }
 
 module.exports = {
-    generateJson, generateText, embed,
+    generateJson, generateText, embed, unloadModel,
     resolveHost, warnIfRemoteHost, toOllamaSchema, schemaGuide, toUserMessage, parseJsonText,
-    finishReasonOf, usageOf, keepAlive, httpPostJson,
-    DEFAULT_HOST, DEFAULT_TIMEOUT_MS, DEFAULT_NUM_CTX, DEFAULT_KEEP_ALIVE, LOCAL_HOSTNAMES,
+    finishReasonOf, usageOf, timingOf, keepAlive, httpPostJson, timeoutMs, numCtx,
+    assembleStream, createProgressReporter, progressIntervalMs, fmtElapsed,
+    DEFAULT_HOST, DEFAULT_TIMEOUT_MS, DEFAULT_NUM_CTX, DEFAULT_KEEP_ALIVE, DEFAULT_PROGRESS_MS, LOCAL_HOSTNAMES,
     _setTransportForTest, _resetForTest
 };

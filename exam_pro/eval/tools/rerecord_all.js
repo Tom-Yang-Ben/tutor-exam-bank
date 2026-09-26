@@ -34,6 +34,10 @@
 //       ③ 測試庫已套 migration（既有）；
 //   - 盤點的費用欄改成「預估時間」（粗估，eval/lib/localMode.js 檔頭有依據與覆寫方式）；
 //   - 錄製子行程多帶 JOB_NODE_TIMEOUT_MS／NLQ_TIMEOUT_MS 的本機值（一次呼叫可能十幾分鐘；不影響 cassette 的鍵）。
+//   - 〔看圖拆題逾時〕pipeline 與 e2e 兩步（localMode.LONG_CALL_STEPS）再放寬：單次 Ollama 呼叫與節點逾時至少 3 小時
+//     （RERECORD_OLLAMA_TIMEOUT_MS／RERECORD_NODE_TIMEOUT_MS 可覆寫）、每 5 分鐘印一次串流進度（localMode.longCallRecordEnv）。
+//     Owner 實機上 qwen3-vl:8b 看一塊 2 頁超過 30 分鐘，被 .env 的 OLLAMA_TIMEOUT_MS 切掉、extract_vision 錄不到。
+//     子行程的環境照舊經 ciEnv 的 extra 帶進去（stepExtraEnv）；不改 .env、不影響 cassette 的鍵與 CI 回放。
 // Windows 上可以直接雙擊 exam_pro\scripts\windows\record_local.bat（db:up → migrate:test → 本指令，自動輸入 yes、寫 log）。
 // ─────────────────────────────────────────────────────────────
 
@@ -111,6 +115,39 @@ function recordSteps({ suites = ALL_SUITES, withSimilar = true } = {}) {
         steps.push({ name: 'e2e-similar', label: 'e2e 的 dedup1 向量（FEATURE_SIMILAR=true；CI 用不到）', args: suiteArgs('e2e'), llmMode: 'replay', embedMode: 'record', extra: { FEATURE_SIMILAR: 'true' } });
     }
     return steps;
+}
+
+/**
+ * 某一步錄製子行程要蓋在 CI 環境上的變數（ciEnv 的 extra）。純函式。
+ * 順序：本機長呼叫（localRecordEnv）→ pipeline／e2e 的寬逾時與進度（longCallRecordEnv，只有 LONG_CALL_STEPS）→ 步驟自己的 extra。
+ * @param {{name:string, extra?:Record<string,string>}} step recordSteps() 的一步
+ * @param {ReturnType<typeof local.recordingPlan>} plan
+ * @param {NodeJS.ProcessEnv|Record<string,string>} [env] 讀 RERECORD_*、OLLAMA_TIMEOUT_MS、OLLAMA_PROGRESS_MS（預設 process.env，已載入 .env）
+ * @returns {Record<string,string>}
+ */
+function stepExtraEnv(step, plan, env = process.env) {
+    return {
+        ...local.localRecordEnv(plan),
+        ...(local.LONG_CALL_STEPS.includes(step.name) ? local.longCallRecordEnv(plan, env) : {}),
+        ...(step.extra || {})
+    };
+}
+
+/**
+ * 盤點後、問 yes 之前印的一行：pipeline／e2e 兩步用多長的逾時（本機才印）。純函式。
+ * @param {Array<{name:string}>} steps
+ * @param {ReturnType<typeof local.recordingPlan>} plan
+ * @param {NodeJS.ProcessEnv|Record<string,string>} [env]
+ * @returns {string|null}
+ */
+function longCallNote(steps, plan, env = process.env) {
+    const names = steps.filter(s => local.LONG_CALL_STEPS.includes(s.name)).map(s => s.name);
+    if (!names.length || !plan || !plan.local) return null;
+    const e = local.longCallRecordEnv(plan, env);
+    const progress = Number(e.OLLAMA_PROGRESS_MS || env.OLLAMA_PROGRESS_MS || 0);
+    return `${names.join('、')}：單次 Ollama 呼叫逾時 ${local.formatDuration(Number(e.OLLAMA_TIMEOUT_MS) / 1000)}、` +
+        `節點逾時 ${local.formatDuration(Number(e.JOB_NODE_TIMEOUT_MS) / 1000)}（RERECORD_OLLAMA_TIMEOUT_MS／RERECORD_NODE_TIMEOUT_MS 可改；不動 .env）` +
+        (progress > 0 ? `，每 ${local.formatDuration(progress / 1000)}印一次輸出進度` : '，不印輸出進度（.env 的 OLLAMA_PROGRESS_MS=0）') + '。';
 }
 
 /**
@@ -337,11 +374,12 @@ async function main(argv = process.argv.slice(2), io = {}) {
     if (!(await preflight(plan, deps))) return 1;
 
     const steps = recordSteps(args);
-    const localEnv = local.localRecordEnv(plan);
     const what = !plan.local ? '會呼叫 Gemini、會產生費用'
         : `本機模型，不連外、不花錢；粗估 ${local.formatDuration(time.lowerSec)}～${local.formatDuration(time.upperSec)}，期間不要讓電腦睡眠` +
           (plan.needGeminiKey ? `。⚠️ ${plan.gemini.map(u => u.key).join('、')} 仍走 Gemini，那一部分會產生費用` : '');
     console.log(`\n接下來會依序執行（${what}）：\n${steps.map((s, i) => `  ${i + 1}. ${s.label}`).join('\n')}`);
+    const longNote = longCallNote(steps, plan);
+    if (longNote) console.log(`  （${longNote}）`);
     const ok = await deps.askYes('\n確定要開始錄製嗎？請輸入 yes：');
     if (!ok) {
         console.log('已取消，沒有呼叫任何模型。');
@@ -351,7 +389,7 @@ async function main(argv = process.argv.slice(2), io = {}) {
     const results = [];
     for (const [i, step] of steps.entries()) {
         banner(`${i + 1}/${steps.length} ${step.label}`);
-        const env = ciEnv({ llmMode: step.llmMode, embedMode: step.embedMode, models, extra: { ...localEnv, ...step.extra } });
+        const env = ciEnv({ llmMode: step.llmMode, embedMode: step.embedMode, models, extra: stepExtraEnv(step, plan) });
         const r = await deps.runNode({ args: step.args, env, echo: true });
         results.push({ step: step.name, exitCode: r.exitCode, ms: r.ms });
         console.log(`  → 結束碼 ${r.exitCode}，${Math.round(r.ms / 1000)} 秒` +
@@ -386,4 +424,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { main, parseArgs, recordSteps, isYes, e2eCounts, verifyReport, preflight, USAGE };
+module.exports = { main, parseArgs, recordSteps, stepExtraEnv, longCallNote, isYes, e2eCounts, verifyReport, preflight, USAGE };

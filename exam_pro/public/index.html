@@ -31,6 +31,13 @@
     <meta name="feature-remedial" content="__FEATURE_REMEDIAL__">
     <meta name="feature-tutor" content="__FEATURE_TUTOR__">
     <meta name="feature-voice" content="__FEATURE_VOICE__">
+    <!-- 錯題重練與間隔複習（docs/retrain-and-review.md 第 5.1 節）：讀法同上，預設關。
+         第二階段起由這幾處讀：public/js/retrain.js（學生視圖的錯題重練卡）、public/js/students.js（批改卡的「要重練」、
+         學生清單的到期徽章）、public/js/remedial.js（補救卷的「附上到期重練」）、下方 inline script 的〔retrain〕組卷頁掛鉤。 -->
+    <meta name="feature-retrain" content="__FEATURE_RETRAIN__">
+    <!-- 〔retrain PR-3〕附上到期重練題的預設比例（RETRAIN_ATTACH_RATIO，R6；不是旗標）。組卷頁與補救卷的題數預設
+         ＝新題數 × 這個比例（無條件捨去）；佔位字串沒被替換時前端退回 0.3。 -->
+    <meta name="retrain-attach-ratio" content="__RETRAIN_ATTACH_RATIO__">
     <!-- 本機模式 L3（docs/local-mode.md 第 3 條第 9 點、第 5 條第 4 點）：POST /api/voice/transcribe 實際上有沒有掛。
          不是旗標：app.js 看路由表後注入 mounted／none。feature-voice 開著、這裡卻是 none＝本機模式不提供語音，
          public/js/tutor.js 據此不放「按住說話」並說明原因。 -->
@@ -545,6 +552,9 @@
                                 </select>
                             </div>
                         </div>
+                        <!-- 〔retrain〕「附上到期的重練題」那一列的插入點：FEATURE_RETRAIN 開啟而且選了學生時才由下面的 inline script 填入；
+                             旗標關閉時永遠是空的、hidden（不佔 space-y 的間距）。 -->
+                        <div id="retrainAttachSlot" hidden></div>
 
                         <button type="button" onclick="generatePaper()"
                             class="primary-button w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold py-3.5 px-4 rounded-xl shadow-lg shadow-emerald-600/20 transition-all cursor-pointer">
@@ -655,6 +665,9 @@
         <!-- 學生視圖（弱點面板、批改、管理；內容由 public/js/students.js 建立，規則同上） -->
         <div id="view-students" class="app-view hidden">
         <section id="students"></section>
+
+        <!-- 錯題重練卡（〔retrain PR-4〕docs/retrain-and-review.md 第 5.3 節；內容由 public/js/retrain.js 建立，FEATURE_RETRAIN 關閉時整段不渲染） -->
+        <section id="retrain"></section>
 
         <!-- 依弱點出補救卷（階段 5 WS-D；內容由 public/js/remedial.js 建立，FEATURE_REMEDIAL 關閉時整段不渲染） -->
         <section id="remedial"></section>
@@ -1225,6 +1238,20 @@
             list.forEach(ch => chapterSelect.appendChild(el('option', null, { value: ch, textContent: ch })));
         }
 
+        // 〔Owner 決策單 2026-09-25 B21〕舊流程 /analyze-pdf 也會裁附圖（docs/figures.md「舊流程 /analyze-pdf 的附圖」）：
+        // 預覽卡顯示裁圖讓老師核對框的準度；框錯了按「不要這張圖」，入庫時就不帶 question_img（該題照樣入庫）。
+        // 不放進共用的 createQuestionEditor（複核分頁與編輯視窗也在用）。
+        function legacyFigurePreview(q) {
+            const wrap = el('div', 'legacy-figure mt-3 flex flex-wrap items-start gap-3');
+            const img = el('img', 'max-w-full max-h-64 rounded-xl border border-slate-200 bg-white', { alt: '題目附圖（自動裁切）', loading: 'lazy' });
+            img.src = q.question_img;
+            img.addEventListener('error', () => img.replaceWith(el('p', 'text-xs text-rose-500', { textContent: '附圖載入失敗' })));
+            const drop = el('button', 'text-xs px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 font-semibold hover:bg-rose-100 cursor-pointer', { type: 'button', textContent: '不要這張圖' });
+            drop.addEventListener('click', () => { delete q.question_img; wrap.remove(); });
+            wrap.append(img, drop);
+            return wrap;
+        }
+
         // 1. PDF 智慧批量分析
         document.getElementById('uploadPdfBtn').addEventListener('click', async () => {
             const fileInput = document.getElementById('pdfFile');
@@ -1263,6 +1290,7 @@
                         card.dataset.idx = idx;   // 對應後端 rejected[].idx
                         card.appendChild(el('div', 'eyebrow text-violet-500 mb-3', { textContent: `Question ${String(idx + 1).padStart(2, '0')}` }));
                         card.appendChild(createQuestionEditor(q)); // 就地編輯：修改會同步回 globalAnalyzedQuestions
+                        if (q.question_img) card.appendChild(legacyFigurePreview(q));   // 〔B21〕有裁出附圖才顯示
                         listEl.appendChild(card);
                     });
 
@@ -1389,6 +1417,7 @@
                     if (selectId && String(selectId) === String(st.id)) o.selected = true;
                     sel.appendChild(o);
                 }
+                syncRetrainAttach();   // 〔retrain〕程式選了學生（新增、出卷後重載）也要更新附帶那一列；旗標關閉時什麼都不做
             } catch (e) {
                 sel.innerHTML = '<option value="">-- 載入學生失敗，請重新整理 --</option>';
             }
@@ -1424,6 +1453,205 @@
             return { id: Number(sel.value), name: opt.dataset.name || opt.textContent };
         }
 
+        // ─────────────────────────────────────────────────────────────
+        // 〔retrain〕組卷頁掛鉤 開始（docs/retrain-and-review.md 第 5.3 節；〔Owner 決策單 2026-09-26 R6、R7、R12〕）
+        //
+        // FEATURE_RETRAIN 開啟、而且選了學生時，題數下方多一列「☐ 附上到期的重練題 [N] 題（目前到期 M 題）」：
+        //   - 預設不勾（R6）；N 預設 capForAttach(新題數)＝新題數 × RETRAIN_ATTACH_RATIO（預設三成）無條件捨去，
+        //     而且新題＋重練 ≤ 50。老師改過 N 之後，新題數再變也不覆寫。M 讀 GET /api/students/:id/retrain-items?status=due。
+        //   - 勾了才在 generate-paper 的 body 帶 retrain: { count: N }。預覽卡上重練題標「重練・第 n 關」徽章（R7：老師看的畫面），
+        //     按鈕從「換這題」變成「移除這題／移除這組」；移除的題放進 exclude_ids，換題、重抽時不會再回來。
+        //   - 確認時帶 retrain_question_ids。承上組放不下時伺服器回 400，訊息照舊顯示在結果區（R12）。
+        // 旗標關閉時：這一列不渲染（#retrainAttachSlot 保持空的、hidden），送出的請求與畫面與 PR-3 之前完全相同。
+        // 伺服器來的文字一律 textContent。只用到上面的 featureOn、selectedStudent、apiFetch 與 document：
+        // test/unit/retrainPaperUi.test.js 把「開始」到「結束」之間抽出來用 miniDom 跑。
+        // ─────────────────────────────────────────────────────────────
+        const RETRAIN_MAX_PAPER = 50;        // 新題＋重練的上限（同 confirm-paper 的題數上限）
+        let retrainAttachEdited = false;     // 老師改過 N：新題數再變也不覆寫
+        let retrainRemoved = [];             // 預覽上「移除這題」的重練題（重新生成時歸零）
+        let retrainDueSeq = 0;               // 讀到期數的請求序號（晚到的舊回應不覆寫新的）
+
+        function retrainOn() { return featureOn('retrain'); }
+
+        /** RETRAIN_ATTACH_RATIO（app.js 注入）；沒注入或不合法時用 0.3（config/retrain.js 的預設）。 */
+        function retrainAttachRatio() {
+            const meta = document.querySelector('meta[name="retrain-attach-ratio"]');
+            const raw = String((meta ? meta.content : '') ?? '').trim();
+            const n = Number(raw);
+            return /^\d+(\.\d+)?$/.test(raw) && n <= 2 ? n : 0.3;
+        }
+
+        /** 與 services/retrainSchedule.js 的 capForAttach 同一條規則：floor(新題數 × 比例)，新題＋重練 ≤ 50。 */
+        function retrainCapForAttach(newCount, ratio) {
+            const n = Number.isInteger(newCount) && newCount > 0 ? newCount : 0;
+            return Math.max(0, Math.min(Math.floor(n * ratio + 1e-9), RETRAIN_MAX_PAPER - n));
+        }
+
+        function retrainNewCount() {
+            return parseInt(document.getElementById('count').value) || 5;   // 同 requestPreview 的讀法
+        }
+
+        /** 讀目前到期題數（同科目）；晚到的舊回應不覆寫。 */
+        async function refreshRetrainDue(studentId, subject, node) {
+            const seq = ++retrainDueSeq;
+            node.textContent = '（讀取目前到期題數…）';
+            try {
+                const q = new URLSearchParams({ status: 'due', subject });
+                const res = await apiFetch(`/api/students/${studentId}/retrain-items?${q.toString()}`);
+                const body = await res.json();
+                if (seq !== retrainDueSeq) return;
+                node.textContent = res.ok && body && body.counts
+                    ? `（目前到期 ${body.counts.due} 題）`
+                    : `（目前到期題數讀取失敗${body && body.message ? `：${body.message}` : ''}）`;
+            } catch {
+                if (seq === retrainDueSeq) node.textContent = '（目前到期題數讀取失敗）';
+            }
+        }
+
+        /**
+         * 建（或更新）「附上到期的重練題」那一列。旗標關閉時什麼都不做；沒選學生時清空並藏起來。
+         * @param {{refreshDue?:boolean}} [opts] 題數改變時只更新 N，不重讀到期數
+         */
+        function syncRetrainAttach(opts) {
+            if (!retrainOn()) return;
+            const slot = document.getElementById('retrainAttachSlot');
+            if (!slot) return;
+            const student = selectedStudent();
+            if (!student) { slot.textContent = ''; slot.hidden = true; return; }
+            let box = document.getElementById('retrainAttach');
+            let input = document.getElementById('retrainAttachCount');
+            let due = document.getElementById('retrainAttachDue');
+            if (!box || !input || !due) {
+                slot.textContent = '';
+                const row = document.createElement('div');
+                row.className = 'flex flex-wrap items-center gap-2 rounded-xl border border-violet-200 bg-violet-50/60 px-3 py-2 text-sm font-semibold text-slate-600';
+                // 只有勾選框和它的文字包在 label 裡：點題數欄或到期數不會切換勾選
+                const t1 = document.createElement('label');
+                t1.className = 'flex items-center gap-2 cursor-pointer';
+                box = document.createElement('input');
+                box.type = 'checkbox';
+                box.id = 'retrainAttach';
+                box.checked = false;                                   // 預設不勾（R6）
+                const t1text = document.createElement('span');
+                t1text.textContent = '附上到期的重練題';
+                t1.append(box, t1text);
+                input = document.createElement('input');
+                input.type = 'number';
+                input.id = 'retrainAttachCount';
+                input.min = '0';
+                input.max = String(RETRAIN_MAX_PAPER);
+                input.className = 'field-control w-20 p-1.5 text-sm';
+                input.setAttribute('aria-label', '附上幾題到期的重練題');
+                input.addEventListener('input', () => { retrainAttachEdited = true; });
+                const t2 = document.createElement('span');
+                t2.textContent = '題';
+                due = document.createElement('span');
+                due.id = 'retrainAttachDue';
+                due.className = 'text-xs font-normal text-slate-400';
+                row.append(t1, input, t2, due);
+                slot.appendChild(row);
+                retrainAttachEdited = false;
+            }
+            slot.hidden = false;
+            if (!retrainAttachEdited) input.value = String(retrainCapForAttach(retrainNewCount(), retrainAttachRatio()));
+            if (!opts || opts.refreshDue !== false) {
+                refreshRetrainDue(student.id, document.getElementById('paper_subject').value, due);
+            }
+        }
+
+        /** generate-paper 要多帶的 retrain；沒勾（或旗標關閉、那一列不在）回 null＝不帶，請求與 PR-3 之前逐字相同。 */
+        function retrainAttachRequest() {
+            if (!retrainOn()) return null;
+            const box = document.getElementById('retrainAttach');
+            const input = document.getElementById('retrainAttachCount');
+            if (!box || !input || !box.checked) return null;
+            // 題數不合法時 requestPreview 會先以 retrainAttachError 提示、不送出；這裡照原樣換成數字
+            return { count: Number(String(input.value).trim()) };
+        }
+
+        /**
+         * 〔retrain 審查修正〕勾了「附上到期的重練題」、題數卻不是 0–50 的整數（含清空）時的提示文字；其餘回 ''。
+         * 比照補救卷那一列（public/js/remedial.js 的 retrainCountOf）：由 requestPreview 提示、不送出——
+         * 以前清空會變成 count 0、靜默不附帶，老師以為附了其實沒有。新題＋重練 ≤ 50 仍由伺服器檢查（400 顯示在結果區）。
+         */
+        function retrainAttachError() {
+            if (!retrainOn()) return '';
+            const box = document.getElementById('retrainAttach');
+            const input = document.getElementById('retrainAttachCount');
+            if (!box || !input || !box.checked) return '';
+            const s = String(input.value ?? '').trim();
+            const n = Number(s);
+            return s !== '' && Number.isInteger(n) && n >= 0 && n <= RETRAIN_MAX_PAPER
+                ? '' : `附上的重練題數要是 0–${RETRAIN_MAX_PAPER} 的整數。`;
+        }
+
+        /** 預覽卡上重練題的徽章（R7：學生卷面不標，這是老師看的畫面）。 */
+        function retrainBadgeNodes(q) {
+            if (!q || q.purpose !== 'retrain') return [];
+            const badge = document.createElement('span');
+            badge.className = 'shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-extrabold text-violet-700';
+            badge.textContent = `重練・第 ${q.retrain_step} 關`;
+            return [badge];
+        }
+
+        /** 預覽上「附上重練題」的摘要（generate-paper 回應的 retrain: { wanted, got, due_total }）。 */
+        function retrainSummaryNodes(result) {
+            if (!result || !result.retrain) return [];
+            const p = document.createElement('p');
+            p.className = 'text-[11px] font-bold text-violet-700 mb-3';
+            p.textContent = `附上到期的重練題 ${result.retrain.got} 題（要 ${result.retrain.wanted} 題；目前到期 ${result.retrain.due_total} 題）。`
+                + '重練題就是他以前錯過的原題，學生的卷面不會標出來。';
+            return [p];
+        }
+
+        /**
+         * 從預覽移除一題重練題（純函式）：承上組整組移除（follows_question_id 相連的題，只看預覽裡的），
+         * 回新的預覽物件與移除的題號。重練題的承上組成員一定都是重練題（伺服器整組挑）。
+         */
+        function removeRetrainFromPreview(preview, qid) {
+            const qs = preview.questions || [];
+            const ids = new Set(qs.map(q => q.id));
+            const adj = new Map([...ids].map(id => [id, new Set()]));
+            for (const q of qs) {
+                if (q.follows_question_id && ids.has(q.follows_question_id)) {
+                    adj.get(q.id).add(q.follows_question_id);
+                    adj.get(q.follows_question_id).add(q.id);
+                }
+            }
+            const group = new Set([qid]);
+            const stack = [qid];
+            while (stack.length) {
+                for (const n of adj.get(stack.pop()) || []) if (!group.has(n)) { group.add(n); stack.push(n); }
+            }
+            const kept = qs.filter(q => !group.has(q.id));
+            const next = Object.assign({}, preview, {
+                questions: kept,
+                question_ids: (preview.question_ids || []).filter(id => !group.has(id))
+            });
+            if (preview.retrain) next.retrain = Object.assign({}, preview.retrain, { got: kept.filter(q => q.purpose === 'retrain').length });
+            return { preview: next, removed: qs.filter(q => group.has(q.id)).map(q => q.id) };
+        }
+
+        /** 確認出卷要多帶的鍵：預覽有附重練題（回應帶了 retrain）才帶 retrain_question_ids。 */
+        function retrainConfirmKeys(preview) {
+            if (!preview || !preview.retrain) return {};
+            return { retrain_question_ids: (preview.questions || []).filter(q => q.purpose === 'retrain').map(q => q.id) };
+        }
+
+        // 學生、科目改變時更新那一列（含到期數）；題數改變時只更新 N 的預設值
+        document.getElementById('student_select').addEventListener('change', () => syncRetrainAttach());
+        document.getElementById('paper_subject').addEventListener('change', () => syncRetrainAttach());
+        document.getElementById('count').addEventListener('input', () => syncRetrainAttach({ refreshDue: false }));
+        // 〔retrain〕組卷頁掛鉤 結束
+
+        /** 預覽上按「移除這題／移除這組」（重練題）：只從這份預覽拿掉，不重抽新題。 */
+        function removeRetrainQuestion(qid) {
+            if (!draftPreview) return;
+            const r = removeRetrainFromPreview(draftPreview, qid);
+            for (const id of r.removed) if (!retrainRemoved.includes(id)) retrainRemoved.push(id);
+            renderPreview(r.preview);
+        }
+
         /** 送 dry_run；成功回預覽物件，失敗回 null（訊息已顯示）。 */
         async function requestPreview() {
             const student = selectedStudent();
@@ -1431,6 +1659,9 @@
             const countInput = document.getElementById('count');
             if (!student) { showToast('請先選擇學生（或先新增）', 'error'); return null; }
             if (!chapterSelect.value) { showToast('請選擇出題章節', 'error'); return null; }
+            // 〔retrain〕勾了「附上到期的重練題」但題數不合法（含清空）：提示、不送出（同補救卷那一列）
+            const retrainErr = retrainAttachError();
+            if (retrainErr) { showToast(retrainErr, 'error'); return null; }
             const data = {
                 student_id: student.id,
                 subject: document.getElementById('paper_subject').value,
@@ -1442,6 +1673,12 @@
             // 題源限制（0006）：all 不帶 source_types ＝ 不過濾
             const scope = document.getElementById('paper_source_scope').value;
             if (SOURCE_SCOPE_MAP[scope]) data.source_types = SOURCE_SCOPE_MAP[scope];
+            // 〔retrain〕勾了「附上到期的重練題」才帶 retrain；預覽上移除過的重練題一起排除（沒勾時請求逐字不變）
+            const retrainReq = retrainAttachRequest();
+            if (retrainReq) {
+                data.retrain = retrainReq;
+                if (retrainRemoved.length) data.exclude_ids = draftExcluded.concat(retrainRemoved);
+            }
             try {
                 const response = await apiFetch('/api/generate-paper', {
                     method: 'POST',
@@ -1465,6 +1702,7 @@
 
         async function generatePaper() {
             draftExcluded = [];                       // 重新生成＝排除清單歸零
+            retrainRemoved = [];                      // 〔retrain〕預覽上移除過的重練題也歸零
             const preview = await requestPreview();
             if (preview) renderPreview(preview);
         }
@@ -1506,6 +1744,7 @@
                 shortNote.textContent = `⚠ ${result.note}`;
                 resultIds.appendChild(shortNote);
             }
+            resultIds.append(...retrainSummaryNodes(result));   // 〔retrain〕有附重練題才有這一行
             // 承上組成員：換其中任一題＝整組換掉（後端整組排除），按鈕字樣跟著改
             const inGroup = new Set();
             result.questions.forEach(q => {
@@ -1526,9 +1765,11 @@
                 const swap = document.createElement('button');
                 swap.type = 'button';
                 swap.className = 'shrink-0 text-[11px] font-bold px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 cursor-pointer';
-                swap.textContent = inGroup.has(q.id) ? '換這組' : '換這題';
-                swap.addEventListener('click', () => rerollQuestion(q.id));
-                head.append(label, swap);
+                // 〔retrain〕重練題不換題，只能從這份預覽移除（整組）；新題照舊
+                const isRetrain = q.purpose === 'retrain';
+                swap.textContent = isRetrain ? (inGroup.has(q.id) ? '移除這組' : '移除這題') : (inGroup.has(q.id) ? '換這組' : '換這題');
+                swap.addEventListener('click', () => (isRetrain ? removeRetrainQuestion(q.id) : rerollQuestion(q.id)));
+                head.append(label, ...retrainBadgeNodes(q), swap);
                 const stem = document.createElement('p');
                 stem.className = 'mt-1 text-sm whitespace-pre-line';
                 stem.textContent = q.question_text;
@@ -1559,7 +1800,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         student_id: draftPreview.student_id,
-                        question_ids: draftPreview.question_ids
+                        question_ids: draftPreview.question_ids,
+                        ...retrainConfirmKeys(draftPreview)      // 〔retrain〕預覽有附重練題才多 retrain_question_ids
                     })
                 });
                 const result = await response.json();
@@ -1629,8 +1871,9 @@
             let infoText = `本次抽出的題目 ID 清單：${JSON.stringify(result.question_ids)}\n(已寫入不重複紀錄)\n`
                 + (shortfallNote ? `⚠ ${shortfallNote}\n` : '')
                 + `\n📝 【 線上考卷題目預覽 】：\n`;
+            const retrainSet = new Set(result.retrain_question_ids || []);   // 〔retrain〕老師看的畫面標「（重練）」（R7）
             result.questions.forEach((q, index) => {
-                infoText += `\n第 ${index + 1} 題 [${q.question_type}] (難度: ${'★'.repeat(q.difficulty)})${q.follows_question_id ? `（承上 #${q.follows_question_id}）` : ''}\n👉 題目：${q.question_text}\n💡 參考答案：${q.answer_text}\n--------------------------------------`;
+                infoText += `\n第 ${index + 1} 題${retrainSet.has(q.id) ? '（重練）' : ''} [${q.question_type}] (難度: ${'★'.repeat(q.difficulty)})${q.follows_question_id ? `（承上 #${q.follows_question_id}）` : ''}\n👉 題目：${q.question_text}\n💡 參考答案：${q.answer_text}\n--------------------------------------`;
             });
             resultIds.textContent = infoText; // 🎯 安全防護
 
@@ -1713,6 +1956,7 @@
         // 〔stage5 整合〕WS-D 的兩個子錨點：補救卷在學生視圖、覆蓋率在題庫視圖（不是頂層分頁）
         VIEW_FOR_ANCHOR.remedial = 'view-students';
         VIEW_FOR_ANCHOR.coverage = 'view-library';
+        VIEW_FOR_ANCHOR.retrain = 'view-students';   // 〔retrain PR-4〕錯題重練卡在學生視圖（子錨點）
 
         let activeViewId = null;   // 首次 routeFromHash 前為 null——初始載入不跑動效
 
@@ -1817,6 +2061,8 @@
     <script type="module" src="/js/kc.js"></script>
     <script type="module" src="/js/remedial.js"></script>
     <script type="module" src="/js/tutor.js"></script>
+    <!-- 〔retrain PR-4〕錯題重練卡（跟著學生分頁選的學生走，所以排在 students.js 之後） -->
+    <script type="module" src="/js/retrain.js"></script>
 </body>
 
 </html>

@@ -2,7 +2,8 @@
 
 > 版本 v1.0 | 2026-09-24 | 分支 `stage5/ws-b` | 對應：`docs/interfaces-stage5.md` 第 3.2、3.3、4.2 條、ADR-010、DEC-019、缺口 G01
 > 本檔是化學支援的功能文件：API、資料、排版子集、答案比對、eval 與給老師的操作說明。共用文件（api_spec、openapi、db_design、srs、各 tracker）由整合階段依本檔回填（第 1.7 條）。
-> 章節表（`exam_pro/config/chemistryChapters.js`，44 章）是 **AI 草擬、待 Owner 對照教科書定稿**；本檔所有例句、golden 與別名同樣是 AI 自撰，不取自任何出版社教材或考卷。
+> 章節表（`exam_pro/config/chemistryChapters.js`，44 章）是 ~~**AI 草擬、待 Owner 對照教科書定稿**~~ 〔修訂 2026-09-26 決策單 A11〕**Owner 2026-09-25 定稿**（決策單：照目前草案定稿，依龍騰；章名一字未改）；本檔所有例句、golden 與別名同樣是 AI 自撰，不取自任何出版社教材或考卷（這些仍是 AI 草擬，待 Owner 抽查）。
+> 〔修訂 2026-09-26〕〔Owner 決策單 2026-09-25 B5〕NLQ 的 LLM 輔路徑與助教改為支援化學（原裁決 S5-13 維持不支援）：`nlq.v1` → `nlq.v2`、`assistant.v1` → `assistant.v2`，兩者的 cassette 需重錄。見第 7、9、10、11 節。〔整合 2026-09-26 更正〕助教沒有入庫的 cassette（`eval/cassettes/` 底下沒有 `assistant`），實際要重錄的只有 `nlq.v2`（nlq eval 的 LLM 路徑 8 句）；另見 `docs/HANDOFF.md` §0.00 B5 那一列。
 
 ## 1. 一句話
 
@@ -83,7 +84,7 @@ Word 端：`utils/chemFormula.js` 的 `ceToLatex` 先把 `\ce{…}` 轉成等價
 | 節點 | 數學／物理（逐字不變） | 化學（新） | 化學路徑的差別 |
 | :--- | :--- | :--- | :--- |
 | extract | `extract`／`extract.v2` | `extract_chem`／`extract_chem.v1` | SYSTEM、模板（化學式規範、結構式與實驗裝置寫進 figure_desc、週期表不是題目）、schema 值域（subject＝化學、chapter＝44 章） |
-| classify | `classify`／`classify.v1` | `classify_chem`／`classify_chem.v1` | SYSTEM、模板、schema；閘門、kNN 投票、few-shot 取材與 cacheKeyParts 共用 |
+| classify | `classify`／`classify.v2`（〔CR-9〕2026-09-26 起，原 v1；化學不受影響） | `classify_chem`／`classify_chem.v1` | SYSTEM、模板、schema；閘門、kNN 投票、few-shot 取材與 cacheKeyParts 共用 |
 | lint | `lint`／`lint.v2` | `lint_chem`／`lint_chem.v1` | 只有第三層（LLM 重寫）換模板——數學版會叫模型「改寫掉不支援的指令」，會把 `\ce` 拆掉 |
 | source_check | —（零成本） | — | 題幹先過 `ceToComparable` |
 | verify | `verify`／`verify.v1` | `verify_chem`／`verify_chem.v1` | SYSTEM 要求數值帶單位、化學式用 `$\ce{…}$`；比對時帶 `subject: '化學'` |
@@ -98,6 +99,7 @@ Word 端：`utils/chemFormula.js` 的 `ceToLatex` 先把 `\ce{…}` 轉成等價
 
 - `config/chapters.js`：`VOLUMES['化學'] = CHEMISTRY_VOLUMES`（排在物理之後）。新增 `LEGACY_SUBJECTS`、`LEGACY_CHAPTERS`（66 章，順序逐字相同）、`SUBJECT_GROUPS`、`SUBJECT_GROUP_KEYS`、`isValidSubjectGroup`、`normalizeSubjectGroup`、`subjectGroupOf`、`subjectChoiceText`。
 - 會進既有 LLM 呼叫的文字一律讀 `LEGACY_*`：`agents/schemas` 的 `ENUM_SOURCES`、`chapterWhitelistText()`（沒指定科目時）、`services/nlqService.chapterWhitelistText()`。
+  〔Owner 決策單 2026-09-25 B5〕例外：`services/nlqService.chapterWhitelistText()` 改列三科（`SUBJECTS`），`ENUM_SOURCES` 多了兩個**新鍵** `subject_all`／`chapter_all`（三科的科目與章節，只有 `nlq.json` 用）；`subject`／`chapter` 兩個鍵的值域不變，所以 extract／classify／verify／lint／variant 的 schema 與 cassette 不受影響。
 - `config/chapterExamples.js`：化學 44 章各一句自撰例句（10–80 字，化學式用 `$\ce{…}$`）。只進化學題的 classify prompt。
 - `config/chapterAliases.js`：化學 44 章各 3–6 個別名（莫耳、平衡常數、Ksp、pH、勒沙特列、赫斯、氧化數、電解、酯化…），通過第 6.2 條三條硬規則。為了不改變數學／物理查詢的解析，**不收**會與數理別名互為子字串的詞（「標準還原電位」含「電位」、「電子排列」含「排列」、「碰撞學說」含「碰撞」），也不收「平衡」「反應」「電荷」這類泛詞。
 - `utils/tokenize.js`：自訂詞典補化學名詞（`CHEMISTRY_TERMS`；原本的數理詞表改名 `MATH_PHYSICS_TERMS`、內容一字未動，合併後的詞典與先前相同）；化學章節名經既有的 `expandChapterWords` 自動進詞典。
@@ -108,6 +110,7 @@ Word 端：`utils/chemFormula.js` 的 `ceToLatex` 先把 `\ce{…}` 轉成等價
 
 - 單元測試：`agentExtract.test.js` 釘住 66 章與 enum 內容；`chemistryAgents.test.js` 逐 agent 斷言數學／物理的請求（agent 名、模板、SYSTEM、schema 實例、prompt）與原本相同；`chemistryConfig.test.js` 斷言 `buildSchema(name)` 與 `buildSchema(name, {group:'math_physics'})` 是同一個實例。
 - 開發期另以 base 版與修改版逐一比對 extract／classify／lint／verify／variant／nlq／assistant 的 SYSTEM、模板原文、實際 prompt、六支 schema 與模板雜湊，全部相同；NLQ 對 golden 與測試字串 388 句的規則解析逐字相同。
+  〔Owner 決策單 2026-09-25 B5〕之後 nlq 與 assistant 依 Owner 決策改版（`nlq.v2`、`assistant.v2`，第 7 節），上面的「逐字相同」只對 extract／classify／lint／verify／variant 仍成立。
 - CI 五個 eval 在不重錄任何 cassette 的情況下全綠，量到的數字與 base 相同。
 
 ## 5. 答案比對（`utils/answerCompare.js`、`utils/units.js`）
@@ -151,15 +154,34 @@ npm run eval:classify-chem
 - 錄好的 cassette 在 `eval/cassettes/classify_chem/`，只存請求摘要（字數＋sha256），不存題目全文（NOTICE 第 4 條）。`test/unit/evalClassifyChem.test.js` 以同一支 `cassetteKey` 寫假 cassette 驗證「錄完就能回放」，避免錄完才發現鍵對不上。
 - 化學卷的 extract／verify／lint／變式目前**沒有** cassette，也沒有 eval；要量時比照上面的方式另錄（建議先用自製的化學樣卷，勿用有版權的考卷）。
 
-## 7. NLQ（自然語言查題）
+## 7. NLQ（自然語言查題）與助教
 
 - 規則路徑辨識化學章節本名與別名：「緩衝溶液的計算題，難度 3 以上」「Ksp 跟勒沙特列的題目」都在規則層抓到章節，`subject` 由章節反推為化學，**不呼叫 LLM**。
-- **LLM 輔路徑本階段不支援化學**：`nlq.v1` 的 prompt 與 schema 凍結為數學／物理兩科（既有 cassette 不失效）。規則沒抓到章節時：
-  - 句子有化學線索（`utils/nlqHeuristics.js` 的 `CHEMISTRY_HINTS`：化學、化合物、反應式、莫耳、溶液、濃度、酸鹼、氧化、還原、沉澱、有機物、週期表）**而且沒有任何數理線索** → 跳過 LLM、`subject` 設成化學、`parse_path = 'rules'`，讓檢索落在化學題裡。
-  - 有數理線索就**照舊走 LLM 輔路徑**（這個分支加進來之前數學／物理句子的行為），`subject` 由 LLM 讀：點名科目（數學、物理、數甲、數乙、數A、數B）；含化學線索字的數理用語（化學能、核反應、衰減）；或階段 5 之前的數理自訂詞典 `MATH_PHYSICS_TERMS`（密度、速率、體積……；比對前先挖掉化學線索詞，「週期表」不因「週期」算物理）。例：「物理 濃度梯度造成的擴散」「數學的溶液混合濃度應用題」「藥物濃度衰減的應用題」「核反應式的題目」都走 LLM，不會被鎖進化學。
-  - 取捨：拿不準就走 LLM。代價是「溶液的密度怎麼算」這類混了數理名詞的化學句子會交給只懂數理的 LLM，查得比較散（LLM 回空章節時 `subject` 為 null，三科都查）；反過來把數理句子鎖進化學則會整批查錯，所以選前者。
+- **LLM 輔路徑支援化學**〔Owner 決策單 2026-09-25 B5〕（原裁決 S5-13：`nlq.v1` 的 prompt 與 schema 凍結為數學／物理兩科、本階段不支援；Owner 改判支援，接受改模板並重錄）。模板 `nlq.v1` → `nlq.v2`：
+  - 白名單（`chapterWhitelistText()`）列三科，一科一行。化學那一行每章加「」（沿用 `agents/promptParts.js` 的 `joinChapters`：「醇、酚、醚」本身含頓號）；數學、物理兩行與 `nlq.v1` 逐字相同。
+  - schema（`agents/schemas/nlq.json`）的 `subject`、`chapters` 改讀新的 enum 來源 `subject_all`／`chapter_all`：三科、數學→物理→化學依序攤平的全部章節（2026-09-26 為 52＋34＋44＝130 章）。說明文字補「化學章名輸出時不要帶「」」。
+  - SYSTEM 改為「數學、物理與化學」；模板規則 1 補「化學章名輸出時不要帶「」」、規則 2 補「同一個詞（濃度、速率、平衡、能量）可能出現在不同學科，要看整句在問哪一科」。
+  - 註冊字串改為 SYSTEM + `'\n---\n'` + 模板（階段 5 第 1.2 條的慣例）：之後 SYSTEM 一改，cassette 鍵就變。識別名、模板雜湊、schemaHash、`cacheKeyParts.template` 都變了，`nlq.v1` 的 cassette 一支都不會再被讀到。
+  - 本機（Ollama）與 Gemini 走同一段程式；Ollama 看不到 schema 的說明文字，`services/llm/ollama.js` 會把欄位說明附在 system 後面，科目 enum（三個）會逐一列出。
+- 規則沒抓到章節時（第 6.3 條），化學句子**不再跳過 LLM**，與數理句子一樣交給 LLM 挑章節。規則層原本的「只查化學」判斷改當**退路**（`utils/nlqHeuristics.js` 的 `chemistrySubjectPrior`）：
+  - 推定成立：`isChemistryOnlyQuery`（有化學線索 `CHEMISTRY_HINTS`、沒有任何數理線索），或 `namesChemistry`（句子點名「化學」——「化學能」不算——而且沒點名數學／物理）。後者是新的：「化學 溶液的密度怎麼算」有數理名詞「密度」，原本推定不成立，點名化學之後成立。
+  - 用途：LLM 失敗（逾時、replay miss、schema 不合），或 LLM 科目與合法章節都沒給 → 再驗之後的 `subject` 補成化學。LLM 給了科目或合法章節就以 LLM 為準。化學句子因此至少維持改判前的檢索範圍（只查化學），不會退成三科全查。
+  - 數理句子（點名數學／物理、數理複合詞「化學能」「核反應」「衰減」、數理名詞且沒點名化學）推定不成立，行為與改判前相同：「物理 濃度梯度造成的擴散」「數學的溶液混合濃度應用題」走 LLM，LLM 空手或失敗時 `subject` 為 null。
+  - LLM 給的章節一律再驗（第 6.4 條）：打錯的章名（「化學平衡」）、跨科的章名（化學配「向量內積」）丟掉那一個並附警告。
+  - **本機模式的代價**：`NLQ_TIMEOUT_MS` 預設 4000，本機模型通常在逾時內回不來。規則沒抓到章節的化學句子因此也會等 4 秒、附「LLM 解析逾時」警告（`fallback_level` 1），`subject` 由推定補成化學；改判前這類句子零延遲、沒有警告。要真的用上 LLM 輔路徑，照 `docs/local-mode.md` 第 10.3 節把 `NLQ_TIMEOUT_MS` 調大。
 - `subject` 全空時的檢索改成三科各跑一次（原本兩科）。
-- 已知限制：「碰撞學說」會被物理別名「碰撞」吃掉、「原子結構」會對到物理的「原子結構與光譜」——要查化學的這兩章請打完整章名（「碰撞學說與催化」「原子結構與週期表」）或用其他別名（催化劑、活化能、週期表、原子序）。
+- 已知限制：「碰撞學說」會被物理別名「碰撞」吃掉、「原子結構」會對到物理的「原子結構與光譜」——要查化學的這兩章請打完整章名（「碰撞學說與催化」「原子結構與週期表」）或用其他別名（催化劑、活化能、週期表、原子序）。這是規則層的別名衝突，LLM 輔路徑不會介入（規則抓到章節就不呼叫 LLM）。
+
+### 7.1 助教（`services/assistantService.js`）〔Owner 決策單 2026-09-25 B5〕
+
+- 工具說明書（SYSTEM 的一部分）的科目選項改由 `SUBJECTS` 產生：`get_student_weakness`、`preview_paper` 的 `subject` 寫成「數學|物理|化學」（原本寫死「數學|物理」，主控模型不知道可以查化學）。SYSTEM 多一句「題庫涵蓋數學、物理、化學共 3 科；subject 只能填這幾個科目名，chapter 要與該科章節白名單完全相同」；`search_questions` 的說明寫明三科都查得到，並多一個化學例句（「緩衝溶液的計算題」）。
+- `preview_paper` 的章節改在執行前驗白名單（`isValidChapter(subject, chapter)`）。原本只檢查非空：錯的章名一路送進選題，撈不到題，回「新題目庫存不足…僅剩 0 題」，主控會以為真的沒題。現在錯誤訊息給候選，主控下一步自己修正：
+  - 別名對到本科章節：「勒沙特列」→「可能是：「勒沙特列原理」」；
+  - 本科章名與輸入互為子字串：「pH」→「酸鹼解離與pH值」、化學科的「碰撞」→「碰撞學說與催化」；
+  - 章名屬於別科：化學科配「向量內積」→「是數學的章節，subject 要填「數學」」。
+  - 三科一視同仁：數學／物理的錯章名從此也在驗證階段擋下（回應形狀相同：`{ ok:false, result:{ error:'參數不合法：…' } }`）。
+- 模板 `assistant.v1` → `assistant.v2`。`assistant.v1` 從來沒有註冊原文，cassette 鍵裡的模板雜湊只是識別名的雜湊，SYSTEM（說明書）改了鍵也不變——不升版的話，舊 cassette 會被當成新說明書的回應讀出來。`assistant.v2` 註冊 SYSTEM + `'\n---\n'` + `PROMPT_TEMPLATE`（`buildPrompt` 的骨架，字樣抽成 `PROMPT_PARTS`，送出的 prompt 與改版前逐字相同）。`DECISION_SCHEMA` 不變。
+- 助教的 `search_questions` 工具呼叫的就是 NLQ（上一節），化學查詢的行為與 NLQ 端點相同。
 
 ## 8. 前端
 
@@ -171,12 +193,12 @@ npm run eval:classify-chem
 
 | 項目 | 狀態 | 理由 |
 | :--- | :--- | :--- |
-| 舊版單呼叫拆題 `services/aiService.js`（`/api/analyze-pdf`） | 維持原狀，只拆數學／物理 | 契約要求不動；前端選化學時直接擋下並提示改用新版管線 |
-| NLQ 的 LLM 輔路徑 | 不支援化學 | 見第 7 節 |
-| 助教（`services/assistantService.js`） | 工具驗證接受化學；**工具說明書仍寫「數學\|物理」** | 說明書是 SYSTEM 的一部分，契約規定不動 SYSTEM／TEMPLATE／DECISION_SCHEMA。主控模型可能不知道可以查化學，整合階段若要改需另開裁決 |
+| 舊版單呼叫拆題 `services/aiService.js`（`/api/analyze-pdf`） | ~~維持原狀，只拆數學／物理~~ 〔修訂 2026-09-26 合併回填 B21〕仍只拆數學／物理；Owner 決策單 2026-09-25 B21 保留這條舊流程並補上附圖裁切（已合入 `local/integration` `7dc14a0`，重用管線的 `figureService`，見 `docs/figures.md`），化學範圍不變 | 契約要求不動；前端選化學時直接擋下並提示改用新版管線（B21 沒有改這一點） |
+| NLQ 的 LLM 輔路徑 | 〔Owner 決策單 2026-09-25 B5〕已支援化學（`nlq.v2`） | 見第 7 節；原本（裁決 S5-13）不支援。`nlq.v2` 的 cassette 需重錄 |
+| 助教（`services/assistantService.js`） | 〔Owner 決策單 2026-09-25 B5〕工具說明書與驗證都接受化學（`assistant.v2`） | 見第 7.1 節；原本說明書仍寫「數學\|物理」（裁決 S5-13）。`preview_paper` 的章節改驗白名單 |
 | embedding 文本（`utils/embedText.js`） | 未改 | `\ce{H2O}` 會轉成「ce H2O」這類字樣；改規則會讓全部向量作廢（該檔檔頭警告） |
 | 化學的 extract／verify／變式 cassette 與 eval | 尚未錄製 | 需要真 LLM；見第 6 節 |
-| 章節表、例句、別名、golden | AI 草擬 | 待 Owner 對照教科書定稿；章名一改，知識點代碼與已標註資料要跟著遷移 |
+| 章節表、例句、別名、golden | AI 草擬（〔修訂 2026-09-26 決策單 A11〕章節表已由 Owner 2026-09-25 定稿） | 待 Owner 對照教科書定稿；章名一改，知識點代碼與已標註資料要跟著遷移。〔修訂 2026-09-26 決策單〕章節表照草案定稿、依龍騰（A11）；例句、別名、golden 仍待 Owner 抽查；別名優先維持（B17）；`classify_chem.json` 的 eval 只當參考（B13） |
 
 ## 10. 給老師的操作說明
 
@@ -191,7 +213,8 @@ npm run eval:classify-chem
    - 下標直接寫數字：`$\ce{H2SO4}$`；離子電荷用 `^{}`：`$\ce{Fe^{3+}}$`、`$\ce{SO4^{2-}}$`（**不要**寫 `Fe3+`，會變成 Fe₃⁺）。
    - 反應式：`$\ce{2H2 + O2 -> 2H2O}$`，可逆用 `<=>`，條件寫 `->[催化劑][加熱]`；氣體 ` ^`、沉澱 ` v`（前後空一格）；結晶水 `$\ce{CuSO4.5H2O}$`。
    - 單位用 `\mathrm`：`$0.10\ \mathrm{M}$`。網頁預覽與 Word 匯出都會排成正體。
-4. **查化學題**：題庫管理、組卷、弱點面板的科目下拉都有「化學」。自然語言查題請用章名或常用簡稱（莫耳、Ksp、pH、勒沙特列、赫斯定律、氧化數、電解、酯化…）。句子裡寫了「物理」「數學」時，系統會照數理的方式解析。
+4. **查化學題**：題庫管理、組卷、弱點面板的科目下拉都有「化學」。自然語言查題用章名或常用簡稱（莫耳、Ksp、pH、勒沙特列、赫斯定律、氧化數、電解、酯化…）最快、最準，不必等 AI。句子裡沒有章名時，系統會請 AI 判斷是哪一章（三科都懂）；AI 判斷不出來或逾時，句子裡寫了「化學」（或只有化學的字眼，例如溶液、酸鹼、沉澱）就只查化學。句子裡寫了「物理」「數學」時，系統會照數理的方式解析。本機模式下 AI 通常來不及回應（預設只等 4 秒），畫面會出現「LLM 解析逾時」的提示，這是正常的。
+   - 助教也能查化學：例如「某某化學哪一章最弱」「用自然語言找緩衝溶液的計算題」「幫某某預覽勒沙特列原理 5 題」（把「某某」換成學生姓名）。章名打得不完整時，系統會把可能的正確章名告訴助教，助教通常會自己改正後再查。
 5. **驗答結果**：驗證模型的答案與拆題答案的單位不同（5 cm 對 5 m）或化學式不同，會停在複核頁標「答案不一致」；只是寫法不同（CH₃COOH 對 C₂H₄O₂）會標「比不出來」，請人工確認。攝氏換克耳文用 273 或 273.15 都算一致（25 ℃ 對 298 K 不會被標不一致）。
 6. **升級後跑一次關鍵字索引重建**（只要一次，之後改章節表或詞典時再跑）：在 `exam_pro` 資料夾執行 `npm run search:reindex -- --dry-run` 看會變幾題，確認後再執行 `npm run search:reindex`。不花錢、不呼叫 AI、可以中斷重跑。沒跑的話，部分舊的數理題（例如題幹有「質量數」「理想氣體」的）用關鍵字查會查不到。
 
@@ -199,14 +222,15 @@ npm run eval:classify-chem
 
 | 檔案 | 內容 |
 | :--- | :--- |
-| `test/unit/chemistryConfig.test.js` | 白名單三科、LEGACY_*、SUBJECT_GROUPS、buildSchema 卷別、promptParts、別名／例句／分詞、NLQ 規則路徑與不走 LLM、點名數理或帶數理名詞的句子照舊走 LLM、subject_group 解析、助教工具與題目驗證訊息 |
+| `test/unit/chemistryConfig.test.js` | 白名單三科、LEGACY_*、SUBJECT_GROUPS、buildSchema 卷別、promptParts、別名／例句／分詞、NLQ 規則路徑、點名數理或帶數理名詞的句子照舊走 LLM、subject_group 解析、助教工具與題目驗證訊息。〔Owner 決策單 2026-09-25 B5〕「化學句子不走 LLM」與「送 LLM 的白名單只列兩科」三個測試依改判更新（化學句子走 LLM、LLM 空手或失敗時 subject 仍是化學；白名單與 schema 三科），修改處有註記 |
+| `test/unit/chemAssistantNlq.test.js` | 〔Owner 決策單 2026-09-25 B5〕NLQ 化學的規則解析（別名＋題型＋難度＋沒寫過）、`namesChemistry`／`chemistrySubjectPrior`、`nlq.v2` 的註冊字串與請求（agent、template、schema、prompt、cacheKeyParts）、schema 三科值域且其他 schema 不變、LLM 給的化學章節被採用、非法章名（打錯、跨科）仍被擋、化學推定只當退路、數理句子不受影響、cassetteAudit 的 `chapter_all` 注入；助教說明書的科目、`preview_paper` 的章節驗證與候選、主控迴圈把錯誤餵回、`assistant.v2` 的註冊字串與 `buildPrompt` 骨架 |
 | `test/unit/chemistryAgents.test.js` | 五個 agent 的化學路徑（agent 名、模板、SYSTEM、schema）、化學模板註冊字串、數學／物理請求不變、source_check 的箭頭 |
 | `test/unit/chemFormula.test.js` | mhchem 子集每一種記法、ceToComparable、化學答案解析 |
 | `test/unit/textFormatterChem.test.js` | 每一種記法打包成 .docx 後的 OMML、`\mathrm` 正體、parseLatexStrict 無事件、formulaLint 放行 |
 | `test/unit/answerCompareChem.test.js` | `answer_chem.json` 90 個案例、單位與化學式的介入邊界（含 ℃／K 的 273 慣例、`^{\circ}\mathrm{C}`、「A 點」不是安培）、`utils/units.js` |
 | `test/unit/reindexSearchTsv.test.js`、`test/integration/searchReindex.pg.test.js` | `search:reindex` 的參數；舊詞典切的 `search_tsv` 查不到新 token、dry-run 不寫、重算後查得到、重跑 0 題、已封存與 NULL 也補、`--limit`；與 POST／PUT `/api/questions` 寫入的值逐字相同 |
 | `test/unit/evalClassifyChem.test.js` | classify_chem golden 硬閘門、沒有 cassette 略過、假 cassette 完整回放 accuracy 1、不完整回放 n/a |
-| `test/integration/chemistry.pg.test.js` | `POST /api/jobs` 的 subject_group（400、預設、冪等鍵）、化學卷走完真的 agents 入庫、verify 的單位與化學式比對、題庫列表與手動新增、NLQ、組卷→批改→弱點、Word 匯出、化學變式 |
+| `test/integration/chemistry.pg.test.js` | `POST /api/jobs` 的 subject_group（400、預設、冪等鍵）、化學卷走完真的 agents 入庫、verify 的單位與化學式比對、題庫列表與手動新增、NLQ、組卷→批改→弱點、Word 匯出、化學變式。〔Owner 決策單 2026-09-25 B5〕NLQ 的 LLM 輔路徑挑化學章節後檢索落在化學題、助教 `preview_paper` 預覽化學章節（不寫庫）與非法章名 |
 | 既有測試的修改（〔stage5 WS-B〕註記） | 「化學被拒」改用「生物」（agentClassify、agentGenerateVariant、students.pg）並補正向斷言；agentExtract 的 subject enum 改對 LEGACY_SUBJECTS 並逐字釘死 `['數學','物理']`；nlqAliases 的 66 章改為「66＋44」且 66 章逐章釘住；nlqService 的「兩科各跑一次」改為「每科各跑一次」；tokenize 的「每章切得出長詞」對「醇、酚、醚」改為「三個單字各自成 token」 |
 
 ## 12. 給整合階段
@@ -216,5 +240,5 @@ npm run eval:classify-chem
 - 需求：FR 編號由整合階段分配；DEC-019 的業務驗收項目＝章節表定稿、`eval:classify-chem` 錄製與分數。
 - 預期衝突：`workers/jobRunner.js`（WS-A 在 save 寫詳解、WS-C 在 save 後掛鉤；WS-B 只動三個 `ctx.job` 與兩句 SELECT）、`public/js/students.js`（WS-B 只換了科目下拉那四行）、`index.html` inline script、`package.json` scripts（WS-B 新增 `eval:classify-chem`、`search:reindex`）、`controllers/questionController.js` 與 `utils/questionValidation.js`（不在 WS-B 的可擴充清單內；WS-B 各只改一行錯誤訊息，改成由 `subjectChoiceText()` 產生科目清單，無功能改動——請在 WS-A 之後合併、保留 WS-A 的版本再套這一行）。
 - **合併後的 Owner 動作**：在正式題庫跑一次 `npm run search:reindex`（先 `--dry-run`），理由見第 4.3 節。沒跑不會壞資料，但部分舊的數理題關鍵字檢索會查不到；共用文件（HANDOFF、README 的升級步驟）回填時請一併寫入。
-- **待裁決（建議記為 S5-n）**：`answer_form = text` 的單位衝突回 `uncertain`（依 S2-26），與契約第 4.2 條第 4 點「應判 disagree」不一致（見第 5.1 節）。WS-B 維持 S2-26，因為改成 disagree 會打破「text 永遠不回 disagree」的凍結取捨；若裁決要改，只動 `compareText` 的一行，`answer_chem.json` 的 unit-007 期望要一起改。
+- **待裁決（建議記為 S5-n）**：`answer_form = text` 的單位衝突回 `uncertain`（依 S2-26），與契約第 4.2 條第 4 點「應判 disagree」不一致（見第 5.1 節）。WS-B 維持 S2-26，因為改成 disagree 會打破「text 永遠不回 disagree」的凍結取捨；若裁決要改，只動 `compareText` 的一行，`answer_chem.json` 的 unit-007 期望要一起改。〔修訂 2026-09-26 決策單 B4〕已記為 S5-11；Owner 2026-09-25 決策單選「維持送複核」，`compareText` 與 unit-007 不改。
 - 化學跨 WS 行為（化學題標知識點、補救卷、AI 家教）由整合階段補測（第 7 條）。

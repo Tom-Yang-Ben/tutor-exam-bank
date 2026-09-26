@@ -215,7 +215,9 @@ describe('services/llm/templates.js 的匯出（裁決 S2-5）', () => {
     test('四個 LLM 節點的模板都要註冊——WS-B 的 extract／classify 在模組載入時就註冊好了', () => {
         // 快照在檔頭取（模組載入時），不受其他測試的 _resetForTest 影響
         assert.equal(REGISTERED_AT_LOAD.extract, extractAgent.PROMPT_TEMPLATE);
-        assert.equal(REGISTERED_AT_LOAD.classify, classifyAgent.PROMPT_TEMPLATE);
+        // 〔重練與收尾決策單 2026-09-26〕classify 原為「等於 PROMPT_TEMPLATE」：界線規則（序列化的 SUBJECT_RULES）
+        //   併進註冊的模板文字，改規則才會改 cassette 的鍵（agents/classify.js 的 REGISTERED_TEMPLATE）。仍是逐字比對。
+        assert.equal(REGISTERED_AT_LOAD.classify, `${classifyAgent.PROMPT_TEMPLATE}\n---\n${JSON.stringify(classifyAgent.SUBJECT_RULES)}`);
         assert.ok(REGISTERED_AT_LOAD.extract.length > 0);
     });
 });

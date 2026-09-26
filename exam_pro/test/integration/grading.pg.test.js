@@ -56,6 +56,9 @@ function runSuite() {
     const appDisabled = loadApp('false');
     const app = loadApp('true');
     const { query, pool } = require(path.join(APP_DIR, 'config', 'db'));
+    // 〔retrain PR-1〕attempts 是唯讀檢視（migrations/0016）：夾具寫派題＋作答走 helper，
+    // 直接改批改細節的夾具改寫 attempt_records（經 assignments 對應卷與題）。斷言照舊讀 attempts。
+    const { insertAttempts } = require(path.join(APP_DIR, 'test', 'helpers', 'attempts'));
     const { ERROR_TYPES } = require(path.join(APP_DIR, 'config', 'errorTypes'));
 
     // ─────────────────── 灌資料輔助 ───────────────────
@@ -91,10 +94,9 @@ function runSuite() {
         const { rows: [p] } = await query(
             'INSERT INTO exam_papers (title, student_id, question_ids) VALUES ($1, $2, $3::int[]) RETURNING id',
             ['批改細節測試卷', studentId, ids]);
-        await query(
-            `INSERT INTO attempts (student_id, question_id, paper_id, assigned_at)
-             SELECT $1, q, $2, CURRENT_DATE - off FROM unnest($3::int[], $4::int[]) AS t(q, off)`,
-            [studentId, p.id, ids, ids.map((_, i) => offsets[i] ?? 0)]);
+        await insertAttempts(query, ids.map((q, i) => ({
+            student_id: studentId, question_id: q, paper_id: p.id, days_ago: offsets[i] ?? 0
+        })));
         return p.id;
     }
 
@@ -117,7 +119,7 @@ function runSuite() {
         });
 
         beforeEach(async () => {
-            await query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE');
+            await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE');
         });
 
         after(async () => {
@@ -152,9 +154,10 @@ function runSuite() {
                 const sid = await seedStudent();
                 const paperId = await seedPaper(sid, ids);
                 await query(
-                    `UPDATE attempts SET result = 0, graded_at = now(), score = 0.25, error_types = '{calc,blank}',
-                                         response = '4', teacher_note = '少開根號'
-                      WHERE paper_id = $1 AND question_id = $2`, [paperId, ids[0]]);
+                    `UPDATE attempt_records r SET result = 0, graded_at = now(), score = 0.25, error_types = '{calc,blank}',
+                                                  response = '4', teacher_note = '少開根號'
+                       FROM assignments s
+                      WHERE s.id = r.assignment_id AND s.paper_id = $1 AND s.question_id = $2`, [paperId, ids[0]]);
 
                 const res = await request(app).get(`/api/papers/${paperId}`);
                 assert.equal(res.status, 200);
@@ -396,8 +399,10 @@ function runSuite() {
                 const ids = await seedQuestions([{}, {}]);
                 const sid = await seedStudent();
                 const paperId = await seedPaper(sid, ids);
-                await query(`UPDATE attempts SET result = 1, graded_at = now(), error_types = '{calc}' WHERE question_id = $1`, [ids[0]]);
-                await query(`UPDATE attempts SET result = 0, graded_at = now(), error_types = '{reading}' WHERE question_id = $1`, [ids[1]]);
+                await query(`UPDATE attempt_records r SET result = 1, graded_at = now(), error_types = '{calc}'
+                               FROM assignments s WHERE s.id = r.assignment_id AND s.question_id = $1`, [ids[0]]);
+                await query(`UPDATE attempt_records r SET result = 0, graded_at = now(), error_types = '{reading}'
+                               FROM assignments s WHERE s.id = r.assignment_id AND s.question_id = $1`, [ids[1]]);
                 const { body } = await request(app).get(`/api/students/${sid}/weakness`);
                 assert.deepEqual(body.by_error_type, [{ error_type: 'reading', label: '審題錯誤', count: 1, share: 1 }]);
                 // 同一張卷的明細照樣讀得到那筆（弱點面板只是不把它算進錯因分布）
@@ -412,7 +417,7 @@ function runSuite() {
                 const empty = await request(app).get(`/api/students/${sid}/weakness`);
                 assert.deepEqual(empty.body.by_error_type, []);
 
-                await query(`UPDATE attempts SET result = 0, graded_at = now(), error_types = '{legacy_code}'`);
+                await query(`UPDATE attempt_records SET result = 0, graded_at = now(), error_types = '{legacy_code}'`);
                 const { body } = await request(app).get(`/api/students/${sid}/weakness`);
                 assert.deepEqual(body.by_error_type, [{ error_type: 'legacy_code', label: null, count: 1, share: 1 }]);
             });

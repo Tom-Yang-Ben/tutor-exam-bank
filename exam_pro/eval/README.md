@@ -489,6 +489,8 @@ eval/
   lib/localMode.js          本機模式：這一輪用到哪些模型、錄前檢查（Ollama／OCR）、預估時間（第 3f 節）
   tools/ocr_selftest.js     npm run ocr:selftest（ocr_service/ocr_pdf.py --selftest；本機模式）
   tools/tee_run.js          Windows 腳本用：輸出同時印畫面與寫 log（scripts/windows/*.bat）
+  tools/local_perf_report.js  npm run perf:local（本機重錄後的實測：各 agent 延遲、速度、建議的逾時與每塊頁數；docs/local-mode.md 第 10.10 條）
+  tools/local_bench_vision.js npm run local:bench-vision（只呼叫一次視覺模型看 1 頁：讀圖／輸出秒數、推估一塊與一份卷；不寫 cassette、不碰 DB；第 10.11 條）
   lib/chapterGate.js        硬閘門的章節白名單來源（預設 config/chapters.js；測試可注入新清單）
   CHAPTER_RELABEL-2026-09.md  章節重整的改標清單（題號、舊章、新章、理由）
   reports/                  報表輸出（.gitignore）
