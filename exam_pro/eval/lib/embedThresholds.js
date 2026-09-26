@@ -15,9 +15,17 @@
 //     （3.2 表 0.80 → 0.1226 就是這樣算的：0.1226 × (675＋899) ≈ 193 對。）
 //   - 百分位數用線性內插（R-7，與 numpy／Excel PERCENTILE.INC 相同）。
 //
+// 〔2026-09-26 審查修正〕另有兩組：
+//   - 「JSON 跳脫吃掉 LaTeX 反斜線」（scanEscapeDamage、repairEscapeDamage、damagedStringFields）：
+//     算「反斜線補回去之後文字閘門會不會擋」與各 agent 的 cassette 有幾支受損（docs/local-mode.md 10.12 第 4 點）；
+//   - 生成題依「不同題幹」計數與 Claude 初判的分類（distinctGenerations、offtopicCategory、offtopicDistinctAt、
+//     findLabel）：初判存在 eval/tools/embed_threshold_labels.json，以題幹 sha256 對上，重錄後對不上就算「未標註」。
+//
 // 本檔**不決定**門檻：候選值（equivalentThreshold、lowestCleanThreshold、justAbove）只是
 // 「照某一條寫明的規則算出來的數字」，要不要採用由 Owner 裁決（docs/local-mode.md 10.12）。
 // ─────────────────────────────────────────────────────────────
+
+const crypto = require('crypto');
 
 /** 四組題對（docs/variants.md 3.1 的四列） */
 const RELATIONS = Object.freeze(['same_concept', 'same_chapter', 'cross_chapter', 'cross_subject']);
@@ -314,6 +322,144 @@ function hasEscapeDamage(text) {
     return /[\t\x08\x0c\r]/.test(String(text || ''));
 }
 
+/** JSON 跳脫把 `\t`、`\b`、`\f`、`\r` 變成的控制字元 → 原本的字母 */
+const ESCAPE_CONTROL = Object.freeze({ '\t': 't', '\x08': 'b', '\x0c': 'f', '\r': 'r' });
+
+/**
+ * 逐字掃描「JSON 跳脫吃掉的 LaTeX 反斜線」，同時產生補回反斜線的文字與壞掉的指令清單。
+ * **只給分析用**（估計「反斜線修好之後」會怎樣）；產品的修補另有分支（`dec/latex-escape-repair`），規則不一定相同。
+ *
+ * 規則（保守：只補得出原字的地方）：
+ *   - `\t`／`\b`／`\f`／`\r` 的控制字元**後面緊接英文字母** → 補回 `\` 與原字母（`\t`＋`imes` → `\times`）；
+ *     後面不是字母的（例如真的定位字元）不動。
+ *   - 換行字元只有在 `$…$` 裡面、而且後面緊接英文字母時才補回 `\n`（`\neq`、`\nu`、`\norm`）；
+ *     數學式外的換行（選項之間）是合法的，不動。`\$` 不算數學式的開關。
+ *
+ * @param {string} text JSON.parse 之後的字串
+ * @returns {{repaired:string, commands:string[]}} commands：依出現順序的壞掉指令（例 ['\\times', '\\text']）
+ */
+function scanEscapeDamage(text) {
+    const s = String(text == null ? '' : text);
+    let repaired = '';
+    let inMath = false;
+    const commands = [];
+    for (let i = 0; i < s.length; i++) {
+        const ch = s[i];
+        if (ch === '$' && s[i - 1] !== '\\') { inMath = !inMath; repaired += ch; continue; }
+        const letter = ESCAPE_CONTROL[ch] || (ch === '\n' && inMath ? 'n' : null);
+        if (letter && /[A-Za-z]/.test(s[i + 1] || '')) {
+            const rest = /^[A-Za-z]+/.exec(s.slice(i + 1))[0];
+            commands.push(`\\${letter}${rest}`);
+            repaired += `\\${letter}`;
+            continue;
+        }
+        repaired += ch;
+    }
+    return { repaired, commands };
+}
+
+/** 補回反斜線之後的文字（scanEscapeDamage 的 repaired） */
+function repairEscapeDamage(text) {
+    return scanEscapeDamage(text).repaired;
+}
+
+/**
+ * 一份 JSON（cassette 的 response.data）裡哪些字串欄位帶控制字元（hasEscapeDamage，下限）。
+ * 陣列的索引不列出來（`a.b[0]` 記成 `a.b`），同一個欄位只記一次。
+ * @param {*} value
+ * @returns {string[]} 欄位路徑，依字母排序
+ */
+function damagedStringFields(value) {
+    const out = new Set();
+    const walk = (v, p) => {
+        if (typeof v === 'string') { if (hasEscapeDamage(v)) out.add(p || '(字串)'); return; }
+        if (Array.isArray(v)) { for (const x of v) walk(x, p); return; }
+        if (v && typeof v === 'object') for (const k of Object.keys(v)) walk(v[k], p ? `${p}.${k}` : k);
+    };
+    walk(value, '');
+    return [...out].sort();
+}
+
+// ───────────────────────── 初判標註與「不同題幹」計數 ─────────────────────────
+
+/** 文字的 sha256（小寫 hex）：初判標註用它對上題幹，重錄後題幹變了就對不上、算「未標註」 */
+function textSha256(text) {
+    return crypto.createHash('sha256').update(String(text == null ? '' : text), 'utf8').digest('hex');
+}
+
+/** 跑題表的分類（V5-2）：換了概念／同概念改寫／補回反斜線後文字閘門就擋／未標註 */
+const OFFTOPIC_CATEGORIES = Object.freeze(['concept_changed', 'same_concept', 'gate_after_repair', 'unlabeled']);
+
+/**
+ * 在初判標註裡找這一題（藍本 id 與題幹 sha256 都要對上）。
+ * @param {Array<{entry:string, sha256:string|string[], label:string}>} list
+ * @param {string} entryId
+ * @param {string|string[]} text 一段題幹；兄弟變式傳兩段（順序不拘）
+ * @returns {object|null}
+ */
+function findLabel(list, entryId, text) {
+    if (!Array.isArray(list)) return null;
+    const want = (Array.isArray(text) ? text : [text]).map(textSha256).sort().join(',');
+    for (const l of list) {
+        if (!l || l.entry !== entryId) continue;
+        const have = (Array.isArray(l.sha256) ? l.sha256 : [l.sha256]).map(String).sort().join(',');
+        if (have === want) return l;
+    }
+    return null;
+}
+
+/**
+ * 一題生成題在跑題表裡算哪一類：補回反斜線後文字閘門就擋的優先（那一題本來就到不了跑題檢查），
+ * 其次是初判標註，都沒有就是未標註。
+ * @param {{label?:string|null, gateAfterRepair?:{ok:boolean}|null}} g
+ */
+function offtopicCategory(g) {
+    if (g && g.gateAfterRepair && g.gateAfterRepair.ok === false) return 'gate_after_repair';
+    if (g && (g.label === 'concept_changed' || g.label === 'same_concept')) return g.label;
+    return 'unlabeled';
+}
+
+/**
+ * 有餘弦的生成題依「藍本＋題幹」去重（同一藍本兩題逐字相同只算一段；餘弦必定相同）。
+ * @param {Array<{entryId:string, idx:number, status:string, text?:string}>} gens
+ * @returns {Array<object>} 每段一筆：第一次出現的那一題，多一個 `gens`（例 ['var-003#1','var-003#2']）
+ */
+function distinctGenerations(gens) {
+    const seen = new Map();
+    for (const g of gens) {
+        if (g.status !== 'sim') continue;
+        const key = `${g.entryId}\u0000${g.text}`;
+        if (seen.has(key)) { seen.get(key).gens.push(`${g.entryId}#${g.idx}`); continue; }
+        seen.set(key, { ...g, gens: [`${g.entryId}#${g.idx}`] });
+    }
+    return [...seen.values()];
+}
+
+/**
+ * 門檻 t 時「不同題幹」擋下幾段、各屬哪一類，放過的換了概念有幾段（V5-2 的表）。
+ * @param {Array<{sim:number, category:string}>} items distinctGenerations 的結果加上 offtopicCategory
+ * @param {number} t
+ * @returns {{t:number, total:number, blocked:number, byCategory:Record<string,number>, passedChanged:number}}
+ */
+function offtopicDistinctAt(items, t) {
+    const byCategory = Object.fromEntries(OFFTOPIC_CATEGORIES.map(c => [c, 0]));
+    let blocked = 0, passedChanged = 0;
+    for (const it of items) {
+        if (it.sim < t) { blocked += 1; byCategory[it.category] = (byCategory[it.category] || 0) + 1; }
+        else if (it.category === 'concept_changed') passedChanged += 1;
+    }
+    return { t, total: items.length, blocked, byCategory, passedChanged };
+}
+
+/**
+ * 「補回反斜線後文字閘門就擋」的題改記成沒過文字閘門（status 'text_gate_after_repair'），
+ * 給 offtopicAt 算「兩題都沒過的藍本」的補回後版本。餘弦沿用受損文字算的（沒有重錄就量不到新的）。
+ */
+function withGateAfterRepair(gens) {
+    return gens.map(g => (g.status === 'sim' && g.gateAfterRepair && g.gateAfterRepair.ok === false
+        ? { ...g, status: 'text_gate_after_repair' } : g));
+}
+
 // ───────────────────────── Markdown ─────────────────────────
 
 /** 數字格式：null → '—' */
@@ -362,5 +508,7 @@ module.exports = {
     pickKindOf, coverageAt, lowestCleanThreshold,
     offtopicAt,
     dedupVerdict, numberTokens, sameNumbers, numbersRelation, hasEscapeDamage,
+    ESCAPE_CONTROL, scanEscapeDamage, repairEscapeDamage, damagedStringFields,
+    textSha256, OFFTOPIC_CATEGORIES, findLabel, offtopicCategory, distinctGenerations, offtopicDistinctAt, withGateAfterRepair,
     fmt, pct, cell, mdTable
 };

@@ -422,7 +422,7 @@ module.exports = {
     run,
     // 給 runner、cassette 錄製腳本與單元測試用的內部零件
     buildPrompt, neighborsText, anchorIdsOf, targetDifficulty, familyRoot, cosine,
-    TEMPLATE, SYSTEM, PROMPT_TEMPLATE, MAX_NEIGHBORS, INHERITED_CHAPTER_CONFIDENCE, DEFAULT_OFFTOPIC_SIM_MIN,
+    TEMPLATE, SYSTEM, PROMPT_TEMPLATE, MAX_NEIGHBORS, INHERITED_CHAPTER_CONFIDENCE, DEFAULT_OFFTOPIC_SIM_MIN, DEFAULT_MIN_EDIT,
     // 〔stage5 WS-B〕化學藍本
     AGENT_CHEM, TEMPLATE_CHEM, SYSTEM_CHEM, PROMPT_TEMPLATE_CHEM
 };

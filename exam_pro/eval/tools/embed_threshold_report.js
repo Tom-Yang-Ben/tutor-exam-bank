@@ -16,6 +16,13 @@
 //   - eval/golden/variant.json（30 個藍本）、eval/golden/dedup.json（30 組去重題對，Owner 已定案的 expect_l1）
 //   - eval/cassettes/variant/*.json：已錄的生成題。把回應餵回 agents/generateVariant.js 的 run()（跑題門檻設成 -1，
 //     所以每一題都算得出餘弦），向量一律查向量檔——與 CI 回放時跑題檢查算的是同一個數字。
+//   - eval/tools/embed_threshold_labels.json：Claude 對生成題的初判（換了概念／同概念改寫；兄弟變式是不是同一題）。
+//     不是量測；以題幹 sha256 對上，重錄後對不上的列為「未標註」。計數一律由本工具算（10.12 不手填）。
+//   - eval/cassettes/<agent>/*.json：第 7 節掃「JSON 跳脫吃掉 LaTeX 反斜線」的控制字元（只讀 response.data 的字串）。
+//
+// 〔2026-09-26 審查修正〕V5-2 的表改依「不同題幹」計（同一藍本兩題逐字相同只算一段，4.3）；
+// 補回反斜線之後文字閘門會不會擋（agents/generateVariant.js 用的同一支 utils/variantTextGate.js、同一個 minEdit）；
+// 第 5 節寫明 dedup1 在變式 job 排除整個家族——同一藍本的兄弟變式在產品裡不會互相比對，5.4 只是「換句話說」的餘弦代理。
 //
 // 限制（報告開頭也會印）：
 //   - Gemini 的向量檔少了 5 題（#51、#53、#54、#55、#62：2026-09-25 CR-8 改標與新增之後沒有用 Gemini 重錄），
@@ -35,21 +42,38 @@ const localMode = require('../lib/localMode');
 
 const APP_DIR = path.resolve(__dirname, '..', '..');
 const DEDUP_GOLDEN = path.join(APP_DIR, 'eval', 'golden', 'dedup.json');
+const LABELS_FILE = path.join(__dirname, 'embed_threshold_labels.json');
 const DEFAULT_COMPARE = 'gemini-embedding-001';
 const DEFAULT_COMPARE_LLM = 'gemini-3.1-pro-preview';
 
 /**
  * 程式裡的現行預設值（直接讀程式，不讀 .env：本報告分析的是「沒寫 .env 時」的行為）。
- * @returns {{retrieve:number, offtopic:number, dedupDup:number, dedupVariant:number}}
+ * minEdit 不是這次要校準的門檻，只拿來重算「補回反斜線後文字閘門會不會擋」（與 generateVariant 同一個預設）。
+ * @returns {{retrieve:number, offtopic:number, dedupDup:number, dedupVariant:number, minEdit:number}}
  */
 function currentDefaults() {
     const dedup = require('../../agents/dedup');
+    const gv = require('../../agents/generateVariant');
     return {
         retrieve: require('../../services/variantService').simMin({}),
-        offtopic: require('../../agents/generateVariant').DEFAULT_OFFTOPIC_SIM_MIN,
+        offtopic: gv.DEFAULT_OFFTOPIC_SIM_MIN,
         dedupDup: dedup.DEFAULT_DUP,
-        dedupVariant: dedup.DEFAULT_VARIANT
+        dedupVariant: dedup.DEFAULT_VARIANT,
+        minEdit: gv.DEFAULT_MIN_EDIT
     };
+}
+
+/**
+ * Claude 的初判標註（eval/tools/embed_threshold_labels.json）。檔案不存在或壞掉時回空的（全部算未標註）。
+ * @returns {{offtopic:Array<object>, siblings:Array<object>, llm:string|null}}
+ */
+function loadLabels(file) {
+    try {
+        const j = JSON.parse(fs.readFileSync(file, 'utf8'));
+        return { offtopic: Array.isArray(j.offtopic) ? j.offtopic : [], siblings: Array.isArray(j.siblings) ? j.siblings : [], llm: j.llm || null };
+    } catch {
+        return { offtopic: [], siblings: [], llm: null };
+    }
 }
 
 /** 各段掃描用的門檻格點 */
@@ -68,6 +92,7 @@ const HELP = `用法：npm run embed:thresholds -- [選項]
   --llm <模型 ID>           主要分析的變式 cassette 是哪個模型錄的（預設 MODEL_VARIANT／MODEL_VERIFY 的裸 ID）
   --compare-llm <模型 ID>   對照的變式 cassette（預設 ${DEFAULT_COMPARE_LLM}）
   --cassettes <資料夾>      cassette 根目錄（預設 EVAL_CASSETTE_DIR 或 eval/cassettes）
+  --labels <檔案>          生成題的初判標註（預設 eval/tools/embed_threshold_labels.json）
   --out <檔案>             報告另存成 Markdown 檔（畫面上照樣印）
   --help                   顯示本說明
 
@@ -86,6 +111,7 @@ function parseArgs(argv, { cwd = process.cwd(), env = process.env } = {}) {
             || (String(env.MODEL_VERIFY || '').trim()) || localMode.LOCAL_DEFAULTS.MODEL_VERIFY),
         compareLlm: DEFAULT_COMPARE_LLM,
         cassettes: path.resolve(APP_DIR, env.EVAL_CASSETTE_DIR || path.join('eval', 'cassettes')),
+        labels: LABELS_FILE,
         out: null,
         help: false
     };
@@ -102,6 +128,7 @@ function parseArgs(argv, { cwd = process.cwd(), env = process.env } = {}) {
             case '--llm': args.llm = value(++i, a); break;
             case '--compare-llm': args.compareLlm = value(++i, a); break;
             case '--cassettes': args.cassettes = path.resolve(cwd, value(++i, a)); break;
+            case '--labels': args.labels = path.resolve(cwd, value(++i, a)); break;
             case '--out': args.out = path.resolve(cwd, value(++i, a)); break;
             case '--help': case '-h': args.help = true; break;
             default: throw new Error(`不認得的參數：${a}（--help 看用法）`);
@@ -136,14 +163,51 @@ function loadVariantCassettes(root, modelId) {
 }
 
 /**
+ * 第 7 節：各 agent 的 cassette 有幾支的回應帶「JSON 跳脫吃掉 LaTeX」的控制字元（T.damagedStringFields，下限）。
+ * 只讀 response.data；依 agent、模型分組。資料夾不存在或檔案壞掉就略過。
+ * @param {string} root cassette 根目錄
+ * @returns {Array<{agent:string, model:string, n:number, damaged:number, fields:Record<string,number>}>}
+ *          依 agent、模型排序
+ */
+function scanCassetteDamage(root) {
+    let agents = [];
+    try { agents = fs.readdirSync(root).filter(d => fs.statSync(path.join(root, d)).isDirectory()).sort(); } catch { return []; }
+    const rows = new Map();
+    for (const agent of agents) {
+        const dir = path.join(root, agent);
+        for (const f of fs.readdirSync(dir).filter(n => n.endsWith('.json')).sort()) {
+            let c;
+            try { c = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); } catch { continue; }
+            const model = String((c && c.meta && c.meta.model) || '（沒有 meta.model）');
+            const key = `${agent}\u0000${model}`;
+            if (!rows.has(key)) rows.set(key, { agent, model, n: 0, damaged: 0, fields: {} });
+            const row = rows.get(key);
+            row.n += 1;
+            const bad = T.damagedStringFields(c && c.response && c.response.data);
+            if (bad.length) {
+                row.damaged += 1;
+                for (const p of bad) row.fields[p] = (row.fields[p] || 0) + 1;
+            }
+        }
+    }
+    return [...rows.values()].sort((a, b) => (a.agent === b.agent ? a.model.localeCompare(b.model) : a.agent.localeCompare(b.agent)));
+}
+
+/**
  * 把錄好的生成結果餵回 agents/generateVariant.js：跑題門檻設 -1（每一題都算出餘弦），向量查向量檔。
  * 回傳每一題的狀態：'sim'（有餘弦）、'text_gate'（文字閘門先擋下，系統不會算向量）、'schema_invalid'、
  * 'miss'（向量檔查不到）、'no_cassette'。
+ *
+ * 另外算「LaTeX 反斜線補回去之後」的文字閘門（T.repairEscapeDamage ＋ utils/variantTextGate.js 的 textGate，
+ * minEdit 與 generateVariant 相同）：gateAfterRepair 是補回後的判定，題幹沒有受損時是 null。
+ * 補回後的**餘弦**量不到（要重錄向量），sim 仍是受損文字的。
  */
-async function replayGenerations({ golden, fixture, cassettes, embedModel, dim }) {
+async function replayGenerations({ golden, fixture, cassettes, embedModel, dim, minEdit }) {
     const agent = require('../../agents/generateVariant');
     const { embedFromFixture } = require('../../services/llm/fixture');
     const { l2Normalize } = require('../../services/llm');
+    const { textGate } = require('../../utils/variantTextGate');
+    const edit = Number.isFinite(minEdit) ? minEdit : agent.DEFAULT_MIN_EDIT;
     const gens = [];
     for (const e of golden.entries) {
         const source = fixture.byId.get(e.source_question_id);
@@ -166,13 +230,21 @@ async function replayGenerations({ golden, fixture, cassettes, embedModel, dim }
                         } catch (err) { miss = err.message; throw err; }
                     }
                 },
-                config: { thresholds: { variantOfftopicSimMin: -1 }, models: { variant: 'replay-only' } },
+                // 文字閘門的 minEdit 與下面「補回反斜線後」重算的是同一個值（沒傳時就是 generateVariant 的預設）
+                config: { thresholds: { variantOfftopicSimMin: -1, variantMinEdit: edit }, models: { variant: 'replay-only' } },
                 job: { kind: 'variant' },
                 signal: undefined
             };
             const out = await agent.run(ctx, { source, neighbors: [], difficulty_delta: 0, idx });
             const text = String(data.question_text || '');
-            const row = { ...base, text, chapter: data.chapter || null, damaged: T.hasEscapeDamage(text) };
+            const scan = T.scanEscapeDamage(text);
+            const gateAfterRepair = scan.repaired === text ? null : (() => {
+                const now = textGate({ source_text: source.question_text, variant_text: text, minEdit: edit });
+                const after = textGate({ source_text: source.question_text, variant_text: scan.repaired, minEdit: edit });
+                return { ok: after.ok, reason: after.reason, editRatio: after.edit_ratio, editRatioNow: now.edit_ratio };
+            })();
+            const row = { ...base, text, chapter: data.chapter || null, damaged: T.hasEscapeDamage(text),
+                damagedCommands: scan.commands, gateAfterRepair };
             if (miss) gens.push({ ...row, status: 'miss' });
             else if (out.kind === 'pass') gens.push({ ...row, status: 'sim', sim: out.gate.sim, chapter: out.data.chapter, vector });
             else if (out.kind === 'fail' && out.reason === 'text_gate') gens.push({ ...row, status: 'text_gate' });
@@ -186,7 +258,7 @@ async function replayGenerations({ golden, fixture, cassettes, embedModel, dim }
  * 讀一個模型的全部資料並算好各段需要的數字。
  * @returns {Promise<object|null>} 向量檔不存在時回 null（只在對照模型允許）
  */
-async function analyzeModel({ model, llm, fixture, golden, dedupGolden, cassetteRoot, dim, optional, questionFilter }) {
+async function analyzeModel({ model, llm, fixture, golden, dedupGolden, cassetteRoot, dim, optional, questionFilter, labels, minEdit }) {
     const emb = loadEmbeddings({ questions: fixture.questions, model, dim, optional });
     if (!emb.available) return null;
     const hasVec = q => Array.isArray(emb.vectorOf(q));
@@ -209,7 +281,14 @@ async function analyzeModel({ model, llm, fixture, golden, dedupGolden, cassette
 
     // ③ 跑題：已錄的生成題
     const cassettes = llm ? loadVariantCassettes(cassetteRoot, llm) : new Map();
-    const gens = await replayGenerations({ golden, fixture, cassettes, embedModel: model, dim });
+    const lab = labels || { offtopic: [], siblings: [] };
+    const gens = (await replayGenerations({ golden, fixture, cassettes, embedModel: model, dim, minEdit }))
+        .map(g => {
+            const l = g.text ? T.findLabel(lab.offtopic, g.entryId, g.text) : null;
+            return { ...g, label: l ? l.label : null };
+        });
+    // V5-2 的表：依「藍本＋題幹」去重，每段一個分類（補回反斜線後文字閘門就擋 → 初判 → 未標註）
+    const distinct = T.distinctGenerations(gens).map(g => ({ ...g, category: T.offtopicCategory(g) }));
 
     // ④ 去重：golden 題對、生成題與 fixture 的最近餘弦、同一藍本兩題之間
     const dedupPairs = dedupGolden.entries
@@ -234,18 +313,34 @@ async function analyzeModel({ model, llm, fixture, golden, dedupGolden, cassette
     for (const e of golden.entries) {
         const [g1, g2] = [1, 2].map(i => gens.find(g => g.entryId === e.id && g.idx === i));
         if (!g1 || !g2 || g1.status !== 'sim' || g2.status !== 'sim') continue;
-        if (g1.text === g2.text) { siblings.push({ entryId: e.id, identical: true, cos: 1, numbers: 'same', t1: g1.text, t2: g2.text }); continue; }
-        siblings.push({ entryId: e.id, identical: false, cos: T.cosine(g1.vector, g2.vector), numbers: T.numbersRelation(g1.text, g2.text), t1: g1.text, t2: g2.text });
+        if (g1.text === g2.text) { siblings.push({ entryId: e.id, identical: true, cos: 1, numbers: 'same', t1: g1.text, t2: g2.text, label: null }); continue; }
+        const l = T.findLabel(lab.siblings, e.id, [g1.text, g2.text]);
+        siblings.push({ entryId: e.id, identical: false, cos: T.cosine(g1.vector, g2.vector), numbers: T.numbersRelation(g1.text, g2.text),
+            t1: g1.text, t2: g2.text, label: l ? l.label : null });
     }
 
     return { model, llm, file: path.relative(APP_DIR, emb.file).replace(/\\/g, '/'), questions, pairs, groups,
-        retrieval, gens, cassetteCount: cassettes.size, dedupPairs, genNearest, siblings };
+        retrieval, gens, distinct, cassetteCount: cassettes.size, dedupPairs, genNearest, siblings };
 }
 
 // ───────────────────────── 報告 ─────────────────────────
 
 const LABEL = T.RELATION_LABELS;
 const PICK_LABEL = { same_concept: '同概念', same_chapter: '同章', lookalike: '2D／3D 對照', cross_chapter: '其他跨章', cross_subject: '跨科' };
+/** 初判標註與 V5-2 分類的顯示名稱 */
+const JUDGE_LABEL = {
+    concept_changed: '換了概念', same_concept: '同概念改寫', gate_after_repair: '補回反斜線後文字閘門就擋', unlabeled: '未標註',
+    same_question: '同一題', numbers_changed: '換數字', different: '問的不一樣'
+};
+/** V5-2 的三個選項（10.12 的表列這三列；4.3 另列整個格點） */
+const OFFTOPIC_OPTIONS = [0.90, 0.87, 0.80];
+/** 補回反斜線後的文字閘門（replayGenerations 的 gateAfterRepair） */
+const repairCell = g => {
+    const r = g.gateAfterRepair;
+    if (!r) return '—（沒受損）';
+    const ratios = `edit_ratio ${T.fmt(r.editRatioNow, 3)} → ${T.fmt(r.editRatio, 3)}`;
+    return r.ok ? `過（${ratios}）` : `**擋：${r.reason}**（${ratios}）`;
+};
 const shortModel = m => (m === DEFAULT_COMPARE ? 'Gemini' : (String(m).startsWith('ollama:') ? '本機' : m));
 
 function distRows(groups, name) {
@@ -288,6 +383,10 @@ function buildReport(a) {
     if (C && a.missingInCompare.length) {
         L.push(`> 對照模型的向量檔少了 ${a.missingInCompare.length} 題（#${a.missingInCompare.join('、#')}）：兩個模型並排的數字只用兩邊都有的 ${a.commonIds.length} 題（「共同題」）。`);
     }
+    const labeledDistinct = P.distinct.filter(d => d.label).length;
+    const sibNonIdent = P.siblings.filter(s => !s.identical);
+    L.push(`> 生成題的初判（Claude 讀過題幹的判斷，**不是量測**）：\`eval/tools/embed_threshold_labels.json\`，以題幹 sha256 對上——跑題 ${labeledDistinct}/${P.distinct.length} 段、` +
+        `兄弟變式 ${sibNonIdent.filter(s => s.label).length}/${sibNonIdent.length} 組對得上（對不上的列「未標註」）。計數都由本工具算。`);
     L.push(`> 現行預設（程式，不讀 .env）：VARIANT_RETRIEVE_SIM_MIN＝${cur.retrieve}、VARIANT_OFFTOPIC_SIM_MIN＝${cur.offtopic}、DEDUP_DUP_THRESHOLD＝${cur.dedupDup}、DEDUP_VARIANT_THRESHOLD＝${cur.dedupVariant}。`);
     L.push('> 百分位數用線性內插；「≥ 門檻」算通過／算相似（與程式相同）。', '');
 
@@ -411,15 +510,53 @@ function buildReport(a) {
     L.push(...T.mdTable(['門檻', `${pName} 擋下`, `${pName} 兩題都沒過的藍本`, ...(C ? [`${cName} 擋下`, `${cName} 兩題都沒過的藍本`] : [])], offRows), '');
     L.push('「兩題都沒過」含文字閘門先擋下的；Gemini 那一欄有幾題缺向量（改標後藍本的向量沒重錄），算作沒過。', '');
     L.push(`### 4.2 ${P.llm}＋${pName} 每一題（依餘弦由低到高）`, '');
+    L.push('「初判」是 Claude 讀過題幹的判斷（`eval/tools/embed_threshold_labels.json`，不是量測）；「補回反斜線後」是把 JSON 跳脫吃掉的反斜線補回去（第 7 節），' +
+        '用 generateVariant 同一支 `utils/variantTextGate.js`、同一個 minEdit 重算的文字閘門。補回後的餘弦量不到（要重錄向量），表中餘弦仍是受損文字的。', '');
     const listRows = [...P.gens].sort((x, y) => (x.status === 'sim' ? x.sim : 9) - (y.status === 'sim' ? y.sim : 9)).map(g => [
         g.status === 'sim' ? T.fmt(g.sim) : `—（${g.status}）`, `${g.entryId}#${g.idx}`, `#${g.sourceId}`,
         T.cell(g.chapter && g.chapter !== g.sourceChapter ? `${g.sourceChapter} → ${g.chapter}` : g.sourceChapter),
+        g.status === 'sim' ? JUDGE_LABEL[g.label || 'unlabeled'] : '—', g.text ? repairCell(g) : '—',
         T.cell(g.sourceText, 30), T.cell(g.text, 70)]);
-    L.push(...T.mdTable(['餘弦', '生成', '藍本', '章節', '藍本題幹', '生成題幹'], listRows, 'rllll'), '');
+    L.push(...T.mdTable(['餘弦', '生成', '藍本', '章節', '初判', '補回反斜線後的文字閘門', '藍本題幹', '生成題幹'], listRows, 'rlllllll'), '');
+
+    // ── 4.3 依不同題幹計（10.12 V5-2 的表） ──
+    L.push('### 4.3 依不同題幹計（10.12 V5-2 的表）', '');
+    const nIdentical = P.gens.filter(g => g.status === 'sim').length - P.distinct.length;
+    L.push(`4.1 每支 cassette 算一題；同一藍本兩題逐字相同的在這裡只算一段（有餘弦的 ${P.gens.filter(g => g.status === 'sim').length} 支 → ${P.distinct.length} 段，少 ${nIdentical} 段）。` +
+        '分類：補回反斜線後文字閘門就擋的先算（那一題修好之後根本到不了跑題檢查），其餘照初判；「兩題都沒過的藍本（補回後）」把這幾題當成沒過文字閘門，餘弦仍是受損文字的。', '');
+    const distinctRow = t => {
+        const d = T.offtopicDistinctAt(P.distinct, t);
+        const now = T.offtopicAt(P.gens, t);
+        const repaired = T.offtopicAt(T.withGateAfterRepair(P.gens), t);
+        return [T.fmt(t, 2), `${d.blocked}/${d.total}`, d.byCategory.concept_changed, d.byCategory.same_concept, d.byCategory.gate_after_repair,
+            d.byCategory.unlabeled, d.passedChanged, `${now.entriesNoneThrough}/${now.entries}`, `${repaired.entriesNoneThrough}/${repaired.entries}`,
+            T.pct(T.rateAtOrAbove(P.groups.same_chapter, t)), T.pct(T.rateAtOrAbove(P.groups.cross_chapter, t))];
+    };
+    const distinctHead = ['門檻', '擋下（不同題幹）', '其中換了概念', '其中同概念改寫', '其中補回反斜線後文字閘門就擋', '其中未標註',
+        '放過的換了概念', '兩題都沒過的藍本', '兩題都沒過的藍本（補回後）', 'fixture 同章不同概念 ≥', 'fixture 跨章同科 ≥'];
+    L.push(`V5-2 的三個選項（${OFFTOPIC_OPTIONS.map(t => T.fmt(t, 2)).join('／')}）：`, '');
+    L.push(...T.mdTable(distinctHead, OFFTOPIC_OPTIONS.map(distinctRow)), '');
+    L.push('整個格點：', '');
+    L.push(...T.mdTable(distinctHead, GRIDS.offtopic.map(distinctRow)), '');
+    const listOf = (t, cat) => P.distinct.filter(d => d.sim < t && d.category === cat).sort((x, y) => x.sim - y.sim)
+        .map(d => `${d.gens.join('＝')} ${T.fmt(d.sim)}`).join('、') || '—';
+    for (const t of OFFTOPIC_OPTIONS) {
+        L.push(`- ${T.fmt(t, 2)} 擋下的：換了概念 ${listOf(t, 'concept_changed')}；同概念改寫 ${listOf(t, 'same_concept')}；` +
+            `補回反斜線後文字閘門就擋 ${listOf(t, 'gate_after_repair')}；放過的換了概念 ` +
+            (P.distinct.filter(d => d.sim >= t && d.category === 'concept_changed').sort((x, y) => x.sim - y.sim)
+                .map(d => `${d.gens.join('＝')} ${T.fmt(d.sim)}`).join('、') || '—') + '。');
+    }
+    L.push('');
 
     // ── 5. 去重 ──
     L.push(`## 5. DEDUP_DUP_THRESHOLD（現行 ${cur.dedupDup}）與 DEDUP_VARIANT_THRESHOLD（現行 ${cur.dedupVariant}）`, '');
-    L.push('dedup1 的判定（`agents/dedup.js`）：與同科最近一題的餘弦 ≥ DEDUP_DUP_THRESHOLD → 重複、**不入庫**；≥ DEDUP_VARIANT_THRESHOLD → 標「變式」照常入庫（只是標記）；其餘 unique。', '');
+    L.push('dedup1 的判定（`agents/dedup.js`）：與同科最近一題的餘弦 ≥ DEDUP_DUP_THRESHOLD → 回 fail／`duplicate`，dedup1 沒有重試，' +
+        '經 `pipeline/stateMachine.js` 的 `REVIEW_REASON_FOR_FAIL` 進複核（`review_reason=\'duplicate\'`；不自動入庫、也不刪，老師決定）；' +
+        '≥ DEDUP_VARIANT_THRESHOLD → 標「變式」照常往下走（只是標記）；其餘 unique。', '');
+    L.push('**變式 job 的 dedup1 排除藍本整個家族**：`workers/jobRunner.js` 給 dedup1 的 input 多一個 `exclude_family_root`（＝藍本的家族根），' +
+        '`agents/dedup.js` 的候選 SQL 加 `AND COALESCE(variant_of, id) <> 家族根`，變式存檔時 `variant_of`＝家族根。' +
+        '所以**同一藍本的變式（兄弟）在 dedup1 永遠不會互相比對**，任何門檻都一樣；只有逐字相同（正規化後）的會被 dedup0 的 L0 雜湊擋下' +
+        '（同一個 job 較早的題，或已入庫的題）。5.3 比的是「生成題 vs 別的家族的題」，這在產品裡會比；5.4 的兄弟之間只是「換句話說」的餘弦代理。', '');
     L.push('### 5.1 dedup golden（Owner 已定案的 expect_l1）', '');
     L.push('verbatim／resend 16 組：L0 雜湊已全部擋下（`npm test` 守著）；resend 的題幹改過格式，向量檔沒有錄，量不到餘弦。下表是其餘 14 組。', '');
     const dgRows = P.dedupPairs.map((d, i) => {
@@ -442,24 +579,47 @@ function buildReport(a) {
         const s = T.summarize(v);
         return [nm, v.length, ...GRIDS.dedup.slice(0, 8).map(t => T.countAtOrAbove(v, t)), T.fmt(s.p50), T.fmt(s.max)];
     };
+    // 依不同題幹（同一藍本兩題逐字相同只算一段；同 4.3）
+    const distinctNearest = M => {
+        const seen = new Set();
+        return M.genNearest.filter(g => { const k = `${g.entryId}\u0000${g.text}`; if (seen.has(k)) return false; seen.add(k); return true; });
+    };
+    const gnDistinctRow = (M, nm) => {
+        const v = distinctNearest(M).map(g => g.nearest.cos);
+        const s = T.summarize(v);
+        return [`${nm}（不同題幹）`, v.length, ...GRIDS.dedup.slice(0, 8).map(t => T.countAtOrAbove(v, t)), T.fmt(s.p50), T.fmt(s.max)];
+    };
     L.push(...T.mdTable(['生成＋向量', '題數', ...GRIDS.dedup.slice(0, 8).map(t => `≥ ${t}`), 'p50', 'max'],
-        [gnRow(P, `${P.llm}＋${pName}`), ...(C ? [gnRow(C, `${C.llm}＋${cName}`)] : [])]), '');
+        [gnRow(P, `${P.llm}＋${pName}`), gnDistinctRow(P, `${P.llm}＋${pName}`),
+            ...(C ? [gnRow(C, `${C.llm}＋${cName}`), gnDistinctRow(C, `${C.llm}＋${cName}`)] : [])]), '');
     const hiNear = P.genNearest.filter(g => g.nearest.cos >= 0.95).sort((x, y) => y.nearest.cos - x.nearest.cos);
     if (hiNear.length) {
-        L.push(`${P.llm}：最近一題 ≥ 0.95 的生成題（最近那題與藍本的關係）：` +
-            hiNear.map(g => `${g.entryId}#${g.idx} ${T.fmt(g.nearest.cos)} → #${g.nearest.id}（${LABEL[g.nearestRel]}）`).join('、') + '。', '');
+        L.push(`${P.llm}：最近一題 ≥ 0.95 的生成題（最近那題與藍本的關係；補回反斜線後文字閘門就擋的另外註明——修好之後它到不了 dedup1）：` +
+            hiNear.map(g => `${g.entryId}#${g.idx} ${T.fmt(g.nearest.cos)} → #${g.nearest.id}（${LABEL[g.nearestRel]}` +
+                (g.gateAfterRepair && !g.gateAfterRepair.ok ? `；補回反斜線後文字閘門就擋：${g.gateAfterRepair.reason}` : '') + '）').join('、') + '。', '');
     }
-    L.push('### 5.4 同一藍本的兩題生成題之間（重複候選的實例）', '');
-    L.push('兩題的數字完全相同＝多半是同一題換句話說（該被當成重複的那一種）；「無數字」是觀念題，這個標記判斷不了，要看題幹。題幹逐字相同的 L0 雜湊就會擋，這裡只列不同的。', '');
+    L.push('### 5.4 同一藍本的兩題生成題之間（「同一題換句話說」的餘弦代理；產品不比這兩題）', '');
+    L.push('**產品不會拿兄弟變式互相比**（見本節開頭：dedup1 排除家族），所以下表不是「現行門檻會抓到幾組」——對這些兄弟，任何門檻實際都是 0 組。' +
+        '它只是借來看「同一題換句話說」在本機向量下是幾分：產品真正會比的「同一題、不同來源」（例如另一份考卷印的同一題、別的家族的變式剛好寫成同一題）目前沒有本機向量的實測。' +
+        '「初判」見 `eval/tools/embed_threshold_labels.json`（同一題＝換句話說或只換誘答；換數字＝真變式；問的不一樣）。題幹逐字相同的會被 L0 雜湊擋，這裡只列不同的。', '');
     const NUM_LABEL = { same: '相同', different: '不同', none: '無數字' };
     const sibRows = P.siblings.filter(s => !s.identical).sort((x, y) => y.cos - x.cos)
-        .map(s => [s.entryId, T.fmt(s.cos), NUM_LABEL[s.numbers], T.cell(s.t1, 45), T.cell(s.t2, 45)]);
-    L.push(...T.mdTable(['藍本', '餘弦', '數字', '第 1 題', '第 2 題'], sibRows, 'lrlll'), '');
-    L.push(`（${P.llm} 另有 ${P.siblings.filter(s => s.identical).length} 個藍本的兩題逐字相同。）`, '');
+        .map(s => [s.entryId, T.fmt(s.cos), NUM_LABEL[s.numbers], JUDGE_LABEL[s.label || 'unlabeled'], T.cell(s.t1, 45), T.cell(s.t2, 45)]);
+    L.push(...T.mdTable(['藍本', '餘弦', '數字', '初判', '第 1 題', '第 2 題'], sibRows, 'lrllll'), '');
+    const nIdent = P.siblings.filter(s => s.identical).length;
+    L.push(`（${P.llm} 另有 ${nIdent} 個藍本的兩題逐字相同：同一個 job 裡第 2 題會被 L0 雜湊擋下、以 duplicate 進複核。）`, '');
+    const sameQ = P.siblings.filter(s => !s.identical && s.label === 'same_question').map(s => s.cos);
+    const numQ = P.siblings.filter(s => !s.identical && (s.label === 'numbers_changed' || s.label === 'different')).map(s => s.cos);
+    const unl = P.siblings.filter(s => !s.identical && !s.label).length;
+    L.push(`初判「同一題」${sameQ.length} 組、「換數字／問的不一樣」${numQ.length} 組${unl ? `、未標註 ${unl} 組` : ''}。門檻掃描（代理：≥ 門檻的組數；產品實際不比）：`, '');
+    const sibSweep = GRIDS.dedup.map(t => [T.fmt(t, 3), `${T.countAtOrAbove(sameQ, t)}/${sameQ.length}`, `${T.countAtOrAbove(numQ, t)}/${numQ.length}`,
+        `${T.countAtOrAbove(P.groups.same_concept, t)}/${P.groups.same_concept.length}`]);
+    L.push(...T.mdTable(['門檻', '「同一題」兄弟 ≥ 門檻（代理）', '「換數字／問的不一樣」兄弟 ≥ 門檻', 'fixture 換數字題對 ≥ 門檻（5.2）'], sibSweep), '');
     if (C) {
         const cs = C.siblings.filter(s => !s.identical);
         const cv = cs.map(s => s.cos);
-        L.push(`對照：${C.llm}＋${cName} 同一藍本兩題（${cs.length} 組，數字相同 ${cs.filter(s => s.numbers === 'same').length} 組）餘弦 min ${T.fmt(T.summarize(cv).min)}、p50 ${T.fmt(T.summarize(cv).p50)}、max ${T.fmt(T.summarize(cv).max)}。`, '');
+        L.push(`對照：${C.llm}＋${cName} 同一藍本兩題（${cs.length} 組不同、${C.siblings.filter(s => s.identical).length} 組逐字相同；不同的裡數字相同 ${cs.filter(s => s.numbers === 'same').length} 組）` +
+            `餘弦 min ${T.fmt(T.summarize(cv).min)}、p50 ${T.fmt(T.summarize(cv).p50)}、max ${T.fmt(T.summarize(cv).max)}。`, '');
     }
 
     candidates.dedup_above_all_numeric = P.groups.same_concept.length ? T.justAbove(Math.max(...P.groups.same_concept), 0.001) : null;
@@ -475,6 +635,51 @@ function buildReport(a) {
         ['DEDUP_VARIANT_THRESHOLD', `${cName || '對照'} ${cur.dedupVariant} 的等效值：換數字題標成「變式」同比例（2.3）`, T.fmt(candidates.dedupVariant_equiv_same_concept)]
     ];
     L.push(...T.mdTable(['門檻', '規則', '值'], cRows, 'llr'), '');
+
+    // ── 7. LaTeX 反斜線被 JSON 跳脫吃掉 ──
+    L.push('## 7. LaTeX 反斜線被 JSON 跳脫吃掉（R6 的證據）', '');
+    L.push('模型在 JSON 字串裡寫 `\\times` 而不是 `\\\\times`，JSON.parse 就把 `\\t` 變成定位字元、只剩 `imes`（`\\b`、`\\f`、`\\r` 同理；' +
+        '`\\n` 開頭的指令變成換行）。本節只讀已錄的檔案；「補回反斜線」用 `eval/lib/embedThresholds.js` 的 `scanEscapeDamage`' +
+        '（控制字元後面緊接英文字母才補；換行只補 `$…$` 裡面的），是分析用的估計，不是產品的修補。', '');
+    L.push('### 7.1 各 agent 的 cassette：回應裡的字串帶控制字元的支數', '');
+    L.push('只數 `\\t`、`\\b`、`\\f`、`\\r` 四種控制字元（`hasEscapeDamage`，下限）；讀全部已錄的 cassette（不只 CI 讀得到的那一份）。', '');
+    const dmgRows = (a.cassetteDamage || []).map(r => [r.agent, r.model, r.n, r.damaged,
+        Object.entries(r.fields).sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0])).map(([k, v]) => `${k} ${v}`).join('、') || '—']);
+    L.push(...T.mdTable(['agent', '模型', '支數', '回應受損', '受損的欄位（支數）'], dmgRows, 'llrrl'), '');
+    L.push(`### 7.2 本報告分析的變式（每個藍本 idx 1、2，difficultyDelta＝0、取最新錄的）`, '');
+    const cmdSummary = M => {
+        const withText = M.gens.filter(g => g.text);
+        const counts = {};
+        for (const g of withText) for (const c of g.damagedCommands) counts[c] = (counts[c] || 0) + 1;
+        const top = Object.entries(counts).sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]));
+        return { withText: withText.length, damaged: withText.filter(g => g.damaged).length,
+            anyCmd: withText.filter(g => g.damagedCommands.length).length, top };
+    };
+    for (const M of [P, ...(C ? [C] : [])]) {
+        const s = cmdSummary(M);
+        L.push(`- ${M.llm}：題幹受損 **${s.damaged}/${s.withText}**（四種控制字元，下限）；連 \`$…$\` 裡的 \`\\n\` 一起算是 ${s.anyCmd}/${s.withText}。` +
+            `壞掉的指令（出現次數）：${s.top.map(([c, n]) => `\`${c}\` ${n}`).join('、') || '—'}。`);
+    }
+    L.push('');
+    if (C) {
+        const cd = C.gens.filter(g => g.text && g.damagedCommands.length);
+        L.push(`${C.llm} 題幹受損的每一題（藍本題號#idx）：` +
+            (cd.map(g => `${g.entryId}#${g.idx}（#${g.sourceId}#${g.idx}）${[...new Set(g.damagedCommands)].map(c => `\`${c}\``).join('、')}`).join('；') || '—') + '。', '');
+    }
+    L.push('### 7.3 反斜線補回去之後，文字閘門會擋的生成題', '');
+    L.push('受損的題幹少了反斜線、多了控制字元（正規化時被當成空白刪掉），和藍本的差異被放大，所以現在過得了文字閘門；補回去之後重算：', '');
+    const gateRows = [];
+    for (const M of [P, ...(C ? [C] : [])]) {
+        for (const g of M.gens.filter(x => x.gateAfterRepair && !x.gateAfterRepair.ok)) {
+            gateRows.push([M.llm, `${g.entryId}#${g.idx}`, `#${g.sourceId}#${g.idx}`, g.status === 'sim' ? T.fmt(g.sim) : `—（${g.status}）`,
+                `${g.gateAfterRepair.reason}`, `${T.fmt(g.gateAfterRepair.editRatioNow, 4)} → ${T.fmt(g.gateAfterRepair.editRatio, 4)}`,
+                M === P ? JUDGE_LABEL[g.label || 'unlabeled'] : '—']);
+        }
+    }
+    L.push(...T.mdTable(['生成模型', '生成', '藍本#idx', '目前的跑題餘弦', '補回後文字閘門', 'edit_ratio（現在 → 補回後）', '初判'], gateRows, 'lllllll'), '');
+    const gateCount = M => M.gens.filter(x => x.gateAfterRepair && !x.gateAfterRepair.ok).length;
+    L.push(`${P.llm}：${gateCount(P)} 題` + (C ? `；${C.llm}：${gateCount(C)} 題` : '') +
+        `（minEdit＝${cur.minEdit}，與 generateVariant 相同）。補回後的跑題餘弦量不到：要等反斜線修好、重錄 variant（LLM 與向量）之後重跑本工具。`, '');
     return { lines: L, candidates };
 }
 
@@ -485,7 +690,9 @@ async function run(args) {
     const fixture = loadFixture();
     const golden = loadVariantGolden({ fixtureById: fixture.byId });
     const dedupGolden = JSON.parse(fs.readFileSync(DEDUP_GOLDEN, 'utf8'));
-    const common = { fixture, golden, dedupGolden, cassetteRoot: args.cassettes, dim };
+    const current = currentDefaults();
+    const labels = loadLabels(args.labels || LABELS_FILE);
+    const common = { fixture, golden, dedupGolden, cassetteRoot: args.cassettes, dim, labels, minEdit: current.minEdit };
 
     const primary = await analyzeModel({ ...common, model: args.model, llm: args.llm, optional: false });
     let compare = null, primaryCommon = null, compareCommon = null, commonIds = [], missingInCompare = [];
@@ -502,8 +709,8 @@ async function run(args) {
             compareCommon = await analyzeModel({ ...common, model: args.compare, llm: null, optional: true, questionFilter: onlyCommon });
         }
     }
-    return buildReport({ primary, compare, primaryCommon, compareCommon, current: currentDefaults(),
-        fixtureCount: fixture.questions.length, commonIds, missingInCompare });
+    return buildReport({ primary, compare, primaryCommon, compareCommon, current,
+        fixtureCount: fixture.questions.length, commonIds, missingInCompare, cassetteDamage: scanCassetteDamage(args.cassettes) });
 }
 
 async function main(argv = process.argv.slice(2)) {
@@ -527,4 +734,5 @@ if (require.main === module) {
     });
 }
 
-module.exports = { parseArgs, currentDefaults, loadVariantCassettes, replayGenerations, analyzeModel, buildReport, run, main, GRIDS, HELP };
+module.exports = { parseArgs, currentDefaults, loadLabels, loadVariantCassettes, scanCassetteDamage, replayGenerations, analyzeModel,
+    buildReport, run, main, GRIDS, OFFTOPIC_OPTIONS, LABELS_FILE, HELP };

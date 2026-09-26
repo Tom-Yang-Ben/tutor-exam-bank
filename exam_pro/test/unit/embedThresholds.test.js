@@ -7,6 +7,8 @@
 //   2. 工具：參數、讀 cassette（挑最新、濾模型與難度差）、把錄好的生成結果餵回 generateVariant
 //      （向量檔放系統暫存目錄；有餘弦／文字閘門／缺向量／沒有 cassette 四種狀態）、現行預設值讀的是程式；
 //   3. 拿 repo 裡錄好的資料跑一次整份報告：只檢查段落都在、不改任何門檻（數字不釘，重錄後會變）。
+//   〔2026-09-26 審查修正〕補：JSON 跳脫受損的補回與指令清單、補回後文字閘門（var-028／var-016 那兩種）、
+//   各 agent 的 cassette 掃描、初判標註（sha256 對上）、不同題幹計數、第 5 節的 dedup1 措辭與第 7 節。
 // 不呼叫模型、不連網、不碰資料庫。
 // ─────────────────────────────────────────────────────────────
 
@@ -174,6 +176,52 @@ describe('純函式：文字', () => {
         assert.equal(T.hasEscapeDamage(JSON.parse('"$\\frac{1}{2}$"')), true);
     });
 
+    test('scanEscapeDamage：控制字元後面接英文字母才補回反斜線；列出壞掉的指令', () => {
+        const damaged = JSON.parse('"$q = 6 \\times 10^{-6}$、$\\tan \\theta$ 與 $\\frac{1}{2}$、$\\boldsymbol{u}$、$37^\\rcirc$"');
+        assert.equal(T.hasEscapeDamage(damaged), true);
+        const s = T.scanEscapeDamage(damaged);
+        assert.equal(s.repaired, '$q = 6 \\times 10^{-6}$、$\\tan \\theta$ 與 $\\frac{1}{2}$、$\\boldsymbol{u}$、$37^\\rcirc$');
+        assert.deepEqual(s.commands, ['\\times', '\\tan', '\\theta', '\\frac', '\\boldsymbol', '\\rcirc']);
+        assert.equal(T.repairEscapeDamage(damaged), s.repaired);
+        // 沒受損的原樣回傳
+        const clean = '$10 \\times 2$\n(A) 1\t(B) 2';
+        assert.deepEqual(T.scanEscapeDamage(clean), { repaired: clean, commands: [] });
+        assert.deepEqual(T.scanEscapeDamage(null), { repaired: '', commands: [] });
+    });
+
+    test('scanEscapeDamage：換行只在 $…$ 裡、後面接字母時才補 \\n；\\$ 不算數學式的開關', () => {
+        const damaged = JSON.parse('"$a \\neq b$\\n(A) 對\\nB 錯 $\\nu = 0.2$"');
+        const s = T.scanEscapeDamage(damaged);
+        assert.equal(s.repaired, '$a \\neq b$\n(A) 對\nB 錯 $\\nu = 0.2$');
+        assert.deepEqual(s.commands, ['\\neq', '\\nu']);
+        assert.equal(T.hasEscapeDamage(damaged), false);                 // 下限：換行不算
+        const dollar = '售價 \\$5\nabc';                                   // 跳脫的 $ 不開數學式
+        assert.deepEqual(T.scanEscapeDamage(dollar), { repaired: dollar, commands: [] });
+    });
+
+    test('補回反斜線之後文字閘門會擋（var-028 那一種：只換數字）；受損時過得了', () => {
+        const { textGate } = require('../../utils/variantTextGate');
+        const src = '兩點電荷 $q_1 = 4 \\times 10^{-6}$ C 與 $q_2 = 3 \\times 10^{-6}$ C 相距 $0.6$ m，求兩者間的靜電力（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）。';
+        const damaged = JSON.parse('"兩點電荷 $q_1 = 6 \\times 10^{-6}$ C 與 $q_2 = 5 \\times 10^{-6}$ C 相距 $0.5$ m，求兩者間的靜電力（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）。"');
+        assert.equal(textGate({ source_text: src, variant_text: damaged, minEdit: 0.08 }).ok, true);
+        const after = textGate({ source_text: src, variant_text: T.repairEscapeDamage(damaged), minEdit: 0.08 });
+        assert.equal(after.ok, false);
+        assert.equal(after.reason, 'numbers_only');
+    });
+
+    test('damagedStringFields：列出帶控制字元的欄位（陣列索引不列、同欄位只記一次）', () => {
+        const data = {
+            chapter: '向量內積',
+            rationale: JSON.parse('"a \\times b"'),
+            questions: [{ question_text: '\text{x}', answer_text: 'ok' }, { question_text: JSON.parse('"\\frac{1}{2}"') }],
+            confidence: 0.9
+        };
+        assert.deepEqual(T.damagedStringFields(data), ['questions.question_text', 'rationale']);
+        assert.deepEqual(T.damagedStringFields({ a: 'ok', b: ['x', 1, null] }), []);
+        assert.deepEqual(T.damagedStringFields(JSON.parse('"\\theta"')), ['(字串)']);
+        assert.deepEqual(T.damagedStringFields(undefined), []);
+    });
+
     test('cell：跳脫 |、控制字元照 JSON 寫法顯示、換行變 ⏎、截斷；mdTable 的形狀', () => {
         assert.equal(T.cell('a|b'), 'a\\|b');
         assert.equal(T.cell('x\timesy'), 'x\\timesy');
@@ -182,6 +230,79 @@ describe('純函式：文字', () => {
         assert.equal(T.fmt(null), '—');
         assert.equal(T.pct(0.1226), '12.3%');
         assert.deepEqual(T.mdTable(['a', 'b'], [[1, 2]]), ['| a | b |', '|---|---:|', '| 1 | 2 |']);
+    });
+});
+
+describe('純函式：初判標註與不同題幹', () => {
+    test('textSha256 是 UTF-8 的 sha256', () => {
+        assert.equal(T.textSha256('abc'), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+        assert.equal(T.textSha256('甲'), crypto.createHash('sha256').update('甲', 'utf8').digest('hex'));
+    });
+
+    test('findLabel：藍本與題幹 sha256 都要對上；兄弟變式兩段順序不拘；題幹改過就對不上', () => {
+        const list = [
+            { entry: 'var-001', sha256: T.textSha256('甲'), label: 'concept_changed' },
+            { entry: 'var-002', sha256: [T.textSha256('乙'), T.textSha256('丙')], label: 'same_question' }
+        ];
+        assert.equal(T.findLabel(list, 'var-001', '甲').label, 'concept_changed');
+        assert.equal(T.findLabel(list, 'var-009', '甲'), null);
+        assert.equal(T.findLabel(list, 'var-001', '甲 '), null);
+        assert.equal(T.findLabel(list, 'var-002', ['丙', '乙']).label, 'same_question');
+        assert.equal(T.findLabel(list, 'var-002', ['乙', '丁']), null);
+        assert.equal(T.findLabel(undefined, 'var-001', '甲'), null);
+    });
+
+    test('offtopicCategory：補回反斜線後文字閘門就擋的優先，其次初判，都沒有算未標註', () => {
+        assert.equal(T.offtopicCategory({ label: 'same_concept', gateAfterRepair: { ok: false, reason: 'too_close' } }), 'gate_after_repair');
+        assert.equal(T.offtopicCategory({ label: 'same_concept', gateAfterRepair: { ok: true } }), 'same_concept');
+        assert.equal(T.offtopicCategory({ label: 'concept_changed', gateAfterRepair: null }), 'concept_changed');
+        assert.equal(T.offtopicCategory({ label: 'same_question' }), 'unlabeled');
+        assert.equal(T.offtopicCategory({}), 'unlabeled');
+        assert.deepEqual(T.OFFTOPIC_CATEGORIES, ['concept_changed', 'same_concept', 'gate_after_repair', 'unlabeled']);
+    });
+
+    test('distinctGenerations：同一藍本逐字相同只算一段；別的藍本同字不合併；沒有餘弦的不算', () => {
+        const gens = [
+            { entryId: 'a', idx: 1, status: 'sim', sim: 0.85, text: '甲' },
+            { entryId: 'a', idx: 2, status: 'sim', sim: 0.85, text: '甲' },
+            { entryId: 'b', idx: 1, status: 'sim', sim: 0.95, text: '甲' },
+            { entryId: 'b', idx: 2, status: 'text_gate', text: '乙' }
+        ];
+        const d = T.distinctGenerations(gens);
+        assert.equal(d.length, 2);
+        assert.deepEqual(d.map(x => x.gens), [['a#1', 'a#2'], ['b#1']]);
+    });
+
+    test('offtopicDistinctAt：擋下的依分類計，放過的只數換了概念', () => {
+        const items = [
+            { sim: 0.75, category: 'concept_changed' },
+            { sim: 0.85, category: 'same_concept' },
+            { sim: 0.88, category: 'gate_after_repair' },
+            { sim: 0.886, category: 'concept_changed' },
+            { sim: 0.95, category: 'same_concept' },
+            { sim: 0.80, category: 'unlabeled' }
+        ];
+        const r = T.offtopicDistinctAt(items, 0.87);
+        assert.deepEqual({ total: r.total, blocked: r.blocked, passedChanged: r.passedChanged }, { total: 6, blocked: 3, passedChanged: 1 });
+        assert.deepEqual(r.byCategory, { concept_changed: 1, same_concept: 1, gate_after_repair: 0, unlabeled: 1 });
+        const r90 = T.offtopicDistinctAt(items, 0.90);
+        assert.equal(r90.blocked, 5);
+        assert.equal(r90.byCategory.gate_after_repair, 1);
+        assert.equal(r90.passedChanged, 0);
+    });
+
+    test('withGateAfterRepair：補回後文字閘門就擋的題改算沒過，offtopicAt 的「兩題都沒過」跟著變', () => {
+        const gens = [
+            { entryId: 'a', idx: 1, status: 'sim', sim: 0.98, gateAfterRepair: { ok: false, reason: 'numbers_only' } },
+            { entryId: 'a', idx: 2, status: 'sim', sim: 0.98, gateAfterRepair: { ok: false, reason: 'numbers_only' } },
+            { entryId: 'b', idx: 1, status: 'sim', sim: 0.93, gateAfterRepair: { ok: true } },
+            { entryId: 'b', idx: 2, status: 'sim', sim: 0.95, gateAfterRepair: null }
+        ];
+        assert.equal(T.offtopicAt(gens, 0.90).entriesNoneThrough, 0);
+        const rep = T.withGateAfterRepair(gens);
+        assert.deepEqual(rep.map(g => g.status), ['text_gate_after_repair', 'text_gate_after_repair', 'sim', 'sim']);
+        assert.equal(T.offtopicAt(rep, 0.90).entriesNoneThrough, 1);
+        assert.equal(gens[0].status, 'sim');                                  // 不改原陣列
     });
 });
 
@@ -198,6 +319,8 @@ describe('工具：eval/tools/embed_threshold_report.js', () => {
         assert.equal(a.llm, 'qwen3:8b');
         assert.equal(a.compareLlm, 'gemini-3.1-pro-preview');
         assert.equal(a.out, null);
+        assert.equal(a.labels, path.join(APP_DIR, 'eval', 'tools', 'embed_threshold_labels.json'));
+        assert.equal(tool.parseArgs(['--labels', 'l.json'], { cwd: '/tmp', env: {} }).labels, path.resolve('/tmp', 'l.json'));
         assert.equal(tool.parseArgs([], { env: { MODEL_VERIFY: 'gemini:gemini-3.1-pro-preview' } }).llm, 'gemini-3.1-pro-preview');
         assert.equal(tool.parseArgs([], { env: { MODEL_VARIANT: 'ollama:qwen3:4b', MODEL_VERIFY: 'ollama:qwen3:8b' } }).llm, 'qwen3:4b');
         assert.equal(tool.parseArgs([], { env: { EMBED_MODEL: 'gemini-embedding-001' } }).model, 'gemini-embedding-001');
@@ -216,10 +339,52 @@ describe('工具：eval/tools/embed_threshold_report.js', () => {
             retrieve: require('../../services/variantService').simMin({}),
             offtopic: require('../../agents/generateVariant').DEFAULT_OFFTOPIC_SIM_MIN,
             dedupDup: require('../../agents/dedup').DEFAULT_DUP,
-            dedupVariant: require('../../agents/dedup').DEFAULT_VARIANT
+            dedupVariant: require('../../agents/dedup').DEFAULT_VARIANT,
+            minEdit: require('../../agents/generateVariant').DEFAULT_MIN_EDIT
         });
-        // 本分支不改任何門檻：這四個數字與 2026-09-26 之前相同
-        assert.deepEqual(cur, { retrieve: 0.80, offtopic: 0.90, dedupDup: 0.97, dedupVariant: 0.90 });
+        // 本分支不改任何門檻：這四個數字與 2026-09-26 之前相同（minEdit 只拿來重算補回反斜線後的文字閘門，也沒改）
+        assert.deepEqual(cur, { retrieve: 0.80, offtopic: 0.90, dedupDup: 0.97, dedupVariant: 0.90, minEdit: 0.08 });
+    });
+
+    test('loadLabels：repo 的初判檔格式正確；檔案不存在時全部算未標註', () => {
+        const l = tool.loadLabels(tool.LABELS_FILE);
+        assert.equal(l.llm, 'qwen3:8b');
+        assert.ok(l.offtopic.length > 0 && l.siblings.length > 0);
+        for (const x of l.offtopic) {
+            assert.match(x.entry, /^var-\d{3}$/);
+            assert.match(x.sha256, /^[0-9a-f]{64}$/);
+            assert.ok(['concept_changed', 'same_concept'].includes(x.label), x.label);
+        }
+        for (const x of l.siblings) {
+            assert.equal(x.sha256.length, 2);
+            assert.ok(['same_question', 'numbers_changed', 'different'].includes(x.label), x.label);
+        }
+        assert.deepEqual(tool.loadLabels(path.join(os.tmpdir(), '不存在的初判檔.json')), { offtopic: [], siblings: [], llm: null });
+    });
+
+    test('scanCassetteDamage：依 agent、模型數回應受損的 cassette 與欄位；壞檔略過', () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'embed-dmg-'));
+        try {
+            const put = (agent, name, model, data) => {
+                fs.mkdirSync(path.join(root, agent), { recursive: true });
+                fs.writeFileSync(path.join(root, agent, `${name}.json`), JSON.stringify({ meta: { model }, response: { data } }));
+            };
+            put('classify', 'a', 'qwen3:8b', { chapter: '向量內積', rationale: JSON.parse('"用到 \\theta"') });
+            put('classify', 'b', 'qwen3:8b', { chapter: '向量內積', rationale: '沒問題' });
+            put('classify', 'c', 'gemini-3.5-flash', { chapter: '向量內積', rationale: '沒問題' });
+            put('variant', 'd', 'qwen3:8b', { question_text: JSON.parse('"$a \\times b$"'), answer_text: JSON.parse('"$\\frac{1}{2}$"') });
+            fs.writeFileSync(path.join(root, 'variant', 'broken.json'), '{');
+            fs.writeFileSync(path.join(root, 'README.txt'), '不是資料夾');
+            const rows = tool.scanCassetteDamage(root);
+            assert.deepEqual(rows.map(r => [r.agent, r.model, r.n, r.damaged]), [
+                ['classify', 'gemini-3.5-flash', 1, 0], ['classify', 'qwen3:8b', 2, 1], ['variant', 'qwen3:8b', 1, 1]
+            ]);
+            assert.deepEqual(rows[1].fields, { rationale: 1 });
+            assert.deepEqual(rows[2].fields, { answer_text: 1, question_text: 1 });
+            assert.deepEqual(tool.scanCassetteDamage(path.join(root, '不存在')), []);
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
     });
 
     describe('讀 cassette 與把錄好的生成結果餵回 generateVariant（暫存目錄）', () => {
@@ -286,6 +451,38 @@ describe('工具：eval/tools/embed_threshold_report.js', () => {
             close(gens[0].sim, 0.8);
             assert.equal(gens[0].vector.length, dim);
             assert.equal(gens[0].damaged, false);
+            assert.equal(gens[0].gateAfterRepair, null);                        // 沒受損就不重算
+            assert.deepEqual(gens[0].damagedCommands, []);
+        });
+
+        test('replayGenerations：題幹受損時，補回反斜線後用同一支文字閘門、同一個 minEdit 重算（gateAfterRepair）', async () => {
+            const src7 = { ...source, id: 7, question_type: '計算', difficulty: 3, question_text: '$\\log_{2} 3 \\times \\log_{3} 8$ 之值為何？' };
+            // 模型把 \times 寫成 JSON 的 \t：受損的題幹過得了文字閘門，補回去之後只剩數字不同
+            const damagedText = JSON.parse('"$\\\\log_{5} 2 \\times \\\\log_{2} 25$ 之值為何？"');
+            assert.equal(damagedText, '$\\log_{5} 2 \times \\log_{2} 25$ 之值為何？');
+            // var-016 那一種：只改一個字（第二象限 → 第三象限），\theta、\tan 被吃掉
+            const src31 = { ...source, id: 31, question_type: '單選', difficulty: 2, question_text: '若 $\\theta$ 落在第二象限，則 $\\tan \\theta$ 的正負為何？\n(A) 恆為正　(B) 恆為負' };
+            const oneWord = { ...variantData(JSON.parse('"若 $\\theta$ 落在第三象限，則 $\\tan \\theta$ 的正負為何？\\n(A) 恆為正　(B) 恆為負"')), question_type: '單選', difficulty: 2 };
+            const golden = { entries: [{ id: 'var-004', source_question_id: 7 }, { id: 'var-016', source_question_id: 31 }] };
+            const fixture = { byId: new Map([[7, src7], [31, src31]]) };
+            const cassettes = new Map([
+                ['7#1', { response: { data: { ...variantData(damagedText), question_type: '計算', difficulty: 3 }, usage: {} } }],
+                ['31#1', { response: { data: oneWord, usage: {} } }]
+            ]);
+            const gens = await tool.replayGenerations({ golden, fixture, cassettes, embedModel: 'ollama:test-embed-none', dim: 4 });
+            const [g7, , g31] = gens;
+            assert.equal(g7.status, 'miss');                                    // 沒錄向量；文字閘門照樣算得出來
+            assert.equal(g7.damaged, true);
+            assert.deepEqual(g7.damagedCommands, ['\\times']);
+            assert.equal(g7.gateAfterRepair.ok, false);
+            assert.equal(g7.gateAfterRepair.reason, 'numbers_only');
+            assert.ok(g7.gateAfterRepair.editRatioNow > g7.gateAfterRepair.editRatio);
+            assert.deepEqual(g31.damagedCommands, ['\\theta', '\\tan', '\\theta']);
+            assert.equal(g31.gateAfterRepair.reason, 'too_close');              // 預設 minEdit（generateVariant 的 0.08）
+            // minEdit 照傳進來的：放寬到 0 時 too_close 就不擋了，numbers_only 仍擋
+            const loose = await tool.replayGenerations({ golden, fixture, cassettes, embedModel: 'ollama:test-embed-none', dim: 4, minEdit: 0 });
+            assert.equal(loose[0].gateAfterRepair.reason, 'numbers_only');
+            assert.equal(loose[2].gateAfterRepair.ok, true);
         });
     });
 
@@ -295,10 +492,18 @@ describe('工具：eval/tools/embed_threshold_report.js', () => {
         const args = tool.parseArgs([], { env: {} });
         const { lines, candidates } = await tool.run(args);
         const text = lines.join('\n');
-        for (const h of ['## 1. ', '## 2. ', '## 3. VARIANT_RETRIEVE_SIM_MIN', '## 4. VARIANT_OFFTOPIC_SIM_MIN', '## 5. DEDUP_DUP_THRESHOLD', '## 6. ']) {
+        for (const h of ['## 1. ', '## 2. ', '## 3. VARIANT_RETRIEVE_SIM_MIN', '## 4. VARIANT_OFFTOPIC_SIM_MIN', '### 4.3 依不同題幹計',
+            '## 5. DEDUP_DUP_THRESHOLD', '### 5.4 ', '## 6. ', '## 7. LaTeX 反斜線', '### 7.1 ', '### 7.3 ']) {
             assert.ok(text.includes(h), `少了段落 ${h}`);
         }
         assert.match(text, /本報告不改任何門檻/);
+        // 審查修正：dedup1 的 duplicate 是進複核（不是「不入庫」就結束）；兄弟變式在產品裡不比
+        assert.match(text, /review_reason='duplicate'/);
+        assert.match(text, /同一藍本的變式（兄弟）在 dedup1 永遠不會互相比對/);
+        assert.doesNotMatch(text, /重複、\*\*不入庫\*\*/);
+        // V5-2 的三個選項都在 4.3 的表裡
+        const s43 = text.slice(text.indexOf('### 4.3'), text.indexOf('## 5. '));
+        for (const t of tool.OFFTOPIC_OPTIONS) assert.match(s43, new RegExp(`^\\| ${t.toFixed(2)} \\| \\d+/\\d+ \\| \\d+ \\| \\d+ \\| \\d+ \\| \\d+ \\| \\d+ \\|`, 'm'));
         for (const k of ['retrieve_clean', 'offtopic_equiv_different_chapter', 'dedupDup_equiv_same_concept', 'dedup_above_all_numeric']) {
             assert.ok(k in candidates, `候選值少了 ${k}`);
         }

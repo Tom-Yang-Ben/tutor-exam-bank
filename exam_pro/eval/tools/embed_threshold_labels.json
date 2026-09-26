@@ -1,0 +1,424 @@
+{
+  "說明": [
+    "npm run embed:thresholds（eval/tools/embed_threshold_report.js）用的 Claude 初判，不是 golden、也不是量測；請 Owner 抽查（docs/local-mode.md 10.12）。",
+    "offtopic：已錄的 qwen3:8b 變式與藍本相比「換了概念」或「同概念改寫」（V5-2 的表）；同一藍本兩題逐字相同只標一段。",
+    "siblings：同一藍本兩題（題幹不同）之間是「同一題（換句話說或只換誘答）」「換數字的真變式」還是「問的不一樣」（V5-3 的代理欄、V5-6）。",
+    "以 entry（藍本）＋題幹 sha256（JSON.parse 之後的原文，含受損的控制字元）對上；重錄之後題幹變了就對不上，報告會列成「未標註」，要重新標。"
+  ],
+  "llm": "qwen3:8b",
+  "labels": {
+    "concept_changed": "換了概念（跑題檢查該擋）",
+    "same_concept": "同概念改寫（跑題檢查不該擋）",
+    "same_question": "同一題：換句話說或只換誘答選項（重複候選）",
+    "numbers_changed": "換數字的真變式（不是重複）",
+    "different": "問的不一樣（不是重複）"
+  },
+  "offtopic": [
+    {
+      "gen": "var-001#1",
+      "entry": "var-001",
+      "sha256": "fcda1051090fef2f9ab46357644bce75ad6df40f1b6a55cd9d010f519c2e13d8",
+      "label": "concept_changed",
+      "note": "對數相加 → 指數函數求值（電壓 V(t)=10×2^t，沒有對數）"
+    },
+    {
+      "gen": "var-001#2",
+      "entry": "var-001",
+      "sha256": "85e9f953cdde2f8ba107b07ff6ed9f8a8b63eabf366e294cfcf2516ba2d53754",
+      "label": "concept_changed",
+      "note": "同 var-001#1（只差「秒時／時刻」）"
+    },
+    {
+      "gen": "var-002#1",
+      "entry": "var-002",
+      "sha256": "76a02865c59ea47c784f778531c6b3b1e20cb94fe97b6a0a169781e4101b8245",
+      "label": "same_concept",
+      "note": "解指數方程式 → 細菌繁殖求 t（仍是解指數方程式）"
+    },
+    {
+      "gen": "var-002#2",
+      "entry": "var-002",
+      "sha256": "2f35c4f505c4d712156841e276111872ac3208ae352cfd8385c820c374afb8f1",
+      "label": "same_concept",
+      "note": "同 var-002#1，換初始數量與目標數量"
+    },
+    {
+      "gen": "var-003#1",
+      "entry": "var-003",
+      "sha256": "7d4ff6bc5ae1eedd73d23a1eaf0962755083c50b1144ae113e43c8003caf092a",
+      "label": "same_concept",
+      "note": "已知 log 2 求 2^50 位數 → 已知 log 3 求 3^60 位數"
+    },
+    {
+      "gen": "var-004#1",
+      "entry": "var-004",
+      "sha256": "e74906a9f888a81da3236ded8e253346e79b3bde482e0740f94c808c2c04e498",
+      "label": "same_concept",
+      "note": "換底公式相乘，換底數"
+    },
+    {
+      "gen": "var-004#2",
+      "entry": "var-004",
+      "sha256": "12ea2fb9fe89b53d7c504b43e0ba719327aca1108bce93c723450a650db4c074",
+      "label": "concept_changed",
+      "note": "換底公式相乘 → 指數成長 2^{1/3}（沒有對數）"
+    },
+    {
+      "gen": "var-005#1",
+      "entry": "var-005",
+      "sha256": "6f98e9ef419cdae6cfb1d2082613c77887fc71de78c90ef547055603b3ddc6a6",
+      "label": "concept_changed",
+      "note": "平面向量內積 → 外積（\\times）"
+    },
+    {
+      "gen": "var-005#2",
+      "entry": "var-005",
+      "sha256": "1d9d0c08d535012ccaa8ce4e52ef06ca8cb92a6ffe97175119943618f7235602",
+      "label": "same_concept",
+      "note": "平面向量內積（\\bullet 當點乘）"
+    },
+    {
+      "gen": "var-006#1",
+      "entry": "var-006",
+      "sha256": "b5d9591391e874183f202b70f2dc34c35e2d3c14c064d38b1c269c07e8166d7e",
+      "label": "same_concept",
+      "note": "平面向量夾角"
+    },
+    {
+      "gen": "var-007#1",
+      "entry": "var-007",
+      "sha256": "66c37b0fd7619e6e8ea46ab6195f1f55d95d00029622d9069f9eadc8bb4c157d",
+      "label": "same_concept",
+      "note": "平面向量垂直求 k"
+    },
+    {
+      "gen": "var-008#1",
+      "entry": "var-008",
+      "sha256": "45f55b75da534ea1361c13bf119b02c32b43ecc52150363ddfb34cc1957c96fd",
+      "label": "same_concept",
+      "note": "柯西不等式（模型把 \\leq 寫成 \\neq，題意有誤，但概念相同）"
+    },
+    {
+      "gen": "var-008#2",
+      "entry": "var-008",
+      "sha256": "f937e77ca856723f447f48b3aa616c64034b4a77a7edb4535dc01dab7aaadf55",
+      "label": "same_concept",
+      "note": "同 var-008#1（「平行」改寫成「夾角 0° 或 180°」）"
+    },
+    {
+      "gen": "var-009#1",
+      "entry": "var-009",
+      "sha256": "5cbbdc351b43e91911a132ef8fc7c03fe6f08f2ded121d378597966c05c0e3c8",
+      "label": "concept_changed",
+      "note": "空間向量內積 → 外積（\\times）"
+    },
+    {
+      "gen": "var-010#1",
+      "entry": "var-010",
+      "sha256": "a1ca7600b42cd135709126d5950278a367aed9ccc65ec5c3748e16d71886ce10",
+      "label": "same_concept",
+      "note": "空間向量夾角"
+    },
+    {
+      "gen": "var-011#1",
+      "entry": "var-011",
+      "sha256": "63acf4a03b9bac714d200acfb9b6caae00782cdcf6b3b6d96ef0841098d58252",
+      "label": "same_concept",
+      "note": "空間向量垂直求 k"
+    },
+    {
+      "gen": "var-012#1",
+      "entry": "var-012",
+      "sha256": "d74353717542f5a713f95bbf34060293e3febacea68793f6b846c39f83fd4d75",
+      "label": "same_concept",
+      "note": "方向餘弦（x 軸 → y 軸）"
+    },
+    {
+      "gen": "var-013#1",
+      "entry": "var-013",
+      "sha256": "972ed4eb240f7657fde0a9a922fc02769d1e0bdb02efcc2d95fc6e5578c1d55e",
+      "label": "concept_changed",
+      "note": "sin²+cos² 恆等式 → 用 30° 的三角比求斜坡高度"
+    },
+    {
+      "gen": "var-013#2",
+      "entry": "var-013",
+      "sha256": "18788d2a8446bef475b6a02d214933d409e8477b68e3b0f95868afad3ac13044",
+      "label": "concept_changed",
+      "note": "sin²+cos² 恆等式 → 用 30° 的三角比求水平投影"
+    },
+    {
+      "gen": "var-014#1",
+      "entry": "var-014",
+      "sha256": "fc1c785cc1c75f1af91d1063a8cc52fda3a662cdd53387d09901429fc5ce3ec9",
+      "label": "concept_changed",
+      "note": "sin 150° 求值 → 240° 的參考角"
+    },
+    {
+      "gen": "var-015#1",
+      "entry": "var-015",
+      "sha256": "01170b8991ad278359f59bd9314a4dc17956473e11752868e75b093105ec320c",
+      "label": "same_concept",
+      "note": "400° 的同界角 → 500° 的同界角"
+    },
+    {
+      "gen": "var-015#2",
+      "entry": "var-015",
+      "sha256": "0981d294125add8f7b66de32c237ae31bcf87e8c902f8ce449eb4f857c5bb64f",
+      "label": "same_concept",
+      "note": "同 var-015#1，兩個誘答選項不同"
+    },
+    {
+      "gen": "var-016#1",
+      "entry": "var-016",
+      "sha256": "da51b57093295e2d6008c19d12797c1e7a9fbee96d0ab89431ece66e18f669d2",
+      "label": "same_concept",
+      "note": "θ 在第二象限 → 第三象限時 tan θ 的正負（只改一個字）"
+    },
+    {
+      "gen": "var-017#1",
+      "entry": "var-017",
+      "sha256": "d60fd11e734592ec7993328522e5ca8376bbcf60a87dee697a3eefd2b03af5fc",
+      "label": "same_concept",
+      "note": "F=ma 換成腳踏車情境"
+    },
+    {
+      "gen": "var-017#2",
+      "entry": "var-017",
+      "sha256": "f2e5bb41d719527d27d302130e7aa83b0b6c5f0ca5b3a960701c15ee8de966bc",
+      "label": "same_concept",
+      "note": "F=ma 換成腳踏車情境，多問 3 秒後的速度"
+    },
+    {
+      "gen": "var-020#1",
+      "entry": "var-020",
+      "sha256": "079fb923b0f66e7cc76674640da89b07537e93895356de33b0ab9e87825ac36a",
+      "label": "same_concept",
+      "note": "慣性（煞車前傾 → 啟動後傾）"
+    },
+    {
+      "gen": "var-021#1",
+      "entry": "var-021",
+      "sha256": "5be4d5e2a1c25fb7682b945f0fde4d343139eca9c9892084181ffb086aafab21",
+      "label": "same_concept",
+      "note": "斜面上有摩擦的下滑加速度"
+    },
+    {
+      "gen": "var-021#2",
+      "entry": "var-021",
+      "sha256": "ff5b38d208060ffb316e2d1564d83adbf844454156647e04c7dadd1d7bf501f8",
+      "label": "same_concept",
+      "note": "同 var-021#1（動摩擦係數的符號寫成 \\nu）"
+    },
+    {
+      "gen": "var-022#1",
+      "entry": "var-022",
+      "sha256": "d55ccd3a4fdf299833c56c4f4aa1fb5d9bcd11ad8937407326b2f357e27a9222",
+      "label": "same_concept",
+      "note": "等速圓周運動的繩張力"
+    },
+    {
+      "gen": "var-023#1",
+      "entry": "var-023",
+      "sha256": "40e7603853c39fa23c1b1bc980e42106d78fbe78bdeba1578ec8c941db99a516",
+      "label": "same_concept",
+      "note": "等速圓周運動的敘述題，幾乎照抄藍本"
+    },
+    {
+      "gen": "var-024#1",
+      "entry": "var-024",
+      "sha256": "ef4c73b5823c76a20155b8b104dbdabf24a79897b06c5fa066b83cdc078c04f9",
+      "label": "same_concept",
+      "note": "等加速度直線運動的位移"
+    },
+    {
+      "gen": "var-025#1",
+      "entry": "var-025",
+      "sha256": "6b6f1bdda10de8295e0c781ab8bae0f6bc1fb20a1c198ca1e49a3ee9fef4fe6c",
+      "label": "same_concept",
+      "note": "自由落體落地時間（「被釋放」）"
+    },
+    {
+      "gen": "var-025#2",
+      "entry": "var-025",
+      "sha256": "e5d07f34b5ed7b30aaebe9545c1d531183a65fbcc7ab3ee36cdc9491357a196e",
+      "label": "same_concept",
+      "note": "自由落體落地時間（「被拋出」）"
+    },
+    {
+      "gen": "var-026#1",
+      "entry": "var-026",
+      "sha256": "5efe62b25fb3e48cb7e60fa3fdaa70de51193b8ce2e910e7bdfa240175f0e529",
+      "label": "same_concept",
+      "note": "v-t 圖面積的意義（多一句「若圖形為一斜線」）"
+    },
+    {
+      "gen": "var-026#2",
+      "entry": "var-026",
+      "sha256": "a2a076a41cecc296f6758579a68963e05dbcd937e4a1e9a150a869c518915a8b",
+      "label": "same_concept",
+      "note": "v-t 圖面積的意義"
+    },
+    {
+      "gen": "var-027#1",
+      "entry": "var-027",
+      "sha256": "f0107dc8700d84ebb9c95a421ae79bff5aee76081d838af129c563da61779a30",
+      "label": "same_concept",
+      "note": "速度計顯示的物理量"
+    },
+    {
+      "gen": "var-028#1",
+      "entry": "var-028",
+      "sha256": "92d7a5ca6d628b757f987f962a39c0e0be15db8013fa8d35d62bb228fe5932bb",
+      "label": "same_concept",
+      "note": "兩點電荷的庫侖力，只換數字"
+    },
+    {
+      "gen": "var-029#1",
+      "entry": "var-029",
+      "sha256": "41ea45c1a5dcbe107e441618b5a3c75968144c2a002b493e362976b6cb730e0d",
+      "label": "same_concept",
+      "note": "點電荷的電場（「帶電的金屬球」）"
+    },
+    {
+      "gen": "var-029#2",
+      "entry": "var-029",
+      "sha256": "d5e1b7bb1e3ea52e32dd4ae92081ad531aeefd29692920778573597b50392b9c",
+      "label": "same_concept",
+      "note": "點電荷的電場，只換數字"
+    },
+    {
+      "gen": "var-030#1",
+      "entry": "var-030",
+      "sha256": "801b5651b6fa6ae6dade80f17eef9b25f20af290e0ceb4eb4f4a92cd3383a268",
+      "label": "same_concept",
+      "note": "等位面與電場線的關係"
+    },
+    {
+      "gen": "var-030#2",
+      "entry": "var-030",
+      "sha256": "18764d690f1693a733a47a791456fb07442928cd3fdd28f8c77bfc7a13826f6a",
+      "label": "same_concept",
+      "note": "等位面與電場線的關係（提示少了 E）"
+    }
+  ],
+  "siblings": [
+    {
+      "entry": "var-001",
+      "sha256": [
+        "fcda1051090fef2f9ab46357644bce75ad6df40f1b6a55cd9d010f519c2e13d8",
+        "85e9f953cdde2f8ba107b07ff6ed9f8a8b63eabf366e294cfcf2516ba2d53754"
+      ],
+      "label": "same_question",
+      "note": "同一題：只差「秒時／時刻」"
+    },
+    {
+      "entry": "var-002",
+      "sha256": [
+        "76a02865c59ea47c784f778531c6b3b1e20cb94fe97b6a0a169781e4101b8245",
+        "2f35c4f505c4d712156841e276111872ac3208ae352cfd8385c820c374afb8f1"
+      ],
+      "label": "numbers_changed",
+      "note": "同一種題、換了初始與目標數量（100→1250 與 125→625）"
+    },
+    {
+      "entry": "var-004",
+      "sha256": [
+        "e74906a9f888a81da3236ded8e253346e79b3bde482e0740f94c808c2c04e498",
+        "12ea2fb9fe89b53d7c504b43e0ba719327aca1108bce93c723450a650db4c074"
+      ],
+      "label": "different",
+      "note": "一題換底相乘、一題指數成長"
+    },
+    {
+      "entry": "var-005",
+      "sha256": [
+        "6f98e9ef419cdae6cfb1d2082613c77887fc71de78c90ef547055603b3ddc6a6",
+        "1d9d0c08d535012ccaa8ce4e52ef06ca8cb92a6ffe97175119943618f7235602"
+      ],
+      "label": "different",
+      "note": "一題外積（\\times）、一題內積（\\bullet）"
+    },
+    {
+      "entry": "var-008",
+      "sha256": [
+        "45f55b75da534ea1361c13bf119b02c32b43ecc52150363ddfb34cc1957c96fd",
+        "f937e77ca856723f447f48b3aa616c64034b4a77a7edb4535dc01dab7aaadf55"
+      ],
+      "label": "same_question",
+      "note": "同一題：「平行」與「夾角 0° 或 180°」同義"
+    },
+    {
+      "entry": "var-013",
+      "sha256": [
+        "972ed4eb240f7657fde0a9a922fc02769d1e0bdb02efcc2d95fc6e5578c1d55e",
+        "18788d2a8446bef475b6a02d214933d409e8477b68e3b0f95868afad3ac13044"
+      ],
+      "label": "different",
+      "note": "一題求斜坡高度、一題求水平投影，數字也不同"
+    },
+    {
+      "entry": "var-015",
+      "sha256": [
+        "01170b8991ad278359f59bd9314a4dc17956473e11752868e75b093105ec320c",
+        "0981d294125add8f7b66de32c237ae31bcf87e8c902f8ce449eb4f857c5bb64f"
+      ],
+      "label": "same_question",
+      "note": "同一題：題幹相同、答案相同，只換了兩個誘答選項"
+    },
+    {
+      "entry": "var-017",
+      "sha256": [
+        "d60fd11e734592ec7993328522e5ca8376bbcf60a87dee697a3eefd2b03af5fc",
+        "f2e5bb41d719527d27d302130e7aa83b0b6c5f0ca5b3a960701c15ee8de966bc"
+      ],
+      "label": "different",
+      "note": "第 2 題多問 3 秒後的瞬時速度"
+    },
+    {
+      "entry": "var-021",
+      "sha256": [
+        "5be4d5e2a1c25fb7682b945f0fde4d343139eca9c9892084181ffb086aafab21",
+        "ff5b38d208060ffb316e2d1564d83adbf844454156647e04c7dadd1d7bf501f8"
+      ],
+      "label": "same_question",
+      "note": "同一題：只差動摩擦係數的符號（兩題都寫錯）"
+    },
+    {
+      "entry": "var-025",
+      "sha256": [
+        "6b6f1bdda10de8295e0c781ab8bae0f6bc1fb20a1c198ca1e49a3ee9fef4fe6c",
+        "e5d07f34b5ed7b30aaebe9545c1d531183a65fbcc7ab3ee36cdc9491357a196e"
+      ],
+      "label": "same_question",
+      "note": "同一題：「被釋放」與「被拋出，做自由落體運動」"
+    },
+    {
+      "entry": "var-026",
+      "sha256": [
+        "5efe62b25fb3e48cb7e60fa3fdaa70de51193b8ce2e910e7bdfa240175f0e529",
+        "a2a076a41cecc296f6758579a68963e05dbcd937e4a1e9a150a869c518915a8b"
+      ],
+      "label": "same_question",
+      "note": "同一題：第 1 題多一句「若圖形為一斜線」"
+    },
+    {
+      "entry": "var-029",
+      "sha256": [
+        "41ea45c1a5dcbe107e441618b5a3c75968144c2a002b493e362976b6cb730e0d",
+        "d5e1b7bb1e3ea52e32dd4ae92081ad531aeefd29692920778573597b50392b9c"
+      ],
+      "label": "same_question",
+      "note": "同一題：「帶電的金屬球」與「點電荷」，數字相同"
+    },
+    {
+      "entry": "var-030",
+      "sha256": [
+        "801b5651b6fa6ae6dade80f17eef9b25f20af290e0ceb4eb4f4a92cd3383a268",
+        "18764d690f1693a733a47a791456fb07442928cd3fdd28f8c77bfc7a13826f6a"
+      ],
+      "label": "same_question",
+      "note": "同一題：只差提示裡有沒有寫出 E"
+    }
+  ]
+}
