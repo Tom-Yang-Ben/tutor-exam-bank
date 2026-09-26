@@ -4,13 +4,15 @@
 // 被 JSON.parse 當成換頁／定位／退格／歸位／換行。本檔的 asModelWrote() 就是把「模型寫出來的 JSON 字串內容」
 // 原樣交給 JSON.parse——得到的正是 agent 會拿到的壞字串；修好之後應該等於原本的 LaTeX。
 //
-// 五組：
+// 六組：
 //   1. 指令表：由 utils/textFormatter.js 的白名單產生（掃 parseCommand 的原始碼防漏列）
 //   2. 正例：指令表裡每一個 b f n r t 開頭的指令、Ollama 文法換字母（\rcirc）、各種上下文
 //   3. 反例：真的換行、真的定位、文字裡 n／t 開頭的英文字、反斜線之後、救不回來的
 //   4. services/llm 的接點：replay／record（Ollama 與 Gemini）都修、cassette 存原始回應、鍵不變
 //   5. 回歸：repo 內 2026-09-25 的本機 cassette（f77d1a3）與 Gemini 的 variant cassette（04e9bd3），
 //      修回後「帶控制字元的支數」與公式閘門（agents/lint.js 的 gate）的結果逐支釘住
+//   6. 審查意見（dec/latex-escape-repair-fix）：連在一起的指令一次修完（冪等，含固定種子的隨機字串）、
+//      數連續反斜線、多行行內公式與 $ 配錯對不誤改、指令表補齊與公式外的定位
 //
 // 執行：npm test
 
@@ -680,5 +682,242 @@ describe('回歸：Gemini 的 variant 87／verify 58（04e9bd3 以前錄的）',
         }
         assert.deepEqual(totals, { before: 86, after: 86 });
         assert.deepEqual(passedWithCtrl, [10, 0]);
+    });
+});
+
+// ───────────────────────── 6. 審查意見（dec/latex-escape-repair-fix）─────────────────────────
+
+/** 固定種子的亂數（mulberry32）：同一個種子每次產生同一串，失敗可重現 */
+function mulberry32(seed) {
+    let a = seed >>> 0;
+    return () => {
+        a = (a + 0x6D2B79F5) >>> 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+describe('審查 1：公式外連在一起的壞指令一次修完（冪等）', () => {
+    test('\\tan\\theta、\\times\\frac、三個連在一起：前一個也修（修前一個時看的是後一個修好之後的反斜線）', () => {
+        for (const [model, want] of [
+            ['由 \\tan\\theta = 1 得', '由 \\tan\\theta = 1 得'],
+            ['所以 \\times\\frac{1}{2}', '所以 \\times\\frac{1}{2}'],
+            ['所以 \\tan\\theta\\times 2', '所以 \\tan\\theta\\times 2'],
+            ['\\tan\\frac{\\pi}{4} = 1', '\\tan\\frac{\\pi}{4} = 1'],
+            ['\\to\\beta', '\\to\\beta']
+        ]) {
+            const broken = asModelWrote(model);
+            const r = repairString(broken);
+            assert.equal(r.text, want, JSON.stringify(broken));
+            assert.deepEqual(r.unresolved, [], JSON.stringify(broken));
+            assert.equal(fix(r.text), r.text, `再修一次不變：${JSON.stringify(broken)}`);
+        }
+    });
+
+    test('後一個候選沒被修（湊不成指令）時，前一個照「真的定位＋英文字」處理：不修', () => {
+        const s = '項目\tan\tapple';
+        assert.equal(fix(s), s);
+        assert.deepEqual(decide({ ch: '\t', word: 'an', prev: '目', next: '\t', math: null }), { action: 'keep' });
+        assert.deepEqual(decide({ ch: '\t', word: 'an', prev: '目', next: '\\', math: null }),
+            { action: 'repair', name: 'tan', rule: 'escape' });
+    });
+
+    test('固定種子的隨機字串 10 萬筆：修過的再修一次一個字都不變；修復只動「控制字元＋字母」那一段', () => {
+        const TOKENS = [
+            '\tan', '\theta', '\times', '\to', '\tau', '\top', '\text', '\frac', '\fdg', '\neq', '\nu', '\ne', '\ni', '\nabla',
+            '\bot', '\beta', '\bm', '\rho', '\rd', '\rcirc', '\begin', '\tapple',
+            '\t', '\n', '\b', '\f', '\r', 'an', 'o', 'e', 'u', 'x', 'y',
+            ' ', ' ', '$', '$', '$$', '\\', '\\\\', '{', '}', '(', ')', '^', '_', '&', '=', '中', '1', '，',
+            '\\(', '\\)', '\\[', '\\]'
+        ];
+        const rnd = mulberry32(20260926);
+        let totalRepairs = 0;
+        let adjacent = 0;
+        for (let n = 0; n < 100000; n++) {
+            const len = 1 + Math.floor(rnd() * 16);
+            let s = '';
+            for (let k = 0; k < len; k++) s += TOKENS[Math.floor(rnd() * TOKENS.length)];
+            if (/[\x08-\x0D][A-Za-z]+[\x08-\x0D][A-Za-z]/.test(s)) adjacent += 1;
+            const once = repairString(s);
+            const twice = repairString(once.text);
+            if (twice.text !== once.text || twice.repairs.length) {
+                assert.fail(`不冪等：${JSON.stringify(s)} → ${JSON.stringify(once.text)} → ${JSON.stringify(twice.text)}`);
+            }
+            // 把每一處修復套回原字串，要得到同一個結果；被換掉的那一段一定是「控制字元＋字母」
+            let rebuilt = '';
+            let last = 0;
+            for (const r of once.repairs) {
+                const span = r.from.length - 1;                   // from 是跳脫寫法（'\\f'＋字母），原字串裡少一個字
+                const original = s.slice(r.at, r.at + span);
+                const expected = CTRL_OF[r.from[1]] + r.from.slice(2);
+                if (original !== expected || !r.to.endsWith(r.from.slice(2))) {
+                    assert.fail(`修復位置不對：${JSON.stringify(s)} ${JSON.stringify(r)}`);
+                }
+                rebuilt += s.slice(last, r.at) + r.to;
+                last = r.at + span;
+            }
+            rebuilt += s.slice(last);
+            if (rebuilt !== once.text) assert.fail(`repairs 與 text 對不上：${JSON.stringify(s)}`);
+            totalRepairs += once.repairs.length;
+        }
+        // 產生器本身要涵蓋到審查指出的樣式，不然這個測試是空轉
+        assert.ok(adjacent > 20000, `連在一起的候選只有 ${adjacent} 筆`);
+        assert.ok(totalRepairs > 100000, `修復只有 ${totalRepairs} 處`);
+    });
+});
+
+describe('審查 2：控制字元前面的反斜線要數個數', () => {
+    test('偶數個（前面是完整的換列 \\\\）：控制字元沒有被跳脫，照一般規則修', () => {
+        for (const [broken, want] of [
+            ['$x=1\\\\\theta=2$', '$x=1\\\\\\theta=2$'],
+            ['$\\begin{cases} x = 1 \\\\\theta = 2 \\end{cases}$', '$\\begin{cases} x = 1 \\\\\\theta = 2 \\end{cases}$'],
+            ['$$\\begin{aligned} a &= 1 \\\\\frac{1}{2} &= b \\end{aligned}$$', '$$\\begin{aligned} a &= 1 \\\\\\frac{1}{2} &= b \\end{aligned}$$'],
+            ['$\\begin{pmatrix} 1 \\\\\beta \\end{pmatrix}$', '$\\begin{pmatrix} 1 \\\\\\beta \\end{pmatrix}$'],
+            ['$a \\\\\\\\\rho$', '$a \\\\\\\\\\rho$']                        // 四個反斜線（兩個換列）
+        ]) {
+            const r = repairString(broken);
+            assert.equal(r.text, want, JSON.stringify(broken));
+            assert.deepEqual(r.unresolved, [], JSON.stringify(broken));
+        }
+    });
+
+    test('奇數個：最後一個反斜線沒有配對，意思不明——不修、列 after_backslash', () => {
+        for (const s of ['$a \\\frac{1}{2}$', '$a \\\\\\\frac{1}{2}$', '$x=1\\\\\\\theta$']) {
+            const r = repairString(s);
+            assert.equal(r.text, s, JSON.stringify(s));
+            assert.deepEqual(r.unresolved.map(u => u.reason), ['after_backslash'], JSON.stringify(s));
+        }
+    });
+
+    test('換列 \\\\ 之後的換行：換列的標準寫法，不修（行內、展示都一樣）', () => {
+        for (const s of ['$\\begin{cases} x=1 \\\\\neq 2 \\end{cases}$', '$a \\\\\nu$']) {
+            assert.equal(fix(s), s, JSON.stringify(s));
+            assert.deepEqual(repairString(s).unresolved, []);
+        }
+    });
+
+    test('decide：backslashes 參數；省略時由 prev 推（prev 是反斜線算 1 個）', () => {
+        const base = { ch: '\t', word: 'heta', prev: '\\', next: '=', math: 'inline' };
+        assert.deepEqual(decide({ ...base, backslashes: 2 }), { action: 'repair', name: 'theta', rule: 'escape' });
+        assert.deepEqual(decide({ ...base, backslashes: 3 }), { action: 'unresolved', reason: 'after_backslash' });
+        assert.deepEqual(decide(base), { action: 'unresolved', reason: 'after_backslash' });
+    });
+});
+
+describe('審查 3：多行的行內公式、$ 配錯對，不把真的換行改成 \\nu \\ni \\ne \\neq', () => {
+    test('審查列的四個誤改：原樣保留；行內公式裡意思不明的單一字母列 ambiguous_newline', () => {
+        for (const [s, reasons] of [
+            ['解聯立 $\\begin{cases}\nu+v=3 \\\\ u-v=1\n\\end{cases}$', []],
+            ['$\\vec a\\times\\vec b=\\begin{vmatrix}\ni & j & k \\\\ 1 & 2 & 3\\end{vmatrix}$', ['ambiguous_newline']],
+            ['設 $f(x) =\ne^{x}$', ['ambiguous_newline']],
+            ['甲：$x = 1\n乙：$y$ 與\neq 無關', []],
+            ['甲：$x = 1\n乙：$y$ 與\neq 無關 $z$', []]                   // 配錯的 $ 後面又關上了
+        ]) {
+            const r = repairString(s);
+            assert.equal(r.text, s, JSON.stringify(s));
+            assert.deepEqual(r.unresolved.map(u => u.reason), reasons, JSON.stringify(s));
+        }
+    });
+
+    test('行內公式真的寫成兩行：第二行後面的文字不因此變成公式（跨行、逐行兩種配對都說是公式才算）', () => {
+        const s = '設 $x +\n y$ 項目\tan apple';
+        assert.equal(fix(s), s);
+    });
+
+    test('單一字母仍然修的情形：公式開頭、空白、左括號、上下標之後，而且公式片段裡沒有多行結構', () => {
+        for (const [model, want] of [
+            ['動摩擦係數 $\\nu = 0.2$', '動摩擦係數 $\\nu = 0.2$'],
+            ['$x \\ne 0$', '$x \\ne 0$'],
+            ['$a \\ni b$', '$a \\ni b$'],
+            ['$v = \\nu\\lambda$', '$v = \\nu\\lambda$'],
+            ['$\\frac{\\nu}{2}$', '$\\frac{\\nu}{2}$'],
+            ['$x_\\nu$', '$x_\\nu$'],
+            ['\\(\\nu\\)', '\\(\\nu\\)']
+        ]) {
+            assert.equal(fix(asModelWrote(model)), want, model);
+        }
+    });
+
+    test('Windows 換行（\\r\\n）後面接字母：真的換行，不修', () => {
+        for (const s of ['$a = 1\r\neq 2$', '$a\r\nu$']) {
+            assert.equal(fix(s), s, JSON.stringify(s));
+            assert.deepEqual(repairString(s).unresolved, []);
+        }
+    });
+
+    test('mathSpans：預設跨行配對；lineAware 時單一 $ 不跨越真的換行，「可能是被吃掉的 \\n」不算斷行', () => {
+        const s = '甲：$x = 1\n乙：$y$ 與\neq 無關';
+        const show = (spans) => spans.map(x => [s.slice(x.start, x.end), x.kind]);
+        assert.deepEqual(show(mathSpans(s)), [['$x = 1\n乙：$', 'inline'], ['$ 與\neq 無關', 'open']]);
+        assert.deepEqual(show(mathSpans(s, { lineAware: true })), [['$x = 1', 'open'], ['$y$', 'inline']]);
+        const t = '$a \neq b$ 與 $c$\n$$x\ny$$';
+        assert.deepEqual(mathSpans(t, { lineAware: true }).map(x => [t.slice(x.start, x.end), x.kind]),
+            [['$a \neq b$', 'inline'], ['$c$', 'inline'], ['$$x\ny$$', 'display']]);
+    });
+});
+
+describe('審查 4：指令表補齊；公式外的定位不再「不修也不列」', () => {
+    const REVIEW_NAMES = ['bot', 'top', 'bm', 'bf', 'rm', 'bmod', 'bigcup', 'bigcap', 'breve', 'nmid', 'nsubseteq', 'ncong',
+        'nexists', 'nparallel', 'triangleq', 'textdegree', 'textcircled', 'texttt', 'textsf', 'rbrace', 'rvert', 'tbinom', 'newline'];
+
+    test('審查列的 23 個指令都在指令表裡；還原後公式閘門看得到（unknown_command）', () => {
+        const table = commandTable();
+        for (const n of REVIEW_NAMES) {
+            assert.ok(table.has(n), n);
+            if (tf.supportedCommandNames().includes(n)) continue;
+            const fixed = fix(`$a ${CTRL_OF[n[0]]}${n.slice(1)}{x}$`);
+            assert.equal(fixed, `$a \\${n}{x}$`, n);
+            const g = lint.gate(fixed, '');
+            assert.equal(g.ok, false, n);
+            assert.ok(g.issues.some(i => i.rule === 'unknown_command'), n);
+        }
+    });
+
+    test('審查的重現：\\bot、\\bm、\\bigcup 修回、不列 unresolved，公式閘門擋下（不再安靜通過）', () => {
+        const s = '$L_1 \bot L_2$，$\bm{a}$，$A \bigcup B$';
+        const r = repairString(s);
+        assert.equal(r.text, '$L_1 \\bot L_2$，$\\bm{a}$，$A \\bigcup B$');
+        assert.deepEqual(r.unresolved, []);
+        const g = lint.gate(r.text, '');
+        assert.equal(g.ok, false);
+        assert.ok(g.issues.filter(i => i.sev === 'error').every(i => i.rule === 'unknown_command'));
+    });
+
+    test('換行開頭的（\\nsubseteq、\\nmid）在行內公式裡修', () => {
+        assert.equal(fix('$A \nsubseteq B$'), '$A \\nsubseteq B$');
+        assert.equal(fix(asModelWrote('$3 \\nmid 7$')), '$3 \\nmid 7$');
+    });
+
+    test('公式外的定位＋指令名，後面緊接中文、數字、標點或字串結尾：修', () => {
+        for (const [broken, want] of [
+            ['夾角\theta為銳角', '夾角\\theta為銳角'],
+            ['3\times4=12', '3\\times4=12'],
+            ['故 \tan45° = 1', '故 \\tan45° = 1'],
+            ['時間常數\tau為 RC', '時間常數\\tau為 RC'],
+            ['所以夾角為\theta', '所以夾角為\\theta'],
+            ['所以 x\to∞', '所以 x\\to∞']
+        ]) {
+            const r = repairString(broken);
+            assert.equal(r.text, want, JSON.stringify(broken));
+            assert.deepEqual(r.unresolved, []);
+        }
+    });
+
+    test('指令表裡每一個 t 開頭的指令，公式外後面接中文、數字、標點都修（沒有「不修也不列」）', () => {
+        const tNames = [...commandTable()].filter(n => n[0] === 't');
+        for (const name of tNames) {
+            for (const next of ['為', '4', '。', ',']) {
+                const r = repairString(`題幹\t${name.slice(1)}${next}`);
+                assert.equal(r.text, `題幹\\${name}${next}`, `${name}${next}`);
+            }
+        }
+    });
+
+    test('只剩一種樣子不修：一兩個字母＋空白或結尾（真的定位＋英文單字 an、o、au、op）', () => {
+        for (const s of ['項目\tan apple', 'Name\to be', '\tau 是希臘字母', '欄\top', '欄\top\t下一欄']) {
+            assert.equal(fix(s), s, JSON.stringify(s));
+            assert.deepEqual(repairString(s).unresolved, []);
+        }
     });
 });
