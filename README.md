@@ -179,7 +179,9 @@ exam_pro/
 │                             # 〔整合 2026-09-26〕已統一更新為 dec/integration-all（錯題重練、本機看圖逾時合入後）實跑的數字，括號內是 7b7065c 的舊值
 │                             # 〔整合 r5 2026-09-26〕再更新為 dec/integration-r5（OCR 為主、向量門檻分析、拆題以外的時間三條併入後）實跑的數字；
 │                             #   同一台機器上的起點 local/integration（889d18f）是 unit 3,261／integration 602／e2e 12
-│   ├─ unit/                  #   3,495 項（dec/integration-all 3,244；舊值 2,716）：不連網、不連庫、零 secrets
+│                             # 〔整合 final5 2026-09-27〕再更新為 dec/integration-final5（classify／nlq 界線規則、LaTeX 反斜線修復、物理口語版核對、移除 exam/ 併入後）實跑的數字；
+│                             #   起點 dec/integration-r5-fix（ed93665）同機實跑是 unit 3,502／integration 615／e2e 12
+│   ├─ unit/                  #   3,609 項（dec/integration-r5 3,495；dec/integration-all 3,244；舊值 2,716）：不連網、不連庫、零 secrets
 │   ├─ integration/           #   615 項（dec/integration-all 593；舊值 503）：對 tmpfs 測試庫（_test 後綴強制）
 │   └─ e2e/                   #   12 項（舊值 11）：HTTP 全路徑（上傳→部分入庫；組卷→Word 公式；〔整合 2026-09-26〕新卷→勾要重練→重練卷→Word 標示；
 │                             #   〔整合 r5〕LOCAL_EXTRACT_MODE=ocr 時上傳那一條改驗「全部停在複核 → 人工核准一題入庫」，docs/local-mode.md 10.12 第 7 點）
@@ -438,7 +440,7 @@ Gemini 已回傳 JSON，為何不直接入庫？
 - **AI（可切回：Gemini）**：`@google/genai`——拆題／分類／變式 `gemini-3.5-flash`、獨立驗答 `gemini-3.1-pro-preview`、embedding `gemini-embedding-001`（768 維）；階段 5 另用 code execution（AI 家教驗算）與音訊輸入（語音轉寫），這兩項只在 Gemini 模式可用。模型 ID 單一真相在 [`exam_pro/config/models.js`](./exam_pro/config/models.js)（`vendor:model-id`）。
 - **文件**：`docx`（自製 LaTeX → OOXML 數學公式轉換）
 - **前端**：單頁 HTML + Tailwind + MathJax（〔修訂 2026-09-25 本機模式〕兩者與字型、GSAP 都改從本機 `/vendor/` 載入，見 `docs/local-mode.md`） + 五個 ES module 分頁（零打包器）；階段 5 另加三個 module（知識點、補救卷與覆蓋率、AI 家教），MathJax 載入 mhchem〔修訂 2026-09-24〕
-- **測試／量測**：`node:test`（〔整合 r5 2026-09-26〕unit 3,495／integration 615／e2e 12，2026-09-26 於 `dec/integration-r5`（OCR 為主、向量門檻分析、拆題以外的時間三條併入後）實跑：unit 3,493 過、2 略過，integration 全過，e2e 12 項中 3 項因缺本機 `extract_ocr` 回放檔紅燈；起點 `local/integration`（`889d18f`）同機實跑是 unit 3,261（3,259 過、2 略過）／integration 602（598 過，4 項是 `cassetteTools.pg` 的 JSON 截斷，本次併入的 `exitAfterFlush` 已修）／e2e 12。以下是上一次整合的數字：〔整合 2026-09-26〕unit 3,244／integration 593／e2e 12，2026-09-26 於 `dec/integration-all`（錯題重練與本機看圖逾時合入後）實跑：unit 3,242 過、2 略過，integration 全過，e2e 12 項中 3 項因缺本機 ocr 回放檔紅燈。舊值：unit 2,716／integration 503／e2e 11，2026-09-26 於 `local/integration` 實跑，是 `7b7065c` 當時的數字，~~合併後由整合者更新~~ 已更新。〔整合 2026-09-26〕~~全域測試數等錯題重練合入後統一更新~~ 錯題重練已合入，全域測試數已統一更新（見本列開頭）；`dec/integration-r23`（`c65909e`）實跑：unit 2,929（2,927 過、2 略過）／integration 528／e2e 11）＋五個 eval suite（golden＋ratchet 門檻）＋ LLM 與 OCR 的 record/replay cassette——CI 全程零金鑰、零網路、零成本
+- **測試／量測**：`node:test`（〔整合 final5 2026-09-27〕unit 3,609／integration 615／e2e 12，2026-09-27 於 `dec/integration-final5`（`dec/local-classify-nlq-prep-fix`、`dec/latex-escape-repair-fix`、`dec/phys-spoken-reviewed`、`dec/cleanup-exam-legacy` 併入後）實跑：unit 3,607 過、2 略過，integration 全過，e2e 12 項中 3 項因缺本機 `extract_ocr` 回放檔紅燈（與起點 `ed93665` 相同；起點同機實跑 unit 3,502（3,500 過、2 略過）／integration 615／e2e 12）。以下是上一次整合的數字：〔整合 r5 2026-09-26〕unit 3,495／integration 615／e2e 12，2026-09-26 於 `dec/integration-r5`（OCR 為主、向量門檻分析、拆題以外的時間三條併入後）實跑：unit 3,493 過、2 略過，integration 全過，e2e 12 項中 3 項因缺本機 `extract_ocr` 回放檔紅燈；起點 `local/integration`（`889d18f`）同機實跑是 unit 3,261（3,259 過、2 略過）／integration 602（598 過，4 項是 `cassetteTools.pg` 的 JSON 截斷，本次併入的 `exitAfterFlush` 已修）／e2e 12。以下是上一次整合的數字：〔整合 2026-09-26〕unit 3,244／integration 593／e2e 12，2026-09-26 於 `dec/integration-all`（錯題重練與本機看圖逾時合入後）實跑：unit 3,242 過、2 略過，integration 全過，e2e 12 項中 3 項因缺本機 ocr 回放檔紅燈。舊值：unit 2,716／integration 503／e2e 11，2026-09-26 於 `local/integration` 實跑，是 `7b7065c` 當時的數字，~~合併後由整合者更新~~ 已更新。〔整合 2026-09-26〕~~全域測試數等錯題重練合入後統一更新~~ 錯題重練已合入，全域測試數已統一更新（見本列開頭）；`dec/integration-r23`（`c65909e`）實跑：unit 2,929（2,927 過、2 略過）／integration 528／e2e 11）＋五個 eval suite（golden＋ratchet 門檻）＋ LLM 與 OCR 的 record/replay cassette——CI 全程零金鑰、零網路、零成本
 
 ---
 
@@ -506,7 +508,7 @@ npm start                 # http://localhost:3000
 | 化學 | 上傳時選「化學」卷別；44 章白名單；化學式與反應式匯出成 Word 原生方程式；答案比對會看單位與化學式 | 既有 `FEATURE_PIPELINE`（上傳） | [`docs/chemistry.md`](./docs/chemistry.md) |
 | 知識點 | 三科 686 個知識點（AI 草擬；章節重整後數學 254、物理 196、化學 236，種子檔 `exam_pro/config/kc/*.json`；〔整合 2026-09-26〕第二輪審定單落實後為 688 個：數學 253、物理 198、化學 237，`npm run kc:validate` 實測），每個有一段上課講給學生聽的「口語版」；可朗讀、就地修改、審定；可替題目標知識點 | `FEATURE_KC`；自動標新題 `FEATURE_KC_TAGGING` | [`docs/knowledge-components.md`](./docs/knowledge-components.md) |
 | 補救卷與題庫覆蓋率 | 依弱點一鍵產生補救卷草稿（補救／先備／延伸配比，說得出為什麼選這些題）；章 × 難度熱度表看哪裡沒題 | `FEATURE_REMEDIAL`（補救卷另需 `FEATURE_STUDENTS`） | [`docs/remedial.md`](./docs/remedial.md) |
-| 錯題重練與間隔複習〔整合 2026-09-26〕 | 批改卡上勾「要重練」的題進清單；下一份卷重做、隔 1 週、再隔 2 週，連對 3 次算練到會，錯了回第 1 關；可附在新卷（預設新題數三成）或單獨出一份重練卷，學生卷面不標、老師的答案區標「（重練）」；學生頁有到期清單與重練成效表。弱點面板與補救卷照舊只算第一次作答（階段 5 之後的下一輪，FR-036～040；已合入 `dec/integration-all`，待併 `local/integration`） | `FEATURE_RETRAIN`（畫面在學生分頁，另需 `FEATURE_STUDENTS`）；**旗標關閉也要先套 migration 0018**（見下方快速開始第 2 步） | [`docs/retrain-and-review.md`](./docs/retrain-and-review.md) |
+| 錯題重練與間隔複習〔整合 2026-09-26〕 | 批改卡上勾「要重練」的題進清單；下一份卷重做、隔 1 週、再隔 2 週，連對 3 次算練到會，錯了回第 1 關；可附在新卷（預設新題數三成）或單獨出一份重練卷，學生卷面不標、老師的答案區標「（重練）」；學生頁有到期清單與重練成效表。弱點面板與補救卷照舊只算第一次作答（階段 5 之後的下一輪，FR-036～040；已合入 `dec/integration-all`，~~待併 `local/integration`~~〔修訂 2026-09-27〕已在主線：`local/integration`（`889d18f`）起即含，之後的整合分支 `dec/integration-r5`、`dec/integration-final5` 都有） | `FEATURE_RETRAIN`（畫面在學生分頁，另需 `FEATURE_STUDENTS`）；**旗標關閉也要先套 migration 0018**（見下方快速開始第 2 步） | [`docs/retrain-and-review.md`](./docs/retrain-and-review.md) |
 | AI 家教 | 問三科題目與觀念；直接講解或引導式；數值由程式驗算並攤開程式與輸出（只在 Gemini 模式；本機模式不做程式驗算、回答也不宣稱驗算過）；每日花費上限 | `FEATURE_TUTOR` | [`docs/tutor.md`](./docs/tutor.md) |
 | 按住說話 | 按住說話、放開後看逐字稿與公式，改好按確認才送給家教（桌機、localhost 或 HTTPS；只在 Gemini 模式，本機模式不掛載） | `FEATURE_VOICE`（需同時開 `FEATURE_TUTOR`） | 同上 |
 
@@ -518,7 +520,7 @@ cd exam_pro
 git pull                                        #    〔整合 2026-09-26〕或 checkout 含錯題重練的版本（npm run dev 的 nodemon 一拉程式就重啟，所以一定先停）
 npm run db:backup                               # 1. 先備份
 node scripts/snapshot_attempt_views.js --out=before.json                  # 〔整合 2026-09-26〕1a. 套用前快照（只讀不寫）
-npm run migrate                                 # 2. 套用 0010 之後的 migration（local/integration 到 0015；章節重整另有 chapters:migrate，見 docs/chapter-restructure.md 第 6.1 節；本機模式另要 embed:backfill，見 deployment_and_operations.md §3.5）
+npm run migrate                                 # 2. 套用 0010 之後的 migration（~~local/integration 到 0015~~〔修訂 2026-09-27〕最新是 0019：0016 assignment_attempt_split、0017～0018 錯題重練、0019 複核原因 ocr_only；章節重整另有 chapters:migrate，見 docs/chapter-restructure.md 第 6.1 節；本機模式另要 embed:backfill，見 deployment_and_operations.md §3.5）
                                                 #    〔整合 2026-09-26〕含錯題重練的版本會套到 0018：先停服務，migrate 前後各跑一次
                                                 #    〔整合 r5 2026-09-26〕本版再多 0019（複核原因 ocr_only）：要在 .env 開 LOCAL_EXTRACT_MODE=ocr 之前一定要先套，
                                                 #    沒套時工作佇列暫停、伺服器視窗印一次「請在 exam_pro 執行 npm run migrate」（docs/local-mode.md 10.12 第 2 點）
@@ -537,7 +539,7 @@ npm start
 
 之後在 `exam_pro/.env` 一次開一個旗標、重啟、實際用一次：`FEATURE_KC` → `FEATURE_REMEDIAL` → `FEATURE_TUTOR`（需 `LLM_MODE=live`；本機模式不需金鑰，走 Gemini 時要金鑰並確認 `TUTOR_DAILY_BUDGET_USD`）→ `FEATURE_VOICE`（只在 Gemini 模式）→ 最後才 `FEATURE_KC_TAGGING`。步驟 1–5 都不呼叫 AI、不花錢。
 
-**尚未做到**（依 DEC 列管）：錯題重練與間隔複習（〔整合 2026-09-26〕已在 `dec/integration-all` 做到，FR-036～040，見上表；待併 `local/integration`）、訂正卷、學習路徑與學習報告、學生端；AI 家教與知識點標註都還沒有對真的模型（Gemini 或本機）量測過品質，化學的拆題與分類品質也還沒量測。交接與 Owner 待辦見 [`docs/HANDOFF.md`](./docs/HANDOFF.md)，裁決見 [`docs/interfaces-stage5.md`](./docs/interfaces-stage5.md) 第 9 條。
+**尚未做到**（依 DEC 列管）：~~錯題重練與間隔複習~~（〔整合 2026-09-26〕已在 `dec/integration-all` 做到，FR-036～040，見上表；~~待併 `local/integration`~~〔修訂 2026-09-27〕已在主線，`local/integration` 起即含）、訂正卷、學習路徑與學習報告、學生端；AI 家教與知識點標註都還沒有對真的模型（Gemini 或本機）量測過品質，化學的拆題與分類品質也還沒量測。交接與 Owner 待辦見 [`docs/HANDOFF.md`](./docs/HANDOFF.md)，裁決見 [`docs/interfaces-stage5.md`](./docs/interfaces-stage5.md) 第 9 條。
 
 ---
 

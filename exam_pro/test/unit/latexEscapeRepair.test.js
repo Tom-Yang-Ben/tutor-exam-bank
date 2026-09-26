@@ -429,6 +429,33 @@ describe('services/llm.generateJson：replay／record、Ollama 與 Gemini 都修
         assert.equal(calls.length, 1, 'replay 不連 Ollama');
     });
 
+    // 〔整合 2026-09-27 dec/integration-final5〕與 dec/local-thinking-speed 的本機調整（adapterOpts）合在同一條路上：
+    // 有 OLLAMA_NUM_CTX_<AGENT> 時照樣送出覆寫值、cassette 記 ollamaOverrides，LaTeX 修復也照樣套用、cassette 仍存原始回應。
+    test('record（Ollama＋本機調整）：num_ctx 覆寫照送、cassette 記 ollamaOverrides 與原始回應；agent 拿到修好的', async () => {
+        process.env.LLM_MODE = 'record';
+        process.env.OLLAMA_NUM_CTX_LATEX_OT = '4096';
+        try {
+            templates.registerTemplate('latex_ot.v1', '測試用模板（record＋本機調整）');
+            const payloads = [];
+            ollama._setTransportForTest(async (url, payload) => {
+                payloads.push(typeof payload === 'string' ? JSON.parse(payload) : payload);
+                return { status: 200, text: JSON.stringify({ model: 'qwen3:8b', done: true, done_reason: 'stop', message: { role: 'assistant', content: MODEL_JSON }, prompt_eval_count: 1, eval_count: 1 }) };
+            });
+            const opts = { model: 'ollama:qwen3:8b', parts: [{ text: 'q' }], schema: { type: 'object' }, agent: 'latex_ot', template: 'latex_ot.v1', cacheKeyParts: { q: 3 } };
+            const res = await silence(() => llm.generateJson(opts));
+            assert.deepEqual(res.data, EXPECTED);
+            assert.equal(payloads.length, 1);
+            assert.equal(payloads[0].options.num_ctx, 4096, '本機調整照送');
+
+            const key = cassette.cassetteKey({ agent: 'latex_ot', modelId: 'qwen3:8b', template: 'latex_ot.v1', schema: { type: 'object' }, cacheKeyParts: { q: 3 } });
+            const c = cassette.readCassette('latex_ot', key);
+            assert.deepEqual(c.response.data, RAW, 'cassette 存修復前的原始回應');
+            assert.deepEqual(c.request.ollamaOverrides, { numCtx: 4096 }, '有套用本機調整才記');
+        } finally {
+            delete process.env.OLLAMA_NUM_CTX_LATEX_OT;
+        }
+    });
+
     test('live（Gemini）：同樣修；沒有 LaTeX 問題的回應與之前逐位元相同（沒有 latexRepair 鍵）', async () => {
         process.env.LLM_MODE = 'live';
         let text = MODEL_JSON;

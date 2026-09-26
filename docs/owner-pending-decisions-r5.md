@@ -291,6 +291,7 @@
 - **建議**：1。這是品質問題（壞公式進題庫與 Word），而且重錄只要做一次；V5-6 選 2 的 prompt 修改也可以併進同一次重錄。
 - **何時**：重錄 variant 之前。
 - 出處：10.13 第 4 點；10.14 第 5 點第 1 項；分支 `dec/latex-escape-repair-fix` 的 `docs/llm.md` 第 10 節。
+- 〔整合 2026-09-27 `dec/integration-final5`〕整合分支依主控指示已併入（等於照選項 1 的做法，但**不是 Owner 的裁決**，Owner 仍可改選）：與 `prune_cassettes.js`、`rerecord_all.js` 的衝突保留主線共用的 `eval/lib/exitAfterFlush.js`；`services/llm/index.js` 的本機調整與 LaTeX 修復合在同一條路上，`test/unit/latexEscapeRepair.test.js` 補一案釘住。variant 回放實測：向量檔查不到從 1 次變 29 次、分數欄不變（本來就是 n/a），與上面選項 1 的預估相同。
 
 ### O-2　kNN 投票門檻 `KNN_VOTE_SIM` 要不要也重新校準
 

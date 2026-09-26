@@ -12,6 +12,7 @@
 > 〔2026-09-26 `dec/local-thinking-speed-fix`，審查修正〕10.14 的「冷的讀 prompt 約 17 token/秒」其實是部分快取，改用只推冷呼叫的方法（約 8 token/秒）並重算受影響的估計；「分類的快取每題被擠掉」改成條件句（回放檔顯示 Ollama 至少留著 3 份快取）；公式反斜線的支數改稱「至少」；驗算不一致不重跑的建議改成先收集資料。`perf:local` 加第 1.5 段的公式閘門統計、第 1.6 段溫度 0 的重現性、`--backfill`；`report:jobs` 加「answer_mismatch 之後原地重跑的結果」；啟動時印出生效的本機調整、名稱寫錯時警告。10.5 的逐題步驟一併更正。
 > 〔整合 2026-09-26 `dec/integration-r5`〕三條分支（`dec/local-ocr-first-fix`、`dec/local-embed-thresholds-fix`、`dec/local-thinking-speed-fix`）各自新增了「10.12」。依併入順序保留全部內容、重新編號：**10.12** 只用 OCR 拆題、**10.13** 三個餘弦門檻、**10.14** 拆題以外的時間與加速選項；程式註解、測試、其他文件裡指到這三節的地方一併改號。三節裡「待 Owner 決定」的事項另有一份總表：[`owner-pending-decisions-r5.md`](owner-pending-decisions-r5.md)。
 > 〔整合審查 2026-09-27 `dec/integration-r5-fix`〕10.12 第 6 點補一條：OCR 整理的 num_ctx 預算與截斷判斷改用實際送出的值，認得 10.14 的 `OLLAMA_NUM_CTX_EXTRACT_OCR`、`OLLAMA_MAX_OUTPUT_EXTRACT_OCR`（兩條分支各自沒錯、合在一起才對不上）。之後併 `dec/local-classify-nlq-prep-fix` 時，它的「10.12 classify／nlq 重錄前修正」要改號為 **10.15**。
+> 〔整合 2026-09-27 `dec/integration-final5`〕`dec/integration-r5-fix`（`ed93665`）依序併入 `dec/local-classify-nlq-prep-fix`、`dec/latex-escape-repair-fix`、`dec/phys-spoken-reviewed`、`dec/cleanup-exam-legacy`。只有第一條新增了一節（原編 10.12），依併入順序改號為 **10.15**（classify／nlq 重錄前修正）；它的程式註解、eval 訊息、fixture 說明與測試一併改號，`test/unit/localModeSections.test.js` 加入 10.15。其餘三條沒有新增節：LaTeX 修復的說明在 [`llm.md`](llm.md) 第 10 節與 10.8 疑難排解一列，舊版原型移除只在 10.4、10.7 就地加註。10.13、10.14、10.15 裡寫「`dec/latex-escape-repair` 還沒併／在做」的地方就地加註，原文保留。
 
 ## 0. Owner 裁決（2026-09-25，對話中）
 
@@ -696,7 +697,7 @@ node eval/tools/local_bench_vision.js --baseline
 - 不建議照 Gemini 的等效值（0.60～0.66，報告 2.3）：覆蓋 22～23 個，但推薦出去有 8～9 題是其他章的題（例：牛頓第二定律的藍本推直線運動題）。
 - 代價：本機現做一題變式，光生成的中位數就是 162 秒（`qwen3:8b` cassette 的 latencyMs，報告 4），還要再跑分類、lint、驗算（10.7 第 8 點：上次重錄 variant 整步 17,292 秒、60 題）——覆蓋率在本機是「省時間」，不是省錢。0.72 會把同章不同觀念的題當成「相似題」推給老師（Gemini 時代 0.80 也是這樣：推薦出去的有同章 12 題、其他章 10 題）。CI 的 `retrieved_coverage` 門檻 0.8367 不動：0.72 時 0.50 仍紅燈（現在 0.2333 也紅）；要過 0.8367 得降到 0.54 以下、推薦 14 題其他章的題，不建議。
 
-**V5-2　`VARIANT_OFFTOPIC_SIM_MIN`（現行 0.90）——模型現做的變式與藍本低於幾分就算「跑題」，退回重做一次（再不過就放棄這一題）——暫定：等 LaTeX 反斜線修回（另一條分支 `dec/latex-escape-repair` 在做）與 variant 重錄後重跑 `embed:thresholds` 再定**
+**V5-2　`VARIANT_OFFTOPIC_SIM_MIN`（現行 0.90）——模型現做的變式與藍本低於幾分就算「跑題」，退回重做一次（再不過就放棄這一題）——暫定：等 LaTeX 反斜線修回（另一條分支 `dec/latex-escape-repair` 在做；〔整合 2026-09-27 `dec/integration-final5`〕已併入，剩重錄 variant）與 variant 重錄後重跑 `embed:thresholds` 再定**
 
 下表的生成題欄位是用**受損的文字**算的（60 支裡 37 支題幹少了反斜線，第 4 點），修好、重錄之後數字會變；只有最後一欄（fixture 題對，與報告 2.3 的等效值同一批資料）與反斜線無關。先後順序見 V5-5。
 
@@ -743,7 +744,7 @@ node eval/tools/local_bench_vision.js --baseline
 **先後順序（V5-2 為什麼是暫定）**
 
 1. **現在就能答**：V5-1、V5-3、V5-4——依據是 fixture 題對的向量、變式 golden 的檢索與 dedup golden，都是手寫的題幹，沒有反斜線受損（V5-3 的「換句話說」代理是受損文字的向量，只當參考）。V5-6 與門檻無關，也可以現在答。
-2. **V5-2 等三步**：① LaTeX 反斜線修好（另一條分支 `dec/latex-escape-repair`，第 4 點）→ ② 重錄 variant（LLM 與向量都要；上次 17,292 秒；V5-6 若選 2，prompt 的修改併進這一次重錄，不必錄兩次）→ ③ `npm run embed:thresholds` 重跑，照報告 4.3 的表再答 V5-2（重錄後題幹變了，`embed_threshold_labels.json` 的初判對不上，報告會列「未標註」，要重新標）。屆時 fixture 的等效值 0.8671 不變；生成題那幾欄會變——至少 var-016、var-028、var-029#2 會先被文字閘門擋（報告 7.3），其餘的跑題餘弦改用修好的文字重算。
+2. **V5-2 等三步**：① LaTeX 反斜線修好（另一條分支 `dec/latex-escape-repair`，第 4 點；〔整合 2026-09-27 `dec/integration-final5`〕已併入）→ ② 重錄 variant（LLM 與向量都要；上次 17,292 秒；V5-6 若選 2，prompt 的修改併進這一次重錄，不必錄兩次）→ ③ `npm run embed:thresholds` 重跑，照報告 4.3 的表再答 V5-2（重錄後題幹變了，`embed_threshold_labels.json` 的初判對不上，報告會列「未標註」，要重新標）。屆時 fixture 的等效值 0.8671 不變；生成題那幾欄會變——至少 var-016、var-028、var-029#2 會先被文字閘門擋（報告 7.3），其餘的跑題餘弦改用修好的文字重算。
 3. 核准的值照本題的選項 1 或 2 落實；V5-2 在第 2 步做完之前不動（現行 0.90 照舊）。
 
 **V5-6　同一藍本的兄弟變式幾乎一樣，卻都能走到最後（產品缺口，與門檻無關；新題）**
@@ -903,7 +904,7 @@ node eval/tools/local_bench_text.js --agent verify --num-ctx 8192
 
 #### 5. 另外發現、本分支沒有改的（待 Owner 決定）
 
-- **公式的反斜線被 JSON 吃掉（品質問題，不是速度問題）**：模型在 JSON 字串裡把 LaTeX 寫成單一反斜線時，`\frac`、`\times`、`\theta`、`\text`、`\rightarrow`、`\beta`、`\neq`、`\nu`、`\nabla` 的 `\f`、`\t`、`\r`、`\b`、`\n` 是合法的 JSON 跳脫，解析後變成換頁、tab、歸位、退格、換行字元（`\frac{1}{2}` → 換頁＋`rac{1}{2}`、`\neq` → 換行＋`eq`）；`\circ` 這種不合法的跳脫則被 Ollama 的 JSON 文法硬改成別的字（回放檔裡有「歸位字元＋`circ`」），不一定留下控制字元。本機回放檔（第 1.5 段；`\n` 開頭的指令也算、避開真的換行，仍是**下限**）：變式 60 支**至少** 49 支、分類 92 支**至少** 10 支、驗算 20 支**至少** 1 支。**60 支變式裡有 38 支帶著這種壞公式通過了公式閘門**（例 `\times` → tab＋`imes`，規則層看不出來），會入庫、匯出 Word 時公式是壞的；對照 Gemini 出的變式 87 支有 11 支有控制字元、10 支照樣通過閘門。會觸發 lint LLM 的 11 支與 4 支 lint 輸入也都有這種字元，但把控制字元修回之後它們仍有別的錯（11／11、4／4 仍不過；例如系統不支援的 `\textbf`、`\bullet`，少反斜線的 `sqrt`），所以 lint 那幾次 9 分鐘的呼叫**不是**主要由它造成。修法可以是在 Ollama 轉接層解析 JSON 前修回（只修「控制字元＋已知 LaTeX 指令」），或在 `formulaFix` 加一條規則；後者會讓 lint 的回放檔鍵改變、要重錄。`npm run perf:local` 第 1.5 段會持續計數。〔整合：同一件事的另一份計數（`npm run embed:thresholds` 報告第 7 節）與給 R6 的補充見 10.13 第 4 點；產品端的修補在 `dec/latex-escape-repair`，本次整合沒有併入。〕
+- **公式的反斜線被 JSON 吃掉（品質問題，不是速度問題）**：模型在 JSON 字串裡把 LaTeX 寫成單一反斜線時，`\frac`、`\times`、`\theta`、`\text`、`\rightarrow`、`\beta`、`\neq`、`\nu`、`\nabla` 的 `\f`、`\t`、`\r`、`\b`、`\n` 是合法的 JSON 跳脫，解析後變成換頁、tab、歸位、退格、換行字元（`\frac{1}{2}` → 換頁＋`rac{1}{2}`、`\neq` → 換行＋`eq`）；`\circ` 這種不合法的跳脫則被 Ollama 的 JSON 文法硬改成別的字（回放檔裡有「歸位字元＋`circ`」），不一定留下控制字元。本機回放檔（第 1.5 段；`\n` 開頭的指令也算、避開真的換行，仍是**下限**）：變式 60 支**至少** 49 支、分類 92 支**至少** 10 支、驗算 20 支**至少** 1 支。**60 支變式裡有 38 支帶著這種壞公式通過了公式閘門**（例 `\times` → tab＋`imes`，規則層看不出來），會入庫、匯出 Word 時公式是壞的；對照 Gemini 出的變式 87 支有 11 支有控制字元、10 支照樣通過閘門。會觸發 lint LLM 的 11 支與 4 支 lint 輸入也都有這種字元，但把控制字元修回之後它們仍有別的錯（11／11、4／4 仍不過；例如系統不支援的 `\textbf`、`\bullet`，少反斜線的 `sqrt`），所以 lint 那幾次 9 分鐘的呼叫**不是**主要由它造成。修法可以是在 Ollama 轉接層解析 JSON 前修回（只修「控制字元＋已知 LaTeX 指令」），或在 `formulaFix` 加一條規則；後者會讓 lint 的回放檔鍵改變、要重錄。`npm run perf:local` 第 1.5 段會持續計數。〔整合：同一件事的另一份計數（`npm run embed:thresholds` 報告第 7 節）與給 R6 的補充見 10.13 第 4 點；產品端的修補在 `dec/latex-escape-repair`，本次整合沒有併入。〕〔整合 2026-09-27 `dec/integration-final5`〕已併入（`services/llm/latexEscapeRepair.js`，[`llm.md`](llm.md) 第 10 節）；replay 也修，所以 variant 回放的變式題幹變成新字串，向量檔查不到的從 1 次變 29 次，要整步重錄 variant 才恢復（[`owner-pending-decisions-r5.md`](owner-pending-decisions-r5.md) O-1 選項 1 的代價）。
 - **驗算「不一致」時整個節點重跑一次**：原本建議「本機溫度 0、重跑多半得到同一個答案，可以考慮把 `maxRetries.verify` 設 0」，**證據不夠**：本機的 `answer_mismatch` 重跑沒有任何資料，只有 2 支 uncertain 的第 2 次採樣（最終答案都與第 1 次相同，**n=2**）；而且溫度 0 在 Ollama 上不能逐字重現（第 1.6 段：30 對同一段變式 prompt 只有 12 對輸出逐字相同），重跑可能換到不同的答案、救回一題。**建議先照現狀上傳幾份卷**，用 `npm run report:jobs -- --since=7d` 看「verify 的驗證關係」裡新加的幾列（answer_mismatch 之後原地重跑：重跑後通過／仍不一致／其他）再決定：重跑後通過的很少，再把本機模式的重跑關掉（或重跑時換一種問法）；不少就維持。
 - **思考模式用溫度 0**：`services/llm/ollama.js` 一律送 `temperature:0`。Qwen3 官方模型卡對思考模式的建議是溫度 0.6、top_p 0.95、top_k 20，並寫明不要用 greedy（可能品質下降、無止境重複）。改取樣參數不影響回放檔的鍵，但輸出更不可重現（現在溫度 0 也只有一部分逐字相同，第 1.6 段）；若 (c1) 不採用、繼續讓驗算思考，可以一併考慮。
 - **分類的 prompt 快取與處理順序**〔審查修正：原本寫「分類的長 prompt 每題都被擠掉」，與回放檔矛盾〕：回放檔顯示 Ollama 至少留著 3 份 prompt 快取（第 1.3 段：15 次同一段變式 prompt 中間夾了 1～2 支 lint 或驗算再送一次，第二次全是熱的）。所以在 Owner 目前的設定下，一題接一題（分類 → lint → 驗算 → 向量 → 下一題分類）時分類的前綴**多半不會**被擠掉；**只有** `OLLAMA_NUM_PARALLEL=1`（只剩一份，驗算一跑就擠掉）或 `OLLAMA_MAX_LOADED_MODELS=1`（向量模型把 qwen3:8b 擠出記憶體，快取跟著清空）時才會每題都冷。那時改成「整份卷先全部分類、再全部驗算」才有用：few-shot 同一科每題相同（`FEATURE_SIMILAR` 關）時每題約 51 秒而不是整段冷的約 7 分（差約 6 分；原本寫的「1 分 vs 3 分半」低估了一倍多）；`FEATURE_SIMILAR` 開時 few-shot 每題不同，只省得到共同前綴（系統提示詞、欄位說明、白名單、界線規則，約三到四成：每題約 7 分 → 4～5 分）。要改 runner 的認領順序。建議先照 (e) 看 `server.log` 的 parallel，決定 `OLLAMA_NUM_PARALLEL` 之後再決定這一項。
@@ -1010,7 +1011,7 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 4. **零成本閘門沒有套**：拆題模型（qwen3-vl）給的高信心章節不經第二層，相鄰章的錯照樣入庫（LC-3）。classify suite 刻意跳過閘門，量不到這一塊。
 5. **信心沒有鑑別力**：本機模型幾乎只給 0.95 與 1，「信心低就送人工」這條路在本機模式等於不存在（第 2 點最後）。
 6. **nlq-036** 的計分與模板規則 6 互相拉扯（LC-4），重錄後這一句很可能仍算錯，吃掉 nlq llm 欄唯一的一句餘裕。
-7. **反斜線損壞**：`dec/latex-escape-repair` 還在審查。不影響這兩個 suite 的分數（只壞在 classify 的 `rationale`），但沒併之前，複核頁看到的分類理由仍會有「rac」「an」這種殘字。
+7. **反斜線損壞**：`dec/latex-escape-repair` 還在審查。〔整合 2026-09-27 `dec/integration-final5`〕已併入：classify 的 `rationale` 回放時也會補回反斜線；`chapter` 欄不受影響，這兩個 suite 的分數不變。不影響這兩個 suite 的分數（只壞在 classify 的 `rationale`），但沒併之前，複核頁看到的分類理由仍會有「rac」「an」這種殘字。
 8. 圓周運動與 K3 兩題（cls-fx-046、cls-dr-008）只能靠模型（LC-1、LC-2）。
 
 #### 6. 決策草稿（請 Owner 決定；本分支都沒有做）

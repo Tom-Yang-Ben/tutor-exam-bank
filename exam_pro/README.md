@@ -160,6 +160,8 @@ exam_pro/
 │         五個 eval 紅燈（本機 cassette／向量還沒重錄）。上一行的「五個 eval 全綠」是 stage5/integration 當時的狀態，不適用本版
 │         〔整合 r5 2026-09-26〕dec/integration-r5 實測：unit 3,495（2 略過）· integration 615（全過）· e2e 12（3 項紅，缺本機 extract_ocr cassette）；
 │         retrieval 9 個門檻全過，其餘四個 eval 紅燈（缺回放檔／向量，與 889d18f 相同，只有拆題缺的那支從 extract_vision 換成 extract_ocr）
+│         〔整合 final5 2026-09-27〕dec/integration-final5 實測：unit 3,609（2 略過）· integration 615（全過）· e2e 12（3 項紅，同上）；
+│         retrieval 全過，其餘四個 eval 紅燈同上；variant 缺向量 1→29 次（LaTeX 修復回放也補反斜線，要重錄 variant）
 ├─ scripts/ + *.bat                    # 備份、向量回填、成本報表、公式健檢（Windows 雙擊）
 └─ docker-compose.yml                  # PG16+pgvector：5442 開發（volume）／5433 測試（tmpfs）；皆只綁 127.0.0.1
 ```

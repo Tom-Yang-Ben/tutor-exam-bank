@@ -128,8 +128,8 @@ TC 依 FR 分組（`TC-<FR 號>-<序>`）；層級：U=單元、I=整合、E=e2e
 
 | 層級 | 數量 | 位置 | 執行條件 |
 |---|---:|---|---|
-| 單元 | 3,495〔整合 r5 2026-09-26〕（dec/integration-all 3,244；舊值 1,613） | exam_pro/test/unit/ | 不連網、不連庫、零 secrets；`npm test` 可完整重現〔修訂 2026-09-16b〕 |
-| 整合 | 615〔整合 r5 2026-09-26〕（dec/integration-all 593；舊值 317） | exam_pro/test/integration/ | tmpfs 測試庫（5433，`_test` 後綴強制）〔修訂 2026-09-16b〕 |
+| 單元 | 3,609〔整合 final5 2026-09-27〕（dec/integration-r5 3,495；dec/integration-all 3,244；舊值 1,613） | exam_pro/test/unit/ | 不連網、不連庫、零 secrets；`npm test` 可完整重現〔修訂 2026-09-16b〕 |
+| 整合 | 615〔整合 r5 2026-09-26；final5 2026-09-27 不變〕（dec/integration-all 593；舊值 317） | exam_pro/test/integration/ | tmpfs 測試庫（5433，`_test` 後綴強制）〔修訂 2026-09-16b〕 |
 | e2e | 12〔整合 2026-09-26〕（舊值 11） | exam_pro/test/e2e/ | HTTP 全路徑（上傳→部分入庫；組卷→Word 公式；〔整合 2026-09-26〕新卷→勾要重練→重練卷→Word 標示；〔整合 r5〕`LOCAL_EXTRACT_MODE=ocr` 時上傳那一條改驗 ①a 全部停在複核、①b 人工核准一題入庫，`docs/local-mode.md` 10.12 第 7 點，測試契約變更待 Owner 裁決） |
 
 〔修訂 2026-09-24〕上表為 main（PR #30–#33 合併後）的數字（〔整合 2026-09-26〕指表中括號內的舊值）。階段 5：**整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠**（~~主控合併後更新數字~~ 〔整合 2026-09-26〕已更新，見下一段）。
@@ -137,6 +137,8 @@ TC 依 FR 分組（`TC-<FR 號>-<序>`）；層級：U=單元、I=整合、E=e2e
 〔整合 2026-09-26〕上表已統一更新為 **`dec/integration-all`**（`local/integration` 7dc14a0＋第二、三輪九條分支＋整合修正＋variant 向量修正＋錯題重練全部＋本機看圖逾時）的完整 `ci.sh` 實測：unit 3,244（3,242 過、2 略過：兩項等本機重錄 cassette 的回放測試）、`check:html` 綠、migrate 套到 0018 綠、integration 593 全過；e2e 12 項中 9 過、3 敗（`pipeline.e2e.test.js` 缺本機 ocr cassette）；五個 eval 紅燈（retrieval 未達門檻、classify 92 筆與 pipeline 1 筆與 nlq 8 筆 replay miss、variant 缺向量 fixture）——e2e 與 eval 的紅燈全是本機模型的回放檔／向量檔還沒重錄（`docs/local-mode.md` 第 8 條的預期），種類與筆數和 `dec/integration-final`、`dec/retrain-phase2-fix` 相同。錯題重練新增 13 支單元測試檔與 7 支整合測試檔（清單見 §1 TC-036-*～TC-040-*）、e2e 新增一案；本機看圖逾時新增 3 支單元測試檔（`llmOllamaStream`、`localBenchVision`、`visionMaxEdge`）。階段 5 新增 29 支單元測試檔與 10 支整合測試檔（清單見 §1 TC-021-*～TC-035-*）；e2e 未新增。
 
 〔整合 r5 2026-09-26〕上表再更新為 **`dec/integration-r5`**（`local/integration` 889d18f＋`dec/local-ocr-first-fix`＋`dec/local-embed-thresholds-fix`＋`dec/local-thinking-speed-fix`）的實測（測試庫 PostgreSQL 16＋pgvector 0.6、埠 5433，env 照 `ci.yml` 的 integration job，含 `LOCAL_EXTRACT_MODE=ocr`）：unit 3,495（3,493 過、2 略過）、`check:html` 綠、migrate 套到 0019 綠、integration 615 全過（起點 889d18f 同機實測 602 項中 4 項紅：`cassetteTools.pg` 整批跑時 JSON 在第 146176 字截斷，本次併入的 `eval/lib/exitAfterFlush.js` 已修）；e2e 12 項中 9 過、3 敗（「runner 跑完」與 ocr 模式的 ①a、①b，缺 `extract_ocr/a47b37a0…` 回放檔）；retrieval 9 個門檻全過，classify 92 筆、pipeline 1 筆（`extract_ocr`）、nlq 8 筆、variant 2 筆 replay miss＋1 筆缺向量。與 889d18f 的差別只有 e2e／pipeline 缺的那一支從 `extract_vision/85ab9965…` 換成 `extract_ocr/a47b37a0…`、e2e 紅的兩項從「部分入庫」「部分是真的」換成 ①a、①b（ocr 模式的合約變更）；`LOCAL_EXTRACT_MODE=cross` 跑 e2e 與 pipeline 和 889d18f 逐項相同。新增單元測試檔：OCR 為主 6 支、向量門檻 2 支、拆題以外的時間 3 支、整合改號 1 支（`localModeSections`）；新增整合測試檔 2 支（`localExtractOcr.pg`、`reportJobs.pg`）。
+
+〔整合 final5 2026-09-27〕上表再更新為 **`dec/integration-final5`**（`dec/integration-r5-fix` ed93665＋`dec/local-classify-nlq-prep-fix`＋`dec/latex-escape-repair-fix`＋`dec/phys-spoken-reviewed`＋`dec/cleanup-exam-legacy`）的實測（全新的 UTF8 測試庫、埠 5433，env 照 `ci.yml`）：unit 3,609（3,607 過、2 略過）、`check:html` 綠、migrate 套到 0019 綠、integration 615 全過；e2e 12 項中 9 過、3 敗（與 ed93665 相同三項，缺 `extract_ocr/a47b37a0…`）；retrieval 9 個門檻全過；classify 92 筆、pipeline 1 筆、nlq 8 筆 replay miss，報表與 ed93665 逐欄相同；variant 2 筆 replay miss，缺向量從 1 次變 29 次（LaTeX 修復在回放時也補反斜線，變式題幹成了新字串，要重錄 variant；分數欄本來就是 n/a，不變）。起點 ed93665 同機實測：unit 3,502（3,500 過、2 略過），其餘同上、variant 缺向量 1 次。新增單元測試檔：`chapterPostRules`、`localV1Regression`、`latexEscapeRepair`（含整合時補的一案：本機調整與 LaTeX 修復同一條路）；`localModeSections` 加 10.15。整合測試檔未新增。
 
 CI（`.github/workflows/ci.yml`）：unit（Node 22/24 矩陣）＋integration（pgvector service→migrations→整合→e2e→五個 eval suite）；全程零金鑰、零網路、零成本（cassette replay；replay miss 於 main 視為錯誤）。CI badge 見 repo 根 `README.md`；全綠 @ f8f6574（PR #7 merge）〔修訂 2026-08-29〕。
 
