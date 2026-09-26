@@ -1,0 +1,1081 @@
+{
+  "_notice": "2026-09-25 Owner 電腦以本機模型 qwen3:8b 錄的 classify.v1（92 支）與 nlq.v1（8 支）cassette 的原始回應（response.data 逐字照抄，含被 JSON 跳脫吃掉反斜線的控制字元）。來源：commit f77d1a3 的 exam_pro/eval/cassettes/（cassette 本身不動、不搬）；cassette 被 npm run cassettes:prune 刪掉之後，回歸測試仍讀得到這一份。用途：test/unit/localV1Regression.test.js 與 eval/tools/local_v1_counterfactual.js 以「同一份模型輸出」回放現行的後處理（章節界線規則、名稱容錯、nlq 的證據檢查），量的是程式那一層單獨補得到哪裡；模板與 schema 已升為 classify.v2／nlq.v2，重錄後模型的輸出一定會變，真正的分數要重錄才知道。docs/local-mode.md 10.12。",
+  "source": {
+    "commit": "f77d1a3",
+    "model": "qwen3:8b",
+    "recorded": "2026-09-25",
+    "templates": {
+      "classify": "classify.v1",
+      "nlq": "nlq.v1"
+    }
+  },
+  "classify": [
+    {
+      "id": "cls-fx-001",
+      "cassette": "classify/e7637fed723b8c6c062ad422d27997ad33e8b0d5b5b85c60e3b18525721e7798.json",
+      "questionText": "$\\log_{2} 8 + \\log_{2} 4$ 之值為何？\n(A) $5$　(B) $6$　(C) $7$　(D) $12$",
+      "data": {
+        "chapter": "指數與對數",
+        "confidence": 0.95,
+        "rationale": "題目涉及對數運算，需使用對數的性質進行計算，屬於指數與對數章節。"
+      }
+    },
+    {
+      "id": "cls-fx-002",
+      "cassette": "classify/5b28975a8706d3e6aef293cb2386cf461c9788f3b8760a8ded80a2a9bfee295f.json",
+      "questionText": "$\\log_{3} 27 + \\log_{3} 9$ 之值為何？\n(A) $3$　(B) $4$　(C) $5$　(D) $6$",
+      "data": {
+        "chapter": "指數與對數",
+        "confidence": 0.95,
+        "rationale": "題目涉及對數運算，需使用對數的性質進行計算，屬於指數與對數章節。"
+      }
+    },
+    {
+      "id": "cls-fx-003",
+      "cassette": "classify/6146b4ccac783b5ac074471d63abaef4c36600a6ec8ade8cff66c140d234ff90.json",
+      "questionText": "解方程式 $2^{x+1} = 32$。",
+      "data": {
+        "chapter": "指數與對數",
+        "confidence": 0.95,
+        "rationale": "題目涉及指數方程，需使用指數與對數的性質進行解題，屬於指數與對數章節。"
+      }
+    },
+    {
+      "id": "cls-fx-004",
+      "cassette": "classify/48c9e6eebd6dbc3dac9bade6ccebe4332ef10a686bec5047bf17d4a87a2281a1.json",
+      "questionText": "解方程式 $3^{x-1} = 81$。",
+      "data": {
+        "chapter": "指數與對數",
+        "confidence": 0.95,
+        "rationale": "題目涉及指數方程，需使用指數與對數的性質進行解題，屬於指數與對數章節。"
+      }
+    },
+    {
+      "id": "cls-fx-005",
+      "cassette": "classify/99cf720b720eb9a913fbca4b705ba8d083554bfe3b174d7dbf58bac8cebbd71e.json",
+      "questionText": "已知 $\\log_{10} 2 = 0.3010$，求 $2^{50}$ 是幾位數的整數。",
+      "data": {
+        "chapter": "指數與對數",
+        "confidence": 0.95,
+        "rationale": "題目涉及指數運算與對數的應用，需利用對數換底公式計算 $2^{50}$ 的位數，屬於指數與對數章節的範疇。"
+      }
+    },
+    {
+      "id": "cls-fx-006",
+      "cassette": "classify/8f7b26c104dcd48e097920b545a8aa76fe33559e8b7950db064babcfe71524a1.json",
+      "questionText": "已知 $\\log_{10} 2 = 0.3010$，求 $2^{100}$ 是幾位數的整數。",
+      "data": {
+        "chapter": "指數與對數",
+        "confidence": 0.95,
+        "rationale": "題目涉及指數運算與對數的應用，需利用對數性質計算 $2^{100}$ 的位數，屬於指數與對數章節。"
+      }
+    },
+    {
+      "id": "cls-fx-007",
+      "cassette": "classify/e1b04cdc9c51a8d42f645f282ebd59a366add61701d8256a170cad20ab620466.json",
+      "questionText": "$\\log_{2} 3 \\times \\log_{3} 8$ 之值為何？",
+      "data": {
+        "chapter": "指數與對數",
+        "confidence": 0.95,
+        "rationale": "題目涉及對數的換底公式與性質，需運用指數與對數的運算規則進行簡化計算。"
+      }
+    },
+    {
+      "id": "cls-fx-008",
+      "cassette": "classify/4d2ab5137f4b2272ac3a509c76cfac131c08e19b8c25c4becfe52a949c097742.json",
+      "questionText": "已知 $\\log_{10} 2 = 0.3010$，利用 $\\log_{10} 5 = \\log_{10} \\frac{10}{2$ 求 $\\log_{10} 5$ 之近似值。\n(A) $0.6990$　(B) $0.3010$　(C) $0.1505$　(D) $1.6990$",
+      "data": {
+        "chapter": "指數與對數",
+        "confidence": 0.95,
+        "rationale": "題目涉及對數的性質與計算，特別是利用已知的 $\frac{10}{2}$ 來求 $\frac{10}{2}$ 的對數，屬於指數與對數章節的內容。"
+      }
+    },
+    {
+      "id": "cls-fx-009",
+      "cassette": "classify/602ba5965421f8e9f76944c7fdc7bad9c4b20f85c1fa205a08c344ddb259efe8.json",
+      "questionText": "設平面向量 $\\vec{a} = (3, 4)$、$\\vec{b} = (1, 2)$，求 $\\vec{a} \\cdot \\vec{b}$。",
+      "data": {
+        "chapter": "向量內積",
+        "confidence": 1,
+        "rationale": "題目要求計算兩個向量的點積，屬於向量內積章節的內容。"
+      }
+    },
+    {
+      "id": "cls-fx-010",
+      "cassette": "classify/ba797c9cd9461fd4faaafa8a0adf1532176ce505358711cd06575d7c425a3201.json",
+      "questionText": "設平面向量 $\\vec{a} = (5, 2)$、$\\vec{b} = (3, 1)$，求 $\\vec{a} \\cdot \\vec{b}$。",
+      "data": {
+        "chapter": "向量內積",
+        "confidence": 1,
+        "rationale": "題目要求計算兩個向量的點積，屬於向量內積章節的內容。"
+      }
+    },
+    {
+      "id": "cls-fx-011",
+      "cassette": "classify/b1135c2121a2d6f1660210d77246c30b44207e879289de5f9fa14318a65ffa9e.json",
+      "questionText": "設平面向量 $\\vec{a} = (1, 0)$、$\\vec{b} = (1, 1)$，求兩向量的夾角 $\\theta$。",
+      "data": {
+        "chapter": "向量內積",
+        "confidence": 0.95,
+        "rationale": "題目要求求兩向量的夾角，需使用向量內積公式計算，屬於向量內積章節。"
+      }
+    },
+    {
+      "id": "cls-fx-012",
+      "cassette": "classify/3ac4bda80a227d7e0e080823c919680f348224b254ebd7c61e472c174eb98d06.json",
+      "questionText": "設平面向量 $\\vec{a} = (2, 0)$、$\\vec{b} = (1, \\sqrt{3})$，求兩向量的夾角 $\\theta$。",
+      "data": {
+        "chapter": "向量內積",
+        "confidence": 0.95,
+        "rationale": "題目要求求兩向量的夾角，需使用向量內積公式計算，屬於向量內積章節。"
+      }
+    },
+    {
+      "id": "cls-fx-013",
+      "cassette": "classify/edda56a2481b2347b2e1f8de41f09706aed5875106feab008f700cffefac8ecc.json",
+      "questionText": "設平面向量 $\\vec{a} = (2, k)$ 與 $\\vec{b} = (3, 6)$ 互相垂直，求 $k$。",
+      "data": {
+        "chapter": "向量內積",
+        "confidence": 0.95,
+        "rationale": "題目中提到向量互相垂直，需利用向量內積為零的條件求解，屬於向量內積章節的核心概念。"
+      }
+    },
+    {
+      "id": "cls-fx-014",
+      "cassette": "classify/317bc5048b90479b1a550fd2501db9e08b6345c1846bc29c51bccb45e32592f4.json",
+      "questionText": "設平面向量 $\\vec{a} = (4, k)$ 與 $\\vec{b} = (5, 10)$ 互相垂直，求 $k$。",
+      "data": {
+        "chapter": "向量內積",
+        "confidence": 0.95,
+        "rationale": "題目中提到向量互相垂直，需利用向量內積為零的條件求解，屬於向量內積章節的核心概念。"
+      }
+    },
+    {
+      "id": "cls-fx-015",
+      "cassette": "classify/2659463b1dea4e20ddbb61ad7a3a6fd9ab7ca8dd9f55fb7e24640732023b5b38.json",
+      "questionText": "求 $\\vec{a} = (3, 4)$ 在 $\\vec{b} = (1, 0)$ 上的正射影長度 $\\frac{\\vec{a} \\cdot \\vec{b}}{|\\vec{b}|$。",
+      "data": {
+        "chapter": "向量內積",
+        "confidence": 0.95,
+        "rationale": "題目涉及向量內積的計算，並直接使用公式 $\frac{\bar{a} \bullet \bar{b}}{|\bar{b}|}$，屬於向量內積章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-fx-016",
+      "cassette": "classify/f585dcd55474d692adc44547fc694d81f1f93277cc233032fb09b71aa3281527.json",
+      "questionText": "試證：對任意平面向量 $\\vec{a}$、$\\vec{b}$，恆有 $|\\vec{a} \\cdot \\vec{b}| \\leq |\\vec{a}||\\vec{b}|$。",
+      "data": {
+        "chapter": "向量內積",
+        "confidence": 0.95,
+        "rationale": "題目涉及向量內積的性質，並要求證明其絕對值不超過兩個向量長度的乘積，屬於向量內積章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-fx-017",
+      "cassette": "classify/04d6dd3152a18971171ff188b395ef22f3d93a54088c1bc5234959a1961dd920.json",
+      "questionText": "設空間向量 $\\vec{a} = (1, 2, 3)$、$\\vec{b} = (2, 0, 1)$，求 $\\vec{a} \\cdot \\vec{b}$。",
+      "data": {
+        "chapter": "空間向量內積",
+        "confidence": 0.95,
+        "rationale": "題目要求計算空間向量的點積，屬於空間向量內積章節的內容。"
+      }
+    },
+    {
+      "id": "cls-fx-018",
+      "cassette": "classify/3cc886dad14b260f6db3068e2473caf91825d2138801bb4eaeda11f10fd632dc.json",
+      "questionText": "設空間向量 $\\vec{a} = (2, 1, 4)$、$\\vec{b} = (3, 2, 0)$，求 $\\vec{a} \\cdot \\vec{b}$。",
+      "data": {
+        "chapter": "空間向量內積",
+        "confidence": 0.95,
+        "rationale": "題目要求計算空間向量的點積，屬於空間向量內積章節的內容。"
+      }
+    },
+    {
+      "id": "cls-fx-019",
+      "cassette": "classify/b88425cb4dd768f4edbbb36a3160a426a6ce62af3111fb8ff5433d9ac693b878.json",
+      "questionText": "設空間向量 $\\vec{a} = (1, 1, 0)$、$\\vec{b} = (0, 1, 1)$，求兩向量的夾角 $\\theta$。",
+      "data": {
+        "chapter": "空間向量內積",
+        "confidence": 0.95,
+        "rationale": "題目要求計算空間向量的夾角，需使用向量內積公式，屬於空間向量內積章節。"
+      }
+    },
+    {
+      "id": "cls-fx-020",
+      "cassette": "classify/774cfe44c653a0b362b7e3a6e48e617631633573f32d53de9c85caa8588e5286.json",
+      "questionText": "設空間向量 $\\vec{a} = (1, 0, 0)$、$\\vec{b} = (1, 1, 0)$，求兩向量的夾角 $\\theta$。",
+      "data": {
+        "chapter": "空間向量內積",
+        "confidence": 0.95,
+        "rationale": "題目要求計算空間向量的夾角，需使用向量內積公式，屬於空間向量內積章節。"
+      }
+    },
+    {
+      "id": "cls-fx-021",
+      "cassette": "classify/6f797f1548140ca0fe11de40d8650b83a734d4d448ddae8050bf866e5f35a0df.json",
+      "questionText": "設空間向量 $\\vec{a} = (1, 2, k)$ 與 $\\vec{b} = (2, -1, 3)$ 互相垂直，求 $k$。",
+      "data": {
+        "chapter": "空間向量內積",
+        "confidence": 0.95,
+        "rationale": "題目涉及空間向量垂直的條件，需使用向量內積為零的性質求解，屬於空間向量內積章節。"
+      }
+    },
+    {
+      "id": "cls-fx-022",
+      "cassette": "classify/91cf441bb6df91c9ee68a0ffa71ba9b9235fdaf4df2b49735e431ed1407631e3.json",
+      "questionText": "設 $A(1, 2, 2)$，求位置向量 $\\vec{OA}$ 與 $\\vec{n} = (1, 0, 0)$ 的內積，並說明其幾何意義。",
+      "data": {
+        "chapter": "向量內積",
+        "confidence": 0.95,
+        "rationale": "題目要求計算位置向量與另一向量的內積，並說明其幾何意義，屬於向量內積章節的內容。"
+      }
+    },
+    {
+      "id": "cls-fx-023",
+      "cassette": "classify/fc48f77eac9a7e4c4a48470a7e5c9520c0db300634b0b78fb0d0e0002b556958.json",
+      "questionText": "設空間向量 $\\vec{a} = (1, 2, 2)$，依 $\\frac{1}{\\sqrt{1^2 + 2^2 + 2^2}$ 求它與 $x$ 軸正向夾角的餘弦值。",
+      "data": {
+        "chapter": "空間向量內積",
+        "confidence": 0.95,
+        "rationale": "題目涉及空間向量與x軸正向的夾角餘弦值計算，需使用向量內積公式，屬於空間向量內積章節。"
+      }
+    },
+    {
+      "id": "cls-fx-024",
+      "cassette": "classify/b9a5d7bbcb76813d4083ee4d694c26122391cab52a32487af2179f88f401492f.json",
+      "questionText": "兩個非零空間向量 $\\vecc{a}$ 與 $\\vecc{b}$ 的內積為 $0$，代表兩者的關係為何？\n(A) 互相垂直　(B) 互相平行　(C) 長度相等　(D) 方向相同",
+      "data": {
+        "chapter": "空間向量內積",
+        "confidence": 0.95,
+        "rationale": "題目涉及空間向量內積為 0 的條件，這屬於空間向量內積章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-fx-025",
+      "cassette": "classify/815af2c99db8b2b20c37676aee0497a1cae52a5a32aabbb23c4ca5411a119669.json",
+      "questionText": "$\\sin^2 40^\\circ + \\cos^2 40^\\circ$ 之值為何？\n(A) $1$　(B) $0$　(C) $\\frac{1}{2}$　(D) 需查表才能得知",
+      "data": {
+        "chapter": "直角三角形的邊角關係",
+        "confidence": 0.95,
+        "rationale": "題目涉及 $\tan\theta$ 與 $\theta$ 的關係，屬於直角三角形的邊角關係章節。"
+      }
+    },
+    {
+      "id": "cls-fx-026",
+      "cassette": "classify/889a397be4c4a283dde5d408bfc209ef3ff389825b0ee53af04ea39d017252c3.json",
+      "questionText": "$\\sin^2 25^\\circ + \\cos^2 25^\\circ$ 之值為何？\n(A) $0$　(B) $\\frac{1}{2}$　(C) $1$　(D) 需查表才能得知",
+      "data": {
+        "chapter": "直角三角形的邊角關係",
+        "confidence": 0.95,
+        "rationale": "題目涉及 $\tan\theta$ 與 $\theta$ 的關係，屬於直角三角形的邊角關係章節。"
+      }
+    },
+    {
+      "id": "cls-fx-027",
+      "cassette": "classify/6cb00b6e5519c4ca315fbebbca536ff7780279ea7c34212cff61399aaf826c4b.json",
+      "questionText": "$\\sin 150^\\circ$ 之值為何？",
+      "data": {
+        "chapter": "廣義角與極坐標",
+        "confidence": 0.95,
+        "rationale": "題目涉及計算 $\theta = 150^\fdg$ 的正弦值，屬於廣義角的三角函數計算，符合該章節的範疇。"
+      }
+    },
+    {
+      "id": "cls-fx-028",
+      "cassette": "classify/0a64b87b1071f93d2e953a2d74ff77d964c06f852ba53b59db1202e7dec90f3a.json",
+      "questionText": "$\\cos 120^\\circ$ 之值為何？",
+      "data": {
+        "chapter": "廣義角與極坐標",
+        "confidence": 0.95,
+        "rationale": "題目涉及計算 $\\cos 120^\bullet$，而 $120^\bullet$ 是第二象限角，需使用廣義角的三角函數定義進行計算，因此屬於廣義角與極坐標章節。"
+      }
+    },
+    {
+      "id": "cls-fx-029",
+      "cassette": "classify/83bfd79634bdf9cd89c9ecef86524881bbbd22804c7dd10f8707bdd35a307704.json",
+      "questionText": "與 $400^\\circ$ 同界的最小正角為何？\n(A) $20^\\circ$　(B) $40^\\circ$　(C) $60^\\circ$　(D) $340^\\circ$",
+      "data": {
+        "chapter": "廣義角與極坐標",
+        "confidence": 0.95,
+        "rationale": "題目涉及同界角的計算，屬於廣義角的範疇，需利用角度的周期性來求最小正角。"
+      }
+    },
+    {
+      "id": "cls-fx-030",
+      "cassette": "classify/b2ffa0e7a4ee353cb2c4313c5b715d9ade2cdfe6ca2d89082d5800d20ffac7ab.json",
+      "questionText": "已知角 $\\theta$ 的終邊通過點 $P(-3, 4)$，試依定義 $\\sin \\theta = \\frac{y}{r$ 求 $\\sin \\theta$。",
+      "data": {
+        "chapter": "廣義角與極坐標",
+        "confidence": 0.95,
+        "rationale": "題目提到角θ的終邊通過點P(-3, 4)，並依定義求sinθ，關鍵在於使用廣義角的定義，即sinθ = y/r，這屬於廣義角與極坐標章節的內容。"
+      }
+    },
+    {
+      "id": "cls-fx-031",
+      "cassette": "classify/54e55ec73e04ad66db22b77334ab437281766e2582aea260901aab67ac1396d9.json",
+      "questionText": "若 $\\theta$ 落在第二象限，則 $\\tan \\theta$ 的正負為何？\n(A) 恆為正　(B) 恆為負　(C) 恆為零　(D) 無法判斷",
+      "data": {
+        "chapter": "廣義角與極坐標",
+        "confidence": 0.95,
+        "rationale": "題目涉及角的象限與三角函數的符號，屬於廣義角與極坐標章節的內容。"
+      }
+    },
+    {
+      "id": "cls-fx-032",
+      "cassette": "classify/b6ee0f2d10a2fec7c6d7fd392e3868295b099d3e1aa2e164732f851d18308e8f.json",
+      "questionText": "質量 $2$ kg 的物體受到合力 $10$ N，求其加速度。",
+      "data": {
+        "chapter": "牛頓運動定律",
+        "confidence": 0.95,
+        "rationale": "題目涉及合力與加速度的關係，屬於牛頓第二運動定律的應用，直接使用 F=ma 的公式計算加速度。"
+      }
+    },
+    {
+      "id": "cls-fx-033",
+      "cassette": "classify/4fffaed2fb787e41d9bd4e82975f86ee82556ddf58b330465156afff10dd18ba.json",
+      "questionText": "質量 $4$ kg 的物體受到合力 $18$ N，求其加速度。",
+      "data": {
+        "chapter": "牛頓運動定律",
+        "confidence": 0.95,
+        "rationale": "題目涉及合力與加速度的關係，屬於牛頓第二運動定律的應用，直接使用 F=ma 的公式計算加速度。"
+      }
+    },
+    {
+      "id": "cls-fx-034",
+      "cassette": "classify/ad4b3c3587e6e977428b10216581dc31cdc758f85c687243c4c9439d56283b6b.json",
+      "questionText": "質量 $50$ kg 的人站在體重計上，電梯以 $2$ m/s$^2$ 的加速度向上加速，求體重計的讀數（取 $g = 10$ m/s$^2$）。",
+      "data": {
+        "chapter": "牛頓運動定律",
+        "confidence": 0.95,
+        "rationale": "題目涉及電梯加速度與人體受力的關係，需應用牛頓第二定律計算體重計讀數，屬於牛頓運動定律章節。"
+      }
+    },
+    {
+      "id": "cls-fx-035",
+      "cassette": "classify/2724bb7b1a0704ae2677217d3b46765b78b3e89f99f9bd8fdb01fc00b7081183.json",
+      "questionText": "質量 $60$ kg 的人站在體重計上，電梯以 $3$ m/s$^2$ 的加速度向上加速，求體重計的讀數（取 $g = 10$ m/s$^2$）。",
+      "data": {
+        "chapter": "牛頓運動定律",
+        "confidence": 0.95,
+        "rationale": "題目涉及電梯加速度與人體受力的關係，需應用牛頓第二定律計算體重計讀數，屬於牛頓運動定律章節。"
+      }
+    },
+    {
+      "id": "cls-fx-036",
+      "cassette": "classify/c467b4440630593425d56fe42362b4f81ac4612232b119d6716476bab45046a7.json",
+      "questionText": "光滑定滑輪兩端以輕繩懸掛 $3$ kg 與 $5$ kg 的物體，由靜止釋放後求系統的加速度與繩張力（取 $g = 10$ m/s$^2$，繩與滑輪質量不計）。",
+      "data": {
+        "chapter": "牛頓運動定律",
+        "confidence": 0.95,
+        "rationale": "題目涉及兩個物體通過繩子連接並受重力作用，需應用牛頓第二定律與張力分析，屬於牛頓運動定律章節。"
+      }
+    },
+    {
+      "id": "cls-fx-037",
+      "cassette": "classify/a590a9ae07837cf6dab575a8f69adb37ba743e34972c0de084ce14f7b92c2b1f.json",
+      "questionText": "光滑定滑輪兩端以輕繩懸掛 $2$ kg 與 $6$ kg 的物體，由靜止釋放後求系統的加速度與繩張力（取 $g = 10$ m/s$^2$，繩與滑輪質量不計）。",
+      "data": {
+        "chapter": "牛頓運動定律",
+        "confidence": 0.95,
+        "rationale": "題目涉及兩個物體通過繩子連接並由滑輪系統運動，需應用牛頓第二定律與張力分析，屬於牛頓運動定律章節。"
+      }
+    },
+    {
+      "id": "cls-fx-038",
+      "cassette": "classify/4d1a069e5346d11123134cc34a62fead1e74a60703590466e1925eca8c05d671.json",
+      "questionText": "馬拉車前進時，馬對車的作用力 $F^$ 與車對馬的反作用力，兩者的關係為何？\n(A) 馬對車的力較大　(B) 大小相等、方向相反　(C) 車對馬的力較大　(D) 視速度而定",
+      "data": {
+        "chapter": "牛頓運動定律",
+        "confidence": 0.95,
+        "rationale": "題目涉及作用力與反作用力的關係，屬於牛頓第三定律的內容，與牛頓運動定律直接相關。"
+      }
+    },
+    {
+      "id": "cls-fx-039",
+      "cassette": "classify/a61466d20f71cf1b653b0749bf805c2f15604fc09f2b557b608cb0b5be7e09bf.json",
+      "questionText": "公車緊急煞車時乘客身體向前傾，主要原因為何？\n(A) 慣性　(B) 向心力　(C) 摩擦力變大　(D) 重力變大",
+      "data": {
+        "chapter": "牛頓運動定律",
+        "confidence": 0.95,
+        "rationale": "題目涉及乘客在公車急煞時向前傾的現象，屬於慣性現象，而慣性是牛頓運動定律中第一定律的內容。"
+      }
+    },
+    {
+      "id": "cls-fx-040",
+      "cassette": "classify/f622e82f0d90fcc539fef4387bc4396f519e579f828f17c37a80354994480c35.json",
+      "questionText": "質量 $10$ kg 的物體置於傾角 $30^\\circ$ 的斜面上，與斜面間的動摩擦係數 $\\mu = 0.2$，求物體沿斜面下滑的加速度（取 $g = 10$ m/s$^2$）。",
+      "data": {
+        "chapter": "摩擦力與向心力",
+        "confidence": 0.95,
+        "rationale": "題目涉及物體沿斜面運動，需計算摩擦力與重力沿斜面分力的合力，以求加速度，屬於摩擦力與向心力章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-fx-041",
+      "cassette": "classify/dd8f18c6cd67cc86ab4d8a1b5a92486174089615a345afb7605f9cab810c0c31.json",
+      "questionText": "質量 $5$ kg 的物體置於傾角 $45^\\circ$ 的斜面上（$\\sin 45^\\circ = \\cos 45^\\circ = \\frac{\\sqrt{2}}{2$），與斜面間的動摩擦係數 $\\mu = 0.1$，求物體沿斜面下滑的加速度（取 $g = 10$ m/s$^2$）。",
+      "data": {
+        "chapter": "摩擦力與向心力",
+        "confidence": 0.95,
+        "rationale": "題目涉及物體沿斜面運動，需計算摩擦力與重力沿斜面分力的合力，以求加速度。關鍵在於分析斜面上的摩擦力與重力分力，屬於摩擦力與向心力章節的內容。"
+      }
+    },
+    {
+      "id": "cls-fx-042",
+      "cassette": "classify/5f6190c6c55627ea6ee79ab5cdf09531911c1accfa0ee5152a43438c1adab2d8.json",
+      "questionText": "長 $1$ m 的輕繩繫住質量 $2$ kg 的小球，在光滑水平面上以 $3$ m/s 的速率作等速圓周運動，求繩的張力。",
+      "data": {
+        "chapter": "摩擦力與向心力",
+        "confidence": 0.95,
+        "rationale": "題目涉及圓周運動的向心力計算，屬於摩擦力與向心力章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-fx-043",
+      "cassette": "classify/9fd77d7d680168777b7b41c43a1a7fa144e2441b0a4a396e9aff3393a6ed39b9.json",
+      "questionText": "長 $2$ m 的輕繩繫住質量 $3$ kg 的小球，在光滑水平面上以 $4$ m/s 的速率作等速圓周運動，求繩的張力。",
+      "data": {
+        "chapter": "摩擦力與向心力",
+        "confidence": 0.95,
+        "rationale": "題目涉及圓周運動的張力計算，屬於向心力的應用，而向心力在白名單中歸屬於「摩擦力與向心力」章節。"
+      }
+    },
+    {
+      "id": "cls-fx-044",
+      "cassette": "classify/6f0b7c940cab39a389fdf3833d9beb46c9179b217d0cb7af4629be137c46eb61.json",
+      "questionText": "質量 $4$ kg 的物體靜置於水平地面，與地面間的靜摩擦係數為 $0.5$，求最大靜摩擦力（取 $g = 10$ m/s$^2$）。",
+      "data": {
+        "chapter": "摩擦力與向心力",
+        "confidence": 0.95,
+        "rationale": "題目涉及靜摩擦力的計算，需使用靜摩擦力公式 $ F_{\text{friction}} = \theta \times N $，其中 $ N $ 為正向力，而靜摩擦力與物體重量相關，因此屬於摩擦力與向心力章節。"
+      }
+    },
+    {
+      "id": "cls-fx-045",
+      "cassette": "classify/3f3435065d3344579c0ee4679c809030f561c22c207af2aa6cb9b977395b01b5.json",
+      "questionText": "汽車在半徑 $50$ m 的水平彎道上轉彎，輪胎與路面的靜摩擦係數為 $0.4$，依 $v_{max} = \\sqrt{\\mu g r$ 求不打滑的最大速率（取 $g = 10$ m/s$^2$）。",
+      "data": {
+        "chapter": "摩擦力與向心力",
+        "confidence": 0.95,
+        "rationale": "題目涉及水平彎道轉彎時的向心力與靜摩擦力的關係，並使用公式 $v_{max} = \frac{\text{靜摩擦力}}{\text{質量}}$ 計算最大速率，屬於摩擦力與向心力章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-fx-046",
+      "cassette": "classify/e5365a11e07efd1257fd78f6f8f03274740d868f4b7fbfc4f3c8ab31775310e1.json",
+      "questionText": "關於等速圓周運動，下列敘述何者正確？（複選）\n(A) 速率不變　(B) 速度不變　(C) 加速度指向圓心　(D) 合力為零",
+      "data": {
+        "chapter": "摩擦力與向心力",
+        "confidence": 0.95,
+        "rationale": "題目涉及等速圓周運動的特性，關鍵在於向心力與加速度的關係，屬於摩擦力與向心力章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-fx-047",
+      "cassette": "classify/738d1f0523e88157f493cf208a4172904fad3b0795dee68497bbb4e2a6d62c03.json",
+      "questionText": "物體由靜止出發，以 $2$ m/s$^2$ 的等加速度直線前進，求 $5$ 秒後的位移。",
+      "data": {
+        "chapter": "直線運動",
+        "confidence": 0.95,
+        "rationale": "題目涉及等加速度運動的位移計算，屬於直線運動章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-fx-048",
+      "cassette": "classify/78c74650a8d22407d0973a98e5da645a77528231bafd33b9e596cd80dd0929d9.json",
+      "questionText": "物體由靜止出發，以 $3$ m/s$^2$ 的等加速度直線前進，求 $4$ 秒後的位移。",
+      "data": {
+        "chapter": "直線運動",
+        "confidence": 0.95,
+        "rationale": "題目涉及等加速度運動的位移計算，屬於直線運動章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-fx-049",
+      "cassette": "classify/1f88aa96fca47a8408bbdc2a6e533bbabbbf0e80ed86a3321ab55d38483cf3d9.json",
+      "questionText": "物體自 $20$ m 高處自由落下，求落地所需的時間（取 $g = 10$ m/s$^2$，不計空氣阻力）。",
+      "data": {
+        "chapter": "直線運動",
+        "confidence": 0.95,
+        "rationale": "題目涉及自由落體運動，屬於直線運動的範疇，需應用位移公式計算落地時間。"
+      }
+    },
+    {
+      "id": "cls-fx-050",
+      "cassette": "classify/f2bc314c7618714d10b8b3917c46688318de190af20af1dd50170bab80dab8b8.json",
+      "questionText": "物體自 $45$ m 高處自由落下，求落地所需的時間（取 $g = 10$ m/s$^2$，不計空氣阻力）。",
+      "data": {
+        "chapter": "物體的運動（速度與加速度）",
+        "confidence": 0.95,
+        "rationale": "題目涉及自由落體運動，需應用加速度與位移的關係式，屬於物體的運動（速度與加速度）章節。"
+      }
+    },
+    {
+      "id": "cls-fx-051",
+      "cassette": "classify/b1647b3095cac732def00c7d6c9dd6a9eaf242e6793df29c85dbea072b7aaddc.json",
+      "questionText": "速度—時間圖中，圖形與時間軸所圍成的面積代表下列何者？\n(A) 加速度　(B) 位移　(C) 速率　(D) 力",
+      "data": {
+        "chapter": "物體的運動（速度與加速度）",
+        "confidence": 0.95,
+        "rationale": "題目提及速度—時間圖形與時間軸所圍成的面積，這是計算位移的基礎概念，屬於物體運動章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-fx-052",
+      "cassette": "classify/4f55397b76e15024bea50de63ec503df979f1ef0e7a2a15b9b1623e1edc71da5.json",
+      "questionText": "甲車以 $20$ m/s 向東行駛、乙車以 $15$ m/s 向西行駛，依 $\\relvel{v}$ 求甲車相對於乙車的速度。",
+      "data": {
+        "chapter": "平面運動",
+        "confidence": 0.95,
+        "rationale": "題目涉及相對速度的計算，屬於平面運動中處理不同參考系下速度關係的內容。"
+      }
+    },
+    {
+      "id": "cls-fx-053",
+      "cassette": "classify/8fdbe823dee1494a4679ca46cede053ccd6f97e9e21293963b8ad4dddc4551b7.json",
+      "questionText": "汽車儀表板上的速度計所顯示的數值，是下列何者？\n(A) 平均速度　(B) 平均速率　(C) 瞬時速率　(D) 位移",
+      "data": {
+        "chapter": "物體的運動（速度與加速度）",
+        "confidence": 0.95,
+        "rationale": "題目涉及速度計顯示的數值，屬於速度的定義與應用，與速度與加速度的章節直接相關。"
+      }
+    },
+    {
+      "id": "cls-fx-054",
+      "cassette": "classify/d558a32c8fc00bbaf483a82d53e6d28afe40c5bb73f6aa913993aa0ef465ba93.json",
+      "questionText": "兩點電荷 $q_1 = 2 \\times 10^{-6}$ C 與 $q_2 = 3 \\times 10^{-6}$ C 相距 $0.3$ m，求兩者間的靜電力（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）。",
+      "data": {
+        "chapter": "靜電學",
+        "confidence": 0.95,
+        "rationale": "題目涉及兩點電荷之間的靜電力計算，屬於靜電學的範疇，需使用庫侖定律。"
+      }
+    },
+    {
+      "id": "cls-fx-055",
+      "cassette": "classify/c343d8f85b3ac628f6f08bdf4724c4fd53f4057c528071c7ab349fdece1d1f3e.json",
+      "questionText": "兩點電荷 $q_1 = 4 \\times 10^{-6}$ C 與 $q_2 = 3 \\times 10^{-6}$ C 相距 $0.6$ m，求兩者間的靜電力（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）。",
+      "data": {
+        "chapter": "靜電學",
+        "confidence": 0.95,
+        "rationale": "題目涉及兩點電荷之間的靜電力計算，使用庫侖定律，屬於靜電學範疇。"
+      }
+    },
+    {
+      "id": "cls-fx-056",
+      "cassette": "classify/734b58ad92cb8d9e1d404c15aa7a3909833f4e6920f7fd7e5f635d48bc1839a9.json",
+      "questionText": "點電荷 $Q = 5 \\times 10^{-6}$ C 在距離 $0.5$ m 處產生的電場量值為何（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）？",
+      "data": {
+        "chapter": "電場與電位",
+        "confidence": 0.95,
+        "rationale": "題目涉及點電荷產生的電場量值計算，屬於電場與電位章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-fx-057",
+      "cassette": "classify/fc349be769079d40428f977eedce10706858116e89d7ce82e5e03a74df14a846.json",
+      "questionText": "點電荷 $Q = 2 \\times 10^{-6}$ C 在距離 $0.3$ m 處產生的電場量值為何（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）？",
+      "data": {
+        "chapter": "電場與電位",
+        "confidence": 0.95,
+        "rationale": "題目涉及點電荷產生的電場量值計算，屬於電場與電位章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-fx-058",
+      "cassette": "classify/ac944c0f84ae455c64972c116562d20d05918a6821318bd2015209b436da8a2e.json",
+      "questionText": "在量值 $E = 200$ N/C 的均勻電場中，將電量 $q = 3 \\times 10^{-6}$ C 的電荷沿電場方向移動 $0.4$ m，求電場力所作的功。",
+      "data": {
+        "chapter": "電場與電位",
+        "confidence": 0.95,
+        "rationale": "題目涉及電場力作功的計算，需使用電場與電位的觀念，特別是電場力作功與電位能的關係。"
+      }
+    },
+    {
+      "id": "cls-fx-059",
+      "cassette": "classify/9dd1683ae110d17633b2de487f3749982af67bbcb7ae174af03bc02cafaeb7ae.json",
+      "questionText": "在靜電平衡下，等位面與電場線的關係為何（提示：$E^$ 沿等位面方向的分量）？\n(A) 互相平行　(B) 互相垂直　(C) 夾 $45^\\circ$　(D) 無固定關係",
+      "data": {
+        "chapter": "電場與電位",
+        "confidence": 0.95,
+        "rationale": "題目涉及電場與等位面的關係，關鍵在於電場線與等位面的垂直性，這屬於電場與電位章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-fx-060",
+      "cassette": "classify/5bdbe47ed861233d66f97eaf196f768a51ec88a5d154ab882b84174de1389f5a.json",
+      "questionText": "在量值 $E = 500$ N/C 的均勻電場中，將電量 $q = 2 \\times 10^{-6}$ C 的電荷沿電場方向移動 $0.2$ m，求電場力所作的功。",
+      "data": {
+        "chapter": "電場與電位",
+        "confidence": 0.95,
+        "rationale": "題目涉及電場力作功的計算，需使用電場與電位的觀念，特別是電場力作功的公式 $ W = qEd $，屬於電場與電位章節的內容。"
+      }
+    },
+    {
+      "id": "cls-fx-061",
+      "cassette": "classify/ca822f4d60a4117adcb0c5a216af5856c77f832d8ad56e2f2907a9fd4c633b90.json",
+      "questionText": "直角三角形 $ABC$ 中，$\\angle C = 90^\\circ$，$\\overline{AC} = 12$、$\\overline{BC} = 5$，則 $\\sin A$ 之值為何？\n(A) $\\frac{5}{13}$　(B) $\\frac{12}{13}$　(C) $\\frac{5}{12}$　(D) $\\frac{12}{5}$",
+      "data": {
+        "chapter": "直角三角形的邊角關係",
+        "confidence": 1,
+        "rationale": "題目涉及直角三角形中角的三角函數值計算，屬於直角三角形的邊角關係章節。"
+      }
+    },
+    {
+      "id": "cls-fx-062",
+      "cassette": "classify/49ba921e8175134bf1681db6b3abd29136f344863aa65930f7e5ef84522beac0.json",
+      "questionText": "將一根帶正電的玻璃棒靠近一顆原本不帶電、放在絕緣支架上的金屬球（兩者不接觸）。玻璃棒保持不動，先用導線將金屬球接地，再拆掉導線，最後才移走玻璃棒。此時金屬球的帶電情形為何？\n(A) 帶正電　(B) 帶負電　(C) 不帶電　(D) 一側帶正電、另一側帶負電，淨電量為零",
+      "data": {
+        "chapter": "靜電學",
+        "confidence": 0.95,
+        "rationale": "題目涉及帶電體對導體的影響，以及接地後電荷的重新分布，屬於靜電學中電荷誘導與接地的內容。"
+      }
+    },
+    {
+      "id": "cls-dr-001",
+      "cassette": "classify/cac2e86802254bec6e4421830f0cee36a7889567a645c59f464183c409c69d11.json",
+      "questionText": "試計算 $\\log_{2} 8$ 與 $\\log_{2} 4$ 兩數之和。\n(A) $5$　(B) $6$　(C) $7$　(D) $12$",
+      "data": {
+        "chapter": "指數與對數",
+        "confidence": 0.95,
+        "rationale": "題目涉及對數運算，計算 $\frac{\text{log}_2 8}{\text{log}_2 4}$ 之和，屬於指數與對數章節的計算範疇。"
+      }
+    },
+    {
+      "id": "cls-dr-002",
+      "cassette": "classify/9fe09aa98a2555118bf2abfbbdd7312181aec2a21c99c6a2044c4bda1e603a3f.json",
+      "questionText": "若 $2^{x+1}$ 等於 $32$，試求未知數 $x$ 的值。",
+      "data": {
+        "chapter": "指數與對數",
+        "confidence": 0.95,
+        "rationale": "題目涉及指數方程式的解法，需使用指數與對數的性質進行計算，屬於指數與對數章節。"
+      }
+    },
+    {
+      "id": "cls-dr-003",
+      "cassette": "classify/0485bc12f990a46d97bbd98d881c8f03439b44726b296c788a440577b741ea82.json",
+      "questionText": "在 $\\log_{10} 2 = 0.3010$ 的條件下，$2^{50}$ 寫成十進位整數時共有幾個數字？",
+      "data": {
+        "chapter": "指數與對數",
+        "confidence": 0.95,
+        "rationale": "題目涉及將指數形式 $2^{50}$ 轉換為十進位整數的位數，需使用對數性質計算 $\\log_{10} 2^{50} = 50 \\log_{10} 2$，並取整數部分加一，屬於指數與對數章節的應用。"
+      }
+    },
+    {
+      "id": "cls-dr-004",
+      "cassette": "classify/cffc73def9a1a368bef1001e9600668c7c867cab41c8062f546a63f26525d243.json",
+      "questionText": "平面上有兩向量 $\\vec{u} = (3, 4)$ 與 $\\vec{v} = (1, 2)$，試求 $\\vec{u} \\cdot \\vec{v}$ 的值。",
+      "data": {
+        "chapter": "向量內積",
+        "confidence": 1,
+        "rationale": "題目直接要求計算兩向量的點積，屬於向量內積章節的計算題。"
+      }
+    },
+    {
+      "id": "cls-dr-005",
+      "cassette": "classify/3ab8d291613a1c2f4d6e80e830174712cd488da01d441b6bd360e03e2893aef9.json",
+      "questionText": "已知 $\\vec{a} = (1, 0)$、$\\vec{b} = (1, 1)$ 為平面向量，問此兩向量所夾的角度為多少度？",
+      "data": {
+        "chapter": "向量內積",
+        "confidence": 0.95,
+        "rationale": "題目要求計算兩向量的夾角，需使用向量內積公式計算餘弦值，因此屬於向量內積章節。"
+      }
+    },
+    {
+      "id": "cls-dr-006",
+      "cassette": "classify/906d91823b18a717c5fb8278a3d08010e8c10347bc3257ad5b82c6980cf682c4.json",
+      "questionText": "平面向量 $\\vec{a} = (2, k)$ 與 $\\vec{b} = (3, 6)$ 的夾角為直角，試求實數 $k$。",
+      "data": {
+        "chapter": "向量內積",
+        "confidence": 0.95,
+        "rationale": "題目涉及平面向量的夾角為直角，需使用向量內積為零的條件，屬於向量內積章節。"
+      }
+    },
+    {
+      "id": "cls-dr-007",
+      "cassette": "classify/872821465fac53da6bf5e316591805a0240cce81e4c3779750e3e384df96e155.json",
+      "questionText": "在空間中，已知 $\\vec{a} = (1, 2, 3)$ 與 $\\vec{b} = (2, 0, 1)$，試求兩者的內積。",
+      "data": {
+        "chapter": "向量內積",
+        "confidence": 1,
+        "rationale": "題目直接要求計算兩向量的內積，屬於向量內積章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-dr-008",
+      "cassette": "classify/0f804345fb16e3435a7455d2d5f2e75984e31a74d27747422acfc494fdadebbb.json",
+      "questionText": "不查表，直接寫出 $\\sin^2 40^\\circ$ 與 $\\cos^2 40^\\circ$ 的和。\n(A) $1$　(B) $0$　(C) $\\frac{1}{2}$　(D) 需查表",
+      "data": {
+        "chapter": "三角函數的疊合",
+        "confidence": 0.95,
+        "rationale": "題目涉及 $\tan\theta$ 與 $\theta$ 的關係，並要求計算 $\tan\theta$ 的值，屬於廣義角與極坐標章節。"
+      }
+    },
+    {
+      "id": "cls-dr-009",
+      "cassette": "classify/16d67a01f825947b2c31f678f848f499ee27ab85f706728c72b743f5d955f2c7.json",
+      "questionText": "請寫出角度 $150^\\circ$ 的正弦函數值。",
+      "data": {
+        "chapter": "廣義角與極坐標",
+        "confidence": 0.95,
+        "rationale": "題目涉及角度 150° 的正弦函數值，屬於廣義角的三角函數計算，與極坐標無直接關係，但屬於廣義角與極坐標章節的範疇。"
+      }
+    },
+    {
+      "id": "cls-dr-010",
+      "cassette": "classify/4af334b0725f4d46e8cf61a229aa65d8e81db4203ba01238eeb866d38e4d4322.json",
+      "questionText": "一個 $2$ kg 的物體，其所受合力為 $10$ N，試問它的加速度量值為何？",
+      "data": {
+        "chapter": "牛頓運動定律",
+        "confidence": 0.95,
+        "rationale": "題目涉及合力與加速度的關係，需應用牛頓第二運動定律 F=ma，屬於牛頓運動定律章節。"
+      }
+    },
+    {
+      "id": "cls-dr-011",
+      "cassette": "classify/519c6592d07be3f2638b3ac236baad68b97110e732e163605b2f11bb585ea321.json",
+      "questionText": "電梯以 $2$ m/s$^2$ 向上加速，站在體重計上的人質量為 $50$ kg，體重計此時指示多少牛頓（$g = 10$ m/s$^2$）？",
+      "data": {
+        "chapter": "牛頓運動定律",
+        "confidence": 0.95,
+        "rationale": "題目涉及電梯加速時人體所受的力，需應用牛頓第二定律計算視重，屬於牛頓運動定律章節。"
+      }
+    },
+    {
+      "id": "cls-dr-012",
+      "cassette": "classify/ce0e126f169d93dbc4c39124671f3fe96168084def5d134005f7756204906930.json",
+      "questionText": "一條長 $1$ m 的輕繩綁著 $2$ kg 的小球，在光滑水平面上以固定速率 $3$ m/s 繞圈，試求繩子所受的張力。",
+      "data": {
+        "chapter": "摩擦力與向心力",
+        "confidence": 0.95,
+        "rationale": "題目涉及物體以固定速率繞圈，需計算繩子的張力，這與向心力的計算有關，屬於摩擦力與向心力章節的內容。"
+      }
+    },
+    {
+      "id": "cls-dr-013",
+      "cassette": "classify/200753a8be9f66e15c5fc90eea17571e710e41edaadd7a2f13a21568785767f8.json",
+      "questionText": "一物體從靜止開始作等加速度直線運動，加速度為 $2$ m/s$^2$，試問經過 $5$ 秒它前進了多遠？",
+      "data": {
+        "chapter": "直線運動",
+        "confidence": 0.95,
+        "rationale": "題目涉及等加速度直線運動的位移計算，屬於直線運動章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-dr-014",
+      "cassette": "classify/410598f1631adf894ff131813967baa5e3efb995a3f8dca3af91bf8058cfbf6a.json",
+      "questionText": "相距 $0.3$ m 的兩個點電荷分別帶 $2 \\times 10^{-6}$ C 與 $3 \\times 10^{-6}$ C，試求它們之間的庫侖力（$k = 9 \\times 10^9$ N·m$^2$/C$^2$）。",
+      "data": {
+        "chapter": "靜電學",
+        "confidence": 0.95,
+        "rationale": "題目涉及兩個點電荷之間的庫侖力計算，屬於靜電學中庫侖定律的應用，直接使用庫侖公式計算力的大小。"
+      }
+    },
+    {
+      "id": "cls-dr-015",
+      "cassette": "classify/8b9a30636c734ce1839da751827cbad0904a22601a48ebd2d9f767658d9753c3.json",
+      "questionText": "均勻電場的量值為 $200$ N/C，一個帶電量 $3 \\times 10^{-6}$ C 的電荷順著電場方向移動 $0.4$ m，試問電場力對它作了多少功？",
+      "data": {
+        "chapter": "電場與電位",
+        "confidence": 0.95,
+        "rationale": "題目涉及電場力做功的計算，需使用電場力與位移的關係，屬於電場與電位章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-dr-016",
+      "cassette": "classify/ae30c7929b34f4213c2f890b97f1ea3555ee7ba6f0ca6cadf35aa226ee95270f.json",
+      "questionText": "兩平面向量的「純量積」定義為對應分量乘積之和。設 $\\vec{a} = (3, 4)$、$\\vec{b} = (1, 2)$，求其純量積。",
+      "data": {
+        "chapter": "向量內積",
+        "confidence": 1,
+        "rationale": "題目直接要求計算兩向量的純量積，屬於向量內積的計算，與向量加減或外積無關。"
+      }
+    },
+    {
+      "id": "cls-dr-017",
+      "cassette": "classify/a73bbb5c106ac01eb78826ee03ff6b9504e59d1ca6f1820901322c1b89f43fa2.json",
+      "questionText": "試求平面向量 $\\vec{a} = (6, 8)$ 與 $\\vec{b} = (1, 2)$ 的點積（dot product）。",
+      "data": {
+        "chapter": "向量內積",
+        "confidence": 1,
+        "rationale": "題目直接要求計算兩個平面向量的點積，屬於向量內積章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-dr-018",
+      "cassette": "classify/9bf88b15bccad0a42f61afcaa3495f0a428ccf90f071fc68e92db1a8a416f162.json",
+      "questionText": "設 $\\vec{a} = (1, 1, 2)$、$\\vec{b} = (2, 3, 0)$ 為三維向量，求其點積。",
+      "data": {
+        "chapter": "空間向量內積",
+        "confidence": 0.95,
+        "rationale": "題目要求計算三維向量的點積，屬於空間向量內積章節的內容。"
+      }
+    },
+    {
+      "id": "cls-dr-019",
+      "cassette": "classify/276b0cbf9843ef38923375bacce2426e6047002d2bc81617de20e213b180d53d.json",
+      "questionText": "空間中兩向量 $\\vec{a} = (1, 2, k)$ 與 $\\vec{b} = (2, -1, 3)$ 正交，求 $k$。",
+      "data": {
+        "chapter": "空間向量內積",
+        "confidence": 0.95,
+        "rationale": "題目涉及空間中兩向量正交，需計算其內積為零，屬於空間向量內積章節的核心概念。"
+      }
+    },
+    {
+      "id": "cls-dr-020",
+      "cassette": "classify/e1e563e497d07ec8fd355477070d6d679263a604d5f5a53dfba8d8d023adf822.json",
+      "questionText": "利用對數律化簡 $\\log_{5} 25 + \\log_{5} 5$，並求其值。",
+      "data": {
+        "chapter": "指數與對數",
+        "confidence": 0.95,
+        "rationale": "題目使用對數律化簡並求值，屬於指數與對數章節的計算內容。"
+      }
+    },
+    {
+      "id": "cls-dr-021",
+      "cassette": "classify/8110bde98246a2208460dab8613357d285bb34265b3a525f4cad1fc7b7f4d565.json",
+      "questionText": "已知 $\\log_{10} 3 = 0.4771$，試求 $3^{20}$ 的首數，並說明它是幾位數。",
+      "data": {
+        "chapter": "指數與對數",
+        "confidence": 0.95,
+        "rationale": "題目涉及將指數轉換為對數計算首數，屬於指數與對數章節的範疇。"
+      }
+    },
+    {
+      "id": "cls-dr-022",
+      "cassette": "classify/bec03648737d97c0a08c0bd5cd290b8ad1d6f59ba14dcef6462e77bd58f954a4.json",
+      "questionText": "依單位圓的定義，寫出 $\\cos 240^\\circ$ 之值。",
+      "data": {
+        "chapter": "廣義角與極坐標",
+        "confidence": 0.95,
+        "rationale": "題目涉及單位圓與角度的定義，屬於廣義角與極坐標章節的範疇。"
+      }
+    },
+    {
+      "id": "cls-dr-023",
+      "cassette": "classify/96ffaa79a8717165933dced3b26195298d8b2f45fe00f69a7f892aca402fe914.json",
+      "questionText": "角 $\\theta$ 的終邊通過點 $P(-3, 4)$，試依廣義角的定義求 $\\cos \\theta$。",
+      "data": {
+        "chapter": "廣義角與極坐標",
+        "confidence": 0.95,
+        "rationale": "題目提到角θ的終邊通過點P(-3, 4)，並要求依廣義角的定義求cosθ，關鍵在於利用廣義角的定義計算三角函數值，屬於廣義角與極坐標章節的內容。"
+      }
+    },
+    {
+      "id": "cls-dr-024",
+      "cassette": "classify/e8d0d2fe44537b2cc857a7b0ed6d7416446569d66130c26488262c078cde511e.json",
+      "questionText": "依「力與運動」的基本關係式 $F = ma$，質量 $3$ kg 的物體受 $12$ N 合力時，加速度為何？",
+      "data": {
+        "chapter": "牛頓運動定律",
+        "confidence": 0.95,
+        "rationale": "題目直接應用牛頓第二定律 F = ma，屬於牛頓運動定律章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-dr-025",
+      "cassette": "classify/15954872ae8d36b235e75ac859e4ca5bd3b530fa3205de53e3898c95636c2a92.json",
+      "questionText": "阿特午機（Atwood machine）兩端掛 $3$ kg 與 $5$ kg，求釋放後的加速度（$g = 10$ m/s$^2$）。",
+      "data": {
+        "chapter": "牛頓運動定律",
+        "confidence": 0.95,
+        "rationale": "題目涉及阿特午機的加速度計算，需應用牛頓第二定律與張力分析，屬於牛頓運動定律章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-dr-026",
+      "cassette": "classify/07abaa28e510c324a7442b7425bdede6be91486d2723e21b4d4f7e7ae5f9e3af.json",
+      "questionText": "等速圓周運動中，向心加速度為 $a = \\frac{v^2}{r}$。$2$ kg 的球以 $3$ m/s 在半徑 $1$ m 的圓上運動，求向心力。",
+      "data": {
+        "chapter": "摩擦力與向心力",
+        "confidence": 0.95,
+        "rationale": "題目涉及向心力的計算，屬於圓周運動中向心力的觀念，而此觀念屬於「摩擦力與向心力」章節。"
+      }
+    },
+    {
+      "id": "cls-dr-027",
+      "cassette": "classify/71d560396fcc7210ce934d6c709484eba269eeba79dc4578fbf3a2d8a17b5f63.json",
+      "questionText": "水平彎道半徑 $50$ m、靜摩擦係數 $0.4$，求汽車不打滑的最大速率（$g = 10$ m/s$^2$）。",
+      "data": {
+        "chapter": "摩擦力與向心力",
+        "confidence": 0.95,
+        "rationale": "題目涉及汽車在水平彎道轉彎時所需的向心力，並要求計算不打滑的最大速率，關鍵在於靜摩擦力提供向心力，屬於摩擦力與向心力章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-dr-028",
+      "cassette": "classify/b5f19045ef67d1eff7c521eae468c85543db37dbe98d7fd297dd1b1608f9169f.json",
+      "questionText": "不計空氣阻力，物體自 $80$ m 高處自由落下，求落地時間（$g = 10$ m/s$^2$）。",
+      "data": {
+        "chapter": "直線運動",
+        "confidence": 0.95,
+        "rationale": "題目涉及自由落體運動，需使用直線運動的公式計算落地時間，屬於直線運動章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-dr-029",
+      "cassette": "classify/e5095b8b7e686f3a35863a5e19fb418b64a09f7d00ea709196b3b41ae1fdbd83.json",
+      "questionText": "依庫侖定律，點電荷 $Q = 5 \\times 10^{-6}$ C 在 $0.5$ m 處造成的電場強度為何（$k = 9 \\times 10^9$）？",
+      "data": {
+        "chapter": "電場與電位",
+        "confidence": 0.95,
+        "rationale": "題目直接應用庫侖定律計算電場強度，屬於電場與電位章節的核心內容。"
+      }
+    },
+    {
+      "id": "cls-dr-030",
+      "cassette": "classify/3c3c8a3833919a98a94c13d516909ac25f18c305859438f19ecda1349a286887.json",
+      "questionText": "靜電平衡的導體內部電場為零，其表面為一等位面。試問等位面與電場線的夾角為何？",
+      "data": {
+        "chapter": "靜電學",
+        "confidence": 0.95,
+        "rationale": "題目涉及靜電平衡下導體的電場與等位面特性，屬於靜電學的範疇。"
+      }
+    }
+  ],
+  "nlq": [
+    {
+      "id": "nlq-036",
+      "cassette": "nlq/ddcae7c0d39a4ba0284430b9ea8cc836b41b06d20823f8c8aa972e05ebf0abba.json",
+      "query": "斜面上物體受力平衡的題目",
+      "data": {
+        "chapters": [
+          "直線運動"
+        ],
+        "question_types": [],
+        "semantic_text": "斜面上物體受力平衡",
+        "keywords": [
+          "斜面",
+          "物體",
+          "受力平衡"
+        ]
+      }
+    },
+    {
+      "id": "nlq-037",
+      "cassette": "nlq/1a46225c2479ec9987f52548c17698a78f51883b731c212ceb2dfe3f4b68f6cd.json",
+      "query": "電梯裡體重計的讀數會變成多少",
+      "data": {
+        "chapters": [
+          "牛頓運動定律"
+        ],
+        "question_types": [],
+        "semantic_text": "電梯體重計讀數",
+        "keywords": [
+          "電梯",
+          "體重計",
+          "讀數"
+        ]
+      }
+    },
+    {
+      "id": "nlq-038",
+      "cassette": "nlq/6ba2c045f35016b28ff28a1da51fb28f15305031cfa3ecb9f404018cdcdada7f.json",
+      "query": "滑輪兩端掛重物求系統的加速度",
+      "data": {
+        "chapters": [
+          "牛頓運動定律"
+        ],
+        "question_types": [],
+        "semantic_text": "滑輪 重物 加速度",
+        "keywords": [
+          "滑輪",
+          "重物",
+          "加速度"
+        ]
+      }
+    },
+    {
+      "id": "nlq-039",
+      "cassette": "nlq/a88eab6bd3aacbb8537fab23835bf2999de195643ed5bcfaede65c1c4df10ed0.json",
+      "query": "把電荷從一點移到另一點需要作多少功",
+      "data": {
+        "chapters": [
+          "電場與電位"
+        ],
+        "question_types": [],
+        "semantic_text": "電荷 移動 功",
+        "keywords": [
+          "電荷",
+          "移動",
+          "功"
+        ]
+      }
+    },
+    {
+      "id": "nlq-040",
+      "cassette": "nlq/7b27f3f3c2d366b8c8c6c496ac7b200373e27488b78f8340b1c76a59c2c31ca8.json",
+      "query": "求 2 的 50 次方是幾位數",
+      "data": {
+        "chapters": [
+          "指數與對數"
+        ],
+        "question_types": [
+          "計算"
+        ],
+        "semantic_text": "2 50 次方 位數",
+        "keywords": [
+          "2",
+          "50",
+          "次方",
+          "位數"
+        ]
+      }
+    },
+    {
+      "id": "nlq-041",
+      "cassette": "nlq/567c041de8b30e6da11329e2b25d84cb42877991847821551729f4e89ee9dae8.json",
+      "query": "角的終邊通過某一點，求它的三角比",
+      "data": {
+        "chapters": [
+          "廣義角與極坐標"
+        ],
+        "question_types": [],
+        "semantic_text": "角的終邊 三角比",
+        "keywords": [
+          "角",
+          "終邊",
+          "三角比"
+        ]
+      }
+    },
+    {
+      "id": "nlq-042",
+      "cassette": "nlq/1fb6b9ed6d628d4a8a696bd2e94ea0f785853883ddd45eb3b1beb452acfb0124.json",
+      "query": "平面上兩個向量互相垂直時，座標裡的未知數是多少",
+      "data": {
+        "chapters": [
+          "向量的加減與係數積",
+          "空間向量內積"
+        ],
+        "question_types": [
+          "計算"
+        ],
+        "semantic_text": "平面上兩個向量互相垂直 座標 未知數",
+        "keywords": [
+          "向量",
+          "垂直",
+          "座標",
+          "未知數"
+        ]
+      }
+    },
+    {
+      "id": "nlq-043",
+      "cassette": "nlq/4c82ef31d90a838080f5bd913a61f661c0085b9a4ba8e61900363a43583f0910.json",
+      "query": "汽車轉彎時輪胎抓地力不夠會打滑",
+      "data": {
+        "chapters": [
+          "摩擦力與向心力"
+        ],
+        "question_types": [],
+        "semantic_text": "汽車轉彎 輪胎 抓地力 打滑",
+        "keywords": [
+          "汽車",
+          "轉彎",
+          "輪胎",
+          "抓地力",
+          "打滑"
+        ]
+      }
+    }
+  ]
+}
