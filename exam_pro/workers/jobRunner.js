@@ -21,6 +21,10 @@
 // 〔Owner 決策單 2026-09-26 第四輪 V3〕選 2「本機模式逾時只重試 1 次」：拆題模型是 ollama 時，
 // 拆題一塊（runExtractChunk）的錯誤類別是 timeout 的只重試 LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES（1）次、共跑 2 次；
 // 其他錯誤類別與 Gemini 模式的重試次數（DEFAULT_LIMITS.maxErrorRetries）完全不變（docs/local-mode.md 10.11 表 #4）。
+//
+// 〔OCR 為主 2026-09-26〕Owner 決定這台電腦的拆題改成 OCR 為主（docs/local-mode.md 10.12）：LOCAL_EXTRACT_MODE
+// （loadLocalExtractModeConfig）經 ctx.config.localExtract 帶給 extract；只用 OCR 拆的題在 save 停在 needs_review('ocr_only')
+// （crossCheckStopReason）；拆題模型是 ollama、LOCAL_EXTRACT_MODE=ocr、OCR_ENGINE=none 是矛盾設定，createRunner 直接丟錯。
 // ─────────────────────────────────────────────────────────────
 const fs = require('fs');
 const path = require('path');
@@ -215,6 +219,21 @@ function loadLocalModeConfig(env = process.env, opts = {}) {
 }
 
 /**
+ * 〔OCR 為主 2026-09-26〕本機拆題的模式 LOCAL_EXTRACT_MODE（config/localExtractMode.js；docs/local-mode.md 10.12）：
+ * 'cross'（預設，交叉驗證）｜'ocr'（只用 OCR 拆題，每題停在 needs_review('ocr_only')）。
+ *
+ * 與 loadLocalModeConfig 分開另一支的理由相同：那一支的回傳形狀被 test/unit/extractLocalRunner.test.js 用 deepEqual 釘住。
+ * `createRunner()` 把它疊在 loadLocalModeConfig 之後，經 ctx.config.localExtract 帶給 agent（agent 不讀 process.env）。
+ * 只在拆題模型是 ollama 時有作用（agents/extract.js 的本機路徑才讀它）；Gemini 模式完全不受影響。
+ *
+ * @param {object} [env] 預設 process.env
+ * @returns {{localExtractMode:'cross'|'ocr'}}
+ */
+function loadLocalExtractModeConfig(env = process.env) {
+    return { localExtractMode: require('../config/localExtractMode').resolveLocalExtractMode(env) };
+}
+
+/**
  * 節點執行中續租的間隔：預設每 30 秒（第 7.1 條），但租約短於 90 秒時縮成租約的三分之一，
  * 保證租約到期前至少續過兩次。
  * @param {number} leaseMs
@@ -230,15 +249,20 @@ function renewIntervalFor(leaseMs) {
  * payload.extract 帶 cross_check、而且 status 不是 'agree' 的題，走到 save 時一律停在
  * needs_review('extract_disagree')，絕不自動入庫。沒有 cross_check 的題（Gemini 路徑、變式題）回 null，照常入庫。
  *
+ * 〔OCR 為主 2026-09-26〕只用 OCR 拆的題（payload.extract.extract_mode === 'ocr'，agents/extract.js 的 runLocalOcrOnly 寫的）
+ * 沒有第二版可以比對：一律停在 needs_review('ocr_only')——與「兩版不一致」分開（複核頁的說明不同），
+ * 不看 cross_check 長什麼樣（缺了、壞了都一樣停，往安全的方向錯）。
+ *
  * 只看得到 save 這一格：前面任何節點先判了更嚴重的原因（重複、章節不合法、答案對不上…），
  * 那一列早就停在 needs_review，不會走到這裡。
  * cross_check 形狀壞掉（不是物件、沒有 status）一律當作「不一致」——往安全的方向錯。
  *
  * @param {object} payload job_questions.payload
- * @returns {'extract_disagree'|null}
+ * @returns {'extract_disagree'|'ocr_only'|null}
  */
 function crossCheckStopReason(payload) {
     const ex = payload && payload.extract;
+    if (ex && typeof ex === 'object' && ex.extract_mode === 'ocr') return 'ocr_only';
     if (!ex || typeof ex !== 'object' || !Object.prototype.hasOwnProperty.call(ex, 'cross_check')) return null;
     const cc = ex.cross_check;
     if (cc === null || cc === undefined) return null;
@@ -477,9 +501,16 @@ function createRunner(opts = {}) {
     const llm = opts.llm || require('../services/llm');
     const agentsDir = opts.agentsDir || path.resolve(__dirname, '..', 'agents');
     // 〔本機模式 L2〕loadLocalModeConfig 疊在 loadConfig 之後：拆題模型是 ollama 且 .env 沒明寫時，補長節點預設
+    // 〔OCR 為主 2026-09-26〕再疊 LOCAL_EXTRACT_MODE（loadLocalExtractModeConfig）
     const config = {
-        ...loadConfig(), ...loadStage3Config(), ...loadSourceCheckConfig(), ...loadLocalModeConfig(), ...(opts.config || {})
+        ...loadConfig(), ...loadStage3Config(), ...loadSourceCheckConfig(), ...loadLocalModeConfig(),
+        ...loadLocalExtractModeConfig(), ...(opts.config || {})
     };
+    // 〔OCR 為主〕矛盾設定（拆題模型是 ollama、LOCAL_EXTRACT_MODE=ocr、OCR_ENGINE=none）在建立 runner 時就丟錯：
+    // server.js 的 startInlineRunner 與 node workers/jobRunner.js 都在啟動時停下、印出要改哪一行，不會等到上傳才失敗。
+    require('../config/localExtractMode').assertLocalExtractConfig({
+        localExtract: config.localExtract === true, mode: config.localExtractMode, ocrEngine: config.ocrEngine
+    });
     if (!Number.isFinite(config.renewIntervalMs) || config.renewIntervalMs <= 0) {
         config.renewIntervalMs = renewIntervalFor(config.leaseMs);
     }
@@ -687,7 +718,9 @@ function createRunner(opts = {}) {
                 sourceCheck: { mode: config.sourceCheckMode },
                 // 〔本機模式 L2〕本機拆題要不要跑 PaddleOCR（OCR_ENGINE，預設 paddle）。其餘 OCR 設定
                 // （OCR_PYTHON／OCR_DPI／OCR_TIMEOUT_MS）由 services/ocr 自己讀，與 services/llm 讀 LLM_MODE 同一個分工。
-                ocr: { engine: config.ocrEngine }
+                ocr: { engine: config.ocrEngine },
+                // 〔OCR 為主 2026-09-26〕本機拆題的模式（LOCAL_EXTRACT_MODE：cross｜ocr）；ocr 的形狀不動，另開一個鍵
+                localExtract: { mode: config.localExtractMode }
             }
         };
         delete ctx.models; delete ctx.limits;
@@ -958,16 +991,19 @@ function createRunner(opts = {}) {
             // （更嚴重的原因會先把它送進複核），走到 save 時停在 needs_review('extract_disagree')，絕不自動入庫。
             // 與上面的 awaiting_approval 同一個做法：不經 transition()（四種 outcome 都無法不謊報失敗地走到
             // needs_review），error_class 寫 NULL。cross_check（含 alt_question_text）原樣留在 payload.extract 給複核頁。
+            // 〔OCR 為主 2026-09-26〕只用 OCR 拆的題走同一條路，原因是 'ocr_only'（crossCheckStopReason）；
+            // 附圖沒配到的提示（figure_hint）一併記進事件，report:jobs 查得到。
             const disagree = node === 'save' ? crossCheckStopReason(jq.payload) : null;
             if (disagree) {
                 const cc = jq.payload.extract.cross_check;
                 const brief = cc && typeof cc === 'object'
                     ? { status: cc.status ?? null, similarity: cc.similarity ?? null, picked: cc.picked ?? null }
                     : { status: null };
+                const figureHint = disagree === 'ocr_only' ? jq.payload.extract.figure_hint : undefined;
                 await writeEvent({
                     job_id: jq.job_id, jq_id: jq.id, node: 'save', attempt: attemptNo(jq.retries, 'save'),
                     cost_usd: 0, cost_estimated: false, latency_ms: 0, outcome: 'skipped', error_class: null,
-                    detail: { reason: disagree, cross_check: brief, review_reason: disagree }
+                    detail: { reason: disagree, cross_check: brief, review_reason: disagree, ...(figureHint ? { figure_hint: figureHint } : {}) }
                 });
                 await db.query(
                     `UPDATE job_questions SET state = 'needs_review', review_reason = $2,
@@ -1605,6 +1641,7 @@ module.exports = {
     runKcTagHook,   // 〔stage5 WS-C〕
     // 〔本機模式 L2〕
     loadLocalModeConfig, renewIntervalFor, crossCheckStopReason,
+    loadLocalExtractModeConfig,   // 〔OCR 為主 2026-09-26〕
     LOCAL_NODE_TIMEOUT_MS, LOCAL_PDF_CHUNK_PAGES, LOCAL_CONCURRENCY, RENEW_MIN_INTERVAL_MS,
     LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES,   // 〔第四輪 V3〕
     ADVANCEABLE_STATES, FREE_NODES, AGENT_MODULE_FOR_NODE, ERROR_CLASSES, SOURCE_CHECK_MODES,

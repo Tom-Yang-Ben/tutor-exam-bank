@@ -22,6 +22,7 @@ Gemini 原生支援 bounding box 輸出（`[ymin, xmin, ymax, xmax]`，0–1000 
 - **舊題不自動補圖**：管線只替新拆的題裁圖。舊題由老師另外跑 `npm run figures:backfill`（提議 → 確認 → 套用），見下方「舊題補附圖」〔修訂 2026-09-26，Owner 決策單 2026-09-25 B20〕。
 - `data/figures/` **不進版控**、不設清理排程：檔名 `<jobId>-<idx>.png` 是確定性的，崩潰重跑會覆寫同檔不堆積；刪 job 不會刪圖（questions 可能還引用著）。
 - ~~舊的 `/analyze-pdf` 相容流程（`services/aiService.js`）不裁圖：它沒有 job 生命週期可掛。~~ → 已補（2026-09-26），見下方「舊流程 /analyze-pdf 的附圖」〔Owner 決策單 2026-09-25 B21〕。
+- 〔OCR 為主 2026-09-26〕**只用 OCR 拆題（`LOCAL_EXTRACT_MODE=ocr`）時沒有模型回框**：環節 2 改由 PaddleOCR 的版面偵測提供框（`ocr_service/ocr_pdf.py` 回報 `pages[].figures`），`agents/extractOcrFigures.js` 依版面位置配到題目（同頁、題目範圍內只有一張才配，配不準的寧可不配），寫的是絕對頁碼與同一種 0–1000 框，環節 3～5 完全不變；配不到的題在複核頁標「疑似有圖未配到，可用 figures:backfill 補」，核准入庫之後用下方「舊題補附圖」補。規則與限制見 [`local-mode.md`](local-mode.md) 10.12 第 4 點。
 
 ## Word 匯出（2026-09-16 實作）
 

@@ -38,6 +38,9 @@
 //     （RERECORD_OLLAMA_TIMEOUT_MS／RERECORD_NODE_TIMEOUT_MS 可覆寫）、每 5 分鐘印一次串流進度（localMode.longCallRecordEnv）。
 //     Owner 實機上 qwen3-vl:8b 看一塊 2 頁超過 30 分鐘，被 .env 的 OLLAMA_TIMEOUT_MS 切掉、extract_vision 錄不到。
 //     子行程的環境照舊經 ciEnv 的 extra 帶進去（stepExtraEnv）；不改 .env、不影響 cassette 的鍵與 CI 回放。
+// 〔OCR 為主 2026-09-26〕ci.yml 寫了 LOCAL_EXTRACT_MODE: ocr（docs/local-mode.md 10.12）：子行程照它（suiteProcess 的
+//   CI_OPTIONAL_KEYS），pipeline／e2e 只錄 ocr 與 extract_ocr、不呼叫看圖模型；錄前檢查不要求 qwen3-vl（recordingPlan）；
+//   時間粗估的拆題鏈少一步（estimateLocalTime 的 mode）；與 OCR_ENGINE: none 同時寫是矛盾設定，錄前檢查停下。
 // Windows 上可以直接雙擊 exam_pro\scripts\windows\record_local.bat（db:up → migrate:test → 本指令，自動輸入 yes、寫 log）。
 // ─────────────────────────────────────────────────────────────
 
@@ -258,7 +261,8 @@ const CI_UNSET_TEXT = Object.freeze({
     MODEL_OCR_STRUCTURE: '未設，退回 MODEL_VERIFY',
     MODEL_NLQ: `未設，services/nlqService.js 的預設 ${local.NLQ_CODE_DEFAULT}`,
     EMBED_MODEL: `未設，程式預設 ${local.LOCAL_DEFAULTS.EMBED_MODEL}`,
-    OCR_ENGINE: `未設，程式預設 ${local.LOCAL_DEFAULTS.OCR_ENGINE}`
+    OCR_ENGINE: `未設，程式預設 ${local.LOCAL_DEFAULTS.OCR_ENGINE}`,
+    LOCAL_EXTRACT_MODE: '未設，程式預設 cross（交叉驗證）'
 });
 
 /**
@@ -269,6 +273,12 @@ const CI_UNSET_TEXT = Object.freeze({
  * @returns {Promise<boolean>}
  */
 async function preflight(plan, deps) {
+    // 〔OCR 為主 2026-09-26〕ci.yml 同時寫了 LOCAL_EXTRACT_MODE=ocr 與 OCR_ENGINE=none：錄出來的東西沒有意義，一次都不錄
+    if (plan.configError) {
+        console.error('\n❌ .github/workflows/ci.yml 同時寫了 LOCAL_EXTRACT_MODE: ocr 與 OCR_ENGINE: none，互相矛盾' +
+            '（只用 OCR 拆題需要 PaddleOCR）。請刪掉其中一行再重錄（docs/local-mode.md 10.12）。');
+        return false;
+    }
     if (plan.needGeminiKey && !String(process.env.GEMINI_API_KEY || '').trim()) {
         const which = plan.gemini.map(u => `${u.key}=${u.spec}`).join('、');
         console.error(`\n❌ exam_pro/.env 沒有 GEMINI_API_KEY：${which} 走 Gemini，錄製必須真的呼叫模型。`);
@@ -332,7 +342,12 @@ async function main(argv = process.argv.slice(2), io = {}) {
     const models = deps.readCiModels();
     const plan = local.recordingPlan({ models, suites: args.suites, withSimilar: args.withSimilar });
     const notes = [];
-    for (const k of ['MODEL_EXTRACT', 'MODEL_VERIFY', 'MODEL_VARIANT', 'MODEL_OCR_STRUCTURE', 'MODEL_NLQ', 'EMBED_MODEL', 'OCR_ENGINE']) {
+    if (plan.configError) notes.push(`ci.yml 的設定互相矛盾（LOCAL_EXTRACT_MODE=ocr 與 OCR_ENGINE=none），正式錄製會在錄前檢查停下。`);
+    if (plan.extractMode === 'ocr' && plan.local) {
+        notes.push('CI 的拆題是「只用 OCR」（ci.yml 的 LOCAL_EXTRACT_MODE=ocr）：pipeline／e2e 只錄 ocr 與 extract_ocr，不呼叫看圖模型；' +
+            '以前錄的 extract_vision 回放檔 CI 不再讀到（cassettes:prune 會列為可刪，還想切回交叉驗證就先不要 --apply）。');
+    }
+    for (const k of ['MODEL_EXTRACT', 'MODEL_VERIFY', 'MODEL_VARIANT', 'MODEL_OCR_STRUCTURE', 'MODEL_NLQ', 'EMBED_MODEL', 'OCR_ENGINE', 'LOCAL_EXTRACT_MODE']) {
         const mine = String(process.env[k] || '').trim();
         const ci = models[k] || '';
         if (mine && mine !== ci) notes.push(`.env 的 ${k}=${mine} 不會用到：錄製與回放一律照 CI（${ci || CI_UNSET_TEXT[k] || '未設'}），否則錄出來的鍵 CI 讀不到。`);
@@ -347,12 +362,13 @@ async function main(argv = process.argv.slice(2), io = {}) {
         console.log(`依序以回放模式跑：${args.suites.join(' → ')}（每個 suite 要幾秒到幾分鐘）`);
     }
     const before = await deps.analyze({ suites: args.suites, models, onStart: args.json ? undefined : (s) => console.log(`  · ${s} …`) });
-    const time = plan.local ? local.estimateLocalTime(before.summary) : null;
+    const time = plan.local ? local.estimateLocalTime(before.summary, { mode: plan.extractMode }) : null;
 
     if (args.dryRun) {
         if (args.json) {
             const localInfo = plan.local ? {
                 ollamaModels: plan.ollama, needGeminiKey: plan.needGeminiKey, needOcr: plan.needOcr,
+                extractMode: plan.extractMode,   // 〔OCR 為主〕
                 estimateSec: { lower: Math.round(time.lowerSec), upper: Math.round(time.upperSec) }
             } : null;
             console.log(JSON.stringify({ models, notes, local: localInfo, steps: recordSteps(args).map(s => s.name), summary: before.summary }, null, 2));

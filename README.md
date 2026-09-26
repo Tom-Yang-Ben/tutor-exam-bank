@@ -15,7 +15,7 @@
 
 | 工作 | 本機模式用什麼 |
 |---|---|
-| PDF 拆題 | PaddleOCR（PP-StructureV3＋公式辨識）與視覺模型 `qwen3-vl:8b` **各拆一次，再逐題交叉比對**；兩版不一致（或只有一版拆到）的題照樣跑完後續檢查，但一律停在人工複核（`extract_disagree`），不自動入庫 |
+| PDF 拆題 | PaddleOCR（PP-StructureV3＋公式辨識）與視覺模型 `qwen3-vl:8b` **各拆一次，再逐題交叉比對**；兩版不一致（或只有一版拆到）的題照樣跑完後續檢查，但一律停在人工複核（`extract_disagree`），不自動入庫。〔OCR 為主 2026-09-26〕`.env` 設 `LOCAL_EXTRACT_MODE=ocr` 時只用 PaddleOCR＋`qwen3:8b` 整理、不看圖（純 CPU 的電腦看圖 1 頁要近一小時），每一題都停在人工複核（`ocr_only`），附圖依 OCR 版面位置配（[`docs/local-mode.md`](docs/local-mode.md) 10.12） |
 | 文字工作：OCR 結果整理、分類、公式 lint、驗算、出變式、助教 | `qwen3:8b`。16 GB 同時只放得下一個 8B 模型，所以拆題之後的逐題節點全用它，不必來回換載（`MODEL_TEXT`，LM-15） |
 | 向量 | `qwen3-embedding:0.6b`，輸出 768 維，資料表的 `vector(768)` 不改 |
 | 切回雲端 | Gemini 保留：改 `.env` 幾行即可整個切回，也可以只切某一個節點 |
@@ -166,7 +166,7 @@ exam_pro/
 │   ├─ index.html             #   單頁殼＋題庫/組卷 inline script＋hash 路由視圖（階段 5 起 7 個；分頁錨點折入視圖）
 │   └─ js/                    #   ES modules：review / students / nlq / variants / assistant；階段 5：kc / remedial / tutor
 │
-├─ migrations/ + migrate.js   # 只增不改的 SQL（0001 init → 0015 extract_disagree；〔整合 2026-09-26〕→ 0018 retrain_unflag_marker）＋極簡執行器
+├─ migrations/ + migrate.js   # 只增不改的 SQL（0001 init → 0015 extract_disagree；〔整合 2026-09-26〕→ 0018 retrain_unflag_marker；〔OCR 為主 2026-09-26〕→ 0019 ocr_only_review）＋極簡執行器
 ├─ eval/                      # 量測體系
 │   ├─ run.js                 #   五個 suite：retrieval / classify / pipeline / nlq / variant
 │   ├─ lib/                   #   指標、golden loader、pg engine、pipeline driver、門檻 ratchet

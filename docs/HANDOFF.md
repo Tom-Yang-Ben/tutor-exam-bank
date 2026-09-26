@@ -9,6 +9,7 @@
 > 〔修訂 2026-09-26 合併回填〕第一輪的 B5、B7、B10、B21 已合入 `local/integration`（`7dc14a0`，尚未推上 GitHub）；§0.00、§0.2、§0.3、§0.4 就地更新。〔修訂 2026-09-26 決策單第二、三輪〕Owner 2026-09-26 在第二輪「知識點審定單」與第三輪「重練與收尾決策單」的答覆登錄在 **§0.00a**（重點與實作分支；實作分支都還沒合入）。〔整合 2026-09-26〕§0.00a 的實作分支（錯題重練除外）、B20 修正分支與 `dec/x-nlq-improve-fix`、`dec/x-local-perf-tool-fix`、`dec/x-readme-architecture-fix` 已合入 ~~`dec/integration-r23`~~ `dec/integration-all`（待併 `local/integration`）；各處狀態見 §0.00a 最後的表與 §0.4 第 4 項。
 > 〔整合 2026-09-26〕`dec/integration-r23` 之後又整合了一次：`dec/integration-final`（r23＋審查修正 `dec/integration-r23-fix`＋variant 向量修正 `dec/fix-variant-embed-record`）再依序併入錯題重練全部（`dec/retrain-phase2-fix`）與本機看圖逾時（`dec/local-vision-timeout`），成為 **`dec/integration-all`**（待併 `local/integration`）。本檔原寫「已合入 `dec/integration-r23`」的地方一律改為「已合入 ~~`dec/integration-r23`~~ `dec/integration-all`」（r23 的內容都在裡面），錯題重練原本的「另一條工作進行中」也改為已合入。完整 `ci.sh` 結果在 §0.4 第 5 項；Owner 接下來要做的事與待裁決清單在 §0.4 第 6、7 項。
 > 〔修訂 2026-09-26 決策單第四輪〕Owner 2026-09-26 在第四輪「上線與本機速度決策單」（U1～U3、V1～V5、T1～T3、Q1～Q4）的答覆登錄在 **§0.00b**（每題的答覆與落實位置）；程式改動在分支 `dec/r4-decisions`（V3、V4、Q1、Q3）。§0.00 的 B18、§0.00a 的 M4、§0.4 第 6、7 項已就地加註，原文保留。
+> 〔OCR 為主 2026-09-26〕Owner 選「這台電腦的拆題改成 OCR 為主」：§0.00b 最後一段（分支 `dec/local-ocr-first`、`local-mode.md` 10.12）。
 
 ---
 
@@ -181,6 +182,8 @@
 | Q4 | 選 1：舊題補附圖的候選排序維持「數字一致」在「出處註記」之前 | 不改程式；`figures.md`「候選題」一段加註 |
 
 **本分支的完整 `ci.sh`**（測試庫 `tutor_r4dec_test`）：unit 3,261（3,259 過、2 略過；比 `local/integration` 多 17 案）、`check:html`、migrate（到 0018）、integration 597（多 4 案）全綠。e2e 12 項中 3 項紅、五個 eval 紅——與 `local/integration`（`4bdaf87`）在同一環境逐項比對，失敗的測試與 eval 輸出相同（缺本機 ocr cassette；classify 92、pipeline 1、nlq 8 筆 replay miss；retrieval 未達門檻；variant 缺向量 fixture），全是本機回放檔／向量檔還沒重錄。沒有改 `eval/thresholds.json`、golden、cassette，也沒有弱化任何既有測試。
+
+**〔OCR 為主 2026-09-26〕2026-09-26 Owner 選 OCR 為主**（第四輪之後、Owner 實測 `qwen3-vl:8b` 看 1 頁樣卷 54 分鐘、JSON 還不合法）：這台電腦的拆題不看圖，只用 PaddleOCR＋`qwen3:8b` 整理；每題都停在人工複核、附圖抓不到的用 `figures:backfill` 補。落實在分支 `dec/local-ocr-first`（起點 `local/integration`）：新設定 `LOCAL_EXTRACT_MODE`（`cross` 預設不變／`ocr`；`config/localExtractMode.js`，與 `OCR_ENGINE=none` 同時設啟動就報錯）、`agents/extract.js` 的 `runLocalOcrOnly`、複核原因 `ocr_only`（`migrations/0019_ocr_only_review.sql`、`reviewController`、複核頁「只用 OCR 拆題，請核對題目與公式」）、依 PaddleOCR 版面配附圖（`ocr_pdf.py` 回報 `figures`、`agents/extractOcrFigures.js`）、`ci.yml` 與 `eval/.env.replay` 改 `LOCAL_EXTRACT_MODE: ocr`（重錄 pipeline／e2e 不再跑看圖）、`npm run perf:local` 3.4 段。Owner 要做的：更新程式後先 `npm run migrate`（到 0019），`.env` 加 `LOCAL_EXTRACT_MODE=ocr`，重啟。說明與預估時間在 [`local-mode.md`](local-mode.md) 10.12；待決：e2e 的「部分入庫」兩項在 `ocr` 模式下設計上不會綠（10.12 第 7 點）。
 
 ### 0.0 章節重整（2026-09-25）〔修訂 2026-09-25 章節重整〕
 

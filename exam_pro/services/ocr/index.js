@@ -1,11 +1,12 @@
 // services/ocr/index.js — 本機 OCR 的唯一出入口（docs/local-mode.md 第 4 條第 2 點，擁有者：L2）
 //
 //   ocrPdf({ pdfBytes, pdfSha256, fromPage, toPage, signal })
-//     → { engine:'paddleocr', engineVersion, dpi, pages:[{ page, markdown, imagePath|null }], dispose(), replayed }
+//     → { engine:'paddleocr', engineVersion, dpi, pages:[{ page, markdown, imagePath|null, figures? }], dispose(), replayed }
+//     〔OCR 為主 2026-09-26〕figures（選用）：版面偵測到的圖框，見下方「版面附圖」一段；沒有＝不知道。
 //
 // 模式跟著 LLM_MODE（services/llm 的 llmMode()）：
 //   live   —— spawn ocr_service/ocr_pdf.py（child_process.spawn、不經 shell），不留 cassette
-//   record —— 同上，再把結果寫成 cassette（**只存 markdown，不存圖片**）
+//   record —— 同上，再把結果寫成 cassette（**只存 markdown（與版面圖框 figures），不存圖片**）
 //   replay —— 只讀 cassette；miss 的訊息與 LLM 的 replay miss 同一個格式（eval/lib/replayMiss.js 認得），
 //             imagePath 一律 null。CI 永遠是這個模式，因此 **CI 不需要 Python**。
 //
@@ -59,6 +60,8 @@ const EXIT_INPUT = 4;
 // 'ocr.v1' 的「模板原文」＝辨識設定的描述。cassette 鍵的 promptTemplateHash 取它的 sha256：
 // ocr_pdf.py 的 PIPELINE_OPTIONS 或 markdown 後處理改了，就要改這段文字（例如 v1 → v2），
 // 既有 ocr cassette 才會失效。
+// 〔OCR 為主 2026-09-26〕ocr_pdf.py 多回報的 figures（版面圖框）**沒有**改辨識設定也沒有改 markdown，刻意不改版：
+// 既有的 OCR cassette 照樣讀得到（只是沒有 figures，配圖退回題幹提示）；重錄後就有。
 const PIPELINE_DESCRIPTION = [
     'ocr_service/ocr_pdf.py v1',
     'pipeline=PP-StructureV3 lang=chinese_cht device=cpu',
@@ -347,7 +350,7 @@ function parseOcrOutput(stdout, { fromPage, toPage, outDir } = {}) {
     for (let n = fromPage; n <= toPage; n++) {
         const p = byPage.get(n);
         if (!p) throw tagged(`ocr_pdf.py 少回了第 ${n} 頁（要求 ${fromPage}～${toPage}）。`, 'provider_error');
-        pages.push({ page: n, markdown: p.markdown, imagePath: acceptImagePath(p.image, outDir) });
+        pages.push(withFigures({ page: n, markdown: p.markdown, imagePath: acceptImagePath(p.image, outDir) }, p.figures));
     }
     if (byPage.size !== pages.length) {
         throw tagged(`ocr_pdf.py 回了範圍外的頁（要求 ${fromPage}～${toPage}）。`, 'provider_error');
@@ -373,6 +376,38 @@ function acceptImagePath(image, outDir) {
     } catch (_) {
         return null;
     }
+}
+
+// ───────────────────────── 版面附圖（〔OCR 為主 2026-09-26〕docs/local-mode.md 10.12）─────────────────────────
+//
+// ocr_pdf.py 從 PP-StructureV3 的版面結果帶出每頁的圖框（page_figures）：
+//   pages[].figures = [{ label, box:[ymin,xmin,ymax,xmax]（0–1000，與 extract 的 figure_box 同一個座標）|null }]
+// 依閱讀順序，與 markdown 裡的「[圖]」一一對應（agents/extractOcrFigures.js 靠這個對應把圖配到題目）。
+// markdown 一個字都不變，所以 'ocr.v1' 的鍵與既有 OCR cassette 都不必動；figures 是 response 的附加欄位：
+// 舊版的 ocr_pdf.py、舊 cassette 沒有它 → 頁物件就沒有 figures 鍵（＝不知道；與「這一頁沒有圖」的 [] 分開）。
+
+/**
+ * ocr_pdf.py（或 cassette）回的 figures → 驗過的陣列；不是陣列回 undefined（不知道）。
+ * 每一張圖都保留（張數要與「[圖]」對得上）：標籤不是字串記 'unknown'；框不合法（不是 4 個數字、夾到 0～1000
+ * 並四捨五入後 ymin ≥ ymax 或 xmin ≥ xmax）記 null——配題時會跳過它（寧可不配）。
+ * @param {any} list
+ * @returns {Array<{label:string, box:number[]|null}>|undefined}
+ */
+function sanitizeFigures(list) {
+    if (!Array.isArray(list)) return undefined;
+    return list.map((f) => {
+        const label = f && typeof f.label === 'string' && f.label.trim() ? f.label.trim().toLowerCase() : 'unknown';
+        const raw = f && Array.isArray(f.box) && f.box.length === 4 && f.box.every(n => typeof n === 'number' && Number.isFinite(n)) ? f.box : null;
+        let box = raw ? raw.map(n => Math.min(1000, Math.max(0, Math.round(n)))) : null;
+        if (box && !(box[0] < box[2] && box[1] < box[3])) box = null;
+        return { label, box };
+    });
+}
+
+/** 頁物件加上 figures（有才加；沒有就維持原本的三個鍵） */
+function withFigures(page, figures) {
+    const clean = sanitizeFigures(figures);
+    return clean === undefined ? page : { ...page, figures: clean };
 }
 
 /** 把 OCR 各頁的 markdown 串成送給結構化模型的那一段文字（agents/extract.js 的 ocrSha256 也算在它上面） */
@@ -437,7 +472,8 @@ async function ocrPdf(opts = {}) {
             if (!p || typeof p.markdown !== 'string') {
                 throw new Error(`OCR cassette 少了第 ${n} 頁：${cassette.cassettePath(AGENT, key)}`);
             }
-            pages.push({ page: n, markdown: p.markdown, imagePath: null });
+            // 〔OCR 為主〕新版錄的 cassette 帶 figures（版面附圖）；舊的沒有 → 頁物件沒有 figures 鍵
+            pages.push(withFigures({ page: n, markdown: p.markdown, imagePath: null }, p.figures));
         }
         return {
             engine: ENGINE,
@@ -509,7 +545,8 @@ async function ocrPdf(opts = {}) {
                     engine: ENGINE,
                     engine_version: parsed.engineVersion,
                     dpi: cfg.dpi,
-                    pages: parsed.pages.map(p => ({ page: p.page, markdown: p.markdown })),
+                    // 〔OCR 為主〕figures 有才寫（版面附圖；不進鍵）。頁面圖片路徑照舊不存
+                    pages: parsed.pages.map(p => ({ page: p.page, markdown: p.markdown, ...(p.figures ? { figures: p.figures } : {}) })),
                     latencyMs
                 }
             });
@@ -578,7 +615,7 @@ function _resetForTest() {
 module.exports = {
     ocrPdf, selftest, warmup,
     resolveEngine, resolveOcrConfig, resolvePython, defaultPython, pinnedEngineVersion,
-    ocrCassetteKey, parseOcrOutput, runProcess, pagesToText, replayMissError,
+    ocrCassetteKey, parseOcrOutput, runProcess, pagesToText, replayMissError, sanitizeFigures,
     ENGINE, AGENT, TEMPLATE, ENGINES, DEFAULT_DPI, DEFAULT_TIMEOUT_MS, SCRIPT_PATH, REQUIREMENTS_PATH,
     PIPELINE_DESCRIPTION,
     _resetForTest

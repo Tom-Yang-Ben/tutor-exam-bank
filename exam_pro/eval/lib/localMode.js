@@ -113,8 +113,19 @@ function effectiveModels(ci = {}) {
         MODEL_TEXT: ci.MODEL_TEXT || (vendorOf(extract) === 'ollama' ? verify : extract),
         EMBED_MODEL: ci.EMBED_MODEL || LOCAL_DEFAULTS.EMBED_MODEL,
         MODEL_NLQ: ci.MODEL_NLQ || NLQ_CODE_DEFAULT,
-        OCR_ENGINE: String(ci.OCR_ENGINE || LOCAL_DEFAULTS.OCR_ENGINE).trim().toLowerCase()
+        OCR_ENGINE: String(ci.OCR_ENGINE || LOCAL_DEFAULTS.OCR_ENGINE).trim().toLowerCase(),
+        // 〔OCR 為主 2026-09-26〕與程式同一條解讀規則（config/localExtractMode.js）；非法值在子行程裡也會退回 cross
+        LOCAL_EXTRACT_MODE: String(ci.LOCAL_EXTRACT_MODE || '').trim().toLowerCase() === 'ocr' ? 'ocr' : 'cross'
     };
+}
+
+/**
+ * 〔OCR 為主 2026-09-26〕本機拆題一塊依序呼叫的步驟：cross＝OCR → 看圖 → OCR 整理；ocr＝OCR → OCR 整理（不看圖）。
+ * @param {string} [mode] LOCAL_EXTRACT_MODE（沒給＝cross）
+ * @returns {string[]}
+ */
+function extractChainFor(mode) {
+    return mode === 'ocr' ? LOCAL_EXTRACT_CHAIN_OCR.slice() : LOCAL_EXTRACT_CHAIN.slice();
 }
 
 /**
@@ -125,15 +136,21 @@ function effectiveModels(ci = {}) {
  *
  * @param {{models?:Record<string,string>, suites:string[], withSimilar?:boolean}} opts
  *        withSimilar：rerecord 的 --no-similar 關掉時，e2e 不錄 dedup1 的向量
+ * 〔OCR 為主 2026-09-26〕ci.yml 寫了 LOCAL_EXTRACT_MODE=ocr 而且拆題模型是 ollama 時，本機拆題不呼叫視覺模型：
+ * MODEL_EXTRACT 不列進 uses（不必下載、不檢查 qwen3-vl）；OCR 仍然要。與 OCR_ENGINE=none 同時寫是矛盾設定（configError）。
+ *
  * @returns {{models:object, uses:Array<{key:string, spec:string}>, gemini:Array<{key:string, spec:string}>,
- *            ollama:string[], needGeminiKey:boolean, needOcr:boolean, local:boolean}}
+ *            ollama:string[], needGeminiKey:boolean, needOcr:boolean, local:boolean,
+ *            extractMode:'cross'|'ocr', configError:string|null}}
  */
 function recordingPlan({ models = {}, suites, withSimilar = true }) {
     const eff = effectiveModels(models);
     const want = new Set(suites);
     const uses = [];
+    const localExtract = vendorOf(eff.MODEL_EXTRACT) === 'ollama';
+    const ocrOnly = localExtract && eff.LOCAL_EXTRACT_MODE === 'ocr';
     if (LLM_SUITES.some(s => want.has(s))) {
-        uses.push({ key: 'MODEL_EXTRACT', spec: eff.MODEL_EXTRACT });
+        if (!ocrOnly) uses.push({ key: 'MODEL_EXTRACT', spec: eff.MODEL_EXTRACT });
         uses.push({ key: 'MODEL_VERIFY', spec: eff.MODEL_VERIFY });
         // 〔LM-15〕分類、公式重寫走 MODEL_TEXT。預設它就是上面兩個之一（本機＝VERIFY、Gemini＝EXTRACT），
         // 只有明寫成第三個模型時才另列一列（要多下載一個模型、或多一家要金鑰）
@@ -150,7 +167,13 @@ function recordingPlan({ models = {}, suites, withSimilar = true }) {
     // 拆題只在 pipeline（e2e 由 pipeline 那一步順帶錄）；本機路徑且 OCR_ENGINE=paddle 才需要 PaddleOCR
     const extractRuns = want.has('pipeline') || want.has('e2e');
     const needOcr = extractRuns && vendorOf(eff.MODEL_EXTRACT) === 'ollama' && eff.OCR_ENGINE === 'paddle';
-    return { models: eff, uses, gemini, ollama, needGeminiKey: gemini.length > 0, needOcr, local: ollama.length > 0 };
+    const configError = require('../../config/localExtractMode').localExtractConflict({
+        localExtract, mode: eff.LOCAL_EXTRACT_MODE, ocrEngine: eff.OCR_ENGINE
+    });
+    return {
+        models: eff, uses, gemini, ollama, needGeminiKey: gemini.length > 0, needOcr, local: ollama.length > 0,
+        extractMode: eff.LOCAL_EXTRACT_MODE, configError
+    };
 }
 
 /**
@@ -427,6 +450,8 @@ const DEFAULT_SEC_PER_CALL = 600;
 const DEFAULT_SEC_PER_EMBED = 1;
 /** 本機拆題一塊的三步（第 4 條第 3 點）：前一步 miss 時，後面幾步這一輪看不到 */
 const LOCAL_EXTRACT_CHAIN = Object.freeze(['ocr', 'extract_vision', 'extract_ocr']);
+/** 〔OCR 為主 2026-09-26〕LOCAL_EXTRACT_MODE=ocr 時一塊只有兩步（不看圖） */
+const LOCAL_EXTRACT_CHAIN_OCR = Object.freeze(['ocr', 'extract_ocr']);
 
 function positiveNumber(v) {
     const n = Number(v);
@@ -464,11 +489,15 @@ function secPerEmbed(env = process.env) {
  *            ②本機拆題一塊的三步裡，miss 那一步之後的幾步（這一輪看不到，也沒有舊 cassette 可以對）。
  * 向量：第 1 步補 fixture 題缺的，加上 nlq／variant／e2e 在 EMBED_MODE=record 下每一段都會重算。
  *
+ * 〔OCR 為主 2026-09-26〕mode='ocr'（ci.yml 的 LOCAL_EXTRACT_MODE）：拆題鏈只有 ocr → extract_ocr；
+ * 沒被讀到的看圖回放檔（extract_vision*）不會再錄，不算進上限。
+ *
  * @param {object} summary
- * @param {{env?:object}} [opts]
+ * @param {{env?:object, mode?:'cross'|'ocr'}} [opts]
  * @returns {{lowerSec:number, upperSec:number, embedSec:number, bySuite:Record<string,number>, calls:Record<string,number>}}
  */
-function estimateLocalTime(summary, { env = process.env } = {}) {
+function estimateLocalTime(summary, { env = process.env, mode } = {}) {
+    const chain = extractChainFor(mode);
     const bySuite = {};
     const calls = {};
     let lower = 0;
@@ -486,9 +515,9 @@ function estimateLocalTime(summary, { env = process.env } = {}) {
             // 本機拆題鏈：某一步 miss，同一塊後面的步驟這一輪看不到
             for (const key of s.missKeys || []) {
                 const agent = key.split('/')[0];
-                const at = LOCAL_EXTRACT_CHAIN.indexOf(agent);
+                const at = chain.indexOf(agent);
                 if (at === -1) continue;
-                for (const later of LOCAL_EXTRACT_CHAIN.slice(at + 1)) unseen += secPerCall(later, env);
+                for (const later of chain.slice(at + 1)) unseen += secPerCall(later, env);
             }
             lower += sec;
         }
@@ -500,7 +529,11 @@ function estimateLocalTime(summary, { env = process.env } = {}) {
         bySuite[name] = sec;
     }
     let downstream = 0;
-    for (const u of summary.unhit || []) if (!u.previousVersion) downstream += secPerCall(u.agent, env);
+    for (const u of summary.unhit || []) {
+        if (u.previousVersion) continue;
+        if (mode === 'ocr' && /^extract_vision/.test(String(u.agent))) continue;   // 〔OCR 為主〕不會再錄
+        downstream += secPerCall(u.agent, env);
+    }
 
     const embedSec = embedTexts * secPerEmbed(env);
     return { lowerSec: lower + embedSec, upperSec: lower + embedSec + downstream + unseen, embedSec, bySuite, calls };
@@ -535,6 +568,7 @@ module.exports = {
     APP_DIR, LOCAL_DEFAULTS, NLQ_CODE_DEFAULT, LOCAL_NODE_TIMEOUT_MS, LOCAL_NLQ_TIMEOUT_MS, LLM_SUITES, EMBED_SUITES,
     RECORD_LONG_TIMEOUT_MS, RECORD_PROGRESS_MS, LONG_CALL_STEPS,
     OCR_SCRIPT, SEC_PER_CALL, DEFAULT_SEC_PER_CALL, DEFAULT_SEC_PER_EMBED, LOCAL_EXTRACT_CHAIN,
+    LOCAL_EXTRACT_CHAIN_OCR, extractChainFor,   // 〔OCR 為主 2026-09-26〕
     vendorOf, modelIdOf, embedModelFromEnv, effectiveModels, recordingPlan, isLocalRun, localRecordEnv, longCallRecordEnv,
     ollamaHost, hasModel, checkOllama, ollamaAdvice,
     ocrPython, parseSelftest, checkOcr, ocrAdvice,

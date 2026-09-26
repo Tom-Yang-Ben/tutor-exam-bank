@@ -50,9 +50,10 @@ const FALLBACK_CI_MODELS = Object.freeze({
 /**
  * 〔本機模式 L4〕ci.yml 的 integration env 有寫才照它、沒寫就交給程式預設的變數。
  * 都會改變 cassette 的鍵或錄製的流程：EMBED_MODEL（向量檔名）、MODEL_NLQ（nlq 的鍵）、MODEL_TEXT（分類／lint 的鍵，LM-15）、
- * OCR_ENGINE（要不要跑 OCR）、OCR_DPI（OCR cassette 的鍵）。
+ * OCR_ENGINE（要不要跑 OCR）、OCR_DPI（OCR cassette 的鍵）、
+ * 〔OCR 為主 2026-09-26〕LOCAL_EXTRACT_MODE（本機拆題要不要呼叫視覺模型：ocr 模式只錄／只讀 ocr 與 extract_ocr）。
  */
-const CI_OPTIONAL_KEYS = Object.freeze(['EMBED_MODEL', 'MODEL_NLQ', 'MODEL_TEXT', 'OCR_ENGINE', 'OCR_DPI']);
+const CI_OPTIONAL_KEYS = Object.freeze(['EMBED_MODEL', 'MODEL_NLQ', 'MODEL_TEXT', 'OCR_ENGINE', 'OCR_DPI', 'LOCAL_EXTRACT_MODE']);
 
 /** 放行到子行程的變數（不影響 cassette 的鍵，而且是跑起來必要的） */
 const PASS_THROUGH = Object.freeze([
@@ -76,7 +77,9 @@ const RECORD_PASS_THROUGH = Object.freeze([
 const LOCAL_SHIELD = Object.freeze([
     'OLLAMA_HOST', 'OLLAMA_CONCURRENCY', 'OLLAMA_RPM', 'OLLAMA_TIMEOUT_MS', 'OLLAMA_NUM_CTX', 'OLLAMA_KEEP_ALIVE',
     'OLLAMA_PROGRESS_MS', 'VISION_MAX_EDGE_PX',
-    'OCR_ENGINE', 'OCR_PYTHON', 'OCR_DPI', 'OCR_TIMEOUT_MS', 'NLQ_TIMEOUT_MS', 'JOB_NODE_TIMEOUT_MS', 'E2E_NODE_TIMEOUT_MS'
+    'OCR_ENGINE', 'OCR_PYTHON', 'OCR_DPI', 'OCR_TIMEOUT_MS', 'NLQ_TIMEOUT_MS', 'JOB_NODE_TIMEOUT_MS', 'E2E_NODE_TIMEOUT_MS',
+    // 〔OCR 為主 2026-09-26〕.env／shell 的值不帶進子行程：照 ci.yml（CI_OPTIONAL_KEYS），沒寫就是空字串＝程式預設 cross
+    'LOCAL_EXTRACT_MODE'
 ]);
 
 /**
@@ -93,7 +96,8 @@ const CI_EFFECTIVE_DEFAULTS = Object.freeze({ JOB_COST_BUDGET_USD: '0.5' });
  * 從 .github/workflows/ci.yml 讀 integration job 的 MODEL_EXTRACT／MODEL_VERIFY，
  * 以及有寫才有的 CI_OPTIONAL_KEYS（〔本機模式 L4〕EMBED_MODEL、MODEL_NLQ…；沒寫就不出現在回傳裡）。
  * @param {string} [file] 預設 <repo>/.github/workflows/ci.yml
- * @returns {{MODEL_EXTRACT:string, MODEL_VERIFY:string, source:string, EMBED_MODEL?:string, MODEL_NLQ?:string, OCR_ENGINE?:string, OCR_DPI?:string}}
+ * @returns {{MODEL_EXTRACT:string, MODEL_VERIFY:string, source:string, EMBED_MODEL?:string, MODEL_NLQ?:string, OCR_ENGINE?:string, OCR_DPI?:string,
+ *            LOCAL_EXTRACT_MODE?:string}}
  */
 function readCiModels(file = path.resolve(APP_DIR, '..', '.github', 'workflows', 'ci.yml')) {
     let text = null;
