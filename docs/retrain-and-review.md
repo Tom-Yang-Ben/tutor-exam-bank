@@ -923,7 +923,7 @@ capForAttach(newCount, ratio) ：R6，floor(新題數 × 比例)，且新題＋�
 - 補救卷以程式改選學生（`remedial:add` 事件，沒觸發 change）時，「目前到期 M 題」不會跟著更新（產生草稿不受影響）。
 - `retrain.js` 沒有 `?mock=1` 的假資料。
 - `retrainService.todayLocal` 與 `examController.localDates` 是兩份同樣的「本地今天」實作，還沒合併。
-- NFR-010 只有上面那一次手動量測，沒有進 CI；`srs.md`、`engineering_tracker.md`、`HANDOFF.md` 的同步照第 9.2 節由文件整合任務處理。
+- NFR-010 只有上面那一次手動量測，沒有進 CI；`srs.md`、`engineering_tracker.md`、`HANDOFF.md` 的同步照第 9.2 節由文件整合任務處理。〔整合 2026-09-26〕已在 `dec/integration-all` 同步（見第 6.1 節的註記）；NFR-010 仍只有那一次手動量測。
 - 既有的紅燈不變（不是本功能造成、這一輪也不修）：e2e 缺 ocr cassette 3 敗、五個 eval 缺 cassette 與向量 fixture，失敗清單與 `dec/retrain-base` 相同。
 
 #### 5.6.6 實作狀態（第二階段審查修正）
@@ -990,7 +990,7 @@ capForAttach(newCount, ratio) ：R6，floor(新題數 × 比例)，且新題＋�
 
 ### 6.1 功能需求（FR-036～FR-040，定稿）
 
-〔凍結〕編號與內容依 Owner 2026-09-26 答覆定稿；同步進 `engineering_docs/01_requirements/srs.md` 由其他分支辦理。
+〔凍結〕編號與內容依 Owner 2026-09-26 答覆定稿；同步進 `engineering_docs/01_requirements/srs.md` 由其他分支辦理。〔整合 2026-09-26〕已在 `dec/integration-all` 同步：`srs.md` §1（FR-036～040，端點欄另補實際路徑）、§2（NFR-006 補一句、NFR-010 附第 5.6.5 節的實測）、§6.2（ACPT-036-*～040-* 照第 6.2 節）；`qa_tracker.md` TC-036-*～040-*（照第 6.3 節，測試檔以實際檔案為準）；`engineering_tracker.md` FR 列與 ADR-018、ADR-019 索引。
 
 | ID | 需求描述 | API 端點 | 旗標 | 來源 | 優先級 | 驗收 ID |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -1038,7 +1038,7 @@ capForAttach(newCount, ratio) ：R6，floor(新題數 × 比例)，且新題＋�
 | :--- | :--- | :--- | :--- |
 | TC-036-1 | 整合 | `test/integration/assignmentSplit.pg.test.js` | 在「只套到 M1 前一號、灌入舊資料（含 `paper_id` 為 NULL、有部分給分與錯因、已封存題）」的庫上套 M1：筆數、id、逐欄相同；序號接續；自我檢查在人為製造不一致時會 RAISE 並整支回滾 |
 | TC-036-2 | 整合 | 同上 | 部分唯一索引擋重複新題（23505）、重練列不受限、`(paper_id, question_id)` 唯一、`question_id` RESTRICT、兩個檢視的欄位名稱與順序（`attempts` 與舊表相同＋`assignment_id`） |
-| TC-036-3 | 整合 | `test/integration/assignmentSplitGolden.pg.test.js` | 以 `students.pg.test.js` 的 1,000 筆 fixture 在 M1 前後各取弱點、知識點掌握度、補救卷草稿（固定亂數）、覆蓋率的 JSON，逐欄相同 |
+| TC-036-3 | 整合 | `test/integration/assignmentSplitGolden.pg.test.js`（〔整合 2026-09-26〕實作併在 `assignmentSplit.pg.test.js`，第 5.6.1 節） | 以 `students.pg.test.js` 的 1,000 筆 fixture 在 M1 前後各取弱點、知識點掌握度、補救卷草稿（固定亂數）、覆蓋率的 JSON，逐欄相同 |
 | TC-036-4 | 整合 | 同上 | EXPLAIN：候選池展開檢視後使用 `assignments_first_exposure_key`，沒有掃 `attempt_records` |
 | TC-036-5 | 整合／e2e | 既有全部 | 夾具改用 helper（`controllers.pg.test.js` 的觸發器改掛 `assignments`）後全部通過；除第 6.4 節列出、依 Owner 決策改寫的結構與索引名稱斷言外，既有斷言一條不改（ACPT-036-4） |
 | TC-036-6 | 單元 | `test/unit/noWritesToAttemptsView.test.js` | 掃描 `controllers/`、`services/`、`workers/`、`scripts/`、`queries/`，不得出現對 `attempts` 的 INSERT／UPDATE／DELETE／TRUNCATE |

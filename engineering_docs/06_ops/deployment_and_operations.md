@@ -14,6 +14,7 @@
 > 🛠 **2026-09-16b 修訂**（主線同步，PR #30–#33 合併後）：§2 CI 測試數同步為單元 1,613、整合 317（PR #30–#33 併入 main 後 CI 實測）。修改處以〔修訂 2026-09-16b〕行內標記。
 > 🛠 **2026-09-24 修訂**（階段 5 整合回填，分支 `stage5/int-docs`）：§2 補整合分支測試數；§3.1 與 §4 migrations 範圍 0001–0012；§3.2 環境變數表補階段 5 全部新變數與旗標；新增 §3.4「階段 5 上線步驟」（migrate → kc:load → search:reindex → solution:backfill → 逐一開旗標）；§5 監控補家教／語音／知識點標註的花費觀察點；§6.1 補階段 5 的回滾方式；§7 追溯。修改處以〔修訂 2026-09-24〕行內標記。
 > 🛠 **2026-09-25 修訂**（本機模式 L4，分支 `local/base`；`docs/local-mode.md`、ADR-017）：§1 部署架構加本機推論元件；§2 CI 的模型名改本機；§3.2 環境變數表補本機模式的變數與依供應商而定的預設；新增 §3.5「本機模式部署與上線」；§5、§6.1、§7 同步。修改處以〔修訂 2026-09-25 本機模式〕行內標記。
+> 🛠 **2026-09-26 整合**（分支 `dec/integration-all`＝`dec/integration-final`＋錯題重練 `dec/retrain-phase2-fix`＋本機看圖逾時 `dec/local-vision-timeout`）：新增 §3.6「錯題重練上線（migrations 0016～0018）」；§2 補本版測試數；§3.1、§4 的 migrations 範圍延伸到 0018；§3.2 環境變數表補 `FEATURE_RETRAIN`、`RETRAIN_*`、`OLLAMA_PROGRESS_MS`、`VISION_MAX_EDGE_PX`；§3.4 第 2、3 步加註（到 0018 改照 §3.6；知識點數 637 → 688）；§6.1 回滾補 0016 的例外。修改處以〔整合 2026-09-26〕行內標記。
 
 ---
 
@@ -52,7 +53,8 @@
 | :--- | :--- | :--- |
 | 單元層 | `npm audit --omit=dev --audit-level=high` ＋ `npm test`（1,613 項）＋ `npm run check:html`，Node 22.x／24.x 矩陣〔修訂 2026-09-16b〕 | 每次 push 與 PR（GitHub Actions） |
 | 整合層 | 起 `pgvector/pgvector:pg16` service → 整合 317 項〔修訂 2026-09-16b〕＋e2e 11 項＋五個 eval suite（ratchet 門檻）〔修訂 2026-08-29〕 | 同上，`integration` job |
-| 階段 5〔修訂 2026-09-24〕 | 整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠（主控合併後更新數字）；CI 步驟不變，未新增 eval suite（`eval:classify-chem` 不進 CI） | 併入 main 後由 GitHub Actions 跑 |
+| 階段 5〔修訂 2026-09-24〕 | 整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠（~~主控合併後更新數字~~ 〔整合 2026-09-26〕已更新，見下一列）；CI 步驟不變，未新增 eval suite（`eval:classify-chem` 不進 CI） | 併入 main 後由 GitHub Actions 跑 |
+| 錯題重練與本機看圖逾時合入後〔整合 2026-09-26〕 | `dec/integration-all` 完整 `ci.sh`：unit 3,244（3,242 過、2 略過）、`check:html`、migrate（到 0018）、integration 593 全綠；e2e 12 項中 3 項與五個 eval 因本機模型的回放檔／向量檔尚未重錄而紅（要等 §3.5 第 8 步以本機模型重錄；重錄後仍未達門檻的 eval 照實紅燈、門檻不放寬）；CI 步驟不變，錯題重練不需要 cassette | 併入 main 後由 GitHub Actions 跑 |
 | 部署 | 無自動部署。本機依 §3 啟動程序手動升級 | 手動 |
 
 CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`EMBED_MODE=fixture`；eval 低於 ratchet 門檻或 main 上 replay miss 即轉紅（NFR-004）。〔修訂 2026-09-25 本機模式〕`ci.yml` 的 `MODEL_EXTRACT`／`MODEL_VERIFY`／`EMBED_MODEL`／`MODEL_NLQ` 改成本機模型名；CI 不裝 Ollama、不裝 Python，cassette 與向量檔由 Owner 在本機以本機模型重錄（`record_local.bat`，§3.5）。重錄之前 e2e 與五個 eval 只會因缺 cassette／缺向量紅燈。
@@ -64,7 +66,7 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 | # | 指令 | 說明 |
 | :--- | :--- | :--- |
 | 1 | `npm run db:up`（＝`docker compose up -d --wait`；或雙擊 `啟動資料庫.bat`） | 拉起 5442／5433 兩容器並等 healthcheck |
-| 2 | `npm run migrate` | 對 `DATABASE_URL` 套用 `migrations/0001`–`0009`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕、`0010`–`0012`〔修訂 2026-09-24〕；只前進不 down，重跑為 no-op（依檔名排序逐支判斷，編號缺口不影響套用） |
+| 2 | `npm run migrate` | 對 `DATABASE_URL` 套用 `migrations/0001`–`0009`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕、`0010`–`0012`〔修訂 2026-09-24〕、`0013`–`0018`〔整合 2026-09-26〕（含錯題重練的 0016～0018 第一次套用時照 §3.6 做前後快照比對）；只前進不 down，重跑為 no-op（依檔名排序逐支判斷，編號缺口不影響套用） |
 | 3 | `npm start`（開發改 `npm run dev`） | 啟動後開 `http://localhost:3000` |
 
 輔助指令：`node migrate.js status`（逐支套用狀態）、`npm run migrate:test`（測試庫）、`npm run db:down`（停止；加 `-v` 才刪 `pgdata`）、`node seed_questions.js --apply`（空庫灌 30 題示範題）。
@@ -79,6 +81,8 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 | `MODEL_OCR_STRUCTURE`〔修訂 2026-09-25 本機模式〕 | 把 PaddleOCR 的文字整理成拆題 JSON 的模型 | 未設沿用 `MODEL_VERIFY` |
 | `MODEL_NLQ`〔修訂 2026-09-25 本機模式〕 | 自然語言查題的 LLM 輔路徑；**程式預設是 Gemini**，本機模式必須在 `.env` 明寫本機模型 | `.env.example`：`ollama:qwen3:8b` |
 | `OLLAMA_HOST`／`OLLAMA_CONCURRENCY`／`OLLAMA_RPM`／`OLLAMA_TIMEOUT_MS`／`OLLAMA_NUM_CTX`／`OLLAMA_KEEP_ALIVE`〔修訂 2026-09-25 本機模式〕 | Ollama 位址（只允許本機）、併發（CPU 一次一個）、每分鐘上限、單次逾時、上下文長度、模型常駐時間 | `http://127.0.0.1:11434`／1／不限／1800000／16384／`10m` |
+| `OLLAMA_PROGRESS_MS`〔整合 2026-09-26〕 | 長呼叫的進度（毫秒）：設了就改用串流，每隔這麼久在伺服器視窗印一行已輸出幾個 token、或還沒輸出第一個 token（讀圖中）；拆出來的結果、用量與回放檔內容和不設時相同（`docs/local-mode.md` 第 10.11 條） | 不設＝不印（重錄 pipeline／e2e 時工具自帶 300000） |
+| `VISION_MAX_EDGE_PX`〔整合 2026-09-26〕 | 加速選項 b：送給視覺模型之前把每頁圖片長邊縮到這個像素（512～10000）；OCR 仍用原圖，圖片不在回放檔的鍵裡、改了不必重錄；先用 `npm run local:bench-vision -- --max-edge 1600` 量過再決定 | 不設或 0＝不縮 |
 | `OCR_ENGINE`／`OCR_PYTHON`／`OCR_DPI`／`OCR_TIMEOUT_MS`〔修訂 2026-09-25 本機模式〕 | `paddle`＝本機 PaddleOCR、`none`＝只用視覺模型（交叉驗證停用、全部停在複核）；跑 `ocr_pdf.py` 的 Python；頁面轉圖解析度（進 OCR cassette 的鍵）；單次逾時 | `paddle`／`exam_pro\ocr_service\.venv\Scripts\python.exe`／200／1800000 |
 | `DATABASE_URL` | 正式庫連線 | `postgres://exam:exam@localhost:5442/tutor_exam_bank` |
 | `TEST_DATABASE_URL` | 測試庫連線；庫名必須以 `_test` 結尾，否則 `migrate.js` 拒絕執行 | `postgres://exam:exam@localhost:5433/tutor_exam_bank_test` |
@@ -115,6 +119,8 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 | `TUTOR_DAILY_BUDGET_USD`〔修訂 2026-09-24〕 | 家教＋語音**合計**的每日花費上限（美元）；依 `config/pricing.js` 估算、程序內按本地日期累計，超過回 429 到隔天；**伺服器重啟歸零**；`0` ＝不准花錢；非數字或負數退回 1.0 | `1.0` |
 | `TUTOR_RATE_LIMIT_PER_MIN`〔修訂 2026-09-24〕 | `POST /api/tutor` 每來源每分鐘上限；非正整數退回 10；路由掛載時讀一次（改動須重啟） | `10` |
 | `VOICE_RATE_LIMIT_PER_MIN`〔修訂 2026-09-24〕 | `POST /api/voice/transcribe` 每來源每分鐘上限；同上 | `10` |
+| `FEATURE_RETRAIN`〔整合 2026-09-26〕 | 錯題重練與間隔複習：批改卡「要重練」勾選、學生分頁「錯題重練」卡、六支新 API 與出卷的重練參數；不呼叫 LLM；開啟時不補建以前的錯題（R11 選 3）。**只管 API 與畫面**：拆表與排程資料的完整性不受它管，關閉時也要套到 migration 0018（§3.6） | `false` |
+| `RETRAIN_STEP_DAYS`／`RETRAIN_MASTERY_STREAK`／`RETRAIN_STUCK_LAPSES`／`RETRAIN_ATTACH_RATIO`〔整合 2026-09-26〕 | 每關間隔天數／連對幾次練到會／錯幾次標卡關／附在新卷的預設上限比例（`config/retrain.js`；非法值退回預設並警告一次）；改完重啟後 `npm run retrain:recompute` 才會照新參數重排到期日 | `1,7,14`／`3`／`3`／`0.3` |
 
 〔修訂 2026-09-24〕階段 5 的 WS-A（批改細節、學生檔案、文字詳解、Word 版本）與 WS-B（化學）沒有新環境變數，也不掛新旗標：批改細節跟著既有 `FEATURE_STUDENTS`，化學卷上傳跟著既有 `FEATURE_PIPELINE`。所有旗標與 `*_RATE_LIMIT_PER_MIN` 都在啟動時讀取，改動後須重啟。
 
@@ -134,8 +140,8 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 | :--- | :--- | :--- | :--- |
 | 0 | 事前決定（Owner） | —— | 數學知識點的章節切法要在**第一次 `kc:load` 之前**決定（搬移知識點會改變 code，`docs/kc-review-數學.md` 第 2 節）；物理、化學的待決事項見 `docs/kc-review-物理.md`、`docs/kc-review-化學.md`。不急著用知識點可以先跳過步驟 3，其餘照做 |
 | 1 | 備份＋停服務 | `npm run db:backup`；停止 `npm start`／`npm run dev` | 備份成功（`backups/LAST_FAILED.txt` 不存在）；含新 migration 的版本要先停服務或先 migrate（§3.3） |
-| 2 | 套用 migrations | `git pull`（或 checkout 併入後的 main）→ `npm run migrate` → `node migrate.js status` | 0010、0011、0012 三支顯示已套用 |
-| 3 | 載入知識點種子檔 | `npm run kc:validate` → `npm run kc:load -- --dry-run` → 數字合理後 `npm run kc:load` | dry-run 印出新增、更新、略過數（三科約 637 個知識點；dry-run 是整批照做後 ROLLBACK，數字與實際載入相同）；有任何 error 整批不寫 |
+| 2 | 套用 migrations | `git pull`（或 checkout 併入後的 main）→ `npm run migrate` → `node migrate.js status` | 0010、0011、0012 三支顯示已套用（〔整合 2026-09-26〕含錯題重練的版本會一路套到 0018，改照 §3.6 做：停服務、備份、前後快照比對回 0 才啟動） |
+| 3 | 載入知識點種子檔 | `npm run kc:validate` → `npm run kc:load -- --dry-run` → 數字合理後 `npm run kc:load` | dry-run 印出新增、更新、略過數（三科約 637 個知識點；〔整合 2026-09-26〕現為 688 個：數學 253、物理 198、化學 237，`npm run kc:validate` 實測；dry-run 是整批照做後 ROLLBACK，數字與實際載入相同）；有任何 error 整批不寫 |
 | 4 | 重建關鍵字索引（**必跑**） | `npm run search:reindex -- --dry-run` → `npm run search:reindex` | 化學詞典改變了分詞，既有數理題的 `search_tsv` 會過期（例「質量數」「理想氣體」「週期表」）；dry-run 印出會變的題數與前 5 題差異；可中斷重跑，之後改詞典或章節名都要再跑（`docs/chemistry.md` §4.3） |
 | 5 | 回填文字詳解 | `npm run solution:backfill -- --dry-run` → `npm run solution:backfill -- --limit 20` → 抽讀幾題 → `npm run solution:backfill` | dry-run 印出掃描、會補、略過（含原因與題號）；已有詳解的題不覆寫、入庫後被改過題幹或答案的題不補；verify 摘要未經人工審閱，發給學生前先讀 |
 | 6 | 啟動並驗收核心延伸 | `npm start` | 不必開新旗標即可用：批改卡錯因／部分給分／詳解（需既有 `FEATURE_STUDENTS`）、學生檔案、題目詳解欄、Word 三種版本、化學卷上傳（需既有 `FEATURE_PIPELINE`）。在瀏覽器實際走一遍（這些畫面只有 miniDom 測試） |
@@ -163,12 +169,34 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 - 回滾：改 `.env` 五行即切回 Gemini（§6.1）；若 `EMBED_MODEL` 也切回，第 5、6 步要再做一次。
 - 監控：本機模型不花錢，要看的是時間與逾時（§5）。
 
+### 3.6 錯題重練上線（migrations 0016～0018）〔整合 2026-09-26〕
+
+適用於第一次把含錯題重練的版本（`dec/integration-all` 之後）升級到本機正式庫。權威說明在 [`docs/retrain-and-review.md`](../../docs/retrain-and-review.md) 第 5.6.6 節「升級步驟」（遷移驗證沿用第 3.6、5.6.1 節）；本節只列順序。全程**不呼叫 LLM、不花錢**。
+
+**新程式即使 `FEATURE_RETRAIN` 關閉，也必須套到 0018。** 拆表（0016）是核心資料層、不受旗標管；批改（`PATCH /api/papers/:id/results` 先鎖 `retrain_items` 再重算）、刪卷、刪學生、合併學生都會讀寫 `retrain_items` 與 `retired_by_unflag`，資料庫沒套到 0018 就會 500。所以不能只拉程式不 migrate，也不能讓服務在舊 schema 上跑新程式（`npm run dev` 的 nodemon 一拉下程式就重啟，§3.3）。
+
+| # | 步驟 | 指令 | 確認什麼 |
+| :--- | :--- | :--- | :--- |
+| 1 | 停服務 | 停止 `npm start`／`npm run dev` | 先停再拉程式 |
+| 2 | 更新程式 | `git pull`（或 checkout 含錯題重練的版本） | — |
+| 3 | 備份 | `npm run db:backup` | 備份成功（`backups/LAST_FAILED.txt` 不存在）；比對有差異時用它還原 |
+| 4 | 套用前快照 | `node scripts/snapshot_attempt_views.js --out=before.json` | 只讀不寫；拍作答逐列摘要與每位學生的弱點、知識點掌握度、補救卷基底、覆蓋率、新題候選池、每張卷的批改數 |
+| 5 | 套用 migrations | `npm run migrate` → `node migrate.js status` | 0016（派題與作答拆表）、0017（重練排程項目）、0018（移出的來源）都顯示已套用；0016 搬資料後自我檢查，不一致會 RAISE、整支回滾 |
+| 6 | 套用後快照 | `node scripts/snapshot_attempt_views.js --out=after.json` | 同第 4 步 |
+| 7 | 比對 | `node scripts/snapshot_attempt_views.js --compare before.json after.json` | **回 0（完全相同）才啟動**；有差異就先別用，把輸出與兩個檔案留給開發者，還原用第 3 步的備份（§6.2） |
+| 8 | 啟動 | `npm start` | 旗標關閉時畫面與行為與升級前相同 |
+| 9 | （要用時）開旗標 | `.env` 設 `FEATURE_RETRAIN=true` 後重啟 | 學生分頁出現「錯題重練」卡、批改卡出現「要重練」勾選框；清單從那天起由老師勾選，以前的錯題用「手動加入題號」（R11 選 3）；排程參數見 §3.2 的 `RETRAIN_*` |
+
+- 回滾：關旗標並重啟即回到升級前的畫面與路由（拆表與排程資料的處理照舊執行）。0016～0018 只增不改，但 0016 把 `attempts` 從表改成唯讀檢視，**0016 之前的程式**寫 `attempts` 會失敗；要退回舊程式就得連資料庫一起用第 3 步的備份還原（`pg_restore`，[runbook-pg-down.md](./runbook-pg-down.md)）。這一點是 §6.1「舊版程式對新 schema 相容」的例外。
+- 重算：排程是作答歷史的純函式、`retrain_items` 只是快取；要照新參數重排或懷疑快取不一致時，`npm run retrain:recompute -- --dry-run` 先看會變幾題，再不帶 `--dry-run` 執行（只重算既有項目、不建立項目、冪等）。
+- 一次性切換工具 `migrate/import_pg.js`、`export_pg_delta.js`、`verify.js` 只適用 0016 之前的 schema（檔頭已註明）。
+
 ## 4. 部署策略
 
 | 策略 | 本專案做法 |
 | :--- | :--- |
 | 發布 | 單行程原地重啟（Ctrl+C 停 `npm start` → `git pull`／checkout → 重啟）；無 Blue-Green／Rolling 需求。**含新 migration 的版本要先停服務或先 `npm run migrate`，再拉程式／重啟**〔修訂 2026-09-16〕：以 `npm run dev`（nodemon）執行時，`git pull` 一帶入新程式就會自動重啟，舊 schema 下寫入新 state／review_reason 會違反 CHECK（例：0009 之前的 schema 不接受 `source_checked`） |
-| DB migration | 只增不改（NFR-006；`0001_init`→`0009_source_check`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕→`0012_knowledge_components`〔修訂 2026-09-24〕），additive 先行，與 expand-contract 的 expand 段等價 |
+| DB migration | 只增不改（NFR-006；`0001_init`→`0009_source_check`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕→`0012_knowledge_components`〔修訂 2026-09-24〕→`0018_retrain_unflag_marker`〔整合 2026-09-26〕），additive 先行，與 expand-contract 的 expand 段等價。〔整合 2026-09-26〕例外：0016 在同一支 migration 內把 `attempts` 表搬成 `assignments`＋`attempt_records`、原名改為唯讀檢視（既有 migration 檔不動），0016 之前的程式不能在新 schema 上寫入（§3.6） |
 | 風險控制 | `FEATURE_*` 旗標預設全關，逐一開啟並觀察，取代 canary（階段 2 起的新功能均走旗標掛載） |
 
 ### 4.1 對外部署前置條件
@@ -195,7 +223,7 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 
 ### 6.1 應用回滾
 
-單行程無狀態（狀態全在 PG）：checkout 前一個綠燈 commit → 重啟。〔修訂 2026-09-25 本機模式〕本機模式不必回滾程式：改 `.env` 的五行即可切回 Gemini（`docs/local-mode.md` 第 10.4 條）；若 `EMBED_MODEL` 也切回，要再跑一次 `embed:backfill`＋`search:reindex`。migrations 只增不改，舊版程式對新 schema 相容至 additive 範圍內。〔修訂 2026-09-24〕階段 5 優先用「關旗標＋重啟」回滾（§3.4）；若要退回階段 5 之前的程式：舊程式的科目白名單沒有化學，已入庫的化學題（`subject = '化學'`）預期無法透過舊版 API 編輯（推論，未實測）；`search_tsv` 的處理見 §3.4 回滾說明；家教的每日累計在程序內，重啟即清。
+單行程無狀態（狀態全在 PG）：checkout 前一個綠燈 commit → 重啟。〔修訂 2026-09-25 本機模式〕本機模式不必回滾程式：改 `.env` 的五行即可切回 Gemini（`docs/local-mode.md` 第 10.4 條）；若 `EMBED_MODEL` 也切回，要再跑一次 `embed:backfill`＋`search:reindex`。migrations 只增不改，舊版程式對新 schema 相容至 additive 範圍內。〔修訂 2026-09-24〕階段 5 優先用「關旗標＋重啟」回滾（§3.4）；若要退回階段 5 之前的程式：舊程式的科目白名單沒有化學，已入庫的化學題（`subject = '化學'`）預期無法透過舊版 API 編輯（推論，未實測）；`search_tsv` 的處理見 §3.4 回滾說明；家教的每日累計在程序內，重啟即清。〔整合 2026-09-26〕錯題重練優先用「關 `FEATURE_RETRAIN`＋重啟」回滾；要退回 0016 之前的程式必須連資料庫一起還原（§3.6）。
 
 ### 6.2 備份與還原
 

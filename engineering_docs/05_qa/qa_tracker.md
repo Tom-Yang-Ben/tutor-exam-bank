@@ -17,6 +17,7 @@
 > 🛠 **2026-09-16b 修訂**（主線同步，PR #30–#33 合併後）：②執行證據同步為單元 1,613／整合 317／e2e 11（PR #30–#33 併入 main 後 CI 實測）。修改處以〔修訂 2026-09-16b〕行內標記。
 > 🛠 **2026-09-24 修訂**（階段 5 整合回填，分支 `stage5/int-docs`）：§1 新增 TC-021-1～TC-035-2（依各 WS 回報的測試檔整理，對應 FR-021～035）；§2.1 測試數寫為「整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠」，主控合併後更新；§2.2 補化學 classify eval（不進 CI、尚未錄製）；§3 追溯。狀態「通過（stage5/integration CI）」指整合分支 @ `6f8e671` 完整 `ci.sh` 全綠（主控實跑），尚未併入 main、尚未在 GitHub Actions 上跑。修改處以〔修訂 2026-09-24〕行內標記。
 > 🛠 **2026-09-26 合併回填**（分支 `dec/docs-backfill-round1-merged`；Owner 決策單 2026-09-25 B7、B10 已合入 `local/integration` `7dc14a0`）：§1 TC-019-8 的題數改為測試檔現況並標出哪些項屬新列；新增 TC-019-9（承上組湊不滿預設 400 與建議題數，B10）、TC-019-10（`confirm-paper` 承上題整組檢查，B7）；TC-032-1 加註。題數以 `node --test` 逐檔實跑計數（`paperGroups.test.js` 23、`followUpShortfallPolicy.test.js` 6、`followUpPaperCheck.test.js` 11、`remedialValidation.test.js` 23、`paperGroups.pg.test.js` 19，全數通過）。§2 全域測試數未改（由主線合併時統一更新）。修改處以〔修訂 2026-09-26 合併回填〕行內標記。
+> 🛠 **2026-09-26 整合**（分支 `dec/integration-all`＝`dec/integration-final`＋錯題重練 `dec/retrain-phase2-fix`＋本機看圖逾時 `dec/local-vision-timeout`）：§1 新增 TC-036-1～TC-040-2（錯題重練與間隔複習，TC 編號與內容照 [`docs/retrain-and-review.md`](../../docs/retrain-and-review.md) 第 6.3 節，測試檔以實際檔案為準；項數以 `node --test` 逐檔實跑計數）；§2.1 全域測試數更新為本版完整 `ci.sh` 實測（舊值保留）；§3 追溯補 FR-036～040、NFR-010。修改處以〔整合 2026-09-26〕行內標記。
 
 ## 目錄
 
@@ -101,6 +102,25 @@ TC 依 FR 分組（`TC-<FR 號>-<序>`）；層級：U=單元、I=整合、E=e2e
 | TC-034-4 | FR-034 | 三種旗標組合 404、400／404（含 ID 超過 int4）、LLM_MODE=replay＋暫存 cassette 跑通一輪並斷言 DB 組出的 prompt 無姓名、退回同章知識點、cassette 記 MAX_TOKENS 時附截斷提醒、replay miss 502、預算 429、兩個限流 env（`test/integration/tutor.pg.test.js`）〔修訂 2026-09-24〕 | I | 通過（stage5/integration CI）；**未呼叫真 Gemini**，家教 eval 未做 |
 | TC-035-1 | FR-035 | 大小、mime（含 `;codecs=`）、科目、送出的 parts 與 cacheKeyParts、ajv 再驗與正規化、共用預算、multer／busboy 錯誤轉譯、buffer 清除（`test/unit/voiceService.test.js`）；錄音→逐字稿→點 chip→按確認才送出、取消不送、麥克風不可用時隱藏並說明（`tutorUi.test.js`，假 MediaRecorder）〔修訂 2026-09-24〕 | U | 通過（stage5/integration CI） |
 | TC-035-2 | FR-035、NFR-008 | voice 的 400（沒檔、欄位名、mime、multipart 壞掉）與 413、錄音不寫進 `uploads/`、模型輸出不合 schema 502（`tutor.pg.test.js`）〔修訂 2026-09-24〕 | I | 通過（stage5/integration CI）；Gemini 收 audio/webm 未實機驗證 |
+| TC-036-1〔整合 2026-09-26〕 | FR-036 | 0016 遷移：在「只套到 0015、灌入舊資料（含 `paper_id` 為 NULL、部分給分與錯因、已封存題）」的暫用 schema 上套 0016——空庫、筆數與 id 與逐欄內容相同、序號接續、重複套用是 no-op、自我檢查在人為製造不一致時 RAISE 並整支回滾；遷移驗證腳本 `scripts/snapshot_attempt_views.js`（`exam_pro/test/integration/assignmentSplit.pg.test.js`，5 項；腳本的比對與參數另見單元 `assignmentSplit.test.js`） | I | 通過（`dec/integration-all` CI） |
+| TC-036-2〔整合 2026-09-26〕 | FR-036 | 部分唯一索引擋重複新題（23505）、重練列不受限、`(paper_id, question_id)` 唯一、`question_id` RESTRICT、兩個檢視的欄位名稱與順序（`assignmentSplit.pg.test.js`）；出卷寫入、新題組卷排除已作答、批改各自記錄、第 3.9 節四個動作、檢視唯讀（`assignmentWrites.pg.test.js`，8 項）；`schema.test.js` 三條依 Owner 決策改寫（DEC-003 例外條款選 a；設計稿第 6.4 節） | I | 通過（`dec/integration-all` CI） |
+| TC-036-3〔整合 2026-09-26〕 | FR-036、FR-040 | 0016 前後弱點、知識點掌握度、補救卷草稿（固定亂數）、覆蓋率逐欄相同（黃金比對三百多支查詢；設計稿原寫另開 `assignmentSplitGolden.pg.test.js`，實作併在 `assignmentSplit.pg.test.js`） | I | 通過（`dec/integration-all` CI） |
+| TC-036-4〔整合 2026-09-26〕 | FR-036、NFR-010 | EXPLAIN：候選池展開檢視後使用 `assignments_first_exposure_key`，沒有掃 `attempt_records`（`assignmentSplit.pg.test.js`）；`students.pg.test.js` 的時間窗索引斷言隨拆表改名（設計稿第 6.4 節） | I | 通過（`dec/integration-all` CI） |
+| TC-036-5〔整合 2026-09-26〕 | FR-036 | 既有整合與 e2e 全部：夾具改用 `test/helpers/attempts.js`、清表改成 `TRUNCATE attempt_records, assignments, …`、`controllers.pg.test.js` 的觸發器改掛 `assignments`，斷言一條不改（ACPT-036-4）。〔整合 2026-09-26〕整合時 `figureBackfill.pg.test.js`（B20，拆表之後才合入）的兩處清表同樣改成 `TRUNCATE attempt_records, assignments, …`，斷言不動 | I＋E | 通過（`dec/integration-all` CI） |
+| TC-036-6〔整合 2026-09-26〕 | FR-036 | 掃描 `controllers/`、`services/`、`workers/`、`scripts/`、`queries/`，不得出現對 `attempts` 的 INSERT／UPDATE／DELETE／TRUNCATE（`exam_pro/test/unit/noWritesToAttemptsView.test.js`，2 項）；出卷寫入語句、刪卷擋路查詢、`FEATURE_RETRAIN` 預設關、0016 靜態檢查、helper 不認得的欄位直接丟錯（`assignmentSplit.test.js`，15 項） | U | 通過（`dec/integration-all` CI） |
+| TC-037-1〔整合 2026-09-26〕 | FR-037 | 旗標關閉 404、批改帶 `retrain` 回 400、不建項目；勾「要重練」建項目、答錯沒勾不建、取消勾選刪項目（重練過則移出）、改判成對不刪項目；手動加入（`not_assigned` 等略過原因；新題派題沒批改、`paper_id` 為 NULL 的舊紀錄加入後照常到期、出卷不 409）；移出／判定已會／重新加入；承上組一起進；開啟旗標後清單為空（不補建）；審查修正：API-3 與批改併發不死結、刪重練卷還原、移出來源（0018）清回、刪卷時承上組（`exam_pro/test/integration/retrain.pg.test.js`，與 TC-037-2、TC-038-3、TC-039-3、TC-040-1 共 23 項） | I | 通過（`dec/integration-all` CI） |
+| TC-037-2〔整合 2026-09-26〕 | FR-037、FR-038 | `retrain:recompute` 的 `--dry-run` 不寫入、正式執行冪等、不建立任何項目、改了參數後到期日照新參數重排（`retrain.pg.test.js`）；CLI 參數（`retrainService.test.js`） | U＋I | 通過（`dec/integration-all` CI） |
+| TC-038-1〔整合 2026-09-26〕 | FR-038 | 純函式表格驅動：設計稿第 4.5 節的例子逐列、升關、回第一關、畢業、卡關仍在清單、R2 部分給分、新題那一次不影響排程、未批改與取消批改（起算日之前沒批改的新題派題不算已派出，`countsAsInFlight`）、override、manual 起算、練到會後重新加入、承上組帶出的已會題又錯、同日多筆、空歷史、時區、`capForAttach`（`exam_pro/test/unit/retrainSchedule.test.js`，與 TC-038-2 共 71 項）；重新加入的同日邊界 `entered_after_assignment_id`（`retrainScheduleCutoff.test.js`，5 項） | U | 通過（`dec/integration-all` CI） |
+| TC-038-2〔整合 2026-09-26〕 | FR-038 | 參數化：K＝2／3／4、間隔表不同時的結果（Owner 改設定不需改程式）（`retrainSchedule.test.js`） | U | 通過（`dec/integration-all` CI） |
+| TC-038-3〔整合 2026-09-26〕 | FR-038 | 批改 PATCH 同一交易建立／更新項目（重算失敗時整筆回滾，批改與項目都不變）；逐筆批改、改判、取消批改、刪重練卷之後，表上的排程快取＝對當下作答歷史直接呼叫純函式的結果（不變量 I7，ACPT-038-4）；已派出不再被挑、兩個確認同時送出後者 409（`retrain.pg.test.js`、`retrainPaper.pg.test.js`） | I | 通過（`dec/integration-all` CI） |
+| TC-038-4〔整合 2026-09-26〕 | FR-038 | 隨機作答歷史（固定種子 1,000 組，含手動加入以前沒批改的題）與參考實作逐欄相同、輸入順序無關、逐筆批改的每個中間歷史也相同、已派出的判斷、不變量 I5（`exam_pro/test/unit/retrainScheduleProperty.test.js`，7 項） | U | 通過（`dec/integration-all` CI） |
+| TC-038-5〔整合 2026-09-26〕 | FR-038 | `config/retrain.js`：Owner 決定的預設值逐字；環境變數合法照用、空字串＝預設、非法退回預設並只警告一次；關數與畢業次數的關係；getter 即時讀 env；50 題上限與 `examController` 一致（`exam_pro/test/unit/retrainConfig.test.js`，16 項） | U | 通過（`dec/integration-all` CI） |
+| TC-039-1〔整合 2026-09-26〕 | FR-039 | 到期挑選、排序、上限（`capForAttach`）、承上組不拆且整組放不下時報錯與訊息（R12 選 2）、封存排除、重練題不佔家族名額（R8 選 1）（`exam_pro/test/unit/retrainSelect.test.js`，19 項）；排序、關卡名稱、已派出、摘要、0017／0018 靜態檢查（`retrainService.test.js`，16 項） | U | 通過（`dec/integration-all` CI） |
+| TC-039-2〔整合 2026-09-26〕 | FR-037、FR-039 | API-1～8、API-10、API-12 的參數驗證（400 訊息）、`retrain_question_ids` 必須是子集、旗標關閉時帶 `retrain` 回 400（`exam_pro/test/unit/retrainValidation.test.js`，27 項）；前端送出的 body 交給伺服器真正用的驗證函式、上下限與預設值兩邊一致（`retrainContract.test.js`，13 項） | U | 通過（`dec/integration-all` CI） |
+| TC-039-3〔整合 2026-09-26〕 | FR-039 | 草稿不寫庫；混合卷確認後派題用途與關卡正確；純重練卷卷名；混合卷卷名跟著新題章節；補救卷 `retrain` 組；刪重練卷後重算；刪原卷被擋 409；R-9 的 B7 整組檢查；R10（`retrainPaper.pg.test.js`，19 項）；刪學生與合併學生的處理（`retrain.pg.test.js`）；全流程（組卷 → 勾要重練 → 草稿 → 確認 → Word → 升關 → 刪卷還原 → 附帶到新卷 → 成效 → 回測答錯）、承上組、旗標關閉、批改提示與伺服器一致（`retrainFlow.pg.test.js`，4 項）；0017、0018 的空庫套用、約束、延後檢查、重複套用與 RAISE（`retrainMigration.pg.test.js`，3 項） | I | 通過（`dec/integration-all` CI） |
+| TC-039-4〔整合 2026-09-26〕 | FR-039 | Word：沒帶 `paper_id` 逐位元不變（固定時鐘比對整個 `.docx`）；帶了依 R7 選 1 標示（標準版與詳解版答案區標、學生版與題目區不標）（`solutionText.test.js`，擴充後 27 項）；e2e 走「新卷 → 批改錯並勾要重練 → 重練卷 → 下載」（`paperWord.e2e.test.js` 新增一案，不需要 cassette） | U＋E | 通過（`dec/integration-all` CI） |
+| TC-040-1〔整合 2026-09-26〕 | FR-040 | API-13 的計數、答對率、分母為 0 時 null、時間窗含 since 當天、依科目、題數＝API-1 的 counts（`retrainStats.pg.test.js`，3 項；純函式與參數 `retrainStats.test.js`，7 項）；API-4 的到期數（`retrain.pg.test.js`） | U＋I | 通過（`dec/integration-all` CI） |
+| TC-040-2〔整合 2026-09-26〕 | FR-037、FR-040 | miniDom：旗標關閉不渲染、不發請求；清單排序與徽章、動作按鈕送出的 body、手動加入、重練卷草稿 → 確認 → Word、R12 的 400 與 409 原樣顯示、重練成效表、批改卡「要重練」勾選框（預設不勾）與徽章與提示、學生清單徽章、伺服器文字一律 `textContent`（`exam_pro/test/unit/retrainUi.test.js`，40 項）；組卷頁附帶選項（預設不勾、題數預設三成、清空或不合法時提示不送出）、補救卷、試卷列表（`retrainPaperUi.test.js`，15 項） | U | 通過（`dec/integration-all` CI）；真瀏覽器只做過一次性 Playwright 冒煙（設計稿第 5.6.5 節），Owner 尚未實際操作 |
 
 ## 2. 執行證據
 
@@ -108,11 +128,13 @@ TC 依 FR 分組（`TC-<FR 號>-<序>`）；層級：U=單元、I=整合、E=e2e
 
 | 層級 | 數量 | 位置 | 執行條件 |
 |---|---:|---|---|
-| 單元 | 1,613 | exam_pro/test/unit/ | 不連網、不連庫、零 secrets；`npm test` 可完整重現〔修訂 2026-09-16b〕 |
-| 整合 | 317 | exam_pro/test/integration/ | tmpfs 測試庫（5433，`_test` 後綴強制）〔修訂 2026-09-16b〕 |
-| e2e | 11 | exam_pro/test/e2e/ | HTTP 全路徑（上傳→部分入庫；組卷→Word 公式） |
+| 單元 | 3,244〔整合 2026-09-26〕（舊值 1,613） | exam_pro/test/unit/ | 不連網、不連庫、零 secrets；`npm test` 可完整重現〔修訂 2026-09-16b〕 |
+| 整合 | 593〔整合 2026-09-26〕（舊值 317） | exam_pro/test/integration/ | tmpfs 測試庫（5433，`_test` 後綴強制）〔修訂 2026-09-16b〕 |
+| e2e | 12〔整合 2026-09-26〕（舊值 11） | exam_pro/test/e2e/ | HTTP 全路徑（上傳→部分入庫；組卷→Word 公式；〔整合 2026-09-26〕新卷→勾要重練→重練卷→Word 標示） |
 
-〔修訂 2026-09-24〕上表為 main（PR #30–#33 合併後）的數字。階段 5：**整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠**（主控合併後更新數字）。階段 5 新增 29 支單元測試檔與 10 支整合測試檔（清單見 §1 TC-021-*～TC-035-*）；e2e 未新增。
+〔修訂 2026-09-24〕上表為 main（PR #30–#33 合併後）的數字（〔整合 2026-09-26〕指表中括號內的舊值）。階段 5：**整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠**（~~主控合併後更新數字~~ 〔整合 2026-09-26〕已更新，見下一段）。
+
+〔整合 2026-09-26〕上表已統一更新為 **`dec/integration-all`**（`local/integration` 7dc14a0＋第二、三輪九條分支＋整合修正＋variant 向量修正＋錯題重練全部＋本機看圖逾時）的完整 `ci.sh` 實測：unit 3,244（3,242 過、2 略過：兩項等本機重錄 cassette 的回放測試）、`check:html` 綠、migrate 套到 0018 綠、integration 593 全過；e2e 12 項中 9 過、3 敗（`pipeline.e2e.test.js` 缺本機 ocr cassette）；五個 eval 紅燈（retrieval 未達門檻、classify 92 筆與 pipeline 1 筆與 nlq 8 筆 replay miss、variant 缺向量 fixture）——e2e 與 eval 的紅燈全是本機模型的回放檔／向量檔還沒重錄（`docs/local-mode.md` 第 8 條的預期），種類與筆數和 `dec/integration-final`、`dec/retrain-phase2-fix` 相同。錯題重練新增 13 支單元測試檔與 7 支整合測試檔（清單見 §1 TC-036-*～TC-040-*）、e2e 新增一案；本機看圖逾時新增 3 支單元測試檔（`llmOllamaStream`、`localBenchVision`、`visionMaxEdge`）。階段 5 新增 29 支單元測試檔與 10 支整合測試檔（清單見 §1 TC-021-*～TC-035-*）；e2e 未新增。
 
 CI（`.github/workflows/ci.yml`）：unit（Node 22/24 矩陣）＋integration（pgvector service→migrations→整合→e2e→五個 eval suite）；全程零金鑰、零網路、零成本（cassette replay；replay miss 於 main 視為錯誤）。CI badge 見 repo 根 `README.md`；全綠 @ f8f6574（PR #7 merge）〔修訂 2026-08-29〕。
 
@@ -136,5 +158,5 @@ CI（`.github/workflows/ci.yml`）：unit（Node 22/24 矩陣）＋integration�
 
 ## 3. 追溯
 
-- 上游：FR-001～016、FR-017～018、FR-019〔修訂 2026-09-15e〕、FR-020〔修訂 2026-09-15f〕、FR-021～035〔修訂 2026-09-24〕／NFR-003、NFR-004、NFR-007～009〔修訂 2026-09-24〕（[engineering_tracker](../03_architecture/engineering_tracker.md)）；ACPT-021-*～035-* 的可觀察判準見 [srs §6.1](../01_requirements/srs.md)〔修訂 2026-09-24〕；DEC-005、DEC-006 之業務驗收（[requirements_tracker](../01_requirements/requirements_tracker.md) §1）。
+- 上游：FR-001～016、FR-017～018、FR-019〔修訂 2026-09-15e〕、FR-020〔修訂 2026-09-15f〕、FR-021～035〔修訂 2026-09-24〕、FR-036～040〔整合 2026-09-26〕／NFR-003、NFR-004、NFR-007～009〔修訂 2026-09-24〕、NFR-010〔整合 2026-09-26〕（[engineering_tracker](../03_architecture/engineering_tracker.md)）；ACPT-021-*～035-* 的可觀察判準見 [srs §6.1](../01_requirements/srs.md)〔修訂 2026-09-24〕；ACPT-036-*～040-* 的驗收全文與驗證案例見 [srs §6.2](../01_requirements/srs.md)〔整合 2026-09-26〕；DEC-005、DEC-006 之業務驗收（[requirements_tracker](../01_requirements/requirements_tracker.md) §1）。
 - 下游：Gate 簽核證據（[requirements_tracker](../01_requirements/requirements_tracker.md) §3）；門檻失守處置（[../06_ops/runbook-eval-threshold-fail.md](../06_ops/runbook-eval-threshold-fail.md)）。

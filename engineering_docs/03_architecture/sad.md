@@ -16,6 +16,7 @@
 > 🛠 **2026-09-16b 修訂**（主線同步，PR #30–#33 合併後）：§部署視圖測試列整合數同步為 317（PR #30–#33 併入 main 後 CI 實測）。修改處以〔修訂 2026-09-16b〕行內標記。
 > 🛠 **2026-09-24 修訂**（階段 5 整合回填，分支 `stage5/int-docs`；契約 `docs/interfaces-stage5.md`）：§1.1 外部呼叫補 code execution 與音訊輸入；§1.2 前端分頁；§1.3 新模組（kcService、kcTagService、tagKc agent、kcWeaknessService、remedialService、coverageService、tutorService、voiceService、`services/llm.generateText`、化學 `*_chem` agent 分支、`utils/chemFormula.js`、`utils/units.js`）與階段 5 旗標表；§2 術語；§3 技術選型補 ADR-010～015；§4 需求摘要補 FR-021～035、NFR-007～009；§5 新增 5.4 補救卷與 5.5 AI 家教旅程；§6 schema 演進補 0010–0012、資料合規補錄音與家教代號化；§7 測試數；§8、§9 補階段 5 的成本、安全與風險；§10 追溯。修改處以〔修訂 2026-09-24〕行內標記。
 > 🛠 **2026-09-26 修訂**（本機模式與章節重整的架構回填，分支 `dec/x-readme-architecture`，基底 `local/integration` 的 `7b7065c`；契約 [`docs/local-mode.md`](../../docs/local-mode.md)、[ADR-017](./adr/ADR-017-local-first-inference.md)、[ADR-016](./adr/ADR-016-chapter-whitelist-restructure.md)）：§1.1 外部呼叫改為「預設無」、Gemini 降為選用；§1.2 補 Ollama 與 PaddleOCR 兩個 runtime；§1.3 補本機模式的模組；§2 review_reason 第十種；§3 補 ADR-016、ADR-017；§5.1 註明本機模式的拆題路徑；§6 schema 演進補 0013–0015；§7 新增 7.1「本機模式（預設）的部署視圖與取捨」；§8、§9 補本機模式的離線保證與風險；§10 追溯。修改處以〔修訂 2026-09-26 本機模式〕行內標記。
+> 🛠 **2026-09-26 整合**（分支 `dec/integration-all`＝`dec/integration-final`＋錯題重練 `dec/retrain-phase2-fix`＋本機看圖逾時 `dec/local-vision-timeout`）：§3 補 ADR-018、ADR-019；§4 補 FR-036～040、NFR-010；§6 schema 演進補 0016～0018；§7 部署視圖的測試數統一更新為本版實測（舊值保留）；§9 註記 NLQ LLM 輔路徑的改善已合入、數字待重錄；§10 追溯。修改處以〔整合 2026-09-26〕行內標記。
 
 ## 目錄
 
@@ -170,12 +171,15 @@ WS-A（批改細節、學生檔案、詳解）與 WS-B（化學）屬既有核�
 | 批改細節與詳解〔修訂 2026-09-24〕 | attempts 加欄＋伺服器端白名單；詳解分來源、以 verify 摘要零成本回填 | 錯因要讓診斷、補救卷、家教都讀得到；詳解素材已存在 | 另開錯因表、另叫 LLM 生成詳解 | [ADR-015](./adr/ADR-015-grading-detail-and-solution-provenance.md) |
 | 章節白名單〔修訂 2026-09-26 本機模式〕 | 整份換成對齊 108 龍騰目錄（數學 52、物理 34 章），cassette 刻意失效一次重錄；舊題規則提議＋老師確認搬章 | 白名單是分類軸，錯位的軸讓下游統計一起錯 | 只在知識點層補齊；新舊兩套值域並存 | [ADR-016](./adr/ADR-016-chapter-whitelist-restructure.md) |
 | 推論部署〔修訂 2026-09-26 本機模式〕 | 本機 Ollama＋PaddleOCR 為預設、Gemini 保留可切回；拆題 OCR／視覺雙路交叉驗證；CI 照舊 replay | 執行期不連外、零費用，且不動 Gemini 路徑與 CI 機制（§7.1） | 維持 Gemini 只控花費；其他雲端免費額度或遠端 GPU | [ADR-017](./adr/ADR-017-local-first-inference.md) |
+| 派題與作答拆表〔整合 2026-09-26〕 | `attempts` 拆成派題 `assignments`（new／retrain）＋作答 `attempt_records`，`attempts` 名字留給唯讀相容檢視；新題每生每題一次由部分唯一索引硬擋 | 錯題重練要讓同一題再派、每次作答各自留下，而既有讀法與數字不能變（DEC-003 例外條款選 a） | 單表加欄、另開重練表 | [ADR-018](./adr/ADR-018-assignment-attempt-split-compat-view.md) |
+| 間隔複習排程〔整合 2026-09-26〕 | 固定關卡（Leitner 式：1／7／14 天、連對 3 次練到會），排程是作答歷史的純函式，`retrain_items` 只存快取 | 家教一週一兩次的節奏、資料少；改判、刪卷、合併之後重算結果要與從頭批改相同 | SM-2、FSRS | [ADR-019](./adr/ADR-019-leitner-fixed-steps-pure-schedule.md) |
 
 ## 4. 需求摘要
 
 - FR-001～009：核心流程——PDF 拆題 job、分類、公式修復、獨立驗答、去重、複核、題庫 CRUD、組卷（草稿→確認）、Word 匯出（對應 DEC-001～005）。
 - FR-010～016：RAG 與收斂——相似題、變式題、NLQ、弱點面板、學生管理、批改、對話式助教（對應 DEC-006～007）。全表與模組對應見 [`engineering_tracker.md`](./engineering_tracker.md)。
 - FR-021～035〔修訂 2026-09-24〕：階段 5 教學診斷平台——批改細節與錯因分布、學生檔案、文字詳解與 Word 版本（FR-021～025，DEC-015／017）；化學入庫與排版（FR-026～027，DEC-019）；知識點與標註（FR-028～029，DEC-015）；知識點掌握度、補救卷、跨章配額、覆蓋率（FR-030～033，DEC-016）；AI 家教與按住說話（FR-034～035，DEC-018）。定義見 [`../01_requirements/srs.md`](../01_requirements/srs.md)。
+- FR-036～040〔整合 2026-09-26〕：錯題重練與間隔複習（DEC-003 例外條款、DEC-016）——派題與作答拆表（FR-036，ADR-018）、錯題重練清單（FR-037）、固定關卡排程（FR-038，ADR-019）、出卷帶入重練題（FR-039）、重練成效與到期提醒（FR-040）；旗標 `FEATURE_RETRAIN`（拆表不受旗標管）。設計與實作狀態見 [`docs/retrain-and-review.md`](../../docs/retrain-and-review.md)。
 
 | NFR | 需求 | 目標值／機制 |
 | :--- | :--- | :--- |
@@ -186,6 +190,7 @@ WS-A（批改細節、學生檔案、詳解）與 WS-B（化學）屬既有核�
 | NFR-007 成本〔修訂 2026-09-24〕 | 家教／語音／知識點標註的花費受控 | `TUTOR_DAILY_BUDGET_USD`（程序內按日）、tutor／voice 各 10/min；標註遇管線預算觸頂即不標；thinking 預算與輸出上限成對 |
 | NFR-008 隱私〔修訂 2026-09-24〕 | 錄音不落地、姓名不出境 | memoryStorage、≤5 MB；家教 prompt 整段代號化 |
 | NFR-009 相容〔修訂 2026-09-24〕 | 既有 cassette 不失效 | 數學／物理 agent 的 SYSTEM／模板／schema 逐字不變；新模板註冊字串含 SYSTEM |
+| NFR-010 效能〔整合 2026-09-26〕 | 錯題重練的清單與草稿夠快（草案） | 單一學生 5,000 筆派題、題庫 5,000 題時 API-1、API-5 本機 < 300 ms；一次性實測中位數 API-1 74 ms、API-5 63 ms、API-13 61 ms（未進 CI） |
 
 ## 5. 關鍵使用者旅程
 
@@ -266,7 +271,7 @@ sequenceDiagram
 
 關聯骨架：students 1—N attempts（作答紀錄）／exam_papers（出卷）；exam_papers 1—N attempts（同交易寫入）；questions 1—N attempts，並以 `variant_of` 自參照構成變式家族；jobs 1—N job_questions（逐題狀態）與 job_events（成本／延遲／token 帳）；job_questions saved 後入 questions。ER 全圖與欄位定義歸 [`../04_design/db_design.md`](../04_design/db_design.md)。
 
-- schema 演進：`exam_pro/migrations/` 0001_init／0002_vector（768 維，embedding 欄）／0003_jobs（狀態以 DDL CHECK 寫死）／0004_origin_legacy／0005_text_hash_unique／0006_source_type（questions.source_type NOT NULL DEFAULT 'unknown'＋jobs.source_type，五值 CHECK）〔修訂 2026-08-29〕／0007_source_detail／0008_follow_up（questions.follows_question_id 自我參照 FK＋follows_src，承上題綁定）〔修訂 2026-09-15e〕／0009_source_check（job_questions.state、review_reason 與 job_events.error_class 三條 CHECK 各加一值）〔修訂 2026-09-15f〕／0010_attempt_detail_student_profile（attempts 批改細節四欄、students 檔案五欄）／0011_chemistry_solution_subject_group（questions.subject 加化學、solution_text／solution_src、jobs.subject_group）／0012_knowledge_components（knowledge_components、question_kcs、kc_prerequisites）〔修訂 2026-09-24〕／0013_teacher_edit_markers（`questions.solution_cleared_at`、`knowledge_components.edited_at`，S5-41、S5-43）／0014_chapter_migration_log（章節重整的搬章紀錄，ADR-016）／0015_extract_disagree（review_reason CHECK 加 `extract_disagree`，LM-3）〔修訂 2026-09-26 本機模式〕；只增不改（NFR-006）。本機模式換 embedding 模型但維度同為 768，`vector(768)` 欄位不改，只需 `embed:backfill` 重算向量。
+- schema 演進：`exam_pro/migrations/` 0001_init／0002_vector（768 維，embedding 欄）／0003_jobs（狀態以 DDL CHECK 寫死）／0004_origin_legacy／0005_text_hash_unique／0006_source_type（questions.source_type NOT NULL DEFAULT 'unknown'＋jobs.source_type，五值 CHECK）〔修訂 2026-08-29〕／0007_source_detail／0008_follow_up（questions.follows_question_id 自我參照 FK＋follows_src，承上題綁定）〔修訂 2026-09-15e〕／0009_source_check（job_questions.state、review_reason 與 job_events.error_class 三條 CHECK 各加一值）〔修訂 2026-09-15f〕／0010_attempt_detail_student_profile（attempts 批改細節四欄、students 檔案五欄）／0011_chemistry_solution_subject_group（questions.subject 加化學、solution_text／solution_src、jobs.subject_group）／0012_knowledge_components（knowledge_components、question_kcs、kc_prerequisites）〔修訂 2026-09-24〕／0013_teacher_edit_markers（`questions.solution_cleared_at`、`knowledge_components.edited_at`，S5-41、S5-43）／0014_chapter_migration_log（章節重整的搬章紀錄，ADR-016）／0015_extract_disagree（review_reason CHECK 加 `extract_disagree`，LM-3）〔修訂 2026-09-26 本機模式〕／0016_assignment_attempt_split（`attempts` 拆成 `assignments`＋`attempt_records`，`attempts` 與 `assignment_attempts` 改為唯讀檢視，ADR-018）／0017_retrain_items（重練排程項目、`assignments.retrain_item_id／retrain_step`）／0018_retrain_unflag_marker（`retrain_items.retired_by_unflag`）〔整合 2026-09-26〕；只增不改（NFR-006）。〔整合 2026-09-26〕0016～0018 不受 `FEATURE_RETRAIN` 管：新程式的批改、刪卷、刪學生、合併學生都會讀寫這些表，更新程式時必須一起套（`../06_ops/deployment_and_operations.md` §3.6）。本機模式換 embedding 模型但維度同為 768，`vector(768)` 欄位不改，只需 `embed:backfill` 重算向量。
 - 一致性：組卷＋attempts、批改回填皆單一交易全有全無；其餘讀取為即時 SQL 聚合，無最終一致場景。
 - 資料合規：題庫屬私有資產、repo 不含題庫內容（DEC-009）；學生僅存姓名與作答紀錄，本機單人使用。學生姓名不出境：NLQ 與助教送 LLM／embedding 前以 `exam_pro/utils/pseudonym.js` 換成「學生#<id>」代號，回覆後還原〔修訂 2026-09-15b〕；AI 家教組好整段 prompt 後一次遮罩（對全部學生），cassette 鍵只放遮罩後 prompt 的雜湊；語音錄音只在請求記憶體內、不落地，但錄音本身原樣送 Gemini 轉寫（姓名遮罩只作用在文字）〔修訂 2026-09-24〕。本機模式下 prompt、題目與向量計算都不離開本機，語音不提供；代號化照舊執行（切回 Gemini 時仍需要）〔修訂 2026-09-26 本機模式〕。
 
@@ -277,7 +282,7 @@ sequenceDiagram
 | 環境 | Deployment 模式 | 資料庫 | 備份／監控 |
 | :--- | :--- | :--- | :--- |
 | 開發（唯一運行環境） | 本機 `npm start`＋`docker compose up` | postgres :5442（volume 持久化） | `exam_pro/scripts/` 備份腳本；`npm run report:jobs` 成本報表 |
-| 測試（本機） | 同機，另指 TEST_DATABASE_URL | postgres_test :5433（tmpfs，`_test` 後綴強制） | 整合 317〔修訂 2026-09-16b〕／e2e 11，`--test-concurrency=1`；整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠（主控合併後更新數字）〔修訂 2026-09-24〕；`local/integration`（`7b7065c`）2026-09-26 實跑：unit 2716（2 略過）、integration 503 全綠，e2e 11 項中 3 項與五個 eval 因缺本機模型的回放檔／向量檔紅燈（契約第 8 條的預期）；這些是 `7b7065c` 當時的數字，合併後由整合者更新〔修訂 2026-09-26 本機模式〕；〔整合 2026-09-26〕全域測試數等錯題重練合入後統一更新，`dec/integration-r23`（`c65909e`）實跑：unit 2929（2 略過）、integration 528 全綠，e2e 與 eval 紅燈的種類同上 |
+| 測試（本機） | 同機，另指 TEST_DATABASE_URL | postgres_test :5433（tmpfs，`_test` 後綴強制） | 整合 317〔修訂 2026-09-16b〕／e2e 11，`--test-concurrency=1`；整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠（~~主控合併後更新數字~~ 〔整合 2026-09-26〕已更新，見本格最後）〔修訂 2026-09-24〕；`local/integration`（`7b7065c`）2026-09-26 實跑：unit 2716（2 略過）、integration 503 全綠，e2e 11 項中 3 項與五個 eval 因缺本機模型的回放檔／向量檔紅燈（契約第 8 條的預期）；這些是 `7b7065c` 當時的數字，~~合併後由整合者更新~~〔修訂 2026-09-26 本機模式〕；〔整合 2026-09-26〕~~全域測試數等錯題重練合入後統一更新~~，`dec/integration-r23`（`c65909e`）實跑：unit 2929（2 略過）、integration 528 全綠，e2e 與 eval 紅燈的種類同上；〔整合 2026-09-26〕已統一更新：`dec/integration-all`（錯題重練、本機看圖逾時合入後）實跑 unit 3244（2 略過）、`check:html`、migrate（到 0018）、integration 593 全綠，e2e 12 項中 3 項（缺本機 ocr 回放檔）與五個 eval 紅燈（classify 92、pipeline 1、nlq 8 筆 replay miss，retrieval 未達門檻，variant 缺向量 fixture），種類與筆數同上 |
 | CI（GitHub Actions） | workflow 起 pg16 service | 臨時容器 | `LLM_MODE=replay`＋`EMBED_MODE=fixture`，零金鑰零網路；〔修訂 2026-09-26 本機模式〕`ci.yml` 明寫本機模型名（決定讀哪一組 cassette），不裝 Ollama、不裝 Python |
 
 - 開發埠取 5442 而非 5432：開發機原生 PostgreSQL 17 服務占用 5432，同埠並存會產生誤導性的驗證失敗（`exam_pro/README.md` 安裝節）。
@@ -352,7 +357,7 @@ sequenceDiagram
 | 分詞詞典改變使既有 `search_tsv` 過期〔修訂 2026-09-24〕 | 已發生（化學詞彙） | 部分既有數理題的關鍵字檢索查不到 | 上線步驟必跑 `npm run search:reindex`（不呼叫 LLM）；之後改詞典或章名都要再跑 |
 | 家教每日預算只在程序內〔修訂 2026-09-24〕 | 中 | 重啟歸零、多實例不共享；最後一次呼叫可能略超 | 單機單人可接受；要跨重啟累計需新表（預留 0017 未用） |
 | 知識點與口語版為 AI 草擬〔修訂 2026-09-24〕 | 已存在 | 內容錯誤會直接進家教講法 | 審查已修正一輪數理化錯誤；draft 在 prompt 內標明「僅供參考」；Owner 逐章審定 |
-| 本機模型的量測低於門檻〔修訂 2026-09-26 本機模式〕 | 已發生 | 2026-09-25 在 Owner 電腦上以本機模型（`ollama:qwen3:8b`）重錄 classify 與 nlq（報表 `eval/reports/classify-2026-09-25-7b7065c.json`、`nlq-2026-09-25-7b7065c.json`，不在 repo）：classify accuracy 0.8370（77/92，門檻 0.87）、macro-F1 0.7419（門檻 0.8956），兩項未達；nlq LLM 輔路徑 filters_exact 0.6250（門檻 0.72）、recall@10 0.7500（門檻 0.845），兩項未達；nlq 規則路徑 rule_coverage 0.84、filters_exact 1、recall@10 1，都達標。retrieval、pipeline、variant 待補。本機回放檔進版控後，CI 的 eval 會因這四項維持紅燈 | `thresholds.json` 的數字不動（LM-14），Owner 決定不放寬門檻、改善後重量；之後會依 CR-9（[`docs/chapter-restructure.md` 第 8 條](../../docs/chapter-restructure.md#8-裁決紀錄)；〔整合 2026-09-26〕已隨 `dec/r2-classify-explog3` 合入 `dec/integration-r23`）與 NLQ LLM 輔路徑的改善重錄，數字會更新。注意這些數字與 Gemini 時期的差距同時包含換模型與章節重整（ADR-016）兩個因素 |
+| 本機模型的量測低於門檻〔修訂 2026-09-26 本機模式〕 | 已發生 | 2026-09-25 在 Owner 電腦上以本機模型（`ollama:qwen3:8b`）重錄 classify 與 nlq（報表 `eval/reports/classify-2026-09-25-7b7065c.json`、`nlq-2026-09-25-7b7065c.json`，不在 repo）：classify accuracy 0.8370（77/92，門檻 0.87）、macro-F1 0.7419（門檻 0.8956），兩項未達；nlq LLM 輔路徑 filters_exact 0.6250（門檻 0.72）、recall@10 0.7500（門檻 0.845），兩項未達；nlq 規則路徑 rule_coverage 0.84、filters_exact 1、recall@10 1，都達標。retrieval、pipeline、variant 待補。本機回放檔進版控後，CI 的 eval 會因這四項維持紅燈 | `thresholds.json` 的數字不動（LM-14），Owner 決定不放寬門檻、改善後重量；之後會依 CR-9（[`docs/chapter-restructure.md` 第 8 條](../../docs/chapter-restructure.md#8-裁決紀錄)；〔整合 2026-09-26〕已隨 `dec/r2-classify-explog3` 合入 `dec/integration-r23`）與 NLQ LLM 輔路徑的改善重錄，數字會更新。〔整合 2026-09-26〕NLQ LLM 輔路徑的改善已由 `dec/x-nlq-improve-fix` 合入（證據檢查、平面／空間對齊、`nlq.v2` 模板補章界提示，[`docs/retrieval.md`](../../docs/retrieval.md) 第 9 節；現在的整合分支是 `dec/integration-all`，待併 `local/integration`）；nlq LLM 輔路徑兩項的數字待以本機模型重錄 `nlq.v2` 後更新，classify 兩項待重錄 `classify.v2`。注意這些數字與 Gemini 時期的差距同時包含換模型與章節重整（ADR-016）兩個因素 |
 | CPU 推論速度未實測〔修訂 2026-09-26 本機模式〕 | 中 | 一份考卷可能超過一夜、長節點逾時 | 逾時與租約依供應商調整、`JOB_NODE_TIMEOUT_MS`／`OLLAMA_TIMEOUT_MS` 可調（LM-12 ②）；Owner 實測後更新使用說明，若無法接受即觸發 ADR-017 的重新評估 |
 | 交叉驗證的門檻與盲點〔修訂 2026-09-26 本機模式〕 | 已存在 | 0.85 未校準，複核比例可能偏高；跨頁題可能兩版一致地殘缺而自動入庫 | 本機重錄後依實測校準（LM-12 ③）；複核時留意跨頁題，之後可加一頁前瞻（LM-12 ①） |
 | PaddlePaddle／PaddleOCR 上游版本問題〔修訂 2026-09-26 本機模式〕 | 已發生（LM-16） | 安裝後辨識第一頁即失敗 | 版本全部釘死、錯誤訊息附處理方式；升級 PaddleOCR＝OCR cassette 失效要重錄 |
@@ -363,8 +368,8 @@ sequenceDiagram
 
 | 項目 | ID／連結 |
 | :--- | :--- |
-| 上游 | DEC-001～009、DEC-013〔修訂 2026-09-15f〕、DEC-014～019〔修訂 2026-09-24〕、FR-001～016、FR-020〔修訂 2026-09-15f〕、FR-021～035〔修訂 2026-09-24〕、NFR-001～009〔修訂 2026-09-24〕（[`../01_requirements/requirements_tracker.md`](../01_requirements/requirements_tracker.md)） |
-| 決策 | ADR-001～009（[`adr/`](./adr/)；ADR-009 原卷文字層比對〔修訂 2026-09-15f〕）；ADR-010～015（階段 5：化學卷別分流、知識點模型、AI 家教、語音、補救卷、批改細節與詳解）〔修訂 2026-09-24〕；ADR-016（章節白名單重整）、ADR-017（本機優先推論，提議）〔修訂 2026-09-26 本機模式〕 |
+| 上游 | DEC-001～009、DEC-013〔修訂 2026-09-15f〕、DEC-014～019〔修訂 2026-09-24〕、FR-001～016、FR-020〔修訂 2026-09-15f〕、FR-021～035〔修訂 2026-09-24〕、FR-036～040 與 NFR-010（DEC-003 例外條款、DEC-016）〔整合 2026-09-26〕、NFR-001～009〔修訂 2026-09-24〕（[`../01_requirements/requirements_tracker.md`](../01_requirements/requirements_tracker.md)） |
+| 決策 | ADR-001～009（[`adr/`](./adr/)；ADR-009 原卷文字層比對〔修訂 2026-09-15f〕）；ADR-010～015（階段 5：化學卷別分流、知識點模型、AI 家教、語音、補救卷、批改細節與詳解）〔修訂 2026-09-24〕；ADR-016（章節白名單重整）、ADR-017（本機優先推論，提議）〔修訂 2026-09-26 本機模式〕；ADR-018（派題與作答拆表）、ADR-019（固定關卡排程，v1.1）〔整合 2026-09-26〕 |
 | 契約與裁決〔修訂 2026-09-26 本機模式〕 | [`docs/local-mode.md`](../../docs/local-mode.md)（第 0～8 條凍結介面、第 9 條 LM-1～LM-16、第 10 條使用說明）；[`docs/chapter-restructure.md`](../../docs/chapter-restructure.md#8-裁決紀錄)（CR-1～~~CR-8~~ CR-9〔整合 2026-09-26〕） |
 | 下游 | `../04_design/lld.md`（Code 層）、`../04_design/api_spec.md`／`db_design.md`（契約）、[`engineering_tracker.md`](./engineering_tracker.md)、`../06_ops/`（runbook 四份） |
 

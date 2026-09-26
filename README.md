@@ -166,7 +166,7 @@ exam_pro/
 │   ├─ index.html             #   單頁殼＋題庫/組卷 inline script＋hash 路由視圖（階段 5 起 7 個；分頁錨點折入視圖）
 │   └─ js/                    #   ES modules：review / students / nlq / variants / assistant；階段 5：kc / remedial / tutor
 │
-├─ migrations/ + migrate.js   # 只增不改的 SQL（0001 init → 0015 extract_disagree）＋極簡執行器
+├─ migrations/ + migrate.js   # 只增不改的 SQL（0001 init → 0015 extract_disagree；〔整合 2026-09-26〕→ 0018 retrain_unflag_marker）＋極簡執行器
 ├─ eval/                      # 量測體系
 │   ├─ run.js                 #   五個 suite：retrieval / classify / pipeline / nlq / variant
 │   ├─ lib/                   #   指標、golden loader、pg engine、pipeline driver、門檻 ratchet
@@ -176,9 +176,10 @@ exam_pro/
 │   └─ thresholds.json        #   門檻（首測 −0.03、只升不降）
 │
 ├─ test/                      # 項數為 2026-09-26 在 local/integration 實跑，是 7b7065c 當時的數字（合併後由整合者更新）〔整合 2026-09-26〕延後到錯題重練合入後統一更新，見「技術棧」的測試列
-│   ├─ unit/                  #   2,716 項：不連網、不連庫、零 secrets
-│   ├─ integration/           #   503 項：對 tmpfs 測試庫（_test 後綴強制）
-│   └─ e2e/                   #   11 項：HTTP 全路徑（上傳→部分入庫；組卷→Word 公式）
+│                             # 〔整合 2026-09-26〕已統一更新為 dec/integration-all（錯題重練、本機看圖逾時合入後）實跑的數字，括號內是 7b7065c 的舊值
+│   ├─ unit/                  #   3,244 項（舊值 2,716）：不連網、不連庫、零 secrets
+│   ├─ integration/           #   593 項（舊值 503）：對 tmpfs 測試庫（_test 後綴強制）
+│   └─ e2e/                   #   12 項（舊值 11）：HTTP 全路徑（上傳→部分入庫；組卷→Word 公式；〔整合 2026-09-26〕新卷→勾要重練→重練卷→Word 標示）
 │
 ├─ ocr_service/               # 本機 OCR（Python）：ocr_pdf.py（PP-StructureV3）、requirements.txt（版本全部釘死）
 ├─ scripts/                   # 維運：備份、向量回填、成本報表、公式健檢；windows/ 本機模式一鍵安裝與重錄
@@ -434,7 +435,7 @@ Gemini 已回傳 JSON，為何不直接入庫？
 - **AI（可切回：Gemini）**：`@google/genai`——拆題／分類／變式 `gemini-3.5-flash`、獨立驗答 `gemini-3.1-pro-preview`、embedding `gemini-embedding-001`（768 維）；階段 5 另用 code execution（AI 家教驗算）與音訊輸入（語音轉寫），這兩項只在 Gemini 模式可用。模型 ID 單一真相在 [`exam_pro/config/models.js`](./exam_pro/config/models.js)（`vendor:model-id`）。
 - **文件**：`docx`（自製 LaTeX → OOXML 數學公式轉換）
 - **前端**：單頁 HTML + Tailwind + MathJax（〔修訂 2026-09-25 本機模式〕兩者與字型、GSAP 都改從本機 `/vendor/` 載入，見 `docs/local-mode.md`） + 五個 ES module 分頁（零打包器）；階段 5 另加三個 module（知識點、補救卷與覆蓋率、AI 家教），MathJax 載入 mhchem〔修訂 2026-09-24〕
-- **測試／量測**：`node:test`（unit 2,716／integration 503／e2e 11，2026-09-26 於 `local/integration` 實跑，是 `7b7065c` 當時的數字，合併後由整合者更新。〔整合 2026-09-26〕全域測試數等錯題重練合入後統一更新；`dec/integration-r23`（`c65909e`）實跑：unit 2,929（2,927 過、2 略過）／integration 528／e2e 11）＋五個 eval suite（golden＋ratchet 門檻）＋ LLM 與 OCR 的 record/replay cassette——CI 全程零金鑰、零網路、零成本
+- **測試／量測**：`node:test`（〔整合 2026-09-26〕unit 3,244／integration 593／e2e 12，2026-09-26 於 `dec/integration-all`（錯題重練與本機看圖逾時合入後）實跑：unit 3,242 過、2 略過，integration 全過，e2e 12 項中 3 項因缺本機 ocr 回放檔紅燈。舊值：unit 2,716／integration 503／e2e 11，2026-09-26 於 `local/integration` 實跑，是 `7b7065c` 當時的數字，~~合併後由整合者更新~~ 已更新。〔整合 2026-09-26〕~~全域測試數等錯題重練合入後統一更新~~ 錯題重練已合入，全域測試數已統一更新（見本列開頭）；`dec/integration-r23`（`c65909e`）實跑：unit 2,929（2,927 過、2 略過）／integration 528／e2e 11）＋五個 eval suite（golden＋ratchet 門檻）＋ LLM 與 OCR 的 record/replay cassette——CI 全程零金鑰、零網路、零成本
 
 ---
 
@@ -459,9 +460,9 @@ LLM 的輸出每次都可能不同，所以品質靠三層固定下來。CI 全�
 - Gemini 欄：retrieval 是 2026-08-22（`a02f7e4`）量的，其餘四個 suite 是 2026-08-24（`f4a15ca`）。
 - 本機欄是 2026-09-25 在 Owner 電腦上以本機模型（`ollama:qwen3:8b`）重錄 classify 與 nlq 後的實測，報表是 `eval/reports/classify-2026-09-25-7b7065c.json` 與 `eval/reports/nlq-2026-09-25-7b7065c.json`（留在 Owner 電腦，不在 repo）。其他三個 suite 還在錄或待重錄，一律寫「待補」。
 - 低於門檻的有四項：classify 的 accuracy 與 macro-F1，以及 nlq LLM 輔路徑的 filters_exact 與 recall@10。nlq 規則路徑的三項都達標。Owner 的決定是**門檻不放寬**，之後改善再量。
-- 之後會依 CR-9（classify 的分冊界線修正，裁決表在 [`docs/chapter-restructure.md`](./docs/chapter-restructure.md#8-裁決紀錄) 第 8 條；〔整合 2026-09-26〕CR-9 已隨 `dec/r2-classify-explog3` 合入 `dec/integration-r23`）與 NLQ LLM 輔路徑的改善重錄，本欄數字屆時更新。
+- 之後會依 CR-9（classify 的分冊界線修正，裁決表在 [`docs/chapter-restructure.md`](./docs/chapter-restructure.md#8-裁決紀錄) 第 8 條；〔整合 2026-09-26〕CR-9 已隨 `dec/r2-classify-explog3` 合入 `dec/integration-r23`）與 NLQ LLM 輔路徑的改善重錄，本欄數字屆時更新。〔整合 2026-09-26〕NLQ LLM 輔路徑的改善（證據檢查、平面／空間對齊、`nlq.v2` 模板補章界提示，[`docs/retrieval.md`](./docs/retrieval.md) 第 9 節）已由 `dec/x-nlq-improve-fix` 合入（現在的整合分支是 `dec/integration-all`，待併 `local/integration`）；上面 nlq LLM 輔路徑兩項的數字要等以本機模型重錄 `nlq.v2` 之後才更新（第 9.3 節的反事實模擬不是量測值），classify 兩項同樣等重錄 `classify.v2`。
 - 兩欄的條件不同：中間同時換了模型（Gemini → 本機 8B）與章節白名單（數學 34→52 章、物理 32→34 章，golden 隨之改標，ADR-016；classify golden 由 90 筆變為 92 筆），所以差距不能全算在模型上。
-- 本機模型的 cassette 與向量檔還沒進版控，CI 目前重現不了本機欄的數字。2026-09-26 在 `local/integration`（`7b7065c`）上實跑（以下是 `7b7065c` 當時的數字，合併後由整合者更新；〔整合 2026-09-26〕全域測試數等錯題重練合入後統一更新，`dec/integration-r23`（`c65909e`）實跑是 unit 2,929 項（2,927 過、2 略過）、integration 528 項，其餘狀態與下文相同）：unit 2,716 項（2,714 過、2 略過）、`check:html`、migrate、integration 503 項全綠；e2e 11 項中 3 項與五個 eval 紅燈，原因全是缺本機回放檔或向量檔（[`docs/local-mode.md`](./docs/local-mode.md) 第 8 條的預期）。等回放檔進版控後，上面未達門檻的四項會讓 CI 的 eval 步驟維持紅燈，直到改善為止。
+- 本機模型的 cassette 與向量檔還沒進版控，CI 目前重現不了本機欄的數字。2026-09-26 在 `local/integration`（`7b7065c`）上實跑（以下是 `7b7065c` 當時的數字，~~合併後由整合者更新~~；〔整合 2026-09-26〕~~全域測試數等錯題重練合入後統一更新~~ 已統一更新：錯題重練與本機看圖逾時合入後，`dec/integration-all` 實跑 unit 3,244 項（3,242 過、2 略過）、`check:html`、migrate（到 0018）、integration 593 項全綠，e2e 12 項中 3 項與五個 eval 紅燈，紅燈的種類與筆數同下文；`dec/integration-r23`（`c65909e`）實跑是 unit 2,929 項（2,927 過、2 略過）、integration 528 項，其餘狀態與下文相同）：unit 2,716 項（2,714 過、2 略過）、`check:html`、migrate、integration 503 項全綠；e2e 11 項中 3 項與五個 eval 紅燈，原因全是缺本機回放檔或向量檔（[`docs/local-mode.md`](./docs/local-mode.md) 第 8 條的預期）。等回放檔進版控後，上面未達門檻的四項會讓 CI 的 eval 步驟維持紅燈，直到改善為止。
 - Gemini 時期每個功能的「問題 → 決策 → 數字」逐條對照（含量測日期、模型 ID、commit、重跑指令）在 [`exam_pro/README.md`](./exam_pro/README.md) 的「問題 → 決策 → 數字」章。
 
 ---
@@ -500,8 +501,9 @@ npm start                 # http://localhost:3000
 | 學生檔案 | 年級、類組、目標考試、學校、教材版本、備註 | 無（核心） | 同上 |
 | 文字詳解與 Word 版本 | 新拆題自動存驗算摘要當詳解、老師可改寫；Word 可匯出學生版（不附答案）與詳解版 | 無（核心） | 同上 |
 | 化學 | 上傳時選「化學」卷別；44 章白名單；化學式與反應式匯出成 Word 原生方程式；答案比對會看單位與化學式 | 既有 `FEATURE_PIPELINE`（上傳） | [`docs/chemistry.md`](./docs/chemistry.md) |
-| 知識點 | 三科 686 個知識點（AI 草擬；章節重整後數學 254、物理 196、化學 236，種子檔 `exam_pro/config/kc/*.json`），每個有一段上課講給學生聽的「口語版」；可朗讀、就地修改、審定；可替題目標知識點 | `FEATURE_KC`；自動標新題 `FEATURE_KC_TAGGING` | [`docs/knowledge-components.md`](./docs/knowledge-components.md) |
+| 知識點 | 三科 686 個知識點（AI 草擬；章節重整後數學 254、物理 196、化學 236，種子檔 `exam_pro/config/kc/*.json`；〔整合 2026-09-26〕第二輪審定單落實後為 688 個：數學 253、物理 198、化學 237，`npm run kc:validate` 實測），每個有一段上課講給學生聽的「口語版」；可朗讀、就地修改、審定；可替題目標知識點 | `FEATURE_KC`；自動標新題 `FEATURE_KC_TAGGING` | [`docs/knowledge-components.md`](./docs/knowledge-components.md) |
 | 補救卷與題庫覆蓋率 | 依弱點一鍵產生補救卷草稿（補救／先備／延伸配比，說得出為什麼選這些題）；章 × 難度熱度表看哪裡沒題 | `FEATURE_REMEDIAL`（補救卷另需 `FEATURE_STUDENTS`） | [`docs/remedial.md`](./docs/remedial.md) |
+| 錯題重練與間隔複習〔整合 2026-09-26〕 | 批改卡上勾「要重練」的題進清單；下一份卷重做、隔 1 週、再隔 2 週，連對 3 次算練到會，錯了回第 1 關；可附在新卷（預設新題數三成）或單獨出一份重練卷，學生卷面不標、老師的答案區標「（重練）」；學生頁有到期清單與重練成效表。弱點面板與補救卷照舊只算第一次作答（階段 5 之後的下一輪，FR-036～040；已合入 `dec/integration-all`，待併 `local/integration`） | `FEATURE_RETRAIN`（畫面在學生分頁，另需 `FEATURE_STUDENTS`）；**旗標關閉也要先套 migration 0018**（見下方快速開始第 2 步） | [`docs/retrain-and-review.md`](./docs/retrain-and-review.md) |
 | AI 家教 | 問三科題目與觀念；直接講解或引導式；數值由程式驗算並攤開程式與輸出（只在 Gemini 模式；本機模式不做程式驗算、回答也不宣稱驗算過）；每日花費上限 | `FEATURE_TUTOR` | [`docs/tutor.md`](./docs/tutor.md) |
 | 按住說話 | 按住說話、放開後看逐字稿與公式，改好按確認才送給家教（桌機、localhost 或 HTTPS；只在 Gemini 模式，本機模式不掛載） | `FEATURE_VOICE`（需同時開 `FEATURE_TUTOR`） | 同上 |
 
@@ -511,6 +513,9 @@ npm start                 # http://localhost:3000
 cd exam_pro
 npm run db:backup                               # 1. 先備份
 npm run migrate                                 # 2. 套用 0010 之後的 migration（local/integration 到 0015；章節重整另有 chapters:migrate，見 docs/chapter-restructure.md 第 6.1 節；本機模式另要 embed:backfill，見 deployment_and_operations.md §3.5）
+                                                #    〔整合 2026-09-26〕含錯題重練的版本會套到 0018：先停服務，migrate 前後各跑一次
+                                                #    node scripts/snapshot_attempt_views.js --out=before.json／--out=after.json，
+                                                #    再 --compare before.json after.json 回 0 才啟動（FEATURE_RETRAIN 關閉也要套；deployment_and_operations.md §3.6）
 npm run kc:load -- --dry-run                    # 3. 先看知識點會新增幾個（數學的章節切法要在第一次載入前決定）
 npm run kc:load                                 #    數字合理再真的載入
 npm run search:reindex -- --dry-run             # 4. 必跑：化學詞彙改變了分詞
