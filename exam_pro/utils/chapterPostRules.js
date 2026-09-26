@@ -128,6 +128,10 @@ function thirdVolumeEvidence(text) {
     if (base) return base;
     const ln = s.match(/\\ln(?![A-Za-z])/);
     if (ln) return ln[0];
+    // 「未知數＋解／求 x」只是推論，不是明確證據：題幹有第一冊的題材（首數、尾數、位數、科學記號、常用對數）時，
+    // 「求 x 的首數」「3^x 是 10 位數，求 x」都是 A5 明定的第一冊題，不得往第三冊換（審查意見 major-1）。
+    // 上面三種明確證據（第三冊關鍵字、底數不是 10、\ln）不受這道檢查影響。
+    if (FIRST_VOLUME_CUE.test(s)) return null;
     const variable = findVariableExponent(s) || findVariableLogArgument(s);
     if (variable) {
         const cue = s.match(SOLVE_CUE);

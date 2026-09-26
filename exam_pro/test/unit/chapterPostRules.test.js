@@ -74,6 +74,23 @@ describe('A5：指數與對數（第一冊）／指數函數與對數函數（�
         }
     });
 
+    test('不是第三冊：未知數＋求 x，但題幹有第一冊題材（首數、尾數、位數）——A5 的第一冊題不得被換走', () => {
+        const firstVolume = [
+            ['已知 $\\log x=-2.3$，求 x 的首數與尾數', '首數'],
+            ['已知 $\\log x = 3.2$，求 $x$ 的整數部分有幾位數？', '位數'],
+            ['若 $3^{x}$ 是 10 位數的整數，求整數 x 的值', '位數'],
+            ['已知 log 3=0.4771，若 $3^{x}$ 為 20 位數，求 x 的範圍', '位數']
+        ];
+        for (const [text, cue] of firstVolume) {
+            assert.equal(pr.thirdVolumeEvidence(text), null, text);
+            assert.equal(pr.boundaryTarget('指數與對數', text), null, `模型答對第一冊時不換：${text}`);
+            assert.equal(pr.firstVolumeEvidence(text), cue, `反過來是第一冊的證據：${text}`);
+        }
+        // 明確證據（底數不是 10、第三冊關鍵字）不受第一冊題材影響
+        assert.equal(pr.thirdVolumeEvidence('$\\log_{2} x$ 的首數'), '\\log_{2}');
+        assert.equal(pr.thirdVolumeEvidence('利用常用對數解指數方程式 $2^{x}=5$'), '指數方程式');
+    });
+
     test('第一冊的證據：首數、尾數、位數、科學記號、常用對數；有第三冊題材時不算', () => {
         assert.equal(pr.firstVolumeEvidence('求 $\\log 0.0072$ 的首數與尾數。'), '首數');
         assert.equal(pr.firstVolumeEvidence('把 $0.000081$ 寫成科學記號。'), '科學記號');
