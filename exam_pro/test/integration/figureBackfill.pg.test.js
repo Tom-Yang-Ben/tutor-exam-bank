@@ -72,7 +72,7 @@ function runSuite() {
 
     async function seed() {
         await query('TRUNCATE jobs RESTART IDENTITY CASCADE');
-        await query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE');
+        await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE');
         fs.rmSync(FIGDIR, { recursive: true, force: true });
         ids.q5 = await insertQ({ text: '質量 $2$ kg 的物體受到合力 $10$ N，求其加速度。' });
         ids.q5dup = await insertQ({ text: '質量 $2$ kg 的物體受到合力 $10$ N，求其加速度。', archived: true });
@@ -130,7 +130,7 @@ function runSuite() {
 
     after(async () => {
         await query('TRUNCATE jobs RESTART IDENTITY CASCADE');
-        await query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE');
+        await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE');
         fs.rmSync(TMP, { recursive: true, force: true });
         await pool.end();
     });
