@@ -184,9 +184,11 @@ async function main(argv = process.argv.slice(2)) {
 }
 
 if (require.main === module) {
-    main().then(code => process.exit(code)).catch(err => {
+    // 等 stdout 寫完再結束：--json 的輸出約 19 萬位元組，接管線時直接 process.exit 會截斷（eval/lib/exitAfterFlush.js）
+    const { exitAfterFlush } = require('../lib/exitAfterFlush');
+    main().then(code => exitAfterFlush(code)).catch(err => {
         console.error(`\n❌ ${err.message}`);
-        process.exit(1);
+        exitAfterFlush(1);
     });
 }
 
