@@ -434,9 +434,11 @@ async function main(argv = process.argv.slice(2), io = {}) {
 }
 
 if (require.main === module) {
-    main().then(code => process.exit(code)).catch(err => {
+    // 等 stdout 寫完再結束：--dry-run --json 的輸出十幾萬位元組，接管線時直接 process.exit 會截斷（eval/lib/exitAfterFlush.js）
+    const { exitAfterFlush } = require('../lib/exitAfterFlush');
+    main().then(code => exitAfterFlush(code)).catch(err => {
         console.error(`\n❌ ${err.message}`);
-        process.exit(1);
+        exitAfterFlush(1);
     });
 }
 

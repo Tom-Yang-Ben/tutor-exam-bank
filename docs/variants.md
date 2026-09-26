@@ -75,6 +75,8 @@ S3-R8 把它改成**只看「數字遮罩後文字相同」**（每段連續數�
 
 ## 3. 跑題閾值與檢索下限的校準（P-11b）
 
+> 〔2026-09-26 `dec/local-embed-thresholds`〕本節的數字全是 Gemini 向量量的。換成本機 embedding（`ollama:qwen3-embedding:0.6b`）後，用同一套方法重算的分布、選項與建議在 [`local-mode.md` 10.13](local-mode.md)（`npm run embed:thresholds`）；**待 Owner 核准，門檻尚未改**。
+
 ### 3.1 量法
 
 在 `eval/fixtures/questions.public.json` 的 60 題自製題上，用已錄好的向量
