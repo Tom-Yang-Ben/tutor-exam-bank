@@ -196,6 +196,8 @@ async function run(ctx, input) {
 
 module.exports = {
     run, PROMPT_TEMPLATE, TEMPLATE, MAX_SAMPLES,
+    // 〔dec/local-thinking-speed〕只多匯出、值不變：services/llm/localTuning.js 的 THINKING_AGENTS 由單元測試對照這兩個數字
+    MAX_OUTPUT_TOKENS, THINKING_BUDGET,
     // 〔stage5 WS-B〕化學題
     SYSTEM, AGENT_CHEM, TEMPLATE_CHEM, SYSTEM_CHEM, PROMPT_TEMPLATE_CHEM
 };

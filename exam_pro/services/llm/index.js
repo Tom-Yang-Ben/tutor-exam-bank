@@ -30,8 +30,26 @@
 // 〔看圖拆題逾時〕ollama adapter 的 usage 可能多一個 timing（載入／讀 prompt／輸出的毫秒數）；
 // record 模式照樣把 usage 原樣寫進 cassette 的 response.usage（鍵不含 usage，不受影響），npm run perf:local 讀它。
 // replay（fake.js）只回四個 token 欄位，所以回放結果與之前相同。
+//
+// 〔dec/local-thinking-speed〕vendor 是 ollama 時套用本機的可選調整（services/llm/localTuning.js；docs/local-mode.md 第 10.12 條）：
+// OLLAMA_NO_THINK（這些 agent 不思考）、OLLAMA_MAX_OUTPUT_<AGENT>（輸出上限只降不升）、OLLAMA_NUM_CTX_<AGENT>。
+// 都沒寫＝轉交給 adapter 的參數與之前逐位元相同；Gemini 路徑與 replay 一個字都不讀。
+// 三者都不在 cassette 的鍵裡；record 時有套用才在 request.ollamaOverrides 記下實際送出的值（沒套用就沒有這個欄位）。
 
 const DEFAULT_DIM = 768;
+
+/**
+ * 〔dec/local-thinking-speed〕要交給 adapter 的參數：只有 ollama 而且這次真的有調整時才換掉那幾個欄位。
+ * @returns {{callOpts:object, overrides:object|null}}
+ */
+function adapterOpts(vendor, id, opts) {
+    if (vendor !== 'ollama') return { callOpts: { ...opts, model: id }, overrides: null };
+    const tuned = require('./localTuning').resolveOllamaOverrides(opts);
+    if (!Object.keys(tuned.applied).length) return { callOpts: { ...opts, model: id }, overrides: null };
+    const callOpts = { ...opts, model: id, thinkingBudget: tuned.thinkingBudget, maxOutputTokens: tuned.maxOutputTokens };
+    if (tuned.numCtx) callOpts.numCtx = tuned.numCtx;
+    return { callOpts, overrides: tuned.applied };
+}
 
 // 啟動檢查（第 2 條 OLLAMA_HOST：只允許 localhost／127.0.0.1／::1，其他主機名啟動時警告）
 require('./ollama').warnIfRemoteHost();
@@ -163,7 +181,8 @@ async function generateJson(opts = {}) {
         return fake.generateJson({ ...opts, model: id });
     }
 
-    const res = await adapterFor(vendor).generateJson({ ...opts, model: id });
+    const { callOpts, overrides } = adapterOpts(vendor, id, opts);
+    const res = await adapterFor(vendor).generateJson(callOpts);
 
     if (mode === 'record') {
         const cassette = require('./cassette');
@@ -184,7 +203,9 @@ async function generateJson(opts = {}) {
             // 只存摘要：PDF base64 與逐字試題絕不進版控（NOTICE 第 4 條）
             request: {
                 parts: cassette.summarizeParts(opts.parts),
-                cacheKeyParts: opts.cacheKeyParts ?? {}
+                cacheKeyParts: opts.cacheKeyParts ?? {},
+                // 〔dec/local-thinking-speed〕有套用本機調整才記（不在鍵內）
+                ...(overrides ? { ollamaOverrides: overrides } : {})
             },
             response: { data: res.data, usage: res.usage, latencyMs: res.latencyMs }
         });
@@ -219,7 +240,8 @@ async function generateText(opts = {}) {
         return fake.generateText({ ...opts, model: id });
     }
 
-    const res = await adapterFor(vendor).generateText({ ...opts, model: id });
+    const { callOpts, overrides } = adapterOpts(vendor, id, opts);
+    const res = await adapterFor(vendor).generateText(callOpts);
 
     if (mode === 'record') {
         const cassette = require('./cassette');
@@ -241,7 +263,8 @@ async function generateText(opts = {}) {
             request: {
                 parts: cassette.summarizeParts(opts.parts),
                 tools: { codeExecution: !!(opts.tools && opts.tools.codeExecution) },
-                cacheKeyParts: opts.cacheKeyParts ?? {}
+                cacheKeyParts: opts.cacheKeyParts ?? {},
+                ...(overrides ? { ollamaOverrides: overrides } : {})
             },
             response: {
                 text: res.text, codeRuns: res.codeRuns, finishReason: res.finishReason ?? null,
