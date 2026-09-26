@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T21:41:08.924Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1597,
+        "sha256": "f984604ae3c9971db79a832f8a7b330f0dedba31f0a50377ee62582e0ba22f30"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 1,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        2,
+        25,
+        26
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數函數與對數函數",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 1,
+      "question_text": "在資訊課的密碼學闖關活動中，小華必須解開一道謎題。關卡提示：請將兩組代碼的值相加即可通關，已知這兩組代碼的計算式分別為 $\\log_{3} 81$ 與 $\\log_{3} 27$。請問通關的總和數值為何？\n(A) $5$　(B) $6$　(C) $7$　(D) $8$",
+      "answer_text": "(C)。$\\log_{3} 81 = 4$、$\\log_{3} 27 = 3$，故兩者之和為 $4 + 3 = 7$。"
+    },
+    "usage": {
+      "tokenIn": 1205,
+      "tokenOut": 222,
+      "tokenThinking": 1662,
+      "tokenCached": 0
+    },
+    "latencyMs": 16548
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:39:13.987Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 3867,
+        "sha256": "8b604c8d038fabbea899c2427b6ba50e6f01d5f4909d2989914e4dae82a41bc9"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "不查表，直接寫出 $\\sin^2 40^\\circ$ 與 $\\cos^2 40^\\circ$ 的和。\n(A) $1$　(B) $0$　(C) $\\frac{1}{2}$　(D) 需查表",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "直角三角形的邊角關係",
+      "confidence": 0.9,
+      "rationale": "題目要求計算 $\\sin^2 40^\\circ + \\cos^2 40^\\circ$ 的值，這利用了銳角三角比的平方關係 $\\sin^2 \\theta + \\cos^2 \\theta = 1$，屬於「直角三角形的邊角關係」章節的基本性質。"
+    },
+    "usage": {
+      "tokenIn": 2934,
+      "tokenOut": 98,
+      "tokenThinking": 268,
+      "tokenCached": 0
+    },
+    "latencyMs": 2560
+  }
+}

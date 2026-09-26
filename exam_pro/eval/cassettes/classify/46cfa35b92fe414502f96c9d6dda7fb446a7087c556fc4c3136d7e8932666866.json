@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:37:43.527Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2487,
+        "sha256": "f40998978adf89838787000c764e1ff5f0b2209f2281eb93f2b48eae86eb3746"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "公車緊急煞車時乘客身體向前傾，主要原因為何？\n(A) 慣性　(B) 向心力　(C) 摩擦力變大　(D) 重力變大",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "confidence": 1,
+      "rationale": "題目探討公車煞車時乘客因慣性向前傾的現象，此為牛頓第一運動定律（慣性定律）的經典應用，故屬於「牛頓運動定律」"
+    },
+    "usage": {
+      "tokenIn": 1996,
+      "tokenOut": 64,
+      "tokenThinking": 215,
+      "tokenCached": 0
+    },
+    "latencyMs": 1969
+  }
+}

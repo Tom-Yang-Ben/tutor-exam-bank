@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:37:24.382Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 3848,
+        "sha256": "5d55f059897607791c4ea95da5da334fb6e6eb7ede31013e711b33478d452c7b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "若 $\\theta$ 落在第二象限，則 $\\tan \\theta$ 的正負為何？\n(A) 恆為正　(B) 恆為負　(C) 恆為零　(D) 無法判斷",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "confidence": 1,
+      "rationale": "題目探討當角度落在第二象限時其正切值（tan）的正負，這涉及廣義角三角比在各象限的正負號判定，屬於「廣義角與極坐標」的基本觀念。"
+    },
+    "usage": {
+      "tokenIn": 2923,
+      "tokenOut": 82,
+      "tokenThinking": 254,
+      "tokenCached": 0
+    },
+    "latencyMs": 2459
+  }
+}

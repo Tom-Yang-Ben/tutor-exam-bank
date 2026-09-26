@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T21:43:51.545Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1757,
+        "sha256": "1a5c08532f9abe0a9cf5dfbae7baaaf70846f71fc77a600eb6dbe2e279e11e62"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 11,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        12,
+        13,
+        14,
+        19,
+        20
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 3,
+      "question_text": "在一項物理實驗中，將一個小物體放置於平滑的水平桌面上，兩名學生分別用彈簧秤以水平方向拉扯該物體。若在桌面上建立直角坐標系，第一名學生施加的拉力向量為 $\\vec{F}_1 = (2, 2\\sqrt{3})$ 牛頓，第二名學生施加的拉力向量為 $\\vec{F}_2 = (-2, 2\\sqrt{3})$ 牛頓，試求這兩股拉力的夾角 $\\theta$。",
+      "answer_text": "由向量內積公式可知 $\\cos \\theta = \\frac{\\vec{F}_1 \\cdot \\vec{F}_2}{|\\vec{F}_1||\\vec{F}_2|}$。先求兩向量的長度：$|\\vec{F}_1| = \\sqrt{2^2 + (2\\sqrt{3})^2} = \\sqrt{4 + 12} = 4$，$|\\vec{F}_2| = \\sqrt{(-2)^2 + (2\\sqrt{3})^2} = \\sqrt{4 + 12} = 4$。接著求兩向量的內積：$\\vec{F}_1 \\cdot \\vec{F}_2 = 2 \\times (-2) + 2\\sqrt{3} \\times 2\\sqrt{3} = -4 + 12 = 8$。代入公式得 $\\cos \\theta = \\frac{8}{4 \\times 4} = \\frac{8}{16} = \\frac{1}{2}$。因為 $0^\\circ \\leq \\theta \\leq 180^\\circ$，故這兩股拉力的夾角 $\\theta = 60^\\circ$。"
+    },
+    "usage": {
+      "tokenIn": 1266,
+      "tokenOut": 455,
+      "tokenThinking": 1888,
+      "tokenCached": 0
+    },
+    "latencyMs": 18297
+  }
+}

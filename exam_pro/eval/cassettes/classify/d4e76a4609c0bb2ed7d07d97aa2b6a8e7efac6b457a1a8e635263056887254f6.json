@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:38:47.916Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2513,
+        "sha256": "0d4738783ec5ad0b74646931871c49401aebdbf3a2d1b7554bb50dc40e7af4af"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "在量值 $E = 200$ N/C 的均勻電場中，將電量 $q = 3 \\times 10^{-6}$ C 的電荷沿電場方向移動 $0.4$ m，求電場力所作的功。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "電場與電位",
+      "confidence": 1,
+      "rationale": "題目給定均勻電場 $E$、電荷 $q$ 與移動距離 $d$，要求電場力所作的功（與電位能變化、電位差相關），此為「電場與電位」章節的核心觀念。"
+    },
+    "usage": {
+      "tokenIn": 2005,
+      "tokenOut": 80,
+      "tokenThinking": 229,
+      "tokenCached": 0
+    },
+    "latencyMs": 2518
+  }
+}

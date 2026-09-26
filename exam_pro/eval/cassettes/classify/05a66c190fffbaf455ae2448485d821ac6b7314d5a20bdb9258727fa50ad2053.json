@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:36:51.978Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 3842,
+        "sha256": "6227737dda35beee78bd400177b26c473bf5b6d829cd92b3a4a34eacad4ee6e0"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "設空間向量 $\\vec{a} = (1, 0, 0)$、$\\vec{b} = (1, 1, 0)$，求兩向量的夾角 $\\theta$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "空間向量內積",
+      "confidence": 1,
+      "rationale": "題目給定兩個空間向量並要求計算其夾角，此解法需使用空間向量內積公式 cos θ = (a·b) / (|a||b|)，故屬於「空間向量內積」章節。"
+    },
+    "usage": {
+      "tokenIn": 2909,
+      "tokenOut": 70,
+      "tokenThinking": 201,
+      "tokenCached": 0
+    },
+    "latencyMs": 7212
+  }
+}

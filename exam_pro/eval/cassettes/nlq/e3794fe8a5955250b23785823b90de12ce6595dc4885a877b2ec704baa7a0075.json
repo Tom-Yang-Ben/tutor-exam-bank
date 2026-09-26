@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "nlq",
+    "model": "gemini-3.5-flash",
+    "template": "nlq.v1",
+    "recorded_at": "2026-09-24T21:40:23.337Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 930,
+        "sha256": "9938042351a4db4d56aa06eb1a33543efb0c9b384e0c263e744e3fda4c4c96e1"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "nlq.v1",
+      "query": "求 2 的 50 次方是幾位數"
+    }
+  },
+  "response": {
+    "data": {
+      "subject": "數學",
+      "chapters": [
+        "指數與對數"
+      ],
+      "question_types": [],
+      "semantic_text": "2的50次方 幾位數",
+      "keywords": [
+        "2的50次方",
+        "位數"
+      ]
+    },
+    "usage": {
+      "tokenIn": 769,
+      "tokenOut": 42,
+      "tokenThinking": 547,
+      "tokenCached": 0
+    },
+    "latencyMs": 3146
+  }
+}

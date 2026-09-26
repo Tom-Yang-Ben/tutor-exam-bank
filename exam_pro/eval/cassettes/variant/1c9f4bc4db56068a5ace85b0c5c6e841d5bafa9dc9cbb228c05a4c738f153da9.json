@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T22:02:43.343Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1774,
+        "sha256": "4306f12390e20be7fe8bf73b54e8db79199b41afe604393e6f0dd09f571c029d"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 31,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        24,
+        27,
+        28,
+        29,
+        61
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "在極坐標系中，一艘探測船的位置標示為 $[r, \theta]$，其中距離 $r > 0$，方位角 $\theta$ 介於 $270^\\circ$ 與 $360^\\circ$ 之間。若欲將其轉換為直角坐標系中的 $y$ 坐標，會使用到關係式 $y = r \\sin \\theta$。請問在此方位角範圍內，$\\sin \\theta$ 的正負情況為何？\n(A) 恆為正　(B) 恆為負　(C) 恆為零　(D) 無法判斷",
+      "answer_text": "(B)。因為 $\\theta$ 介於 $270^\\circ$ 與 $360^\\circ$ 之間，為第四象限角。在第四象限中，直角坐標系上一點的 $y$ 坐標皆小於 $0$，根據廣義角三角函數的定義 $\\sin \\theta = \\frac{y}{r}$，由於 $r > 0$ 且 $y < 0$，故 $\\sin \\theta < 0$，恆為負。"
+    },
+    "usage": {
+      "tokenIn": 1298,
+      "tokenOut": 328,
+      "tokenThinking": 1764,
+      "tokenCached": 0
+    },
+    "latencyMs": 16837
+  }
+}

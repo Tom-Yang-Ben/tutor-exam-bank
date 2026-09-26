@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T22:04:07.584Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1533,
+        "sha256": "fe2f191ff5f2bfc9719909f714ecd2f3421e5bb94770da6fd5db77f2eecba54c"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 37,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        36,
+        45
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 4,
+      "question_text": "在一個建築工地中，工人利用固定在高處的輕質定滑輪與一條不可伸長的輕質纜繩來運送物料。纜繩的一端懸掛著載滿磁磚的吊籃，總質量為 $12$ kg；另一端則懸掛著質量為 $20$ kg 的金屬配重塊。當工人將系統由靜止狀態釋放後，配重塊會向下掉落並帶動吊籃向上運動。若不計滑輪的質量及所有摩擦力，且重力加速度取 $g = 10$ m/s$^2$，試求系統釋放後吊籃的加速度大小，以及纜繩上的張力。",
+      "answer_text": "設纜繩張力為 $T$，系統加速度為 $a$。依牛頓第二運動定律，對向下運動的金屬配重塊列式為 $20g - T = 20a$；對向上運動的吊籃列式為 $T - 12g = 12a$。兩式相加可得 $(20 - 12)g = (20 + 12)a$，解得加速度 $a = \\frac{8 \\times 10}{32} = 2.5$ m/s$^2$。將 $a = 2.5$ 代回吊籃的方程式，可得張力 $T = 12 \\times (10 + 2.5) = 150$ N。"
+    },
+    "usage": {
+      "tokenIn": 1158,
+      "tokenOut": 386,
+      "tokenThinking": 2309,
+      "tokenCached": 0
+    },
+    "latencyMs": 20700
+  }
+}

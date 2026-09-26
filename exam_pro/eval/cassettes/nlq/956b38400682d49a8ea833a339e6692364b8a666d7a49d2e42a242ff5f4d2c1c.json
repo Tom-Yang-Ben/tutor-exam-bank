@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "agent": "nlq",
+    "model": "gemini-3.5-flash",
+    "template": "nlq.v1",
+    "recorded_at": "2026-09-24T21:40:11.149Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 927,
+        "sha256": "a780bdea28099ca765e08b25dd0b642e6b595f170223f27d62057db4efb6dc5c"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "nlq.v1",
+      "query": "斜面上物體受力平衡的題目"
+    }
+  },
+  "response": {
+    "data": {
+      "subject": "物理",
+      "chapters": [
+        "牛頓運動定律",
+        "剛體轉動與平衡"
+      ],
+      "question_types": [],
+      "semantic_text": "斜面 物體 受力平衡",
+      "keywords": [
+        "斜面",
+        "物體",
+        "受力平衡"
+      ]
+    },
+    "usage": {
+      "tokenIn": 765,
+      "tokenOut": 90,
+      "tokenThinking": 600,
+      "tokenCached": 0
+    },
+    "latencyMs": 3385
+  }
+}

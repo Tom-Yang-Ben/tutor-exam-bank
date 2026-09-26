@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-24T22:04:16.678Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 218,
+        "sha256": "c8e9de6860db3564474ba0aca3e3aed3dd2da5689383a1a073513993f8e51b3b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "在一個建築工地中，工人利用固定在高處的輕質定滑輪與一條不可伸長的輕質纜繩來運送物料。纜繩的一端懸掛著載滿磁磚的吊籃，總質量為 $12$ kg；另一端則懸掛著質量為 $20$ kg 的金屬配重塊。當工人將系統由靜止狀態釋放後，配重塊會向下掉落並帶動吊籃向上運動。若不計滑輪的質量及所有摩擦力，且重力加速度取 $g = 10$ m/s$^2$，試求系統釋放後吊籃的加速度大小，以及纜繩上的張力。",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "2.5 m/s^2, 150 N",
+      "answer_form": "text",
+      "steps_summary": "1. 設吊籃質量為 m1 = 12 kg，配重塊質量為 m2 = 20 kg，系統加速度大小為 a，纜繩張力為 T。\n2. 根據牛頓第二運動定律，對配重塊列式：m2*g - T = m2*a；對吊籃列式：T - m1*g = m1*a。\n3. 將兩式相加解得加速度：a = (m2 - m1) / (m1 + m2) * g = (20 - 12) / (12 + 20) * 10 = 2.5 m/s^2。\n4. 將 a 代回方程式解得張力：T = m1 * (g + a) = 12 * (10 + 2.5) = 150 N。"
+    },
+    "usage": {
+      "tokenIn": 262,
+      "tokenOut": 242,
+      "tokenThinking": 806,
+      "tokenCached": 0
+    },
+    "latencyMs": 8648
+  }
+}

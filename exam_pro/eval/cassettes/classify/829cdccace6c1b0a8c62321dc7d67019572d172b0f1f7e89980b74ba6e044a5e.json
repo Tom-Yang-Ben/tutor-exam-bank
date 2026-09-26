@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:38:52.832Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2513,
+        "sha256": "067a3a626444cd8d511778f4ca9644fa6be9a3617a965cbd9a6fb01bfb4fa962"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "在量值 $E = 500$ N/C 的均勻電場中，將電量 $q = 2 \\times 10^{-6}$ C 的電荷沿電場方向移動 $0.2$ m，求電場力所作的功。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "電場與電位",
+      "confidence": 0.95,
+      "rationale": "題目涉及電荷在均勻電場中所受的電場力（F=qE）以及沿電場方向移動時電場力所作的功（W=Fd），屬於電場與電位的基本應用。"
+    },
+    "usage": {
+      "tokenIn": 2005,
+      "tokenOut": 73,
+      "tokenThinking": 280,
+      "tokenCached": 0
+    },
+    "latencyMs": 2730
+  }
+}

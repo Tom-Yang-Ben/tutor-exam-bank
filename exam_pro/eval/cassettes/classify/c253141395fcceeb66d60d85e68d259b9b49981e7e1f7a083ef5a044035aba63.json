@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:36:04.453Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 3839,
+        "sha256": "fb426eaefc7a13c757ec957680645a91ec82fa97d5fcbe728f00e7abe408eef5"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "$\\log_{3} 27 + \\log_{3} 9$ 之值為何？\n(A) $3$　(B) $4$　(C) $5$　(D) $6$",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "confidence": 1,
+      "rationale": "題目要求計算兩個對數數值相加 $\\log_{3} 27 + \\log_{3} 9$，直接運用對數的定義與運算性質，屬於「指數與對數」的基本運算。"
+    },
+    "usage": {
+      "tokenIn": 2919,
+      "tokenOut": 73,
+      "tokenThinking": 292,
+      "tokenCached": 0
+    },
+    "latencyMs": 2563
+  }
+}

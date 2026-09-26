@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T22:05:11.757Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1402,
+        "sha256": "c3539c35cd9157334a7cf7ac356a57bab28e02e5d6a6aa0d1de906f6efdd51e5"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 39,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        38,
+        53
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 1,
+      "question_text": "當列車從靜止狀態突然加速啟動時，車廂內站立的乘客身體會向後傾倒，這個現象主要是由下列哪一項物理概念造成的？\n(A) 慣性　(B) 向心力　(C) 摩擦力減小　(D) 萬有引力變小",
+      "answer_text": "(A)。根據牛頓第一運動定律，乘客原處於靜止狀態，當列車向前加速啟動時，乘客的身體因慣性而傾向維持原來的靜止狀態，因此會相對於車體向後傾倒。"
+    },
+    "usage": {
+      "tokenIn": 1080,
+      "tokenOut": 192,
+      "tokenThinking": 1464,
+      "tokenCached": 0
+    },
+    "latencyMs": 14259
+  }
+}

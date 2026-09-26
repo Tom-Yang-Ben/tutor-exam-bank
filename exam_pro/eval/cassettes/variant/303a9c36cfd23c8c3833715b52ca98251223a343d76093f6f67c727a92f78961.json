@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T22:03:30.978Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1758,
+        "sha256": "cb3ed0db05897b81d7e09016d5968019243667eb5d0bbeb60165b71f20392477"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 35,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        34,
+        40,
+        41,
+        42,
+        43
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 3,
+      "question_text": "在建築工地上，一台起重機的鋼纜懸吊著一塊質量為 $200$ kg 的混凝土預鑄板。當起重機將預鑄板以 $2.5$ m/s$^2$ 的加速度垂直向上吊起時，求鋼纜對預鑄板的張力大小（取重力加速度 $g = 10$ m/s$^2$）。",
+      "answer_text": "以預鑄板為受力分析對象：設鋼纜張力為 $T$，向下重力為 $mg$。根據牛頓第二運動定律，向上的合力為 $T - mg = ma$，故可得 $T = m(g + a) = 200 \times (10 + 2.5) = 200 \times 12.5 = 2500$ N。"
+    },
+    "usage": {
+      "tokenIn": 1314,
+      "tokenOut": 246,
+      "tokenThinking": 1408,
+      "tokenCached": 0
+    },
+    "latencyMs": 13311
+  }
+}

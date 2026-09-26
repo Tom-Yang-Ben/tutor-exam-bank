@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T22:05:27.951Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1402,
+        "sha256": "c3539c35cd9157334a7cf7ac356a57bab28e02e5d6a6aa0d1de906f6efdd51e5"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 39,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        38,
+        53
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 1,
+      "question_text": "魔術師表演「抽桌布」魔術時，迅速將桌布水平抽出，而原本放在桌布上的玻璃杯卻幾乎留在原處沒有跟著掉落。造成這個現象的主要原因為何？\n(A) 慣性\n(B) 向心力\n(C) 玻璃杯的重力增加\n(D) 作用力與反作用力",
+      "answer_text": "(A)。根據牛頓第一運動定律（慣性定律），物體會傾向維持原有的運動狀態。玻璃杯原本處於靜止狀態，當桌布被快速抽出時，摩擦力作用的時間極短，不足以改變玻璃杯的運動狀態，因此玻璃杯因慣性而保持靜止在原處。"
+    },
+    "usage": {
+      "tokenIn": 1080,
+      "tokenOut": 218,
+      "tokenThinking": 1078,
+      "tokenCached": 0
+    },
+    "latencyMs": 11942
+  }
+}

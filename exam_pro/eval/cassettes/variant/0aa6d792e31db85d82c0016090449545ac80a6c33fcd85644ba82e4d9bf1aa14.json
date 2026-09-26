@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T22:03:46.503Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1758,
+        "sha256": "cb3ed0db05897b81d7e09016d5968019243667eb5d0bbeb60165b71f20392477"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 35,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        34,
+        40,
+        41,
+        42,
+        43
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "chapter_confidence": 0.99,
+      "question_type": "計算",
+      "difficulty": 3,
+      "question_text": "一架大型無人機下方用一條輕繩懸掛著一個質量為 $15$ kg 的包裹，此時無人機正以 $4$ m/s$^2$ 的加速度垂直向上升空。若忽略空氣阻力與輕繩質量，求升空過程中輕繩對包裹的張力大小為多少？（取重力加速度 $g = 10$ m/s$^2$）",
+      "answer_text": "以包裹為受力分析對象，其受到向上的輕繩張力 $T$ 與向下的重力 $mg$ 作用。根據牛頓第二運動定律，取向上為正方向，合力等於質量乘上加速度，可得 $T - mg = ma$。移項求得張力 $T = m(g + a) = 15 \times (10 + 4) = 210$ N。"
+    },
+    "usage": {
+      "tokenIn": 1314,
+      "tokenOut": 253,
+      "tokenThinking": 1591,
+      "tokenCached": 0
+    },
+    "latencyMs": 15153
+  }
+}

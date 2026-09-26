@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:38:36.149Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2488,
+        "sha256": "764e274032c2dfa6a2c3d84cf13c1d6548a65f42f1db3bd058fc42ad42c590dd"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "汽車儀表板上的速度計所顯示的數值，是下列何者？\n(A) 平均速度　(B) 平均速率　(C) 瞬時速率　(D) 位移",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "物體的運動（速度與加速度）",
+      "confidence": 1,
+      "rationale": "題目探討汽車速度計（時速表）所測得的物理量，其代表的是車子在該瞬間的運動快慢，即為「瞬時速率」，這屬於基礎物理中介紹「速度與加速度」的基本概念定義。"
+    },
+    "usage": {
+      "tokenIn": 1994,
+      "tokenOut": 78,
+      "tokenThinking": 344,
+      "tokenCached": 0
+    },
+    "latencyMs": 3201
+  }
+}

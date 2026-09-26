@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T21:41:19.936Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1694,
+        "sha256": "33ea2394f7d2f4b48a69d57faeb7f3dba1f196ff117c07398f742cfbec47a80a"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 3,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        4,
+        8,
+        10,
+        17,
+        18
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數函數與對數函數",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "假設一實驗室觀察某特定細菌的繁殖，其數量 $N$（萬隻）與時間 $t$（天）的關係符合指數模型 $N(t) = 3^{t+2}$。若某日觀測到該細菌數量達到 $243$ 萬隻，請問這是觀測開始後的第幾天（即求 $t$ 之值）？",
+      "answer_text": "由題意可知 $3^{t+2} = 243$。因為 $243 = 3^5$，故 $t + 2 = 5$，解得 $t = 3$。所以是觀測開始後的第 $3$ 天。"
+    },
+    "usage": {
+      "tokenIn": 1265,
+      "tokenOut": 208,
+      "tokenThinking": 970,
+      "tokenCached": 0
+    },
+    "latencyMs": 10559
+  }
+}

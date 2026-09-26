@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:38:55.194Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 3945,
+        "sha256": "606a2d767be5331e86eb8ad9bc25a0555dd69509a9c19d3ea5a0990fed64dbe8"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "直角三角形 $ABC$ 中，$\\angle C = 90^\\circ$，$\\overline{AC} = 12$、$\\overline{BC} = 5$，則 $\\sin A$ 之值為何？\n(A) $\\frac{5}{13}$　(B) $\\frac{12}{13}$　(C) $\\frac{5}{12}$　(D) $\\frac{12}{5}$",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "直角三角形的邊角關係",
+      "confidence": 1,
+      "rationale": "題目給定直角三角形的兩股長，要求銳角 A 的正弦值。這需要利用畢氏定理求得斜邊長後，再套用直角三角形的邊角關係定義（sin A = 對邊 / 斜邊）來求解，因此屬於「直角三角形的邊角關係」之範疇。"
+    },
+    "usage": {
+      "tokenIn": 2966,
+      "tokenOut": 98,
+      "tokenThinking": 240,
+      "tokenCached": 0
+    },
+    "latencyMs": 2358
+  }
+}

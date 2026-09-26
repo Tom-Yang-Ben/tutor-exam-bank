@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-24T22:04:50.162Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 182,
+        "sha256": "1223c1178021e03edfb666118261f84fc5cb63a36f0affeb9fae167dcc24112a"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "劇團的舞台工作人員利用固定於天花板的定滑輪系統來控制佈景。一條質量不計的輕繩跨過光滑定滑輪，兩端分別懸掛著質量為 $12$ kg 的沙袋與質量為 $8$ kg 的燈具。當系統由靜止釋放後，求沙袋與燈具運動時的加速度大小，以及輕繩上的張力大小。（取重力加速度 $g = 10$ m/s$^2$，並忽略滑輪質量與空氣阻力）",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "加速度大小為2 m/s^2，繩上張力為96 N",
+      "answer_form": "text",
+      "steps_summary": "1. 設沙袋質量 m1 = 12 kg，燈具質量 m2 = 8 kg，系統加速度為 a，繩張力為 T。\n2. 根據牛頓第二運動定律，對沙袋列式：m1g - T = m1a；對燈具列式：T - m2g = m2a。\n3. 兩式相加可得 (m1 - m2)g = (m1 + m2)a，代入數值得：(12 - 8) × 10 = (12 + 8)a，解得 a = 2 m/s^2。\n4. 將 a 代入燈具的方程式：T = m2(g + a) = 8 × (10 + 2) = 96 N。\n故加速度大小為 2 m/s^2，輕繩上的張力大小為 96 N。"
+    },
+    "usage": {
+      "tokenIn": 229,
+      "tokenOut": 256,
+      "tokenThinking": 764,
+      "tokenCached": 0
+    },
+    "latencyMs": 8689
+  }
+}

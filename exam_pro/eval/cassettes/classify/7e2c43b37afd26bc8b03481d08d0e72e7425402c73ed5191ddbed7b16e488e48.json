@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:36:38.557Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 3859,
+        "sha256": "776e25fd898f8e8e0b22ce494fc9c279603243b344d36a6f848832b4b8970de1"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "試證：對任意平面向量 $\\vec{a}$、$\\vec{b}$，恆有 $|\\vec{a} \\cdot \\vec{b}| \\leq |\\vec{a}||\\vec{b}|$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "confidence": 1,
+      "rationale": "題目要求證明平面向量的內積不等式 $|\\vec{a} \\cdot \\vec{b}| \\leq |\\vec{a}||\\vec{b}|$，此性質通常由內積的定義 $\\vec{a}\\cdot\\vec{b}=|\\vec{a}||\\vec{b}|\\cos\\theta$ 及其性質 $|\\cos\\theta|\\le 1$ 證得，故歸屬於「向量內積」章節。"
+    },
+    "usage": {
+      "tokenIn": 2910,
+      "tokenOut": 124,
+      "tokenThinking": 316,
+      "tokenCached": 0
+    },
+    "latencyMs": 2708
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:38:18.651Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2475,
+        "sha256": "6b43b6f2c9b064d9940c2f0ffd3d3d94b6569bd5b3fe854bc6f78d6f1d82f3fb"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "物體由靜止出發，以 $3$ m/s$^2$ 的等加速度直線前進，求 $4$ 秒後的位移。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "物體的運動（速度與加速度）",
+      "confidence": 1,
+      "rationale": "題目為典型的一維等加速度運動計算，由靜止出發並給定加速度與時間求位移，與範例中「汽車由靜止以等加速度直線前進，求末速與位移」的題型完全契合，屬於「物體的運動（速度與加速度）」章節。"
+    },
+    "usage": {
+      "tokenIn": 1978,
+      "tokenOut": 103,
+      "tokenThinking": 705,
+      "tokenCached": 0
+    },
+    "latencyMs": 4288
+  }
+}

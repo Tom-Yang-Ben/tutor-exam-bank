@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T22:01:35.197Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1805,
+        "sha256": "75c87bdbfbd421c250944148d9a6f374b03adf942ec872a6332a4ae38211e558"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 27,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        18,
+        28,
+        29,
+        31,
+        61
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 2,
+      "question_text": "在某個虛擬射擊遊戲中，砲管初始朝向正東方（$x$ 軸正向），接著逆時針旋轉 $240^\\circ$ 瞄準目標。試求此旋轉角度的正弦值（即 $\\sin 240^\\circ$）為何？",
+      "answer_text": "$-\\frac{\\sqrt{3}}{2}$。$240^\\circ$ 落在第三象限，參考角為 $60^\\circ$，且第三象限的正弦值為負，故 $\\sin 240^\\circ = -\\sin 60^\\circ = -\\frac{\\sqrt{3}}{2}$。"
+    },
+    "usage": {
+      "tokenIn": 1306,
+      "tokenOut": 215,
+      "tokenThinking": 2479,
+      "tokenCached": 0
+    },
+    "latencyMs": 85091
+  }
+}

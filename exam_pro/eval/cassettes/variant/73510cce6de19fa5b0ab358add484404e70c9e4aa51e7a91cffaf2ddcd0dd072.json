@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T21:42:50.481Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1718,
+        "sha256": "6dd81eeb738d08a64425e63f515156721f0a5768186d00313700906ea2b47143"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 7,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        12,
+        13,
+        14,
+        21,
+        23
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數函數與對數函數",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 3,
+      "question_text": "在經濟學中，分析師定義了不同市場規模之間的「相對轉換指數」。若市場 $A$ 的規模為 $a$，市場 $B$ 的規模為 $b$（其中 $a, b > 1$），則市場 $B$ 相對於市場 $A$ 的轉換指數定義為 $I(A, B) = \frac{\\log b}{\\log a} = \\log_a b$。今有三個規模皆大於 $1$ 的市場 $X$、$Y$、$Z$，已知市場 $Y$ 相對於市場 $X$ 的轉換指數為 $\\log_3 10$，市場 $Z$ 相對於市場 $Y$ 的轉換指數為 $\\log_{10} 243$。請問市場 $Z$ 相對於市場 $X$ 的轉換指數 $I(X, Z)$ 之值為何？",
+      "answer_text": "$5$。設 $X, Y, Z$ 的規模分別為 $x, y, z$，由題意可知 $I(X, Y) = \\log_x y = \\log_3 10$，$I(Y, Z) = \\log_y z = \\log_{10} 243$。根據對數換底公式，可得 $I(X, Z) = \\log_x z = \\frac{\\log z}{\\log x} = \\frac{\\log y}{\\log x} \\times \\frac{\\log z}{\\log y} = \\log_x y \\times \\log_y z$。將已知數值代入，換底後計算得 $\\frac{\\log 10}{\\log 3} \\times \\frac{\\log 243}{\\log 10} = \\frac{\\log 243}{\\log 3} = \\log_3 243 = 5$。"
+    },
+    "usage": {
+      "tokenIn": 1254,
+      "tokenOut": 478,
+      "tokenThinking": 3281,
+      "tokenCached": 0
+    },
+    "latencyMs": 30318
+  }
+}

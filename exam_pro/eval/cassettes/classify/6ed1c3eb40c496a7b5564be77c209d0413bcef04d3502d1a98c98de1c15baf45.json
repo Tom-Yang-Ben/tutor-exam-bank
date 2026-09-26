@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:40:00.069Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2487,
+        "sha256": "6a539920e19c05096a8e9c185f9c2c7ce97dd9edebec88aa035191e960b7db04"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "水平彎道半徑 $50$ m、靜摩擦係數 $0.4$，求汽車不打滑的最大速率（$g = 10$ m/s$^2$）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "摩擦力與向心力",
+      "confidence": 1,
+      "rationale": "題目要求汽車在水平彎道不打滑的最大速率，其物理機制為最大靜摩擦力提供所需之向心力（$f_{s,\\max} = \\mu_s mg = m \\frac{v^2}{R}$），屬於「摩擦力與向心力」章節。"
+    },
+    "usage": {
+      "tokenIn": 1986,
+      "tokenOut": 90,
+      "tokenThinking": 196,
+      "tokenCached": 0
+    },
+    "latencyMs": 2226
+  }
+}

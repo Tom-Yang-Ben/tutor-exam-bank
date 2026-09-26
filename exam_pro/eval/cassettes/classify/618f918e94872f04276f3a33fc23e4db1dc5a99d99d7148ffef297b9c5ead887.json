@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:36:13.690Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 3821,
+        "sha256": "dd9d696ac897e6444b152fa8dd97d67b6f01ca9382221c15f1119197aa779a4c"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "已知 $\\log_{10} 2 = 0.3010$，求 $2^{100}$ 是幾位數的整數。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "confidence": 1,
+      "rationale": "題目要求 $2^{100}$ 的位數，需要對該數取常用對數 $\\log_{10} 2^{100}$，並利用其首數來判斷位數。這屬於常用對數的首數與尾數應用，應歸於「指數與對數」章節。"
+    },
+    "usage": {
+      "tokenIn": 2898,
+      "tokenOut": 94,
+      "tokenThinking": 428,
+      "tokenCached": 0
+    },
+    "latencyMs": 3039
+  }
+}

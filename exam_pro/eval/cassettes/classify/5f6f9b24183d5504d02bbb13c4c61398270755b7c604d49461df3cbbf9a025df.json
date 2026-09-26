@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:39:06.696Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 3837,
+        "sha256": "e840612b9425b3c92916eb117b8a07f22b0fb43ec07742c16e67bce770ee86f0"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "已知 $\\vec{a} = (1, 0)$、$\\vec{b} = (1, 1)$ 為平面向量，問此兩向量所夾的角度為多少度？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "confidence": 1,
+      "rationale": "題目給定兩個平面向量 $\\vec{a}$ 與 $\\vec{b}$，並要求計算兩向量的夾角，這需要用到向量內積公式 $\\cos\\theta = \\frac{\\vec{a}\\cdot\\vec{b}}{|\\vec{a}||\\vec{b}|}$，因此屬於「向量內積」章節。"
+    },
+    "usage": {
+      "tokenIn": 2905,
+      "tokenOut": 100,
+      "tokenThinking": 172,
+      "tokenCached": 0
+    },
+    "latencyMs": 2132
+  }
+}

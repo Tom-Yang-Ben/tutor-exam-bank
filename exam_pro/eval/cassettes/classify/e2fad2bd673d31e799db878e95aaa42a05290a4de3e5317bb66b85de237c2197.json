@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:37:10.061Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 3862,
+        "sha256": "62ff18f1c863d3263fcd9d049f00b7bfca0094fb13de5f69a6f05b5b41fac4fc"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "$\\sin^2 40^\\circ + \\cos^2 40^\\circ$ 之值為何？\n(A) $1$　(B) $0$　(C) $\\frac{1}{2}$　(D) 需查表才能得知",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "直角三角形的邊角關係",
+      "confidence": 0.9,
+      "rationale": "題目計算 $\\sin^2 40^\\circ + \\cos^2 40^\\circ$，直接考查三角函數的平方關係公式 $\\sin^2 \\theta + \\cos^2 \\theta = 1$，因 $40^\\circ$ 為銳角，此基本恆等式屬於直角三角形的邊角關係範疇。"
+    },
+    "usage": {
+      "tokenIn": 2929,
+      "tokenOut": 106,
+      "tokenThinking": 576,
+      "tokenCached": 0
+    },
+    "latencyMs": 7919
+  }
+}

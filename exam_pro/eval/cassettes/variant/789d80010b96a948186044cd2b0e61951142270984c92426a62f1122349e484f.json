@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T22:05:54.650Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1800,
+        "sha256": "80bcabfb7cbe12551b145f8c0521b6e4d72cc90fa087140f9f82d12ac6402d91"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 41,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        34,
+        35,
+        40,
+        42,
+        43
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "摩擦力與向心力",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 3,
+      "question_text": "一名搬運工將一個質量 $20$ kg 的木箱放置於與水平面夾角 $37^\\circ$ 的裝卸貨斜坡上（已知 $\\sin 37^\\circ = \\frac{3}{5}$，$\\cos 37^\\circ = \\frac{4}{5}$）。若木箱與斜坡表面間的動摩擦係數為 $\\mu = 0.25$，求木箱沿著斜坡下滑時的加速度（取重力加速度 $g = 10$ m/s$^2$）。",
+      "answer_text": "由牛頓第二運動定律，木箱在平行斜面方向的合力 $F = mg \\sin 37^\\circ - \\mu mg \\cos 37^\\circ = ma$，因此加速度大小為 $a = g(\\sin 37^\\circ - \\mu \\cos 37^\\circ) = 10 \\times \\left(\\frac{3}{5} - 0.25 \\times \\frac{4}{5}\\right) = 10 \\times (0.6 - 0.2) = 4$ m/s$^2$，方向沿斜坡向下。"
+    },
+    "usage": {
+      "tokenIn": 1337,
+      "tokenOut": 301,
+      "tokenThinking": 3508,
+      "tokenCached": 0
+    },
+    "latencyMs": 26346
+  }
+}

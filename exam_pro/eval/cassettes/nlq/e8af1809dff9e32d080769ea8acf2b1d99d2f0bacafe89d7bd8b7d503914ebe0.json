@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "nlq",
+    "model": "gemini-3.5-flash",
+    "template": "nlq.v1",
+    "recorded_at": "2026-09-24T21:40:28.620Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 934,
+        "sha256": "277798c3aa68b8cbb33e27cd3632c650457212a481f8d6ab6a3e7e6fbe6a66fb"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "nlq.v1",
+      "query": "兩個向量互相垂直時座標裡的未知數是多少"
+    }
+  },
+  "response": {
+    "data": {
+      "subject": "數學",
+      "chapters": [
+        "向量內積",
+        "空間向量內積"
+      ],
+      "question_types": [],
+      "semantic_text": "向量垂直 座標 未知數",
+      "keywords": [
+        "向量",
+        "垂直",
+        "座標",
+        "未知數",
+        "內積"
+      ]
+    },
+    "usage": {
+      "tokenIn": 766,
+      "tokenOut": 48,
+      "tokenThinking": 427,
+      "tokenCached": 0
+    },
+    "latencyMs": 2936
+  }
+}

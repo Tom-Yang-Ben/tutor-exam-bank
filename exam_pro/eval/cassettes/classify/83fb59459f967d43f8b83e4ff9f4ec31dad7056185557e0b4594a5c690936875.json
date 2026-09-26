@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:37:34.530Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2504,
+        "sha256": "230ae3f986f53f0525499ae4f527eac45136b82415ec0a0e1922c73fa0b6285a"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "質量 $60$ kg 的人站在體重計上，電梯以 $3$ m/s$^2$ 的加速度向上加速，求體重計的讀數（取 $g = 10$ m/s$^2$）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "confidence": 1,
+      "rationale": "此題探討電梯加速上升時，人所受正向力（體重計讀數）的變化，需應用牛頓第二運動定律 F = ma 進行受力分析，求得 N - mg = ma，因此屬於「牛頓運動定律」的範疇。"
+    },
+    "usage": {
+      "tokenIn": 1998,
+      "tokenOut": 83,
+      "tokenThinking": 390,
+      "tokenCached": 0
+    },
+    "latencyMs": 3233
+  }
+}
