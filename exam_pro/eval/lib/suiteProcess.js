@@ -81,6 +81,14 @@ const LOCAL_SHIELD = Object.freeze([
     // 〔OCR 為主 2026-09-26〕.env／shell 的值不帶進子行程：照 ci.yml（CI_OPTIONAL_KEYS），沒寫就是空字串＝程式預設 cross
     'LOCAL_EXTRACT_MODE'
 ]);
+/**
+ * 〔dec/local-thinking-speed〕本機的可選調整（services/llm/localTuning.js）：OLLAMA_NO_THINK、OLLAMA_MAX_OUTPUT_<AGENT>、
+ * OLLAMA_NUM_CTX_<AGENT>。名稱帶 agent，列不成固定清單，所以用樣式比對。與 VISION_MAX_EDGE_PX 同一個做法：
+ * 都不在 cassette 的鍵裡——回放時一律擋成空字串（與沒寫相同），錄製時放行：Owner 平常關了思考，錄的就是不思考的版本，
+ * eval 量到的才是實際用的品質（有套用的呼叫在 cassette 的 request.ollamaOverrides 看得到）。
+ * shell 裡設的（不在 .env）也照同一條規則，不會因為來源不同而漏網。
+ */
+const LOCAL_TUNING_PATTERN = require('../../services/llm/localTuning').OVERRIDE_ENV_PATTERN;
 
 /**
  * 〔章節重整 CH-B〕CI 沒設、而讀取端以 `??` 取預設值的變數 → CI 實際生效的值（＝讀取端在「沒設」時用的預設值）。
@@ -156,6 +164,11 @@ function ciEnv(opts = {}) {
     const shield = new Set(opts.envFileKeys || dotenvKeys());
     for (const k of Object.keys(base)) {
         if (/^(MODEL_|FEATURE_)/.test(k)) shield.add(k);
+        // 〔dec/local-thinking-speed〕本機的可選調整：回放擋、錄製放行（LOCAL_TUNING_PATTERN 的說明）
+        if (LOCAL_TUNING_PATTERN.test(k)) shield.add(k);
+    }
+    if (recording) {
+        for (const k of shield) if (LOCAL_TUNING_PATTERN.test(k)) allow.add(k);
     }
     // 其他已知會改變流程或鍵、而 CI 沒有設的變數
     for (const k of ['JIEBA_DICT_BIG', 'EMBED_MODEL', 'EMBED_DIM', 'EVAL_FORK_PR', 'GEMINI_API_KEY', 'DATABASE_URL',
@@ -261,6 +274,6 @@ async function probeSuites({ suites, probeDir, echo = false, extraEnv = {}, onSt
 
 module.exports = {
     EVAL_SUITES, ALL_SUITES, PASS_THROUGH, RECORD_PASS_THROUGH, FALLBACK_CI_MODELS, CI_OPTIONAL_KEYS, LOCAL_SHIELD,
-    CI_EFFECTIVE_DEFAULTS, APP_DIR, PROBE_PATH,
+    CI_EFFECTIVE_DEFAULTS, APP_DIR, PROBE_PATH, LOCAL_TUNING_PATTERN,
     readCiModels, dotenvKeys, ciEnv, suiteArgs, runNode, probeSuites
 };

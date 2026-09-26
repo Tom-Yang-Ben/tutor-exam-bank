@@ -46,6 +46,12 @@
 //     讀 prompt（含看圖）那一段 Ollama 不回報進度，只能印「還沒輸出第一個 token」與經過時間；
 //     那一段要多久用 npm run local:bench-vision 量（docs/local-mode.md 第 10.11 條）。
 //   - 呼叫端可帶 timeoutMs 取代 OLLAMA_TIMEOUT_MS（只有本機量測工具用；agent 不帶）。
+//
+// 〔dec/local-thinking-speed〕generateJson／generateText 多收兩個選用參數（docs/local-mode.md 第 10.14 條）：
+//   - numCtx：這一次的 num_ctx。services/llm/index.js 依 OLLAMA_NUM_CTX_<AGENT> 帶（services/llm/localTuning.js），
+//     量測工具依 --num-ctx 帶；沒帶＝OLLAMA_NUM_CTX（與之前相同）。
+//   - numThread：Ollama 的 num_thread，只有 npm run local:bench-text 的 --num-thread 帶；沒帶＝不送（與之前逐位元相同）。
+//   「不思考」不在這裡決定：OLLAMA_NO_THINK 由 services/llm/index.js 換成 thinkingBudget 0，這裡照舊是 think:false。
 
 const http = require('http');
 const https = require('https');
@@ -688,12 +694,20 @@ function resolveProgress(progressMs, onProgress) {
 
 // ───────────────────────── /api/chat ─────────────────────────
 
-function chatBody({ model, system, parts, maxOutputTokens, thinkingBudget }) {
+/**
+ * /api/chat 的本文。
+ * 〔dec/local-thinking-speed〕numCtxOverride：這一次的 num_ctx（services/llm/index.js 依 OLLAMA_NUM_CTX_<AGENT> 帶、
+ * 或量測工具帶）；沒帶＝OLLAMA_NUM_CTX（與之前相同）。numThread：只有 npm run local:bench-text 帶（Ollama 的 num_thread），
+ * agent 不帶＝不送這個欄位（與之前逐位元相同）。
+ */
+function chatBody({ model, system, parts, maxOutputTokens, thinkingBudget, numCtx: numCtxOverride, numThread }) {
     const messages = [];
     if (system) messages.push({ role: 'system', content: String(system) });
     messages.push(toUserMessage(parts));
-    const options = { temperature: 0, num_ctx: numCtx() };
+    const options = { temperature: 0, num_ctx: positiveInt(numCtxOverride, 0) || numCtx() };
     if (maxOutputTokens) options.num_predict = maxOutputTokens;
+    const threads = positiveInt(numThread, 0);
+    if (threads) options.num_thread = threads;
     return {
         model,
         messages,
@@ -730,17 +744,18 @@ async function chat(body, { signal, label, timeoutMs: limit, progress = null }) 
  *          progressMs?:number, onProgress?:(line:string)=>void, timeoutMs?:number}} opts
  *        model 必須是**裸 ID**（qwen3:8b；vendor 前綴由 services/llm/index.js 剝掉）
  *        progressMs／onProgress／timeoutMs：〔看圖拆題逾時〕見檔頭；agent 不帶（progressMs 沒帶時看 OLLAMA_PROGRESS_MS）
+ *        numCtx／numThread：〔dec/local-thinking-speed〕見 chatBody；agent 不帶
  * @returns {Promise<{data:object, usage:{tokenIn,tokenOut,tokenThinking,tokenCached,timing?},
  *                    latencyMs:number, raw:any, schemaFallback:false}>}
  */
-async function generateJson({ model, system, parts, schema, maxOutputTokens, thinkingBudget, signal, progressMs, onProgress, timeoutMs: limit }) {
+async function generateJson({ model, system, parts, schema, maxOutputTokens, thinkingBudget, signal, progressMs, onProgress, timeoutMs: limit, numCtx: ctxOverride, numThread }) {
     const startedAt = Date.now();
     const format = schema ? toOllamaSchema(schema) : 'json';
     const guide = schemaGuide(schema ? format : undefined);
     const body = chatBody({
         model,
         system: system ? `${system}\n\n${guide}` : guide,
-        parts, maxOutputTokens, thinkingBudget
+        parts, maxOutputTokens, thinkingBudget, numCtx: ctxOverride, numThread
     });
     body.format = format;
 
@@ -763,13 +778,14 @@ async function generateJson({ model, system, parts, schema, maxOutputTokens, thi
  * 自由文字生成（第 3 條第 3 點）。tools.codeExecution 直接忽略（Ollama 沒有程式執行環境），codeRuns 恆為 []。
  * @param {{model:string, system?:string, parts:Array<object>, tools?:{codeExecution?:boolean},
  *          maxOutputTokens?:number, thinkingBudget?:number, signal?:AbortSignal,
- *          progressMs?:number, onProgress?:(line:string)=>void, timeoutMs?:number}} opts
+ *          progressMs?:number, onProgress?:(line:string)=>void, timeoutMs?:number,
+ *          numCtx?:number, numThread?:number}} opts
  * @returns {Promise<{text:string, codeRuns:[], finishReason:string|null,
  *                    usage:{tokenIn,tokenOut,tokenThinking,tokenCached,timing?}, latencyMs:number, raw:any}>}
  */
-async function generateText({ model, system, parts, maxOutputTokens, thinkingBudget, signal, progressMs, onProgress, timeoutMs: limit }) {
+async function generateText({ model, system, parts, maxOutputTokens, thinkingBudget, signal, progressMs, onProgress, timeoutMs: limit, numCtx: ctxOverride, numThread }) {
     const startedAt = Date.now();
-    const body = chatBody({ model, system, parts, maxOutputTokens, thinkingBudget });
+    const body = chatBody({ model, system, parts, maxOutputTokens, thinkingBudget, numCtx: ctxOverride, numThread });
     const res = await chat(body, { signal, label: `/api/chat(${model}, text)`, timeoutMs: limit, progress: resolveProgress(progressMs, onProgress) });
     return {
         text: stripThink(res?.message?.content),
