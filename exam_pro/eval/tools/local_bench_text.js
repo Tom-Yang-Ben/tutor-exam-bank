@@ -13,6 +13,9 @@
 //   1. 從 eval/fixtures/questions.public.json 挑一題（--id 可指定）；
 //   2. 用 agent 本身的 run() 組出請求（系統提示詞、提示詞、schema、輸出上限、thinkingBudget 與正式流程一模一樣：
 //      給 agent 一個「只記下請求、不呼叫模型」的假 llm，拿到請求就停）；
+//      〔審查修正〕例外是 classify：這裡沒有資料庫（ctx.db=null），few-shot 全部來自設定檔的自製例句（同一科每題相同，
+//      與 eval 的 classify 回放檔同一種 prompt）；正式上傳時 few-shot 由題庫組（FEATURE_SIMILAR 開時是向量近鄰、每題不同），
+//      prompt 的長度與內容都不一樣，量到的讀 prompt 秒數只能參考（報告裡會註明）；
 //   3. 套上 .env 裡的本機調整（OLLAMA_NO_THINK、OLLAMA_MAX_OUTPUT_<AGENT>、OLLAMA_NUM_CTX_<AGENT>；services/llm/localTuning.js），
 //      再套上這次的參數（--no-think／--think、--max-output、--num-ctx、--num-thread）——不加參數＝正式上傳現在的樣子；
 //   4. 先請 Ollama 卸載模型（--warm 可略過），**只呼叫一次**，印出載入、讀 prompt、輸出（含思考）的時間、token 數與速度，
@@ -201,9 +204,15 @@ function inputFor(agent, q, { kcsLookup = kcsFor } = {}) {
 
 const AGENT_MODULES = Object.freeze({ lint: 'agents/lint', verify: 'agents/verify', classify: 'agents/classify', kc_tag: 'agents/tagKc' });
 
+/** 〔審查修正〕classify 的量測與正式上傳不同的地方（報告印在「題目」下面） */
+const CLASSIFY_NOTE = '注意（分類）：量測不碰資料庫，few-shot 全部來自設定檔的自製例句（同一科每題相同，與 eval 的 classify 回放檔同一種 prompt）；' +
+    '正式上傳時 few-shot 由題庫組（`FEATURE_SIMILAR` 開時是向量近鄰、每題不同），prompt 的長度與內容都不一樣，讀 prompt 的秒數只能參考。' +
+    '回放檔的分類 51 秒是這種 prompt 同一科連續送、前綴快取是熱的結果（npm run perf:local 第 4 段）。';
+
 /**
  * 用 agent 自己的 run() 組出請求：給它一個只記下請求就丟錯的 llm，拿到請求就停。
- * 所以送出的內容（系統提示詞、提示詞、schema、maxOutputTokens、thinkingBudget、agent 名稱）與正式流程逐字相同。
+ * 所以送出的內容（系統提示詞、提示詞、schema、maxOutputTokens、thinkingBudget、agent 名稱）與正式流程逐字相同——
+ * 〔審查修正〕classify 除外：ctx.db=null，few-shot 來自設定檔的例句，不是正式上傳時題庫組出來的（見檔頭第 2 點與 CLASSIFY_NOTE）。
  * @returns {Promise<object>} generateJson 收到的 opts
  */
 async function captureRequest(agent, input, modelSpec) {
@@ -335,6 +344,7 @@ function formatReport(r) {
     L.push('══ 文字模型量測（npm run local:bench-text）══════════════════════════');
     L.push(`步驟：${r.agent}（agent 名稱 ${r.agentName}）；模型：${r.model}（Ollama ${r.host}）`);
     L.push(`題目：fixture id=${r.question.id}（${r.question.subject}／${r.question.chapter}／${r.question.question_type}；${r.why}）`);
+    if (r.agent === 'classify') L.push(CLASSIFY_NOTE);
     L.push(`思考：${p.thinkWhy}；num_ctx：${fmtInt(p.numCtx)}（${p.ctxWhy}）；輸出上限：${p.maxOutputTokens ? fmtInt(p.maxOutputTokens) : '不設'}（${p.maxWhy}）；` +
         `執行緒：${p.numThread ? `${p.numThread}（--num-thread）` : 'Ollama 預設'}`);
     L.push(`載入：${r.warm ? '沒有先卸載（--warm）：時間可能不含載入，也可能吃到上一次的 prompt 快取' : '量測前先卸載模型，時間含載入、prompt 是冷的'}`);
@@ -489,5 +499,5 @@ if (require.main === module) {
 module.exports = {
     main, parseArgs, loadFixtureQuestions, kcsFor, pickQuestion, modelSpecFor, inputFor, captureRequest, resolveCallParams,
     estimateTokens, callsPerPaper, checkAnswer, formatReport, USAGE,
-    AGENTS, AGENT_MODULES, THINK_ON_BUDGET, TOKENS_PER_CHAR, FIXTURE_FILE
+    AGENTS, AGENT_MODULES, THINK_ON_BUDGET, TOKENS_PER_CHAR, FIXTURE_FILE, CLASSIFY_NOTE
 };

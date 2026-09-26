@@ -227,6 +227,28 @@ describe('main', () => {
         assert.ok(!/其中思考/.test(seen.out));
         assert.match(seen.out, /\| 輸出 \| 4 分 \| 250 \|/);
         assert.match(seen.out, /重寫後通過公式閘門/);
+        assert.ok(!seen.out.includes(bench.CLASSIFY_NOTE), '不是分類就不印分類的注意事項');
+    });
+
+    test('〔審查修正〕classify：報告註明 few-shot 來自設定檔（沒有資料庫），與正式上傳不同', async () => {
+        const { io, seen } = fakes({
+            generate: () => ({
+                data: { chapter: '數列', confidence: 0.9, rationale: '因為' },
+                usage: { tokenIn: 3600, tokenOut: 60, tokenThinking: 0, tokenCached: 0, timing: TIMING }, raw: { message: {} }
+            })
+        });
+        assert.equal(await bench.main(['--agent', 'classify', '--progress-sec', '0'], io), 0);
+        assert.ok(seen.out.includes(bench.CLASSIFY_NOTE));
+        assert.match(bench.CLASSIFY_NOTE, /few-shot 全部來自設定檔的自製例句/);
+        assert.match(bench.CLASSIFY_NOTE, /FEATURE_SIMILAR/);
+        // 前提：量測時 ctx.db＝null，few-shot 全部來自設定檔的自製例句（config/chapterExamples.js）
+        const classify = require('../../agents/classify');
+        const { getChapterExample } = require('../../config/chapterExamples');
+        const q = bench.loadFixtureQuestions()[0];
+        const text = seen.generate[0].parts[0].text;
+        assert.ok(text.includes(classify.fewShotText([{ question_text: 'x', chapter: 'y' }]).split('\n')[0]), '有 few-shot 段');
+        const other = require('../../config/chapters').CHAPTERS[q.subject].find(c => c !== q.chapter);
+        assert.ok(text.includes(String(getChapterExample(q.subject, other)).trim().slice(0, 20)), '例句來自設定檔');
     });
 
     test('逾時：結束碼 1、講明怎麼辦；不是 ollama 的模型直接擋下', async () => {
