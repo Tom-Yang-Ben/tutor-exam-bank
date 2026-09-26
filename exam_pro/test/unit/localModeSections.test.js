@@ -1,9 +1,12 @@
 // ─────────────────────────────────────────────────────────────
-// localModeSections.test.js — docs/local-mode.md 10.12～10.14 的編號與交互參照（〔整合 2026-09-26 dec/integration-r5〕）
+// localModeSections.test.js — docs/local-mode.md 10.12～10.15 的編號與交互參照（〔整合 2026-09-26 dec/integration-r5〕；
+// 〔整合 2026-09-27 dec/integration-final5〕加 10.15）
 //
 // dec/local-ocr-first-fix、dec/local-embed-thresholds-fix、dec/local-thinking-speed-fix 三條分支各自新增了「10.12」。
 // 整合時依併入順序改號：10.12＝只用 OCR 拆題、10.13＝三個餘弦門檻、10.14＝拆題以外的時間與加速選項，
 // 程式註解、執行時印出的訊息、其他文件裡指到這三節的地方一併改號。
+// 〔整合 2026-09-27 dec/integration-final5〕dec/local-classify-nlq-prep-fix 也新增了「10.12 classify／nlq 重錄前修正」，
+// 依併入順序改號為 10.15；它的程式註解、eval 訊息、測試一併改號。
 // 這裡釘住：① 三個標題真的是這個順序、各出現一次；② 各功能的原始碼／文件指到的是自己那一節（改號沒有漏、也沒有改錯邊）；
 // ③ 執行時印給 Owner 看的兩句（localTuning 的啟動訊息、report:jobs 的重跑說明）指到 10.14。
 // 只讀檔，不連 DB、不呼叫模型。
@@ -24,17 +27,18 @@ function sectionRefs(text) {
     return [...out].sort();
 }
 
-describe('docs/local-mode.md 10.12～10.14（整合 r5 改號）', () => {
+describe('docs/local-mode.md 10.12～10.15（整合 r5、final5 改號）', () => {
     const doc = read('docs/local-mode.md');
 
-    test('三個標題依併入順序各出現一次：10.12 OCR 為主、10.13 餘弦門檻、10.14 拆題以外的時間', () => {
+    test('四個標題依併入順序各出現一次：10.12 OCR 為主、10.13 餘弦門檻、10.14 拆題以外的時間、10.15 classify／nlq 重錄前修正', () => {
         const heads = [...doc.matchAll(/^### (10\.1[2-9]) (.*)$/gm)].map(m => [m[1], m[2]]);
-        assert.deepEqual(heads.map(h => h[0]), ['10.12', '10.13', '10.14'], JSON.stringify(heads));
+        assert.deepEqual(heads.map(h => h[0]), ['10.12', '10.13', '10.14', '10.15'], JSON.stringify(heads));
         assert.match(heads[0][1], /只用 OCR 拆題/);
         assert.match(heads[1][1], /三個餘弦門檻/);
         assert.match(heads[2][1], /拆題以外的時間/);
-        const i12 = doc.indexOf('### 10.12 '), i13 = doc.indexOf('### 10.13 '), i14 = doc.indexOf('### 10.14 ');
-        assert.ok(i12 < i13 && i13 < i14, '依編號排列');
+        assert.match(heads[3][1], /classify／nlq 重錄前修正/);
+        const i12 = doc.indexOf('### 10.12 '), i13 = doc.indexOf('### 10.13 '), i14 = doc.indexOf('### 10.14 '), i15 = doc.indexOf('### 10.15 ');
+        assert.ok(i12 < i13 && i13 < i14 && i14 < i15, '依編號排列');
         assert.equal(/^<{7}|^={7}$|^>{7}/m.test(doc), false, '沒有殘留的衝突標記');
     });
 
@@ -59,7 +63,13 @@ describe('docs/local-mode.md 10.12～10.14（整合 r5 改號）', () => {
         ['exam_pro/eval/tools/local_bench_text.js', ['10.14']],
         ['exam_pro/test/unit/localTuning.test.js', ['10.14']],
         ['exam_pro/test/unit/localBenchText.test.js', ['10.14']],
-        ['exam_pro/test/unit/localPerfThinking.test.js', ['10.14']]
+        ['exam_pro/test/unit/localPerfThinking.test.js', ['10.14']],
+        ['exam_pro/agents/classify.js', ['10.15']],
+        ['exam_pro/utils/chapterPostRules.js', ['10.15']],
+        ['exam_pro/eval/lib/suiteClassify.js', ['10.15']],
+        ['exam_pro/eval/tools/local_v1_counterfactual.js', ['10.15']],
+        ['exam_pro/eval/fixtures/local_raw_2026-09-25.json', ['10.15']],
+        ['exam_pro/test/unit/localV1Regression.test.js', ['10.15']]
     ];
     for (const [file, want] of OWN) {
         test(`${file} 只指到 ${want.join('、')}`, () => {

@@ -388,6 +388,8 @@ async function runNlqSuite(args = {}) {
             if (parsed) {
                 row.got = parsed.filters;
                 row.parse_path = parsed.parse_path;
+                // 〔dec/local-classify-nlq-prep〕mergeLlm 擋下或換掉的 LLM 條件（證據檢查、平面／空間、界線規則），報表逐句列出
+                row.adjustments = Array.isArray(parsed.adjustments) ? parsed.adjustments.slice() : [];
                 const cmp = filtersExact(e.expect, parsed.filters);
                 row.exact = cmp.ok;
                 row.diff = cmp.diff;
@@ -501,6 +503,7 @@ async function runNlqSuite(args = {}) {
             exact: r.exact,
             diff: r.diff,
             drifted: r.drifted,
+            adjustments: r.adjustments || [],
             recall_hit: r.recallHit ?? null,
             fallback_level: r.fallbackLevel ?? null
         })),

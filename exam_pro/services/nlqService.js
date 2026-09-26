@@ -41,8 +41,10 @@ const {
 const { CHAPTER_ALIASES, subjectOfChapter } = require('../config/chapterAliases');
 const {
     parseQuery, mentionsChemistry, chemistrySubjectPrior,
-    mentionsQuestionType, mentionsDifficulty, alignChapterDimension
+    mentionsQuestionType, mentionsDifficulty, alignChapterDimension, TYPE_ALIASES
 } = require('../utils/nlqHeuristics');
+// 〔dec/local-classify-nlq-prep〕模型挑的章的後處理：名稱容錯＋相鄰兩章的界線（與 agents/classify.js 共用）
+const { canonicalChapterAny, questionTypeKey, alignChapters } = require('../utils/chapterPostRules');
 const { joinChapters } = require('../agents/promptParts');
 const { registerTemplate } = require('./llm/templates');
 const { loadPseudonymizer, IDENTITY } = require('../utils/pseudonym');
@@ -94,6 +96,8 @@ const WARN = {
 //   - 新增三個【範例】：題材刻意避開 eval/golden/nlq.json 的 50 句（單元測試釘住不得含 golden 原句）。
 // 伺服器端另有兩道不依賴模型的檢查（mergeLlm）：句子沒提到的題型／難度／學生不採用、只明講平面或只明講空間時，
 // 模型只挑了另一個維度的章就換成同名的那一章（兩章都列、或句子兩種都講時不換）。
+// 〔dec/local-classify-nlq-prep〕2026-09-26 再加第三道：相鄰兩章的界線規則（與 classify 共用 utils/chapterPostRules.js）
+// 與章名／題型的名稱容錯。都在 generateJson 之後，模板、schema 與 cacheKeyParts 一個字都沒動，nlq.v2 的鍵不變。
 const TEMPLATE = 'nlq.v2';
 
 const SYSTEM = '你是一位台灣高中數學、物理與化學家教老師的題庫助理。你的工作是把老師隨口說的一句查題需求，翻成題庫看得懂的檢索條件。你只輸出 JSON，不輸出任何其他文字。';
@@ -248,7 +252,10 @@ function validateFilters(filters) {
         keywords: Array.isArray(filters.keywords) ? filters.keywords.filter(k => typeof k === 'string' && k.trim()) : []
     };
 
-    const rawChapters = Array.isArray(filters.chapters) ? filters.chapters : [];
+    // 〔dec/local-classify-nlq-prep〕名稱容錯：只差空白、引號、全形半形的章名先對回白名單（utils/chapterPostRules.js），
+    // 對不到的原樣留著、照舊在下面被丟掉並附警告。規則路徑的章名本來就是白名單原字，不受影響。
+    const rawChapters = (Array.isArray(filters.chapters) ? filters.chapters : [])
+        .map(chapter => canonicalChapterAny(out.subject, chapter) ?? chapter);
 
     // 第 6.4 條第 6 點：subject 為 null 且 chapters 非空時，由第一個章節反推 subject
     if (!out.subject) {
@@ -276,7 +283,9 @@ function validateFilters(filters) {
     }
 
     // 第 6.4 條第 2 點：question_types 逐一過 isValidQuestionType
-    for (const type of (Array.isArray(filters.question_types) ? filters.question_types : [])) {
+    // 〔dec/local-classify-nlq-prep〕容錯：「計算題」「填充」這類寫法照規則層的 TYPE_ALIASES 對回白名單題型
+    for (const raw of (Array.isArray(filters.question_types) ? filters.question_types : [])) {
+        const type = isValidQuestionType(raw) ? raw : (TYPE_ALIASES[questionTypeKey(raw)] ?? raw);
         if (isValidQuestionType(type)) {
             if (!out.question_types.includes(type)) out.question_types.push(type);
         } else {
@@ -333,6 +342,9 @@ async function resolveStudent(db, name) {
  *   - 學生：LLM 給的名字要逐字出現在句子裡，否則不採用（名字不在句子裡＝模型編的）；
  *   - 章節：句子只明講平面或只明講空間時，挑錯維度的章換成同名的另一章（alignChapterDimension）；
  *     同名的另一章模型已經列了、或句子兩種都講（「平面和空間的都要」）時不換。
+ *   - 〔dec/local-classify-nlq-prep〕章節：句子裡有 Owner 界線規則寫明的證據時（A5 的底數、第一冊的位數與首數尾數、
+ *     電位差與等位面、K2 的一維相對速度…），在相鄰兩章之間換（utils/chapterPostRules.js 的 alignChapters，與 classify
+ *     同一張規則表；換過去的那一章模型已經列了就不換）。之前先做章名的名稱容錯（空白、引號、全形半形）。
  * 模板規則 4 本來就要求「沒提到的條件不要輸出」；這一層讓規則不必仰賴模型照做。被擋下或換掉的項目記在
  * adjustments（parseOnly 寫進 log 與解析結果，不進 200 回應的凍結形狀）。沒給 opts.query 時行為與改版前相同。
  *
@@ -350,9 +362,15 @@ function mergeLlm(rulesFilters, rulesSemantic, data, opts = {}) {
 
     if (Array.isArray(d.chapters) && d.chapters.length) {
         if (query !== null) {
-            const aligned = alignChapterDimension(d.chapters, query);
+            // 〔dec/local-classify-nlq-prep〕先做名稱容錯（對到白名單才換），兩道對齊才認得出章名
+            const llmSubject = typeof d.subject === 'string' ? d.subject : null;
+            const named = d.chapters.map(c => canonicalChapterAny(llmSubject, c) ?? c);
+            const aligned = alignChapterDimension(named, query);
             for (const c of aligned.changes) adjustments.push(`章節「${c.from}」→「${c.to}」（句子明講了平面或空間）`);
-            out.chapters = aligned.chapters;
+            // 〔dec/local-classify-nlq-prep〕相鄰兩章的界線（與 classify 同一張規則表；平面／空間已由上一行處理，略過）
+            const bounded = alignChapters(aligned.chapters, query, { skipDimension: true });
+            for (const c of bounded.changes) adjustments.push(`章節「${c.from}」→「${c.to}」（句子裡有「${c.evidence}」）`);
+            out.chapters = bounded.chapters;
         } else {
             out.chapters = d.chapters.slice();
         }
