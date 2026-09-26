@@ -379,6 +379,7 @@ CI 不裝 Ollama、不裝 Python，只讀 repo 裡錄好的回放檔（cassette�
 | 語音按鈕不見了 | 本機模式不提供語音 | 預期中的行為；要用語音只能切回 Gemini（10.4） |
 | GitHub Actions 的 e2e／eval 紅燈，訊息是 replay miss 或缺向量 | `ci.yml` 已改本機模型，回放檔還沒以本機模型重錄 | 照 10.7 重錄 |
 | 重錄 variant 時大部分題都有「已寫入 2 筆向量」，最後卻報「dedup1 取不到變式題的向量（EMBED_MODE=fixture）」、`gate_pass_rate` n/a | 2026-09-26 之前的版本 dedup1 寫死讀向量檔（已修正） | 拉新版後照 10.7 第 8 點只補向量，不必重錄 LLM |
+| 題幹裡的公式少了一截（`rac{1}{2}`、` imes`、`ullet`），或 variant 回放報二、三十次「embedding fixture 查無此文本」 | 模型在 JSON 裡的 LaTeX 只寫一個反斜線，`\frac` 的 `\f`、`\times` 的 `\t` 被當成控制字元。`dec/latex-escape-repair` 起 `services/llm` 在交給 agent 之前補回去（回放也補）；在那之前錄的向量與下游 cassette 是對著壞字串錄的，題幹修好後對不上 | 不必改設定。要讓 variant 的 eval 重新量得到：`scripts\windows\record_local.bat variant` 整步重錄（只補向量不夠）。規則、救不回來的情形與實測數字見 [`docs/llm.md`](llm.md) 第 10 節 |
 | `.bat` 視窗裡中文變亂碼 | 主控台字型不支援 | 不影響執行；log 檔是 UTF-8，用記事本開 |
 | 頁面沒有樣式、公式不排版、字型怪怪的，瀏覽器主控台有 500／CORS 錯誤 | 用 `http://127.0.0.1:3000` 開頁面；字型、MathJax、Tailwind 改由本機伺服器提供後要過 `ALLOWED_ORIGINS` | 一律用 `.env` 的 `ALLOWED_ORIGINS` 裡的網址開（預設 `http://localhost:3000`） |
 | 拆題被切在兩頁中間的題，兩個引擎都拆成殘缺的一題卻自動入庫 | 一塊 2 頁的已知限制（LM-12 ①） | 複核時留意跨頁題；可在 `.env` 把 `JOB_PDF_CHUNK_PAGES` 設大一點（每塊更慢） |
