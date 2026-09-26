@@ -139,7 +139,7 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 | # | 步驟 | 指令 | 確認什麼 |
 | :--- | :--- | :--- | :--- |
 | 0 | 事前決定（Owner） | —— | 數學知識點的章節切法要在**第一次 `kc:load` 之前**決定（搬移知識點會改變 code，`docs/kc-review-數學.md` 第 2 節）；物理、化學的待決事項見 `docs/kc-review-物理.md`、`docs/kc-review-化學.md`。不急著用知識點可以先跳過步驟 3，其餘照做 |
-| 1 | 備份＋停服務 | `npm run db:backup`；停止 `npm start`／`npm run dev` | 備份成功（`backups/LAST_FAILED.txt` 不存在）；含新 migration 的版本要先停服務或先 migrate（§3.3） |
+| 1 | 備份＋停服務 | `npm run db:backup`；停止 `npm start`／`npm run dev` | 備份成功（`backups/LAST_FAILED.txt` 不存在）；含新 migration 的版本要先停服務或先 migrate（§3.3）。〔整合 2026-09-26〕含 0016 以後（錯題重練）的版本改照 §3.6 的順序：**先停服務、更新程式，再備份**（停了才不會有備份之後的寫入漏掉），接著 migrate 前後拍快照比對；那種版本不能用「先 migrate」代替停服務（0016 之後舊程式寫 `attempts` 會失敗，新程式在沒套到 0018 的庫上會 500，服務跑著時兩個方向都不能切，§3.6） |
 | 2 | 套用 migrations | `git pull`（或 checkout 併入後的 main）→ `npm run migrate` → `node migrate.js status` | 0010、0011、0012 三支顯示已套用（〔整合 2026-09-26〕含錯題重練的版本會一路套到 0018，改照 §3.6 做：停服務、備份、前後快照比對回 0 才啟動） |
 | 3 | 載入知識點種子檔 | `npm run kc:validate` → `npm run kc:load -- --dry-run` → 數字合理後 `npm run kc:load` | dry-run 印出新增、更新、略過數（三科約 637 個知識點；〔整合 2026-09-26〕現為 688 個：數學 253、物理 198、化學 237，`npm run kc:validate` 實測；dry-run 是整批照做後 ROLLBACK，數字與實際載入相同）；有任何 error 整批不寫 |
 | 4 | 重建關鍵字索引（**必跑**） | `npm run search:reindex -- --dry-run` → `npm run search:reindex` | 化學詞典改變了分詞，既有數理題的 `search_tsv` 會過期（例「質量數」「理想氣體」「週期表」）；dry-run 印出會變的題數與前 5 題差異；可中斷重跑，之後改詞典或章節名都要再跑（`docs/chemistry.md` §4.3） |

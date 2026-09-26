@@ -507,15 +507,21 @@ npm start                 # http://localhost:3000
 | AI 家教 | 問三科題目與觀念；直接講解或引導式；數值由程式驗算並攤開程式與輸出（只在 Gemini 模式；本機模式不做程式驗算、回答也不宣稱驗算過）；每日花費上限 | `FEATURE_TUTOR` | [`docs/tutor.md`](./docs/tutor.md) |
 | 按住說話 | 按住說話、放開後看逐字稿與公式，改好按確認才送給家教（桌機、localhost 或 HTTPS；只在 Gemini 模式，本機模式不掛載） | `FEATURE_VOICE`（需同時開 `FEATURE_TUTOR`） | 同上 |
 
-**給老師的快速開始**（升級一次；完整步驟與每一步要確認什麼見 [`engineering_docs/06_ops/deployment_and_operations.md`](./engineering_docs/06_ops/deployment_and_operations.md) §3.4）：
+**給老師的快速開始**（升級一次；完整步驟與每一步要確認什麼見 [`engineering_docs/06_ops/deployment_and_operations.md`](./engineering_docs/06_ops/deployment_and_operations.md) §3.4；〔整合 2026-09-26〕含 migration 0016 以後（錯題重練）的版本，第 0～2 步改照同檔 [§3.6](./engineering_docs/06_ops/deployment_and_operations.md#36-錯題重練上線migrations-00160018整合-2026-09-26) 的順序：先停服務、更新程式，再備份，migrate 前後拍快照比對。下面的區塊已照這個順序排好，請一行一行做、看完輸出再做下一行）：
 
 ```bash
 cd exam_pro
+# 0. 〔整合 2026-09-26〕先停服務：關掉正在跑 npm start／npm run dev 的視窗（Ctrl+C），再更新程式
+git pull                                        #    〔整合 2026-09-26〕或 checkout 含錯題重練的版本（npm run dev 的 nodemon 一拉程式就重啟，所以一定先停）
 npm run db:backup                               # 1. 先備份
+node scripts/snapshot_attempt_views.js --out=before.json                  # 〔整合 2026-09-26〕1a. 套用前快照（只讀不寫）
 npm run migrate                                 # 2. 套用 0010 之後的 migration（local/integration 到 0015；章節重整另有 chapters:migrate，見 docs/chapter-restructure.md 第 6.1 節；本機模式另要 embed:backfill，見 deployment_and_operations.md §3.5）
                                                 #    〔整合 2026-09-26〕含錯題重練的版本會套到 0018：先停服務，migrate 前後各跑一次
                                                 #    node scripts/snapshot_attempt_views.js --out=before.json／--out=after.json，
                                                 #    再 --compare before.json after.json 回 0 才啟動（FEATURE_RETRAIN 關閉也要套；deployment_and_operations.md §3.6）
+node scripts/snapshot_attempt_views.js --out=after.json                   # 〔整合 2026-09-26〕2a. 套用後快照
+node scripts/snapshot_attempt_views.js --compare before.json after.json   # 〔整合 2026-09-26〕2b. 印「完全相同」、回 0 才往下做；
+                                                #    有差異（回 1）就停在這裡、不要啟動，把輸出與兩個檔案留給開發者，用第 1 步的備份還原（deployment_and_operations.md §6.2）
 npm run kc:load -- --dry-run                    # 3. 先看知識點會新增幾個（數學的章節切法要在第一次載入前決定）
 npm run kc:load                                 #    數字合理再真的載入
 npm run search:reindex -- --dry-run             # 4. 必跑：化學詞彙改變了分詞
@@ -526,7 +532,7 @@ npm start
 
 之後在 `exam_pro/.env` 一次開一個旗標、重啟、實際用一次：`FEATURE_KC` → `FEATURE_REMEDIAL` → `FEATURE_TUTOR`（需 `LLM_MODE=live`；本機模式不需金鑰，走 Gemini 時要金鑰並確認 `TUTOR_DAILY_BUDGET_USD`）→ `FEATURE_VOICE`（只在 Gemini 模式）→ 最後才 `FEATURE_KC_TAGGING`。步驟 1–5 都不呼叫 AI、不花錢。
 
-**尚未做到**（依 DEC 列管）：錯題重練與間隔複習、訂正卷、學習路徑與學習報告、學生端；AI 家教與知識點標註都還沒有對真的模型（Gemini 或本機）量測過品質，化學的拆題與分類品質也還沒量測。交接與 Owner 待辦見 [`docs/HANDOFF.md`](./docs/HANDOFF.md)，裁決見 [`docs/interfaces-stage5.md`](./docs/interfaces-stage5.md) 第 9 條。
+**尚未做到**（依 DEC 列管）：錯題重練與間隔複習（〔整合 2026-09-26〕已在 `dec/integration-all` 做到，FR-036～040，見上表；待併 `local/integration`）、訂正卷、學習路徑與學習報告、學生端；AI 家教與知識點標註都還沒有對真的模型（Gemini 或本機）量測過品質，化學的拆題與分類品質也還沒量測。交接與 Owner 待辦見 [`docs/HANDOFF.md`](./docs/HANDOFF.md)，裁決見 [`docs/interfaces-stage5.md`](./docs/interfaces-stage5.md) 第 9 條。
 
 ---
 
