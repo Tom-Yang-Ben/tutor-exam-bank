@@ -140,6 +140,22 @@ function renderMarkdown(r) {
     ]));
     out.push('> 線上 `answer_mismatch` 比例 > 15% 時先查 prompt，不要急著接第二家模型（規劃 §3.8）。\n');
 
+    // 〔審查 2026-09-26〕LOCAL_EXTRACT_MODE=ocr 的版面配圖（docs/local-mode.md 10.12 第 4 點）：期間內有只用 OCR 拆的塊才印
+    const of = r.ocrFigures;
+    if (of && of.chunks > 0) {
+        out.push('\n## OCR 版面配圖（LOCAL_EXTRACT_MODE=ocr）\n');
+        out.push(table(['指標', '值'], [
+            ['只用 OCR 拆的塊數', int(of.chunks)],
+            ['版面偵測到的圖（印章以外）', int(of.detected)],
+            ['自動配到題目', int(of.assigned)],
+            ['標了補圖提示的題', int(of.hinted)],
+            ['讀不到版面或框數對不上的塊', int(of.no_layout)],
+            ['可能被截斷、整塊只給提示的塊', int(of.truncated)]
+        ]));
+        out.push('> 逐題的提示：停在 `ocr_only` 的題記在 save 事件的 `detail.figure_hint`；被其他閘門先攔下的題只在 ' +
+            '`job_questions.payload->\'extract\'->\'figure_hint\'`。沒配到的圖用 `npm run figures:backfill` 補（docs/figures.md）。\n');
+    }
+
     return out.join('');
 }
 
@@ -231,10 +247,23 @@ async function collect(db, since) {
     const topModel = (node) => models.find(m => m.node === node)?.model ?? null;
     const relation = verifyRelation(topModel('extract') ?? topModel('classify'), topModel('verify'));
 
+    // 〔審查 2026-09-26〕只用 OCR 拆的塊（LOCAL_EXTRACT_MODE=ocr）的版面配圖：extract 事件的
+    // detail.cross_check.figures（agents/extractOcrFigures.js 的摘要：detected／assigned／hinted／layout／truncated）
+    const ocrFigures = await one(
+        `SELECT COUNT(*)::int                                                              AS chunks,
+                COALESCE(SUM((detail->'cross_check'->'figures'->>'detected')::int), 0)::int AS detected,
+                COALESCE(SUM((detail->'cross_check'->'figures'->>'assigned')::int), 0)::int AS assigned,
+                COALESCE(SUM((detail->'cross_check'->'figures'->>'hinted')::int), 0)::int   AS hinted,
+                COUNT(*) FILTER (WHERE COALESCE(detail->'cross_check'->'figures'->>'layout', 'none') <> 'ok')::int AS no_layout,
+                COUNT(*) FILTER (WHERE detail->'cross_check'->'figures'->>'truncated' = 'true')::int AS truncated
+           FROM job_events
+          WHERE created_at >= $1 AND node = 'extract' AND outcome = 'pass'
+            AND detail->'cross_check'->>'mode' = 'ocr'`);
+
     return {
         since: { ...since, from },
         totals, nodes, outcomes, errorClasses, reviewReasons, perJob,
-        classifyGate, verify: { ...verifyStats, ...relation }, models
+        classifyGate, verify: { ...verifyStats, ...relation }, models, ocrFigures
     };
 }
 

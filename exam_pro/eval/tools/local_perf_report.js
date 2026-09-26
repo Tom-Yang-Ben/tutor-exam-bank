@@ -87,10 +87,15 @@ const VENDOR_CHOICES = Object.freeze(['ollama', 'gemini', 'all']);
 const LOCAL_VENDORS = Object.freeze(['ollama', 'paddleocr']);
 /** 表格的排列順序（本機拆題鏈在前；其他 agent 依字母排在後面） */
 const AGENT_ORDER = Object.freeze(['ocr', 'extract_vision', 'extract_ocr', 'classify', 'lint', 'verify', 'variant', 'nlq']);
-/** 一個拆題節點（一塊）依序呼叫的三步（agents/extract.js 的 runLocal；workers/jobRunner.js 一塊一個節點） */
-const EXTRACT_CHAIN = local.LOCAL_EXTRACT_CHAIN;
+// 一個拆題節點（一塊）依序呼叫的步驟（agents/extract.js 的 runLocal；workers/jobRunner.js 一塊一個節點）：
+// 〔OCR 為主 2026-09-26〕依 LOCAL_EXTRACT_MODE 由 local.extractChainFor(mode) 決定（cross 三步、ocr 兩步），見 recommend()。
 /** 一次呼叫就是一個節點的 agent（驗算另計：最多採樣 RULES.VERIFY_MAX_SAMPLES 次） */
 const SINGLE_CALL_NODES = Object.freeze(['classify', 'lint', 'variant']);
+/**
+ * 〔OCR 為主 2026-09-26〕extract_ocr 一次呼叫的輸出上限（agents/extract.js 的 LOCAL_MAX_OUTPUT_TOKENS；單元測試釘住兩邊一致）。
+ * 讀進去的 token（prompt）加上它要放得進 OLLAMA_NUM_CTX，否則 Ollama 會截掉前面的內容或截斷輸出（3.4 段）。
+ */
+const EXTRACT_MAX_OUTPUT_TOKENS = 8192;
 
 /**
  * rerecord_all.js 的錄製步驟標籤（recordSteps() 的 label）開頭 → 步驟名。
@@ -235,7 +240,10 @@ function toEntry(doc, { file = null, dirAgent = null, mtimeMs = null } = {}) {
         timing: timing && (timing.promptEvalMs !== null || timing.evalMs !== null) ? timing : null,
         pages,
         pagesFrom,
-        chunkRef: ckp.pdfSha256 && ckp.chunkNo != null ? `${ckp.pdfSha256}#${ckp.chunkNo}` : null
+        chunkRef: ckp.pdfSha256 && ckp.chunkNo != null ? `${ckp.pdfSha256}#${ckp.chunkNo}` : null,
+        // 〔OCR 為主〕OCR 的頁碼範圍（沒有看圖的 cassette 時，extract_ocr 靠它推一塊幾頁；見 fillChunkPages）
+        ocrRange: agent === 'ocr' && ckp.pdfSha256 && Number.isInteger(ckp.fromPage) && Number.isInteger(ckp.toPage) && ckp.toPage >= ckp.fromPage
+            ? { pdfSha256: ckp.pdfSha256, fromPage: ckp.fromPage, toPage: ckp.toPage } : null
     };
 }
 
@@ -248,10 +256,34 @@ function fillChunkPages(entries) {
     for (const e of entries) {
         if (e.pagesFrom === 'images' && e.chunkRef && /^extract_vision/.test(e.agent)) byChunk.set(e.chunkRef, e.pages);
     }
+    // 〔OCR 為主 2026-09-26〕只用 OCR 拆題時沒有看圖的 cassette：改由同一份 PDF 的 OCR 頁碼範圍推「第 n 塊」是哪幾頁
+    // （每塊頁數＝從第 1 頁開始的那一塊的頁數；第 n 塊從 (n−1)×每塊頁數＋1 頁開始）。推不出來就維持不知道。
+    const ocrBySha = new Map();
     for (const e of entries) {
-        if (e.pages === null && e.chunkRef && /^extract_ocr/.test(e.agent) && byChunk.has(e.chunkRef)) {
+        if (!e.ocrRange) continue;
+        const list = ocrBySha.get(e.ocrRange.pdfSha256) || [];
+        list.push(e.ocrRange);
+        ocrBySha.set(e.ocrRange.pdfSha256, list);
+    }
+    const pagesFromOcr = (chunkRef) => {
+        const [sha, no] = String(chunkRef).split('#');
+        const chunkNo = Number(no);
+        const ranges = ocrBySha.get(sha);
+        if (!ranges || !Number.isInteger(chunkNo) || chunkNo < 1) return null;
+        const first = ranges.find(r => r.fromPage === 1);
+        if (!first) return null;
+        const size = first.toPage - first.fromPage + 1;
+        const hit = ranges.find(r => r.fromPage === (chunkNo - 1) * size + 1);
+        return hit ? hit.toPage - hit.fromPage + 1 : null;
+    };
+    for (const e of entries) {
+        if (e.pages !== null || !e.chunkRef || !/^extract_ocr/.test(e.agent)) continue;
+        if (byChunk.has(e.chunkRef)) {
             e.pages = byChunk.get(e.chunkRef);
             e.pagesFrom = 'chunk';
+        } else {
+            const n = pagesFromOcr(e.chunkRef);
+            if (n) { e.pages = n; e.pagesFrom = 'ocr-chunk'; }
         }
     }
     return entries;
@@ -384,6 +416,8 @@ function statsOf({ agent, model, vendor, items }) {
         tokensPerSec: withUsage.length && usageMs > 0 && outTokens > 0 ? outTokens / (usageMs / 1000) : null,
         avgTokenIn: withUsage.length ? sum(withUsage.map(e => e.usage.tokenIn)) / withUsage.length : null,
         avgTokenOut: withUsage.length ? outTokens / withUsage.length : null,
+        // 〔OCR 為主〕讀得最多的那一次（extract_ocr 的 num_ctx 檢查用，3.4 段）
+        maxTokenIn: withUsage.length ? Math.max(...withUsage.map(e => e.usage.tokenIn)) : null,
         pages
     };
 }
@@ -577,10 +611,16 @@ function currentSettings(env = {}) {
 
 /**
  * 依各 agent 的統計算建議。只用本機（ollama／paddleocr）的組。純函式。
+ * 〔OCR 為主 2026-09-26〕opts.mode（.env 的 LOCAL_EXTRACT_MODE）：'ocr' 時拆題一塊只有 ocr → extract_ocr（不看圖），
+ * 節點逾時不再說「沒有 extract_vision 的資料，這一項偏低」；每塊頁數沒有看圖的 cassette 時改以 extract_ocr 為基準。
+ * 另外算 ocrCtx：extract_ocr 讀得最多的那一次＋輸出上限（EXTRACT_MAX_OUTPUT_TOKENS）放不放得進 OLLAMA_NUM_CTX。
  * @param {ReturnType<typeof summarizeGroups>} agentStats 本機呼叫的 summarizeGroups(entries, {byModel:false})
  * @param {ReturnType<typeof currentSettings>} settings
+ * @param {{mode?:'cross'|'ocr'}} [opts]
  */
-function recommend(agentStats, settings) {
+function recommend(agentStats, settings, opts = {}) {
+    const mode = opts && opts.mode === 'ocr' ? 'ocr' : 'cross';
+    const CHAIN = local.extractChainFor(mode);
     const localStats = agentStats.filter(s => LOCAL_VENDORS.includes(s.vendor));
     const by = new Map(localStats.map(s => [s.agent, s]));
     const lowSample = localStats.filter(s => s.n < RULES.MIN_SAMPLES).map(s => s.agent);
@@ -598,11 +638,11 @@ function recommend(agentStats, settings) {
 
     // 3. JOB_NODE_TIMEOUT_MS：一個節點內依序呼叫的總和，取最大
     const candidates = [];
-    const chain = EXTRACT_CHAIN.filter(a => by.has(a));
+    const chain = CHAIN.filter(a => by.has(a));
     if (chain.length) {
         const p90 = sum(chain.map(a => by.get(a).p90Ms));
         const max = sum(chain.map(a => by.get(a).maxMs));
-        const missing = EXTRACT_CHAIN.filter(a => !by.has(a));
+        const missing = CHAIN.filter(a => !by.has(a));
         candidates.push({
             node: `拆題一塊（${chain.join('＋')}）`,
             p90Ms: p90, maxMs: max, needMs: safeMs(p90, max),
@@ -651,18 +691,19 @@ function recommend(agentStats, settings) {
     // 5. 每塊頁數：線性外推每頁秒數，在目前的逾時與 num_ctx 下放得下的最大頁數。
     //    固定開銷也按頁攤，所以只有「推到不少於錄製時的頁數」才偏保守；推到比錄製時少的頁數會低估（belowRecorded）。
     let chunkPages = null;
-    const vision = by.get('extract_vision');
+    // 基準：看圖那一步的頁數（圖片張數）；〔OCR 為主〕ocr 模式沒有看圖的 cassette 時改用 extract_ocr（頁數由 OCR 的頁碼範圍推）
+    const vision = by.get('extract_vision') || (mode === 'ocr' ? by.get('extract_ocr') : null);
     if (vision && vision.pages) {
         const perPage = {};   // agent → { safeSec, p90Sec, maxSec, from }
-        for (const a of EXTRACT_CHAIN) {
+        for (const a of CHAIN) {
             const s = by.get(a);
             if (!s) continue;
             if (s.pages) {
                 perPage[a] = { p90Sec: s.pages.p90SecPerPage, maxSec: s.pages.maxSecPerPage, meanSec: s.pages.secPerPage, from: '實際頁數' };
             } else {
-                // 不知道頁數：以 extract_vision 的平均頁數換算（同一批塊）
+                // 不知道頁數：以基準那一步（extract_vision；ocr 模式是 extract_ocr）的平均頁數換算（同一批塊）
                 const k = vision.pages.avgPages;
-                perPage[a] = { p90Sec: s.p90Ms / 1000 / k, maxSec: s.maxMs / 1000 / k, meanSec: s.meanMs / 1000 / k, from: `以 extract_vision 的平均 ${round1(k)} 頁換算` };
+                perPage[a] = { p90Sec: s.p90Ms / 1000 / k, maxSec: s.maxMs / 1000 / k, meanSec: s.meanMs / 1000 / k, from: `以 ${vision.agent} 的平均 ${round1(k)} 頁換算` };
             }
             perPage[a].safeSec = Math.max(RULES.P90_FACTOR * perPage[a].p90Sec, RULES.MAX_FACTOR * perPage[a].maxSec);
         }
@@ -689,7 +730,7 @@ function recommend(agentStats, settings) {
         const recordedAvgPages = vision.pages.avgPages;
         // 實際錄到的每塊最長：各步最慢的那一次（一次呼叫處理一塊）與它的頁數。
         // 各步相加是上限：同一塊不一定每步都最慢（ocr 的 cassette 沒有塊號，無法逐塊對齊）。
-        const recordedSteps = EXTRACT_CHAIN.filter(a => by.has(a)).map(a => {
+        const recordedSteps = CHAIN.filter(a => by.has(a)).map(a => {
             const s = by.get(a);
             return { agent: a, maxMs: s.maxMs, pages: Number.isInteger(s.maxCallPages) ? s.maxCallPages : null };
         });
@@ -702,7 +743,18 @@ function recommend(agentStats, settings) {
         };
     }
 
-    return { ollamaTimeout, ocrTimeout, nodeTimeout, timeScale, chunkPages, lowSample };
+    // 6. 〔OCR 為主〕extract_ocr 的 context：讀得最多的那一次＋輸出上限，放不放得進 OLLAMA_NUM_CTX
+    const eo = by.get('extract_ocr');
+    const ocrCtx = eo && Number.isFinite(eo.maxTokenIn) ? {
+        agent: 'extract_ocr',
+        maxTokenIn: eo.maxTokenIn,
+        maxOutputTokens: EXTRACT_MAX_OUTPUT_TOKENS,
+        numCtx: settings.OLLAMA_NUM_CTX.value,
+        over: eo.maxTokenIn + EXTRACT_MAX_OUTPUT_TOKENS > settings.OLLAMA_NUM_CTX.value,
+        n: eo.n
+    } : null;
+
+    return { mode, ollamaTimeout, ocrTimeout, nodeTimeout, timeScale, chunkPages, lowSample, ocrCtx };
 }
 
 // ───────────────────────── 輸出 ─────────────────────────
@@ -764,7 +816,9 @@ function buildReport(args, { env = {}, now = new Date(), readFile = (p) => fs.re
     // 建議只看本機的呼叫（--vendor all 時同一個 agent 可能也有 Gemini 錄的，不能混在一起算）
     const agentStats = summarizeGroups(selected.filter(e => LOCAL_VENDORS.includes(e.vendor)), { byModel: false });
     const settings = currentSettings(env);
-    const rec = recommend(agentStats, settings);
+    // 〔OCR 為主 2026-09-26〕.env 的 LOCAL_EXTRACT_MODE（與程式同一條解讀規則）：決定拆題一塊算哪幾步
+    const mode = require('../../config/localExtractMode').resolveLocalExtractMode(env);
+    const rec = recommend(agentStats, settings, { mode });
     const overlaps = countOverlaps(selected);
     const mtimeCount = selected.filter(e => e.timeSource === 'mtime').length;
     const logs = args.logs.map(file => {
@@ -1001,7 +1055,9 @@ function buildReport(args, { env = {}, now = new Date(), readFile = (p) => fs.re
         L.push('### 3.3 每塊頁數（`JOB_PDF_CHUNK_PAGES`）');
         L.push('');
         if (!rec.chunkPages) {
-            L.push('沒有 `extract_vision` 的 cassette（或看不出頁數），無法建議每塊頁數。');
+            L.push(rec.mode === 'ocr'
+                ? '沒有 `extract_vision` 或 `extract_ocr` 的 cassette（或看不出頁數），無法建議每塊頁數。'
+                : '沒有 `extract_vision` 的 cassette（或看不出頁數），無法建議每塊頁數。');
         } else {
             const c = rec.chunkPages;
             const avg = round1(c.recordedAvgPages);
@@ -1049,6 +1105,27 @@ function buildReport(args, { env = {}, now = new Date(), readFile = (p) => fs.re
             }
             L.push('');
             L.push('這個設定只影響正式上傳（`exam_pro/.env`）；重錄 CI 回放檔時一律照 CI 的設定（本機 2 頁），不受影響。');
+        }
+        L.push('');
+
+        // 〔OCR 為主 2026-09-26〕只用 OCR 拆題時，一塊的 OCR 文字全部塞進一次 extract_ocr：讀的＋輸出上限要放得進 num_ctx
+        L.push('### 3.4 OCR 整理一次讀多少（`OLLAMA_NUM_CTX`）');
+        L.push('');
+        L.push(`拆題方式：${rec.mode === 'ocr' ? '`LOCAL_EXTRACT_MODE=ocr`（只用 OCR：一塊＝ocr → extract_ocr，不看圖）' : '交叉驗證（`LOCAL_EXTRACT_MODE` 沒寫或是 cross：一塊＝ocr → extract_vision → extract_ocr）'}。`);
+        L.push('');
+        if (!rec.ocrCtx) {
+            L.push('沒有 `extract_ocr` 的 cassette（或沒有 token 數），算不出來。');
+        } else {
+            const x = rec.ocrCtx;
+            const need = x.maxTokenIn + x.maxOutputTokens;
+            L.push(`\`extract_ocr\` 讀得最多的一次 ${fmtInt(x.maxTokenIn)} token（${x.n} 支）＋輸出上限 ${fmtInt(x.maxOutputTokens)}（\`agents/extract.js\` 的 \`LOCAL_MAX_OUTPUT_TOKENS\`）` +
+                `＝${fmtInt(need)}，\`OLLAMA_NUM_CTX\`＝${fmtInt(x.numCtx)}（${settings.OLLAMA_NUM_CTX.source}）。`);
+            L.push('');
+            L.push(x.over
+                ? '⚠️ **放不下**：模型寫得長的時候，Ollama 會截掉前面的內容或截斷輸出（拆出來的 JSON 不完整、少題）。' +
+                  '可以在 `.env` 把 `JOB_PDF_CHUNK_PAGES` 設成 1（一塊 1 頁，每次讀的 OCR 文字少一半），或調高 `OLLAMA_NUM_CTX`（記憶體要夠）。' +
+                  '正式上傳時伺服器視窗也會對每一塊印一行「估計要讀約 N token…」的警告。'
+                : `放得下（還有 ${fmtInt(x.numCtx - need)} token 的餘裕）。題目多、公式與表格多的卷讀得更多；伺服器視窗出現「估計要讀約 N token…」的警告時再照那一行調。`);
         }
         L.push('');
     }
@@ -1104,5 +1181,6 @@ module.exports = {
     stepNameOf, parseRecordLog,
     safeMs, currentSettings, recommend,
     fmtDur,
-    RULES, LOW_SAMPLE_LABEL, SETTING_DEFAULTS, STEP_LABEL_PREFIXES, LOCAL_VENDORS, VENDOR_CHOICES, DEFAULT_CASSETTE_DIR, USAGE
+    RULES, LOW_SAMPLE_LABEL, SETTING_DEFAULTS, STEP_LABEL_PREFIXES, LOCAL_VENDORS, VENDOR_CHOICES, DEFAULT_CASSETTE_DIR, USAGE,
+    EXTRACT_MAX_OUTPUT_TOKENS   // 〔OCR 為主 2026-09-26〕
 };

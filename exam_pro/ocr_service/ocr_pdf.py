@@ -10,9 +10,14 @@ ocr_pdf.py — 本機 PDF OCR（PaddleOCR 3.x 的 PP-StructureV3；docs/local-mo
         再用 PP-StructureV3（版面分析＋文字＋表格＋公式轉 LaTeX，繁體中文，只用 CPU）逐頁辨識。
         stdout 只印一個 JSON：
           { "engine": "paddleocr", "engine_version": "3.7.0", "dpi": 200,
-            "pages": [ { "page": N, "image": "<PNG 的絕對路徑>", "markdown": "…" }, … ] }
+            "pages": [ { "page": N, "image": "<PNG 的絕對路徑>", "markdown": "…",
+                         "figures": [ { "label": "image", "box": [ymin, xmin, ymax, xmax] }, … ] }, … ] }
         markdown 裡的公式是 $…$（行內）或 $$…$$（獨立公式塊），表格是簡化過的 HTML，
         附圖一律換成「[圖]」。
+        〔OCR 為主 2026-09-26〕figures：版面分析偵測到、會在 markdown 變成「[圖]」的區塊（見 page_figures），
+        依閱讀順序與「[圖]」一一對應；box 是 0–1000 的正規化座標（頁面左上角為原點、先 y 後 x，與拆題的
+        figure_box 相同），框退化時是 null。讀不到版面結果時整個 figures 鍵省略（Node 端當作「不知道」）。
+        只是把版面結果多帶出來：辨識設定與 markdown 都沒有變。
 
   --selftest：不需要任何輸入檔。確認套件裝好、模型都在本機、CPU 推論跑得動
         （拿一張程式自己畫的小頁面實際辨識一次）。成功印 {"ok": true, "engine_version": …}。
@@ -37,6 +42,7 @@ ocr_pdf.py — 本機 PDF OCR（PaddleOCR 3.x 的 PP-StructureV3；docs/local-mo
 
 import argparse
 import json
+import math
 import os
 import re
 import sys
@@ -292,6 +298,82 @@ def result_markdown(res):
     return clean_markdown(md)
 
 
+# ───────────────────────── 版面附圖（〔OCR 為主 2026-09-26〕docs/local-mode.md 10.12）─────────────────────────
+#
+# PaddleX 3.7.2（requirements.txt 釘的版本）的 PP-StructureV3：每頁結果的 parsing_res_list 是依閱讀順序排好的
+# LayoutBlock（.label、.bbox＝[x1, y1, x2, y2] 像素、.image＝裁圖 {"path", "img"} 或 None）。markdown 是逐一
+# 把這些區塊交給格式化函式接起來的；_to_markdown(pretty=False) 時 image、chart（use_chart_recognition=False）、
+# seal（use_seal_recognition=False）三種標籤用 format_image_plain 印成 ![](imgs/…)——clean_markdown 再換成「[圖]」；
+# 沒有裁圖（image 為 None）的區塊印成空字串。header_image／footer_image 在 markdown_ignore_labels 裡，不會出現。
+# 所以「會變成 [圖] 的區塊」＝這三種標籤、而且有裁圖，依 parsing_res_list 的順序——page_figures 照這個規則挑，
+# Node 端（agents/extractOcrFigures.js）再核對張數與「[圖]」的個數，對不上就整頁不用（寧可不配）。
+FIGURE_LABELS = ("image", "chart", "seal")
+
+
+def _get(obj, key, attr=None):
+    """dict 形狀（res.json 的 block_label／block_bbox）與物件形狀（LayoutBlock 的 .label／.bbox）都認得。"""
+    if isinstance(obj, dict):
+        return obj.get(key)
+    return getattr(obj, attr or key, None)
+
+
+def _parsing_blocks(res):
+    """一頁結果的 parsing_res_list；讀不到（PaddleX 改了結構）回 None。"""
+    blocks = None
+    try:
+        blocks = res["parsing_res_list"]
+    except (KeyError, TypeError, IndexError):
+        blocks = getattr(res, "parsing_res_list", None)
+    if blocks is None:
+        try:
+            blocks = res.json["res"]["parsing_res_list"]
+        except Exception:  # noqa: BLE001 — 讀不到就是讀不到
+            blocks = None
+    return list(blocks) if isinstance(blocks, (list, tuple)) else None
+
+
+def _norm_box(bbox, width, height):
+    """[x1, y1, x2, y2] 像素 → [ymin, xmin, ymax, xmax]（0–1000，四捨五入到整數）；退化或讀不到回 None。"""
+    try:
+        x1, y1, x2, y2 = (float(v) for v in list(bbox)[:4])
+        w = float(width)
+        h = float(height)
+    except Exception:  # noqa: BLE001
+        return None
+    if w <= 0 or h <= 0:
+        return None
+
+    def scale(v, total):
+        return int(min(1000, max(0, math.floor(v / total * 1000 + 0.5))))
+
+    box = [scale(y1, h), scale(x1, w), scale(y2, h), scale(x2, w)]
+    if not (box[0] < box[2] and box[1] < box[3]):
+        return None
+    return box
+
+
+def page_figures(results, width, height):
+    """
+    一頁（pipeline.predict 的結果清單）裡會在 markdown 變成「[圖]」的區塊 → [{"label", "box"}]，依閱讀順序。
+    width／height 是送進 PaddleOCR 的那張頁面圖的像素大小（沒有做方向校正與扭曲校正，座標就是這張圖的）。
+    讀不到版面結果回 None。
+    """
+    out = []
+    for res in results:
+        blocks = _parsing_blocks(res)
+        if blocks is None:
+            return None
+        for block in blocks:
+            label = _get(block, "block_label", "label")
+            if label not in FIGURE_LABELS:
+                continue
+            # 物件形狀才知道有沒有裁圖；dict 形狀（res.json）沒有這個欄位，這三種標籤 PaddleX 一律會裁
+            if not isinstance(block, dict) and not getattr(block, "image", None):
+                continue
+            out.append({"label": label, "box": _norm_box(_get(block, "block_bbox", "bbox"), width, height)})
+    return out
+
+
 def _paddle_version():
     try:
         import paddle
@@ -317,7 +399,16 @@ def ocr_images(pipeline, rendered):
                         "請重新執行 setup_local_ai.bat 讓它重裝套件）")
             raise OcrError(f"第 {page_no} 頁辨識失敗：{type(exc).__name__}: {exc}{hint}", EXIT_OCR)
         markdown = "\n\n".join(result_markdown(r) for r in results).strip()
-        pages.append({"page": page_no, "image": image_path, "markdown": markdown})
+        page = {"page": page_no, "image": image_path, "markdown": markdown}
+        # 〔OCR 為主〕版面圖框：讀不到只少這一頁的自動配圖（Node 端退回「題幹提到圖就提示」），不影響辨識結果
+        try:
+            figures = page_figures(results, arr.shape[1], arr.shape[0])
+        except Exception as exc:  # noqa: BLE001
+            _err(f"[ocr_pdf] 警告：第 {page_no} 頁的版面位置讀不到（{type(exc).__name__}: {exc}），這一頁的附圖不自動配。")
+            figures = None
+        if figures is not None:
+            page["figures"] = figures
+        pages.append(page)
     return pages
 
 

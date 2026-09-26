@@ -12,6 +12,7 @@
 //   missing_page 少回最後一頁
 //   version      engine_version 回 9.9.9（與 requirements.txt 不符）
 //   outside      image 路徑指到輸出目錄外
+//   figures      每頁多一個 figures（〔OCR 為主 2026-09-26〕版面圖框；第一頁正常、其餘頁的框是 null）
 // FAKE_OCR_ARGS_FILE 有設時，把收到的 argv 寫進那個檔（測「有沒有照介面傳參數」）。
 
 const fs = require('fs');
@@ -74,7 +75,10 @@ for (let p = from; p <= last; p++) {
         ? path.resolve(out, '..', `escape-${p}.png`)
         : path.resolve(out, `page-${String(p).padStart(4, '0')}.png`);
     fs.writeFileSync(image, PNG);
-    pages.push({ page: p, image, markdown: `第 ${p} 頁\n\n1. 設 $x+${p}=5$，求 $x$。\n\n[圖]` });
+    const page = { page: p, image, markdown: `第 ${p} 頁\n\n1. 設 $x+${p}=5$，求 $x$。\n\n[圖]` };
+    // 〔OCR 為主〕figures：版面圖框（第一頁一張正常的框、其餘頁一個壞框），與 markdown 的「[圖]」一一對應
+    if (mode === 'figures') page.figures = p === from ? [{ label: 'image', box: [100, 150, 400, 850] }] : [{ label: 'image', box: null }];
+    pages.push(page);
 }
 
 process.stderr.write('假 OCR：這是 log，應該只出現在 stderr\n');

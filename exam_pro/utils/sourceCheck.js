@@ -306,5 +306,7 @@ function describeMismatch(result) {
 module.exports = {
     DEFAULTS, FUNCS, PUA_MAP,
     normalizeSourceText, latexToComparable, stripNumbering, tally, hasTextLayer,
-    locateSegments, compareSegment, describeMismatch
+    locateSegments, compareSegment, describeMismatch,
+    // 〔OCR 為主 2026-09-26〕agents/extractOcrFigures.js 在 OCR 文字裡定位題目起點（同一套中文字 5-gram 與門檻）；只加匯出、行為不變
+    locateOne, cjkIndex
 };

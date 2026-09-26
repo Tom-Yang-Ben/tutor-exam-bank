@@ -125,9 +125,11 @@ function formatSummary(res, opts = {}) {
     const { summary, models, inventory } = res;
     const env = opts.env || process.env;
     const isLocal = local.isLocalRun(models);
-    const time = isLocal ? local.estimateLocalTime(summary, { env }) : null;
+    // 〔OCR 為主 2026-09-26〕ci.yml 的 LOCAL_EXTRACT_MODE：ocr 時拆題鏈只有 ocr → extract_ocr（時間粗估少一步）
+    const extractMode = local.effectiveModels(models).LOCAL_EXTRACT_MODE;
+    const time = isLocal ? local.estimateLocalTime(summary, { env, mode: extractMode }) : null;
     const lines = [];
-    const optional = ['EMBED_MODEL', 'MODEL_NLQ', 'MODEL_TEXT', 'OCR_ENGINE', 'OCR_DPI'].filter(k => models[k]).map(k => `、${k}=${models[k]}`).join('');
+    const optional = ['EMBED_MODEL', 'MODEL_NLQ', 'MODEL_TEXT', 'OCR_ENGINE', 'OCR_DPI', 'LOCAL_EXTRACT_MODE'].filter(k => models[k]).map(k => `、${k}=${models[k]}`).join('');
     lines.push(`CI 的設定：MODEL_EXTRACT=${models.MODEL_EXTRACT}、MODEL_VERIFY=${models.MODEL_VERIFY}${optional}（取自 ${models.source}）；LLM_MODE=replay、EMBED_MODE=fixture`);
     lines.push(`cassette 目錄：${audit.displayPath(inventory.dir)}`);
     lines.push('');
@@ -179,7 +181,11 @@ function formatSummary(res, opts = {}) {
         return lines.join('\n');
     }
     // 〔本機模式 L4〕本機模型不花錢，印預估時間（粗估）
-    const agents = [...new Set([...Object.keys(time.calls), ...local.LOCAL_EXTRACT_CHAIN, 'classify', 'lint', 'verify', 'variant', 'nlq'])];
+    const agents = [...new Set([...Object.keys(time.calls), ...local.extractChainFor(extractMode), 'classify', 'lint', 'verify', 'variant', 'nlq'])];
+    if (extractMode === 'ocr' && local.vendorOf(local.effectiveModels(models).MODEL_EXTRACT) === 'ollama') {
+        lines.push('拆題是「只用 OCR」（LOCAL_EXTRACT_MODE=ocr，docs/local-mode.md 10.12）：一塊只有 ocr → extract_ocr，不呼叫看圖模型；' +
+            'extract_vision 的回放檔這一輪不會被讀到，也不算進預估時間。');
+    }
     lines.push(`向量：缺 ${e.missing} 段（第 1 步補錄；nlq／variant／e2e 錄製時另外逐段重算），本機模型 $0`);
     lines.push(`預估：錄製時 LLM 呼叫 ${est.callsLower}～${est.callsUpper} 次，本機模型費用 $0；` +
         `預估時間約 ${local.formatDuration(time.lowerSec)}～${local.formatDuration(time.upperSec)}（含向量約 ${local.formatDuration(time.embedSec)}）。`);

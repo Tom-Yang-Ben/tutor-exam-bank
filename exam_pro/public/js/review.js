@@ -45,7 +45,9 @@ const REASON_LABEL = {
     provider_error: '供應商錯誤',
     awaiting_approval: '等待人工確認',
     // 〔本機模式 L2〕0015：本機拆題（PaddleOCR 與視覺模型）兩版不一致或只有一版（docs/local-mode.md 第 4 條）
-    extract_disagree: '拆題交叉驗證不一致'
+    extract_disagree: '拆題交叉驗證不一致',
+    // 〔OCR 為主 2026-09-26〕0019：LOCAL_EXTRACT_MODE=ocr 只用 OCR 拆題，沒有第二版可以比對，每題都要人工確認（docs/local-mode.md 10.12）
+    ocr_only: '只用 OCR 拆題'
 };
 
 const REASON_TONE = {
@@ -58,7 +60,8 @@ const REASON_TONE = {
     budget_exceeded: 'slate',
     provider_error: 'slate',
     awaiting_approval: 'indigo',
-    extract_disagree: 'amber'
+    extract_disagree: 'amber',
+    ocr_only: 'amber'
 };
 
 const TONE_CLASS = {
@@ -353,9 +356,34 @@ export function reasonSentence(reason, payload) {
             return `視覺模型與 OCR 讀出的題幹不一致${sim}，目前採用${used}。` +
                 (altShort ? `另一版題幹：「${altShort}」。` : '') + '請對照原卷確認。';
         }
+        case 'ocr_only': {
+            // 〔OCR 為主 2026-09-26〕agents/extract.js 的 runLocalOcrOnly：只用 PaddleOCR＋文字模型拆，公式最容易錯
+            const ex = p.extract || {};
+            const auto = typeof ex.figure_img === 'string' || (Number.isInteger(ex.figure_page) && Array.isArray(ex.figure_box));
+            return '只用 OCR 拆題，請核對題目與公式。' +
+                (auto ? '附圖是依 OCR 的版面位置自動配的，請確認裁到的是這一題的圖。' : '') +
+                figureHintNote(p);
+        }
         default:
             return `複核原因：${reason}`;
     }
+}
+
+/**
+ * 〔OCR 為主 2026-09-26〕附圖沒配到的提示（payload.extract.figure_hint，agents/extractOcrFigures.js 寫的）。
+ * 題目核准入庫之後，可以用舊題補附圖工具（npm run figures:backfill，docs/figures.md）拿原卷補圖。
+ * ocr_only 的說明句會帶上；其他原因的卡片由 reasonBar 接在後面。
+ * @param {object} payload
+ * @returns {string} 沒有提示回空字串
+ */
+export function figureHintNote(payload) {
+    const hint = payload && payload.extract && payload.extract.figure_hint;
+    if (!hint || typeof hint !== 'object') return '';
+    const count = Number.isInteger(hint.count) && hint.count > 0 ? hint.count : null;
+    const why = hint.reason === 'multiple' ? `這一題範圍內有 ${count ?? '多'} 張圖，無法判斷要用哪一張`
+        : hint.reason === 'nearby' ? `OCR 在這一題附近偵測到${count ? ` ${count} 張` : ''}圖，但配不準`
+            : '題幹提到圖，但版面上沒有配到';
+    return `疑似有圖未配到，可用 figures:backfill 補（${why}）。`;
 }
 
 /**
@@ -564,9 +592,11 @@ function takeOverUpload(app) {
 function reasonBar(reason, payload) {
     const tone = TONE_CLASS[REASON_TONE[reason]] || TONE_CLASS.slate;
     const bar = el('div', `mb-3 rounded-xl border px-3 py-2 text-xs font-bold leading-5 ${tone}`);
+    // 〔OCR 為主〕只用 OCR 拆的題先被別的閘門攔下（例如答案對不上）時，補圖提示接在那一句後面
+    const note = reason === 'ocr_only' ? '' : figureHintNote(payload);
     bar.append(
         el('span', 'mr-2 rounded-md bg-white/70 px-1.5 py-0.5', { textContent: REASON_LABEL[reason] || reason }),
-        el('span', '', { textContent: reasonSentence(reason, payload) })
+        el('span', '', { textContent: reasonSentence(reason, payload) + (note ? ` ${note}` : '') })
     );
     return bar;
 }

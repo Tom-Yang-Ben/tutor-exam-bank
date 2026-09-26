@@ -25,6 +25,12 @@
 // 〔本機模式 L2〕docs/local-mode.md 第 4 條：MODEL_EXTRACT 的 vendor 是 ollama 時改走本機路徑
 // （PaddleOCR＋視覺模型交叉驗證，見下方「本機路徑」兩段與 agents/extractCrossCheck.js）；
 // 其餘 vendor 走原路徑，送出的 prompt、schema、cassette 鍵逐位元不變。
+//
+// 〔OCR 為主 2026-09-26〕docs/local-mode.md 10.12：本機路徑多一個模式 LOCAL_EXTRACT_MODE（config/localExtractMode.js；
+// ctx.config.localExtract.mode，沒帶時問設定檔）。'cross'（預設）＝上面那條路一個字都沒改；'ocr'＝只做 OCR → extract_ocr，
+// 不呼叫視覺模型（runLocalOcrOnly）：每題 cross_check 固定是 ocr_only、帶 extract_mode:'ocr'（runner 據此停在
+// needs_review('ocr_only')），附圖依 OCR 的版面位置配（agents/extractOcrFigures.js）。extract_ocr 的請求（ocrStructureRequest）
+// 與交叉驗證第 3 步送出的逐位元相同（test/unit/extractOcrOnly.test.js 逐鍵比對），所以兩種模式讀同一支 cassette。
 
 const fs = require('fs');
 const path = require('path');
@@ -35,7 +41,8 @@ const { PDFDocument } = require('pdf-lib');
 const { buildSchema } = require('./schemas');
 const { chapterWhitelistText, questionTypeText, LATEX_RULES, CHEM_LATEX_RULES, resolveSubjectGroup } = require('./promptParts');
 const { registerTemplate } = require('../services/llm/templates');
-const { crossCheck, summarize: summarizeCrossCheck } = require('./extractCrossCheck');
+const { crossCheck, summarize: summarizeCrossCheck, FIGURE_FIELDS } = require('./extractCrossCheck');
+const { matchOcrFigures } = require('./extractOcrFigures');
 
 const TEMPLATE = 'extract.v2';   // v2（2026-09-15）：加【表格】規範，見 docs/formulas.md §2
 
@@ -544,7 +551,79 @@ function localDeps() {
         ocrConfig: localDepsOverride.ocrConfig || (() => require('../services/ocr').resolveOcrConfig()),
         // 〔看圖拆題逾時〕選項 b：送給視覺模型前縮圖（VISION_MAX_EDGE_PX，由 services/ocr/render 自己讀；未設＝0＝不縮）
         visionMaxEdge: localDepsOverride.visionMaxEdge || (() => require('../services/ocr/render').visionMaxEdgeFromEnv()),
-        fitLongEdge: localDepsOverride.fitLongEdge || ((pngs, maxEdge) => require('../services/ocr/render').fitLongEdge(pngs, maxEdge))
+        fitLongEdge: localDepsOverride.fitLongEdge || ((pngs, maxEdge) => require('../services/ocr/render').fitLongEdge(pngs, maxEdge)),
+        // 〔OCR 為主〕ctx 沒帶 localExtract（eval、舊的 /analyze-pdf）時的模式；由設定檔讀 LOCAL_EXTRACT_MODE（agent 不讀 process.env）
+        localExtractMode: localDepsOverride.localExtractMode || (() => require('../config/localExtractMode').resolveLocalExtractMode()),
+        // 〔OCR 為主〕Ollama 的 num_ctx（OLLAMA_NUM_CTX，由 services/llm/ollama 自己讀）：估 extract_ocr 放不放得下
+        numCtx: localDepsOverride.numCtx || (() => require('../services/llm/ollama').numCtx())
+    };
+}
+
+/**
+ * 〔OCR 為主〕這一塊的本機拆題模式：ctx.config.localExtract.mode 優先，沒帶就問設定檔。
+ * @param {object} ctx
+ * @param {ReturnType<typeof localDeps>} deps
+ * @returns {'cross'|'ocr'}
+ */
+function localExtractModeOf(ctx, deps) {
+    const fromCtx = ctx && ctx.config && ctx.config.localExtract && ctx.config.localExtract.mode;
+    if (fromCtx === 'ocr' || fromCtx === 'cross') return fromCtx;
+    return deps.localExtractMode() === 'ocr' ? 'ocr' : 'cross';
+}
+
+/**
+ * 〔OCR 為主〕「只用 OCR」模式的 OCR 版（extract_ocr／extract_ocr_chem）請求。
+ * 與 runLocal（交叉驗證）第 3 步送出的請求逐位元相同——model／system／parts／schema／輸出上限／cassette 鍵都一樣，
+ * 同一支 cassette 兩種模式都讀得到（test/unit/extractOcrOnly.test.js 逐鍵比對；交叉驗證那一段刻意不改寫成呼叫本函式，
+ * 讓 cross 模式的程式一個字都不動）。
+ * 不帶 thinkingBudget：services/llm/ollama.js 的 think 是 false（OCR 整理不需要推理，CPU 上每個思考 token 都要時間）。
+ */
+function ocrStructureRequest({ group, models, schema, range, ocrText, chunkNo, pdfSha256, signal }) {
+    const v = VARIANTS[group];
+    const lv = LOCAL_VARIANTS[group];
+    const ocrSha256 = sha256Bytes(Buffer.from(ocrText, 'utf8'));
+    return {
+        model: models.ocrStructure || models.verify || require('../config/models').MODEL_VERIFY,
+        system: v.system,
+        parts: [{ text: `${buildLocalPrompt(group, 'ocr', range)}\n\n${wrapOcrText(ocrText)}` }],
+        schema,
+        maxOutputTokens: LOCAL_MAX_OUTPUT_TOKENS,
+        signal,
+        agent: lv.ocr.agent,
+        template: lv.ocr.template,
+        cacheKeyParts: { template: lv.ocr.template, chunkNo, pdfSha256, ocrSha256 }
+    };
+}
+
+const CJK_CHARS = /[一-鿿]/g;
+
+/**
+ * 〔OCR 為主〕粗估 token 數：中文字一字一個，其餘字元（含空白、LaTeX、HTML 表格）每 3 個一個。
+ * Qwen 的分詞器對常用中文多半一字一 token、英數符號 3～4 字一 token；取保守的一邊，只拿來提醒 num_ctx 可能不夠。
+ * @param {string} text
+ * @returns {number}
+ */
+function estimatePromptTokens(text) {
+    const s = String(text ?? '');
+    const cjk = (s.match(CJK_CHARS) || []).length;
+    return cjk + Math.ceil((s.length - cjk) / 3);
+}
+
+/**
+ * 〔OCR 為主〕extract_ocr 一次呼叫的 context 預算：prompt（system＋Ollama 轉接層附加的 schema 說明＋模板＋OCR 文字）
+ * 加上輸出上限（num_predict）要放得進 OLLAMA_NUM_CTX；放不下時 Ollama 會截掉前面的內容或截斷輸出。
+ */
+function ocrContextBudget(req, deps) {
+    let guide = '';
+    try { guide = require('../services/llm/ollama').schemaGuide(req.schema) || ''; } catch (_) { guide = ''; }
+    const promptTokens = estimatePromptTokens(req.system) + estimatePromptTokens(guide)
+        + req.parts.reduce((n, p) => n + estimatePromptTokens(p.text), 0);
+    const numCtx = deps.numCtx();
+    return {
+        prompt_tokens_est: promptTokens,
+        max_output_tokens: req.maxOutputTokens,
+        num_ctx: numCtx,
+        over: promptTokens + req.maxOutputTokens > numCtx
     };
 }
 
@@ -612,6 +691,13 @@ async function runLocal(ctx, input, { bytes, pdfSha256, chunkNo, fromPage, toPag
     const replay = deps.llmMode() === 'replay';
     const signal = ctx && ctx.signal;
     const range = { fromPage, toPage };
+
+    // 〔OCR 為主〕LOCAL_EXTRACT_MODE=ocr：只做 OCR → extract_ocr（下面交叉驗證的程式一個字都沒動）
+    if (localExtractModeOf(ctx, deps) === 'ocr') {
+        return runLocalOcrOnly(ctx, { bytes, pdfSha256, chunkNo, fromPage, toPage, pageCount }, logger, {
+            deps, group, schema, models, engine, signal, range
+        });
+    }
 
     if (toPage < fromPage) {
         // 塊的起始頁已經超過 PDF 的總頁數（理論上不會發生）：沒有頁面可拆，照原路徑「空塊不是失敗」的慣例
@@ -760,6 +846,139 @@ async function runLocal(ctx, input, { bytes, pdfSha256, chunkNo, fromPage, toPag
     }
 }
 
+// ───────────────────────── 只用 OCR（〔OCR 為主 2026-09-26〕LOCAL_EXTRACT_MODE=ocr）─────────────────────────
+
+/** 「只用 OCR」每一題的 cross_check：沿用交叉驗證的欄位形狀（extractCrossCheck.js 檔頭），沒有第二版可以比 */
+const OCR_ONLY_CROSS_CHECK = Object.freeze({ status: 'ocr_only', similarity: null, alt_question_text: null, picked: 'ocr' });
+
+/**
+ * LOCAL_EXTRACT_MODE=ocr 的一塊：OCR → extract_ocr，不呼叫視覺模型、不轉圖。
+ *   - 文字模型看不到圖（模板也要它不要輸出附圖欄位）：它回的 figure_desc／figure_page／figure_box 一律拿掉，
+ *     附圖改由 OCR 的版面位置配（agents/extractOcrFigures.js），配不到的題標 figure_hint。
+ *   - 每題 cross_check＝OCR_ONLY_CROSS_CHECK、extract_mode:'ocr'：workers/jobRunner.js 的 crossCheckStopReason
+ *     讓它走完後續節點、最後停在 needs_review('ocr_only')——與「兩版不一致」（extract_disagree）分開，絕不自動入庫。
+ *   - outcome 形狀與交叉驗證相同（cross_check_summary 多 mode、figures、ctx_budget 三個鍵）。
+ * @returns {Promise<object>} outcome；丟出的錯由 run() 收成 {kind:'error'}
+ */
+async function runLocalOcrOnly(ctx, { bytes, pdfSha256, chunkNo, fromPage, toPage, pageCount }, logger, { deps, group, schema, models, engine, signal, range }) {
+    if (engine === 'none') {
+        // 矛盾設定（config/localExtractMode.js）：runner 啟動時就擋下；這裡是 eval、舊的 /analyze-pdf 這些沒經過 runner 的呼叫端
+        const message = require('../config/localExtractMode').localExtractConflict({ localExtract: true, mode: 'ocr', ocrEngine: 'none' });
+        return { kind: 'error', errorClass: 'provider_error', message };
+    }
+    const summaryBase = { engine, mode: 'ocr', vision_elements: null };
+
+    if (toPage < fromPage) {
+        return {
+            kind: 'pass',
+            data: {
+                questions: [], rejected: [], chunk_no: chunkNo, page_range: [fromPage, toPage], page_count: pageCount,
+                pdf_sha256: pdfSha256, schema_fallback: false, usage: sumUsage([]), latency_ms: 0,
+                cross_check_summary: { ...summaryBase, engine_version: null, counts: summarizeCrossCheck([]), ocr_elements: 0 }
+            }
+        };
+    }
+
+    let ocr = null;
+    try {
+        ocr = await deps.ocrPdf({ pdfBytes: bytes, pdfSha256, fromPage, toPage, signal });
+        if (signal && signal.aborted) throw abortedError();
+
+        const ocrText = require('../services/ocr').pagesToText(ocr.pages);
+        const req = ocrStructureRequest({ group, models, schema, range, ocrText, chunkNo, pdfSha256, signal });
+        const budget = ocrContextBudget(req, deps);
+        if (budget.over) {
+            logger.warn?.({
+                node: 'extract', chunk_no: chunkNo,
+                msg: `OCR 整理這一塊估計要讀約 ${budget.prompt_tokens_est} token，加上輸出上限 ${budget.max_output_tokens} 會超過 OLLAMA_NUM_CTX=${budget.num_ctx}：` +
+                    '前面的內容可能被截掉、輸出可能被截斷。可在 .env 把 JOB_PDF_CHUNK_PAGES 設成 1（一塊 1 頁），或調高 OLLAMA_NUM_CTX（記憶體要夠）。'
+            });
+        }
+        const res = await ctx.llm.generateJson(req);
+
+        const validate = getItemValidator(group);
+        const elements = (Array.isArray(res.data && res.data.questions) ? res.data.questions : []).map((el) => {
+            const out = normalizeElement(el && typeof el === 'object' ? el : {});
+            for (const f of FIGURE_FIELDS) delete out[f];
+            return out;
+        });
+        // 〔審查 2026-09-26〕這一塊可能被截斷（粗估放不下 OLLAMA_NUM_CTX，或輸出用滿上限）時模型可能少拆了後面幾題，
+        // 題目範圍說不準：整塊只標提示、不自動配（agents/extractOcrFigures.js 檔頭 ⑦）
+        const tokenOut = Number(res.usage && res.usage.tokenOut);
+        const truncated = budget.over || (Number.isFinite(tokenOut) && tokenOut >= req.maxOutputTokens);
+        const fig = matchOcrFigures(elements, ocr.pages, { truncated });
+
+        const questions = [];
+        const rejected = [];
+        const chunkInfo = { chunkNo, fromPage, toPage };
+        elements.forEach((el, position) => {
+            // idx 的題序＝陣列位置（含不合格的元素，留缺號），與原路徑、交叉驗證同一個語意
+            const idx = chunkNo * 1000 + position + 1;
+            if (!validate(el)) {
+                rejected.push({ idx, errors: formatErrors(validate.errors).map(e => `OCR 版：${e}`), source: 'ocr' });
+                return;
+            }
+            const f = fig.results[position] || {};
+            questions.push({
+                ...toPayloadQuestion(el, idx, chunkInfo),
+                // 版面配到的圖：頁碼是 OCR 回的整份 PDF 絕對頁碼（不經 toPayloadQuestion 的塊內頁碼換算）
+                ...(f.figure_box ? { figure_page: f.figure_page, figure_box: f.figure_box } : {}),
+                cross_check: { ...OCR_ONLY_CROSS_CHECK },
+                extract_mode: 'ocr',
+                ...(f.figure_hint ? { figure_hint: f.figure_hint } : {})
+            });
+        });
+
+        const summary = {
+            ...summaryBase,
+            engine_version: ocr.engineVersion ?? null,
+            counts: { ...summarizeCrossCheck([]), ocr_only: questions.length },
+            ocr_elements: elements.length,
+            figures: fig.summary,
+            ctx_budget: budget
+        };
+
+        if (questions.length === 0 && rejected.length > 0) {
+            return {
+                kind: 'fail',
+                reason: 'schema_invalid',
+                feedback: `這一塊拆出 ${rejected.length} 題，全部沒通過 schema 驗證：${(rejected[0].errors || []).join('；')}`,
+                data: { questions: [], rejected, chunk_no: chunkNo, page_range: [fromPage, toPage], pdf_sha256: pdfSha256 }
+            };
+        }
+        if (rejected.length) {
+            logger.warn?.({ node: 'extract', chunk_no: chunkNo, rejected: rejected.length, msg: '部分元素未通過 schema 驗證，只丟掉那幾題' });
+        }
+        if (questions.length) {
+            logger.info?.({
+                node: 'extract', chunk_no: chunkNo,
+                msg: `只用 OCR 拆題：${questions.length} 題，最後都會停在人工複核（ocr_only）；附圖自動配到 ${fig.summary.assigned} 題、${fig.summary.hinted} 題標了補圖提示`,
+                figures: fig.summary
+            });
+        }
+
+        return {
+            kind: 'pass',
+            data: {
+                questions,
+                rejected,
+                chunk_no: chunkNo,
+                page_range: [fromPage, toPage],
+                page_count: pageCount,
+                pdf_sha256: pdfSha256,
+                schema_fallback: res.schemaFallback === true,
+                usage: sumUsage([res.usage]),
+                latency_ms: res.latencyMs || 0,
+                cross_check_summary: summary
+            }
+        };
+    } finally {
+        if (ocr && typeof ocr.dispose === 'function') {
+            try { ocr.dispose(); } catch (_) { /* 暫存檔刪不掉不影響結果 */ }
+        }
+    }
+}
+
 module.exports = {
     run,
     // 給相容包裝、cassette 錄製腳本與單元測試用的內部零件
@@ -773,5 +992,7 @@ module.exports = {
     AGENT_OCR, AGENT_OCR_CHEM, TEMPLATE_OCR, TEMPLATE_OCR_CHEM,
     LOCAL_VISION_TEMPLATE, LOCAL_VISION_TEMPLATE_CHEM, LOCAL_OCR_TEMPLATE, LOCAL_OCR_TEMPLATE_CHEM,
     LOCAL_MAX_OUTPUT_TOKENS,
+    // 〔OCR 為主〕LOCAL_EXTRACT_MODE=ocr
+    OCR_ONLY_CROSS_CHECK, estimatePromptTokens, ocrStructureRequest,
     _setLocalDepsForTest
 };

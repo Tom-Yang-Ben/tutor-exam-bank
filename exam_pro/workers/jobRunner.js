@@ -21,6 +21,12 @@
 // 〔Owner 決策單 2026-09-26 第四輪 V3〕選 2「本機模式逾時只重試 1 次」：拆題模型是 ollama 時，
 // 拆題一塊（runExtractChunk）的錯誤類別是 timeout 的只重試 LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES（1）次、共跑 2 次；
 // 其他錯誤類別與 Gemini 模式的重試次數（DEFAULT_LIMITS.maxErrorRetries）完全不變（docs/local-mode.md 10.11 表 #4）。
+//
+// 〔OCR 為主 2026-09-26〕Owner 決定這台電腦的拆題改成 OCR 為主（docs/local-mode.md 10.12）：LOCAL_EXTRACT_MODE
+// （loadLocalExtractModeConfig）經 ctx.config.localExtract 帶給 extract；只用 OCR 拆的題在 save 停在 needs_review('ocr_only')
+// （crossCheckStopReason）；拆題模型是 ollama、LOCAL_EXTRACT_MODE=ocr、OCR_ENGINE=none 是矛盾設定，createRunner 直接丟錯。
+// 〔審查 2026-09-26〕ocr 模式的資料庫還沒套 0019（review_reason 不接受 ocr_only）時，tick 不認領任何工作、印一次
+// 「先 npm run migrate」（ocrOnlySchemaProblem），不會每題每輪撞 CHECK、無限重試。
 // ─────────────────────────────────────────────────────────────
 const fs = require('fs');
 const path = require('path');
@@ -215,6 +221,48 @@ function loadLocalModeConfig(env = process.env, opts = {}) {
 }
 
 /**
+ * 〔OCR 為主 2026-09-26〕本機拆題的模式 LOCAL_EXTRACT_MODE（config/localExtractMode.js；docs/local-mode.md 10.12）：
+ * 'cross'（預設，交叉驗證）｜'ocr'（只用 OCR 拆題，每題停在 needs_review('ocr_only')）。
+ *
+ * 與 loadLocalModeConfig 分開另一支的理由相同：那一支的回傳形狀被 test/unit/extractLocalRunner.test.js 用 deepEqual 釘住。
+ * `createRunner()` 把它疊在 loadLocalModeConfig 之後，經 ctx.config.localExtract 帶給 agent（agent 不讀 process.env）。
+ * 只在拆題模型是 ollama 時有作用（agents/extract.js 的本機路徑才讀它）；Gemini 模式完全不受影響。
+ *
+ * @param {object} [env] 預設 process.env
+ * @returns {{localExtractMode:'cross'|'ocr'}}
+ */
+function loadLocalExtractModeConfig(env = process.env) {
+    return { localExtractMode: require('../config/localExtractMode').resolveLocalExtractMode(env) };
+}
+
+/** 〔審查 2026-09-26〕沒套 0019 就開 LOCAL_EXTRACT_MODE=ocr 時，runner 印的那一句（只印一次） */
+const OCR_ONLY_SCHEMA_MESSAGE =
+    'LOCAL_EXTRACT_MODE=ocr（只用 OCR 拆題）需要資料庫套到 migrations/0019_ocr_only_review.sql（複核原因 ocr_only），' +
+    '這個資料庫還沒套：請在 exam_pro 執行 npm run migrate（套完之後佇列自己恢復，不必重啟）。' +
+    '在那之前工作佇列暫停、不認領任何工作（上傳的卷會排隊，不會開始拆題）。';
+
+/**
+ * 〔審查 2026-09-26〕LOCAL_EXTRACT_MODE=ocr 的前置條件：job_questions.review_reason 的 CHECK 接受 'ocr_only'（migration 0019）。
+ * 沒套就開 ocr 模式時，每一題走到 save 寫 review_reason='ocr_only' 會撞 CHECK，例外被 spawn 吃掉、租約放掉、
+ * 下一輪又認領同一列——每題每輪多一筆事件、一行錯誤，沒有上限。所以 runner 在認領之前先查一次（tick）。
+ *
+ * 查的是約束本身（pg_get_constraintdef），不是 schema_migrations：約束才是真正會擋下寫入的東西。
+ * 約束不存在（有人手動拿掉）時寫 'ocr_only' 不會被擋，當作可以跑。
+ *
+ * @param {{query:Function}} db
+ * @returns {Promise<string|null>} null＝可以跑；字串＝還沒套 0019（給 Owner 看的訊息）
+ */
+async function ocrOnlySchemaProblem(db) {
+    const { rows } = await db.query(
+        `SELECT pg_get_constraintdef(c.oid) AS def
+           FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid
+          WHERE t.relname = 'job_questions' AND c.conname = 'job_questions_review_reason_check'
+            AND pg_table_is_visible(t.oid)`);
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+    return rows.some(r => String((r && r.def) || '').includes("'ocr_only'")) ? null : OCR_ONLY_SCHEMA_MESSAGE;
+}
+
+/**
  * 節點執行中續租的間隔：預設每 30 秒（第 7.1 條），但租約短於 90 秒時縮成租約的三分之一，
  * 保證租約到期前至少續過兩次。
  * @param {number} leaseMs
@@ -230,15 +278,20 @@ function renewIntervalFor(leaseMs) {
  * payload.extract 帶 cross_check、而且 status 不是 'agree' 的題，走到 save 時一律停在
  * needs_review('extract_disagree')，絕不自動入庫。沒有 cross_check 的題（Gemini 路徑、變式題）回 null，照常入庫。
  *
+ * 〔OCR 為主 2026-09-26〕只用 OCR 拆的題（payload.extract.extract_mode === 'ocr'，agents/extract.js 的 runLocalOcrOnly 寫的）
+ * 沒有第二版可以比對：一律停在 needs_review('ocr_only')——與「兩版不一致」分開（複核頁的說明不同），
+ * 不看 cross_check 長什麼樣（缺了、壞了都一樣停，往安全的方向錯）。
+ *
  * 只看得到 save 這一格：前面任何節點先判了更嚴重的原因（重複、章節不合法、答案對不上…），
  * 那一列早就停在 needs_review，不會走到這裡。
  * cross_check 形狀壞掉（不是物件、沒有 status）一律當作「不一致」——往安全的方向錯。
  *
  * @param {object} payload job_questions.payload
- * @returns {'extract_disagree'|null}
+ * @returns {'extract_disagree'|'ocr_only'|null}
  */
 function crossCheckStopReason(payload) {
     const ex = payload && payload.extract;
+    if (ex && typeof ex === 'object' && ex.extract_mode === 'ocr') return 'ocr_only';
     if (!ex || typeof ex !== 'object' || !Object.prototype.hasOwnProperty.call(ex, 'cross_check')) return null;
     const cc = ex.cross_check;
     if (cc === null || cc === undefined) return null;
@@ -477,9 +530,16 @@ function createRunner(opts = {}) {
     const llm = opts.llm || require('../services/llm');
     const agentsDir = opts.agentsDir || path.resolve(__dirname, '..', 'agents');
     // 〔本機模式 L2〕loadLocalModeConfig 疊在 loadConfig 之後：拆題模型是 ollama 且 .env 沒明寫時，補長節點預設
+    // 〔OCR 為主 2026-09-26〕再疊 LOCAL_EXTRACT_MODE（loadLocalExtractModeConfig）
     const config = {
-        ...loadConfig(), ...loadStage3Config(), ...loadSourceCheckConfig(), ...loadLocalModeConfig(), ...(opts.config || {})
+        ...loadConfig(), ...loadStage3Config(), ...loadSourceCheckConfig(), ...loadLocalModeConfig(),
+        ...loadLocalExtractModeConfig(), ...(opts.config || {})
     };
+    // 〔OCR 為主〕矛盾設定（拆題模型是 ollama、LOCAL_EXTRACT_MODE=ocr、OCR_ENGINE=none）在建立 runner 時就丟錯：
+    // server.js 的 startInlineRunner 與 node workers/jobRunner.js 都在啟動時停下、印出要改哪一行，不會等到上傳才失敗。
+    require('../config/localExtractMode').assertLocalExtractConfig({
+        localExtract: config.localExtract === true, mode: config.localExtractMode, ocrEngine: config.ocrEngine
+    });
     if (!Number.isFinite(config.renewIntervalMs) || config.renewIntervalMs <= 0) {
         config.renewIntervalMs = renewIntervalFor(config.leaseMs);
     }
@@ -500,6 +560,9 @@ function createRunner(opts = {}) {
     let timer = null;
     let ticking = false;
     let dailyWarned = false;
+    // 〔審查 2026-09-26〕ocr 模式的前置條件（migration 0019）：通過一次就不再查；沒通過時只印一次錯
+    let ocrSchemaPending = config.localExtract === true && config.localExtractMode === 'ocr';
+    let ocrSchemaWarned = false;
 
     // ── agent 載入 ────────────────────────────────────────────
     function loadAgent(node) {
@@ -687,7 +750,9 @@ function createRunner(opts = {}) {
                 sourceCheck: { mode: config.sourceCheckMode },
                 // 〔本機模式 L2〕本機拆題要不要跑 PaddleOCR（OCR_ENGINE，預設 paddle）。其餘 OCR 設定
                 // （OCR_PYTHON／OCR_DPI／OCR_TIMEOUT_MS）由 services/ocr 自己讀，與 services/llm 讀 LLM_MODE 同一個分工。
-                ocr: { engine: config.ocrEngine }
+                ocr: { engine: config.ocrEngine },
+                // 〔OCR 為主 2026-09-26〕本機拆題的模式（LOCAL_EXTRACT_MODE：cross｜ocr）；ocr 的形狀不動，另開一個鍵
+                localExtract: { mode: config.localExtractMode }
             }
         };
         delete ctx.models; delete ctx.limits;
@@ -958,16 +1023,22 @@ function createRunner(opts = {}) {
             // （更嚴重的原因會先把它送進複核），走到 save 時停在 needs_review('extract_disagree')，絕不自動入庫。
             // 與上面的 awaiting_approval 同一個做法：不經 transition()（四種 outcome 都無法不謊報失敗地走到
             // needs_review），error_class 寫 NULL。cross_check（含 alt_question_text）原樣留在 payload.extract 給複核頁。
+            // 〔OCR 為主 2026-09-26〕只用 OCR 拆的題走同一條路，原因是 'ocr_only'（crossCheckStopReason）；
+            // 附圖沒配到的提示（figure_hint）一併記進這一筆事件的 detail。〔審查 2026-09-26〕只有停在 ocr_only 的題會記：
+            // 被前面的閘門先攔下的題，提示只在 job_questions.payload.extract.figure_hint。要逐題查就直接
+            // SELECT detail->'figure_hint' FROM job_events WHERE node='save'（或查 payload）；整體的配圖數
+            // （配到幾張、幾題有提示）看 npm run report:jobs 的「OCR 版面配圖」一節（讀 extract 事件的 cross_check.figures）。
             const disagree = node === 'save' ? crossCheckStopReason(jq.payload) : null;
             if (disagree) {
                 const cc = jq.payload.extract.cross_check;
                 const brief = cc && typeof cc === 'object'
                     ? { status: cc.status ?? null, similarity: cc.similarity ?? null, picked: cc.picked ?? null }
                     : { status: null };
+                const figureHint = disagree === 'ocr_only' ? jq.payload.extract.figure_hint : undefined;
                 await writeEvent({
                     job_id: jq.job_id, jq_id: jq.id, node: 'save', attempt: attemptNo(jq.retries, 'save'),
                     cost_usd: 0, cost_estimated: false, latency_ms: 0, outcome: 'skipped', error_class: null,
-                    detail: { reason: disagree, cross_check: brief, review_reason: disagree }
+                    detail: { reason: disagree, cross_check: brief, review_reason: disagree, ...(figureHint ? { figure_hint: figureHint } : {}) }
                 });
                 await db.query(
                     `UPDATE job_questions SET state = 'needs_review', review_reason = $2,
@@ -1526,6 +1597,22 @@ function createRunner(opts = {}) {
         if (ticking) return;
         ticking = true;
         try {
+            // 〔審查 2026-09-26〕LOCAL_EXTRACT_MODE=ocr 卻沒套 0019：不認領任何工作（否則每題在 save 撞 CHECK、無限重試），
+            // 伺服器視窗印一次「先 npm run migrate」。每一輪都再查一次：Owner 套完 migrate 後不必重啟也會恢復。
+            // 查詢本身失敗（連不上 DB）不擋：下面的認領會照常報錯。
+            if (ocrSchemaPending) {
+                let problem = null;
+                try { problem = await ocrOnlySchemaProblem(db); } catch (_) { problem = null; }
+                if (problem) {
+                    if (!ocrSchemaWarned) {
+                        logger.error({ msg: problem, node: 'claim' });
+                        ocrSchemaWarned = true;
+                    }
+                    return;
+                }
+                ocrSchemaPending = false;
+            }
+
             const overDaily = await dailySpentUsd().then(s => s >= config.dailyCostBudgetUsd);
             if (overDaily && !dailyWarned) {
                 logger.warn({ msg: `當日成本已達 DAILY_COST_BUDGET_USD=${config.dailyCostBudgetUsd}，停止認領需要付費的工作`, node: 'claim' });
@@ -1605,6 +1692,8 @@ module.exports = {
     runKcTagHook,   // 〔stage5 WS-C〕
     // 〔本機模式 L2〕
     loadLocalModeConfig, renewIntervalFor, crossCheckStopReason,
+    loadLocalExtractModeConfig,   // 〔OCR 為主 2026-09-26〕
+    ocrOnlySchemaProblem, OCR_ONLY_SCHEMA_MESSAGE,   // 〔審查 2026-09-26〕
     LOCAL_NODE_TIMEOUT_MS, LOCAL_PDF_CHUNK_PAGES, LOCAL_CONCURRENCY, RENEW_MIN_INTERVAL_MS,
     LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES,   // 〔第四輪 V3〕
     ADVANCEABLE_STATES, FREE_NODES, AGENT_MODULE_FOR_NODE, ERROR_CLASSES, SOURCE_CHECK_MODES,

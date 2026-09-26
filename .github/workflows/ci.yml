@@ -88,6 +88,15 @@ jobs:
       # 所以這幾行就是「CI 讀哪一組 cassette」的單一真相。切回 Gemini：改回 gemini:… 並用 Gemini 重錄。
       MODEL_EXTRACT: ollama:qwen3-vl:8b
       MODEL_VERIFY: ollama:qwen3:8b
+      # 〔OCR 為主 2026-09-26〕Owner 的電腦（純 CPU）看圖拆題 1 頁要 54 分鐘，正式環境改用「只用 OCR」拆題
+      # （docs/local-mode.md 10.12）：本機拆題只跑 PaddleOCR＋extract_ocr、不呼叫看圖模型，每題都停在人工複核（ocr_only）。
+      # CI 回放照同一條路（pipeline／e2e 讀 ocr 與 extract_ocr 的回放檔，不讀 extract_vision），重錄也照它錄。
+      # eval/.env.replay 也寫同一個值（在本機手動跑 e2e 或 eval 時一致）；兩處一起改。改回 cross＝交叉驗證（要重錄看圖）。
+      # 'cross' 模式由單元與整合測試（假模型）覆蓋，不靠回放。
+      # 〔審查 2026-09-26〕這一行與 e2e 的 ocr 分支一起進：ocr 模式一題都不自動入庫，所以 test/e2e/pipeline.e2e.test.js 的
+      # 「部分入庫」兩項在 ocr 模式改驗「每一題停在複核（ocr_only）→ 經複核 API 核准一題入庫」（檔頭；10.12 第 7 點選項 ①，
+      # 測試契約變更、待 Owner 裁決）。eval:pipeline 的 saved_rate 在 ocr 模式固定是 0（設計如此，10.12 第 7 點）。
+      LOCAL_EXTRACT_MODE: ocr
       # 向量檔 eval/fixtures/embeddings.<模型>.768.json 的模型段（`:`、`/`、`\` 換成 `-`）：
       # 這一行對應 embeddings.ollama-qwen3-embedding-0.6b.768.json。沒有前綴的舊值（gemini-embedding-001）視為 Gemini。
       EMBED_MODEL: ollama:qwen3-embedding:0.6b
@@ -116,7 +125,8 @@ jobs:
         run: npm run test:integration
 
       # ── e2e（E-X15，階段 3）──
-      # 兩條端到端：① POST /api/jobs 上傳自製樣卷 → 真 runner 走完 → 部分入庫；
+      # 兩條端到端：① POST /api/jobs 上傳自製樣卷 → 真 runner 走完 → 部分入庫
+      #               （LOCAL_EXTRACT_MODE=ocr：全部停在複核 → 經複核 API 核准一題入庫）；
       #             ② 組卷 → download-word，解開 .docx 斷言公式是 <m:oMath> 不是純文字。
       # 與 eval:pipeline 量的不是同一件事：那支量分數、不經 HTTP 也不碰 jobs 兩張表，
       # 這兩條量的是「接線有沒有斷」。同樣不連外（LLM_MODE=replay、EMBED_MODE=fixture）。
