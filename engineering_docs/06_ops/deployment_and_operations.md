@@ -55,6 +55,7 @@
 | 整合層 | 起 `pgvector/pgvector:pg16` service → 整合 317 項〔修訂 2026-09-16b〕＋e2e 11 項＋五個 eval suite（ratchet 門檻）〔修訂 2026-08-29〕 | 同上，`integration` job |
 | 階段 5〔修訂 2026-09-24〕 | 整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠（~~主控合併後更新數字~~ 〔整合 2026-09-26〕已更新，見下一列）；CI 步驟不變，未新增 eval suite（`eval:classify-chem` 不進 CI） | 併入 main 後由 GitHub Actions 跑 |
 | 錯題重練與本機看圖逾時合入後〔整合 2026-09-26〕 | `dec/integration-all` 完整 `ci.sh`：unit 3,244（3,242 過、2 略過）、`check:html`、migrate（到 0018）、integration 593 全綠；e2e 12 項中 3 項與五個 eval 因本機模型的回放檔／向量檔尚未重錄而紅（要等 §3.5 第 8 步以本機模型重錄；重錄後仍未達門檻的 eval 照實紅燈、門檻不放寬）；CI 步驟不變，錯題重練不需要 cassette | 併入 main 後由 GitHub Actions 跑 |
+| OCR 為主、向量門檻、拆題以外的時間併入後〔整合 r5 2026-09-26〕 | `dec/integration-r5` 實測：unit 3,495（3,493 過、2 略過）、`check:html`、migrate（到 0019）、integration 615 全綠；e2e 12 項中 3 項與四個 eval（classify、pipeline、nlq、variant）因本機回放檔／向量檔尚未重錄而紅，retrieval 全過。CI 的 integration job 多一個 `LOCAL_EXTRACT_MODE: ocr`（與 `eval/.env.replay` 同值），所以 pipeline／e2e 缺的回放檔是 `extract_ocr`（不再是 `extract_vision`），e2e 在 ocr 模式改驗「全部停在複核 → 人工核准一題入庫」（`docs/local-mode.md` 10.12 第 7 點，測試契約變更待 Owner 裁決） | 併入 main 後由 GitHub Actions 跑 |
 | 部署 | 無自動部署。本機依 §3 啟動程序手動升級 | 手動 |
 
 CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`EMBED_MODE=fixture`；eval 低於 ratchet 門檻或 main 上 replay miss 即轉紅（NFR-004）。〔修訂 2026-09-25 本機模式〕`ci.yml` 的 `MODEL_EXTRACT`／`MODEL_VERIFY`／`EMBED_MODEL`／`MODEL_NLQ` 改成本機模型名；CI 不裝 Ollama、不裝 Python，cassette 與向量檔由 Owner 在本機以本機模型重錄（`record_local.bat`，§3.5）。重錄之前 e2e 與五個 eval 只會因缺 cassette／缺向量紅燈。
@@ -196,7 +197,7 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 | 策略 | 本專案做法 |
 | :--- | :--- |
 | 發布 | 單行程原地重啟（Ctrl+C 停 `npm start` → `git pull`／checkout → 重啟）；無 Blue-Green／Rolling 需求。**含新 migration 的版本要先停服務或先 `npm run migrate`，再拉程式／重啟**〔修訂 2026-09-16〕：以 `npm run dev`（nodemon）執行時，`git pull` 一帶入新程式就會自動重啟，舊 schema 下寫入新 state／review_reason 會違反 CHECK（例：0009 之前的 schema 不接受 `source_checked`） |
-| DB migration | 只增不改（NFR-006；`0001_init`→`0009_source_check`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕→`0012_knowledge_components`〔修訂 2026-09-24〕→`0018_retrain_unflag_marker`〔整合 2026-09-26〕），additive 先行，與 expand-contract 的 expand 段等價。〔整合 2026-09-26〕例外：0016 在同一支 migration 內把 `attempts` 表搬成 `assignments`＋`attempt_records`、原名改為唯讀檢視（既有 migration 檔不動），0016 之前的程式不能在新 schema 上寫入（§3.6） |
+| DB migration | 只增不改（NFR-006；`0001_init`→`0009_source_check`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕→`0012_knowledge_components`〔修訂 2026-09-24〕→`0018_retrain_unflag_marker`〔整合 2026-09-26〕→`0019_ocr_only_review`〔整合 r5 2026-09-26〕），additive 先行，與 expand-contract 的 expand 段等價。〔整合 2026-09-26〕例外：0016 在同一支 migration 內把 `attempts` 表搬成 `assignments`＋`attempt_records`、原名改為唯讀檢視（既有 migration 檔不動），0016 之前的程式不能在新 schema 上寫入（§3.6） |
 | 風險控制 | `FEATURE_*` 旗標預設全關，逐一開啟並觀察，取代 canary（階段 2 起的新功能均走旗標掛載） |
 
 ### 4.1 對外部署前置條件

@@ -177,9 +177,12 @@ exam_pro/
 │
 ├─ test/                      # 項數為 2026-09-26 在 local/integration 實跑，是 7b7065c 當時的數字（合併後由整合者更新）〔整合 2026-09-26〕延後到錯題重練合入後統一更新，見「技術棧」的測試列
 │                             # 〔整合 2026-09-26〕已統一更新為 dec/integration-all（錯題重練、本機看圖逾時合入後）實跑的數字，括號內是 7b7065c 的舊值
-│   ├─ unit/                  #   3,244 項（舊值 2,716）：不連網、不連庫、零 secrets
-│   ├─ integration/           #   593 項（舊值 503）：對 tmpfs 測試庫（_test 後綴強制）
-│   └─ e2e/                   #   12 項（舊值 11）：HTTP 全路徑（上傳→部分入庫；組卷→Word 公式；〔整合 2026-09-26〕新卷→勾要重練→重練卷→Word 標示）
+│                             # 〔整合 r5 2026-09-26〕再更新為 dec/integration-r5（OCR 為主、向量門檻分析、拆題以外的時間三條併入後）實跑的數字；
+│                             #   同一台機器上的起點 local/integration（889d18f）是 unit 3,261／integration 602／e2e 12
+│   ├─ unit/                  #   3,495 項（dec/integration-all 3,244；舊值 2,716）：不連網、不連庫、零 secrets
+│   ├─ integration/           #   615 項（dec/integration-all 593；舊值 503）：對 tmpfs 測試庫（_test 後綴強制）
+│   └─ e2e/                   #   12 項（舊值 11）：HTTP 全路徑（上傳→部分入庫；組卷→Word 公式；〔整合 2026-09-26〕新卷→勾要重練→重練卷→Word 標示；
+│                             #   〔整合 r5〕LOCAL_EXTRACT_MODE=ocr 時上傳那一條改驗「全部停在複核 → 人工核准一題入庫」，docs/local-mode.md 10.12 第 7 點）
 │
 ├─ ocr_service/               # 本機 OCR（Python）：ocr_pdf.py（PP-StructureV3）、requirements.txt（版本全部釘死）
 ├─ scripts/                   # 維運：備份、向量回填、成本報表、公式健檢；windows/ 本機模式一鍵安裝與重錄
@@ -435,7 +438,7 @@ Gemini 已回傳 JSON，為何不直接入庫？
 - **AI（可切回：Gemini）**：`@google/genai`——拆題／分類／變式 `gemini-3.5-flash`、獨立驗答 `gemini-3.1-pro-preview`、embedding `gemini-embedding-001`（768 維）；階段 5 另用 code execution（AI 家教驗算）與音訊輸入（語音轉寫），這兩項只在 Gemini 模式可用。模型 ID 單一真相在 [`exam_pro/config/models.js`](./exam_pro/config/models.js)（`vendor:model-id`）。
 - **文件**：`docx`（自製 LaTeX → OOXML 數學公式轉換）
 - **前端**：單頁 HTML + Tailwind + MathJax（〔修訂 2026-09-25 本機模式〕兩者與字型、GSAP 都改從本機 `/vendor/` 載入，見 `docs/local-mode.md`） + 五個 ES module 分頁（零打包器）；階段 5 另加三個 module（知識點、補救卷與覆蓋率、AI 家教），MathJax 載入 mhchem〔修訂 2026-09-24〕
-- **測試／量測**：`node:test`（〔整合 2026-09-26〕unit 3,244／integration 593／e2e 12，2026-09-26 於 `dec/integration-all`（錯題重練與本機看圖逾時合入後）實跑：unit 3,242 過、2 略過，integration 全過，e2e 12 項中 3 項因缺本機 ocr 回放檔紅燈。舊值：unit 2,716／integration 503／e2e 11，2026-09-26 於 `local/integration` 實跑，是 `7b7065c` 當時的數字，~~合併後由整合者更新~~ 已更新。〔整合 2026-09-26〕~~全域測試數等錯題重練合入後統一更新~~ 錯題重練已合入，全域測試數已統一更新（見本列開頭）；`dec/integration-r23`（`c65909e`）實跑：unit 2,929（2,927 過、2 略過）／integration 528／e2e 11）＋五個 eval suite（golden＋ratchet 門檻）＋ LLM 與 OCR 的 record/replay cassette——CI 全程零金鑰、零網路、零成本
+- **測試／量測**：`node:test`（〔整合 r5 2026-09-26〕unit 3,495／integration 615／e2e 12，2026-09-26 於 `dec/integration-r5`（OCR 為主、向量門檻分析、拆題以外的時間三條併入後）實跑：unit 3,493 過、2 略過，integration 全過，e2e 12 項中 3 項因缺本機 `extract_ocr` 回放檔紅燈；起點 `local/integration`（`889d18f`）同機實跑是 unit 3,261（3,259 過、2 略過）／integration 602（598 過，4 項是 `cassetteTools.pg` 的 JSON 截斷，本次併入的 `exitAfterFlush` 已修）／e2e 12。以下是上一次整合的數字：〔整合 2026-09-26〕unit 3,244／integration 593／e2e 12，2026-09-26 於 `dec/integration-all`（錯題重練與本機看圖逾時合入後）實跑：unit 3,242 過、2 略過，integration 全過，e2e 12 項中 3 項因缺本機 ocr 回放檔紅燈。舊值：unit 2,716／integration 503／e2e 11，2026-09-26 於 `local/integration` 實跑，是 `7b7065c` 當時的數字，~~合併後由整合者更新~~ 已更新。〔整合 2026-09-26〕~~全域測試數等錯題重練合入後統一更新~~ 錯題重練已合入，全域測試數已統一更新（見本列開頭）；`dec/integration-r23`（`c65909e`）實跑：unit 2,929（2,927 過、2 略過）／integration 528／e2e 11）＋五個 eval suite（golden＋ratchet 門檻）＋ LLM 與 OCR 的 record/replay cassette——CI 全程零金鑰、零網路、零成本
 
 ---
 
@@ -462,7 +465,7 @@ LLM 的輸出每次都可能不同，所以品質靠三層固定下來。CI 全�
 - 低於門檻的有四項：classify 的 accuracy 與 macro-F1，以及 nlq LLM 輔路徑的 filters_exact 與 recall@10。nlq 規則路徑的三項都達標。Owner 的決定是**門檻不放寬**，之後改善再量。
 - 之後會依 CR-9（classify 的分冊界線修正，裁決表在 [`docs/chapter-restructure.md`](./docs/chapter-restructure.md#8-裁決紀錄) 第 8 條；〔整合 2026-09-26〕CR-9 已隨 `dec/r2-classify-explog3` 合入 `dec/integration-r23`）與 NLQ LLM 輔路徑的改善重錄，本欄數字屆時更新。〔整合 2026-09-26〕NLQ LLM 輔路徑的改善（證據檢查、平面／空間對齊、`nlq.v2` 模板補章界提示，[`docs/retrieval.md`](./docs/retrieval.md) 第 9 節）已由 `dec/x-nlq-improve-fix` 合入（現在的整合分支是 `dec/integration-all`，待併 `local/integration`）；上面 nlq LLM 輔路徑兩項的數字要等以本機模型重錄 `nlq.v2` 之後才更新（第 9.3 節的反事實模擬不是量測值），classify 兩項同樣等重錄 `classify.v2`。
 - 兩欄的條件不同：中間同時換了模型（Gemini → 本機 8B）與章節白名單（數學 34→52 章、物理 32→34 章，golden 隨之改標，ADR-016；classify golden 由 90 筆變為 92 筆），所以差距不能全算在模型上。
-- 本機模型的 cassette 與向量檔還沒進版控，CI 目前重現不了本機欄的數字。2026-09-26 在 `local/integration`（`7b7065c`）上實跑（以下是 `7b7065c` 當時的數字，~~合併後由整合者更新~~；〔整合 2026-09-26〕~~全域測試數等錯題重練合入後統一更新~~ 已統一更新：錯題重練與本機看圖逾時合入後，`dec/integration-all` 實跑 unit 3,244 項（3,242 過、2 略過）、`check:html`、migrate（到 0018）、integration 593 項全綠，e2e 12 項中 3 項與五個 eval 紅燈，紅燈的種類與筆數同下文；`dec/integration-r23`（`c65909e`）實跑是 unit 2,929 項（2,927 過、2 略過）、integration 528 項，其餘狀態與下文相同）：unit 2,716 項（2,714 過、2 略過）、`check:html`、migrate、integration 503 項全綠；e2e 11 項中 3 項與五個 eval 紅燈，原因全是缺本機回放檔或向量檔（[`docs/local-mode.md`](./docs/local-mode.md) 第 8 條的預期）。等回放檔進版控後，上面未達門檻的四項會讓 CI 的 eval 步驟維持紅燈，直到改善為止。
+- 本機模型的 cassette 與向量檔還沒進版控，CI 目前重現不了本機欄的數字。2026-09-26 在 `local/integration`（`7b7065c`）上實跑（以下是 `7b7065c` 當時的數字，~~合併後由整合者更新~~；〔整合 r5 2026-09-26〕`dec/integration-r5` 實跑 unit 3,495 項（3,493 過、2 略過）、`check:html`、migrate（到 0019）、integration 615 項全綠，e2e 12 項中 3 項與四個 eval（classify、pipeline、nlq、variant）紅燈，retrieval 9 個門檻全過；紅燈全是缺本機回放檔或向量檔，與 `889d18f` 相比只有「拆題缺哪一支回放檔」從 `extract_vision` 換成 `extract_ocr`（CI 改成 `LOCAL_EXTRACT_MODE=ocr`，docs/local-mode.md 10.12 第 7 點）；〔整合 2026-09-26〕~~全域測試數等錯題重練合入後統一更新~~ 已統一更新：錯題重練與本機看圖逾時合入後，`dec/integration-all` 實跑 unit 3,244 項（3,242 過、2 略過）、`check:html`、migrate（到 0018）、integration 593 項全綠，e2e 12 項中 3 項與五個 eval 紅燈，紅燈的種類與筆數同下文；`dec/integration-r23`（`c65909e`）實跑是 unit 2,929 項（2,927 過、2 略過）、integration 528 項，其餘狀態與下文相同）：unit 2,716 項（2,714 過、2 略過）、`check:html`、migrate、integration 503 項全綠；e2e 11 項中 3 項與五個 eval 紅燈，原因全是缺本機回放檔或向量檔（[`docs/local-mode.md`](./docs/local-mode.md) 第 8 條的預期）。等回放檔進版控後，上面未達門檻的四項會讓 CI 的 eval 步驟維持紅燈，直到改善為止。
 - Gemini 時期每個功能的「問題 → 決策 → 數字」逐條對照（含量測日期、模型 ID、commit、重跑指令）在 [`exam_pro/README.md`](./exam_pro/README.md) 的「問題 → 決策 → 數字」章。
 
 ---
@@ -517,6 +520,8 @@ npm run db:backup                               # 1. 先備份
 node scripts/snapshot_attempt_views.js --out=before.json                  # 〔整合 2026-09-26〕1a. 套用前快照（只讀不寫）
 npm run migrate                                 # 2. 套用 0010 之後的 migration（local/integration 到 0015；章節重整另有 chapters:migrate，見 docs/chapter-restructure.md 第 6.1 節；本機模式另要 embed:backfill，見 deployment_and_operations.md §3.5）
                                                 #    〔整合 2026-09-26〕含錯題重練的版本會套到 0018：先停服務，migrate 前後各跑一次
+                                                #    〔整合 r5 2026-09-26〕本版再多 0019（複核原因 ocr_only）：要在 .env 開 LOCAL_EXTRACT_MODE=ocr 之前一定要先套，
+                                                #    沒套時工作佇列暫停、伺服器視窗印一次「請在 exam_pro 執行 npm run migrate」（docs/local-mode.md 10.12 第 2 點）
                                                 #    node scripts/snapshot_attempt_views.js --out=before.json／--out=after.json，
                                                 #    再 --compare before.json after.json 回 0 才啟動（FEATURE_RETRAIN 關閉也要套；deployment_and_operations.md §3.6）
 node scripts/snapshot_attempt_views.js --out=after.json                   # 〔整合 2026-09-26〕2a. 套用後快照

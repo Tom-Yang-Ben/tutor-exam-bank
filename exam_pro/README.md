@@ -153,11 +153,13 @@ exam_pro/
 │                                      # embedText、shuffle、pickOnePerFamily、normalizeStem、
 │                                      # answerCompare、variantTextGate、nlqHeuristics、formula*
 ├─ public/index.html + public/js/      # 單頁殼（7 個 hash 路由視圖）+ ES module（review/students/nlq/variants/assistant；階段 5：kc/remedial/tutor）
-├─ migrations/ + migrate.js            # 只增不改的 SQL（0001~0018；〔整合 2026-09-26〕舊值 0001~0012）＋執行器
+├─ migrations/ + migrate.js            # 只增不改的 SQL（0001~0019；〔整合 r5 2026-09-26〕0019＝複核原因 ocr_only；〔整合 2026-09-26〕舊值 0001~0012）＋執行器
 ├─ eval/                               # run.js（五個 suite）、lib/、golden/、cassettes/、fixtures/、thresholds.json
 ├─ test/  unit(1,613) · integration(317) · e2e(11)（main）；整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠
 │         〔整合 2026-09-26〕dec/integration-all 實測：unit 3,244（2 略過；舊值 2258）· integration 593（舊值 481）· e2e 12（舊值 11；3 項紅，缺本機 ocr cassette）；
 │         五個 eval 紅燈（本機 cassette／向量還沒重錄）。上一行的「五個 eval 全綠」是 stage5/integration 當時的狀態，不適用本版
+│         〔整合 r5 2026-09-26〕dec/integration-r5 實測：unit 3,495（2 略過）· integration 615（全過）· e2e 12（3 項紅，缺本機 extract_ocr cassette）；
+│         retrieval 9 個門檻全過，其餘四個 eval 紅燈（缺回放檔／向量，與 889d18f 相同，只有拆題缺的那支從 extract_vision 換成 extract_ocr）
 ├─ scripts/ + *.bat                    # 備份、向量回填、成本報表、公式健檢（Windows 雙擊）
 └─ docker-compose.yml                  # PG16+pgvector：5442 開發（volume）／5433 測試（tmpfs）；皆只綁 127.0.0.1
 ```
