@@ -35,6 +35,7 @@
 // OLLAMA_NO_THINK（這些 agent 不思考）、OLLAMA_MAX_OUTPUT_<AGENT>（輸出上限只降不升）、OLLAMA_NUM_CTX_<AGENT>。
 // 都沒寫＝轉交給 adapter 的參數與之前逐位元相同；Gemini 路徑與 replay 一個字都不讀。
 // 三者都不在 cassette 的鍵裡；record 時有套用才在 request.ollamaOverrides 記下實際送出的值（沒套用就沒有這個欄位）。
+// 〔審查修正〕模組載入時（live／record）印一行生效的本機調整，寫錯的名稱另外警告（localTuning.announceOverrides）。
 
 const DEFAULT_DIM = 768;
 
@@ -53,6 +54,9 @@ function adapterOpts(vendor, id, opts) {
 
 // 啟動檢查（第 2 條 OLLAMA_HOST：只允許 localhost／127.0.0.1／::1，其他主機名啟動時警告）
 require('./ollama').warnIfRemoteHost();
+// 〔審查修正 dec/local-thinking-speed-fix〕live／record 時印出生效的本機調整（OLLAMA_NO_THINK 等），名稱寫錯時警告；
+// 什麼都沒寫或 replay 時不印（services/llm/localTuning.js 的 announceOverrides）
+require('./localTuning').announceOverrides();
 
 /**
  * 依 vendor 取 adapter（generateJson／generateText 用）。

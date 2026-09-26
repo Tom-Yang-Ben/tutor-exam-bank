@@ -196,6 +196,92 @@ describe('THINKING_AGENTS 與程式一致', () => {
     });
 });
 
+// ───────────────────────── 〔審查修正〕啟動時印出生效的本機調整、名稱寫錯時警告 ─────────────────────────
+
+describe('checkOverrides／announceOverrides', () => {
+    test('什麼都沒寫：沒有生效的、沒有警告', () => {
+        assert.deepEqual(tuning.checkOverrides({}), { active: [], warnings: [] });
+        assert.deepEqual(tuning.checkOverrides({ OLLAMA_NO_THINK: '  ', OLLAMA_NUM_CTX: '8192', OLLAMA_MAX_OUTPUT_VERIFY: '' }), { active: [], warnings: [] },
+            '空字串＝沒寫；全域的 OLLAMA_NUM_CTX 不是本分支的設定');
+    });
+
+    test('生效的列成一段；寫錯的 agent（verfy）、本來就不思考的（classify）、後綴拼錯、值不是正整數、輸出上限沒有比較小，各一行警告', () => {
+        const { active, warnings } = tuning.checkOverrides({
+            OLLAMA_NO_THINK: 'verfy, classify，lint、kc_tag',
+            OLLAMA_MAX_OUTPUT_VERIFY: '3072', OLLAMA_MAX_OUTPUT_LINT: '9000', OLLAMA_MAX_OUTPUT_VARIANT: '2048',
+            OLLAMA_NUM_CTX_EXTRCT_OCR: '16384', OLLAMA_NUM_CTX_EXTRACT_OCR: 'abc', OLLAMA_NUM_CTX_EXTRACT_VISION_CHEM: '16384'
+        });
+        assert.deepEqual(active, [
+            '不思考：kc_tag、lint（寫基本名稱的連化學版一起）',
+            '輸出上限：OLLAMA_MAX_OUTPUT_VARIANT=2048、OLLAMA_MAX_OUTPUT_VERIFY=3072',
+            'num_ctx：OLLAMA_NUM_CTX_EXTRACT_VISION_CHEM=16384'
+        ]);
+        assert.equal(warnings.length, 5, warnings.join('\n'));
+        assert.match(warnings.find(w => w.includes('verfy')), /不是認得的 agent（寫錯了？這個名字會被忽略）.*會思考的 agent：verify、lint、kc_tag、tutor、voice/);
+        assert.match(warnings.find(w => w.includes('classify')), /本來就不思考，寫了沒有作用/);
+        assert.match(warnings.find(w => w.includes('OLLAMA_MAX_OUTPUT_LINT')), /9000 不比 lint 原本的輸出上限 8192 小（只降不升），沒有作用/);
+        assert.match(warnings.find(w => w.includes('EXTRCT_OCR')), /「EXTRCT_OCR」不是認得的 agent/);
+        assert.match(warnings.find(w => w.includes('=abc')), /OLLAMA_NUM_CTX_EXTRACT_OCR=abc 不是正整數，被忽略/);
+        // 警告的名稱真的被忽略（與 resolveOllamaOverrides 一致）
+        assert.deepEqual(tuning.resolveOllamaOverrides({ agent: 'verify', thinkingBudget: 1024 }, { OLLAMA_NO_THINK: 'verfy' }).applied, {});
+    });
+
+    test('all／*：全部會思考的；化學版寫全名也認得', () => {
+        assert.deepEqual(tuning.checkOverrides({ OLLAMA_NO_THINK: 'all' }).active, ['不思考：全部會思考的 agent（verify、lint、kc_tag、tutor、voice）']);
+        assert.deepEqual(tuning.checkOverrides({ OLLAMA_NO_THINK: 'verify_chem' }), { active: ['不思考：verify_chem（寫基本名稱的連化學版一起）'], warnings: [] });
+        assert.deepEqual(tuning.checkOverrides({ OLLAMA_NUM_CTX_CLASSIFY_CHEM: '8192' }).warnings, []);
+    });
+
+    test('announceOverrides：live／record 才印、同一行程只印一次；replay 或什麼都沒寫不印', () => {
+        const logs = [];
+        const warns = [];
+        const out = { log: (s) => logs.push(s), warn: (s) => warns.push(s) };
+        tuning._resetAnnounceForTest();
+        assert.equal(tuning.announceOverrides({ LLM_MODE: 'replay', OLLAMA_NO_THINK: 'verify' }, out), false, 'replay 不套用，不印');
+        assert.equal(tuning.announceOverrides({ OLLAMA_NO_THINK: 'verify' }, out), false, '沒設 LLM_MODE＝replay');
+        assert.equal(tuning.announceOverrides({ LLM_MODE: 'live' }, out), false, '什麼都沒寫');
+        assert.deepEqual([logs, warns], [[], []]);
+        assert.equal(tuning.announceOverrides({ LLM_MODE: 'LIVE', OLLAMA_NO_THINK: 'verify,verfy' }, out), true);
+        assert.deepEqual(logs, ['[ollama] 本機調整（docs/local-mode.md 第 10.12 條；只在模型是 ollama:… 時套用）：不思考：verify（寫基本名稱的連化學版一起）']);
+        assert.equal(warns.length, 1);
+        assert.match(warns[0], /^\[ollama\] ⚠ OLLAMA_NO_THINK 裡的「verfy」/);
+        assert.equal(tuning.announceOverrides({ LLM_MODE: 'record', OLLAMA_NO_THINK: 'lint' }, out), false, '同一行程只印一次');
+        tuning._resetAnnounceForTest();
+        assert.equal(tuning.announceOverrides({ LLM_MODE: 'record', OLLAMA_NUM_CTX_VERFY: '8192' }, out), true, '只有警告也印');
+        assert.equal(logs.length, 1);
+        assert.match(warns[1], /OLLAMA_NUM_CTX_VERFY/);
+        tuning._resetAnnounceForTest();
+    });
+
+    test('services/llm 載入時呼叫 announceOverrides（在 OLLAMA_HOST 的檢查之後）', () => {
+        const src = fs.readFileSync(path.join(APP_DIR, 'services', 'llm', 'index.js'), 'utf8');
+        const host = src.indexOf("require('./ollama').warnIfRemoteHost();");
+        const ann = src.indexOf("require('./localTuning').announceOverrides();");
+        assert.ok(host > 0 && ann > host, '兩個啟動檢查都在、順序固定');
+    });
+
+    test('KNOWN_AGENTS：原始碼裡傳給 services/llm 的 agent 名稱都列到了（寫錯的名稱才警告得出來）', () => {
+        const names = new Set();
+        const walk = (dir) => {
+            for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+                const p = path.join(dir, ent.name);
+                if (ent.isDirectory()) { if (!['llm', 'schemas'].includes(ent.name)) walk(p); continue; }
+                if (!ent.name.endsWith('.js')) continue;
+                const src = fs.readFileSync(p, 'utf8');
+                for (const m of src.matchAll(/\bagent:\s*'([a-z_]+)'/g)) names.add(m[1]);
+                for (const m of src.matchAll(/\bAGENT(?:_[A-Z]+)*\s*=\s*'([a-z_]+)'/g)) names.add(m[1]);
+            }
+        };
+        walk(path.join(APP_DIR, 'agents'));
+        walk(path.join(APP_DIR, 'services'));
+        names.delete('ocr');   // PaddleOCR（services/ocr）不經 services/llm，沒有這三個設定
+        const missing = [...names].filter(n => !tuning.KNOWN_AGENTS.includes(n)).sort();
+        assert.deepEqual(missing, [], '新的 agent 名稱要補進 KNOWN_AGENTS');
+        for (const a of Object.keys(tuning.THINKING_AGENTS)) assert.ok(tuning.KNOWN_AGENTS.includes(a), a);
+        assert.ok(names.has('classify') && names.has('extract_vision') && names.has('kc_tag'), '掃描有效');
+    });
+});
+
 // ───────────────────────── services/llm 的套用 ─────────────────────────
 
 describe('services/llm：vendor 是 ollama 時套用', () => {

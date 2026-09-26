@@ -20,7 +20,11 @@
 // 錄製時有套用，services/llm/index.js 就在 cassette 的 request.ollamaOverrides 記下實際送出的值（沒套用時不寫這個欄位，
 // 與之前逐位元相同）；npm run perf:local 據此把「不思考」的呼叫分開統計。
 //
-// 這支檔案只讀環境變數、不碰網路，全部是純函式（env 可注入）。
+// 〔審查修正〕啟動時（services/llm/index.js 載入、LLM_MODE 是 live／record）由 announceOverrides 印一行生效的本機調整；
+// 名稱寫錯（例 OLLAMA_NO_THINK=verfy、OLLAMA_NUM_CTX_EXTRCT_OCR）、值不是正整數、寫了沒有作用的，各印一行警告（checkOverrides）。
+// 本來寫錯只會被靜默忽略。
+//
+// 這支檔案只讀環境變數、不碰網路；除了 announceOverrides 會印字，全部是純函式（env 可注入）。
 // ─────────────────────────────────────────────────────────────
 
 /**
@@ -177,7 +181,110 @@ function describeOverrides(env = process.env) {
 /** 本分支新增、會進 eval 重錄子行程的環境變數名稱（eval/lib/suiteProcess.js 錄製時放行、回放時擋掉） */
 const OVERRIDE_ENV_PATTERN = /^OLLAMA_(NO_THINK|MAX_OUTPUT_[A-Z0-9_]+|NUM_CTX_[A-Z0-9_]+)$/;
 
+// ───────────────────────── 〔審查修正〕啟動時印出生效的本機調整、名稱寫錯時警告 ─────────────────────────
+
+/**
+ * 會經 services/llm 呼叫模型的 agent 名稱（cassette 的子目錄名；test/unit/localTuning.test.js 掃原始碼確認沒有漏列）。
+ * OLLAMA_NO_THINK 的名稱與 OLLAMA_MAX_OUTPUT_／OLLAMA_NUM_CTX_ 的後綴拿它對照：不在這裡的＝寫錯了，會被靜默忽略，啟動時警告。
+ */
+const KNOWN_AGENTS = Object.freeze([
+    'extract', 'extract_chem', 'extract_vision', 'extract_vision_chem', 'extract_ocr', 'extract_ocr_chem',
+    'classify', 'classify_chem', 'lint', 'lint_chem', 'verify', 'verify_chem', 'variant', 'variant_chem',
+    'nlq', 'assistant', 'kc_tag', 'tutor', 'voice'
+]);
+
+/** 會思考的基本名稱（OLLAMA_NO_THINK 只對它們有作用；化學版寫基本名稱即可） */
+function thinkingBaseNames() {
+    return [...new Set(Object.keys(THINKING_AGENTS).map(baseAgent))];
+}
+
+/**
+ * 目前環境裡的本機調整：生效的（給人看的一段話）與寫錯、沒有作用的（警告）。純函式。
+ *   OLLAMA_NO_THINK：不認得的名稱（例 verfy）→ 警告；認得但本來就不思考的（例 classify）→ 警告「沒有作用」。
+ *   OLLAMA_MAX_OUTPUT_<X>／OLLAMA_NUM_CTX_<X>：<X> 不是認得的 agent → 警告；值不是正整數 → 警告「被忽略」；
+ *   輸出上限不比 agent 原本的小（只降不升）→ 警告「沒有作用」。
+ * @param {object} [env]
+ * @returns {{active:string[], warnings:string[]}}
+ */
+function checkOverrides(env = process.env) {
+    const active = [];
+    const warnings = [];
+    const knownSuffix = new Map(KNOWN_AGENTS.map(a => [agentEnvSuffix(a), a]));
+    const thinkers = thinkingBaseNames();
+
+    const rawNoThink = String(env.OLLAMA_NO_THINK ?? '').trim();
+    if (rawNoThink) {
+        const { all, names } = describeOverrides(env).noThink;
+        const effective = [];
+        for (const name of names) {
+            const known = KNOWN_AGENTS.includes(name) || KNOWN_AGENTS.includes(baseAgent(name));
+            if (!known) {
+                warnings.push(`OLLAMA_NO_THINK 裡的「${name}」不是認得的 agent（寫錯了？這個名字會被忽略）。會思考的 agent：${thinkers.join('、')}（化學版寫基本名稱即可）。`);
+            } else if (!Object.prototype.hasOwnProperty.call(THINKING_AGENTS, name) && !thinkers.includes(baseAgent(name))) {
+                warnings.push(`OLLAMA_NO_THINK 裡的「${name}」本來就不思考，寫了沒有作用。會思考的 agent：${thinkers.join('、')}。`);
+            } else {
+                effective.push(name);
+            }
+        }
+        if (all) active.push(`不思考：全部會思考的 agent（${thinkers.join('、')}）`);
+        else if (effective.length) active.push(`不思考：${effective.join('、')}（寫基本名稱的連化學版一起）`);
+    }
+
+    for (const [prefix, what] of [['OLLAMA_MAX_OUTPUT_', '輸出上限'], ['OLLAMA_NUM_CTX_', 'num_ctx']]) {
+        const items = [];
+        for (const key of Object.keys(env).filter(k => k.startsWith(prefix) && k.length > prefix.length).sort()) {
+            const raw = String(env[key] ?? '').trim();
+            if (!raw) continue;
+            const agent = knownSuffix.get(key.slice(prefix.length));
+            if (!agent) {
+                warnings.push(`${key}：「${key.slice(prefix.length)}」不是認得的 agent（寫錯了？這個設定會被忽略）。agent 名稱大寫，例 ${prefix}${agentEnvSuffix('verify')}、${prefix}${agentEnvSuffix('extract_ocr')}。`);
+                continue;
+            }
+            const n = positiveIntOrNull(raw);
+            if (n === null) {
+                warnings.push(`${key}=${raw} 不是正整數，被忽略。`);
+                continue;
+            }
+            const own = THINKING_AGENTS[agent] || THINKING_AGENTS[baseAgent(agent)];
+            if (prefix === 'OLLAMA_MAX_OUTPUT_' && own && n >= own.maxOutputTokens) {
+                warnings.push(`${key}=${n} 不比 ${agent} 原本的輸出上限 ${own.maxOutputTokens} 小（只降不升），沒有作用。`);
+                continue;
+            }
+            items.push(`${key}=${n}`);
+        }
+        if (items.length) active.push(`${what}：${items.join('、')}`);
+    }
+    return { active, warnings };
+}
+
+let announced = false;
+
+/**
+ * 啟動時印一次（同一行程只印一次）：LLM_MODE 是 live／record 時，把生效的本機調整印成一行，寫錯或沒有作用的各印一行警告。
+ * 什麼都沒寫、或 replay（這些設定不會套用）時什麼都不印。services/llm/index.js 載入時呼叫（伺服器與 worker 啟動時都會載入它）。
+ * @param {object} [env]
+ * @param {{log?:Function, warn?:Function}} [out]  測試注入點（預設 console）
+ * @returns {boolean} 這次有沒有印東西
+ */
+function announceOverrides(env = process.env, { log = (s) => console.log(s), warn = (s) => console.warn(s) } = {}) {
+    if (announced) return false;
+    // 與 services/llm/index.js 的 llmMode() 同一個讀法：沒設或空字串＝replay
+    const mode = String(env.LLM_MODE ?? '').trim().toLowerCase() || 'replay';
+    if (mode !== 'live' && mode !== 'record') return false;
+    const { active, warnings } = checkOverrides(env);
+    if (!active.length && !warnings.length) return false;
+    announced = true;
+    if (active.length) log(`[ollama] 本機調整（docs/local-mode.md 第 10.12 條；只在模型是 ollama:… 時套用）：${active.join('；')}`);
+    for (const w of warnings) warn(`[ollama] ⚠ ${w}`);
+    return true;
+}
+
+/** 測試用：讓 announceOverrides 可以再印一次 */
+function _resetAnnounceForTest() { announced = false; }
+
 module.exports = {
     resolveOllamaOverrides, noThinkFor, perAgentInt, parseAgentList, agentEnvSuffix, baseAgent, describeOverrides,
-    THINKING_AGENTS, OVERRIDE_ENV_PATTERN, ALL_WORDS
+    THINKING_AGENTS, OVERRIDE_ENV_PATTERN, ALL_WORDS,
+    // 〔審查修正〕
+    KNOWN_AGENTS, checkOverrides, announceOverrides, _resetAnnounceForTest
 };
