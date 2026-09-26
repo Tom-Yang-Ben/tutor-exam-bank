@@ -269,7 +269,20 @@ JOB_CONCURRENCY=2                    # 選填
 - 也可以只把某一個節點切回 Gemini（例如只改 `MODEL_VERIFY`），那一個節點就會連外、花錢，其餘仍在本機。
 - `MODEL_TEXT`（分類、公式重寫等純文字工作）不寫時自動跟著走：拆題模型改回 Gemini 就等於 `MODEL_EXTRACT`。若 `.env` 裡明寫了 `MODEL_TEXT=ollama:…`，要一併刪掉或改掉，否則這幾個節點仍在本機。
 - 語音提問只在 `MODEL_VOICE`（未設時沿用 `MODEL_EXTRACT`）是 `gemini:` 時可用。
-- **CI 讀哪一組回放檔不看 `.env`**，看 `.github/workflows/ci.yml` 的 `MODEL_EXTRACT`／`MODEL_VERIFY`／`EMBED_MODEL`／`MODEL_NLQ`。要讓 CI 也回到 Gemini，改那四行並用 Gemini 重錄（會花錢）；舊的 Gemini 回放檔若還沒被 `cassettes:prune` 刪掉，可以直接沿用（見 10.7）。
+- **CI 讀哪一組回放檔不看 `.env`**，看 `.github/workflows/ci.yml` 的 `MODEL_EXTRACT`／`MODEL_VERIFY`／`EMBED_MODEL`／`MODEL_NLQ`。要讓 CI 也回到 Gemini，改那四行並用 Gemini 重錄（會花錢）；~~舊的 Gemini 回放檔若還沒被 `cassettes:prune` 刪掉，可以直接沿用（見 10.7）。~~
+  〔修訂 2026-09-27 `dec/cleanup-exam-legacy`〕**舊的 Gemini 回放檔大多已經不能直接沿用**。2026-09-27 以 `eval/lib/cassetteAudit.js` 的 `auditKeys`（用現在的模板與 schema 重算每支 cassette 的鍵）對 `889d18f` 盤點，並用上面這組 Gemini 設定、CI 的回放模式（`LLM_MODE=replay`、`EMBED_MODE=fixture`）把五個 eval 各跑一次，結果如下（Gemini 回放檔一支都沒刪，照決策單 C 暫緩）：
+
+  | 回放檔（Gemini） | 鍵還有效 | 切回 Gemini 時 | 原因 |
+  |---|---|---|---|
+  | `classify`（`classify.v1`） | 0／181 | **要重錄**：classify suite 92 筆全部 replay miss | 模板已升 `classify.v2`（本機錄的 `classify.v1` 92 支也一樣失效） |
+  | `nlq`（`nlq.v1`） | 0／16 | **要重錄**：nlq 的 LLM 路徑 8 句全部 replay miss；規則路徑不呼叫 LLM，不受影響 | 模板已升 `nlq.v2`（本機錄的 8 支也一樣失效） |
+  | `variant`（`variant.v1`） | 0／87 | **要重錄** | 這批最晚一支錄於 2026-09-24 22:05（UTC），早於 `522f81c`（章節白名單依冊別分組），鍵已對不上；本機 9/25 錄的 60 支有效 |
+  | `extract`（`extract.v2`） | 0／1 | **要重錄**：pipeline 的 extract 一開始就 replay miss，e2e 用同一份樣卷、同一組呼叫 | 2026-09-15 錄的，之後模板或 schema 改過 |
+  | `verify`（`verify.v1`） | 58／58 | 鍵有效，但實際讀不讀得到要看上游：題幹來自 extract（pipeline／e2e）或出變式（variant），上游重錄後題幹只要差一個字就是新鍵 | — |
+  | `lint`（`lint.v2`） | 1／1 | 同 verify | — |
+  | 向量檔 `embeddings.gemini-embedding-001.768.json` | 62 題缺 5 題（id 51、53、54、55、62） | **要補向量**：retrieval 與 variant 在第一步就停，nlq 的 `recall10` 是 n/a；`npm run cassettes:rerecord` 的第一步（`eval/record_embeddings.js --only-missing`）只補缺的、只呼叫 embedding，費用很小 | 向量檔以 `embed_text` 的雜湊當鍵：#62 是 `49256a0` 新增的干擾題，#51、#53、#54、#55 在同一個 commit 改了章（章名在 `embed_text` 裡），檔裡沒有這 5 段新文字的 Gemini 向量 |
+
+  所以切回 Gemini 後要用 Gemini 做的是：補 5 題向量，重錄 classify、nlq、variant、pipeline＋e2e，也就是 `npm run cassettes:rerecord` 的全部步驟。還能用的只有 verify、lint 那 59 支的鍵，但 `LLM_MODE=record` 每一次呼叫都會真的打模型、同鍵覆寫（`services/llm/index.js`），重錄 pipeline 時它們還是會被重新呼叫，**省不到錢**。要估費用，先把 `ci.yml` 那四行改成 Gemini，再跑 `npm run cassettes:rerecord -- --dry-run` 看盤點。這張表是 2026-09-27 的快照，之後再改模板或 schema 就會變；重算方法：在 `exam_pro/` 執行 `node -e "const a=require('./eval/lib/cassetteAudit');for(const e of a.auditKeys(a.inventory().entries))console.log(e.keyValid?'有效':'失效',e.agent,e.model,e.template)"`。
 
 ### 10.5 預期速度與品質
 
@@ -321,7 +334,7 @@ CI 不裝 Ollama、不裝 Python，只讀 repo 裡錄好的回放檔（cassette�
    - 模型一律照 `ci.yml`，`.env` 的 `MODEL_*` 不會帶進去（照 `.env` 錄的鍵 CI 讀不到）。
 4. 太久的話可以分次錄：在 `exam_pro\scripts\windows\` 開命令列執行 `record_local.bat classify,nlq`（逗號分隔、不加空白；等於 `--suites classify,nlq`）；或 `npm run cassettes:rerecord -- --dry-run` 先看盤點。
 5. 錄完：`git add eval/cassettes eval/fixtures/embeddings.*.json`，commit、push。本機的向量檔叫 `eval/fixtures/embeddings.ollama-qwen3-embedding-0.6b.768.json`（模型名裡的 `:` 換成 `-`，Windows 檔名不能有冒號）。
-6. `npm run cassettes:prune` 會把原本 Gemini 錄的回放檔列為「CI 不再讀到」。**還想保留讓 CI 切回 Gemini 的可能，就先不要 `--apply`**（刪掉之後要切回就得再用 Gemini 重錄、花錢）；確定不回頭再刪。
+6. `npm run cassettes:prune` 會把原本 Gemini 錄的回放檔列為「CI 不再讀到」。**還想保留讓 CI 切回 Gemini 的可能，就先不要 `--apply`**（刪掉之後要切回就得再用 Gemini 重錄、花錢）；確定不回頭再刪。〔修訂 2026-09-27〕保留下來的 Gemini 回放檔大多已經讀不到（見 10.4 的表）：就算不刪，切回 Gemini 也還是要重錄 classify、nlq、variant、pipeline＋e2e，並補 5 題向量。刪不刪由 Owner 決定（決策單 C 暫緩）。
 7. 回放驗證有門檻未達時，照 10.5 最後一點：不放寬，交給 Owner 裁決。〔修訂 2026-09-26 決策單 A7〕Owner 已裁決：門檻不放寬、照實紅燈，之後改善；帶紅燈的 PR 能否合併等第二輪 X1。
    〔整合 2026-09-26〕X1 已答（見 [`HANDOFF.md` §0.00a](HANDOFF.md#000a-owner-決策單第二三輪2026-09-26修訂-2026-09-26-決策單第二三輪)）：只有 eval 分數可以紅燈合併，unit、integration、e2e 必須綠，PR 說明列出未達項。
 8. **〔2026-09-26 修正〕variant 那一步最後報「dedup1 取不到變式題的向量（EMBED_MODE=fixture）：embedding fixture 查無此文本」、`gate_pass_rate` n/a**：舊版 `eval/lib/suiteVariant.js` 的 dedup1 寫死去讀向量檔，不看 `EMBED_MODE`（訊息裡的「EMBED_MODE=fixture」也是寫死的字，子行程其實是 record）。平常查得到，是因為出變式的跑題檢查剛剛才把**同一段文字**錄進檔；classify 換了章、或 lint 改寫了題幹（例：模型寫 `\overrightarrow`、lint 改成 `\vec`）的那幾題，dedup1 要的那一段沒有人錄過。`dec/fix-variant-embed-record` 已修正：錄製時 dedup1 也呼叫 embedding 模型並寫進向量檔。

@@ -746,7 +746,7 @@ COMMIT;
 ```
 
   （`jobs` 表整份拆題同理。）MySQL 沒有 `UPDATE ... RETURNING`，也不能在 `UPDATE` 的子查詢引用同一張表（error 1093），所以不寫單句版。租約 `JOB_LEASE_MS` 必須 ≥ `JOB_NODE_TIMEOUT_MS` + 該節點的退避總和；此外 LLM 呼叫進行中每 30 秒 `UPDATE locked_until` 續租，避免另一個並行槽重新認領仍在付費的列。程序崩潰或 `nodemon` 重啟後，租約過期的列被重新認領——這就是重跑保證。並行上限 `JOB_CONCURRENCY`（預設 2）。
-- `server.js` 在 `JOB_RUNNER=inline`（預設）時啟動 runner；`JOB_RUNNER=off` 供測試與純 API 部署；`node worker.js` 可獨立跑。環境變數一律寫在 `.env`（PowerShell／cmd 不支援行內 `VAR=x node ...`）。不引入 Redis、不引入第二個常駐服務。
+- `server.js` 在 `JOB_RUNNER=inline`（預設）時啟動 runner；`JOB_RUNNER=off` 供測試與純 API 部署；~~`node worker.js` 可獨立跑~~〔修訂 2026-09-27〕沒有 `worker.js` 這支檔：runner 在 `workers/jobRunner.js`，平常由 `server.js`（`npm start`／`npm run dev`）載入並呼叫 `startInlineRunner()`，只有 `JOB_RUNNER` 是 `inline`（預設）時才啟動；要獨立跑就在 `exam_pro/` 底下執行 `node workers/jobRunner.js`（`package.json` 沒有對應的 npm script；它用 `dotenv` 讀目前目錄的 `.env`，所以要在 `exam_pro/` 執行）。環境變數一律寫在 `.env`（PowerShell／cmd 不支援行內 `VAR=x node ...`）。不引入 Redis、不引入第二個常駐服務。
 - `services/llm/throttle.js`：每供應商一個 token bucket（RPM 與併發兩個桶），所有 adapter 呼叫前 `await acquire(vendor)`。`middleware/rateLimit.js` 是固定時間窗、保護的是入口；這裡保護的是出口配額，不能共用。
 
 #### 3.2 資料表：`migrations/002_jobs.mysql.sql` 與 `002_jobs.pg.sql` 兩份
@@ -991,7 +991,7 @@ CI 維持 `npm test`、無 secrets：LLM 全走 `fake.js`；新管線程式碼�
 
 | 風險 | 影響 | 緩解 |
 |---|---|---|
-| `nodemon` 熱重載殺掉跑到一半的 job | 付費節點中斷 | 租約過期自動重認領；已記的 usage 不遺失；開發時 `.env` 設 `JOB_RUNNER=off`，另開視窗 `node worker.js` |
+| `nodemon` 熱重載殺掉跑到一半的 job | 付費節點中斷 | 租約過期自動重認領；已記的 usage 不遺失；開發時 `.env` 設 `JOB_RUNNER=off`，另開視窗 ~~`node worker.js`~~〔修訂 2026-09-27〕在 `exam_pro/` 執行 `node workers/jobRunner.js`（沒有 `worker.js` 這支檔，也沒有 npm script） |
 | 並行槽重認領仍在跑的列 | 重複付費 | `JOB_LEASE_MS ≥ JOB_NODE_TIMEOUT_MS + 退避總和`，呼叫中每 30 秒續租 |
 | Gemini 低階配額 RPM 不足、30 題 PDF 可達 100+ 次呼叫 | 整排 `rate_limited` | 每供應商 token bucket；classify 零成本閘門與 dedup0 前置直接減少呼叫數 |
 | `uploads/` 一小時清理刪掉排隊中的 PDF | 拆不了題 | PDF 存 `data/jobs/`，拆題完成即刪 |
