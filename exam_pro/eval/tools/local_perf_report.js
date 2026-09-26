@@ -1625,13 +1625,37 @@ function currentSettings(env = {}) {
 }
 
 /**
+ * 〔整合 r5 審查〕這個 agent 實際生效的 num_ctx 與輸出上限：與 services/llm/index.js 的 adapterOpts 同一條規則
+ * （localTuning.resolveOllamaOverrides）——OLLAMA_NUM_CTX_<AGENT> 有寫就用它，否則全域 OLLAMA_NUM_CTX；
+ * OLLAMA_MAX_OUTPUT_<AGENT> 比程式原本的上限小才換成它。純函式。
+ * @param {string} agent
+ * @param {ReturnType<typeof currentSettings>} settings
+ * @param {object} env
+ * @param {number} maxOutputTokens 程式原本的輸出上限
+ * @returns {{numCtx:number, numCtxEnv:string, numCtxSource:string, maxOutputTokens:number, maxOutputEnv:string|null}}
+ */
+function effectiveOllamaLimits(agent, settings, env = {}, maxOutputTokens) {
+    const tuning = require('../../services/llm/localTuning');
+    const r = tuning.resolveOllamaOverrides({ agent, maxOutputTokens }, env || {});
+    const nameOf = (prefix) => (tuning.perAgentInt(prefix, agent, env || {}) || {}).name || null;
+    return Object.assign(
+        r.applied.numCtx
+            ? { numCtx: r.numCtx, numCtxEnv: nameOf('OLLAMA_NUM_CTX_'), numCtxSource: '.env' }
+            : { numCtx: settings.OLLAMA_NUM_CTX.value, numCtxEnv: 'OLLAMA_NUM_CTX', numCtxSource: settings.OLLAMA_NUM_CTX.source },
+        r.applied.numPredict
+            ? { maxOutputTokens: r.maxOutputTokens, maxOutputEnv: nameOf('OLLAMA_MAX_OUTPUT_') }
+            : { maxOutputTokens, maxOutputEnv: null }
+    );
+}
+
+/**
  * 依各 agent 的統計算建議。只用本機（ollama／paddleocr）的組。純函式。
  * 〔OCR 為主 2026-09-26〕opts.mode（.env 的 LOCAL_EXTRACT_MODE）：'ocr' 時拆題一塊只有 ocr → extract_ocr（不看圖），
  * 節點逾時不再說「沒有 extract_vision 的資料，這一項偏低」；每塊頁數沒有看圖的 cassette 時改以 extract_ocr 為基準。
  * 另外算 ocrCtx：extract_ocr 讀得最多的那一次＋輸出上限（EXTRACT_MAX_OUTPUT_TOKENS）放不放得進 OLLAMA_NUM_CTX。
  * @param {ReturnType<typeof summarizeGroups>} agentStats 本機呼叫的 summarizeGroups(entries, {byModel:false})
  * @param {ReturnType<typeof currentSettings>} settings
- * @param {{mode?:'cross'|'ocr'}} [opts]
+ * @param {{mode?:'cross'|'ocr', env?:object}} [opts] env：〔整合 r5 審查〕讀逐步驟的 OLLAMA_NUM_CTX_<AGENT>／OLLAMA_MAX_OUTPUT_<AGENT>
  */
 function recommend(agentStats, settings, opts = {}) {
     const mode = opts && opts.mode === 'ocr' ? 'ocr' : 'cross';
@@ -1723,9 +1747,9 @@ function recommend(agentStats, settings, opts = {}) {
             perPage[a].safeSec = Math.max(RULES.P90_FACTOR * perPage[a].p90Sec, RULES.MAX_FACTOR * perPage[a].maxSec);
         }
         const limits = [];
-        const cap = (name, limit, per, why) => {
+        const cap = (name, limit, per, why, extra) => {
             if (!(per > 0)) return;
-            limits.push({ name, maxPages: Math.floor(limit / per), why });
+            limits.push({ name, maxPages: Math.floor(limit / per), why, ...(extra || {}) });
         };
         const chainSafe = sum(Object.values(perPage).map(p => p.safeSec));
         cap('JOB_NODE_TIMEOUT_MS', settings.JOB_NODE_TIMEOUT_MS.value / 1000, chainSafe,
@@ -1737,7 +1761,11 @@ function recommend(agentStats, settings, opts = {}) {
         for (const a of ['extract_vision', 'extract_ocr']) {
             const s = by.get(a);
             const tpp = s && s.pages && s.pages.tokensPerPage;
-            if (tpp) cap('OLLAMA_NUM_CTX', settings.OLLAMA_NUM_CTX.value, tpp, `${a} 每頁約 ${fmtInt(tpp)} token（輸入＋輸出；固定的提示詞也按頁攤）`);
+            // 〔整合 r5 審查〕num_ctx 用這一步實際生效的值（OLLAMA_NUM_CTX_<AGENT> 有寫就是它）
+            const lim = effectiveOllamaLimits(a, settings, opts.env, EXTRACT_MAX_OUTPUT_TOKENS);
+            // 逐步驟設定生效時 name 是 OLLAMA_NUM_CTX_<AGENT>（settings 裡沒有它），另記 numCtx 給報表印值
+            if (tpp) cap(lim.numCtxEnv, lim.numCtx, tpp, `${a} 每頁約 ${fmtInt(tpp)} token（輸入＋輸出；固定的提示詞也按頁攤）`,
+                lim.numCtxEnv !== 'OLLAMA_NUM_CTX' ? { numCtx: lim.numCtx } : null);
         }
         const binding = limits.reduce((w, l) => (!w || l.maxPages < w.maxPages ? l : w), null);
         const pages = Math.max(0, Math.min(RULES.MAX_CHUNK_PAGES, binding ? binding.maxPages : RULES.MAX_CHUNK_PAGES));
@@ -1759,14 +1787,19 @@ function recommend(agentStats, settings, opts = {}) {
     }
 
     // 6. 〔OCR 為主〕extract_ocr 的 context：讀得最多的那一次＋輸出上限，放不放得進 OLLAMA_NUM_CTX
+    // 〔整合 r5 審查〕num_ctx 與輸出上限用 extract_ocr 實際生效的值（OLLAMA_NUM_CTX_EXTRACT_OCR、OLLAMA_MAX_OUTPUT_EXTRACT_OCR），
+    // 與 agents/extract.js 的 ocrCallLimits 同一條規則；都沒寫＝與整合前逐鍵相同
     const eo = by.get('extract_ocr');
+    const eoLim = effectiveOllamaLimits('extract_ocr', settings, opts.env, EXTRACT_MAX_OUTPUT_TOKENS);
     const ocrCtx = eo && Number.isFinite(eo.maxTokenIn) ? {
         agent: 'extract_ocr',
         maxTokenIn: eo.maxTokenIn,
-        maxOutputTokens: EXTRACT_MAX_OUTPUT_TOKENS,
-        numCtx: settings.OLLAMA_NUM_CTX.value,
-        over: eo.maxTokenIn + EXTRACT_MAX_OUTPUT_TOKENS > settings.OLLAMA_NUM_CTX.value,
-        n: eo.n
+        maxOutputTokens: eoLim.maxOutputTokens,
+        numCtx: eoLim.numCtx,
+        over: eo.maxTokenIn + eoLim.maxOutputTokens > eoLim.numCtx,
+        n: eo.n,
+        ...(eoLim.numCtxEnv !== 'OLLAMA_NUM_CTX' ? { numCtxEnv: eoLim.numCtxEnv } : {}),
+        ...(eoLim.maxOutputEnv ? { maxOutputEnv: eoLim.maxOutputEnv } : {})
     } : null;
 
     return { mode, ollamaTimeout, ocrTimeout, nodeTimeout, timeScale, chunkPages, lowSample, ocrCtx };
@@ -1834,7 +1867,7 @@ function buildReport(args, { env = {}, now = new Date(), readFile = (p) => fs.re
     const settings = currentSettings(env);
     // 〔OCR 為主 2026-09-26〕.env 的 LOCAL_EXTRACT_MODE（與程式同一條解讀規則）：決定拆題一塊算哪幾步
     const mode = require('../../config/localExtractMode').resolveLocalExtractMode(env);
-    const rec = recommend(agentStats, settings, { mode });
+    const rec = recommend(agentStats, settings, { mode, env });
     const overlaps = countOverlaps(selected);
     // 〔dec/local-thinking-speed〕推算速度、思考比例、一份卷（第 1.3～1.5 段、第 4 段）只看本機的呼叫
     const localSelected = selected.filter(e => LOCAL_VENDORS.includes(e.vendor));
@@ -2120,15 +2153,16 @@ function buildReport(args, { env = {}, now = new Date(), readFile = (p) => fs.re
             L.push('');
             if (c.limits.length) {
                 L.push(table(['限制', '最多幾頁', '依據'], c.limits.map(l => [
-                    `\`${l.name}\`＝${fmtInt(settings[l.name].value)}`, String(l.maxPages), l.why
+                    `\`${l.name}\`＝${fmtInt(l.numCtx || settings[l.name].value)}`, String(l.maxPages), l.why
                 ])));
                 L.push('');
             }
             if (c.pages === 0) {
                 const b = c.binding;
-                const limitText = `\`${b.name}\`＝${b.name === 'OLLAMA_NUM_CTX' ? fmtInt(settings[b.name].value) : fmtSetting(settings[b.name].value)}`;
-                L.push(b.name === 'OLLAMA_NUM_CTX'
-                    ? `建議：**每塊 1 頁，估計的 token 數也超過 ${limitText}**。${b.why}。請先調高 \`OLLAMA_NUM_CTX\`（記憶體要夠），再重跑本工具。`
+                const isCtx = b.name === 'OLLAMA_NUM_CTX' || Number.isFinite(b.numCtx);
+                const limitText = `\`${b.name}\`＝${isCtx ? fmtInt(b.numCtx || settings[b.name].value) : fmtSetting(settings[b.name].value)}`;
+                L.push(isCtx
+                    ? `建議：**每塊 1 頁，估計的 token 數也超過 ${limitText}**。${b.why}。請先調高 \`${b.name}\`（記憶體要夠），再重跑本工具。`
                     : `建議：**每塊 1 頁也達不到 max(${RULES.P90_FACTOR} × p90, ${RULES.MAX_FACTOR} × max) 的安全餘裕**。` +
                       `受限於 ${limitText}：${b.why}。請先照 3.1 調高逾時，再重跑本工具。`);
                 const steps = c.recorded.steps;
@@ -2165,12 +2199,14 @@ function buildReport(args, { env = {}, now = new Date(), readFile = (p) => fs.re
         } else {
             const x = rec.ocrCtx;
             const need = x.maxTokenIn + x.maxOutputTokens;
-            L.push(`\`extract_ocr\` 讀得最多的一次 ${fmtInt(x.maxTokenIn)} token（${x.n} 支）＋輸出上限 ${fmtInt(x.maxOutputTokens)}（\`agents/extract.js\` 的 \`LOCAL_MAX_OUTPUT_TOKENS\`）` +
-                `＝${fmtInt(need)}，\`OLLAMA_NUM_CTX\`＝${fmtInt(x.numCtx)}（${settings.OLLAMA_NUM_CTX.source}）。`);
+            const ctxEnv = x.numCtxEnv || 'OLLAMA_NUM_CTX';
+            const outFrom = x.maxOutputEnv ? `\`.env\` 的 \`${x.maxOutputEnv}\`` : '`agents/extract.js` 的 `LOCAL_MAX_OUTPUT_TOKENS`';
+            L.push(`\`extract_ocr\` 讀得最多的一次 ${fmtInt(x.maxTokenIn)} token（${x.n} 支）＋輸出上限 ${fmtInt(x.maxOutputTokens)}（${outFrom}）` +
+                `＝${fmtInt(need)}，\`${ctxEnv}\`＝${fmtInt(x.numCtx)}（${x.numCtxEnv ? '.env，逐步驟設定優先於全域 `OLLAMA_NUM_CTX`' : settings.OLLAMA_NUM_CTX.source}）。`);
             L.push('');
             L.push(x.over
                 ? '⚠️ **放不下**：模型寫得長的時候，Ollama 會截掉前面的內容或截斷輸出（拆出來的 JSON 不完整、少題）。' +
-                  '可以在 `.env` 把 `JOB_PDF_CHUNK_PAGES` 設成 1（一塊 1 頁，每次讀的 OCR 文字少一半），或調高 `OLLAMA_NUM_CTX`（記憶體要夠）。' +
+                  `可以在 \`.env\` 把 \`JOB_PDF_CHUNK_PAGES\` 設成 1（一塊 1 頁，每次讀的 OCR 文字少一半），或調高 \`${ctxEnv}\`（記憶體要夠）。` +
                   '正式上傳時伺服器視窗也會對每一塊印一行「估計要讀約 N token…」的警告。'
                 : `放得下（還有 ${fmtInt(x.numCtx - need)} token 的餘裕）。題目多、公式與表格多的卷讀得更多；伺服器視窗出現「估計要讀約 N token…」的警告時再照那一行調。`);
         }

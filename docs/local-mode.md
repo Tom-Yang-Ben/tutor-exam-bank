@@ -10,6 +10,7 @@
 > 〔2026-09-26 `dec/local-thinking-speed`〕新增 10.14（原編 10.12，整合時改號；拆題以外的時間花在哪裡、加速選項 a～e，**待 Owner 決定，預設未改**）：可選設定 `OLLAMA_NO_THINK`、`OLLAMA_MAX_OUTPUT_<AGENT>`、`OLLAMA_NUM_CTX_<AGENT>`（都不寫＝與之前逐位元相同）、`npm run local:bench-text`、`npm run perf:local` 第 1.2～1.5、4 段。第 0～9 條沒有改。
 > 〔2026-09-26 `dec/local-thinking-speed-fix`，審查修正〕10.14 的「冷的讀 prompt 約 17 token/秒」其實是部分快取，改用只推冷呼叫的方法（約 8 token/秒）並重算受影響的估計；「分類的快取每題被擠掉」改成條件句（回放檔顯示 Ollama 至少留著 3 份快取）；公式反斜線的支數改稱「至少」；驗算不一致不重跑的建議改成先收集資料。`perf:local` 加第 1.5 段的公式閘門統計、第 1.6 段溫度 0 的重現性、`--backfill`；`report:jobs` 加「answer_mismatch 之後原地重跑的結果」；啟動時印出生效的本機調整、名稱寫錯時警告。10.5 的逐題步驟一併更正。
 > 〔整合 2026-09-26 `dec/integration-r5`〕三條分支（`dec/local-ocr-first-fix`、`dec/local-embed-thresholds-fix`、`dec/local-thinking-speed-fix`）各自新增了「10.12」。依併入順序保留全部內容、重新編號：**10.12** 只用 OCR 拆題、**10.13** 三個餘弦門檻、**10.14** 拆題以外的時間與加速選項；程式註解、測試、其他文件裡指到這三節的地方一併改號。三節裡「待 Owner 決定」的事項另有一份總表：[`owner-pending-decisions-r5.md`](owner-pending-decisions-r5.md)。
+> 〔整合審查 2026-09-27 `dec/integration-r5-fix`〕10.12 第 6 點補一條：OCR 整理的 num_ctx 預算與截斷判斷改用實際送出的值，認得 10.14 的 `OLLAMA_NUM_CTX_EXTRACT_OCR`、`OLLAMA_MAX_OUTPUT_EXTRACT_OCR`（兩條分支各自沒錯、合在一起才對不上）。之後併 `dec/local-classify-nlq-prep-fix` 時，它的「10.12 classify／nlq 重錄前修正」要改號為 **10.15**。
 
 ## 0. Owner 裁決（2026-09-25，對話中）
 
@@ -598,6 +599,7 @@ node eval/tools/local_bench_vision.js --baseline
 - 一次呼叫讀：系統提示＋轉接層附加的 schema 說明（約 0.7k token）＋模板（白名單、題型、公式規範，約 1.6k）＋這一塊的 OCR 文字；再加輸出上限 8192 要放得進 16384，所以 **OCR 文字大約只能到 5～6k token**（兩頁各約 2.5～3k）。樣卷 1 頁的 OCR 文字約 970 字（約 0.5k token），一般考卷兩頁放得下；**題目很密、公式或表格很多（OCR 的表格是 HTML，很佔 token）的卷可能放不下**——放不下時 Ollama 會截掉前面的內容或截斷輸出（拆出來的題少、JSON 不完整）。
 - 提醒在兩個地方：① 伺服器視窗：每一塊送出前粗估（中文字一字一 token、其餘每 3 字元一 token），可能放不下時印一行「OCR 整理這一塊估計要讀約 N token……可在 .env 把 JOB_PDF_CHUNK_PAGES 設成 1，或調高 OLLAMA_NUM_CTX」，拆題事件的 `cross_check.ctx_budget` 也記下估計值；照常送出（由你決定要不要調）。② `npm run perf:local` 的 3.4 段：用回放檔裡 `extract_ocr` 實際讀得最多的一次＋8192 對照 `OLLAMA_NUM_CTX`。〔審查 2026-09-26〕粗估放不下（或輸出用滿上限）的那一塊，附圖一張都不自動配、只標提示（第 4 點），`npm run report:jobs` 的「OCR 版面配圖」一節會數到它。
 - 要調的話：`JOB_PDF_CHUNK_PAGES=1`（每次讀一半，但一塊的固定開銷多付一次、跨頁題變多，10.11 (a)）或 `OLLAMA_NUM_CTX=20480`（記憶體要夠；16 GB 放一個 8B 模型通常可以）。
+- 〔整合審查 2026-09-27 `dec/integration-r5-fix`〕10.14 的逐步驟設定也算數：上面兩處提醒與「可能被截斷就不自動配圖」的判斷，用的是這一次**實際送給 Ollama** 的值（與 `services/llm/index.js` 同一條規則：`services/llm/localTuning.js` 的 `resolveOllamaOverrides`）——`OLLAMA_NUM_CTX_EXTRACT_OCR`（化學版可另寫 `_CHEM`）有寫就用它、沒寫才是全域 `OLLAMA_NUM_CTX`；`OLLAMA_MAX_OUTPUT_EXTRACT_OCR` 比 8192 小時，輸出上限與「用滿上限＝可能截斷」都照它算。警告叫你調的也是實際生效的那一個變數。所以「只加大 OCR 整理」可以寫 `OLLAMA_NUM_CTX_EXTRACT_OCR=20480`（其他步驟的記憶體不變，但同一個模型換 num_ctx 會多換載一次，10.14 (d)）；「全域降到 8192、OCR 整理保留 16384」也不會被誤判成每塊都截斷。整合當下的 `dec/integration-r5` 只看全域 `OLLAMA_NUM_CTX` 與固定的 8192，這兩種寫法都會誤判（每塊標截斷、附圖不自動配、警告誤報）。
 
 #### 7. CI 與重錄
 

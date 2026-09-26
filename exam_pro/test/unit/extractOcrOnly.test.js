@@ -99,7 +99,9 @@ function useDeps({ ocr, mode, engine = 'paddle', llmMode = 'live', numCtx = 1638
         fitLongEdge: async () => { throw new Error('ocr 模式不該縮圖'); },
         llmMode: () => llmMode,
         ocrConfig: () => ({ engine, dpi: 200 }),
-        numCtx: () => numCtx,
+        // numCtx: null＝不替換，用真的 services/llm/ollama.numCtx()（讀 OLLAMA_NUM_CTX）與 localTuning 的逐步驟設定；
+        // 其餘情況兩者都固定（shell 裡設了 OLLAMA_NUM_CTX_EXTRACT_OCR 等也不影響這些測試）
+        ...(numCtx === null ? {} : { numCtx: () => numCtx, ollamaOverrides: () => ({ applied: {} }) }),
         ...(mode ? { localExtractMode: () => mode } : {})
     });
 }
@@ -405,5 +407,133 @@ describe('extract — LOCAL_EXTRACT_MODE=ocr', () => {
         assert.equal(extract.estimatePromptTokens('甲乙丙'), 3);
         assert.equal(extract.estimatePromptTokens('abcdef'), 2);
         assert.equal(extract.estimatePromptTokens('甲 abc'), 1 + 2);
+    });
+});
+
+// 〔整合 r5 審查〕OCR 分支的「放不放得下／有沒有被截斷」與加速分支的逐步驟設定（OLLAMA_NUM_CTX_EXTRACT_OCR、
+// OLLAMA_MAX_OUTPUT_EXTRACT_OCR）合起來要對得上：判斷用的必須是實際送給 Ollama 的值（services/llm/index.js 的 adapterOpts
+// 用 localTuning.resolveOllamaOverrides 算），不是全域 OLLAMA_NUM_CTX 與固定的 8192。
+// 這裡不替換 numCtx／ollamaOverrides 兩個相依，走真的 services/llm/ollama 與 localTuning（讀 process.env）。
+describe('extract — OCR 整理的預算與截斷判斷認得逐步驟設定（整合 r5）', () => {
+    const KEYS = ['OLLAMA_NUM_CTX', 'OLLAMA_NUM_CTX_EXTRACT_OCR', 'OLLAMA_NUM_CTX_EXTRACT_OCR_CHEM',
+        'OLLAMA_MAX_OUTPUT_EXTRACT_OCR', 'OLLAMA_MAX_OUTPUT_EXTRACT_OCR_CHEM'];
+    const saved = {};
+    let pdf;
+    const tuning = require('../../services/llm/localTuning');
+
+    function setEnv(vars) {
+        for (const k of KEYS) delete process.env[k];
+        for (const [k, v] of Object.entries(vars)) process.env[k] = v;
+    }
+    // 第 1 頁有一題帶圖（版面配得到），第 2 頁只有填充文字（控制這一塊讀多少）
+    function pagesWith(padChars) {
+        return ({ fromPage }) => [
+            { page: fromPage, markdown: `## 1. (物理·計算)\n\n${PHYS_FIG.question_text.replace(/\$/g, '')}\n\n[圖]`, imagePath: null, figures: [{ label: 'image', box: [120, 200, 400, 800] }] },
+            { page: fromPage + 1, markdown: '甲'.repeat(padChars), imagePath: null, figures: [] }
+        ];
+    }
+    async function runOnce({ padChars = 0, tokenOut = 20 } = {}) {
+        useDeps({ ocr: fakeOcr({ pages: pagesWith(padChars) }), numCtx: null });
+        const f = fakeCtx({ ocr: { questions: [PHYS_FIG] } });
+        f.ctx.llm.generateJson = async (opts) => {
+            f.calls.push(opts);
+            return { data: { questions: [PHYS_FIG] }, usage: { ...USAGE, tokenOut }, latencyMs: 9, raw: null, schemaFallback: false };
+        };
+        const outcome = await extract.run(f.ctx, { pdfBytes: pdf, chunk: CHUNK });
+        assert.equal(outcome.kind, 'pass');
+        const sent = tuning.resolveOllamaOverrides(f.calls[0]);
+        return { outcome, logs: f.logs, sent, budget: outcome.data.cross_check_summary.ctx_budget, q: outcome.data.questions[0] };
+    }
+
+    before(async () => {
+        for (const k of KEYS) saved[k] = process.env[k];
+        models.parseModel = parseWithOllama;
+        pdf = await makePdf(5);
+    });
+    after(() => {
+        for (const k of KEYS) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
+        models.parseModel = ORIGINAL_PARSE;
+        extract._setLocalDepsForTest({});
+    });
+    afterEach(() => extract._setLocalDepsForTest({}));
+
+    test('什麼都沒寫：與整合前相同（全域 16384、輸出上限 8192，摘要不多鍵）', async () => {
+        setEnv({});
+        const { budget, q } = await runOnce();
+        assert.deepEqual(Object.keys(budget), ['prompt_tokens_est', 'max_output_tokens', 'num_ctx', 'over']);
+        assert.equal(budget.num_ctx, 16384);
+        assert.equal(budget.max_output_tokens, extract.LOCAL_MAX_OUTPUT_TOKENS);
+        assert.equal(budget.over, false);
+        assert.deepEqual(q.figure_box, [120, 200, 400, 800]);
+    });
+
+    test('OLLAMA_NUM_CTX=8192＋OLLAMA_NUM_CTX_EXTRACT_OCR=16384：用 16384 判斷，不算截斷、附圖照配、不警告', async () => {
+        setEnv({ OLLAMA_NUM_CTX: '8192', OLLAMA_NUM_CTX_EXTRACT_OCR: '16384' });
+        const { budget, q, logs, sent } = await runOnce();
+        assert.equal(sent.numCtx, 16384, '實際送出的 num_ctx');
+        assert.equal(budget.num_ctx, sent.numCtx, '判斷用的＝實際送出的');
+        assert.equal(budget.num_ctx_env, 'OLLAMA_NUM_CTX_EXTRACT_OCR');
+        assert.equal(budget.over, false);
+        assert.deepEqual(q.figure_box, [120, 200, 400, 800]);
+        assert.equal(q.figure_hint, undefined);
+        assert.ok(!logs.warn.some(x => /num_ctx|OLLAMA_NUM_CTX/i.test(x.msg || '')));
+
+        // 對照：只有全域 8192（沒有逐步驟設定）時照舊用 8192——輸出上限 8192 本身就放不下，整塊標截斷
+        setEnv({ OLLAMA_NUM_CTX: '8192' });
+        const g = await runOnce();
+        assert.equal(g.budget.num_ctx, 8192);
+        assert.equal(g.budget.over, true);
+        assert.equal(g.q.figure_box, undefined);
+        assert.ok(g.logs.warn.some(x => /超過 OLLAMA_NUM_CTX=8192/.test(x.msg || '')));
+    });
+
+    test('OLLAMA_NUM_CTX_EXTRACT_OCR=20480：介於 16384 與 20480 之間的塊用 20480 判斷，不算截斷', async () => {
+        const PAD = 9000;
+        setEnv({});
+        const base = await runOnce({ padChars: PAD });
+        const need = base.budget.prompt_tokens_est + extract.LOCAL_MAX_OUTPUT_TOKENS;
+        assert.ok(need > 16384 && need <= 20480, `這一塊要 ${need}，應介於 16384 與 20480 之間`);
+        assert.equal(base.budget.over, true, '全域 16384 放不下');
+
+        setEnv({ OLLAMA_NUM_CTX_EXTRACT_OCR: '20480' });
+        const { budget, q, logs } = await runOnce({ padChars: PAD });
+        assert.equal(budget.num_ctx, 20480);
+        assert.equal(budget.over, false);
+        assert.deepEqual(q.figure_box, [120, 200, 400, 800]);
+        assert.ok(!logs.warn.some(x => /num_ctx|OLLAMA_NUM_CTX/i.test(x.msg || '')));
+
+        // 設了 20480 仍放不下時，警告叫人調的是實際生效的 OLLAMA_NUM_CTX_EXTRACT_OCR
+        setEnv({ OLLAMA_NUM_CTX_EXTRACT_OCR: '12288' });
+        const small = await runOnce({ padChars: PAD });
+        assert.equal(small.budget.over, true);
+        const w = small.logs.warn.find(x => /OLLAMA_NUM_CTX_EXTRACT_OCR=12288/.test(x.msg || ''));
+        assert.ok(w, '警告要寫出生效的變數');
+        assert.match(w.msg, /調高 OLLAMA_NUM_CTX_EXTRACT_OCR/);
+    });
+
+    test('OLLAMA_MAX_OUTPUT_EXTRACT_OCR=3072：tokenOut 到 3072 算截斷（附圖不自動配），3071 不算', async () => {
+        setEnv({ OLLAMA_MAX_OUTPUT_EXTRACT_OCR: '3072' });
+        const full = await runOnce({ tokenOut: 3072 });
+        assert.equal(full.sent.maxOutputTokens, 3072, '實際送出的輸出上限');
+        assert.equal(full.budget.max_output_tokens, 3072);
+        assert.equal(full.budget.max_output_env, 'OLLAMA_MAX_OUTPUT_EXTRACT_OCR');
+        assert.equal(full.budget.over, false);
+        assert.equal(full.q.figure_box, undefined);
+        assert.equal(full.outcome.data.cross_check_summary.figures.truncated, true);
+
+        const ok = await runOnce({ tokenOut: 3071 });
+        assert.deepEqual(ok.q.figure_box, [120, 200, 400, 800]);
+        assert.equal('truncated' in ok.outcome.data.cross_check_summary.figures, false);
+    });
+
+    test('化學版 extract_ocr_chem：寫基本名稱 OLLAMA_NUM_CTX_EXTRACT_OCR 一樣認得；_CHEM 另寫時以它為準', () => {
+        const req = { model: 'ollama:qwen3:8b', agent: 'extract_ocr_chem', maxOutputTokens: 8192 };
+        setEnv({ OLLAMA_NUM_CTX: '8192', OLLAMA_NUM_CTX_EXTRACT_OCR: '16384' });
+        const deps = { numCtx: () => require('../../services/llm/ollama').numCtx(), ollamaOverrides: (r) => ({ ...tuning.resolveOllamaOverrides(r), numCtxEnv: 'OLLAMA_NUM_CTX_EXTRACT_OCR' }) };
+        assert.equal(extract.ocrCallLimits(req, deps).numCtx, 16384);
+        setEnv({ OLLAMA_NUM_CTX: '8192', OLLAMA_NUM_CTX_EXTRACT_OCR: '16384', OLLAMA_NUM_CTX_EXTRACT_OCR_CHEM: '20480' });
+        assert.equal(extract.ocrCallLimits(req, deps).numCtx, 20480);
+        // 模型不是 ollama（adapterOpts 不套逐步驟設定）：照舊全域
+        assert.equal(extract.ocrCallLimits({ ...req, model: 'gemini-2.5-flash' }, deps).numCtx, 8192);
     });
 });

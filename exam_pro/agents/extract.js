@@ -555,7 +555,19 @@ function localDeps() {
         // 〔OCR 為主〕ctx 沒帶 localExtract（eval、舊的 /analyze-pdf）時的模式；由設定檔讀 LOCAL_EXTRACT_MODE（agent 不讀 process.env）
         localExtractMode: localDepsOverride.localExtractMode || (() => require('../config/localExtractMode').resolveLocalExtractMode()),
         // 〔OCR 為主〕Ollama 的 num_ctx（OLLAMA_NUM_CTX，由 services/llm/ollama 自己讀）：估 extract_ocr 放不放得下
-        numCtx: localDepsOverride.numCtx || (() => require('../services/llm/ollama').numCtx())
+        numCtx: localDepsOverride.numCtx || (() => require('../services/llm/ollama').numCtx()),
+        // 〔整合 r5 審查〕這一次實際送給 Ollama 的逐步驟設定（OLLAMA_NUM_CTX_<AGENT>、OLLAMA_MAX_OUTPUT_<AGENT>）：
+        // 與 services/llm/index.js 的 adapterOpts 用同一支 localTuning.resolveOllamaOverrides（由它自己讀環境變數）
+        ollamaOverrides: localDepsOverride.ollamaOverrides || ((req) => {
+            const tuning = require('../services/llm/localTuning');
+            const r = tuning.resolveOllamaOverrides(req);
+            const nameOf = (prefix) => (tuning.perAgentInt(prefix, req.agent) || {}).name || null;
+            return {
+                ...r,
+                numCtxEnv: r.applied.numCtx ? nameOf('OLLAMA_NUM_CTX_') : null,
+                maxOutputEnv: r.applied.numPredict ? nameOf('OLLAMA_MAX_OUTPUT_') : null
+            };
+        })
     };
 }
 
@@ -610,20 +622,48 @@ function estimatePromptTokens(text) {
 }
 
 /**
+ * 〔整合 r5 審查〕extract_ocr 這一次**實際送出**的 num_ctx 與輸出上限（num_predict）。
+ * 規則與 services/llm/index.js 的 adapterOpts 一致：模型的 vendor 是 ollama 時套 localTuning.resolveOllamaOverrides——
+ *   num_ctx：OLLAMA_NUM_CTX_EXTRACT_OCR（化學版先找 _CHEM）有寫就用它，沒寫才是全域 OLLAMA_NUM_CTX（services/llm/ollama.numCtx）；
+ *   輸出上限：OLLAMA_MAX_OUTPUT_EXTRACT_OCR 比 LOCAL_MAX_OUTPUT_TOKENS 小才換成它（只降不升）。
+ * 兩個都沒寫（預設）＝與整合前相同：全域 OLLAMA_NUM_CTX、req.maxOutputTokens。
+ * numCtxEnv 給警告訊息用：叫 Owner 去調的是實際生效的那一個變數。
+ * @returns {{numCtx:number, maxOutputTokens:number, numCtxEnv:string, maxOutputEnv:string|null}}
+ */
+function ocrCallLimits(req, deps) {
+    let tuned = null;
+    try {
+        const { vendor } = require('../config/models').parseModel(req.model);
+        if (vendor === 'ollama') tuned = deps.ollamaOverrides(req);
+    } catch (_) { tuned = null; }
+    const applied = (tuned && tuned.applied) || {};
+    return {
+        numCtx: applied.numCtx ? tuned.numCtx : deps.numCtx(),
+        maxOutputTokens: applied.numPredict ? tuned.maxOutputTokens : req.maxOutputTokens,
+        numCtxEnv: (applied.numCtx && tuned.numCtxEnv) || 'OLLAMA_NUM_CTX',
+        maxOutputEnv: (applied.numPredict && tuned.maxOutputEnv) || null
+    };
+}
+
+/**
  * 〔OCR 為主〕extract_ocr 一次呼叫的 context 預算：prompt（system＋Ollama 轉接層附加的 schema 說明＋模板＋OCR 文字）
- * 加上輸出上限（num_predict）要放得進 OLLAMA_NUM_CTX；放不下時 Ollama 會截掉前面的內容或截斷輸出。
+ * 加上輸出上限（num_predict）要放得進 num_ctx；放不下時 Ollama 會截掉前面的內容或截斷輸出。
+ * 〔整合 r5 審查〕num_ctx 與輸出上限用這一次實際送出的值（ocrCallLimits），不是固定的全域 OLLAMA_NUM_CTX 與 8192。
  */
 function ocrContextBudget(req, deps) {
     let guide = '';
     try { guide = require('../services/llm/ollama').schemaGuide(req.schema) || ''; } catch (_) { guide = ''; }
     const promptTokens = estimatePromptTokens(req.system) + estimatePromptTokens(guide)
         + req.parts.reduce((n, p) => n + estimatePromptTokens(p.text), 0);
-    const numCtx = deps.numCtx();
+    const lim = ocrCallLimits(req, deps);
     return {
         prompt_tokens_est: promptTokens,
-        max_output_tokens: req.maxOutputTokens,
-        num_ctx: numCtx,
-        over: promptTokens + req.maxOutputTokens > numCtx
+        max_output_tokens: lim.maxOutputTokens,
+        num_ctx: lim.numCtx,
+        over: promptTokens + lim.maxOutputTokens > lim.numCtx,
+        // 有逐步驟設定時才多記生效的變數名稱；都沒寫＝與整合前的摘要逐鍵相同
+        ...(lim.numCtxEnv !== 'OLLAMA_NUM_CTX' ? { num_ctx_env: lim.numCtxEnv } : {}),
+        ...(lim.maxOutputEnv ? { max_output_env: lim.maxOutputEnv } : {})
     };
 }
 
@@ -888,10 +928,11 @@ async function runLocalOcrOnly(ctx, { bytes, pdfSha256, chunkNo, fromPage, toPag
         const req = ocrStructureRequest({ group, models, schema, range, ocrText, chunkNo, pdfSha256, signal });
         const budget = ocrContextBudget(req, deps);
         if (budget.over) {
+            const ctxEnv = budget.num_ctx_env || 'OLLAMA_NUM_CTX';
             logger.warn?.({
                 node: 'extract', chunk_no: chunkNo,
-                msg: `OCR 整理這一塊估計要讀約 ${budget.prompt_tokens_est} token，加上輸出上限 ${budget.max_output_tokens} 會超過 OLLAMA_NUM_CTX=${budget.num_ctx}：` +
-                    '前面的內容可能被截掉、輸出可能被截斷。可在 .env 把 JOB_PDF_CHUNK_PAGES 設成 1（一塊 1 頁），或調高 OLLAMA_NUM_CTX（記憶體要夠）。'
+                msg: `OCR 整理這一塊估計要讀約 ${budget.prompt_tokens_est} token，加上輸出上限 ${budget.max_output_tokens} 會超過 ${ctxEnv}=${budget.num_ctx}：` +
+                    `前面的內容可能被截掉、輸出可能被截斷。可在 .env 把 JOB_PDF_CHUNK_PAGES 設成 1（一塊 1 頁），或調高 ${ctxEnv}（記憶體要夠）。`
             });
         }
         const res = await ctx.llm.generateJson(req);
@@ -905,7 +946,8 @@ async function runLocalOcrOnly(ctx, { bytes, pdfSha256, chunkNo, fromPage, toPag
         // 〔審查 2026-09-26〕這一塊可能被截斷（粗估放不下 OLLAMA_NUM_CTX，或輸出用滿上限）時模型可能少拆了後面幾題，
         // 題目範圍說不準：整塊只標提示、不自動配（agents/extractOcrFigures.js 檔頭 ⑦）
         const tokenOut = Number(res.usage && res.usage.tokenOut);
-        const truncated = budget.over || (Number.isFinite(tokenOut) && tokenOut >= req.maxOutputTokens);
+        // 〔整合 r5 審查〕「用滿上限」比的是實際送出的上限（OLLAMA_MAX_OUTPUT_EXTRACT_OCR 降過就是降過的值）
+        const truncated = budget.over || (Number.isFinite(tokenOut) && tokenOut >= budget.max_output_tokens);
         const fig = matchOcrFigures(elements, ocr.pages, { truncated });
 
         const questions = [];
@@ -993,6 +1035,6 @@ module.exports = {
     LOCAL_VISION_TEMPLATE, LOCAL_VISION_TEMPLATE_CHEM, LOCAL_OCR_TEMPLATE, LOCAL_OCR_TEMPLATE_CHEM,
     LOCAL_MAX_OUTPUT_TOKENS,
     // 〔OCR 為主〕LOCAL_EXTRACT_MODE=ocr
-    OCR_ONLY_CROSS_CHECK, estimatePromptTokens, ocrStructureRequest,
+    OCR_ONLY_CROSS_CHECK, estimatePromptTokens, ocrStructureRequest, ocrCallLimits,
     _setLocalDepsForTest
 };

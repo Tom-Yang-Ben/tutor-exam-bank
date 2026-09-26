@@ -98,4 +98,34 @@ describe('perf:local — 只用 OCR 拆題', () => {
         const roomy = perf.buildReport(args, { env: { LOCAL_EXTRACT_MODE: 'ocr', OLLAMA_NUM_CTX: '32768' } }).markdown;
         assert.match(roomy, /放得下（還有/);
     });
+
+    // 〔整合 r5 審查〕加速分支的逐步驟設定（OLLAMA_NUM_CTX_EXTRACT_OCR、OLLAMA_MAX_OUTPUT_EXTRACT_OCR）才是實際送出的值：
+    // 3.4 段與每塊頁數的 num_ctx 限制要照它算（與 agents/extract.js 的 ocrCallLimits 同一條規則）
+    test('ocrCtx 認得逐步驟設定：全域 8192＋OCR 16384 用 16384；OCR 20480 用 20480；輸出上限降到 3072 照 3072 算', () => {
+        const rec = (env) => perf.recommend(stats(), perf.currentSettings(env), { mode: 'ocr', env }).ocrCtx;
+        const a = rec({ OLLAMA_NUM_CTX: '8192', OLLAMA_NUM_CTX_EXTRACT_OCR: '16384' });
+        assert.deepEqual([a.numCtx, a.numCtxEnv, a.maxOutputTokens, a.over], [16384, 'OLLAMA_NUM_CTX_EXTRACT_OCR', 8192, true], '9000＋8192 > 16384');
+        const b = rec({ OLLAMA_NUM_CTX_EXTRACT_OCR: '20480' });
+        assert.deepEqual([b.numCtx, b.over], [20480, false], '9000＋8192 ≤ 20480');
+        const c = rec({ OLLAMA_MAX_OUTPUT_EXTRACT_OCR: '3072' });
+        assert.deepEqual([c.numCtx, c.maxOutputTokens, c.maxOutputEnv, c.over], [16384, 3072, 'OLLAMA_MAX_OUTPUT_EXTRACT_OCR', false], '9000＋3072 ≤ 16384');
+        // 都沒寫：與整合前逐鍵相同
+        assert.deepEqual(Object.keys(rec({})), ['agent', 'maxTokenIn', 'maxOutputTokens', 'numCtx', 'over', 'n']);
+        // 沒傳 env（舊的呼叫方式）：照全域
+        assert.equal(perf.recommend(stats(), perf.currentSettings({ OLLAMA_NUM_CTX: '8192' }), { mode: 'ocr' }).ocrCtx.numCtx, 8192);
+    });
+
+    test('報告 3.4 段與每塊頁數的限制：印出實際生效的變數名稱與值', () => {
+        const args = perf.parseArgs(['--cassettes', root], { cwd: process.cwd() });
+        const env = { LOCAL_EXTRACT_MODE: 'ocr', OLLAMA_NUM_CTX: '8192', OLLAMA_NUM_CTX_EXTRACT_OCR: '20480', OLLAMA_MAX_OUTPUT_EXTRACT_OCR: '3072' };
+        const { markdown } = perf.buildReport(args, { env, now: new Date('2026-09-27T12:00:00Z') });
+        assert.match(markdown, /輸出上限 3,072（`\.env` 的 `OLLAMA_MAX_OUTPUT_EXTRACT_OCR`）/);
+        assert.match(markdown, /`OLLAMA_NUM_CTX_EXTRACT_OCR`＝20,480（\.env，逐步驟設定優先於全域 `OLLAMA_NUM_CTX`）/);
+        assert.match(markdown, /放得下（還有/);
+        assert.match(markdown, /`OLLAMA_NUM_CTX_EXTRACT_OCR`＝20,480 \|/, '每塊頁數的限制表');
+        assert.ok(!/undefined|NaN/.test(markdown));
+        const tight = perf.buildReport(args, { env: { LOCAL_EXTRACT_MODE: 'ocr', OLLAMA_NUM_CTX_EXTRACT_OCR: '12288' } }).markdown;
+        assert.match(tight, /⚠️ \*\*放不下\*\*/);
+        assert.match(tight, /調高 `OLLAMA_NUM_CTX_EXTRACT_OCR`/);
+    });
 });
