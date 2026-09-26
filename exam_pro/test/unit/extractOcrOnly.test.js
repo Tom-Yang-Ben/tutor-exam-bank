@@ -367,6 +367,39 @@ describe('extract — LOCAL_EXTRACT_MODE=ocr', () => {
         assert.ok(!small.logs.warn.some(x => /OLLAMA_NUM_CTX/.test(x.msg || '')));
     });
 
+    test('〔審查 2026-09-26〕這一塊可能被截斷（粗估放不下 num_ctx，或輸出用滿上限）→ 附圖一張都不自動配，只標提示', async () => {
+        const pages = ({ fromPage }) => [
+            { page: fromPage, markdown: `## 1. (物理·計算)\n\n${PHYS_FIG.question_text.replace(/\$/g, '')}\n\n[圖]`, imagePath: null, figures: [{ label: 'image', box: [120, 200, 400, 800] }] },
+            { page: fromPage + 1, markdown: '', imagePath: null, figures: [] }
+        ];
+        // ① 粗估放不下（num_ctx 故意設很小）
+        useDeps({ ocr: fakeOcr({ pages }), numCtx: 1000 });
+        const over = fakeCtx({ ocr: { questions: [PHYS_FIG] } });
+        const a = await extract.run(over.ctx, { pdfBytes: pdf, chunk: CHUNK });
+        assert.equal(a.data.cross_check_summary.ctx_budget.over, true);
+        assert.equal(a.data.questions[0].figure_box, undefined);
+        assert.deepEqual(a.data.questions[0].figure_hint, { reason: 'nearby', count: 1 });
+        assert.deepEqual(a.data.cross_check_summary.figures, { layout: 'ok', detected: 1, assigned: 0, hinted: 1, truncated: true });
+
+        // ② 放得下，但輸出用滿上限（LOCAL_MAX_OUTPUT_TOKENS）
+        useDeps({ ocr: fakeOcr({ pages }) });
+        const full = fakeCtx({ ocr: { questions: [PHYS_FIG] } });
+        full.ctx.llm.generateJson = async () => ({
+            data: { questions: [PHYS_FIG] }, usage: { ...USAGE, tokenOut: extract.LOCAL_MAX_OUTPUT_TOKENS }, latencyMs: 9, raw: null, schemaFallback: false
+        });
+        const b = await extract.run(full.ctx, { pdfBytes: pdf, chunk: CHUNK });
+        assert.equal(b.data.cross_check_summary.ctx_budget.over, false);
+        assert.equal(b.data.questions[0].figure_box, undefined);
+        assert.equal(b.data.cross_check_summary.figures.truncated, true);
+
+        // 對照：沒截斷時照配（同一份版面）
+        useDeps({ ocr: fakeOcr({ pages }) });
+        const ok = fakeCtx({ ocr: { questions: [PHYS_FIG] } });
+        const c = await extract.run(ok.ctx, { pdfBytes: pdf, chunk: CHUNK });
+        assert.deepEqual(c.data.questions[0].figure_box, [120, 200, 400, 800]);
+        assert.equal('truncated' in c.data.cross_check_summary.figures, false);
+    });
+
     test('estimatePromptTokens：中文字一字一個 token，其餘每 3 個字元一個（保守）', () => {
         assert.equal(extract.estimatePromptTokens(''), 0);
         assert.equal(extract.estimatePromptTokens('甲乙丙'), 3);

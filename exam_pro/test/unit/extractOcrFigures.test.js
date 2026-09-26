@@ -152,6 +152,99 @@ describe('extractOcrFigures — 依 OCR 版面把附圖配到題目', () => {
         assert.deepEqual(r.results[0], { figure_page: 1, figure_box: BOX(1) });
     });
 
+    // ── 〔審查 2026-09-26〕反例：題目範圍被拉回上一題的題號行、圖配給錯的題 ──
+    // 中文字少於 12 個的題（「2. 如圖，求 ∠A 的度數。」）定位不到；以前本題的起點一律往前找題號行、
+    // 而下界只被定位到的題推進，所以第 3 題的起點會被拉回第 2 題的題號行，第 2 題的圖自動配給第 3 題。
+    const SHORT = '如圖，求 $\\angle A$ 的度數。';
+    const MASS = Q2.replace('如圖，', '');   // 「一個質量為 2 公斤的木塊…」：題幹沒提到圖
+    const plain = (q) => q.replace(/\$/g, '');
+    const oneFig = (markdown) => ({ page: 1, markdown, figures: [{ label: 'image', box: [400, 100, 600, 400] }] });
+
+    test('上一題定位不到（中文字少於 12 個）、本題題號與題幹同一行 → 上一題的圖不配給本題；兩題之間的圖只標提示', () => {
+        const md = oneFig([`1. ${plain(Q1)}`, `2. ${plain(SHORT)}`, '[圖]', `3. ${plain(MASS)}`].join('\n\n'));
+        const r = figs.matchOcrFigures([Q1, SHORT, MASS].map(question_text => ({ question_text })), [md]);
+        assert.equal(r.results[2].figure_box, undefined, '第 3 題不能拿到第 2 題的圖');
+        assert.deepEqual(r.results[2], {});
+        assert.deepEqual(r.results[1], { figure_hint: { reason: 'nearby', count: 1 } }, '第 2 題（定位不到）標「附近有圖」');
+        assert.deepEqual(r.results[0], { figure_hint: { reason: 'nearby', count: 1 } });
+        assert.equal(r.summary.assigned, 0);
+    });
+
+    test('上一題定位不到、本題沒有題號（OCR 漏了）→ 不往前越過上一題找題號行', () => {
+        const md = oneFig([`1. ${plain(Q1)}`, `2. ${plain(SHORT)}`, '[圖]', plain(Q3)].join('\n\n'));
+        const r = figs.matchOcrFigures([Q1, SHORT, Q3].map(question_text => ({ question_text })), [md]);
+        assert.equal(r.results[2].figure_box, undefined, '第 2 題的題號行不是第 3 題的起點');
+        assert.deepEqual(r.results[1], { figure_hint: { reason: 'nearby', count: 1 } });
+    });
+
+    test('模型漏拆一題（elements 只有第 1、3 題）→ 被漏掉那題的圖不配給第 3 題，也不配給第 1 題（中間有題號行）', () => {
+        const md = oneFig([`1. ${plain(Q1)}`, `2. ${plain(SHORT)}`, '[圖]', `3. ${plain(MASS)}`].join('\n\n'));
+        const r = figs.matchOcrFigures([Q1, MASS].map(question_text => ({ question_text })), [md]);
+        assert.equal(r.results[1].figure_box, undefined, '第 3 題不能拿到第 2 題的圖');
+        assert.equal(r.results[0].figure_box, undefined, '第 1 題也不能（圖前面有第 2 題的題號行）');
+        assert.deepEqual(r.results[0], { figure_hint: { reason: 'nearby', count: 1 } });
+        assert.equal(r.summary.assigned, 0);
+    });
+
+    test('第一個元素就定位不到：題號行之後的圖給它標提示；題號行之前的校徽不提示', () => {
+        const md = oneFig([`1. ${plain(SHORT)}`, '[圖]', `2. ${plain(MASS)}`].join('\n\n'));
+        const r = figs.matchOcrFigures([SHORT, MASS].map(question_text => ({ question_text })), [md]);
+        assert.deepEqual(r.results, [{ figure_hint: { reason: 'nearby', count: 1 } }, {}]);
+        const logo = oneFig(['[圖]', '1. 求 x 的值。', `2. ${plain(Q3)}`].join('\n\n'));
+        const r2 = figs.matchOcrFigures(['求 $x$ 的值。', Q3].map(question_text => ({ question_text })), [logo]);
+        assert.deepEqual(r2.results, [{}, {}]);
+    });
+
+    test('輸出被截斷或漏拆最後幾題（elements 只有第 1 題）→ 最後一個拆到的題不拿後面那題的圖', () => {
+        const md = oneFig([`1. ${plain(Q3)}`, `2. ${plain(Q4)}`, '[圖]', `3. ${plain(Q5)}`].join('\n\n'));
+        const r = figs.matchOcrFigures([{ question_text: Q3 }], [md]);
+        assert.deepEqual(r.results, [{ figure_hint: { reason: 'nearby', count: 1 } }]);
+    });
+
+    test('呼叫端說這一塊可能被截斷（truncated）→ 整塊一張都不自動配，原本會配的改標提示；摘要記 truncated', () => {
+        const r = figs.matchOcrFigures(QS, [page3(FULL_P3), page4(FULL_P4)], { truncated: true });
+        assert.deepEqual(r.results.map(x => x.figure_box), [undefined, undefined, undefined, undefined, undefined]);
+        assert.deepEqual(r.results[1], { figure_hint: { reason: 'nearby', count: 1 } });
+        assert.deepEqual(r.summary, { layout: 'ok', detected: 5, assigned: 0, hinted: 3, truncated: true });
+        assert.equal('truncated' in figs.matchOcrFigures(QS, [page3(FULL_P3), page4(FULL_P4)]).summary, false, '沒截斷時摘要形狀不變');
+    });
+
+    test('版面閱讀順序把上一題（提到圖）的右側圖排在本題文字之後 → 不配給本題；上一題標提示', () => {
+        const md = oneFig([`1. ${plain(Q4)}`, `2. ${plain(Q3)}`, '[圖]', `3. ${plain(Q5)}`].join('\n\n'));
+        const r = figs.matchOcrFigures([Q4, Q3, Q5].map(question_text => ({ question_text })), [md]);
+        assert.equal(r.results[1].figure_box, undefined, '第 2 題沒提到圖、第 1 題提到圖卻沒有圖：說不準是誰的');
+        assert.deepEqual(r.results[0], { figure_hint: { reason: 'mentions' } });
+        assert.deepEqual(r.results[1], {});
+    });
+
+    test('上一題提到圖、而且已經有自己的圖 → 本題題幹之後的那一張照配（不是上一題的）', () => {
+        const md = {
+            page: 1,
+            markdown: [`1. ${plain(Q4)}`, '[圖]', `2. ${plain(Q3)}`, '[圖]', `3. ${plain(Q5)}`].join('\n\n'),
+            figures: [{ label: 'image', box: BOX(1) }, { label: 'image', box: BOX(2) }]
+        };
+        const r = figs.matchOcrFigures([Q4, Q3, Q5].map(question_text => ({ question_text })), [md]);
+        assert.deepEqual(r.results[0], { figure_page: 1, figure_box: BOX(1) });
+        assert.deepEqual(r.results[1], { figure_page: 1, figure_box: BOX(2) });
+    });
+
+    test('題號寫成「第 n 題」：圖在題號與題幹之間 → 屬於這一題（不配給上一題）', () => {
+        for (const [n1, n2] of [['第1題', '第 2 題'], ['第一題', '第二題']]) {
+            const md = oneFig([n1, plain(Q3), n2, '[圖]', plain(Q5)].join('\n\n'));
+            const r = figs.matchOcrFigures([Q3, Q5].map(question_text => ({ question_text })), [md]);
+            assert.deepEqual(r.results, [{}, { figure_page: 1, figure_box: [400, 100, 600, 400] }], n2);
+        }
+    });
+
+    test('NUMBER_LINE_RE：認「12.」「## 1 ．」「( )3、」「第 3 題」「第十二題」；不認選項「(1)」、小數、頁首註解、「第 11 至 13 題為題組」', () => {
+        for (const s of ['12. 題幹', '## 1 . (數學·單選)', '( )3、題幹', '第 3 題', '第十二題 題幹', '  第1題']) {
+            assert.equal(figs.NUMBER_LINE_RE.test(s), true, s);
+        }
+        for (const s of ['(1) 2 (2) 3 (3) 4', '（2）一個質量', '1.5 公尺', '<!-- 第 2 頁 -->', '第 11 至 13 題為題組', '承第1題']) {
+            assert.equal(figs.NUMBER_LINE_RE.test(s), false, s);
+        }
+    });
+
     test('mentionsFigure：如圖／附圖／下圖／右圖／圖中，以及沒清掉的「[圖]」', () => {
         for (const s of ['如圖所示', '附圖為', '下圖中', '如右圖', '圖中的', '見下方[圖]']) assert.equal(figs.mentionsFigure(s), true, s);
         for (const s of ['函數的圖形', '試求 $x$', '', null]) assert.equal(figs.mentionsFigure(s), false, String(s));

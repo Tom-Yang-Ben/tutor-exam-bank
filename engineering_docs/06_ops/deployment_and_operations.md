@@ -66,7 +66,7 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 | # | 指令 | 說明 |
 | :--- | :--- | :--- |
 | 1 | `npm run db:up`（＝`docker compose up -d --wait`；或雙擊 `啟動資料庫.bat`） | 拉起 5442／5433 兩容器並等 healthcheck |
-| 2 | `npm run migrate` | 對 `DATABASE_URL` 套用 `migrations/0001`–`0009`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕、`0010`–`0012`〔修訂 2026-09-24〕、`0013`–`0018`〔整合 2026-09-26〕（含錯題重練的 0016～0018 第一次套用時照 §3.6 做前後快照比對）、`0019`〔OCR 為主 2026-09-26〕（複核原因加 `ocr_only`，只重建一條 CHECK；**要開 `LOCAL_EXTRACT_MODE=ocr` 之前一定要先套**，否則每題寫複核原因時被擋、一直重試）；只前進不 down，重跑為 no-op（依檔名排序逐支判斷，編號缺口不影響套用） |
+| 2 | `npm run migrate` | 對 `DATABASE_URL` 套用 `migrations/0001`–`0009`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕、`0010`–`0012`〔修訂 2026-09-24〕、`0013`–`0018`〔整合 2026-09-26〕（含錯題重練的 0016～0018 第一次套用時照 §3.6 做前後快照比對）、`0019`〔OCR 為主 2026-09-26〕（複核原因加 `ocr_only`，只重建一條 CHECK；**要開 `LOCAL_EXTRACT_MODE=ocr` 之前一定要先套**，否則工作佇列暫停、不認領任何工作，伺服器視窗印一次「請在 exam_pro 執行 npm run migrate」，套完自己恢復〔審查 2026-09-26〕）；只前進不 down，重跑為 no-op（依檔名排序逐支判斷，編號缺口不影響套用） |
 | 3 | `npm start`（開發改 `npm run dev`） | 啟動後開 `http://localhost:3000` |
 
 輔助指令：`node migrate.js status`（逐支套用狀態）、`npm run migrate:test`（測試庫）、`npm run db:down`（停止；加 `-v` 才刪 `pgdata`）、`node seed_questions.js --apply`（空庫灌 30 題示範題）。

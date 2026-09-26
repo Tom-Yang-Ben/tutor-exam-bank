@@ -10,23 +10,39 @@
 //   1. 把各頁 markdown 依頁序接起來（與 services/ocr 的 pagesToText 同一個形狀），先做原卷比對用的正規化
 //      （utils/sourceCheck 的 normalizeSourceText：NFKC＋Symbol 字型對映）。
 //   2. 每一題的題幹依序定位（utils/sourceCheck 的 locateOne：中文字 5-gram、覆蓋率 ≥ 0.8；中文字少於 12 個的題定位不到）。
-//   3. 題目的起點＝題幹起點往前 80 字內最近的「題號行」（「12.」「## 1 ．」「( )3、」這種行首）；沒有題號行就是題幹起點。
+//   3. 題目的起點：
+//      - locateOne 已經把同一行的題號算進題幹起點（「3. 一個質量…」）→ 起點就是那裡，不再往前找；
+//      - 上一個元素（模型拆出來的上一題）定位不到 → 起點就是題幹起點，不往前找（往前找到的題號行多半是那一題的）；
+//      - 其餘：題幹起點往前 80 字內、不越過上一題題幹終點的最近「題號行」（「12.」「## 1 ．」「( )3、」「第 3 題」這種行首）；
+//        沒有題號行就是題幹起點。
 //      題目的範圍＝［這一題的起點, 下一題的起點）。附圖常在題號與題幹之間、題幹旁邊或題幹之後，都在這個範圍裡。
+//      〔審查 2026-09-26〕以前一律往前找、而且只被定位到的題推進下界：上一題定位不到（中文字少於 12 個的「2. 如圖，求 ∠A。」）
+//      或被模型漏拆、本題題號又與題幹同一行時，本題的起點會被拉回上一題的題號行，上一題的圖就自動配給本題。
 //
 // ── 配圖（配不準的寧可不配）──
 //   一張圖（標籤 image／chart；印章 seal 不是附圖）屬於「起點在它之前、最後一個」定位到的題，而且要同時滿足：
 //     ① 與那一題的起點在同一頁（跨頁的題、下一頁頁首的圖不配）；
-//     ② 那一題與下一個定位到的題之間沒有定位不到的題（不然說不準是誰的）；
+//     ② 那一題與它前後的題之間沒有定位不到的題（不然說不準是誰的）：往後看＝與下一個定位到的題之間；
+//        往前看由上面第 3 點保證——上一題定位不到時本題的範圍從題幹起點算，題幹之前的圖落在更前面那一題的範圍、
+//        在那裡被「往後看」擋下（第一個元素就定位不到時，題號行之後的圖給那幾題標 nearby）；
 //     ③ 圖框合法；
 //     ④ 那一題的範圍內只有這一張（兩張以上不猜哪一張，也不把兩張框在一起——中間可能夾著題目文字）；
-//     ⑤ 圖在題幹之後、這一題沒提到圖、下一題卻提到圖（「如圖」「如右圖」…）→ 多半是下一題的圖，不配。
+//     ⑤ 圖在題幹之後、這一題沒提到圖，而下一題提到圖（「如圖」「如右圖」…），或上一題提到圖卻沒有自己的圖
+//        （版面閱讀順序把上一題右側的圖排到本題文字之後）→ 說不準是誰的，不配；
+//     ⑥ 圖在題幹之後，而題幹終點與圖之間有一行題號行 → 圖在一題「模型沒拆到」的題裡（漏拆、輸出被截斷少了後面幾題），
+//        不配、標 nearby；
+//     ⑦ 這一塊的 extract_ocr 可能被截斷（呼叫端傳 truncated：粗估放不下 OLLAMA_NUM_CTX、或輸出用滿上限）→
+//        整塊一張都不自動配，原本會配的都改標 nearby（模型可能少拆了題，範圍說不準）。
 //   第一題起點之前的圖（校徽、卷首的圖）不屬於任何題，不配也不提示。
 //   配到的題寫 figure_page（整份 PDF 的絕對頁碼，OCR 回的就是）與 figure_box（[ymin,xmin,ymax,xmax]，0–1000），
 //   裁圖照舊由 workers/jobRunner.js 的 attachFigureImages（services/figureService）在 PDF 刪檔前做。
+//   已知限制：題號寫成「(1)」「（2）」的卷認不出題號行（這種寫法在學測式的卷是選項、在題組是小題，當成題號會把
+//   題組的圖切掉）；這種卷的圖若排在題號與題幹之間、題幹又沒寫「如圖」，會配給上一題——進人工複核，
+//   複核頁有「請確認裁到的是這一題的圖」這句（docs/local-mode.md 10.12 第 4 點）。
 //
 // ── 提示（figure_hint，給複核頁：「疑似有圖未配到，可用 figures:backfill 補」）──
 //   { reason:'multiple', count }  範圍內有 count 張圖（④）
-//   { reason:'nearby', count }    範圍附近有 count 張圖但配不準（①②③）
+//   { reason:'nearby', count }    範圍附近有 count 張圖但配不準（①②③⑥⑦）
 //   { reason:'mentions' }         題幹提到圖（utils/figureLayout 的 hasFigureHint，或沒清掉的「[圖]」）卻沒配到圖
 //   OCR 沒回報版面（舊版 ocr_pdf.py、舊 cassette）或某一頁的圖框數與「[圖]」數對不上：那一頁一張都不配，
 //   只剩 mentions 這一種提示。
@@ -40,8 +56,11 @@ const FIGURE_TOKEN = '[圖]';
 const ASSIGNABLE_LABELS = Object.freeze(['image', 'chart']);
 /** 題幹起點往前找題號行的距離（字元） */
 const NUMBER_LINE_BACK = 80;
-/** 題號行：行首的「12.」「12、」「## 1 ．」「( )3.」（markdown 標題記號、題前的作答括號都容許；1.5 這種小數不算） */
-const NUMBER_LINE_RE = /^[ \t]*#{0,6}[ \t]*(?:[(（][ \t]*[)）][ \t]*)?[(（]?[ \t]*\d{1,2}[ \t]*[.、．](?!\d)/;
+/**
+ * 題號行：行首的「12.」「12、」「## 1 ．」「( )3.」「第 3 題」「第三題」（markdown 標題記號、題前的作答括號都容許；
+ * 1.5 這種小數不算）。「(1)」「（2）」不算（學測式的卷是選項、題組是小題；見檔頭「已知限制」）。
+ */
+const NUMBER_LINE_RE = /^[ \t]*#{0,6}[ \t]*(?:[(（][ \t]*[)）][ \t]*)?(?:[(（]?[ \t]*\d{1,2}[ \t]*[.、．](?!\d)|第[ \t]*(?:\d{1,2}|[一二三四五六七八九十]{1,3})[ \t]*題)/;
 const CJK_ALL = /[一-鿿]/g;
 
 /**
@@ -127,7 +146,24 @@ function numberLineBefore(raw, from, lower) {
 }
 
 /**
+ * (a, b) 之間有沒有一行以題號行開頭（行首在 a 之後、b 之前）。
+ * 題幹終點與圖之間有題號行＝圖在另一題（模型沒拆到的題）裡（檔頭 ⑥）。
+ * @param {string} raw
+ * @param {number} a
+ * @param {number} b
+ */
+function hasNumberLineBetween(raw, a, b) {
+    for (let nl = raw.indexOf('\n', a); nl >= 0 && nl + 1 < b; nl = raw.indexOf('\n', nl + 1)) {
+        const ls = nl + 1;
+        const le = raw.indexOf('\n', ls);
+        if (NUMBER_LINE_RE.test(raw.slice(ls, le < 0 ? raw.length : le))) return true;
+    }
+    return false;
+}
+
+/**
  * 依序定位每一題：{ from（題幹起點）, end（題幹最後一個中文字之後）, anchor（題目起點）}；定位不到回 null。
+ * 起點的三條規則見檔頭「題目在 OCR 文字裡的範圍」第 3 點。
  * @param {Array<{question_text?:string}>} elements
  * @param {string} raw
  */
@@ -136,16 +172,23 @@ function locateAll(elements, raw) {
     const index = cjkIndex(raw);
     let cursor = 0;
     let lower = 0;
+    let prevLocated = true;   // 第一個元素之前沒有「定位不到的上一題」
     return elements.map((el) => {
         const text = el && typeof el.question_text === 'string' ? el.question_text : '';
         const r = locateOne(text, raw, index, cursor, o);
-        if (!r || r.status !== 'located') return null;
+        if (!r || r.status !== 'located') {
+            prevLocated = false;
+            return null;
+        }
         cursor = r.cjkStart + 1;
         const q = (text.match(CJK_ALL) || []).length;
         const lastCjk = Math.min(index.seq.length - 1, r.cjkStart + q - 1);
         const end = index.pos[lastCjk] + 1;
-        const anchor = numberLineBefore(raw, r.from, lower);
+        // locateOne 把同一行的題號算進去時，from 在題幹第一個中文字之前（「3. 一個質量」的「3」）
+        const numbered = r.from < index.pos[r.cjkStart];
+        const anchor = numbered || !prevLocated ? r.from : numberLineBefore(raw, r.from, lower);
         lower = Math.max(lower, end);
+        prevLocated = true;
         return { from: r.from, end, anchor };
     });
 }
@@ -156,12 +199,14 @@ function locateAll(elements, raw) {
  * @param {Array<{question_text?:string}>} elements 模型拆出來的題（**全部**，含 schema 不合格的——
  *        它們在卷面上也佔一個位置，拿來切範圍；結果照位置一一對應，呼叫端只用合格的那幾題）
  * @param {Array<{page:number, markdown:string, figures?:Array}>} pages 這一塊的 OCR 頁（services/ocr 的 pages）
+ * @param {{truncated?:boolean}} [opts] truncated：這一塊的 extract_ocr 可能被截斷（檔頭 ⑦），整塊只給提示、不自動配
  * @returns {{results:Array<{figure_page?:number, figure_box?:number[], figure_hint?:{reason:string, count?:number}}>,
- *            summary:{layout:'ok'|'none'|'mismatch'|'partial', detected:number, assigned:number, hinted:number}}}
+ *            summary:{layout:'ok'|'none'|'mismatch'|'partial', detected:number, assigned:number, hinted:number, truncated?:true}}}
  */
-function matchOcrFigures(elements, pages) {
+function matchOcrFigures(elements, pages, opts = {}) {
     const els = Array.isArray(elements) ? elements : [];
     const pgs = (Array.isArray(pages) ? pages : []).filter(p => p && Number.isInteger(p.page));
+    const truncated = Boolean(opts && opts.truncated);
     const n = els.length;
     const idx = buildIndex(pgs);
     const loc = locateAll(els, idx.raw);
@@ -176,6 +221,7 @@ function matchOcrFigures(elements, pages) {
         while (j < n && !loc[j]) j += 1;
         return j;
     };
+    const firstLocated = nextLocated(-1);
 
     const cands = els.map(() => []);
     const nearby = els.map(() => 0);
@@ -188,13 +234,28 @@ function matchOcrFigures(elements, pages) {
         for (let i = 0; i < n; i++) {
             if (loc[i] && loc[i].anchor <= fig.pos && (owner < 0 || loc[i].anchor >= loc[owner].anchor)) owner = i;
         }
-        if (owner < 0) continue;                         // 第一題之前：卷首、校徽
+        if (owner < 0) {
+            // 第一個定位到的題之前：卷首、校徽，不配也不提示。但前面有定位不到的題、圖又在某一行題號行之後，
+            // 那張圖是那幾題的（② 往前看的那一半）
+            if (firstLocated > 0 && hasNumberLineBetween(idx.raw, -1, fig.pos)) {
+                for (let k = 0; k < Math.min(firstLocated, n); k++) nearby[k] += 1;
+            }
+            continue;
+        }
         const next = nextLocated(owner);
-        if (next > owner + 1) {                          // ② 中間有定位不到的題
+        if (next > owner + 1) {                          // ② 與下一個定位到的題之間有定位不到的題
             for (let k = owner; k < next; k++) nearby[k] += 1;
             continue;
         }
         if (pageOf(loc[owner].anchor) !== fig.page || !fig.box) {   // ① 跨頁、③ 框壞掉
+            nearby[owner] += 1;
+            continue;
+        }
+        if (fig.pos > loc[owner].end && hasNumberLineBetween(idx.raw, loc[owner].end, fig.pos)) {   // ⑥ 圖在沒拆到的題裡
+            nearby[owner] += 1;
+            continue;
+        }
+        if (truncated) {                                 // ⑦ 模型可能少拆了題：範圍說不準
             nearby[owner] += 1;
             continue;
         }
@@ -207,7 +268,11 @@ function matchOcrFigures(elements, pages) {
         if (cands[i].length === 1) {
             const f = cands[i][0];
             const next = nextLocated(i);
-            const ambiguous = f.pos > loc[i].end && !mentions[i] && next < n && mentions[next];   // ⑤
+            const afterStem = f.pos > loc[i].end && !mentions[i];
+            const ambiguous = afterStem && (
+                (next < n && mentions[next])                                  // ⑤ 下一題提到圖
+                || (i > 0 && mentions[i - 1] && cands[i - 1].length === 0)    // ⑤ 上一題提到圖、自己卻沒有圖
+            );
             if (!ambiguous) {
                 out.figure_page = f.page;
                 out.figure_box = f.box.slice();
@@ -230,7 +295,10 @@ function matchOcrFigures(elements, pages) {
 
     return {
         results,
-        summary: { layout, detected, assigned, hinted: results.filter(r => r.figure_hint).length }
+        summary: {
+            layout, detected, assigned, hinted: results.filter(r => r.figure_hint).length,
+            ...(truncated ? { truncated: true } : {})
+        }
     };
 }
 

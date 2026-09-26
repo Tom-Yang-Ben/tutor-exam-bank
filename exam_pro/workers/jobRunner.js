@@ -25,6 +25,8 @@
 // 〔OCR 為主 2026-09-26〕Owner 決定這台電腦的拆題改成 OCR 為主（docs/local-mode.md 10.12）：LOCAL_EXTRACT_MODE
 // （loadLocalExtractModeConfig）經 ctx.config.localExtract 帶給 extract；只用 OCR 拆的題在 save 停在 needs_review('ocr_only')
 // （crossCheckStopReason）；拆題模型是 ollama、LOCAL_EXTRACT_MODE=ocr、OCR_ENGINE=none 是矛盾設定，createRunner 直接丟錯。
+// 〔審查 2026-09-26〕ocr 模式的資料庫還沒套 0019（review_reason 不接受 ocr_only）時，tick 不認領任何工作、印一次
+// 「先 npm run migrate」（ocrOnlySchemaProblem），不會每題每輪撞 CHECK、無限重試。
 // ─────────────────────────────────────────────────────────────
 const fs = require('fs');
 const path = require('path');
@@ -231,6 +233,33 @@ function loadLocalModeConfig(env = process.env, opts = {}) {
  */
 function loadLocalExtractModeConfig(env = process.env) {
     return { localExtractMode: require('../config/localExtractMode').resolveLocalExtractMode(env) };
+}
+
+/** 〔審查 2026-09-26〕沒套 0019 就開 LOCAL_EXTRACT_MODE=ocr 時，runner 印的那一句（只印一次） */
+const OCR_ONLY_SCHEMA_MESSAGE =
+    'LOCAL_EXTRACT_MODE=ocr（只用 OCR 拆題）需要資料庫套到 migrations/0019_ocr_only_review.sql（複核原因 ocr_only），' +
+    '這個資料庫還沒套：請在 exam_pro 執行 npm run migrate（套完之後佇列自己恢復，不必重啟）。' +
+    '在那之前工作佇列暫停、不認領任何工作（上傳的卷會排隊，不會開始拆題）。';
+
+/**
+ * 〔審查 2026-09-26〕LOCAL_EXTRACT_MODE=ocr 的前置條件：job_questions.review_reason 的 CHECK 接受 'ocr_only'（migration 0019）。
+ * 沒套就開 ocr 模式時，每一題走到 save 寫 review_reason='ocr_only' 會撞 CHECK，例外被 spawn 吃掉、租約放掉、
+ * 下一輪又認領同一列——每題每輪多一筆事件、一行錯誤，沒有上限。所以 runner 在認領之前先查一次（tick）。
+ *
+ * 查的是約束本身（pg_get_constraintdef），不是 schema_migrations：約束才是真正會擋下寫入的東西。
+ * 約束不存在（有人手動拿掉）時寫 'ocr_only' 不會被擋，當作可以跑。
+ *
+ * @param {{query:Function}} db
+ * @returns {Promise<string|null>} null＝可以跑；字串＝還沒套 0019（給 Owner 看的訊息）
+ */
+async function ocrOnlySchemaProblem(db) {
+    const { rows } = await db.query(
+        `SELECT pg_get_constraintdef(c.oid) AS def
+           FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid
+          WHERE t.relname = 'job_questions' AND c.conname = 'job_questions_review_reason_check'
+            AND pg_table_is_visible(t.oid)`);
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+    return rows.some(r => String((r && r.def) || '').includes("'ocr_only'")) ? null : OCR_ONLY_SCHEMA_MESSAGE;
 }
 
 /**
@@ -531,6 +560,9 @@ function createRunner(opts = {}) {
     let timer = null;
     let ticking = false;
     let dailyWarned = false;
+    // 〔審查 2026-09-26〕ocr 模式的前置條件（migration 0019）：通過一次就不再查；沒通過時只印一次錯
+    let ocrSchemaPending = config.localExtract === true && config.localExtractMode === 'ocr';
+    let ocrSchemaWarned = false;
 
     // ── agent 載入 ────────────────────────────────────────────
     function loadAgent(node) {
@@ -992,7 +1024,10 @@ function createRunner(opts = {}) {
             // 與上面的 awaiting_approval 同一個做法：不經 transition()（四種 outcome 都無法不謊報失敗地走到
             // needs_review），error_class 寫 NULL。cross_check（含 alt_question_text）原樣留在 payload.extract 給複核頁。
             // 〔OCR 為主 2026-09-26〕只用 OCR 拆的題走同一條路，原因是 'ocr_only'（crossCheckStopReason）；
-            // 附圖沒配到的提示（figure_hint）一併記進事件，report:jobs 查得到。
+            // 附圖沒配到的提示（figure_hint）一併記進這一筆事件的 detail。〔審查 2026-09-26〕只有停在 ocr_only 的題會記：
+            // 被前面的閘門先攔下的題，提示只在 job_questions.payload.extract.figure_hint。要逐題查就直接
+            // SELECT detail->'figure_hint' FROM job_events WHERE node='save'（或查 payload）；整體的配圖數
+            // （配到幾張、幾題有提示）看 npm run report:jobs 的「OCR 版面配圖」一節（讀 extract 事件的 cross_check.figures）。
             const disagree = node === 'save' ? crossCheckStopReason(jq.payload) : null;
             if (disagree) {
                 const cc = jq.payload.extract.cross_check;
@@ -1562,6 +1597,22 @@ function createRunner(opts = {}) {
         if (ticking) return;
         ticking = true;
         try {
+            // 〔審查 2026-09-26〕LOCAL_EXTRACT_MODE=ocr 卻沒套 0019：不認領任何工作（否則每題在 save 撞 CHECK、無限重試），
+            // 伺服器視窗印一次「先 npm run migrate」。每一輪都再查一次：Owner 套完 migrate 後不必重啟也會恢復。
+            // 查詢本身失敗（連不上 DB）不擋：下面的認領會照常報錯。
+            if (ocrSchemaPending) {
+                let problem = null;
+                try { problem = await ocrOnlySchemaProblem(db); } catch (_) { problem = null; }
+                if (problem) {
+                    if (!ocrSchemaWarned) {
+                        logger.error({ msg: problem, node: 'claim' });
+                        ocrSchemaWarned = true;
+                    }
+                    return;
+                }
+                ocrSchemaPending = false;
+            }
+
             const overDaily = await dailySpentUsd().then(s => s >= config.dailyCostBudgetUsd);
             if (overDaily && !dailyWarned) {
                 logger.warn({ msg: `當日成本已達 DAILY_COST_BUDGET_USD=${config.dailyCostBudgetUsd}，停止認領需要付費的工作`, node: 'claim' });
@@ -1642,6 +1693,7 @@ module.exports = {
     // 〔本機模式 L2〕
     loadLocalModeConfig, renewIntervalFor, crossCheckStopReason,
     loadLocalExtractModeConfig,   // 〔OCR 為主 2026-09-26〕
+    ocrOnlySchemaProblem, OCR_ONLY_SCHEMA_MESSAGE,   // 〔審查 2026-09-26〕
     LOCAL_NODE_TIMEOUT_MS, LOCAL_PDF_CHUNK_PAGES, LOCAL_CONCURRENCY, RENEW_MIN_INTERVAL_MS,
     LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES,   // 〔第四輪 V3〕
     ADVANCEABLE_STATES, FREE_NODES, AGENT_MODULE_FOR_NODE, ERROR_CLASSES, SOURCE_CHECK_MODES,

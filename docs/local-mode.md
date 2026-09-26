@@ -545,7 +545,7 @@ node eval/tools/local_bench_vision.js --baseline
 
 #### 2. 怎麼切換（Owner 要做的）
 
-1. 更新程式後**先 `npm run migrate`**（到 `0019_ocr_only_review.sql`：複核原因多一個 `ocr_only`）。沒套 0019 就開 `ocr` 模式，每一題走到最後寫複核原因時會被資料庫擋下、一直重試。
+1. 更新程式後**先 `npm run migrate`**（到 `0019_ocr_only_review.sql`：複核原因多一個 `ocr_only`）。沒套 0019 就開 `ocr` 模式時，工作佇列**暫停、不認領任何工作**（上傳的卷會排隊、不會開始拆題），伺服器視窗印一次「……請在 exam_pro 執行 npm run migrate」；套完之後下一輪就自己恢復，不必重啟。〔審查 2026-09-26〕以前是每一題走到最後寫複核原因時被資料庫擋下、每輪重試、每次多一筆事件與一行錯誤，沒有上限（`workers/jobRunner.js` 的 `ocrOnlySchemaProblem`，查的是約束本身）。
 2. `exam_pro\.env` 加一行（`.env.example` 已經寫好）：
 
    ```dotenv
@@ -568,9 +568,11 @@ node eval/tools/local_bench_vision.js --baseline
 
 `ocr_pdf.py` 現在會把 PP-StructureV3 版面分析偵測到、在 markdown 裡變成「[圖]」的區塊（`image`、`chart`、`seal`，依閱讀順序）與它們的框一起回報（`pages[].figures`；辨識設定與 markdown 一個字都沒改，所以 OCR 回放檔的鍵 `ocr.v1` 不變）。`agents/extractOcrFigures.js` 把第 k 個「[圖]」對到第 k 個框，再決定屬於哪一題：
 
-- 題目的範圍＝這一題的題號行（或題幹起點）到下一題的題號行（或題幹起點）；題幹在 OCR 文字裡的位置用原卷比對同一套中文字 5-gram 定位。
+- 題目的範圍＝這一題的題號行（或題幹起點）到下一題的題號行（或題幹起點）；題幹在 OCR 文字裡的位置用原卷比對同一套中文字 5-gram 定位。題號行認得「12.」「12、」「## 1 ．」「( )3.」「第 3 題」「第三題」。
+  - 〔審查 2026-09-26〕兩種情況不往前找題號行：題號與題幹在同一行（「3. 一個質量…」）時起點就是那個題號；**上一題定位不到**（中文字少於 12 個的「2. 如圖，求 ∠A 的度數。」）時起點就是題幹起點，不往前找——以前會把本題的起點拉回上一題的題號行，上一題的圖於是自動配給本題、沒有任何提示。
 - **配**：同一頁、在這一題的範圍內（題號與題幹之間、題幹旁、緊接在題幹之後都算），而且範圍內只有這一張。配到的題寫 `figure_page`／`figure_box`，裁圖照舊在 PDF 刪檔前由 `services/figureService` 做，複核頁會顯示裁好的圖並提醒「附圖是依 OCR 的版面位置自動配的，請確認裁到的是這一題的圖」。
-- **寧可不配**（改標提示）：跨頁（題目從上一頁開始、圖在下一頁頁首）；兩題之間有一題定位不到；範圍內兩張以上（不猜哪一張，也不把兩張框在一起）；圖在題幹之後、這一題沒提到圖而下一題寫「如圖」；某一頁的框數與「[圖]」數對不上（那一頁整頁不配）。卷首的校徽、標題圖不屬於任何題，不配也不提示。印章不是附圖。
+- **寧可不配**（改標提示）：跨頁（題目從上一頁開始、圖在下一頁頁首）；兩題之間有一題定位不到（前後兩個方向都算）；範圍內兩張以上（不猜哪一張，也不把兩張框在一起）；圖在題幹之後、這一題沒提到圖，而下一題寫「如圖」，或上一題寫「如圖」卻沒有自己的圖（版面閱讀順序把上一題右側的圖排到本題文字之後）；圖在題幹之後、中間隔著一行題號行（圖在一題**模型沒拆到**的題裡：漏拆、或輸出被截斷少了後面幾題）；這一塊的 `extract_ocr` 可能被截斷（第 6 點的粗估放不下 `OLLAMA_NUM_CTX`，或輸出用滿 8192 的上限）時**整塊一張都不自動配**；某一頁的框數與「[圖]」數對不上（那一頁整頁不配）。卷首的校徽、標題圖不屬於任何題，不配也不提示。印章不是附圖。
+- **已知限制**：題號寫成「(1)」「（2）」的卷認不出題號行——學測式的卷「(1)～(5)」是選項、題組的「(1)(2)」是小題，當成題號會把題組的圖切掉；這種卷的圖若排在題號與題幹之間、題幹又沒寫「如圖」，會配給上一題。每一題都進人工複核，複核頁有「請確認裁到的是這一題的圖」這句。
 - **提示**（`payload.extract.figure_hint`）：複核說明加「疑似有圖未配到，可用 figures:backfill 補（原因）」。原因是「範圍內有 N 張圖」「附近偵測到圖但配不準」或「題幹提到圖（如圖、附圖、下圖、右圖、圖中…），但版面上沒有配到」。
 - **怎麼補**：核准入庫之後，用舊題補附圖工具 `npm run figures:backfill -- --dir "<原卷資料夾>"`（docs/figures.md「舊題補附圖」；預設不呼叫模型，產生提議檔給你確認再 `--apply`）。
 - 做到哪一種：**拿得到版面位置**（PaddleX 3.7.2 的 `parsing_res_list`，程式照它的原始碼寫；在這台雲端環境沒有 PaddleOCR 可以實跑，只用鴨子型別的假區塊測過 `page_figures`，Owner 電腦上第一次跑時請看一張有圖的卷對不對）。讀不到版面（舊版 `ocr_pdf.py`、2026-09-25 錄的樣卷 OCR 回放檔沒有 `figures`）時，退回「題幹提到圖就提示」。
@@ -590,7 +592,7 @@ node eval/tools/local_bench_vision.js --baseline
 
 - `extract_ocr` **不開思考**（沒帶 `thinkingBudget`，`services/llm/ollama.js` 送 `think:false`；單元測試釘住）。
 - 一次呼叫讀：系統提示＋轉接層附加的 schema 說明（約 0.7k token）＋模板（白名單、題型、公式規範，約 1.6k）＋這一塊的 OCR 文字；再加輸出上限 8192 要放得進 16384，所以 **OCR 文字大約只能到 5～6k token**（兩頁各約 2.5～3k）。樣卷 1 頁的 OCR 文字約 970 字（約 0.5k token），一般考卷兩頁放得下；**題目很密、公式或表格很多（OCR 的表格是 HTML，很佔 token）的卷可能放不下**——放不下時 Ollama 會截掉前面的內容或截斷輸出（拆出來的題少、JSON 不完整）。
-- 提醒在兩個地方：① 伺服器視窗：每一塊送出前粗估（中文字一字一 token、其餘每 3 字元一 token），可能放不下時印一行「OCR 整理這一塊估計要讀約 N token……可在 .env 把 JOB_PDF_CHUNK_PAGES 設成 1，或調高 OLLAMA_NUM_CTX」，拆題事件的 `cross_check.ctx_budget` 也記下估計值；照常送出（由你決定要不要調）。② `npm run perf:local` 的 3.4 段：用回放檔裡 `extract_ocr` 實際讀得最多的一次＋8192 對照 `OLLAMA_NUM_CTX`。
+- 提醒在兩個地方：① 伺服器視窗：每一塊送出前粗估（中文字一字一 token、其餘每 3 字元一 token），可能放不下時印一行「OCR 整理這一塊估計要讀約 N token……可在 .env 把 JOB_PDF_CHUNK_PAGES 設成 1，或調高 OLLAMA_NUM_CTX」，拆題事件的 `cross_check.ctx_budget` 也記下估計值；照常送出（由你決定要不要調）。② `npm run perf:local` 的 3.4 段：用回放檔裡 `extract_ocr` 實際讀得最多的一次＋8192 對照 `OLLAMA_NUM_CTX`。〔審查 2026-09-26〕粗估放不下（或輸出用滿上限）的那一塊，附圖一張都不自動配、只標提示（第 4 點），`npm run report:jobs` 的「OCR 版面配圖」一節會數到它。
 - 要調的話：`JOB_PDF_CHUNK_PAGES=1`（每次讀一半，但一塊的固定開銷多付一次、跨頁題變多，10.11 (a)）或 `OLLAMA_NUM_CTX=20480`（記憶體要夠；16 GB 放一個 8B 模型通常可以）。
 
 #### 7. CI 與重錄
@@ -598,7 +600,12 @@ node eval/tools/local_bench_vision.js --baseline
 - `.github/workflows/ci.yml` 的 integration job 加 `LOCAL_EXTRACT_MODE: ocr`，`eval/.env.replay` 寫同一個值（本機手動跑 e2e／eval、主控的 `ci.sh` 與 CI 一致；兩處一起改，單元測試釘住）。重錄工具的子行程照 `ci.yml`（`eval/lib/suiteProcess.js` 的 `CI_OPTIONAL_KEYS`），`.env` 裡的 `LOCAL_EXTRACT_MODE` 不帶進去（`LOCAL_SHIELD`）。
 - **盤點會變的地方**：pipeline 與 e2e 只需要 `ocr` 與 `extract_ocr`（加上後面的分類、lint、驗算），**不再需要 `extract_vision`**；錄前檢查不要求下載 `qwen3-vl:8b`；時間粗估的拆題鏈少一步（`estimateLocalTime` 的 `mode`）；盤點表的「CI 的設定」一行多印 `LOCAL_EXTRACT_MODE=ocr`，並註明 `extract_vision` 的回放檔不會被讀到。以前錄的 `extract_vision` 回放檔（若有）會被 `cassettes:prune` 列為 CI 不再讀到——還想保留改回 `cross` 的可能就先不要 `--apply`。
 - 目前 CI 的回放缺口（本分支 `ci.sh` 實測）：pipeline 的 replay miss 從 `extract_vision`（`85ab9965…`）變成 `extract_ocr`（`a47b37a0…`），筆數一樣是 1；e2e 同樣是那一塊拆不出來（3 項紅）。樣卷的 OCR 回放檔（2026-09-25 錄的）照舊命中。重錄 `record_local.bat pipeline,e2e` 只要 OCR（幾分鐘）＋`extract_ocr`（約 15 分）＋每題的後續節點，**不必跑 54 分鐘的看圖**；錄製模式下 OCR 會重跑一次，順便把版面圖框錄進回放檔。
-- ⚠️ **e2e 在 `ocr` 模式下重錄後仍會有兩項紅**：`test/e2e/pipeline.e2e.test.js` 的「部分入庫：至少一題進 questions」與「部分是真的：…沒有任何一題入庫」要求至少一題自動入庫，而且複核原因只認九個舊值；`ocr` 模式設計上一題都不自動入庫。這兩項是既有測試、本分支沒有改它（不得弱化既有斷言）。要怎麼處理請 Owner／主控決定：① e2e 在 `ocr` 模式改成「全部停在 ocr_only，經複核 API 核准一題後入庫」（改測試，要裁決）；② e2e 固定用 `cross`（重錄 e2e 就要跑看圖）；③ 維持現狀、等 X1 的規則（e2e 必須綠）另行裁決。
+- **e2e 在 `ocr` 模式（〔審查 2026-09-26〕採選項 ①；測試契約變更，待 Owner 裁決）**：`test/e2e/pipeline.e2e.test.js` 的「部分入庫：至少一題進 questions」與「部分是真的：…沒有任何一題入庫」要求至少一題**自動**入庫、複核原因只認九個舊值；`ocr` 模式設計上一題都不自動入庫，這兩項在 `ocr` 模式結構上不可能綠，依 X1（e2e 必須綠）不能就這樣合併。原本列給 Owner 的三個選項：① e2e 在 `ocr` 模式改成「全部停在複核，經複核 API 核准一題後入庫」；② e2e 固定用 `cross`（重錄 e2e 就要在 Owner 的電腦跑一頁 54 分鐘的看圖，9/26 實測輸出的 JSON 還不合法；審查意見認為錄不出來、不可行）；③ 維持現狀、另行裁決 X1。審查建議 ①，本分支照 ① 做、和 `ci.yml` 的 `LOCAL_EXTRACT_MODE: ocr` 一起進：
+  - 交叉驗證（`cross`）與 Gemini 模式跑的仍是原本那兩項，**一個字都沒改**（`testCross`）。
+  - `ocr` 模式改跑兩項（`testOcr`；檔頭有說明）：**①a** 一題都不自動入庫——每一列都在終態、沒有 `saved`、`question_id` 都是空的；`needs_review` 的原因只能是九個舊值加 `ocr_only`（不會有 `extract_disagree`）；樣卷沒有 `transcription_mismatch`（原本那一項的斷言照搬）；至少一題走完全部閘門停在 `ocr_only`，而且 payload 看得到 dedup0、classify、lint、source_check、verify、dedup1 六個閘門都跑過（原本「部分是真的」守的主張：閘門沒被跳過）；`GET /api/jobs/:id` 的 `counts.saved` 是 0。**①b** 用複核頁送出的欄位（`public/js/review.js` 的 `payloadToQuestion`，同一支函式）`POST /api/review/:jqId/approve` 核准第一個 `ocr_only` 的題 → 回 200、只有這一題進 `questions`、origin=pdf、章節在白名單內、題幹與答案非空（原本「部分入庫」的四個斷言照搬）、那一列變 `saved`、`counts.saved` 變 1 且四個 counts 相加仍等於總列數。
+  - 驗證方式：本機沒有 `extract_ocr` 的回放檔，所以另用一支不進版控的預載腳本把 `extract_ocr` 的回應換成手寫的樣卷題目（其餘節點用 `test/fixtures/fakeAgents`、原卷比對用真的），`pipeline.e2e.test.js` 在 `ocr` 模式 8 項全綠；把 `crossCheckStopReason` 的 `ocr_only` 暫時拿掉（會自動入庫）時 ①a、①b 兩項都紅。
+  - 目前 CI（沒有 `extract_ocr` 的回放檔）e2e 仍是 3 項紅、原因仍是 replay miss `extract_ocr/a47b37a0…`：「runner 把這個 job 跑完」照舊，另外兩項從舊的「部分入庫」「部分是真的」換成 ①a、①b。`LOCAL_EXTRACT_MODE=cross npm run test:e2e` 的結果與 889d18f 相同（同樣 3 項、miss `extract_vision/85ab9965…`）。
+- **eval:pipeline 的 `saved_rate` 在 `ocr` 模式固定是 0（設計如此）**：`eval/lib/pipelineDriver.js` 走同一個 `crossCheckStopReason`，每一題走完閘門都停在 `ocr_only`，`thresholds.json` 的 0.87 門檻因此在 `ocr` 模式重錄之後**一定紅**（依 A7／X1 可以紅燈合併，但 PR 要列為未達項）。`gate_pass_rate` 與 `answer_agree_rate` 仍有意義。要怎麼解讀請 Owner 決定：例如另外算「人工核准前的通過率」（走完全部閘門、只因 `ocr_only` 停下的比例）當 `ocr` 模式的替代指標，或在 `ocr` 模式把 `saved_rate` 印成 n/a；門檻數字不動（`thresholds.json` 只升不降）。
 - `cross` 模式仍由單元與整合測試（假模型）完整覆蓋：`test/unit/extractLocal*.test.js`、`test/integration/localExtract.pg.test.js` 一則都沒少；`ocr` 模式另有 `test/unit/extractOcrOnly.test.js`、`extractOcrFigures.test.js`、`localExtractMode.test.js`、`ocrFigures.test.js`、`reviewOcrOnly.test.js`、`localPerfReportOcr.test.js` 與 `test/integration/localExtractOcr.pg.test.js`（真的 PostgreSQL＋真的 `agents/extract.js`＋假 OCR 與假模型：每題停在 `ocr_only`、附圖在 PDF 刪檔前裁好、人工核准照常入庫）。
 
 #### 8. 實作位置
@@ -606,12 +613,14 @@ node eval/tools/local_bench_vision.js --baseline
 | 檔案 | 做什麼 |
 |---|---|
 | `config/localExtractMode.js`（新） | 解析 `LOCAL_EXTRACT_MODE`、矛盾設定的訊息與丟錯 |
-| `workers/jobRunner.js` | `loadLocalExtractModeConfig`、`createRunner` 啟動時檢查矛盾、`ctx.config.localExtract`、`crossCheckStopReason` 回 `ocr_only` |
+| `workers/jobRunner.js` | `loadLocalExtractModeConfig`、`createRunner` 啟動時檢查矛盾、`ctx.config.localExtract`、`crossCheckStopReason` 回 `ocr_only`；〔審查 2026-09-26〕`ocrOnlySchemaProblem`（沒套 0019 時 tick 不認領、只報一次錯） |
 | `agents/extract.js` | `runLocalOcrOnly`（只做 OCR → `extract_ocr`）、`ocrStructureRequest`、context 粗估 |
-| `agents/extractOcrFigures.js`（新） | 依 OCR 版面把附圖配到題目、補圖提示 |
+| `agents/extractOcrFigures.js`（新） | 依 OCR 版面把附圖配到題目、補圖提示（〔審查 2026-09-26〕題目起點的三條規則、⑤ 對稱、⑥ 沒拆到的題、⑦ 截斷時整塊不配、「第 n 題」） |
 | `ocr_service/ocr_pdf.py`、`services/ocr/index.js` | 回報與錄製版面圖框（`figures`）；`ocr.v1` 的鍵不變 |
 | `utils/sourceCheck.js` | 多匯出 `locateOne`、`cjkIndex`（行為不變） |
 | `migrations/0019_ocr_only_review.sql`（新）、`controllers/reviewController.js` | 複核原因 `ocr_only` |
 | `public/js/review.js` | 標籤「只用 OCR 拆題」、說明句、補圖提示 |
 | `.github/workflows/ci.yml`、`eval/.env.replay`、`eval/lib/suiteProcess.js`、`eval/lib/localMode.js`、`eval/lib/cassettePlan.js`、`eval/tools/rerecord_all.js` | CI 與重錄照 `ocr` |
 | `eval/tools/local_perf_report.js` | `ocr` 模式的拆題鏈、每塊頁數、3.4 段 context 檢查 |
+| `scripts/report_jobs.js` | 〔審查 2026-09-26〕「OCR 版面配圖」一節（extract 事件的 `cross_check.figures`：配到幾張、幾題有提示、讀不到版面、截斷） |
+| `test/e2e/pipeline.e2e.test.js` | 〔審查 2026-09-26〕`ocr` 模式的 ①a／①b（第 7 點） |

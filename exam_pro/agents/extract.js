@@ -902,7 +902,11 @@ async function runLocalOcrOnly(ctx, { bytes, pdfSha256, chunkNo, fromPage, toPag
             for (const f of FIGURE_FIELDS) delete out[f];
             return out;
         });
-        const fig = matchOcrFigures(elements, ocr.pages);
+        // 〔審查 2026-09-26〕這一塊可能被截斷（粗估放不下 OLLAMA_NUM_CTX，或輸出用滿上限）時模型可能少拆了後面幾題，
+        // 題目範圍說不準：整塊只標提示、不自動配（agents/extractOcrFigures.js 檔頭 ⑦）
+        const tokenOut = Number(res.usage && res.usage.tokenOut);
+        const truncated = budget.over || (Number.isFinite(tokenOut) && tokenOut >= req.maxOutputTokens);
+        const fig = matchOcrFigures(elements, ocr.pages, { truncated });
 
         const questions = [];
         const rejected = [];

@@ -4,6 +4,7 @@
 // 在真的 PostgreSQL 上成立的三件事：
 //   1. 0019：review_reason 的 CHECK 接受 'ocr_only'（0018 為止不接受）、仍拒絕亂寫的值、既有十個值都在；
 //      再套一次是 no-op（約束定義與資料都不變）。在暫用 schema 上從 0001 一路套，不動共用的 public。
+//      〔審查 2026-09-26〕沒套 0019 時 ocr 模式的 runner 不認領、只印一次「先 npm run migrate」（ocrOnlySchemaProblem）。
 //   2. runner 用**真的** agents/extract.js（ocr 模式）拆一份 2 頁的 PDF：OCR 與模型都是假的
 //      （extract._setLocalDepsForTest、注入的 llm），其餘節點用 test/fixtures/fakeAgents。
 //      → 不呼叫視覺模型；每題走完後續節點、最後一律停在 needs_review('ocr_only')，一題都不自動入庫；
@@ -46,7 +47,8 @@ function runSuite() {
     const request = require('supertest');
     const app = require(path.join(APP_DIR, 'app'));
     const { query, pool } = require(path.join(APP_DIR, 'config', 'db'));
-    const { createRunner } = require(path.join(APP_DIR, 'workers', 'jobRunner'));
+    const jobRunner = require(path.join(APP_DIR, 'workers', 'jobRunner'));
+    const { createRunner } = jobRunner;
     const extract = require(path.join(APP_DIR, 'agents', 'extract'));
     const fakeCommon = require(path.join(APP_DIR, 'test', 'fixtures', 'fakeAgents', '_fake.js'));
     const { FIGURES_DIR } = require(path.join(APP_DIR, 'services', 'figureService'));
@@ -124,6 +126,29 @@ function runSuite() {
                 const { rows: [kept] } = await client.query('SELECT review_reason FROM job_questions WHERE id = $1', [jq.id]);
                 assert.equal(kept.review_reason, 'ocr_only', '再套一次不動資料');
             });
+        });
+
+        test('〔審查 2026-09-26〕runner 的前置檢查（ocrOnlySchemaProblem）在真的 PostgreSQL 上：0018 → 回「先 npm run migrate」；套 0019 → null', async () => {
+            await withScratchSchema('m19_runner_check', async (client) => {
+                for (const f of ALL.filter(f => f < M19)) await applySql(client, fs.readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8'));
+                // search_path＝暫用 schema, public：pg_table_is_visible 只認得暫用 schema 的 job_questions（public 的被遮住）
+                const db = { query: (text, params) => client.query(text, params) };
+                assert.equal(await jobRunner.ocrOnlySchemaProblem(db), jobRunner.OCR_ONLY_SCHEMA_MESSAGE);
+                // ocr 模式的 runner 在這個庫上：tick 不認領（pool.connect 一被叫就會記成「tick 失敗」），只印一次錯
+                const errors = [];
+                const r = createRunner({
+                    db: { ...db, pool: { connect: async () => { throw new Error('不該認領'); } } },
+                    llm: {}, logger: { info() { }, warn() { }, error: (o) => errors.push(o.msg) }, sleep: async () => { },
+                    config: { localExtract: true, localExtractMode: 'ocr', ocrEngine: 'paddle', renewIntervalMs: 60000 }
+                });
+                await r.tick();
+                await r.tick();
+                assert.deepEqual(errors, [jobRunner.OCR_ONLY_SCHEMA_MESSAGE]);
+                await applySql(client, fs.readFileSync(path.join(MIGRATIONS_DIR, M19), 'utf8'));
+                assert.equal(await jobRunner.ocrOnlySchemaProblem(db), null);
+            });
+            // 共用的測試庫（migrate:test 已套到最新）也是 null
+            assert.equal(await jobRunner.ocrOnlySchemaProblem({ query }), null);
         });
 
         test('測試庫（migrate:test 已套到最新）接受 ocr_only', async () => {
@@ -263,6 +288,13 @@ function runSuite() {
             assert.equal(cc.mode, 'ocr');
             assert.deepEqual(cc.counts, { agree: 0, disagree: 0, vision_only: 0, ocr_only: 3 });
             assert.deepEqual(cc.figures, { layout: 'ok', detected: 1, assigned: 1, hinted: 1 });
+        });
+
+        test('〔審查 2026-09-26〕report:jobs 的「OCR 版面配圖」讀得到這一塊的摘要（配到 1 張、1 題有提示）', async () => {
+            const report = require(path.join(APP_DIR, 'scripts', 'report_jobs'));
+            const r = await report.collect({ query }, report.parseSince('1d'));
+            assert.deepEqual(r.ocrFigures, { chunks: 1, detected: 1, assigned: 1, hinted: 1, no_layout: 0, truncated: 0 });
+            assert.match(report.renderMarkdown(r), /\| 自動配到題目 \| 1 \|/);
         });
 
         test('附圖：依版面配到的那一題在 PDF 刪檔前裁好 PNG；「如右圖」但版面上沒有圖的那一題留 figure_hint', async () => {

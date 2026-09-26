@@ -232,6 +232,79 @@ describe('workers/jobRunner — 只用 OCR 拆的題停在 ocr_only', () => {
     });
 });
 
+describe('〔審查 2026-09-26〕ocr 模式但資料庫還沒套 0019：runner 不認領、只報一次錯', () => {
+    const DEF_0018 = "CHECK (review_reason = ANY (ARRAY['chapter_invalid'::text, 'extract_disagree'::text]))";
+    const DEF_0019 = "CHECK (review_reason = ANY (ARRAY['chapter_invalid'::text, 'extract_disagree'::text, 'ocr_only'::text]))";
+
+    /** 假 db：回傳約束定義（def＝null 表示約束不存在）；認領時記一筆（回「沒有工作」） */
+    function fakeDb(state) {
+        const log = { claims: 0, constraintQueries: 0 };
+        return {
+            log,
+            pool: {
+                connect: async () => ({
+                    async query(text) {
+                        if (/FOR UPDATE SKIP LOCKED/.test(text)) log.claims += 1;
+                        return { rows: [], rowCount: 0 };
+                    },
+                    release() { }
+                })
+            },
+            async query(text) {
+                if (/job_questions_review_reason_check/.test(text)) {
+                    log.constraintQueries += 1;
+                    if (state.throws) throw new Error('連不上');
+                    return { rows: state.def === null ? [] : [{ def: state.def }], rowCount: 1 };
+                }
+                if (/SUM\(cost_usd\)/.test(text)) return { rows: [{ spent: 0 }], rowCount: 1 };
+                return { rows: [], rowCount: 0 };
+            }
+        };
+    }
+    const OCR = { localExtract: true, localExtractMode: 'ocr', ocrEngine: 'paddle', renewIntervalMs: 60000 };
+
+    test('ocrOnlySchemaProblem：0018 的約束 → 回訊息（叫 Owner 先 npm run migrate）；0019 → null；約束不存在 → null', async () => {
+        const msg = await runner.ocrOnlySchemaProblem(fakeDb({ def: DEF_0018 }));
+        assert.equal(msg, runner.OCR_ONLY_SCHEMA_MESSAGE);
+        assert.match(msg, /npm run migrate/);
+        assert.match(msg, /0019/);
+        assert.equal(await runner.ocrOnlySchemaProblem(fakeDb({ def: DEF_0019 })), null);
+        assert.equal(await runner.ocrOnlySchemaProblem(fakeDb({ def: null })), null);
+    });
+
+    test('沒套 0019：tick 一次都不認領（不會每題在 save 撞 CHECK、無限重試），錯誤只印一次；套完之後下一輪自己恢復', async () => {
+        const state = { def: DEF_0018 };
+        const db = fakeDb(state);
+        const errors = [];
+        const r = runner.createRunner({ db, llm: {}, logger: { info() { }, warn() { }, error: (o) => errors.push(o) }, config: OCR });
+        await r.tick();
+        await r.tick();
+        await r.tick();
+        assert.equal(db.log.claims, 0, '還沒套 0019 就不認領任何工作');
+        assert.equal(errors.length, 1, '錯誤只印一次');
+        assert.match(errors[0].msg, /npm run migrate/);
+
+        state.def = DEF_0019;
+        await r.tick();
+        assert.ok(db.log.claims > 0, '套完之後照常認領');
+        const queried = db.log.constraintQueries;
+        await r.tick();
+        assert.equal(db.log.constraintQueries, queried, '通過一次就不再查');
+    });
+
+    test('cross 模式、Gemini 模式不查（與以前完全相同）；查詢本身失敗不擋（認領照常，錯由認領自己報）', async () => {
+        for (const config of [{ ...OCR, localExtractMode: 'cross' }, { ...OCR, localExtract: false }]) {
+            const db = fakeDb({ def: DEF_0018 });
+            await runner.createRunner({ db, llm: {}, logger: QUIET, config }).tick();
+            assert.equal(db.log.constraintQueries, 0, JSON.stringify(config));
+            assert.ok(db.log.claims > 0);
+        }
+        const broken = fakeDb({ def: DEF_0018, throws: true });
+        await runner.createRunner({ db: broken, llm: {}, logger: QUIET, config: OCR }).tick();
+        assert.ok(broken.log.claims > 0);
+    });
+});
+
 describe('複核原因白名單與 0019', () => {
     const SQL = fs.readFileSync(path.join(APP_DIR, 'migrations', '0019_ocr_only_review.sql'), 'utf8');
     function reasons() {
