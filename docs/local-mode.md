@@ -4,6 +4,7 @@
 > 本檔是 L1～L4 四條平行工作的**凍結介面**。各 WS 發現契約有問題，寫在自己的回報裡，不要自行改契約；由主控裁決，登錄在第 9 條（LM-n）。
 > 〔修訂 2026-09-26 決策單〕依 Owner 2026-09-25「出題系統決策單」第一輪答覆，在第 6 條第 3 點、LM-12、LM-14、10.5、10.7 就地加註（A7：門檻不動、未達就紅燈；C：刪 Gemini cassette 暫緩；B18、B21）；總表見 [`HANDOFF.md`](HANDOFF.md) §0.00。
 > 〔2026-09-26 `dec/local-vision-timeout`〕Owner 實機重錄時看圖拆題一塊超過 30 分而逾時：10.5、10.8、10.9、10.10 就地加註，新增 10.11（逾時清單、進度、`npm run local:bench-vision`、加速選項）。第 0～9 條沒有改。
+> 〔2026-09-26 `dec/local-thinking-speed`〕新增 10.12（拆題以外的時間花在哪裡、加速選項 a～e，**待 Owner 決定，預設未改**）：可選設定 `OLLAMA_NO_THINK`、`OLLAMA_MAX_OUTPUT_<AGENT>`、`OLLAMA_NUM_CTX_<AGENT>`（都不寫＝與之前逐位元相同）、`npm run local:bench-text`、`npm run perf:local` 第 1.2～1.5、4 段。第 0～9 條沒有改。
 > 〔Owner 決策單 2026-09-26 第四輪〕依 Owner 2026-09-26「上線與本機速度決策單」答覆（分支 `dec/r4-decisions`）：第 2 條的表、LM-12、10.7 第 9 點、10.11 的逾時表（#4、#6）、加速選項表與 (a)(c) 的細節就地加註（V1～V5）；程式改了兩處（V3 本機拆題逾時只重試 1 次、V4 舊流程 `/analyze-pdf` 本機預設每塊 2 頁），其餘預設值不變。總表見 [`HANDOFF.md`](HANDOFF.md) §0.00b。
 
 ## 0. Owner 裁決（2026-09-25，對話中）
@@ -524,3 +525,109 @@ node eval/tools/local_bench_vision.js --baseline
 - 換了硬體之後用 bench 重量一次：逾時、每塊頁數、縮圖多半都可以回到預設。GPU 與 CPU 的數值不完全相同，之後重錄的回放檔內容可能與 CPU 錄的有細微差異（鍵不變，CI 照樣回放）。
 
 **建議的決定順序（只是建議）**〔Owner 決策單 2026-09-26 第四輪〕已由 Owner 決定：先照 V1 放寬 `.env`、先量 1 頁（U3），見本節第 3 點的「Owner 的選擇」：① 先照 10.8 量一頁，把結果貼回來；② 讀 prompt（看圖）占大半 → 試 (b) `--max-edge 1600` 再量，題目沒變差就在 `.env` 開；③ 一塊仍超過 30 分 → (c) 依 bench 的建議同時調 `OLLAMA_TIMEOUT_MS` 與 `JOB_NODE_TIMEOUT_MS`；④ 單次呼叫仍太長、或 bench 提醒 `OLLAMA_NUM_CTX` 放不下 → (a)；⑤ 有預算換硬體 → (d)。重錄 CI 的回放檔不受這些選項影響（(b) 除外：錄的是你開著的設定），拉新版後直接 `record_local.bat pipeline,e2e` 即可。
+
+### 10.12 拆題以外的時間花在哪裡、加速選項（2026-09-26，`dec/local-thinking-speed`；**待 Owner 決定，預設未改**）
+
+> 本節的程式只加了「可以開、預設關」的設定與兩個量測工具：`.env` 不寫任何新設定時，送給 Ollama 的內容與之前逐位元相同（`test/unit/localTuning.test.js`）。拆題本身（OCR 為主）在另一條分支，本節不動。
+
+#### 1. 實測：時間花在哪裡（2026-09-25 本機重錄的回放檔，`npm run perf:local` 第 1、1.2～1.4 段）
+
+資料：commit `f77d1a3` 的本機回放檔（`qwen3:8b` 185 支、PaddleOCR 1 支；錄於 2026-09-25 22:19～09-26 04:42）。這批回放檔沒有 Ollama 的分段時間（`usage.timing` 是之後才加的），讀 prompt 與輸出的速度用「同一段 prompt 連送兩次」推算（第 1.3 段；變式題 idx 1、2 送的是同一段 prompt，第二次吃到 Ollama 的 prompt 快取、幾乎只剩輸出）。
+
+| 步驟（agent） | 支數 | 讀 token（p50；範圍） | 寫 token（含思考；p50；範圍） | 延遲 p50／p90／最長 | 思考 |
+|---|---:|---|---|---|---|
+| 分類 `classify` | 92 | 3,600（2,480～3,689） | 62（48～111） | 51 秒／1 分 4 秒／8 分 38 秒 | 不思考 |
+| 公式 LLM 重寫 `lint` | 4 | 845（838～961） | 866（805～1,036） | 8 分 22 秒／10 分／10 分 | **思考，約占輸出 71%** |
+| 驗算 `verify` | 20 | 311（299～346） | 465（286～1,285） | 3 分 18 秒／6 分 14 秒／10 分 46 秒 | **思考，約占輸出 81%** |
+| 出變式 `variant` | 60 | 1,952（1,750～2,028） | 199（129～454） | 2 分 41 秒／4 分 3 秒／5 分 56 秒 | 不思考 |
+| 查題 `nlq` | 8 | 1,439 | 51（50～73） | 25 秒／3 分 26 秒／3 分 26 秒 | 不思考 |
+| PaddleOCR `ocr` | 1 | — | — | 4 分 33 秒（1 頁） | — |
+
+- **速度**：`qwen3:8b` 輸出約 **2.06 token/秒**（17 對連送兩次的中位數；驗算的延遲對輸出 token 迴歸得 1.92 token/秒、r² 0.98）；**冷的讀 prompt 約 17 token/秒**（15 對、讀 1,000 token 以上的，範圍約 8～23）。所以輸出一個 token 約 0.5 秒、讀一個 token 約 0.06 秒：**時間幾乎都花在輸出**，讀多的步驟（分類）在 prompt 剛讀過時很快、冷的時候才慢。
+- **思考占多少**：Ollama 把思考與回答算在同一個輸出 token 數裡，回放檔只存回答。用 160 支不思考的回放檔擬合「輸出 token ≈ 0.88 × 中文字數 ＋ 0.50 × 其他字數」（平均誤差 5%），套到 lint 與驗算的回答上：lint 平均 930 token 裡約 662 是思考（每次約 5 分 20 秒）、驗算平均 549 token 裡約 445 是思考（每次約 3 分 36 秒）。知識點標註（`kc_tag`，也會思考）沒有本機回放檔，只能照這兩個的比例推。
+- **lint 什麼時候才呼叫 LLM**：`agents/lint.js` 三層，① `formulaFix` 規則修、② `formulaLint` 硬閘門，**② 還有 `sev:'error'` 才走 ③ LLM 重寫**（`lint.v2`，思考開）；重寫後再過一次 ①②，仍不過就 `formula_unparsable`，狀態機原地重跑最多 2 次（每次都再呼叫一次 LLM）。對既有資料跑 ①②：Gemini 拆的 10 題 1 題、fixture 62 題 10 題、`qwen3:8b` 出的變式 60 題 11 題要走 ③——**約 10%～20%**。
+- **驗算哪些題會跑**：證明題以外**每一題**（`agents/verify.js`）。比對結果 uncertain 時同一個節點再採樣一次（本機 18 題有 2 題，11%）；判定不一致（`answer_mismatch`）時狀態機**整個節點原地重跑一次**（`pipeline/stateMachine.js` 的 `maxRetries.verify=1`），驗算的輸入不變、溫度 0，重跑多半得到同一個答案（兩支第 2 次採樣的答案與第 1 次相同）——所以一題不一致的驗算最多 4 次呼叫。
+- **分類什麼時候才呼叫 LLM**：拆題給的章節在白名單內而且信心 ≥ 0.8 就不呼叫（`agents/classify.js` 第一層）。本機拆題（OCR 為主）的信心分數還沒有資料，估計只能寫 0～10 次。回放檔的 51 秒是「錄製時一支接一支、prompt 快取是熱的」；正式上傳時每題之間夾著 lint、驗算與向量，冷的分類約 3 分半（第一支回放檔含模型載入是 8 分 38 秒）。
+
+**一份 10 題、4 頁的卷（每塊 2 頁、OCR 為主，不含看圖拆題；`npm run perf:local` 第 4 段）**：
+
+| 步驟 | 呼叫次數 | 每次 | 合計 | 依據 |
+|---|---:|---|---|---|
+| PaddleOCR | 2 塊 | 約 9 分 | 約 18 分 | 回放檔 1 支（1 頁 4 分 33 秒，含每次啟動 Python 與載入 OCR 模型）× 2 頁 |
+| OCR 結果整理成題目（`qwen3:8b`） | 2 塊 | 約 9 分半 | 約 19 分 | **估計**（沒有本機回放檔）：每塊讀約 3,550、寫約 750 token |
+| 分類 | 0～10 | 51 秒（熱）～3 分 34 秒（冷） | 0～36 分 | 呼叫比例沒有本機資料 |
+| lint 的 LLM 重寫 | 1～2 | 8 分 22 秒～10 分 | 8～20 分 | 觸發 10%～20% |
+| 驗算 | 10～14.4 | 3 分 18 秒～6 分 14 秒 | 33 分～1 小時 29 分 | uncertain 11%、不一致 0～30% 時重跑 |
+| **合計** | | | **約 1 小時 18 分～3 小時** | 低＝p50、次數少；高＝p90、次數多 |
+| （知識點標註，預設關） | 10 | 約 6 分（估計） | 約 1 小時 | 開了 `FEATURE_KC_TAGGING` 或跑 `kc:backfill` 才有 |
+
+沒算進去的：看圖拆題（Owner 實測一頁讀 6,248 token 用 23 分 32 秒、寫 1,786 token 用 28 分 40 秒，另一條分支處理）、模型換載（下面 (e)）、排隊、人工複核。**拆題以外（分類＋lint＋驗算）約 41 分～2 小時 25 分，其中驗算占六到八成**，其次是分類（冷的時候）與 lint。
+
+#### 2. 加速選項（預設都沒有改；每一項都待 Owner 決定）
+
+| 選項 | 怎麼開（`exam_pro\.env`） | 一份卷省多少（估） | 代價與風險 | 要重錄嗎 |
+|---|---|---|---|---|
+| (a) lint 不思考 | `OLLAMA_NO_THINK=lint` | 每次 5 分 20 秒～6 分 30 秒；一份卷 5～13 分 | 重寫的品質可能變差：改不好時多跑一輪 ③（狀態機最多重跑 2 次），反而更久；lint 的工作是「只改公式寫法」，比驗算單純，風險較小 | 不必（鍵不含思考設定） |
+| (b) 知識點標註不思考 | `OLLAMA_NO_THINK=kc_tag` | 每題約 3 分 20 秒（估計）；開自動標註時一份卷約 33 分；既有約 200 題 `kc:backfill` 約省 11 小時（約 20 → 9 小時） | 標錯的比例可能上升；信心低於 `KC_TAG_MIN_CONFIDENCE` 的不會寫入，留給老師手標。沒有本機實測，**先用 bench 量幾題** | 不必 |
+| (c1) 驗算不思考 | `OLLAMA_NO_THINK=verify` | 每次 2 分 25 秒～4 分 47 秒；一份卷 24 分～1 小時 9 分（省最多） | **驗算是獨立檢查**：不思考時 8B 模型自己算錯的題變多 → 假的「不一致」變多（停在複核、而且不一致會整個節點再跑一次，省下的時間被吃回一部分）；更糟的是自己算錯卻剛好與抄錯的答案相同的機會也變大。等於降低「拆題 ≠ 驗算」這道防線的強度 | 不必 |
+| (c2) 驗算只降輸出上限 | `OLLAMA_MAX_OUTPUT_VERIFY=3072` | 平常 0（實測最多 1,285 token） | 只縮短「思考繞圈」的最壞情況：沒有上限時一次最多寫 8,192 token ≈ 66 分，超過 Owner `.env` 的 `OLLAMA_TIMEOUT_MS`（90 分，V1）之前都不會停，錯誤還會重試 3 次（最壞約 4.4 小時）；上限 3072 時最壞約 25 分 × 4 次。代價：真的需要長推理的難題被截斷 → JSON 不完整 → 重試後進複核。Qwen3 官方模型卡建議思考模式**不要用溫度 0（greedy）**，否則可能無止境重複；本機 20 支驗算沒有觀察到繞圈 | 不必 |
+| (d) `num_ctx` 16384 → 8192 | `OLLAMA_NUM_CTX=8192`，拆題保留大的：`OLLAMA_NUM_CTX_EXTRACT_VISION=16384`、`OLLAMA_NUM_CTX_EXTRACT_OCR=16384`（家教也建議 `OLLAMA_NUM_CTX_TUTOR=16384`） | 不一定：只有記憶體不夠、系統在換頁時才會變快 | `qwen3:8b`／`qwen3-vl:8b` 的 KV cache 每個 token 144 KB（f16）：16384 約 **2.25 GB**、8192 約 **1.1 GB**，每個並行槽各一份（見 (e) 的 `OLLAMA_NUM_PARALLEL`）。文字步驟實測讀＋寫最多 3,771 token（分類），8192 放得下；**看圖拆題 1 頁就約 8,000 token，一塊 2 頁一定放不下**，OCR 整理一塊約 4,300～6,000 token 也偏緊，所以這兩個要保留 16384。同一個模型換 num_ctx 時 Ollama 會重新載入模型（幾十秒；OCR 整理與分類都用 `qwen3:8b`，一份卷多一次換載） | 不必 |
+| (e) Ollama 伺服器與其他程式 | 不是本系統的設定（Windows 的使用者環境變數，改完從工作列結束 Ollama 再開） | 不一定 | 見下面的說明與量法 | 不必 |
+
+**(e) 的細節（只寫建議與怎麼量；都在 Owner 的電腦上）**
+
+- **記憶體帳**：`qwen3:8b` 權重約 5.2 GB ＋ KV cache 2.25 GB（16384、一個槽）＋ 計算緩衝約 0.5 GB ≈ 8 GB；Windows 本身約 3 GB；Docker Desktop 的 WSL2 虛擬機預設最多可吃到**實體記憶體的一半（8 GB）**；Chrome 每個分頁數百 MB；VS Code 約 1 GB。16 GB 很容易不夠，一旦換頁，每秒 2 個 token 會再往下掉。CPU 上輸出速度主要受記憶體頻寬限制：粗估雙通道 DDR4-2400 跑 8B Q4 模型每秒 3～4 個 token，**只插一條記憶體（單通道）約減半**；實測 2.06，可能是單通道、降頻（筆電 15 W 長時間滿載）或換頁，要量才知道（工作管理員 → 效能 → 記憶體的「已使用的插槽」看得到是不是單通道；單通道的話 2 token/秒就是這台電腦的正常值，下面的設定幫不了太多）。
+- **`OLLAMA_NUM_PARALLEL`**：回放檔有間接證據顯示 Ollama 同時留著好幾份 prompt 快取（例：變式題 → lint → 驗算 → 同一段變式題，第二次只花 114 秒、剛好是只剩輸出的時間），代表 Ollama 可能開了多個並行槽。**每個槽各佔一份 num_ctx 的 KV cache**（4 個槽 × 16384 ≈ 9 GB）。設 `OLLAMA_NUM_PARALLEL=1` 可以省下大量記憶體；代價是只剩一份 prompt 快取，分類的長 prompt 每題都會被驗算擠掉、變成冷的（每題多約 2～3 分）。先量再決定。
+- **`OLLAMA_MAX_LOADED_MODELS`**：10.2 第 4 步建議 1。代價：每題入庫前後都要算一次向量（`qwen3-embedding:0.6b`），設 1 時可能每題都把 `qwen3:8b` 擠出記憶體、下一題分類要重新載入（加上 prompt 變冷）。embedding 模型只有約 0.6 GB，設 2 讓它與 `qwen3:8b` 並存通常放得下，但拆題時 `qwen3-vl:8b` 與 `qwen3:8b` 也可能同時載入（兩個約 11 GB）。OCR 為主之後看圖拆題變少，可以重新評估。
+- **`OLLAMA_KEEP_ALIVE`**：本系統每次呼叫都帶 `.env` 的 `OLLAMA_KEEP_ALIVE`（預設 10m），**會蓋過** Windows 環境變數裡的同名設定；向量那一支不帶，照 Ollama 伺服器的預設（5 分）。一份卷內各呼叫間隔都在幾分鐘內，10m 夠用；老師在複核頁停很久之後再上傳，第一次要重新載入。
+- **`num_thread`**：Ollama 預設用實體核心數（i5-8265U 是 4）。用 bench 比 `--num-thread 3／4／8`：8（含超執行緒）在 llama.cpp 上通常不會更快；3 可能讓 Docker／Chrome 比較不卡。本系統沒有對應的 `.env` 設定（要常駐的話另外決定）。
+- **關掉 Chrome、VS Code；限制 Docker 的記憶體**：PostgreSQL 在 Docker 裡，處理考卷時 Docker 不能關；可以在 `%UserProfile%\.wslconfig` 寫 `[wsl2]` 與 `memory=4GB`，`wsl --shutdown` 後重開 Docker Desktop，把 WSL2 的上限從 8 GB 降下來。
+- **怎麼量**：
+  1. 跑一次 `npm run local:bench-text -- --agent verify`（下面），同時開「工作管理員 → 效能 → 記憶體」看「使用中」與「認可」是否逼近 16 GB，「資源監視器 → 記憶體」的「硬錯誤/秒」持續幾百以上就是在換頁。
+  2. `ollama ps` 看目前載入哪些模型、各佔多少（新版還有 CONTEXT 欄）；`%LOCALAPPDATA%\Ollama\server.log` 搜 `parallel`、`n_ctx`、`KvSize` 看並行槽數與實際的 context 大小，搜 `loading model` 數一份卷裡換載幾次。
+  3. 關掉 Chrome／VS Code（或改 `.wslconfig`、`OLLAMA_NUM_PARALLEL=1`）後同一個指令再量一次，比「輸出 token/秒」。
+
+#### 3. 怎麼量：`npm run local:bench-text`（文字模型量一次）
+
+用 `eval/fixtures/questions.public.json` 的一題，照正式流程組出請求（系統提示詞、提示詞、schema、輸出上限、思考與 agent 自己的一模一樣），**只呼叫一次** `qwen3:8b`，印出載入、讀 prompt、輸出（含思考）各花多久、每秒幾個 token、思考約占多少、回答對不對（驗算對照 fixture 的答案、分類對照 fixture 的章節），以及一份 10 題卷這一步大約多久。不寫回放檔、不碰資料庫、不改 `.env`；預設先卸載模型（時間含載入、prompt 是冷的），逾時 60 分。不加參數＝正式上傳現在的樣子（會套用 `.env` 裡已經寫的本機調整）。
+
+在 `exam_pro` 資料夾開**命令提示字元（cmd）**，一次一行，每行幾分鐘到十幾分鐘：
+
+```bat
+cd /d C:\你的路徑\tutor-exam-bank\exam_pro
+npm run local:bench-text -- --agent lint
+npm run local:bench-text -- --agent lint --no-think
+npm run local:bench-text -- --agent verify
+npm run local:bench-text -- --agent verify --no-think
+npm run local:bench-text -- --agent verify --num-ctx 8192
+npm run local:bench-text -- --agent classify --num-thread 3
+npm run local:bench-text -- --agent kc_tag --no-think
+npm run local:bench-text -- --agent verify --id 7 --no-think
+```
+
+**PowerShell** 直接呼叫 node（`--` 可能被 `npm.ps1` 吃掉）：
+
+```powershell
+Set-Location C:\你的路徑\tutor-exam-bank\exam_pro
+node eval/tools/local_bench_text.js --agent lint
+node eval/tools/local_bench_text.js --agent lint --no-think
+node eval/tools/local_bench_text.js --agent verify --num-ctx 8192
+```
+
+- `--agent`：`lint`（挑第一題規則修不好的）、`verify`（第一題計算題）、`classify`（第一題；強制走 LLM 那一層）、`kc_tag`（第一題有知識點清單的章）。`--id <題號>` 換題；判斷品質（尤其驗算）請多量幾題。
+- `--no-think`／`--think`、`--num-ctx <N>`、`--max-output <N>`、`--num-thread <N>`：只影響這一次。`--warm` 不先卸載（看「prompt 剛讀過」有多快）。
+- 比較：同一題換一個參數再跑一次，把兩段「══ 文字模型量測」貼在一起：看「輸出」的 token 數與秒數少了多少、回答是否還對。
+- 重錄之後的整體數字：`npm run perf:local`（第 1.2 段 token 分布與 num_ctx、1.3 速度、1.4 思考比例、1.5 公式反斜線、第 4 段一份卷的估計；`--questions 20 --pages 6` 改卷的大小）。
+
+#### 4. 設定的細節（給維護者）
+
+- `services/llm/localTuning.js`：`OLLAMA_NO_THINK`（逗號分隔，`all`＝全部；寫基本名稱連化學版一起，例 `lint` 也管 `lint_chem`；只會關、不會開）、`OLLAMA_MAX_OUTPUT_<AGENT>`（只降不升）、`OLLAMA_NUM_CTX_<AGENT>`（蓋過 `OLLAMA_NUM_CTX`）。會思考的 agent：`verify`、`lint`（與化學版）、`kc_tag`、`tutor`、`voice`（`THINKING_AGENTS`，單元測試對照各模組的常數並掃原始碼）。
+- 只在 vendor 是 `ollama`、`LLM_MODE` 是 live／record 時由 `services/llm/index.js` 套用；Gemini 路徑與回放一個字都不讀。**cassette 的鍵不含思考、輸出上限與 num_ctx**，開關不會讓既有回放檔失效（單元測試拿 repo 裡本機錄的驗算回放檔證明）。錄製時有套用，就在回放檔的 `request.ollamaOverrides` 記下實際送出的值，`perf:local` 把「（不思考）」另列一組。
+- 重錄（`record_local.bat`）：這三個設定與 `VISION_MAX_EDGE_PX` 同一個做法——**錄製時照 `.env` 帶進去**（錄的就是平常用的設定，eval 量到的就是那個品質），回放時一律擋掉（`eval/lib/suiteProcess.js` 的 `LOCAL_TUNING_PATTERN`）。所以開了 `OLLAMA_NO_THINK=verify` 再重錄，variant suite 的驗算閘門通過率量到的就是不思考的版本。
+
+#### 5. 另外發現、本分支沒有改的（待 Owner 決定）
+
+- **公式的反斜線被 JSON 吃掉（品質問題，不是速度問題）**：模型在 JSON 字串裡把 LaTeX 寫成單一反斜線時，`\frac`、`\times`、`\theta`、`\text`、`\rightarrow`、`\beta` 的 `\f`、`\t`、`\r`、`\b` 是合法的 JSON 跳脫，解析後變成換頁、tab、歸位、退格字元（`\frac{1}{2}` → 換頁＋`rac{1}{2}`）；`\circ` 這種不合法的跳脫則被 Ollama 的 JSON 文法硬改成別的字（回放檔裡有「歸位字元＋`circ`」）。本機回放檔：變式 60 支有 49 支、分類 92 支有 10 支、驗算 20 支有 1 支。**60 支變式裡有 38 支帶著這種壞公式通過了公式閘門**（例 `\times` → tab＋`imes`，規則層看不出來），會入庫、匯出 Word 時公式是壞的。會觸發 lint LLM 的 11 支與 4 支 lint 輸入也都有這種字元，但把控制字元修回之後它們仍有別的錯誤（系統不支援的 `\textbf`、`\bullet`，少反斜線的 `sqrt`），所以 lint 那幾次 9 分鐘的呼叫**不是**主要由它造成。修法可以是在 Ollama 轉接層解析 JSON 前修回（只修「控制字元＋已知 LaTeX 指令」），或在 `formulaFix` 加一條規則；後者會讓 lint 的回放檔鍵改變、要重錄。`npm run perf:local` 第 1.5 段會持續計數。
+- **驗算「不一致」時整個節點重跑一次**：本機溫度 0，同樣的輸入多半得到同樣的答案，重跑幾乎只是再等 3～6 分鐘（uncertain 的題更是 4 次呼叫）。本機模式可以考慮把 `maxRetries.verify` 設 0，或重跑時換一種問法。
+- **思考模式用溫度 0**：`services/llm/ollama.js` 一律送 `temperature:0`。Qwen3 官方模型卡對思考模式的建議是溫度 0.6、top_p 0.95、top_k 20，並寫明不要用 greedy（可能品質下降、無止境重複）。改取樣參數不影響回放檔的鍵，但輸出不再完全可重現；若 (c1) 不採用、繼續讓驗算思考，可以一併考慮。
+- **分類的 prompt 快取**：一題接一題依序跑（分類 → lint → 驗算 → 向量 → 下一題分類），分類的長 prompt 每題都被擠掉；若改成「整份卷先全部分類、再全部驗算」，分類幾乎都是熱的（每題約 1 分而不是 3 分半）。要改 runner 的認領順序。
