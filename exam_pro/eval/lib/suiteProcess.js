@@ -58,16 +58,25 @@ const CI_OPTIONAL_KEYS = Object.freeze(['EMBED_MODEL', 'MODEL_NLQ', 'MODEL_TEXT'
 const PASS_THROUGH = Object.freeze([
     'TEST_DATABASE_URL', 'EVAL_CASSETTE_DIR', 'EMBED_FIXTURE_DIR'
 ]);
-/** 只在錄製時放行（〔本機模式 L4〕加上本機推論的連線、逾時與 OCR 的 Python；都不進 cassette 的鍵） */
+/**
+ * 只在錄製時放行（〔本機模式 L4〕加上本機推論的連線、逾時與 OCR 的 Python；都不進 cassette 的鍵）。
+ * 〔看圖拆題逾時〕加上 OLLAMA_PROGRESS_MS（串流進度的間隔）與 VISION_MAX_EDGE_PX（送給視覺模型前縮圖；
+ * 圖片不在任何鍵裡——Owner 平常開了縮圖，錄製時也照同一個設定錄，cassette 才代表實際用的輸入）。
+ */
 const RECORD_PASS_THROUGH = Object.freeze([
     'GEMINI_API_KEY', 'GEMINI_RPM', 'EMBED_RPM', 'EMBED_BATCH',
     'OLLAMA_HOST', 'OLLAMA_CONCURRENCY', 'OLLAMA_RPM', 'OLLAMA_TIMEOUT_MS', 'OLLAMA_NUM_CTX', 'OLLAMA_KEEP_ALIVE',
+    'OLLAMA_PROGRESS_MS', 'VISION_MAX_EDGE_PX',
     'OCR_PYTHON', 'OCR_TIMEOUT_MS'
 ]);
-/** 〔本機模式 L4〕一律照 CI（空字串或 ci.yml 的值）的本機模式變數：回放時用不到、錄製時只放行上面那幾個 */
+/**
+ * 〔本機模式 L4〕一律照 CI（空字串或 ci.yml 的值）的本機模式變數：回放時用不到、錄製時只放行上面那幾個。
+ * 〔看圖拆題逾時〕E2E_NODE_TIMEOUT_MS（e2e 的 runner 節點逾時）只由 rerecord 錄 e2e 那一步帶，其餘一律空字串＝30 秒。
+ */
 const LOCAL_SHIELD = Object.freeze([
     'OLLAMA_HOST', 'OLLAMA_CONCURRENCY', 'OLLAMA_RPM', 'OLLAMA_TIMEOUT_MS', 'OLLAMA_NUM_CTX', 'OLLAMA_KEEP_ALIVE',
-    'OCR_ENGINE', 'OCR_PYTHON', 'OCR_DPI', 'OCR_TIMEOUT_MS', 'NLQ_TIMEOUT_MS', 'JOB_NODE_TIMEOUT_MS'
+    'OLLAMA_PROGRESS_MS', 'VISION_MAX_EDGE_PX',
+    'OCR_ENGINE', 'OCR_PYTHON', 'OCR_DPI', 'OCR_TIMEOUT_MS', 'NLQ_TIMEOUT_MS', 'JOB_NODE_TIMEOUT_MS', 'E2E_NODE_TIMEOUT_MS'
 ]);
 
 /**

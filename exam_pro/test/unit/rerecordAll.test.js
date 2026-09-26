@@ -427,10 +427,13 @@ describe('yes 確認與驗證表', () => {
         assert.equal(seen.ocr[0].python, '/opt/venv/bin/python');
         assert.deepEqual(seen.runs.map(r => r.args.slice(-1)[0]), ['--only-missing', 'classify', 'nlq', 'pipeline']);
         for (const r of seen.runs) {
+            const suite = r.args.slice(-1)[0];
             assert.equal(r.env.MODEL_EXTRACT, LOCAL_CI.MODEL_EXTRACT);
             assert.equal(r.env.EMBED_MODEL, LOCAL_CI.EMBED_MODEL, 'EMBED_MODEL 照 ci.yml');
             assert.equal(r.env.MODEL_NLQ, LOCAL_CI.MODEL_NLQ, 'MODEL_NLQ 照 ci.yml');
-            assert.equal(r.env.JOB_NODE_TIMEOUT_MS, String(local.LOCAL_NODE_TIMEOUT_MS), '一個節點可能跑二十分鐘（原則 5）');
+            // 〔看圖拆題逾時〕pipeline 那一步放寬到 3 小時（看圖拆題一塊就超過 30 分）；其餘步驟照舊 45 分
+            assert.equal(r.env.JOB_NODE_TIMEOUT_MS, suite === 'pipeline' ? String(local.RECORD_LONG_TIMEOUT_MS) : String(local.LOCAL_NODE_TIMEOUT_MS),
+                '一個節點可能跑二十分鐘（原則 5）；看圖拆題更久');
             assert.equal(r.env.NLQ_TIMEOUT_MS, String(local.LOCAL_NLQ_TIMEOUT_MS), 'NLQ 預設 4 秒在 CPU 上一定逾時，錄不到 cassette');
             assert.equal(r.env.OLLAMA_HOST, '127.0.0.1:11434', '錄製時放行本機連線設定');
             assert.equal(r.env.OLLAMA_NUM_CTX, '8192');
@@ -519,5 +522,124 @@ describe('yes 確認與驗證表', () => {
         assert.match(text, /粗估/);
         assert.match(text, /不連外、不花錢/);
         assert.doesNotMatch(text, /會呼叫 Gemini、會產生費用/);
+    });
+
+    // ── 〔看圖拆題逾時〕pipeline 與 e2e 兩步的寬逾時（eval/lib/localMode.js 的 longCallRecordEnv） ──
+
+    describe('〔看圖拆題逾時〕錄 pipeline／e2e 時的逾時與進度', () => {
+        const plan = (m = LOCAL_CI, suites = ['classify', 'nlq', 'variant', 'pipeline', 'e2e']) => local.recordingPlan({ models: m, suites });
+        /** Owner 實機的 .env（OLLAMA_TIMEOUT_MS＝30 分；rerecord_all.js 開頭 dotenv 已載進 process.env） */
+        const OWNER_ENV = Object.freeze({ OLLAMA_TIMEOUT_MS: '1800000', OLLAMA_NUM_CTX: '16384', OCR_TIMEOUT_MS: '1800000' });
+        const H3 = String(3 * 60 * 60 * 1000);
+
+        test('常數：3 小時、進度 5 分、只有 pipeline 與 e2e-similar 兩步', () => {
+            assert.equal(local.RECORD_LONG_TIMEOUT_MS, 10_800_000);
+            assert.equal(local.RECORD_PROGRESS_MS, 300_000);
+            assert.deepEqual(local.LONG_CALL_STEPS, ['pipeline', 'e2e-similar']);
+            const names = rerecord.recordSteps().map(s => s.name);
+            for (const n of local.LONG_CALL_STEPS) assert.ok(names.includes(n), `${n} 是 recordSteps() 的步驟名`);
+        });
+
+        test('stepExtraEnv：pipeline／e2e 蓋上 3 小時與進度；其餘步驟與之前相同（只有 localRecordEnv）', () => {
+            const p = plan();
+            const by = Object.fromEntries(rerecord.recordSteps().map(s => [s.name, rerecord.stepExtraEnv(s, p, OWNER_ENV)]));
+            const base = local.localRecordEnv(p);
+            for (const n of ['embeddings', 'classify', 'nlq', 'variant']) assert.deepEqual(by[n], base, n);
+            assert.deepEqual(by.pipeline, {
+                ...base, OLLAMA_TIMEOUT_MS: H3, JOB_NODE_TIMEOUT_MS: H3, E2E_NODE_TIMEOUT_MS: H3, OLLAMA_PROGRESS_MS: '300000'
+            });
+            assert.deepEqual(by['e2e-similar'], { ...by.pipeline, FEATURE_SIMILAR: 'true' }, '步驟自己的 extra 最後蓋上去');
+            assert.equal(by.pipeline.NLQ_TIMEOUT_MS, String(local.LOCAL_NLQ_TIMEOUT_MS), 'localRecordEnv 的其他值照留');
+        });
+
+        test('RERECORD_* 覆寫；.env 的 OLLAMA_TIMEOUT_MS 比 3 小時長就照 .env；.env 明寫 OLLAMA_PROGRESS_MS（含 0）就不蓋', () => {
+            const p = plan();
+            assert.deepEqual(local.longCallRecordEnv(p, { ...OWNER_ENV, RERECORD_OLLAMA_TIMEOUT_MS: '14400000', RERECORD_NODE_TIMEOUT_MS: '21600000' }), {
+                OLLAMA_TIMEOUT_MS: '14400000', JOB_NODE_TIMEOUT_MS: '21600000', E2E_NODE_TIMEOUT_MS: '21600000', OLLAMA_PROGRESS_MS: '300000'
+            });
+            assert.equal(local.longCallRecordEnv(p, { OLLAMA_TIMEOUT_MS: '18000000' }).OLLAMA_TIMEOUT_MS, '18000000', '.env 設 5 小時就是 5 小時，不縮短');
+            assert.equal(local.longCallRecordEnv(p, {}).OLLAMA_TIMEOUT_MS, H3, '.env 沒寫：3 小時');
+            for (const bad of ['abc', '0', '-1', '']) {
+                assert.equal(local.longCallRecordEnv(p, { RERECORD_OLLAMA_TIMEOUT_MS: bad }).OLLAMA_TIMEOUT_MS, H3, bad);
+                assert.equal(local.longCallRecordEnv(p, { RERECORD_NODE_TIMEOUT_MS: bad }).JOB_NODE_TIMEOUT_MS, H3, bad);
+            }
+            assert.ok(!('OLLAMA_PROGRESS_MS' in local.longCallRecordEnv(p, { OLLAMA_PROGRESS_MS: '0' })), '明寫 0＝不要進度，照 .env');
+            assert.ok(!('OLLAMA_PROGRESS_MS' in local.longCallRecordEnv(p, { OLLAMA_PROGRESS_MS: '60000' })));
+            assert.equal(local.longCallRecordEnv(p, { OLLAMA_PROGRESS_MS: '  ' }).OLLAMA_PROGRESS_MS, '300000', '空白＝沒寫');
+        });
+
+        test('Gemini 的 CI 模型：不帶任何本機逾時（與之前相同）', () => {
+            const g = plan({ MODEL_EXTRACT: 'gemini:a', MODEL_VERIFY: 'gemini:b', EMBED_MODEL: 'gemini-embedding-001', MODEL_NLQ: 'gemini:c' });
+            assert.deepEqual(local.longCallRecordEnv(g, OWNER_ENV), {});
+            const pipe = rerecord.recordSteps().find(s => s.name === 'pipeline');
+            assert.deepEqual(rerecord.stepExtraEnv(pipe, g, OWNER_ENV), {});
+            assert.equal(rerecord.longCallNote(rerecord.recordSteps(), g, OWNER_ENV), null);
+        });
+
+        test('只影響逾時與進度：沒有任何一個會進 cassette 的鍵或改變流程（MODEL_*、FEATURE_*、EMBED_*、OCR_ENGINE／OCR_DPI）', () => {
+            const keys = Object.keys(local.longCallRecordEnv(plan(), {}));
+            assert.deepEqual(keys.sort(), ['E2E_NODE_TIMEOUT_MS', 'JOB_NODE_TIMEOUT_MS', 'OLLAMA_PROGRESS_MS', 'OLLAMA_TIMEOUT_MS']);
+            for (const k of keys) {
+                assert.ok(!/^(MODEL_|FEATURE_|EMBED_)/.test(k), k);
+                assert.ok(!sp.CI_OPTIONAL_KEYS.includes(k), k);
+                assert.ok(sp.LOCAL_SHIELD.includes(k), `${k} 回放時一律擋成空字串（CI 與錄完的驗證不受影響）`);
+            }
+        });
+
+        test('ciEnv：回放時 E2E_NODE_TIMEOUT_MS／OLLAMA_PROGRESS_MS／VISION_MAX_EDGE_PX 一律空字串；錄製時後兩個放行、E2E 只由 extra 帶', () => {
+            const ciLocal = { MODEL_EXTRACT: 'ollama:ci-vl', MODEL_VERIFY: 'ollama:ci-text' };
+            const dotenv = { E2E_NODE_TIMEOUT_MS: '999', OLLAMA_PROGRESS_MS: '60000', VISION_MAX_EDGE_PX: '1600', OLLAMA_TIMEOUT_MS: '1800000' };
+            const replay = sp.ciEnv({ base: { PATH: '/bin', ...dotenv }, models: ciLocal, envFileKeys: Object.keys(dotenv) });
+            for (const k of Object.keys(dotenv)) assert.equal(replay[k], '', `${k} 回放時不照 .env`);
+            const rec = sp.ciEnv({ base: { PATH: '/bin', ...dotenv }, models: ciLocal, envFileKeys: Object.keys(dotenv), llmMode: 'record' });
+            assert.equal(rec.OLLAMA_PROGRESS_MS, '60000');
+            assert.equal(rec.VISION_MAX_EDGE_PX, '1600', '圖片不在鍵裡：Owner 平常開了縮圖，錄製照同一個設定');
+            assert.equal(rec.E2E_NODE_TIMEOUT_MS, '', '.env 的 E2E_NODE_TIMEOUT_MS 不帶進去；只有 rerecord 錄 e2e 那一步帶');
+            const withExtra = sp.ciEnv({
+                base: { PATH: '/bin', ...dotenv }, models: ciLocal, envFileKeys: Object.keys(dotenv), llmMode: 'replay', embedMode: 'record',
+                extra: { E2E_NODE_TIMEOUT_MS: H3 }
+            });
+            assert.equal(withExtra.E2E_NODE_TIMEOUT_MS, H3);
+        });
+
+        test('main（本機）：.env 的 OLLAMA_TIMEOUT_MS 是 30 分，pipeline 與 e2e 那兩步照樣拿到 3 小時；其餘步驟拿 .env 的 30 分；問 yes 前講明', async (t) => {
+            const out = [];
+            t.mock.method(console, 'log', (m) => out.push(String(m)));
+            const { deps, seen } = localDeps();
+            await withEnv({
+                GEMINI_API_KEY: undefined, TEST_DATABASE_URL: 'postgres://x/y_test', OLLAMA_TIMEOUT_MS: '1800000',
+                OLLAMA_PROGRESS_MS: undefined, RERECORD_OLLAMA_TIMEOUT_MS: undefined, RERECORD_NODE_TIMEOUT_MS: undefined, E2E_NODE_TIMEOUT_MS: undefined
+            }, async () => {
+                assert.equal(await rerecord.main(['--suites', 'classify,pipeline,e2e'], deps), 0);
+            });
+            const by = Object.fromEntries(seen.runs.map(r => [r.args.includes('--test') ? 'e2e-similar' : r.args.slice(-1)[0], r.env]));
+            assert.deepEqual(Object.keys(by), ['classify', 'pipeline', 'e2e-similar']);
+            assert.equal(by.classify.OLLAMA_TIMEOUT_MS, '1800000', 'classify 照 .env（一支幾十秒）');
+            assert.equal(by.classify.E2E_NODE_TIMEOUT_MS, '');
+            assert.equal(by.classify.OLLAMA_PROGRESS_MS, undefined, '沒寫就不設（不串流，與之前相同）');
+            for (const n of ['pipeline', 'e2e-similar']) {
+                assert.equal(by[n].OLLAMA_TIMEOUT_MS, H3, n);
+                assert.equal(by[n].JOB_NODE_TIMEOUT_MS, H3, n);
+                assert.equal(by[n].E2E_NODE_TIMEOUT_MS, H3, n);
+                assert.equal(by[n].OLLAMA_PROGRESS_MS, '300000', n);
+                assert.equal(by[n].MODEL_EXTRACT, LOCAL_CI.MODEL_EXTRACT, '模型照 CI（鍵不變）');
+            }
+            assert.equal(by['e2e-similar'].LLM_MODE, 'replay', 'e2e 那一步 LLM 照舊只回放');
+            assert.equal(by['e2e-similar'].FEATURE_SIMILAR, 'true');
+            assert.ok(out.some(l => l.includes('pipeline、e2e-similar：單次 Ollama 呼叫逾時 3 小時、節點逾時 3 小時') && l.includes('每 5 分印一次輸出進度')), out.join('\n'));
+        });
+
+        test('longCallNote：.env 明寫 OLLAMA_PROGRESS_MS=0 時講明不印進度；沒有長步驟時回 null', () => {
+            const p = plan();
+            assert.match(rerecord.longCallNote(rerecord.recordSteps(), p, { OLLAMA_PROGRESS_MS: '0' }), /不印輸出進度/);
+            assert.equal(rerecord.longCallNote(rerecord.recordSteps({ suites: ['classify'] }), p, {}), null);
+        });
+
+        test('e2e 的 runner 節點逾時讀 E2E_NODE_TIMEOUT_MS，沒設時仍是 30 秒（CI 不變）', () => {
+            const src = fs.readFileSync(path.join(sp.APP_DIR, 'test', 'e2e', 'pipeline.e2e.test.js'), 'utf8');
+            assert.match(src, /process\.env\.E2E_NODE_TIMEOUT_MS/);
+            assert.match(src, /: 30000;/);
+            assert.match(src, /nodeTimeoutMs: NODE_TIMEOUT_MS/);
+        });
     });
 });

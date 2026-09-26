@@ -26,6 +26,10 @@
 //   - record／replay 分支、cassette 鍵、meta 一律不變（modelId 就是 qwen3:8b 這種裸 ID）
 //   - Gemini 路徑送出的內容逐位元不變：分派前後呼叫 gemini.js 的參數與之前完全相同
 //   - 模組載入時檢查一次 OLLAMA_HOST（非本機就警告；伺服器與 worker 啟動時都會載入本檔）
+//
+// 〔看圖拆題逾時〕ollama adapter 的 usage 可能多一個 timing（載入／讀 prompt／輸出的毫秒數）；
+// record 模式照樣把 usage 原樣寫進 cassette 的 response.usage（鍵不含 usage，不受影響），npm run perf:local 讀它。
+// replay（fake.js）只回四個 token 欄位，所以回放結果與之前相同。
 
 const DEFAULT_DIM = 768;
 

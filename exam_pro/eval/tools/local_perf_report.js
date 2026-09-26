@@ -26,7 +26,10 @@
 //     Ollama 的 tokenOut＝eval_count（思考與回覆合計），tokenThinking 恆為 0（services/llm/ollama.js）。
 //   - 逾時或失敗的呼叫不會留下 cassette：只看得到成功的呼叫（倖存者偏差）；逾時要看 log。
 //   - 正式上傳（LLM_MODE=live）不寫 cassette：那一部分看 npm run report:jobs（job_events 的各節點 p50／p95）。
-//   - 重錄時 JOB_NODE_TIMEOUT_MS 固定是 localMode.LOCAL_NODE_TIMEOUT_MS（不讀 .env）；節點建議超過它時報告會提醒。
+//   - 重錄時 JOB_NODE_TIMEOUT_MS 固定是 localMode.LOCAL_NODE_TIMEOUT_MS（不讀 .env；pipeline 與 e2e 兩步是
+//     localMode.RECORD_LONG_TIMEOUT_MS）；節點建議超過它時報告會提醒。
+//   - 〔看圖拆題逾時〕cassette 的 response.usage.timing（services/llm/ollama.js；新版錄的才有）是 Ollama 自己量的
+//     載入／讀 prompt（含看圖）／輸出毫秒數：第 1.1 段分開列，才看得出慢在讀圖還是輸出。
 //
 // 建議的規則（RULES；報告裡逐條寫出依據）：
 //   - 逾時安全值＝max(3 × p90, 2 × max)，無條件進位到整分鐘。
@@ -202,6 +205,12 @@ function toEntry(doc, { file = null, dirAgent = null, mtimeMs = null } = {}) {
     const usage = res.usage && typeof res.usage === 'object'
         ? { tokenIn: num(res.usage.tokenIn), tokenOut: num(res.usage.tokenOut), tokenThinking: num(res.usage.tokenThinking) }
         : null;
+    // 〔看圖拆題逾時〕Ollama 的分段時間（services/llm/ollama.js 的 usage.timing；2026-09-26 之後錄的才有）
+    const rt = res.usage && res.usage.timing && typeof res.usage.timing === 'object' ? res.usage.timing : null;
+    const msOrNull = (v) => { const n = Number(v); return v !== null && v !== undefined && Number.isFinite(n) && n >= 0 ? n : null; };
+    const timing = rt ? {
+        totalMs: msOrNull(rt.totalMs), loadMs: msOrNull(rt.loadMs), promptEvalMs: msOrNull(rt.promptEvalMs), evalMs: msOrNull(rt.evalMs)
+    } : null;
     const parts = Array.isArray(req.parts) ? req.parts : [];
     const images = parts.filter(p => p && p.kind === 'image').length;
     const ckp = (req.cacheKeyParts && typeof req.cacheKeyParts === 'object') ? req.cacheKeyParts : {};
@@ -223,6 +232,7 @@ function toEntry(doc, { file = null, dirAgent = null, mtimeMs = null } = {}) {
         timeSource: hasMetaTime ? 'meta' : (recordedAt === null ? null : 'mtime'),
         latencyMs: Number.isFinite(lat) && lat > 0 ? lat : null,
         usage,
+        timing: timing && (timing.promptEvalMs !== null || timing.evalMs !== null) ? timing : null,
         pages,
         pagesFrom,
         chunkRef: ckp.pdfSha256 && ckp.chunkNo != null ? `${ckp.pdfSha256}#${ckp.chunkNo}` : null
@@ -364,6 +374,7 @@ function statsOf({ agent, model, vendor, items }) {
         model,
         vendor,
         n: items.length,
+        timing: timingStatsOf(items),
         p50Ms: percentile(lat, 50),
         p90Ms: percentile(lat, 90),
         maxMs: Math.max(...lat),
@@ -374,6 +385,45 @@ function statsOf({ agent, model, vendor, items }) {
         avgTokenIn: withUsage.length ? sum(withUsage.map(e => e.usage.tokenIn)) / withUsage.length : null,
         avgTokenOut: withUsage.length ? outTokens / withUsage.length : null,
         pages
+    };
+}
+
+/**
+ * 〔看圖拆題逾時〕分段時間的統計（只算 cassette 帶了 usage.timing 的呼叫；舊 cassette 沒有就回 null）。純函式。
+ *   讀 prompt（prompt eval）：視覺模型的圖片也在這一段——「讀圖」的秒數與每頁秒數看這裡；
+ *   輸出（eval）：tokenOut ÷ evalMs＝純生成速度（不含讀 prompt，比第 1 段表格的「輸出 token/秒」準）；
+ *   其他＝latencyMs − totalMs：排隊等併發槽與傳輸（Ollama 沒算到的時間）。
+ * @param {ReturnType<typeof toEntry>[]} items
+ */
+function timingStatsOf(items) {
+    const withT = items.filter(e => e.timing && e.usage);
+    if (!withT.length) return null;
+    const pick = (k) => withT.filter(e => e.timing[k] !== null);
+    const mean = (xs, k) => (xs.length ? sum(xs.map(e => e.timing[k])) / xs.length : null);
+    const pe = pick('promptEvalMs');
+    const ev = pick('evalMs');
+    const ld = pick('loadMs');
+    const tot = pick('totalMs');
+    const peMs = sum(pe.map(e => e.timing.promptEvalMs));
+    const evMs = sum(ev.map(e => e.timing.evalMs));
+    const pePages = pe.filter(e => Number.isInteger(e.pages) && e.pages > 0);
+    const evPages = ev.filter(e => Number.isInteger(e.pages) && e.pages > 0);
+    const perPage = (xs, k) => {
+        const pages = sum(xs.map(e => e.pages));
+        return pages > 0 ? sum(xs.map(e => e.timing[k])) / pages / 1000 : null;
+    };
+    return {
+        n: withT.length,
+        meanLoadMs: mean(ld, 'loadMs'),
+        meanPromptEvalMs: mean(pe, 'promptEvalMs'),
+        maxPromptEvalMs: pe.length ? Math.max(...pe.map(e => e.timing.promptEvalMs)) : null,
+        promptTokensPerSec: peMs > 0 ? sum(pe.map(e => e.usage.tokenIn)) / (peMs / 1000) : null,
+        meanEvalMs: mean(ev, 'evalMs'),
+        maxEvalMs: ev.length ? Math.max(...ev.map(e => e.timing.evalMs)) : null,
+        evalTokensPerSec: evMs > 0 ? sum(ev.map(e => e.usage.tokenOut + e.usage.tokenThinking)) / (evMs / 1000) : null,
+        promptEvalSecPerPage: perPage(pePages, 'promptEvalMs'),
+        evalSecPerPage: perPage(evPages, 'evalMs'),
+        meanOtherMs: tot.length ? sum(tot.map(e => Math.max(0, e.latencyMs - e.timing.totalMs))) / tot.length : null
     };
 }
 
@@ -779,6 +829,38 @@ function buildReport(args, { env = {}, now = new Date(), readFile = (p) => fs.re
         L.push(`合計 ${selected.length} 次呼叫、延遲加總 ${fmtDur(sum(selected.map(e => e.latencyMs)))}。` +
             `「${LOW_SAMPLE_LABEL}」＝少於 ${RULES.MIN_SAMPLES} 支：百分位數用 nearest-rank，` +
             `n ≤ ${RULES.MIN_SAMPLES - 1} 時第 ceil(0.9 × n) 支就是最慢的那一支，p90 沒有比 max 多出資訊，只能參考。`);
+        L.push('');
+        // 〔看圖拆題逾時〕Ollama 自己量的分段時間：讀 prompt（含看圖）與輸出分開看，才知道慢在哪一段
+        L.push('### 1.1 讀 prompt（含看圖）與輸出各花多久（Ollama 自己量的分段時間）');
+        L.push('');
+        const timed = groups.filter(g => g.timing);
+        if (!timed.length) {
+            L.push('這批 cassette 沒有分段時間（`usage.timing`；2026-09-26 之前的版本錄的不會有）。用新版重錄之後，這裡會分開列出' +
+                '讀 prompt（視覺模型看圖也在這一段）與輸出各花多久；也可以先用 `npm run local:bench-vision` 量一頁（docs/local-mode.md 第 10.11 條）。');
+        } else {
+            L.push(table(
+                ['agent', '模型', '有分段時間的支數', '載入模型（平均）', '讀 prompt（平均／最長）', '讀 prompt token/秒', '每頁讀圖',
+                    '輸出（平均／最長）', '純輸出 token/秒', '每頁輸出', '其他（排隊、傳輸；平均）'],
+                timed.map(g => {
+                    const t = g.timing;
+                    return [
+                        `\`${g.agent}\``, g.model ? `\`${g.model}\`` : '—', String(t.n),
+                        fmtDur(t.meanLoadMs),
+                        `${fmtDur(t.meanPromptEvalMs)}／${fmtDur(t.maxPromptEvalMs)}`,
+                        t.promptTokensPerSec == null ? '—' : t.promptTokensPerSec.toFixed(1),
+                        t.promptEvalSecPerPage == null ? '—' : fmtDur(t.promptEvalSecPerPage * 1000),
+                        `${fmtDur(t.meanEvalMs)}／${fmtDur(t.maxEvalMs)}`,
+                        t.evalTokensPerSec == null ? '—' : t.evalTokensPerSec.toFixed(1),
+                        t.evalSecPerPage == null ? '—' : fmtDur(t.evalSecPerPage * 1000),
+                        fmtDur(t.meanOtherMs)
+                    ];
+                })
+            ));
+            L.push('');
+            L.push('「讀 prompt」含系統提示詞、章節白名單與題目文字，視覺模型的頁面圖片也在這一段（Ollama 不再細分），所以「每頁讀圖」把固定的提示詞也按頁攤了；' +
+                '「純輸出 token/秒」的分母只有生成的時間，比第 1 段含讀 prompt 的速度準。讀 prompt 占大半時，縮小送給視覺模型的圖片（`VISION_MAX_EDGE_PX`）最有效；' +
+                '輸出占大半時，一塊少放幾頁（`JOB_PDF_CHUNK_PAGES`）比較有用（docs/local-mode.md 第 10.11 條）。');
+        }
     }
     L.push('');
 
@@ -875,9 +957,13 @@ function buildReport(args, { env = {}, now = new Date(), readFile = (p) => fs.re
                 '頁數調小時不能直接按比例縮小——模型載入、系統提示詞等固定開銷不會跟著頁數減少。');
             L.push('');
             if (rec.nodeTimeout.needMs > local.LOCAL_NODE_TIMEOUT_MS) {
+                // 〔看圖拆題逾時〕pipeline 與 e2e 兩步另帶 3 小時（localMode.longCallRecordEnv）；eval 的 suite 不對節點計時
                 L.push(`注意：\`.env\` 的 \`JOB_NODE_TIMEOUT_MS\` 只影響正式上傳。重錄（\`cassettes:rerecord\`）時固定帶 ${local.LOCAL_NODE_TIMEOUT_MS}` +
-                    '（`eval/lib/localMode.js` 的 `LOCAL_NODE_TIMEOUT_MS`），不讀 `.env`；上面的建議超過它，代表重錄 pipeline 時也可能逾時，要改那個常數（第 2 條的契約值，需另行裁決）。' +
-                    '`OLLAMA_TIMEOUT_MS`、`OCR_TIMEOUT_MS` 則會從 `.env` 帶進重錄。');
+                    '（`eval/lib/localMode.js` 的 `LOCAL_NODE_TIMEOUT_MS`；classify、nlq、variant 三步），' +
+                    `pipeline 與 e2e 兩步帶 ${local.RECORD_LONG_TIMEOUT_MS}（${fmtDur(local.RECORD_LONG_TIMEOUT_MS)}；\`RERECORD_NODE_TIMEOUT_MS\` 可改），都不讀 \`.env\`。` +
+                    'eval 的 suite 只把節點逾時記在報表、不真的計時（只有 e2e 的 runner 會），所以重錄時真正會切斷呼叫的是 `OLLAMA_TIMEOUT_MS` 與 `OCR_TIMEOUT_MS`：' +
+                    `pipeline 與 e2e 兩步的 \`OLLAMA_TIMEOUT_MS\` 至少 ${fmtDur(local.RECORD_LONG_TIMEOUT_MS)}（\`RERECORD_OLLAMA_TIMEOUT_MS\` 可改；\`.env\` 更長就照 \`.env\`），` +
+                    '其餘步驟與 `OCR_TIMEOUT_MS` 照 `.env`。');
                 L.push('');
             }
         }
