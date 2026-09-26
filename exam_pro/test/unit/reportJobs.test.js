@@ -157,6 +157,18 @@ describe('report_jobs — renderMarkdown', () => {
         assert.ok(renderMarkdown(REPORT).includes('同家異級驗證（gemini：gemini-3.5-flash → gemini-3.7-flash）'));
     });
 
+    test('〔dec/local-thinking-speed-fix〕answer_mismatch 之後原地重跑的結果：有 rerun 才列；舊的報表物件照樣排得出來', () => {
+        const withRerun = { ...REPORT, verify: { ...REPORT.verify, rerun: { reruns: 3, rerun_pass: 1, rerun_mismatch: 2, rerun_other: 0, no_next: 2 } } };
+        const md = renderMarkdown(withRerun);
+        assert.ok(md.includes('| answer_mismatch 之後原地重跑（同一題下一次 verify） | 3 |'));
+        assert.ok(md.includes('| 　重跑後通過 | 1 |'));
+        assert.ok(md.includes('| 　重跑後仍 answer_mismatch | 2 |'));
+        assert.ok(md.includes('| answer_mismatch 之後沒有再跑 verify（停在複核或還沒輪到） | 2 |'));
+        assert.ok(md.includes('docs/local-mode.md 第 10.12 條'));
+        const old = renderMarkdown(REPORT);
+        assert.ok(!old.includes('原地重跑'), '沒有 rerun 欄位的報表物件不列');
+    });
+
     test('全空的報表也排得出來（不丟例外、不出現 NaN／undefined）', () => {
         const empty = {
             since: { label: '7d', from: '2026-08-15T00:00:00.000Z' },

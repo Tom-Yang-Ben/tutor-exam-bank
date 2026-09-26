@@ -136,9 +136,21 @@ function renderMarkdown(r) {
         ['verify 事件數', int(r.verify.calls)],
         ['skipped（證明題）', int(r.verify.skipped)],
         ['answer_mismatch 次數', int(r.verify.mismatch)],
-        ['不一致率', pct(r.verify.mismatch_rate)]
+        ['不一致率', pct(r.verify.mismatch_rate)],
+        // 〔dec/local-thinking-speed-fix〕舊的報表物件沒有 rerun：不列
+        ...(r.verify.rerun ? [
+            ['answer_mismatch 之後原地重跑（同一題下一次 verify）', int(r.verify.rerun.reruns)],
+            ['　重跑後通過', int(r.verify.rerun.rerun_pass)],
+            ['　重跑後仍 answer_mismatch', int(r.verify.rerun.rerun_mismatch)],
+            ['　重跑後是其他結果（error 等）', int(r.verify.rerun.rerun_other)],
+            ['answer_mismatch 之後沒有再跑 verify（停在複核或還沒輪到）', int(r.verify.rerun.no_next)]
+        ] : [])
     ]));
     out.push('> 線上 `answer_mismatch` 比例 > 15% 時先查 prompt，不要急著接第二家模型（規劃 §3.8）。\n');
+    if (r.verify.rerun) {
+        out.push('> 不一致時狀態機會原地重跑一次 verify；「重跑後通過」很少時，這次重跑多半只是多等一次（本機模式一次幾分鐘），' +
+            '要不要關掉見 docs/local-mode.md 第 10.12 條。\n');
+    }
 
     return out.join('');
 }
@@ -223,6 +235,23 @@ async function collect(db, since) {
     const judged = verifyStats.calls - verifyStats.skipped;
     verifyStats.mismatch_rate = judged > 0 ? verifyStats.mismatch / judged : null;
 
+    // 〔dec/local-thinking-speed-fix〕answer_mismatch 之後狀態機原地重跑 verify（pipeline/stateMachine.js 的 maxRetries.verify=1）：
+    // 同一題下一次 verify 的結果。本機模式要不要關掉這次重跑（docs/local-mode.md 第 10.12 條）看「重跑後通過」占多少。
+    const verifyRerun = await one(
+        `WITH v AS (
+             SELECT error_class,
+                    LEAD(outcome)     OVER w AS next_outcome,
+                    LEAD(error_class) OVER w AS next_error
+               FROM job_events
+              WHERE created_at >= $1 AND node = 'verify' AND jq_id IS NOT NULL
+             WINDOW w AS (PARTITION BY jq_id ORDER BY id))
+         SELECT COUNT(*) FILTER (WHERE error_class = 'answer_mismatch' AND next_outcome IS NOT NULL)::int AS reruns,
+                COUNT(*) FILTER (WHERE error_class = 'answer_mismatch' AND next_outcome = 'pass')::int     AS rerun_pass,
+                COUNT(*) FILTER (WHERE error_class = 'answer_mismatch' AND next_error = 'answer_mismatch')::int AS rerun_mismatch,
+                COUNT(*) FILTER (WHERE error_class = 'answer_mismatch' AND next_outcome IS NULL)::int     AS no_next
+           FROM v`);
+    verifyRerun.rerun_other = (verifyRerun.reruns || 0) - (verifyRerun.rerun_pass || 0) - (verifyRerun.rerun_mismatch || 0);
+
     // 「同家／異家」用**實際跑過的模型**判定，不是 .env 寫什麼就信什麼
     const models = await all(
         `SELECT node, model, COUNT(*)::int AS n FROM job_events
@@ -234,7 +263,7 @@ async function collect(db, since) {
     return {
         since: { ...since, from },
         totals, nodes, outcomes, errorClasses, reviewReasons, perJob,
-        classifyGate, verify: { ...verifyStats, ...relation }, models
+        classifyGate, verify: { ...verifyStats, ...relation, rerun: verifyRerun }, models
     };
 }
 
