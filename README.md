@@ -40,7 +40,7 @@ flowchart TD
 > **分支狀態**：階段 5（教學診斷平台）已於 2026-09-25 併入 main（PR #38）；章節重整與本機模式在 `local/integration` 分支，尚未併入 main。
 > 本機模式的契約、裁決（LM-1～LM-16）與使用說明：[`docs/local-mode.md`](./docs/local-mode.md)；決策紀錄：[ADR-017](./engineering_docs/03_architecture/adr/ADR-017-local-first-inference.md)；架構與取捨：[`sad.md` §7.1](./engineering_docs/03_architecture/sad.md#71-本機模式預設的部署視圖與取捨)。
 
-本儲存庫保留完整的開發歷程：早期原型（`exam/`）、重構後的系統本體與各階段的演進（`exam_pro/`），以及全部設計文件與決策紀錄（`docs/`、`engineering_docs/`）。階段 5「教學診斷平台」（錯因診斷、知識點、補救卷、化學、AI 家教）的功能與旗標見[下方專節](#階段-5教學診斷平台功能旗標與給老師的快速開始)。
+本儲存庫保留完整的開發歷程：重構後的系統本體與各階段的演進（`exam_pro/`），以及全部設計文件與決策紀錄（`docs/`、`engineering_docs/`）。早期原型（`exam/`）已於 2026-09-27 從主線移除，原始碼保留在 tag [`v1-mysql`](https://github.com/Tom-Yang-Ben/tutor-exam-bank/tree/v1-mysql/exam)。階段 5「教學診斷平台」（錯因診斷、知識點、補救卷、化學、AI 家教）的功能與旗標見[下方專節](#階段-5教學診斷平台功能旗標與給老師的快速開始)。
 
 > ⚖️ 本儲存庫為作者的個人工具與技術作品集：**保留所有權利，僅供瀏覽與技術評估，不授權使用**（見 [`LICENSE`](./LICENSE)）。儲存庫不含任何題庫或考卷內容，示範題與 eval 素材均為作者自行編寫（見 [`NOTICE`](./NOTICE)）。
 
@@ -76,7 +76,7 @@ flowchart TD
 
 | 階段 | 主題 | 內容 | 狀態 |
 |---|---|---|---|
-| 原型 | `exam/` | 單檔 `server.js` 驗證「AI 拆題＋組卷＋匯出」核心流程 | ARCHIVED（保留當重構對照） |
+| 原型 | [`exam/`](https://github.com/Tom-Yang-Ben/tutor-exam-bank/tree/v1-mysql/exam)（tag `v1-mysql`） | 單檔 `server.js` 驗證「AI 拆題＋組卷＋匯出」核心流程 | ARCHIVED；2026-09-27 從主線移除，原始碼保留在 tag `v1-mysql` |
 | 重構 | `exam_pro/` v1 | MVC 分層、白名單硬驗證、LaTeX→OOXML 公式引擎、防 SSRF、限流、交易 | ✅ |
 | 階段 1 資料層 | MySQL → **PostgreSQL 16 + pgvector** | `students`/`attempts` 正規化、embedding 回填、hybrid 檢索、eval 體系與 CI integration job；2026-08-21 切換上線 | ✅ |
 | 階段 2 Agent 管線 | `jobs` 狀態機 + 六個 sub-agent | 拆題／分類／公式修復／獨立驗答／兩段去重，硬閘門、重試預算、**部分入庫**、人工複核佇列、cassette record/replay | ✅ |
@@ -97,7 +97,7 @@ flowchart TD
 | 位置 | 內容 |
 |---|---|
 | **[`exam_pro/`](./exam_pro)** | 🌟 **主要成品**——可執行的系統本體（下表展開） |
-| [`exam/`](./exam) | 早期原型（ARCHIVED）：單檔 `server.js`，保留當重構前後對照與 A-T16 基準 |
+| 早期原型 `exam/`（已移除） | 單檔 `server.js`，2026-09-27 從主線移除，原始碼保留在 tag [`v1-mysql`](https://github.com/Tom-Yang-Ben/tutor-exam-bank/tree/v1-mysql/exam)，供重構前後對照（見下方[原型與重構版的關係](#-原型與重構版的關係)）。A-T16 新舊管線前後對照的「舊流程」基準不是它，是 [`exam_pro/services/legacy/analyzePdf.js`](./exam_pro/services/legacy/analyzePdf.js)（A-T8 之前 `aiService.js` 的凍結快照，`npm run compare:legacy`） |
 | [`docs/`](./docs) | 全部設計文件：規劃、凍結介面與裁決、技術選型、交接檔；已結案的協調文件歸檔於 `docs/archive/`（下表展開） |
 | [`screenshots/`](./screenshots) | README 用截圖 |
 | [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) | CI：unit（Node 22/24 矩陣）＋ integration（起 pgvector service → migrations → 整合測試 → e2e → 五個 eval suite） |
@@ -206,17 +206,17 @@ exam_pro/
 
 ---
 
-## 🔄 兩個子專案的關係
+## 🔄 原型與重構版的關係
 
 ```
 exam/  ──（重構）──▶  exam_pro/
 原型：邏輯全在              企業級版：MVC 分層、
 單一 server.js            白名單驗證、API 認證、
-                         防 SSRF、LaTeX→Word 公式引擎
+（tag v1-mysql）          防 SSRF、LaTeX→Word 公式引擎
 ```
 
-- **`exam`**：最初的可運作原型，驗證「AI 拆題 + 組卷 + 匯出」的核心流程。
-- **`exam_pro`**：以 `exam` 為基礎重構，拆分為 `config / controllers / services / middleware / routes / utils`，並補強安全性與正確性。**若要實際執行，請使用 `exam_pro`。**
+- **`exam`**：最初的可運作原型，驗證「AI 拆題 + 組卷 + 匯出」的核心流程。舊版原型已於 2026-09-27 從主線移除，原始碼保留在 tag [`v1-mysql`](https://github.com/Tom-Yang-Ben/tutor-exam-bank/tree/v1-mysql/exam)。
+- **`exam_pro`**：以 `exam` 為基礎重構，拆分為 `config / controllers / services / middleware / routes / utils`，並補強安全性與正確性。主線上可執行的只有 `exam_pro`。
 
 ---
 
@@ -381,7 +381,7 @@ pandoc 是文件轉換的業界標準，一行指令就能把 LaTeX 轉成 `.doc
 - **輸入不是一份 LaTeX 文件**。資料是 DB 裡一列列的題目，內容為「中文敘述混雜行內 `$...$` 片段」；`buildParagraphComponents` / `renderMixedInto` 處理的正是中英數混排，而 pandoc 的單位是整份文件。
 - **交付物需要程式化組裝**。[`wordService.js`](./exam_pro/services/wordService.js) 要控制標題階層、藍色題號、`★` 難度、換頁、答案區紅字與遠端圖片插入——這些由 `docx` 的物件模型逐段建構，交給 pandoc 產檔後就無法再回頭插入。
 - **pandoc 是外部二進位相依**。Node 伺服器需每次請求 `spawn` 一次，部署環境還得額外安裝執行檔；現行方案零外部相依。
-- **中介方案試過並淘汰**。原型 `exam/server.js` 走 `temml`：LaTeX → MathML → 以字串包上 `<m:oMathPara>` 命名空間灌進 `MathXml`，本質是「MathML 標籤穿 OOXML 外衣」，Word 不保證接受。重構版改為直接建構 `docx` 原生數學物件（`MathFraction`、`MathRadical`、`MathSum`、`MathSubSuperScript` …），產出**可用 Word 方程式編輯器開啟編輯的真・直式分數**，正對應本專案的核心約束。
+- **中介方案試過並淘汰**。原型 [`exam/server.js`](https://github.com/Tom-Yang-Ben/tutor-exam-bank/blob/v1-mysql/exam/server.js)（tag `v1-mysql`）走 `temml`：LaTeX → MathML → 以字串包上 `<m:oMathPara>` 命名空間灌進 `MathXml`，本質是「MathML 標籤穿 OOXML 外衣」，Word 不保證接受。重構版改為直接建構 `docx` 原生數學物件（`MathFraction`、`MathRadical`、`MathSum`、`MathSubSuperScript` …），產出**可用 Word 方程式編輯器開啟編輯的真・直式分數**，正對應本專案的核心約束。
 - **輸入域是受控的**。AI prompt 已將可用語法限縮為高中數理子集，因此無須覆蓋完整 LaTeX；未知指令會退化為純文字（`parseCommand` 末段），單一公式失敗不會導致整份考卷打包失敗。
 
 > **權衡**：pandoc 的 LaTeX 覆蓋率遠勝本解析器。此處換得的是「部署零相依 + 版面完全可控 + 失敗可局部降級」，代價是僅支援語法子集。
@@ -406,7 +406,7 @@ Gemini 已回傳 JSON，為何不直接入庫？
 
 ### 3️⃣ exam → exam_pro 重構到底改了什麼？
 
-兩個資料夾功能相近，差異在**行為**而非目錄長相（375 行單檔 → 約 1,400 行分層）：
+兩個資料夾功能相近，差異在**行為**而非目錄長相（375 行單檔 → 約 1,400 行分層；原型原始碼見 tag [`v1-mysql`](https://github.com/Tom-Yang-Ben/tutor-exam-bank/tree/v1-mysql/exam)）：
 
 | 面向 | `exam`（原型） | `exam_pro`（重構版） |
 |---|---|---|
@@ -424,7 +424,7 @@ Gemini 已回傳 JSON，為何不直接入庫？
 
 > **最具體的一例**：原型的 `app.use(express.static(__dirname))` 會把含 `GEMINI_API_KEY` 的 `.env` 一併當靜態檔案對外提供。
 > 重構的價值不在目錄變好看，而在於把一個「會外洩金鑰、AI 額度可被無限刷、章節名各寫各的」原型，變成可以真的對外部署的系統。
-> （2026-09-15 起 `exam/` 的 `npm start` 改為直接拒絕啟動並印出這段說明，原型只留作對照，不再能被誤跑。）
+> （2026-09-15 起 `exam/` 的 `npm start` 改為直接拒絕啟動並印出這段說明；2026-09-27 起舊版原型從主線移除，原始碼保留在 tag [`v1-mysql`](https://github.com/Tom-Yang-Ben/tutor-exam-bank/tree/v1-mysql/exam)，只供對照，主線上已沒有可以誤跑的原型。注意 tag 裡的 `exam/package.json` 還是 2026-09-15 之前的版本，`npm start` 會照舊啟動並公開整個目錄，請勿在那個 checkout 裡放 `.env` 或執行它。）
 
 ---
 
