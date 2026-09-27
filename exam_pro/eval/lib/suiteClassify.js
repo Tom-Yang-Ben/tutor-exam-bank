@@ -159,7 +159,8 @@ async function runClassifySuite(args) {
                 warnings.push(
                     `程式後處理改了 ${adjusted.length} 題的章（改完與 golden 相同 ${right} 題）：` +
                     adjusted.slice(0, 8).map(r => `${r.id} ${r.adjustments.join('、')}`).join('；') +
-                    `${adjusted.length > 8 ? ' …' : ''}（規則：utils/chapterPostRules.js；docs/local-mode.md 10.15）`
+                    // 〔Owner 2026-09-27 改答 LC-2〕新加的四條規則寫在 10.22
+                    `${adjusted.length > 8 ? ' …' : ''}（規則：utils/chapterPostRules.js；docs/local-mode.md 10.15、10.22）`
                 );
             }
         }

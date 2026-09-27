@@ -129,11 +129,15 @@ describe('10.21 要錄的模板版號', () => {
 describe('docs/local-mode.md 10.21 與工具一致', () => {
     const doc = fs.readFileSync(path.join(REPO, 'docs', 'local-mode.md'), 'utf8');
     const start = doc.indexOf('### 10.21 重錄計畫（2026-09-27，第五輪之後）');
-    const sec = start >= 0 ? doc.slice(start) : '';
+    // 〔Owner 2026-09-27 改答 LC-2，dec/r6-classify-rules〕10.21 之後接了 10.22：本節的檢查只看 10.21 自己（到下一個 ### 為止）
+    const next = start >= 0 ? doc.indexOf('\n### ', start + 4) : -1;
+    const sec = start >= 0 ? doc.slice(start, next > start ? next : undefined) : '';
 
-    test('10.21 是最後一節', () => {
+    // 〔Owner 2026-09-27 改答 LC-2〕原本釘「10.21 是最後一節」；末尾新增 10.22 之後，改成逐一釘住 10.21 之後的節（不允許其他節插進來）
+    test('10.21 之後只有 10.22 一節', () => {
         assert.ok(start > 0);
-        assert.equal(/^### /m.test(sec.slice(4)), false, '10.21 之後不應再有節');
+        const after = [...doc.slice(start + 4).matchAll(/^### (.*)$/gm)].map(m => m[1]);
+        assert.deepEqual(after, ['10.22 classify 重錄後的四條界線規則（2026-09-27，改答 LC-2）']);
     });
 
     test('三個錄製指令依序出現，每一步寫的 LLM_MODE／EMBED_MODE 與 rerecord_all 相同', () => {

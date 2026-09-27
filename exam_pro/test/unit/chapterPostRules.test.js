@@ -31,10 +31,12 @@ describe('規則表', () => {
             assert.ok(typeof rule.source === 'string' && rule.source.length > 10, `${rule.id} 要寫出處`);
             assert.equal(typeof rule.test, 'function');
         }
+        // 〔Owner 2026-09-27 改答 LC-2：加四條規則，dec/r6-classify-rules〕末尾多四條（docs/local-mode.md 10.22）
         assert.deepEqual(pr.RULES.map(r => r.id), [
             'exp_log_third', 'exp_log_first',
             'dimension_space', 'dimension_plane', 'dimension_space', 'dimension_plane',
-            'field_potential', 'coulomb', 'relative_1d', 'relative_2d', 'free_fall_computation'
+            'field_potential', 'coulomb', 'relative_1d', 'relative_2d', 'free_fall_computation',
+            'trig_square_relation', 'general_angle', 'friction_coefficient', 'circular_kinematics'
         ]);
     });
 
@@ -171,6 +173,203 @@ describe('物理的三組界線', () => {
         assert.equal(pr.boundaryTarget('物體的運動（速度與加速度）', '石頭自 80 m 高處自由落下，幾秒後落地？').to, '直線運動');
         assert.equal(pr.boundaryTarget('物體的運動（速度與加速度）', '自由落體的加速度和物體的質量有沒有關係？'), null);
         assert.equal(pr.boundaryTarget('物體的運動（速度與加速度）', '下列關於自由落體的敘述何者正確？(A) 第 1 秒內…'), null);
+    });
+});
+
+// ───────────────── 〔Owner 2026-09-27 改答 LC-2：加四條規則〕docs/local-mode.md 10.22 ─────────────────
+// 例句都是自撰的，不取自 golden（golden 與回放檔上的效果見 classifyRulesLc2.test.js）。
+
+describe('LC-2 規則 1：三角函數的疊合 → 直角三角形的邊角關係（只有平方關係）', () => {
+    const FROM = '三角函數的疊合';
+    const TO = '直角三角形的邊角關係';
+
+    test('正例：sin²＋cos²、1＋tan²、明寫「平方關係」、Unicode 上標', () => {
+        const cases = [
+            ['求 $\\sin^2 25^\\circ + \\cos^2 25^\\circ$ 的值。', '\\sin^2＋\\cos^2'],
+            ['化簡 $\\sin^{2}\\theta+\\cos^{2}\\theta$。', '\\sin^{2}＋\\cos^{2}'],
+            ['化簡 $(1+\\tan^2\\theta)\\cos^2\\theta$，其中 $\\theta$ 為銳角。', '\\tan^2＋\\cos^2'],
+            ['已知 $\\theta$ 為銳角且 $\\sin\\theta = \\frac{3}{5}$，利用平方關係求 $\\cos\\theta$。', '平方關係'],
+            ['sin²35° + cos²35° 之值為何？', 'sin^{2}＋cos^{2}']   // Unicode 上標先寫成 ^{2}
+        ];
+        for (const [text, evidence] of cases) {
+            assert.equal(pr.squareRelationEvidence(text), evidence, text);
+            const hit = pr.boundaryTarget(FROM, text);
+            assert.equal(hit && hit.to, TO, text);
+            assert.equal(hit.rule, 'trig_square_relation');
+        }
+    });
+
+    test('反例：和角、疊合、倍角、一次的 sin±cos、廣義角的線索、鈍角、弧度、只有一個平方', () => {
+        for (const text of [
+            '已知 $\\sin^2\\theta+\\cos^2\\theta=1$，求 $\\sin(\\theta+30^\\circ)$ 的值。',             // 和角
+            '把 $\\sin x+\\sqrt{3}\\cos x$ 化成 $r\\sin(x+\\phi)$，並求最大值。',                      // 疊合
+            '利用 $\\sin^2\\theta+\\cos^2\\theta=1$ 與 $\\cos 2\\theta$ 的公式化簡。',                  // 倍角
+            '利用倍角公式與 $\\sin^2\\theta+\\cos^2\\theta=1$ 化簡。',                                    // 倍角（字眼）
+            '已知 $\\sin\\theta+\\cos\\theta=\\frac{1}{2}$，由 $\\sin^2\\theta+\\cos^2\\theta=1$ 求 $\\sin\\theta\\cos\\theta$。', // 一次的 sin＋cos
+            '$\\theta$ 在第二象限且 $\\sin\\theta=\\frac{3}{5}$，由 $\\sin^2\\theta+\\cos^2\\theta=1$ 求 $\\cos\\theta$。', // 象限（廣義角也教平方關係）
+            '求 $\\sin^2 120^\\circ+\\cos^2 120^\\circ$ 之值。',                                         // 鈍角
+            '求 $\\sin^2\\frac{\\pi}{5}+\\cos^2\\frac{\\pi}{5}$ 之值。',                                 // 弧度
+            '求 $\\sin^2 30^\\circ$ 的值。',                                                            // 只有一個平方
+            '求 $y=\\sin^2 x+\\cos^2 x$ 的圖形。'                                                        // 第三冊的函數題材
+        ]) {
+            assert.equal(pr.squareRelationEvidence(text), null, text);
+            assert.equal(pr.boundaryTarget(FROM, text), null, text);
+        }
+    });
+
+    test('只管「疊合 → 直角三角形」這一對：模型選別章不動', () => {
+        const text = '求 $\\sin^2 25^\\circ + \\cos^2 25^\\circ$ 的值。';
+        assert.equal(pr.boundaryTarget(TO, text), null, '已經是直角三角形');
+        assert.equal(pr.boundaryTarget('和角與差角公式', text), null, '一條規則只管一對章');
+        assert.equal(pr.boundaryTarget('廣義角與極坐標', text), null);
+    });
+});
+
+describe('LC-2 規則 2：直角三角形的邊角關係 → 廣義角與極坐標（角度 >90° 或 <0°）', () => {
+    const FROM = '直角三角形的邊角關係';
+    const TO = '廣義角與極坐標';
+
+    test('正例：150°、負角、210°、400°、「135° 的正切」、U+2212 減號、有一個角超出就算', () => {
+        const cases = [
+            ['$\\sin 150^\\circ$ 之值為何？', '\\sin 150^\\circ'],
+            ['求 $\\cos(-30^\\circ)$。', '\\cos(-30^\\circ'],
+            ['$\\tan 210°$ 等於多少？', '\\tan 210°'],
+            ['求 cos 400° 的值。', 'cos 400°'],
+            ['寫出 $135^{\\circ}$ 的正切值。', '135^{\\circ}$ 的正切'],
+            ['求 sin(−45°)。', 'sin(-45°'],
+            ['求 $\\sin 30^\\circ + \\cos 120^\\circ$ 的值。', '\\cos 120^\\circ']
+        ];
+        for (const [text, evidence] of cases) {
+            assert.equal(pr.generalAngleEvidence(text), evidence, text);
+            const hit = pr.boundaryTarget(FROM, text);
+            assert.equal(hit && hit.to, TO, text);
+            assert.equal(hit.rule, 'general_angle');
+        }
+    });
+
+    test('反例：0°～90°（含兩端）、sin²40° 不是 240°、解三角形、和角、角度裡有 ±、弧度、角度不是直接寫在函數裡', () => {
+        for (const text of [
+            '$\\sin 30^\\circ$ 之值為何？',
+            '求 $\\cos 90^\\circ$ 與 $\\sin 0^\\circ$。',
+            '$\\sin^2 40^\\circ$ 與 $\\cos^2 40^\\circ$ 的和。',
+            'sin²40° + cos²40° 之值為何？',                                   // Unicode 上標：直接 NFKC 會變成 sin240°
+            '$\\sin^240^\\circ+\\cos^240^\\circ$',                            // 次方只吃一位數
+            '三角形 $ABC$ 中 $\\angle A=120^\\circ$，求 $\\sin 120^\\circ$ 與面積。', // 解三角形（鈍角三角形）
+            '利用和角公式求 $\\sin 105^\\circ$。',
+            '化簡 $\\sin(180^\\circ-30^\\circ)$。',                               // 角度裡有 ±：不判斷
+            '求 $\\sin \\frac{5\\pi}{6}$ 之值。',                                  // 弧度：不處理（見 10.22）
+            '已知 $\\theta=150^\\circ$，求 $\\sin\\theta$。'                       // 角度沒有直接寫在函數裡：不判斷
+        ]) {
+            assert.equal(pr.generalAngleEvidence(text), null, text);
+            assert.equal(pr.boundaryTarget(FROM, text), null, text);
+        }
+    });
+
+    test('trigAngles：Unicode 上標先改成 ^n，再做 NFKC', () => {
+        assert.equal(pr.normalizeTrigText('sin²40°'), 'sin^{2}40°');
+        assert.deepEqual(pr.trigAngles(pr.normalizeTrigText('sin²40°')).map(a => a.deg), [40]);
+        assert.deepEqual(pr.trigAngles(pr.normalizeTrigText('sin⁻¹ 150°')).map(a => a.deg), [150], '上標的 -1 整串當次方');
+        assert.deepEqual(pr.trigAngles(pr.normalizeTrigText('\\sin^{2} 40^{\\circ}')).map(a => a.deg), [40]);
+        assert.deepEqual(pr.trigAngles(pr.normalizeTrigText('$\\cos\\left(-60^\\circ\\right)$')).map(a => a.deg), [-60]);
+        assert.deepEqual(pr.trigAngles(pr.normalizeTrigText('basin 150°')), [], '字的一部分不算函數名');
+    });
+
+    test('只管「直角三角形 → 廣義角」這一對', () => {
+        assert.equal(pr.boundaryTarget(TO, '$\\sin 150^\\circ$ 之值'), null);
+        assert.equal(pr.boundaryTarget('正弦與餘弦定理', '$\\sin 150^\\circ$ 之值'), null);
+    });
+});
+
+describe('LC-2 規則 3：牛頓運動定律 → 摩擦力與向心力（題幹出現摩擦係數）', () => {
+    const FROM = '牛頓運動定律';
+    const TO = '摩擦力與向心力';
+
+    test('正例：動摩擦係數、靜摩擦、μ＝數、\\mu_k＝數', () => {
+        const cases = [
+            ['木箱與地面的動摩擦係數為 0.3，以 50 N 水平拉 10 kg 的木箱，求加速度。', '動摩擦係數'],
+            ['地面對木箱的最大靜摩擦力是多少？', '靜摩擦'],
+            ['物體與桌面間 $\\mu_k = 0.2$，以 6 N 拉 2 kg 物體，求加速度。', '\\mu_k = 0.2'],
+            ['μ=0.25 的水平面上以 20 N 推 4 kg 的箱子，求加速度。', 'μ=0.25'],
+            ['兩木塊以輕繩相連，與桌面的摩擦係數皆為 0.1，求繩張力。', '摩擦係數']
+        ];
+        for (const [text, evidence] of cases) {
+            assert.equal(pr.frictionCoefficientEvidence(text), evidence, text);
+            const hit = pr.boundaryTarget(FROM, text);
+            assert.equal(hit && hit.to, TO, text);
+            assert.equal(hit.rule, 'friction_coefficient');
+        }
+    });
+
+    test('反例：寫明沒有摩擦、μ 的其他意思（微米、微法拉、磁導率、線密度）、功與能量的題材', () => {
+        for (const text of [
+            '光滑水平面（不計摩擦），以 10 N 拉 2 kg 物體，求加速度。',
+            '不計動摩擦，求兩物體的共同加速度。',
+            '桌面的摩擦係數可忽略，求繩張力。',
+            '摩擦係數為零的水平面上，以 8 N 拉 4 kg 物體，求加速度。',
+            '在 μ = 0 的冰面上推 3 kg 的冰壺，求加速度。',
+            '直徑 5 μm 的塵粒受 2 N 的力，求加速度。',
+            '2 μF 的電容器充電後，兩板間的電場為何？',
+            '真空磁導率 $\\mu_0 = 4\\pi\\times10^{-7}$，求導線受的力。',
+            '弦的線密度 μ = 0.01 kg/m、張力 4 N，求波速。',
+            '木塊在動摩擦係數 0.2 的地面上滑行 5 m，摩擦力作了多少功？',
+            '質量 2 kg 的物體受 10 N 合力，求加速度。'
+        ]) {
+            assert.equal(pr.frictionCoefficientEvidence(text), null, text);
+            assert.equal(pr.boundaryTarget(FROM, text), null, text);
+        }
+    });
+
+    test('只管「牛頓運動定律 → 摩擦力與向心力」這一對', () => {
+        const text = '木箱與地面的動摩擦係數為 0.3，求加速度。';
+        assert.equal(pr.boundaryTarget(TO, text), null, '已經是摩擦力與向心力（不接著套規則 4）');
+        assert.equal(pr.boundaryTarget('直線運動', text), null);
+        assert.equal(pr.boundaryTarget('功與動能', text), null);
+    });
+});
+
+describe('LC-2 規則 4：摩擦力與向心力 → 平面運動（等速圓周運動只問運動學量）', () => {
+    const FROM = '摩擦力與向心力';
+    const TO = '平面運動';
+
+    test('正例：速率、週期、向心加速度、速度方向；選項裡「合力為零」是要判斷的敘述，不算受力計算（CHAPTER_RELABEL 8.1 #46）', () => {
+        const cases = [
+            ['一質點作等速圓周運動，半徑 2 m、週期 4 s，求其速率與向心加速度的量值。', '等速圓周運動＋週期'],
+            ['等速圓周運動的物體，其速度方向與加速度方向的關係為何？', '等速圓周運動＋速度'],
+            ['關於等速率圓周運動，下列何者正確？(A) 速率不變 (B) 加速度為零 (C) 合力為零', '等速率圓周運動＋速率']
+        ];
+        // 主題字「等速率圓周運動」本身含「速率」，不能拿來當「題目問了運動學量」的證據
+        assert.equal(pr.circularKinematicsEvidence('等速率圓周運動的題目'), null);
+        for (const [text, evidence] of cases) {
+            assert.equal(pr.circularKinematicsEvidence(text), evidence, text);
+            const hit = pr.boundaryTarget(FROM, text);
+            assert.equal(hit && hit.to, TO, text);
+            assert.equal(hit.rule, 'circular_kinematics');
+        }
+    });
+
+    test('反例：算張力、向心力、摩擦提供向心力、合力的方向、質量、別章的題材（簡諧、磁場、衛星、能量）、不是等速', () => {
+        for (const text of [
+            '以輕繩繫住的小球在光滑水平面上作等速圓周運動，速率 3 m/s，求繩的張力。',
+            '2 kg 的物體作等速圓周運動，半徑 1 m、速率 2 m/s，求所需的向心力。',
+            '汽車在水平彎道上作等速圓周運動，由靜摩擦力提供向心力，求不打滑的最大速率。',
+            '等速圓周運動的物體所受合力的方向為何？',
+            '等速圓周運動中，速率 4 m/s 的物體所受的合力是多少？',
+            '質量 3 kg 的小球作等速圓周運動，速率 2 m/s，求其加速度與受力。',
+            '簡諧運動可視為等速圓周運動在直徑上的投影，求最大速度。',
+            '帶電粒子垂直射入均勻磁場作等速圓周運動，求週期。',
+            '人造衛星繞地球作等速圓周運動，求其速率。',
+            '等速圓周運動的物體動能是否改變？速率是否改變？',
+            '鉛直面上的圓周運動，求最高點的最小速率。'
+        ]) {
+            assert.equal(pr.circularKinematicsEvidence(text), null, text);
+            assert.equal(pr.boundaryTarget(FROM, text), null, text);
+        }
+    });
+
+    test('只管「摩擦力與向心力 → 平面運動」這一對（換過去之後不再接著套 K2 的 relative_1d）', () => {
+        const text = '一質點作等速圓周運動，半徑 2 m、週期 4 s，求其速率。';
+        assert.equal(pr.boundaryTarget(TO, text), null);
+        assert.equal(pr.boundaryTarget('牛頓運動定律', text), null);
     });
 });
 
@@ -333,7 +532,9 @@ describe('agents/classify.js：第二層的章節後處理', () => {
         assert.equal(calls.length, 1);
     });
 
-    test('不誤觸（local_v1_counterfactual --gate）：golden 92 題以正確的章走閘門一題都不改；以 2026-09-25 的回答代用時 77 → 90 對、改錯 0', async () => {
+    // 〔Owner 2026-09-27 改答 LC-2，dec/r6-classify-rules〕原本是 77 → 90、改對 13；加了四條規則之後 dr-008（trig_square_relation）、
+    // fx-046（circular_kinematics）也改對，變成 77 → 92、改對 15。這兩條是看過這類錯題才寫的，92/92 會高估對新題的效果（10.22）。
+    test('不誤觸（local_v1_counterfactual --gate）：golden 92 題以正確的章走閘門一題都不改；以 2026-09-25 的回答代用時 77 → 92 對、改錯 0', async () => {
         const { gateCounterfactual } = require('../../eval/tools/local_v1_counterfactual');
         const raw = JSON.parse(fs.readFileSync(path.join(ROOT, 'eval', 'fixtures', 'local_raw_2026-09-25.json'), 'utf8'));
         const g = await gateCounterfactual(raw);
@@ -343,8 +544,9 @@ describe('agents/classify.js：第二層的章節後處理', () => {
         assert.equal(g.proxy.n, 92);
         assert.deepEqual(g.proxy.notGate, []);
         assert.equal(g.proxy.rawCorrect, 77);
-        assert.equal(g.proxy.gateCorrect, 90);
-        assert.equal(g.proxy.fixed.length, 13);
+        assert.equal(g.proxy.gateCorrect, 92);
+        assert.equal(g.proxy.fixed.length, 15);
+        assert.ok(g.proxy.fixed.includes('cls-dr-008') && g.proxy.fixed.includes('cls-fx-046'));
         assert.deepEqual(g.proxy.broken, []);
     });
 
@@ -358,6 +560,48 @@ describe('agents/classify.js：第二層的章節後處理', () => {
                 assert.equal(outcome.data.adjustments, undefined, q.id);
             }
         }
+    });
+
+    // 〔Owner 2026-09-27 改答 LC-2〕四條新規則走同一條接線：第二層與零成本閘門都套（LC-3），cassette 的鍵不變
+    test('LC-2 新規則在第二層：模型選「牛頓運動定律」、題幹有動摩擦係數 → 摩擦力與向心力；模板與鍵不變', async () => {
+        const { ctx, calls } = classifyCtx({ rationale: '用 F=ma。', chapter: '牛頓運動定律', confidence: 0.95 });
+        const outcome = await classify.run(ctx, { subject: '物理', chapter: '', chapter_confidence: 0, question_text: '木箱與地面的動摩擦係數為 0.3，以 50 N 水平拉 10 kg 的木箱，求加速度。' });
+        assert.equal(outcome.data.source, 'llm');
+        assert.equal(outcome.data.chapter, '摩擦力與向心力');
+        assert.deepEqual(outcome.data.adjustments, [{ rule: 'friction_coefficient', from: '牛頓運動定律', to: '摩擦力與向心力', evidence: '動摩擦係數' }]);
+        assert.equal(outcome.data.rationale, '〔界線規則：模型選「牛頓運動定律」，依題幹的「動摩擦係數」改為「摩擦力與向心力」〕用 F=ma。');
+        assert.equal(calls[0].template, 'classify.v2');
+        assert.deepEqual(Object.keys(calls[0].cacheKeyParts), ['template', 'questionText', 'fewShotIds']);
+    });
+
+    test('LC-2 新規則在零成本閘門（LC-3）：拆題模型給「摩擦力與向心力」、題幹只問等速圓周運動的運動學量 → 平面運動，不呼叫 LLM', async () => {
+        const { ctx, calls } = classifyCtx({});
+        const outcome = await classify.run(ctx, { subject: '物理', chapter: '摩擦力與向心力', chapter_confidence: 0.9, question_text: '一質點作等速圓周運動，半徑 2 m、週期 4 s，求其速率。' });
+        assert.equal(outcome.data.source, 'gate');
+        assert.equal(outcome.data.chapter, '平面運動');
+        assert.deepEqual(outcome.data.adjustments, [{ rule: 'circular_kinematics', from: '摩擦力與向心力', to: '平面運動', evidence: '等速圓周運動＋週期' }]);
+        assert.ok(outcome.data.rationale.startsWith('〔界線規則：拆題模型給「摩擦力與向心力」，依題幹的「等速圓周運動＋週期」改為「平面運動」〕'));
+        assert.equal(calls.length, 0);
+    });
+
+    test('LC-2 新規則：數學兩條在第二層與閘門都生效；沒有證據的題 outcome.data 與改版前逐鍵相同', async () => {
+        const a = classifyCtx({ rationale: 'r', chapter: '三角函數的疊合', confidence: 0.95 });
+        const sq = await classify.run(a.ctx, { subject: '數學', chapter: '', chapter_confidence: 0, question_text: '求 $\\sin^2 25^\\circ + \\cos^2 25^\\circ$ 的值。' });
+        assert.equal(sq.data.chapter, '直角三角形的邊角關係');
+        assert.equal(sq.data.adjustments[0].rule, 'trig_square_relation');
+
+        const b = classifyCtx({});
+        const ga = await classify.run(b.ctx, { subject: '數學', chapter: '直角三角形的邊角關係', chapter_confidence: 1, question_text: '$\\sin 150^\\circ$ 之值為何？' });
+        assert.equal(ga.data.source, 'gate');
+        assert.equal(ga.data.chapter, '廣義角與極坐標');
+        assert.equal(ga.data.adjustments[0].rule, 'general_angle');
+
+        const c = classifyCtx({});
+        const keep = await classify.run(c.ctx, { subject: '數學', chapter: '直角三角形的邊角關係', chapter_confidence: 1, question_text: '$\\sin 30^\\circ$ 之值為何？' });
+        assert.deepEqual(keep.data, {
+            chapter: '直角三角形的邊角關係', confidence: 1,
+            rationale: '拆題模型給的章節在白名單內，且信心 1 ≥ 0.8，零成本閘門直接採用。', source: 'gate'
+        });
     });
 
     test('化學題：界線規則全是數學／物理的章，不會動到化學', async () => {
@@ -408,6 +652,21 @@ describe('services/nlqService.js：名稱容錯與界線規則', () => {
         assert.deepEqual(merged.filters.chapters, ['指數函數與對數函數']);
         assert.deepEqual(merged.filters.question_types, ['計算']);
         assert.deepEqual(merged.adjustments, []);
+    });
+
+    // 〔Owner 2026-09-27 改答 LC-2〕nlq 與 classify 共用規則表：新四條在 nlq 也生效（誤觸檢查見 classifyRulesLc2.test.js）
+    test('LC-2 新規則在 nlq：句子有摩擦係數、LLM 只回牛頓運動定律 → 換成摩擦力與向心力；兩章都列就不換', () => {
+        const rules = { subject: null, chapters: [], question_types: [], difficulty_min: null, difficulty_max: null, exclude_student_name: null, keywords: [] };
+        const q = '有動摩擦係數的斜面題';
+        const merged = nlq.mergeLlm(rules, q, { chapters: ['牛頓運動定律'], question_types: [], semantic_text: q }, { query: q });
+        assert.deepEqual(merged.filters.chapters, ['摩擦力與向心力']);
+        assert.deepEqual(merged.adjustments, ['章節「牛頓運動定律」→「摩擦力與向心力」（句子裡有「動摩擦係數」）']);
+        const both = nlq.mergeLlm(rules, q, { chapters: ['牛頓運動定律', '摩擦力與向心力'], question_types: [], semantic_text: q }, { query: q });
+        assert.deepEqual(both.filters.chapters, ['牛頓運動定律', '摩擦力與向心力']);
+        assert.deepEqual(both.adjustments, []);
+        // 句子沒有證據（「斜面上物體受力平衡」，nlq-036 的題材）：不換
+        const q2 = '斜面上物體受力平衡的題目';
+        assert.deepEqual(nlq.mergeLlm(rules, q2, { chapters: ['牛頓運動定律'], question_types: [] }, { query: q2 }).filters.chapters, ['牛頓運動定律']);
     });
 
     test('名稱容錯在對齊之前：「」包起來的空間章名，句子明講平面時照樣換成平面那一章', () => {

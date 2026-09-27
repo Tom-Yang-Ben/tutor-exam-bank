@@ -9,6 +9,8 @@
 //   ① 2026-09-25 的失敗照原樣重現得出來（15/92、nlq llm 欄 3/8）；
 //   ② 後處理把哪幾題改對、沒有把任何原本對的題改錯；
 //   ③ 剩下的錯是哪幾題（要靠模板與模型，見決策草稿 LC-1、LC-2、LC-4）。
+//      〔Owner 2026-09-27 改答 LC-2，dec/r6-classify-rules〕加了四條界線規則（docs/local-mode.md 10.22）之後，這份回答上
+//      原本剩下的 dr-008、fx-046 也由程式改對（92/92）；那兩條規則是看過這類錯題才寫的，這個數字不代表新題的表現。
 // 規則是看過這批錯題之後寫的，在同一批題上的改善會高估對新題的效果（反例另見 chapterPostRules.test.js）。
 //
 // 執行：npm test（不連 DB、不呼叫模型）。要連 recall10 一起看：node eval/tools/local_v1_counterfactual.js（要測試庫）。
@@ -40,7 +42,8 @@ const RAW_WRONG = [
     'cls-fx-052', 'cls-dr-001', 'cls-dr-002', 'cls-dr-007', 'cls-dr-008', 'cls-dr-020', 'cls-dr-030'
 ];
 
-// 現行程式把哪幾題改了章（規則 id）；13 題全部改成 golden 的章
+// 現行程式把哪幾題改了章（規則 id）；15 題全部改成 golden 的章
+// 〔Owner 2026-09-27 改答 LC-2，dec/r6-classify-rules〕原本 13 題；加了四條規則之後多 dr-008、fx-046 兩題（docs/local-mode.md 10.22）
 const EXPECTED_ADJUSTED = {
     'cls-fx-001': 'exp_log_third', 'cls-fx-002': 'exp_log_third', 'cls-fx-003': 'exp_log_third',
     'cls-fx-004': 'exp_log_third', 'cls-fx-007': 'exp_log_third', 'cls-dr-001': 'exp_log_third',
@@ -48,11 +51,15 @@ const EXPECTED_ADJUSTED = {
     'cls-fx-022': 'dimension_space', 'cls-dr-007': 'dimension_space',
     'cls-dr-030': 'field_potential',
     'cls-fx-052': 'relative_1d',
-    'cls-fx-050': 'free_fall_computation'
+    'cls-fx-050': 'free_fall_computation',
+    'cls-dr-008': 'trig_square_relation',
+    'cls-fx-046': 'circular_kinematics'
 };
 
-// 程式補不到、留給模板與模型的兩題（圓周運動的運動學／受力、K3 的平方關係；決策草稿 LC-2）
-const STILL_WRONG = ['cls-dr-008', 'cls-fx-046'];
+// 程式補不到、留給模板與模型的題。
+// 〔Owner 2026-09-27 改答 LC-2〕原本是 ['cls-dr-008', 'cls-fx-046']（圓周運動的運動學／受力、K3 的平方關係；決策草稿 LC-2 選 1＝不加）；
+// Owner 改答加規則之後這兩題也由程式改對，這份回答上沒有剩下的錯題。這兩條規則是看過這類錯題才寫的（10.22 第 6 點）。
+const STILL_WRONG = [];
 
 /** 與 eval/lib/suiteClassify.js 相同的 ctx：db=null、features.similar=false、閘門刻意不過 */
 function suiteCtx(llm) {
@@ -178,15 +185,16 @@ describe('classify：2026-09-25 的原始回應', () => {
         }
     });
 
-    test('現行 agent（v2 模板＋程式後處理）跑同一份回答：90/92，改了 13 題、全部改對，沒有把對的改錯', async () => {
+    // 〔Owner 2026-09-27 改答 LC-2〕原本釘 90/92、改 13 題、accuracy 0.9783、macro-F1 0.908；加了四條規則之後是 92/92、改 15 題
+    test('現行 agent（v2 模板＋程式後處理）跑同一份回答：92/92，改了 15 題、全部改對，沒有把對的改錯', async () => {
         const { rows, calls } = await runClassifyOnRaw();
         assert.equal(calls.length, 92, '每題都走第二層（閘門刻意不過）');
         assert.ok(calls.every(c => c.template === 'classify.v2' && c.agent === 'classify'));
 
         const wrong = rows.filter(r => r.pred !== r.gold).map(r => r.id).sort();
         assert.deepEqual(wrong, STILL_WRONG);
-        assert.equal(metrics.round4(metrics.accuracy(rows).accuracy), 0.9783);
-        assert.equal(metrics.round4(metrics.macroF1(rows).macroF1), 0.908);
+        assert.equal(metrics.round4(metrics.accuracy(rows).accuracy), 1);
+        assert.equal(metrics.round4(metrics.macroF1(rows).macroF1), 1);
 
         const adjusted = {};
         for (const r of rows) {
@@ -211,8 +219,11 @@ describe('classify：2026-09-25 的原始回應', () => {
         const { rows } = await runClassifyOnRaw();
         assert.ok(metrics.accuracy(rows).accuracy >= th.accuracy);
         assert.ok(metrics.macroF1(rows).macroF1 >= th.macro_f1);
-        // 餘裕很小：再錯一題「只有一兩題」的章，macro-F1 就可能掉到門檻下（docs/local-mode.md 10.15 的風險）
-        assert.ok(metrics.macroF1(rows).macroF1 - th.macro_f1 < 0.02);
+        // 〔Owner 2026-09-27 改答 LC-2〕原本這裡釘「餘裕很小：macro-F1 − 門檻 < 0.02」（10.15 第 5 點，當時是 0.908 對 0.8956）。
+        // 加了四條規則之後同一份回答是 92/92（macro-F1 1），餘裕的判斷改看 2026-09-27 重錄的回放（10.22：0.9744，仍只錯 fx-051）；
+        // 這裡改成逐位釘住 1，不再比餘裕。門檻本身（eval/thresholds.json）不動。
+        assert.equal(metrics.round4(metrics.macroF1(rows).macroF1), 1);
+        assert.equal(th.macro_f1, 0.8956, '門檻數字不動');
     });
 });
 

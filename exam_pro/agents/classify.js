@@ -42,6 +42,9 @@
 //   classify.v2 的版號不變；回放照樣吃得到後處理（改規則不必重錄）。
 // 〔Owner 第五輪 LC-3 核准，2026-09-27，dec/r6-gates〕同一套界線規則也套在第一層零成本閘門：拆題模型給的章
 //   規則判定要換時直接改章，仍記為閘門通過（source='gate'），data 多一個 adjustments。不呼叫 LLM、不動任何 cassette 的鍵。
+// 〔Owner 2026-09-27 改答 LC-2：加四條規則，dec/r6-classify-rules〕規則表多四條（docs/local-mode.md 10.22）：K3 的平方關係
+//   （疊合 → 直角三角形的邊角關係）、廣義角（直角三角形 → 廣義角與極坐標）、摩擦係數（牛頓運動定律 → 摩擦力與向心力）、
+//   等速圓周運動的運動學（摩擦力與向心力 → 平面運動）。接線不變：第二層與閘門都經 boundaryTarget，本檔程式沒改。
 
 const { CHAPTERS, SUBJECTS, isValidChapter, isValidSubject } = require('../config/chapters');
 const { getChapterExample } = require('../config/chapterExamples');

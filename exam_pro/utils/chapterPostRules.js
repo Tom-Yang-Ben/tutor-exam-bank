@@ -23,6 +23,17 @@
 //
 // 這些規則寫的時候看過 2026-09-25 的 15 題錯題（證據字是照著錯題的型態挑的）；回歸測試在同一批題上的改善
 // 會高估對新題的效果。每條規則另有「不該觸發」的反例測試（test/unit/chapterPostRules.test.js）。
+//
+// 〔Owner 2026-09-27 改答 LC-2：加四條規則〕上面第 2 點「刻意不寫」的兩組（圓周運動的運動學／受力、直角三角形／疊合），
+//   Owner 在 2026-09-27 classify.v2 本機重錄（92 題錯 6 題）之後改答 LC-2（原選 1＝不加），加四條界線（docs/local-mode.md
+//   10.22「classify 重錄後的四條界線規則（2026-09-27，改答 LC-2）」）：
+//     trig_square_relation  三角函數的疊合 → 直角三角形的邊角關係（只有 sin²＋cos² 這類平方關係，K3）
+//     general_angle         直角三角形的邊角關係 → 廣義角與極坐標（求三角函數值的角度 >90° 或 <0°）
+//     friction_coefficient  牛頓運動定律 → 摩擦力與向心力（題幹出現摩擦係數）
+//     circular_kinematics   摩擦力與向心力 → 平面運動（等速圓周運動只問運動學量，沒有受力計算）
+//   原則照舊：每條只管一對章、證據不明確（兩種線索都有、有別章的線索）就不換。這四條是**看著 2026-09-27 的錯題**
+//   （cls-fx-025、026、027、041、046）寫的，同一批題上的改善會高估對新題的效果；必修運動學／直線運動的一般情形
+//   （cls-fx-051 那一組）仍然不寫。
 
 const { CHAPTERS, isValidChapter } = require('../config/chapters');
 const { KEYWORD_RULES, findNonCommonLogBase, findVariableExponent } = require('../config/chapterMigrationRules');
@@ -251,6 +262,207 @@ function freeFallComputationEvidence(text) {
     return ask ? `${topic[0]}＋${ask[0]}` : null;
 }
 
+// ───────────────────────── 〔Owner 2026-09-27 改答 LC-2〕證據：三角（K3 的平方關係、廣義角） ─────────────────────────
+
+const RIGHT_TRIANGLE = '直角三角形的邊角關係';
+const GENERAL_ANGLE = '廣義角與極坐標';
+const TRIG_COMBINATION = '三角函數的疊合';
+
+const SUPERSCRIPT_DIGITS = Object.freeze({
+    '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁻': '-'
+});
+
+/**
+ * 三角題的比對用文字：一串上標數字先寫成 ^{n} 再做 NFKC（直接 NFKC 會把「sin²40°」變成「sin240°」，被當成 240°；
+ * 寫成 ^2 也不行，「sin^240°」分不出 2 次方與 40°），º、˚ 當成度的符號，減號（U+2212）當成 -。
+ * @param {string} text
+ * @returns {string}
+ */
+function normalizeTrigText(text) {
+    return String(text ?? '')
+        .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+/g, run => `^{${[...run].map(ch => SUPERSCRIPT_DIGITS[ch]).join('')}}`)
+        .replace(/[º˚]/g, '°')
+        .normalize('NFKC')
+        .replace(/−/g, '-');
+}
+
+const TRIG_FN = String.raw`(?<![A-Za-z])\\?(?:sin|cos|tan|cot|sec|csc)(?![A-Za-z])`;
+/** 函數名後面的次方（\sin^2、\sin^{2}、\sin^{-1}）：只吃一位數或大括號，「\sin^240^\circ」才分得出 2 次方與 40° */
+const TRIG_POWER = String.raw`(?:\s*\^\s*(?:\{\s*-?\d+\s*\}|-?\d))?`;
+/** 度的寫法：^\circ、^{\circ}、°、\degree、「度」；數字與 ^ 之間可以夾一個空的 {} */
+const DEGREE = String.raw`(?:\{\s*\})?\s*(?:\^\s*\{?\s*\\circ\s*\}?|°|\\degree(?![A-Za-z])|度)`;
+const CN_TRIG_FN = '(?:正弦|餘弦|正切|餘切|正割|餘割)';
+
+/** \sin 150^\circ、\cos(-30°)、\tan\left(210^{\circ}\right)、\sin^2 40^\circ */
+const TRIG_ANGLE_RE = new RegExp(String.raw`${TRIG_FN}${TRIG_POWER}\s*(?:\\left\s*)?[({]?\s*(-)?\s*(\d+(?:\.\d+)?)${DEGREE}`, 'g');
+/** 「150° 的正弦（函數）值」「$-30^\circ$ 角的餘弦」 */
+const ANGLE_THEN_CN_RE = new RegExp(String.raw`(-)?\s*(\d+(?:\.\d+)?)${DEGREE}\s*\$?\s*角?\s*的\s*(?:三角函數|三角比|${CN_TRIG_FN})`, 'g');
+/** 「正弦 150°」「餘弦函數值 (-30°)」 */
+const CN_THEN_ANGLE_RE = new RegExp(String.raw`${CN_TRIG_FN}(?:函數)?值?\s*\$?\s*(?:\\left\s*)?[({]?\s*(-)?\s*(\d+(?:\.\d+)?)${DEGREE}`, 'g');
+
+/**
+ * 題幹裡「三角函數作用在一個以度表示的數字角」的每一處。只收直接寫成數字的角：
+ * 「θ＝150°，求 sin θ」「sin(180°−θ)」不收（證據不夠直接）。
+ * @param {string} text 已經過 normalizeTrigText
+ * @returns {Array<{deg:number, raw:string}>}
+ */
+function trigAngles(text) {
+    const out = [];
+    for (const re of [TRIG_ANGLE_RE, ANGLE_THEN_CN_RE, CN_THEN_ANGLE_RE]) {
+        re.lastIndex = 0;
+        for (const m of text.matchAll(re)) {
+            const deg = Number(m[2]) * (m[1] ? -1 : 1);
+            if (Number.isFinite(deg)) out.push({ deg, raw: m[0].trim() });
+        }
+    }
+    return out;
+}
+
+/** 和角、差角、倍角、半角、疊合、和差化積：屬第三冊「和角與差角公式」「三角函數的疊合」的題材 */
+const COMPOUND_ANGLE_CUE = /疊合|和角|差角|倍角|半角|和差|積化|化積/;
+/** 角度裡有 ±（\sin(x+\phi)、\cos(60°+45°)、\sin(180°-30°)）：開頭的負號（\sin(-30°)）不算 */
+const COMPOUND_ARGUMENT_RE = new RegExp(String.raw`${TRIG_FN}${TRIG_POWER}\s*(?:\\left\s*)?\(\s*[^()]*?[0-9A-Za-z}°\u0370-\u03FF]\s*[+-]\s*[^()]*\)`);
+/** 倍角：\sin 2\theta、\cos(2x)、\sin 3α */
+const MULTIPLE_ANGLE_RE = new RegExp(String.raw`${TRIG_FN}${TRIG_POWER}\s*(?:\\left\s*)?\(?\s*\d+\s*(?:\\(?:theta|alpha|beta|gamma|phi|varphi)(?![A-Za-z])|[xtθαβγφ](?![A-Za-z]))`);
+/** 一次的 sin 與 cos 相加減（a sinθ＋b cosθ 的疊合形式，或 (sinθ＋cosθ)² 這種要另外判斷的題） */
+const LINEAR_COMBINATION_RE = new RegExp(String.raw`(?<![A-Za-z])\\?(sin|cos)(?![A-Za-z])(?!\s*\^)[^=，。,;；？?]{0,25}?[+-][^=，。,;；？?]{0,15}?\\?(?!\1)(?:sin|cos)(?![A-Za-z])(?!\s*\^)`);
+/** 弧度：108 課綱的弧度在第三冊「三角函數的圖形」，出現弧度時「直角三角形／廣義角」這一對不一定是答案 */
+const RADIAN_CUE = /\\pi(?![A-Za-z])|π|弧度|(?<![A-Za-z])rad(?![A-Za-z])/;
+/** 第三冊的函數題材：最大最小值（疊合的典型用途）、週期、振幅、圖形 */
+const TRIG_FUNCTION_CUE = /最大值|最小值|極大|極小|值域|週期|周期|振幅|圖形|圖像/;
+/** 廣義角的題材（CHAPTER_RELABEL 第 0 節：廣義角與同界角、以坐標定義的三角比、參考角與象限正負號、極坐標） */
+const GENERAL_ANGLE_CUE = /廣義角|象限|終邊|同界|標準位置|參考角|單位圓|極坐標|極座標/;
+/** 解三角形的題材：鈍角三角形的角可以大於 90°，那是「正弦與餘弦定理」「三角測量」，不一定是廣義角 */
+const TRIANGLE_SOLVING_CUE = /三角形|正弦定理|餘弦定理|面積|仰角|俯角|測量|方位/;
+
+/**
+ * 題幹裡平方的三角函數（\sin^2、\sin^{2}、sin²、(\sin\theta)^2）。
+ * @param {string} s 已經過 normalizeTrigText
+ * @param {string} fn sin、cos、tan、sec、cot、csc
+ * @returns {string|null}
+ */
+function squaredTrig(s, fn) {
+    const re = new RegExp(String.raw`(?<![A-Za-z])\\?${fn}(?![A-Za-z])\s*\^\s*(?:\{\s*2\s*\}|2(?!\d))|\(\s*\\?${fn}(?![A-Za-z])[^()]{0,20}\)\s*\^\s*(?:\{\s*2\s*\}|2(?!\d))`);
+    const m = s.match(re);
+    return m ? m[0].trim() : null;
+}
+
+/**
+ * K3＋Owner 2026-09-27 規則 1：題幹的三角運算只有平方關係（sin²θ＋cos²θ＝1、1＋tan²θ＝sec²θ 這類），
+ * 沒有和角、差角、倍角、疊合（a sinθ＋b cosθ）、第三冊的函數題材、弧度，也沒有廣義角的線索（角度 >90° 或 <0°、象限、終邊…）。
+ * 平方關係對廣義角也成立（第二冊「廣義角與極坐標」也教），有廣義角線索時不判斷。
+ * @param {string} text
+ * @returns {string|null} 命中的原文
+ */
+function squareRelationEvidence(text) {
+    const s = normalizeTrigText(text);
+    if (COMPOUND_ANGLE_CUE.test(s) || COMPOUND_ARGUMENT_RE.test(s) || MULTIPLE_ANGLE_RE.test(s) || LINEAR_COMBINATION_RE.test(s)) return null;
+    if (RADIAN_CUE.test(s) || TRIG_FUNCTION_CUE.test(s) || GENERAL_ANGLE_CUE.test(s) || /正弦定理|餘弦定理/.test(s)) return null;
+    if (trigAngles(s).some(a => a.deg > 90 || a.deg < 0)) return null;
+    const word = s.match(/平方關係/);
+    if (word) return word[0];
+    const sq = (fn) => squaredTrig(s, fn);
+    const pairs = [['sin', 'cos'], ['tan', 'sec'], ['tan', 'cos'], ['cot', 'csc'], ['cot', 'sin']];
+    for (const [a, b] of pairs) {
+        const ma = sq(a);
+        const mb = ma && sq(b);
+        if (mb) return `${ma}＋${mb}`;
+    }
+    return null;
+}
+
+/**
+ * Owner 2026-09-27 規則 2：題幹求三角函數值的角度大於 90° 或小於 0°（150°、-30°、210°）→ 廣義角。0°～90° 不判斷。
+ * 不判斷的情形：弧度（第三冊，見 RADIAN_CUE）、解三角形的題材（鈍角三角形）、和角／差角／倍角／疊合的題材。
+ * @param {string} text
+ * @returns {string|null} 命中的原文（第一個超出 0°～90° 的角）
+ */
+function generalAngleEvidence(text) {
+    const s = normalizeTrigText(text);
+    if (RADIAN_CUE.test(s) || TRIANGLE_SOLVING_CUE.test(s)) return null;
+    if (COMPOUND_ANGLE_CUE.test(s) || COMPOUND_ARGUMENT_RE.test(s)) return null;
+    const hit = trigAngles(s).find(a => a.deg > 90 || a.deg < 0);
+    return hit ? hit.raw : null;
+}
+
+// ───────────────────────── 〔Owner 2026-09-27 改答 LC-2〕證據：物理（摩擦係數、等速圓周運動的運動學） ─────────────────────────
+
+const NEWTON_LAWS = '牛頓運動定律';
+const FRICTION_CENTRIPETAL = '摩擦力與向心力';
+
+/** 摩擦係數的字眼（Owner 規則 3：μ、摩擦係數、動摩擦、靜摩擦） */
+const FRICTION_WORD_RE = /[動靜]?摩擦係數|動摩擦|靜摩擦/g;
+/** 前後文說「沒有摩擦」：不計、忽略、無、為零 */
+const FRICTION_NEGATION_BEFORE = /(?:不計|忽略|無|沒有|不考慮|不含)[^，。；,;？?]{0,2}$/;
+const FRICTION_NEGATION_AFTER = /^[^，。；,;？?]{0,4}?(?:不計|可忽略|忽略不計|為零|=\s*0(?![.\d])|為\s*0(?![.\d]))/;
+/**
+ * 符號 μ 當摩擦係數：後面是關係符號再接一個數（μ＝0.2、\mu_k = 0.1、μs 為 0.4、\mu = \frac{1}{2}）。
+ * μm、μC、μs（微秒）後面沒有關係符號；「μ 為線密度」後面不是數；\mu_0（磁導率）的下標不是 k／s。
+ * micro 符號 µ（U+00B5）經 NFKC 變成 μ。第 1 組是那個數（＝0 表示沒有摩擦，不算）。
+ */
+const MU_RELATION_RE = /(?:\\mu|μ)(?![A-Za-z])\s*(?:_\s*\{?\s*(?:\\(?:text|mathrm)\s*\{\s*)?[ksKS靜動]\s*\}?\s*\}?)?\s*(?:=|為|是|<|>|≤|≥|≈|\\(?:le|ge|leq|geq|approx)(?![A-Za-z]))\s*\$?\s*(\d+(?:\.\d+)?|\.\d+|\\[dt]?frac(?![A-Za-z])|\\sqrt(?![A-Za-z]))/;
+/** μ 的其他意思：磁導率（μ₀）、電學的微（μC、μA）、弦的線密度；題幹有這些題材時，只有符號 μ 不算證據 */
+const MU_OTHER_CONTEXT = /磁|電荷|電場|電流|電位|電壓|電容|電阻|導線|線圈|線密度|弦|波|\\mu\s*_\s*\{?\s*0|μ\s*_?\s*\{?\s*0/;
+/**
+ * 功與能量、動量的題材（功與動能、位能與能量守恆、動量與衝量…另一組章）：題幹有這些題材時，
+ * 「牛頓運動定律／摩擦力與向心力」「摩擦力與向心力／平面運動」這兩對不一定是答案，不判斷。
+ */
+const WORK_ENERGY_MOMENTUM_CUE = /[作做]了?[^，。；,;？?]{0,4}功|功率|功能|力學能|動能|位能|能量|生熱|熱量|動量|衝量|碰撞/;
+
+/**
+ * Owner 2026-09-27 規則 3：物理題幹出現摩擦係數（μ、摩擦係數、動摩擦、靜摩擦）。
+ * 前後文寫明沒有摩擦（「不計摩擦係數」「摩擦係數為零」「μ＝0」）的那一處不算；
+ * 題幹有功與能量、動量的題材時不判斷（WORK_ENERGY_MOMENTUM_CUE）。
+ * @param {string} text
+ * @returns {string|null} 命中的原文
+ */
+function frictionCoefficientEvidence(text) {
+    const s = String(text ?? '').normalize('NFKC');
+    if (WORK_ENERGY_MOMENTUM_CUE.test(s)) return null;
+    for (const m of s.matchAll(FRICTION_WORD_RE)) {
+        const before = s.slice(Math.max(0, m.index - 6), m.index);
+        const after = s.slice(m.index + m[0].length, m.index + m[0].length + 12);
+        if (FRICTION_NEGATION_BEFORE.test(before) || FRICTION_NEGATION_AFTER.test(after)) continue;
+        return m[0];
+    }
+    if (MU_OTHER_CONTEXT.test(s)) return null;
+    const mu = s.match(MU_RELATION_RE);
+    if (mu && !(/^[\d.]+$/.test(mu[1]) && Number(mu[1]) === 0)) return mu[0].trim();
+    return null;
+}
+
+/** 等速圓周運動（Owner 規則 4 的前提：題幹是等速圓周運動） */
+const UNIFORM_CIRCULAR_RE = /等速率?圓周運動|勻速率?圓周運動|等速率?圓周/;
+/** 運動學量：速率、速度（方向）、加速度（向心加速度、指向圓心）、角速度、週期、頻率 */
+const CIRCULAR_KINEMATIC_RE = /向心加速度|角速度|加速度|速率|速度|週期|周期|頻率|轉速|切線|指向圓心/;
+/**
+ * 受力計算的線索：向心力、張力、摩擦、各種力的名稱、質量（F＝ma 要用）、力的單位 N、「求…力」「力的大小／方向為何」。
+ * 選項裡「合力為零」這種要判斷對錯的敘述不算受力計算（CHAPTER_RELABEL 第 8.1 節 #46 的 Owner 裁決理由：
+ * 「四個選項只問速率、速度、加速度方向與合力是否為零，是運動學」）；「求合力」「合力的大小／方向為何」算。
+ */
+const CIRCULAR_FORCE_RE = /向心力|張力|摩擦|拉力|推力|正向力|法向力|支撐力|離心力|引力|重力|重量|質量|公斤|kg|牛頓|施力|受力|作用力|力矩|繩|細線|彈簧|壓力|\\mathrm\s*\{\s*N\s*\}|(?<![A-Za-z\\])N(?![A-Za-z])|多大的力|求[^。，,；;？?]{0,8}力|力[^。，,；;？?]{0,4}(?:大小|量值|多少|為何|多大|方向)/;
+/**
+ * 等速圓周運動只是工具、題目屬別章的題材：簡諧運動（圓周運動的投影）、帶電粒子在磁場中、行星與衛星（重力場）、
+ * 轉動與角動量。題幹有這些題材時不判斷。
+ */
+const CIRCULAR_OTHER_TOPIC = /簡諧|投影|磁|電場|電荷|帶電|庫侖|行星|衛星|克卜勒|角動量|轉動慣量|剛體/;
+
+/**
+ * Owner 2026-09-27 規則 4：題幹是等速圓周運動，只問速率、速度方向、向心加速度等運動學量，
+ * 沒有要算向心力大小、張力、摩擦力提供向心力等受力計算（classify.v2 物理規則 6、CHAPTER_RELABEL 第 8.0 節）。
+ * 兩種線索都有（運動學量＋受力）、或題幹屬別章的題材（CIRCULAR_OTHER_TOPIC、功與能量）時不判斷。
+ * @param {string} text
+ * @returns {string|null} 命中的原文（「等速圓周運動＋速率」）
+ */
+function circularKinematicsEvidence(text) {
+    const s = String(text ?? '').normalize('NFKC');
+    const topic = s.match(UNIFORM_CIRCULAR_RE);
+    if (!topic || CIRCULAR_FORCE_RE.test(s) || CIRCULAR_OTHER_TOPIC.test(s) || WORK_ENERGY_MOMENTUM_CUE.test(s)) return null;
+    // 「等速率圓周運動」本身含「速率」：先拿掉主題字，再找題目問的運動學量
+    const cue = s.replace(new RegExp(UNIFORM_CIRCULAR_RE.source, 'g'), '').match(CIRCULAR_KINEMATIC_RE);
+    return cue ? `${topic[0]}＋${cue[0]}` : null;
+}
+
 // ───────────────────────── 規則表 ─────────────────────────
 
 /**
@@ -316,6 +528,27 @@ const RULES = Object.freeze([
         id: 'free_fall_computation', from: REQUIRED_MOTION, to: LINEAR_MOTION,
         source: 'CHAPTER_RELABEL 第 8.0 節第三條：需要代入等加速度公式求數值的歸直線運動（classify.v2 物理規則 5）',
         test: freeFallComputationEvidence
+    },
+    // 〔Owner 2026-09-27 改答 LC-2：加四條規則〕docs/local-mode.md 10.22
+    {
+        id: 'trig_square_relation', from: TRIG_COMBINATION, to: RIGHT_TRIANGLE,
+        source: '重練與收尾決策單 K3（選 1）＋Owner 2026-09-27 改答 LC-2 規則 1：題幹的三角運算只有 sin²θ＋cos²θ＝1 這類平方關係（沒有和角、差角、倍角、疊合）的，歸第二冊直角三角形的邊角關係（classify.v2 數學規則 7）',
+        test: squareRelationEvidence
+    },
+    {
+        id: 'general_angle', from: RIGHT_TRIANGLE, to: GENERAL_ANGLE,
+        source: 'Owner 2026-09-27 改答 LC-2 規則 2：求三角函數值的角度大於 90° 或小於 0° 屬廣義角（CHAPTER_RELABEL 第 0 節：廣義角與同界角、參考角與象限正負號）',
+        test: generalAngleEvidence
+    },
+    {
+        id: 'friction_coefficient', from: NEWTON_LAWS, to: FRICTION_CENTRIPETAL,
+        source: 'Owner 2026-09-27 改答 LC-2 規則 3：物理題幹出現摩擦係數（μ、摩擦係數、動摩擦、靜摩擦）的，歸摩擦力與向心力（知識點 PHYS.摩擦力與向心力.01～.03）',
+        test: frictionCoefficientEvidence
+    },
+    {
+        id: 'circular_kinematics', from: FRICTION_CENTRIPETAL, to: PLANAR_MOTION,
+        source: 'Owner 2026-09-27 改答 LC-2 規則 4：等速圓周運動只問速率、速度方向、向心加速度等運動學量（不求向心力、張力、摩擦）的，歸平面運動（classify.v2 物理規則 6；CHAPTER_RELABEL 第 8.0 節、第 8.1 節 #46）',
+        test: circularKinematicsEvidence
     }
 ].map(rule => Object.freeze(rule)));
 
@@ -364,5 +597,8 @@ module.exports = {
     boundaryTarget, alignChapters, RULES,
     // 證據函式（單元測試用）
     thirdVolumeEvidence, firstVolumeEvidence, findVariableLogArgument, THIRD_VOLUME_KEYWORDS,
-    coordinateTuples, dimensionEvidence, relativeMotionEvidence, freeFallComputationEvidence
+    coordinateTuples, dimensionEvidence, relativeMotionEvidence, freeFallComputationEvidence,
+    // 〔Owner 2026-09-27 改答 LC-2〕
+    normalizeTrigText, trigAngles, squareRelationEvidence, generalAngleEvidence,
+    frictionCoefficientEvidence, circularKinematicsEvidence
 };
