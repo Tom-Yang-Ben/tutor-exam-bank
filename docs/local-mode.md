@@ -1441,6 +1441,10 @@ C-f 的細節：
 3. `.env` 若照舊範本明寫了 `VARIANT_RETRIEVE_SIM_MIN=0.80`、`VARIANT_OFFTOPIC_SIM_MIN=0.90`、`DEDUP_DUP_THRESHOLD=0.97`、`VARIANT_SIM_MIN` 這幾行，刪掉（10.19 第 2 點；不刪的話正式上傳用的是舊值，伺服器視窗啟動時會提醒）。**重錄不受影響**：錄製子行程一律把這幾個變數清成空白、照程式預設（本機 0.72／0.87／0.99），與 CI 回放相同。
 4. **O-5 要先答**（[`owner-pending-decisions-r5.md`](owner-pending-decisions-r5.md) O-5：lint 的模板要不要也加「JSON 字串裡的反斜線寫兩個」）。lint 沒有自己的 suite，它的回放檔是在第 2 步 variant 與第 3 步 pipeline 裡順帶錄的；錄製模式每次都整步重呼叫模型，**variant 錄完才改 lint 的話，第 2、3 步要整個再錄一次**（再花 8～12 小時）。
 5. 盤點（只回放、不連網、幾分鐘）：`npm run cassettes:rerecord -- --dry-run`。整合當天（CI 環境）的盤點：classify 92、nlq 8、variant 60、pipeline 1（`extract_ocr`）、e2e 1（同一支 `extract_ocr`）筆 replay miss，缺向量 0。
+6. **先看懂「成功」長什麼樣**（第 1～3 步都用這個標準）：錄完工具會以回放模式把錄的 suite 各跑一次，印一張「回放驗證」表（suite｜結束碼｜replay miss｜缺向量｜門檻）。**錄製成功＝這次錄的每一列 replay miss 與缺向量兩欄都是 0**（e2e 那一列看 pass／fail）。
+   - 「門檻」欄是 ❌ 時，那一列的結束碼會是 1（eval 未達門檻就回 1，與 CI 相同），所以視窗最後印的是「[!] 錄製或回放驗證沒有全過」、`record_local.bat` 的結束碼是 1，**不會**印「[OK] 重錄與回放驗證都通過」。**只有門檻欄 ❌、replay miss 與缺向量都是 0 時，這是預期的，錄製已經成功，不要重跑**；工具也會多印一行「回放檔已經錄齊……不要重錄」。門檻不放寬、照實紅燈（10.7 第 7 點），把 log 交給維護的人。
+   - 只有 replay miss 或缺向量不是 0 時，才照視窗的提示重跑同一個指令。
+   - 視窗錄完印的「下一步」會提到 `cassettes:prune`：只列、先不要 `--apply`（第 4 步第 6 點）。
 
 #### 1. classify.v2＋nlq.v2（約 1.5～2 小時）
 
@@ -1453,7 +1457,7 @@ rerecord 依序跑（模式由工具設定，不必自己設環境變數）：
 - `classify`：`LLM_MODE=record`、`EMBED_MODE=fixture`（92 題；10.15 估約 1.5 小時）
 - `nlq`：`LLM_MODE=record`、`EMBED_MODE=record`（8 句，含查詢句的向量；約 5～10 分）
 
-**怎麼確認成功**：視窗最後印「[OK] 重錄與回放驗證都通過」；log 最後的「回放驗證」表 classify、nlq 兩列的 replay miss 都是 0。門檻那一欄若是 ❌ 不算失敗（Owner 已裁決門檻不放寬、照實紅燈，10.7 第 7 點），照 10.15 第 7 點「重錄後怎麼看」看 accuracy／macro-F1 與 nlq 的 llm 欄。
+**怎麼確認成功**：以 log 最後的「回放驗證」表為準（第 0 步第 6 點）：classify、nlq 兩列的 replay miss 與缺向量都是 0。視窗最後印「[OK] 重錄與回放驗證都通過」只發生在兩列門檻也都 ✅ 時；classify 或 nlq 任一列門檻 ❌，視窗會印「[!] 錄製或回放驗證沒有全過」、結束碼 1——**只有門檻欄 ❌ 時這是預期的，不要重跑**（Owner 已裁決門檻不放寬、照實紅燈，10.7 第 7 點）。之後照 10.15 第 7 點「重錄後怎麼看」看 accuracy／macro-F1 與 nlq 的 llm 欄。
 
 #### 1a. （條件步驟）O-5 選 2 時：先讓 lint.v3 進來，不另外錄
 
@@ -1469,7 +1473,7 @@ scripts\windows\record_local.bat variant
 - `embeddings`：`LLM_MODE=replay`、`EMBED_MODE=live`
 - `variant`：`LLM_MODE=record`、`EMBED_MODE=record`（30 個藍本 × 2 題＝60 次生成，每題再跑分類、lint、驗算；生成題的向量同一步錄。上次 `variant.v1` 花 17,292 秒≈4.8 小時；`variant.v2` 的 prompt 多了兄弟題幹、第 2 題多讀幾百字，估 5～6 小時）
 
-**怎麼確認成功**：同第 1 步，variant 那一列 replay miss 0、缺向量 0，`gate_pass_rate` 是數字（不是 n/a）。`retrieved_coverage` 0.5000 低於門檻 0.8367 是已知狀況（10.19，V5-1 之後），與重錄無關。
+**怎麼確認成功**：以回放驗證表為準（第 0 步第 6 點）：variant 那一列 replay miss 0、缺向量 0，`gate_pass_rate` 是數字（不是 n/a）。**這一步視窗一定印「[!] 錄製或回放驗證沒有全過」、結束碼 1，不會印 [OK]**：`retrieved_coverage` 0.5000 低於門檻 0.8367 是已知狀況（10.19，V5-1 之後），與重錄無關，門檻欄必是 ❌、那一列結束碼必是 1。replay miss 與缺向量都是 0 就是成功，**不要重跑**（重跑要再花 5～6 小時，錄出來也一樣）。
 
 #### 3. pipeline＋e2e（OCR 為主，`extract_ocr.v2`；約 2.5～5.5 小時）
 
@@ -1482,7 +1486,7 @@ scripts\windows\record_local.bat pipeline,e2e
 
 `ci.yml` 寫的是 `LOCAL_EXTRACT_MODE: ocr`：只錄 `ocr` 與 `extract_ocr`，**不呼叫看圖模型**，錄前檢查也不要求 `qwen3-vl:8b`，但要 PaddleOCR 自我檢查通過。
 
-**怎麼確認成功**：回放驗證表 pipeline 的 replay miss 0，`saved_rate` 印 n/a（OCR 模式設計如此，10.18 第 5 點）、另有「人工核准前的通過率」一行是數字；e2e 那一列是 `pass 12／fail 0`（OCR 模式下 e2e 驗的是「每題停在複核 → 核准一題入庫」，10.12 第 7 點）。
+**怎麼確認成功**：以回放驗證表為準（第 0 步第 6 點）：pipeline 那一列 replay miss 0、缺向量 0；門檻欄的 `saved_rate` 寫「n/a（不比門檻：OCR 模式…）」、不算 ❌（OCR 模式設計如此，D-2，10.18 第 5 點），pipeline 的 log 另有「人工核准前的通過率」一行是數字；e2e 那一列是 `pass 12／fail 0`（OCR 模式下 e2e 驗的是「每題停在複核 → 核准一題入庫」，10.12 第 7 點）。`gate_pass_rate`、`answer_agree_rate` 照舊比門檻：其中一項 ❌ 時視窗會印 [!]、結束碼 1，同第 0 步第 6 點，**不要重跑**。
 
 #### 4. 全部錄完之後（只讀檔，不呼叫模型）
 

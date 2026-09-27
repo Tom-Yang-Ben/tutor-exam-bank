@@ -204,16 +204,21 @@ function formatSummary(res, opts = {}) {
 
 /**
  * 一份 eval 報表對照門檻，排成逐列結果。
+ * 〔Owner 第五輪 D-2〕報表的 not_applicable（eval/lib/report2.js 寫入；run.js 比門檻時用的同一份）照樣傳給
+ * thresholds.compareSuite：白名單內的指標（例：OCR 模式的 pipeline.saved_rate）列成 na、不算失敗；
+ * 白名單以外的組合 compareSuite 會丟錯，不讓報表自己宣告「這個門檻不算」。
  * @param {object} doc eval/reports/*.json 的內容（retrieval 或 stage2／3 的形狀）
  * @param {object} [table] thresholds.json 的內容；未給時讀 eval/thresholds.json
- * @returns {{suite:string, rows:Array<{metric:string, measured:number|null, threshold:number, ok:boolean}>, failures:string[], skipped:string[]}}
+ * @returns {{suite:string, rows:Array<{metric:string, measured:number|null, threshold:number, ok:boolean, na?:string}>, failures:string[], skipped:string[]}}
  */
 function thresholdRows(doc, table = thresholds.loadThresholds()) {
     const suite = doc.suite;
     const measured = doc.measured || {};
     const spec = thresholds.SUITE_METRICS[suite];
     if (!spec) throw new Error(`未知的 suite「${suite}」`);
-    const cmp = suite === 'retrieval' ? thresholds.compare(table, measured) : thresholds.compareSuite(table, suite, measured);
+    const notApplicable = doc.not_applicable || undefined;
+    const cmp = suite === 'retrieval' ? thresholds.compare(table, measured)
+        : thresholds.compareSuite(table, suite, measured, { notApplicable });
     const want = table[suite] || {};
     const rows = [];
     for (const column of spec.columns) {
@@ -222,6 +227,8 @@ function thresholdRows(doc, table = thresholds.loadThresholds()) {
             if (typeof t !== 'number') continue;
             const got = measured[column] ? measured[column][metric] : null;
             const v = typeof got === 'number' ? got : null;
+            const na = notApplicable && notApplicable[column] && notApplicable[column][metric];
+            if (na) { rows.push({ metric: `${column}.${metric}`, measured: v, threshold: t, ok: true, na }); continue; }
             rows.push({ metric: `${column}.${metric}`, measured: v, threshold: t, ok: v !== null && v + 1e-9 >= t });
         }
     }

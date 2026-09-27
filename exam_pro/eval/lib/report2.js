@@ -195,6 +195,9 @@ function emit(opts) {
         suite: res.suite,
         meta: res.meta,
         measured: res.measured,
+        // 〔Owner 第五輪 D-2〕這一輪設計上不比的指標（run.js 比門檻時用的同一份）；
+        // 重錄工具的回放驗證表（eval/lib/cassettePlan.js 的 thresholdRows）讀它，才不會把 OCR 模式的 saved_rate 列成 ❌
+        not_applicable: res.notApplicable || null,
         warnings: [...new Set(res.warnings || [])],
         // 私有層一律不寫逐題明細（規劃 §5.3.2）
         detail: opts.private ? null : {

@@ -159,3 +159,122 @@ describe('docs/local-mode.md 10.21 與工具一致', () => {
         assert.equal(bench.parseArgs(['--agent', 'verify']).agent, 'verify');
     });
 });
+
+// ─────────────────────────────────────────────────────────────
+// 〔整合 r6 審查修正 dec/integration-r6-fix〕10.21 的「怎麼確認成功」要與工具實際的判定一致：
+//   ① eval 未達門檻 → run.js 結束碼 1 → verifyReport.ok=false → record_local.bat 印 [!]（不會印 [OK]）；
+//      所以 10.21 以回放驗證表的 replay miss／缺向量為準，並寫明「只有門檻欄 ❌ 不要重跑」，variant 一定是這樣。
+//   ② OCR 模式的 pipeline 報表帶 not_applicable（D-2）：重錄工具的回放驗證表不把 saved_rate 列成 ❌、不列進「門檻未達」。
+// ─────────────────────────────────────────────────────────────
+describe('〔r6 審查〕10.21 的成功判準與 verifyReport／thresholdRows 一致', () => {
+    const os = require('node:os');
+    const audit = require('../../eval/lib/cassetteAudit');
+    const { thresholdRows } = require('../../eval/lib/cassettePlan');
+    const report2 = require('../../eval/lib/report2');
+    const suitePipeline = require('../../eval/lib/suitePipeline');
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rerecord-r6-'));
+    const TABLE = { pipeline: { pipeline: { saved_rate: 0.87, gate_pass_rate: 0.97, answer_agree_rate: 0.87 } } };
+
+    /** 一個 suite、零 replay miss、零缺向量的回放盤點（cassetteAudit.summarize 的形狀） */
+    function analysisOf(suite, { exitCode, reportFile }) {
+        const events = [{ suite, kind: 'start' }];
+        const runs = { [suite]: { exitCode, tail: [], reportFiles: reportFile ? [reportFile] : [] } };
+        return { runs, events, summary: audit.summarize({ events, entries: [], suites: [suite], runs }) };
+    }
+
+    test('run.js：eval 未達門檻就把結束碼設成 1（與 CI 相同；10.21 因此不能拿 [OK] 當成功判準）', () => {
+        const src = fs.readFileSync(path.join(APP_DIR, 'eval', 'run.js'), 'utf8');
+        assert.match(src, /if \(cmp\.failures\.length\) \{\s*console\.error\(`\\n❌ \$\{res\.suite\} eval 未達門檻[^]*?process\.exitCode = 1;/);
+    });
+
+    test('門檻紅也會讓 verifyReport.ok=false（即使 replay miss 與缺向量都是 0）：variant 的 retrieved_coverage 0.5 < 0.8367', () => {
+        const file = path.join(tmp, 'variant.json');
+        fs.writeFileSync(file, JSON.stringify({ suite: 'variant', measured: { variant: { retrieved_coverage: 0.5, gate_pass_rate: 0.9 } } }), 'utf8');
+        // 錄完的回放：run.js 因門檻未達回 1（門檻讀 eval/thresholds.json 本身，不另造）
+        const v = rerecord.verifyReport(analysisOf('variant', { exitCode: 1, reportFile: file }));
+        assert.equal(v.missTotal, 0);
+        assert.equal(v.ok, false, '門檻紅 → 結束碼 1 → ok=false → record_local.bat 印 [!]');
+        assert.ok(v.lines.some(l => l.startsWith('| variant | 1 | 0 | 0 | ❌') && l.includes('variant.retrieved_coverage 0.5000 <')), v.lines.join('\n'));
+        assert.ok(v.thresholdFailures.some(f => f.startsWith('variant：variant.retrieved_coverage')));
+    });
+
+    test('record_local.bat：rerecord 回 1 時印 [!]、走不到 [OK]；並寫明「只有門檻欄紅燈…不要重跑」', () => {
+        const bat = fs.readFileSync(path.join(APP_DIR, 'scripts', 'windows', 'record_local.bat'), 'utf8');
+        const lines = bat.split('\r\n');
+        const rc = lines.indexOf('if "%RC%"=="0" goto :done_ok');
+        const fail = lines.findIndex(l => l.includes('[!] 錄製或回放驗證沒有全過'));
+        const ok = lines.findIndex(l => l.includes('[OK] 重錄與回放驗證都通過'));
+        assert.ok(rc > 0 && fail > rc && ok > fail && lines.slice(rc, ok).includes('exit /b %RC%'), '結束碼不是 0 就走 [!] 那一段，走不到 [OK]');
+        assert.ok(bat.includes('只有「門檻」欄紅燈、replay miss 與缺向量都是 0：錄製已經成功，不要重跑'));
+    });
+
+    test('10.21：成功以 replay miss 與缺向量為準；只有門檻欄 ❌ 不要重跑；第 2 步點名 variant 一定印 [!]', () => {
+        const doc = fs.readFileSync(path.join(REPO, 'docs', 'local-mode.md'), 'utf8');
+        const sec = doc.slice(doc.indexOf('### 10.21 '));
+        const step = (n) => {
+            const a = sec.indexOf(`#### ${n}. `);
+            const b = sec.indexOf(`#### ${n + 1}. `);
+            assert.ok(a >= 0, `找不到第 ${n} 步`);
+            return sec.slice(a, b > a ? b : undefined);
+        };
+        assert.match(step(0), /錄製成功＝這次錄的每一列 replay miss 與缺向量兩欄都是 0/);
+        assert.match(step(0), /只有門檻欄 ❌、replay miss 與缺向量都是 0 時，這是預期的，錄製已經成功，不要重跑/);
+        for (const n of [1, 2, 3]) {
+            const s = step(n);
+            assert.match(s, /\*\*怎麼確認成功\*\*：以(?: log 最後的「)?回放驗證(?:」)?表為準/, `第 ${n} 步`);
+            assert.match(s, /不要重跑/, `第 ${n} 步`);
+            assert.ok(!s.includes('視窗最後印「[OK] 重錄與回放驗證都通過」；'), `第 ${n} 步不可以把 [OK] 當成功判準`);
+        }
+        assert.match(step(2), /這一步視窗一定印「\[!\] 錄製或回放驗證沒有全過」、結束碼 1，不會印 \[OK\]/);
+        assert.match(step(3), /不算 ❌/);
+    });
+
+    test('pipeline OCR 模式的報表：not_applicable 寫進 JSON，thresholdRows 不產生 failures、saved_rate 那一列標 na', () => {
+        const na = { pipeline: { saved_rate: suitePipeline.OCR_SAVED_RATE_NOTE } };
+        const res = {
+            suite: 'pipeline',
+            measured: { pipeline: { saved_rate: null, gate_pass_rate: 1, answer_agree_rate: 0.9, n: 10 } },
+            notApplicable: na,
+            ocrOnly: { saved_rate_note: suitePipeline.OCR_SAVED_RATE_NOTE, pre_approval: { passed: 10, total: 10, rate: 1 } },
+            counts: { total: 10, saved: 0, needs_review: 10, rejected: 0, pending: 0 },
+            nodes: {}, reviewReasons: [],
+            cost: { token_in: 0, token_out: 0, token_thinking: 0, token_out_billed: 0, cost_usd: 0, latency_ms: 0 },
+            warnings: [],
+            meta: { pdf: 'eval/fixtures/sample_exam.pdf', questionsExpected: 10, llmMode: 'replay', agentSources: {}, stateMachine: 'x', db: null, sources: {}, cassetteDir: 'eval/cassettes' }
+        };
+        const origLog = console.log;
+        let emitted;
+        try { console.log = () => {}; emitted = report2.emit({ res, dir: tmp }); } finally { console.log = origLog; }
+        const doc = JSON.parse(fs.readFileSync(emitted.file, 'utf8'));
+        assert.deepEqual(doc.not_applicable, na);
+
+        const t = thresholdRows(doc, TABLE);
+        assert.deepEqual(t.failures, []);
+        const saved = t.rows.find(r => r.metric === 'pipeline.saved_rate');
+        assert.equal(saved.ok, true);
+        assert.equal(saved.na, suitePipeline.OCR_SAVED_RATE_NOTE);
+        assert.ok(t.rows.filter(r => !r.na).every(r => r.ok));
+
+        // 回放驗證表（門檻讀 eval/thresholds.json 本身）：那一列不是 ❌、註明不比門檻，也不列進「門檻未達」
+        const v = rerecord.verifyReport(analysisOf('pipeline', { exitCode: 0, reportFile: emitted.file }));
+        const row = v.lines.find(l => l.startsWith('| pipeline'));
+        assert.ok(!row.includes('❌'), row);
+        assert.match(row, /pipeline\.saved_rate n\/a（不比門檻：OCR 模式/);
+        assert.deepEqual(v.thresholdFailures, []);
+        assert.equal(v.ok, true);
+    });
+
+    test('沒有 not_applicable 的報表（交叉驗證／Gemini、舊報表）：saved_rate n/a 照舊是失敗；白名單以外的宣告直接丟錯', () => {
+        const measured = { pipeline: { saved_rate: null, gate_pass_rate: 1, answer_agree_rate: 0.9, n: 10 } };
+        const t = thresholdRows({ suite: 'pipeline', measured }, TABLE);
+        assert.deepEqual(t.failures, ['pipeline.saved_rate：門檻 0.87 但這次是 n/a']);
+        assert.equal(t.rows.find(r => r.metric === 'pipeline.saved_rate').ok, false);
+        assert.throws(() => thresholdRows({ suite: 'pipeline', measured, not_applicable: { pipeline: { gate_pass_rate: 'x' } } }, TABLE), /白名單/);
+    });
+
+    test('rerecord_all 錄完的「下一步」：cassettes:prune 先不要 --apply（與 10.21 第 4 步、record_local.bat 一致）', () => {
+        const src = fs.readFileSync(path.join(APP_DIR, 'eval', 'tools', 'rerecord_all.js'), 'utf8');
+        assert.ok(!src.includes('確認後 npm run cassettes:prune -- --apply'));
+        assert.ok(src.includes('npm run cassettes:prune 只列出 CI 不再讀到的過期檔；先不要 --apply'));
+    });
+});

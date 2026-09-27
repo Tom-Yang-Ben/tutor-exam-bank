@@ -215,9 +215,12 @@ function verifyReport(res) {
             if (file && fs.existsSync(file)) {
                 const t = thresholdRows(JSON.parse(fs.readFileSync(file, 'utf8')));
                 const bad = t.rows.filter(r => !r.ok);
+                const compared = t.rows.filter(r => !r.na);
+                // 〔Owner 第五輪 D-2〕白名單內「這一輪不比」的指標另外註明，不算 ❌
+                const naNote = t.rows.filter(r => r.na).map(r => `${r.metric} n/a（不比門檻：${r.na}）`).join('；');
                 verdict = t.rows.length === 0 ? '未設門檻（只報告）'
-                    : bad.length === 0 ? `✅ ${t.rows.length} 項全達標`
-                        : `❌ ${bad.map(r => `${r.metric} ${r.measured === null ? 'n/a' : r.measured.toFixed(4)} < ${r.threshold}`).join('；')}`;
+                    : bad.length === 0 ? `✅ ${compared.length} 項全達標${naNote ? `；${naNote}` : ''}`
+                        : `❌ ${bad.map(r => `${r.metric} ${r.measured === null ? 'n/a' : r.measured.toFixed(4)} < ${r.threshold}`).join('；')}${naNote ? `；${naNote}` : ''}`;
                 thresholdFailures.push(...t.failures.map(f => `${name}：${f}`));
             } else {
                 verdict = '沒有報表（多半是在量測前就失敗了）';
@@ -425,11 +428,17 @@ async function main(argv = process.argv.slice(2), io = {}) {
         console.log(`\n門檻未達（不會自動放寬；請另開裁決，docs/chapter-restructure.md 第 5 條第 4 點` +
             `${plan.local ? '；換成本機模型後低於門檻由 Owner 另行裁決，docs/local-mode.md 第 6 條第 3 點' : ''}）：\n  - ${v.thresholdFailures.join('\n  - ')}`);
     }
+    if (!v.ok && v.missTotal === 0) {
+        // 〔整合 r6 審查〕eval 未達門檻時 run.js 的結束碼就是 1（上表結束碼欄），這裡因此回 1；那不是錄製失敗（docs/local-mode.md 10.21）
+        console.log('\n回放驗證表的 replay miss 與缺向量都是 0：回放檔已經錄齊。若結束碼 1 的列只是「門檻」欄 ❌，' +
+            '這是門檻未達（照實紅燈、不放寬），不是錄製失敗，**不要重錄**；把 log 交給維護的人。');
+    }
     console.log('\n錄製步驟：' + results.map(r => `${r.step}=${r.exitCode}（${Math.round(r.ms / 1000)} 秒）`).join('、'));
     console.log('\n下一步：');
     console.log('  1. git add eval/cassettes eval/fixtures/embeddings.*.json，commit、push。');
-    console.log('  2. npm run cassettes:prune 先看要刪哪些過期檔，確認後 npm run cassettes:prune -- --apply，再 commit。');
-    console.log('     （單元測試 sourceCheckSample 要求 extract.v2 的 cassette 恰好一份：舊的那份清掉之前它會紅。）');
+    console.log('  2. npm run cassettes:prune 只列出 CI 不再讀到的過期檔；先不要 --apply，刪不刪由 Owner 決定' +
+        '（刪了就不能不花錢地切回 Gemini；docs/local-mode.md 10.7 第 6 點、10.21 第 4 步）。');
+    console.log('     （單元測試 sourceCheckSample 要求 extract.v2 的 cassette 恰好一份：日後真的要 --apply 時，別讓它剩零份或兩份。）');
     return v.ok ? 0 : 1;
 }
 

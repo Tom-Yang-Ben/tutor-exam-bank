@@ -69,8 +69,9 @@ call :log
 call :log [!] 錄製或回放驗證沒有全過（結束碼 %RC%）。
 echo     先看 log 最後的「回放驗證」表：
 echo       - 錄前檢查沒過（Ollama、模型、OCR、測試庫）：照畫面上的處置做完，再雙擊本檔；
-echo       - 還有 replay miss：某些呼叫沒錄到，重跑本檔即可（只會多花時間，不花錢）；
-echo       - 門檻未達：不會自動放寬，把 log 交給維護的人，由 Owner 另行裁決（docs\local-mode.md 第 6 條第 3 點）。
+echo       - 表上 replay miss 或缺向量不是 0：某些呼叫沒錄到，重跑本檔即可（只會多花時間，不花錢）；
+echo       - 只有「門檻」欄紅燈、replay miss 與缺向量都是 0：錄製已經成功，不要重跑；門檻不會自動放寬，
+echo         把 log 交給維護的人，由 Owner 另行裁決（docs\local-mode.md 第 6 條第 3 點、10.21 第 0 步第 6 點）。
 echo.
 echo 完整輸出：%LOG%
 pause
