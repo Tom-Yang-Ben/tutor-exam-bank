@@ -26,11 +26,13 @@ const report2 = require('../../eval/lib/report2');
 const { runNlqSuite } = require('../../eval/lib/suiteNlq');
 const { runVariantSuite } = require('../../eval/lib/suiteVariant');
 const { isReplayMiss } = require('../../eval/lib/replayMiss');
-const { fixtureVectorGap, RECORDED_EMBED_MODEL } = require('./lib/recordedData');
+const { fixtureVectorGap, CI_EMBED_MODEL } = require('./lib/recordedData');
 
 // 〔本機模式 L4〕eval 的預設 embedding 模型改成本機（docs/local-mode.md 第 2 條）之後，
 // 在行程內跑 suite 的這幾則仍讀 repo 內錄好的那一份向量（test/unit/lib/recordedData.js），斷言不變。
-process.env.EMBED_MODEL = RECORDED_EMBED_MODEL;
+// 〔r7 測試空轉清理〕原本讀 Gemini 的舊向量檔：它缺 5 題、本機模式之後不再重錄，下面 variant 的斷言因此永遠走「缺向量」那一支、
+// 從沒量過 variant。改讀 CI 讀的那一份（ci.yml 的 EMBED_MODEL），與 npm run eval:variant 相同；斷言一條沒改。
+process.env.EMBED_MODEL = CI_EMBED_MODEL;
 
 // 兩支 suite 各只跑一次（跑一輪 nlq 要好幾秒），結果給多則斷言共用。
 // 這裡**沒有連 DB、沒有呼叫 Gemini**：`LLM_MODE` 預設 replay、`EMBED_MODE` 預設 fixture

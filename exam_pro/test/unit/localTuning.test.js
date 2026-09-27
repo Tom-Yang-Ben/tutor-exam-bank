@@ -454,13 +454,18 @@ describe('services/llm：vendor 是 ollama 時套用', () => {
         assert.equal(calls.length, 0);
     });
 
-    test('replay 不讀這些設定：repo 裡本機錄的 verify cassette，思考與輸出上限怎麼改都照樣回放（鍵不含它們）', async () => {
+    test('replay 不讀這些設定：repo 裡本機錄的 verify cassette，思考與輸出上限怎麼改都照樣回放（鍵不含它們）', async (t) => {
         delete process.env.EVAL_CASSETTE_DIR;   // 讀 repo 的 eval/cassettes
         process.env.LLM_MODE = 'replay';
         const dir = path.join(APP_DIR, 'eval', 'cassettes', 'verify');
         const doc = fs.readdirSync(dir).map(f => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')))
             .find(d => d.meta.model === 'qwen3:8b' && d.meta.template === 'verify.v1');
-        if (!doc) return;   // 本機 cassette 被清掉時不適用
+        // 〔r7 測試空轉清理〕原本 `if (!doc) return;`：回放檔被清掉時這一則悄悄算通過。改成明確 skip 並說明缺什麼
+        if (!doc) {
+            t.skip('repo 的 eval/cassettes/verify/ 沒有本機（qwen3:8b）錄的 verify.v1 回放檔（被 cassettes:prune 刪掉？）——' +
+                '以本機模型重錄（npm run cassettes:rerecord）後自動恢復執行');
+            return;
+        }
         const base = { model: 'ollama:qwen3:8b', system: 'x', parts: [{ text: 'x' }], schema: buildSchema('verify'), agent: 'verify', template: 'verify.v1', cacheKeyParts: doc.request.cacheKeyParts };
         const calls = fakeOllama();
         for (const [env, extra] of [

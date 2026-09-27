@@ -17,6 +17,7 @@ const driver = require('../../eval/lib/pipelineDriver');
 const { matchQuestions, scoreExtraction, jaccardSets, JACCARD_FLOOR } = require('../../eval/lib/pdfMatch');
 const { loadSheet, validateSheet, sha256File } = require('../../eval/lib/pdfGolden');
 const { promptHash } = require('../../eval/lib/legacyAdapter');
+const { sampleExtractOcrCassette } = require('./lib/recordedData');
 
 const SAMPLE_PDF = path.resolve(__dirname, '..', '..', 'eval', 'fixtures', 'sample_exam.pdf');
 
@@ -335,24 +336,44 @@ describe('答案卷（pdf_golden）的硬閘門', () => {
 });
 
 describe('pipelineDriver 端到端', () => {
-    // 兩段式，與 answerGolden.test.js 同一個道理。
-    // agents/extract.js 合入之後，這一支會真的呼叫 LLM（replay 模式）；
-    // WS-B 的 cassette 目前是對**他們自己那份 6 題樣卷**錄的，裁決 S2-15 要求改對
-    // eval/fixtures/sample_exam.pdf 重錄。在重錄之前這裡一定 replay miss——
-    // 那不是 driver 壞掉，硬斷言只會得到一片與本次改動無關的紅燈。
+    // 兩段式，與 answerGolden.test.js 同一個道理：跑得起來就硬斷言；拆題的回放檔還沒錄就 skip 並指名缺哪一支，
+    // 錄好之後自動轉回硬斷言。**其他任何失敗一律照舊紅燈。**
     //
-    // 因此：跑得起來就硬斷言；replay miss 就印出實際的 agent／key 並 skip，
-    // cassette 重錄之後自動轉回硬斷言。**其他任何失敗一律照舊紅燈。**
+    // 〔r7 測試空轉清理 2026-09-27〕原本「只要有 replay miss 就 skip」，訊息還停在階段 2（WS-B 對樣卷重錄、裁決 S2-15）。
+    // Owner 第五輪 D-3 把本機拆題的程式預設改成 ocr 之後，npm test（不帶 env，與 CI 的 unit job 相同）走的是
+    // OCR → extract_ocr：兩則等的是樣卷的 extract_ocr.v2 回放檔（不是看圖的 extract_vision）。現在收窄成：
+    //   - ocr 模式（CI 的設定）：只有「唯一的 miss 就是樣卷第 1 塊的 extract_ocr、鍵與預期鍵相同、檔案確實不在」才 skip，
+    //     訊息指名等 docs/local-mode.md 10.21 第 3 步；extract_ocr 錄好之後任何 replay miss（例如下游的分類、lint、驗算缺檔）
+    //     都不再 skip，直接紅燈。
+    //   - 其他模式（明寫 LOCAL_EXTRACT_MODE=cross，或 Gemini 拆題）：CI 不讀、10.21 也不錄這些拆題回放檔
+    //     （extract_vision／Gemini 的 extract），miss 只發生在拆題節點時照舊 skip 並說明；其他節點的 miss 一樣紅燈。
+    /**
+     * 這一輪沒跑完、而且原因只是「拆題的回放檔還沒錄」時回 skip 訊息，否則回 null（交給硬斷言）。
+     * @param {object} res driver.runPipeline 的結果
+     * @returns {string|null}
+     */
+    function pendingRecording(res) {
+        const misses = res.replayMisses || [];
+        if (res.ok || misses.length === 0) return null;
+        if (OCR_MODE) {
+            const toPage = (res.thresholds && res.thresholds.pdfChunkPages) || undefined;
+            const expected = sampleExtractOcrCassette({ chunkNo: 1, fromPage: 1, toPage });
+            if (expected.ready) return null;
+            const onlyPending = misses.every(m => m.agent === expected.agent && m.key === expected.key);
+            return onlyPending ? expected.reason : null;
+        }
+        if (!misses.every(m => m.node === 'extract')) return null;
+        const m = misses[0];
+        return `拆題的回放檔不在（agent=${m.agent} key=${(m.key || '').slice(0, 12)}…）：本機拆題不是 ocr 模式` +
+            '（明寫了 LOCAL_EXTRACT_MODE=cross，或拆題模型是 Gemini）。CI 與 docs/local-mode.md 10.21 的重錄都是 ocr，' +
+            '不讀也不錄這一支；這一則在 CI 的設定（npm test 不帶 env）下跑。';
+    }
+
     /** @returns {Promise<{res:object, skip:string|null}>} */
     async function runOnce(opts) {
         const sheet = loadSheet({ pdfPath: SAMPLE_PDF });
         const res = await driver.runPipeline({ pdfPath: SAMPLE_PDF, sheet, ...opts });
-        if (!res.ok && (res.replayMisses || []).length) {
-            const m = res.replayMisses[0];
-            return { res, skip: `replay 找不到 cassette（agent=${m.agent} key=${(m.key || '').slice(0, 12)}…）：` +
-                `WS-B 的 cassette 尚未對 eval/fixtures/sample_exam.pdf 重錄（裁決 S2-15）。` };
-        }
-        return { res, skip: null };
+        return { res, skip: pendingRecording(res) };
     }
 
     test('10 題全部走到終態，事件的形狀與 job_events 一致', async (t) => {
