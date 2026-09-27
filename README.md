@@ -40,7 +40,7 @@ flowchart TD
 > **分支狀態**：階段 5（教學診斷平台）已於 2026-09-25 併入 main（PR #38）；章節重整與本機模式在 `local/integration` 分支，尚未併入 main。
 > 本機模式的契約、裁決（LM-1～LM-16）與使用說明：[`docs/local-mode.md`](./docs/local-mode.md)；決策紀錄：[ADR-017](./engineering_docs/03_architecture/adr/ADR-017-local-first-inference.md)；架構與取捨：[`sad.md` §7.1](./engineering_docs/03_architecture/sad.md#71-本機模式預設的部署視圖與取捨)。
 
-本儲存庫保留完整的開發歷程：重構後的系統本體與各階段的演進（`exam_pro/`），以及全部設計文件與決策紀錄（`docs/`、`engineering_docs/`）。早期原型（`exam/`）已於 2026-09-27 從主線移除，原始碼保留在 tag [`v1-mysql`](https://github.com/Tom-Yang-Ben/tutor-exam-bank/tree/v1-mysql/exam)。（tag 內的授權宣告以主線 [`LICENSE`](./LICENSE) 為準，另見[授權與著作權](#-授權與著作權)一節；〔修訂 2026-09-27〕此句只是釐清，不改變任何授權。）階段 5「教學診斷平台」（錯因診斷、知識點、補救卷、化學、AI 家教）的功能與旗標見[下方專節](#階段-5教學診斷平台功能旗標與給老師的快速開始)。
+本儲存庫保留完整的開發歷程：重構後的系統本體與各階段的演進（`exam_pro/`），以及全部設計文件與決策紀錄（`docs/`、`engineering_docs/`）。早期原型（`exam/`）已於 2026-09-27 從主線移除，原始碼保留在 tag [`v1-mysql`](https://github.com/Tom-Yang-Ben/tutor-exam-bank/tree/v1-mysql/exam)。（主線現行版本以主線 [`LICENSE`](./LICENSE) 為準；tag 內的歷史版本見[授權與著作權](#-授權與著作權)一節。〔修訂 2026-09-27〕此句只是指路，不改變任何授權。）階段 5「教學診斷平台」（錯因診斷、知識點、補救卷、化學、AI 家教）的功能與旗標見[下方專節](#階段-5教學診斷平台功能旗標與給老師的快速開始)。
 
 > ⚖️ 本儲存庫為作者的個人工具與技術作品集：**保留所有權利，僅供瀏覽與技術評估，不授權使用**（見 [`LICENSE`](./LICENSE)）。儲存庫不含任何題庫或考卷內容，示範題與 eval 素材均為作者自行編寫（見 [`NOTICE`](./NOTICE)）。
 
@@ -429,7 +429,7 @@ Gemini 已回傳 JSON，為何不直接入庫？
 
 > **最具體的一例**：原型的 `app.use(express.static(__dirname))` 會把含 `GEMINI_API_KEY` 的 `.env` 一併當靜態檔案對外提供。
 > 重構的價值不在目錄變好看，而在於把一個「會外洩金鑰、AI 額度可被無限刷、章節名各寫各的」原型，變成可以真的對外部署的系統。
-> （2026-09-15 起 `exam/` 的 `npm start` 改為直接拒絕啟動並印出這段說明；2026-09-27 起舊版原型從主線移除，原始碼保留在 tag [`v1-mysql`](https://github.com/Tom-Yang-Ben/tutor-exam-bank/tree/v1-mysql/exam)，只供對照，主線上已沒有可以誤跑的原型。注意 tag 裡的 `exam/package.json` 還是 2026-09-15 之前的版本，`npm start` 會照舊啟動並公開整個目錄，請勿在那個 checkout 裡放 `.env` 或執行它。tag 內的授權宣告以主線 [`LICENSE`](./LICENSE) 為準；〔修訂 2026-09-27〕此句只是釐清，不改變任何授權。）
+> （2026-09-15 起 `exam/` 的 `npm start` 改為直接拒絕啟動並印出這段說明；2026-09-27 起舊版原型從主線移除，原始碼保留在 tag [`v1-mysql`](https://github.com/Tom-Yang-Ben/tutor-exam-bank/tree/v1-mysql/exam)，只供對照，主線上已沒有可以誤跑的原型。注意 tag 裡的 `exam/package.json` 還是 2026-09-15 之前的版本，`npm start` 會照舊啟動並公開整個目錄，請勿在那個 checkout 裡放 `.env` 或執行它。主線現行版本以主線 [`LICENSE`](./LICENSE) 為準；tag 內的歷史版本見[授權與著作權](#-授權與著作權)一節。〔修訂 2026-09-27〕此句只是指路，不改變任何授權。）
 
 ---
 

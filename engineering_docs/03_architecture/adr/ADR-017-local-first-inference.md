@@ -47,7 +47,7 @@
 - **優點**: 執行期零外連、零費用；額度不再是單點故障；Gemini 路徑的程式與 cassette 鍵不變，改 `.env` 幾行即可切回；CI 的機制（record／replay、fixture、門檻 ratchet）一個字都不用改。
 - **缺點**: CPU 上非常慢（一份考卷數小時）；8B 模型品質低於 Gemini，eval 的量測值預期下降；多一套 Python 環境（PaddleOCR）要安裝與維護；語音與家教的程式驗算暫時沒有。
 - **成本/複雜度**: 高（四條平行工作）
-- 〔修訂 2026-09-27〕上面「PDF 拆題改成兩條本機路徑……不一致的題停在人工複核」是 2026-09-25 的原設計，現在只是 `LOCAL_EXTRACT_MODE=cross`（程式預設）的做法；Owner 的電腦改用選項四的拆題方式。選項三的其餘部分（Ollama 為預設、Gemini 可切回、單一轉接點、CI 照舊 replay）不變。
+- 〔修訂 2026-09-27〕上面「PDF 拆題改成兩條本機路徑……不一致的題停在人工複核」是 2026-09-25 的原設計，現在只是 `LOCAL_EXTRACT_MODE=cross`（`cross` 模式）的做法（程式預設值由 D-3 處理，見 §3.1）；Owner 的電腦改用選項四的拆題方式。選項三的其餘部分（Ollama 為預設、Gemini 可切回、單一轉接點、CI 照舊 replay）不變。
 
 ### 選項四〔修訂 2026-09-27 新增〕: 選項三，但本機拆題改成 OCR 為主（`LOCAL_EXTRACT_MODE=ocr`；目前採用）
 - **描述**: 其餘同選項三；拆題一塊（2 頁）只做 PaddleOCR → 文字模型 `qwen3:8b` 整理 OCR 結果（`extract_ocr`），**不呼叫看圖模型、不轉圖**。每一題走完分類、lint、原卷比對、驗算、去重之後都停在人工複核（原因 `ocr_only`，migration 0019），一題都不自動入庫；附圖依 PaddleOCR 的版面位置配，配不到的標提示，用 `figures:backfill` 補。看圖模型只在 `cross` 模式（交叉驗證）才用。

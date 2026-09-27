@@ -1102,7 +1102,7 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 
 #### 4. 同批的文件清理（cleanup 審查留下的）
 
-- `README.md`：連到 tag `v1-mysql` 的原型說明（開頭的專案說明、「exam → exam_pro 重構到底改了什麼」一節最後的註記）後補一句「tag 內的授權宣告以主線 `LICENSE` 為準」，註明只是釐清、不改變任何授權。**請 Owner 留意**：tag `v1-mysql`（2026-08-21）裡的 `LICENSE` 是 Apache-2.0，README「授權與著作權」一節也寫「2026-08-24 之前的歷史版本曾以 Apache-2.0 釋出，該授權僅及於該等歷史版本」；這句是照指示加的釐清，已經發出去的 Apache-2.0 授權一般無法事後收回，對外措辭若要更精確，建議再看一次。
+- `README.md`：連到 tag `v1-mysql` 的原型說明（開頭的專案說明、「exam → exam_pro 重構到底改了什麼」一節最後的註記）後補一句「tag 內的授權宣告以主線 `LICENSE` 為準」，註明只是釐清、不改變任何授權。**請 Owner 留意**：tag `v1-mysql`（2026-08-21）裡的 `LICENSE` 是 Apache-2.0，README「授權與著作權」一節也寫「2026-08-24 之前的歷史版本曾以 Apache-2.0 釋出，該授權僅及於該等歷史版本」；這句是照指示加的釐清，已經發出去的 Apache-2.0 授權一般無法事後收回，對外措辭若要更精確，建議再看一次。〔審查修正 2026-09-27〕已改成「主線現行版本以主線 `LICENSE` 為準；tag 內的歷史版本見授權與著作權一節」（見第 6 點），不再和該節衝突。
 - `requirements_tracker.md` 第 32、63 行、`ux_research_and_journey.md` 第 25 行提到 `exam/` 的地方加〔修訂 2026-09-27〕「已自主線移除，見 tag `v1-mysql`」。
 
 #### 5. 測試與 eval
@@ -1110,3 +1110,14 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 - `test/unit/localModeSections.test.js`：標題清單多一節 10.16（本節），其餘斷言不變。
 - 實測（5433 上新建的 UTF8 測試庫，用完刪除）：unit 3,615（3,613 過、2 略過；比 `a670783` 多 4 案）、`check:html`、migrate（到 0019）、integration 617 全過（多 2 案）。
 - 本分支沒有改任何模板、schema、prompt 或 agent 程式，**沒有 cassette 的鍵會變、不需要重錄**。五個 eval 在 replay 下與 `local/integration-r5`（`a670783`）同一環境逐項比對，輸出除了延遲毫秒數以外完全相同：retrieval 過；classify 92、nlq 8、pipeline 1、variant 2 筆 replay miss 都是原本就缺的 cassette，沒有一筆是本分支造成的。
+
+#### 6. 審查修正（分支 `dec/r6-docs-kc-fix`，從 `dec/r6-docs-kc` `563c6ed` 開）
+
+審查（approve、4 條 minor）逐條先驗證再改：
+
+1. **README 授權句和「授權與著作權」一節衝突——屬實，已改。** tag `v1-mysql` 的 commit 日期是 2026-08-21，裡面的 `LICENSE` 是 Apache-2.0、README 也寫程式碼採 Apache-2.0；主線 README「授權與著作權」一節說「2026-08-24 之前的歷史版本曾以 Apache-2.0 釋出，該授權僅及於該等歷史版本」。原句「tag 內的授權宣告以主線 `LICENSE` 為準」會被讀成推翻這一點。兩處（開頭的專案說明、「exam → exam_pro 重構到底改了什麼」一節的註記）改成「主線現行版本以主線 `LICENSE` 為準；tag 內的歷史版本見授權與著作權一節」：只指向 README 既有的 Owner 措辭，不新增任何法律主張、不改 `LICENSE`／`NOTICE`。**要不要再改措辭仍由 Owner 決定**。
+2. **ADR-017 選項三把 `cross` 寫成「程式預設」——屬實，已改。** 改成「`LOCAL_EXTRACT_MODE=cross`（`cross` 模式）的做法（程式預設值由 D-3 處理，見 §3.1）」，和 §3.1「本 ADR 不重複規定數值」一致；`dec/r6-defaults`（D-3＝2）併入後不會過時。
+3. **HANDOFF §0.2 第 7 項的註記範圍比 K-P 大——屬實，已改。** 改成只解除「物理先不跑」，數學與化學照第 7 項原有條件「併入 `local/integration` 之前不跑」。已核對：`dec/r2-math-kc3` 與 `dec/integration-all` 都是 `local/integration`（`889d18f`）的祖先，所以原條件已成立；這寫成〔現況 2026-09-27〕，不是本輪的新決定。§0.00 A9 列與 §0.00「知識點審定單」一點也加同樣的現況註記，三處一致。
+4. **那一次無法重現的 integration 失敗——無法確認和本分支有關，照建議加防護。** `test/integration/kcLoadPhysicsDraft.pg.test.js` 的 `spawnSync` 加 `timeout: 120000`（`killSignal: SIGKILL`），失敗訊息改帶 `status`、`signal`、spawn 錯誤與子行程輸出；斷言本身一條都沒改、沒放寬。
+
+- 沒有改任何程式、模板、schema、prompt、`eval/thresholds.json`、golden 或 cassette，**不需要重錄**。

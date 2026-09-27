@@ -34,12 +34,16 @@ function runSuite() {
     const seed = (subject) => JSON.parse(fs.readFileSync(path.join(KC_DIR, `${subject}.json`), 'utf8'));
     const reset = () => query('TRUNCATE question_kcs, kc_prerequisites, knowledge_components RESTART IDENTITY CASCADE');
 
+    // 子行程上限：負載高時卡住就在這裡中止，失敗訊息帶 signal／error，不讓整套 integration 等到外層逾時才知道是哪一案。
+    const LOAD_TIMEOUT_MS = 120000;
     function runLoad(args) {
         return spawnSync(process.execPath, [path.join('scripts', 'load_kc.js'), '--test', ...args], {
-            cwd: APP_DIR, encoding: 'utf8',
+            cwd: APP_DIR, encoding: 'utf8', timeout: LOAD_TIMEOUT_MS, killSignal: 'SIGKILL',
             env: { ...process.env, TEST_DATABASE_URL, DATABASE_URL: '' }
         });
     }
+    // 斷言失敗時的說明：exit code、signal（逾時被殺是 SIGKILL）、spawn 錯誤，加上子行程輸出。
+    const why = (r) => `status=${r.status} signal=${r.signal}${r.error ? ` error=${r.error.message}` : ''}\n${r.stdout || ''}${r.stderr || ''}`;
     async function bySubject() {
         const { rows } = await query(
             `SELECT subject, status, COUNT(*)::int AS n FROM knowledge_components GROUP BY 1, 2 ORDER BY 1, 2`);
@@ -57,17 +61,17 @@ function runSuite() {
             const phys = path.join('config', 'kc', '物理.json');
             // 空庫：物理有 6 條先備指向數學，數學不在本批也不在庫裡 → 整批拒絕（先備解析規則，與草稿／物理無關）
             const empty = runLoad(['--file', phys]);
-            assert.equal(empty.status, 1, empty.stdout + empty.stderr);
+            assert.equal(empty.status, 1, why(empty));
             assert.match(empty.stderr, /先備 MATH\.[^ ]+ 在本批與資料庫中都找不到/);
             assert.doesNotMatch(empty.stdout + empty.stderr, /draft|草稿|approved|已審定才/);
             assert.deepEqual(await bySubject(), []);
 
             const m = runLoad(['--file', path.join('config', 'kc', '數學.json')]);
-            assert.equal(m.status, 0, m.stdout + m.stderr);
+            assert.equal(m.status, 0, why(m));
             const before = await bySubject();
 
             const r = runLoad(['--file', phys]);
-            assert.equal(r.status, 0, r.stdout + r.stderr);
+            assert.equal(r.status, 0, why(r));
             assert.match(r.stdout, /物理：種子檔 198 個知識點、34 章、標記已審定 0 個/);
             assert.match(r.stdout, /新增 198、更新 0/);
             assert.match(r.stdout, /✅ 載入完成/);
@@ -82,7 +86,7 @@ function runSuite() {
                 return { s, total: cs.length, approved: cs.filter(c => c.status === 'approved').length };
             });
             const r = runLoad([]);
-            assert.equal(r.status, 0, r.stdout + r.stderr);
+            assert.equal(r.status, 0, why(r));
 
             const got = await bySubject();
             const expected = [];
@@ -101,7 +105,7 @@ function runSuite() {
             assert.equal(cross.n, seedCross, '跨科先備（物理 → 其他科）照種子檔寫入');
 
             const again = runLoad([]);
-            assert.equal(again.status, 0, again.stdout + again.stderr);
+            assert.equal(again.status, 0, why(again));
             const total = want.reduce((a, w) => a + w.total, 0);
             assert.match(again.stdout, new RegExp(`新增 0、更新 0、略過 ${total}（內容相同 ${total}、已審定受保護 0）`));
         });
