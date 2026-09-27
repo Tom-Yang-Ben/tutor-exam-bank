@@ -60,7 +60,39 @@ const ISSUE_RULES = Object.freeze([
     'parser_error', 'tokenize_error', 'bare_script', 'lint_crashed',
     // ── warn ──
     'slash_fraction', 'unicode_math', 'latex_without_dollar', 'bare_script_text',
+    // ── error（2026-09-27 起；Owner 第五輪 L-1 核准，只能往後加）──
+    'control_char',
 ]);
+
+/**
+ * 〔Owner 第五輪 L-1 核准，2026-09-27〕換行以外的控制字元（C0 的 U+0000–U+001F 與 U+007F；與 latexEscapeRepair 的
+ * hasNonNewlineControl、docs/llm.md 第 10 節「帶控制字元」同一個範圍，但 Windows 換行 `\r\n` 裡的歸位不算——
+ * hasNonNewlineControl 是回歸量測用的計數，連這個歸位也算）。
+ * 例外只有換行：U+000A，以及 Windows 換行 `\r\n` 裡緊接在換行前的歸位（單獨的歸位照擋——`\rho`、`\rightarrow`
+ * 被 JSON 吃掉就是「歸位＋ho」）。定位（U+0009）也擋：`\times`、`\theta` 被吃掉就是它。
+ *
+ * 為什麼要兜底（docs/llm.md 第 10 節「沒有做」第 1 項）：services/llm/latexEscapeRepair.js 只修得回「控制字元＋
+ * 指令表裡的名字」；救不回來的（換頁＋`dg`）與指令表漏列的，控制字元在 Word 匯出時被 stripUnsafe 刪掉或當空白，
+ * 解析器看不出來，原本會安靜地通過閘門。
+ */
+const CONTROL_CHAR_RE = /\r(?!\n)|[\x00-\x09\x0B\x0C\x0E-\x1F\x7F]/g;
+
+/** 控制字元 → 人看得懂的寫法（\f 換頁、U+0008…） */
+const CONTROL_NAMES = { '\b': '退格 U+0008', '\t': '定位 U+0009', '\f': '換頁 U+000C', '\r': '歸位 U+000D' };
+const controlName = (ch) => CONTROL_NAMES[ch]
+    || `U+${ch.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`;
+
+/**
+ * 字串裡「換行以外」的控制字元位置（與 formulaLint 的 control_char 同一個判準；jobRunner 的詳解也用它）。
+ * @param {string} text
+ * @returns {Array<{at:number, ch:string}>}
+ */
+function findControlChars(text) {
+    if (typeof text !== 'string' || text === '') return [];
+    const out = [];
+    for (const m of text.matchAll(CONTROL_CHAR_RE)) out.push({ at: m.index, ch: m[0] });
+    return out;
+}
 
 /**
  * 數學區段的 [start, end) 範圍，與 buildParagraphComponents 逐行掃描的界定符一致。
@@ -204,8 +236,16 @@ function formulaLint(text) {
         }
     }
 
+    // ── 10. 換行以外的控制字元（Owner 第五輪 L-1 核准，2026-09-27）──
+    // foldDisplayMath 只把 $$…$$ 裡的換行換成空白，長度與位置不變，所以位置可以直接用 s 的。
+    for (const { at, ch } of findControlChars(s)) {
+        push('error', 'control_char', at,
+            `含控制字元（${controlName(ch)}），多半是 LaTeX 的反斜線被 JSON 吃掉（\\frac → 換頁＋rac、\\times → 定位＋imes）；`
+            + 'Word 匯出時控制字元會被刪掉或當成空白，公式壞掉');
+    }
+
     issues.sort((a, b) => a.at - b.at || a.rule.localeCompare(b.rule));
     return { ok: issues.every(i => i.sev !== 'error'), issues };
 }
 
-module.exports = { formulaLint, ISSUE_RULES, EVENT_RULES, MAX_PER_RULE };
+module.exports = { formulaLint, ISSUE_RULES, EVENT_RULES, MAX_PER_RULE, findControlChars };

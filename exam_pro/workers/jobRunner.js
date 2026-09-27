@@ -38,6 +38,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { transition, NODE_FOR_STATE, DEFAULT_LIMITS, TERMINAL_STATES, FREE_NODES: SM_FREE_NODES, REVIEW_REASON_FOR_ERROR } = require('../pipeline/stateMachine');
+const { findControlChars } = require('../utils/formulaLint');
 
 /** exam_pro/ 的絕對路徑：jobs.pdf_path 存的是相對路徑，一律對這裡 resolve，不看 process.cwd()。 */
 const APP_DIR = path.resolve(__dirname, '..');
@@ -450,7 +451,7 @@ const SOLUTION_MAX_LEN = 4000;
  * payload 裡只留得下 data。證明題走 skipped（`{ skipped: true }`，沒有 steps_summary）。
  *
  * 只有「一致且 steps_summary 非空」才寫；其他情況（沒跑、跳過、uncertain／disagree、空白、
- * 超過 4000 字）一律兩欄 NULL。超長**不截斷**：截一半的詳解比沒有詳解更會誤導學生。
+ * 超過 4000 字、含換行以外的控制字元〔Owner 第五輪 L-1〕）一律兩欄 NULL。超長**不截斷**：截一半的詳解比沒有詳解更會誤導學生。
  *
  * scripts/backfill_solutions.js 回填既有題目時也呼叫這一支，兩條路徑的判定因此不會走鐘。
  *
@@ -463,6 +464,9 @@ function buildSolutionFields(payload) {
     if (!v || typeof v !== 'object' || v.skipped === true || v.compare !== 'agree') return none;
     const text = typeof v.steps_summary === 'string' ? v.steps_summary.trim() : '';
     if (text === '' || [...text].length > SOLUTION_MAX_LEN) return none;
+    // 〔Owner 第五輪 L-1 核准，2026-09-27〕詳解不經公式閘門（verify 在 lint 之後才跑，沒有公式重寫可送），
+    // 還有換行以外的控制字元（LaTeX 反斜線被 JSON 吃掉、修復層救不回來的）就不寫——同 formulaLint 的 control_char 判準。
+    if (findControlChars(text).length > 0) return none;
     return { solution_text: text, solution_src: 'verify' };
 }
 

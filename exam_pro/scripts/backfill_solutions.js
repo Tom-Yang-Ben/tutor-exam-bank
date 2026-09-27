@@ -26,6 +26,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { buildSolutionFields, buildSaveFields } = require('../workers/jobRunner');
+const { findControlChars } = require('../utils/formulaLint');
 
 // ───────────────────────── 參數 ─────────────────────────
 
@@ -73,7 +74,7 @@ function resolveDb(useTest) {
 /**
  * payload 為什麼**沒有**可用的詳解（buildSolutionFields 回 null 時才問）。只用來分類報告。
  * @param {object} payload
- * @returns {'no_verify'|'verify_skipped'|'not_agree'|'empty_steps'|'too_long'}
+ * @returns {'no_verify'|'verify_skipped'|'not_agree'|'empty_steps'|'control_char'|'too_long'}
  */
 function unusableReason(payload) {
     const v = payload && payload.verify;
@@ -81,7 +82,10 @@ function unusableReason(payload) {
     if (v.skipped === true) return 'verify_skipped';
     if (v.compare !== 'agree') return 'not_agree';
     const text = typeof v.steps_summary === 'string' ? v.steps_summary.trim() : '';
-    return text === '' ? 'empty_steps' : 'too_long';
+    if (text === '') return 'empty_steps';
+    // 〔Owner 第五輪 L-1 核准〕與 buildSolutionFields 同一個判準（utils/formulaLint.js 的 findControlChars）
+    if (findControlChars(text).length > 0) return 'control_char';
+    return 'too_long';
 }
 
 /**
@@ -123,7 +127,7 @@ function planBackfill(rows, { limit = null } = {}) {
 
     const skipped = {
         has_teacher: 0, has_verify: 0, has_ai: 0, cleared: 0,
-        edited: 0, no_verify: 0, verify_skipped: 0, not_agree: 0, empty_steps: 0, too_long: 0
+        edited: 0, no_verify: 0, verify_skipped: 0, not_agree: 0, empty_steps: 0, control_char: 0, too_long: 0
     };
     const updates = [];
     let remaining = 0;
@@ -214,6 +218,7 @@ const SKIP_LABELS = {
     verify_skipped: 'verify 跳過（證明題）',
     not_agree: 'verify 與答案不一致或無法判定',
     empty_steps: '解題摘要是空的',
+    control_char: '解題摘要含換行以外的控制字元（LaTeX 反斜線被吃掉；Owner 第五輪 L-1）',
     too_long: '解題摘要超過 4000 字'
 };
 

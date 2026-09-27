@@ -12,6 +12,12 @@
 //   - **saved_rate**：跑完之後真的入庫的比例。這是整條管線對使用者唯一有意義的產出，
 //     也是唯一適合放進 ratchet 的指標（越高越好）。
 //
+// 〔Owner 第五輪 D-2 核准（選 3），2026-09-27，dec/r6-gates〕OCR 為主（拆題模型是 ollama、LOCAL_EXTRACT_MODE=ocr）時
+//   每一題都停在人工複核（ocr_only），saved_rate 設計上恆為 0：印成 n/a、不比門檻（run.js 經 thresholds.js 的白名單略過；
+//   thresholds.json 不動）。交叉驗證與 Gemini 模式照舊比 0.87。另報替代指標「人工核准前的通過率」＝
+//   走完全部閘門、只因「只用 OCR 拆題」停下的題（needs_review 且原因 ocr_only）÷ 全部題；**只報告、不設門檻**
+//   （不進 measured，--write-baseline 寫不到它），累積幾次實測後再請 Owner 定門檻。
+//
 // stub 狀態的處理與 compare_pipeline.js 相同：
 //   agents/extract.js 未合入時走 oracle stub，**所有與拆題品質有關的欄位一律 n/a**，
 //   且拒絕寫 thresholds 初值（見 run.js 的 guard）。細節見 eval/lib/pipelineDriver.js 檔頭紅線。
@@ -29,6 +35,37 @@ const { isPrivatePath } = require('./golden');
 const EVAL_DIR = path.resolve(__dirname, '..');
 const ROOT = path.resolve(EVAL_DIR, '..');
 const DEFAULT_PDF = path.join(EVAL_DIR, 'fixtures', 'sample_exam.pdf');
+
+/** 〔Owner 第五輪 D-2〕OCR 模式下 saved_rate 不比門檻的原因（報表與 run.js 的「未設門檻」一行都印這句） */
+const OCR_SAVED_RATE_NOTE = 'OCR 模式每題都停在人工複核，設計上恆為 0，不比門檻（Owner 第五輪 D-2）';
+
+/**
+ * 這一輪是不是「只用 OCR 拆題」：拆題模型是 ollama 而且 LOCAL_EXTRACT_MODE=ocr（與 workers/jobRunner.js 的判斷相同），
+ * 或者任何一題的 payload.extract.extract_mode 是 'ocr'（agents/extract.js 的 runLocalOcrOnly 寫的）。
+ * @param {object} [env]
+ * @param {Array<object>} [jq]
+ * @returns {boolean}
+ */
+function isOcrOnlyRun(env = process.env, jq = []) {
+    if ((jq || []).some(r => r && r.payload && r.payload.extract && r.payload.extract.extract_mode === 'ocr')) return true;
+    const models = require('../../config/models');
+    const spec = String((env && env.MODEL_EXTRACT) || '').trim() || models.MODEL_EXTRACT;
+    let vendor = null;
+    try { vendor = models.parseModel(spec).vendor; } catch (_) { vendor = null; }
+    return vendor === 'ollama' && require('../../config/localExtractMode').resolveLocalExtractMode(env) === 'ocr';
+}
+
+/**
+ * 〔Owner 第五輪 D-2〕人工核准前的通過率：走完全部閘門、只因 ocr_only 停下的題 ÷ 全部題（沒有題＝null）。
+ * 只報告、不設門檻。
+ * @param {Array<{state:string, review_reason:string|null}>} jq
+ * @returns {{passed:number, total:number, rate:number|null}}
+ */
+function preApprovalPassRate(jq) {
+    const rows = Array.isArray(jq) ? jq : [];
+    const passed = rows.filter(r => r.state === 'needs_review' && r.review_reason === 'ocr_only').length;
+    return { passed, total: rows.length, rate: rows.length === 0 ? null : metrics.round4(passed / rows.length) };
+}
 
 /**
  * @param {object} args run.js 的 args（用到 --pdfs、--golden）
@@ -60,11 +97,16 @@ async function runPipelineSuite(args) {
     // 沒跑完時**不丟例外**：replay miss 要交給 run.js 依裁決 S2-14 判斷
     // （fork PR 降 warning、其餘紅燈），丟例外會讓那段邏輯完全繞過去，
     // 而且 fork 的外部貢獻者會看到一個他無法自救的堆疊。
+    const ocrOnly = isOcrOnlyRun(process.env, res.jq);
+    const notApplicable = ocrOnly ? { pipeline: { saved_rate: OCR_SAVED_RATE_NOTE } } : undefined;
+
     if (!res.ok) {
         const misses = res.replayMisses || [];
         return {
             suite: 'pipeline',
             measured: { pipeline: null },
+            notApplicable,
+            ocrOnly: ocrOnly ? { saved_rate_note: OCR_SAVED_RATE_NOTE, pre_approval: { passed: 0, total: 0, rate: null } } : null,
             nodes: {}, reviewReasons: [],
             counts: { total: 0, saved: 0, needs_review: 0, rejected: 0, pending: 0 },
             cost: { token_in: 0, token_out: 0, token_thinking: 0, token_out_billed: 0, cost_usd: 0, latency_ms: res.totals.latencyMs },
@@ -132,16 +174,24 @@ async function runPipelineSuite(args) {
 
     const measured = {
         pipeline: {
-            saved_rate: fake ? null : (total === 0 ? null : metrics.round4(summary.saved / total)),
+            // 〔Owner 第五輪 D-2〕OCR 模式印 n/a、不比門檻（notApplicable）；交叉驗證與 Gemini 照舊
+            saved_rate: fake || ocrOnly ? null : (total === 0 ? null : metrics.round4(summary.saved / total)),
             gate_pass_rate: fake ? null : metrics.round4(gatePassRate),
             answer_agree_rate: metrics.round4(answerAgreeRate),
             n: total
         }
     };
 
+    if (ocrOnly && summary.saved > 0) {
+        warnings.push(`OCR 模式卻有 ${summary.saved} 題自動入庫：每一題都該停在人工複核（ocr_only），請檢查 save 節點的停等。`);
+    }
+
     return {
         suite: 'pipeline',
         measured,
+        notApplicable,
+        // 〔Owner 第五輪 D-2〕替代指標：只報告、不設門檻（不進 measured）
+        ocrOnly: ocrOnly ? { saved_rate_note: OCR_SAVED_RATE_NOTE, pre_approval: fake ? { passed: 0, total, rate: null } : preApprovalPassRate(res.jq) } : null,
         nodes,
         reviewReasons,
         counts: {
@@ -184,4 +234,4 @@ async function runPipelineSuite(args) {
     };
 }
 
-module.exports = { runPipelineSuite, DEFAULT_PDF };
+module.exports = { runPipelineSuite, DEFAULT_PDF, isOcrOnlyRun, preApprovalPassRate, OCR_SAVED_RATE_NOTE };

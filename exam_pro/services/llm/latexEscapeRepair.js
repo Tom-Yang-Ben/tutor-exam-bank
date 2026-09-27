@@ -76,12 +76,14 @@ const ESCAPE_LETTER = Object.freeze({ '\b': 'b', '\t': 't', '\n': 'n', '\f': 'f'
  * 確實是 LaTeX（或 amssymb、KaTeX）指令、但 utils/textFormatter.js 的解析器**不支援**的名字（只收 b f n r t 開頭的）。
  * 還原它們不會讓 Word 匯出變好——還原後 parseLatexStrict 會發 unknown_command、公式閘門擋下來交給 lint 重寫；
  * 不還原的話控制字元被 stripUnsafe 吃掉，「ullet」「extbf{…}」「ot」「igcup」這種壞字會**安靜地**通過閘門。
- * 第一列是 2026-09-25 本機 cassette 實際出現的（\bullet、\textbf、\big、\bigg、\norm、\root）；其餘是高中數理
+ * 第一列是 2026-09-25 本機 cassette 實際出現的（\big、\bigg、\norm、\root；原本還有 \bullet、\textbf，L-3 之後解析器支援）；其餘是高中數理
  * 常見、同樣開頭的寫法（dec/latex-escape-repair-fix 依審查意見補齊：\bot \bm \bigcup \nsubseteq \textdegree…）。
  * 解析器之後支援了其中哪一個，supportedCommandNames() 自然涵蓋，這裡不必刪。
  */
 const UNSUPPORTED_LATEX_COMMANDS = Object.freeze([
-    'bullet', 'textbf', 'big', 'bigg', 'norm', 'root',
+    // 〔Owner 第五輪 L-3 核准，2026-09-27〕\bullet、\textbf 解析器已支援（EXTRA_SYMBOLS、parseCommand），移出本清單；
+    // 修復表照樣認得它們（supportedCommandNames() 涵蓋）。
+    'big', 'bigg', 'norm', 'root',
     // b：字型、大型運算子、符號
     'bigl', 'bigr', 'biggl', 'biggr', 'binom', 'boxed', 'bot', 'bm', 'bf', 'bold', 'bmod',
     'bigcup', 'bigcap', 'bigvee', 'bigwedge', 'bigcirc', 'bigstar', 'breve',

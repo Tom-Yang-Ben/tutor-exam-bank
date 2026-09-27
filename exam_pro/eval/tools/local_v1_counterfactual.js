@@ -5,6 +5,10 @@
 //   node eval/tools/local_v1_counterfactual.js --suite classify
 //   node eval/tools/local_v1_counterfactual.js --raw-merge     nlq 另印一欄「不帶原句」的合併（＝nlq.v1 當時的伺服器端行為）的 filters_exact
 //   node eval/tools/local_v1_counterfactual.js --no-post       classify 關掉程式後處理（＝重現 2026-09-25 的原始分數）
+//   node eval/tools/local_v1_counterfactual.js --gate          〔Owner 第五輪 LC-3〕classify 的零成本閘門也套界線規則之後：
+//                                                              ① golden 92 題以「拆題模型給對的章、信心 1」走閘門，一題都不得被改（不誤觸）；
+//                                                              ② 以 2026-09-25 分類模型的原始回答當成拆題模型給的章（信心 1）走閘門，
+//                                                                 閘門改對幾題、改錯幾題（拆題模型的章沒有錄過，這只是代用）。
 //   設了 TEST_DATABASE_URL 時 nlq 另量 recall10（會清空並灌測試庫，與 npm run eval:nlq 相同）。
 //
 // 問題：classify.v2／nlq.v2 的模板與 schema 還沒錄過任何 cassette（docs/local-mode.md 10.15），
@@ -27,9 +31,10 @@ const path = require('path');
 const RAW_FILE = path.resolve(__dirname, '..', 'fixtures', 'local_raw_2026-09-25.json');
 
 function parseArgs(argv) {
-    const args = { suites: ['classify', 'nlq'], rawMerge: false, noPost: false };
+    const args = { suites: ['classify', 'nlq'], rawMerge: false, noPost: false, gate: false };
     for (let i = 0; i < argv.length; i++) {
         if (argv[i] === '--suite') args.suites = [argv[++i]];
+        else if (argv[i] === '--gate') args.gate = true;
         else if (argv[i] === '--raw-merge') args.rawMerge = true;
         else if (argv[i] === '--no-post') args.noPost = true;
         else throw new Error(`不認得的參數：${argv[i]}`);
@@ -77,6 +82,50 @@ function disableClassifyPostRules() {
     return () => { rules.boundaryTarget = original; delete require.cache[require.resolve('../../agents/classify.js')]; };
 }
 
+/**
+ * 〔Owner 第五輪 LC-3〕零成本閘門套界線規則的反事實量測（不呼叫 LLM：閘門通過的題本來就不呼叫）。
+ * ① golden：拆題模型給的章＝golden 的章、信心 1 → 閘門的結果必須逐題等於 golden、沒有 adjustments。
+ * ② proxy：拆題模型給的章＝2026-09-25 分類模型的原始回答（代用；拆題模型的章沒有錄過）、信心 1。
+ * @param {object} raw local_raw_2026-09-25.json 的內容
+ * @returns {Promise<{golden:{n:number, misfires:string[], notGate:string[]},
+ *                    proxy:{n:number, rawCorrect:number, gateCorrect:number, fixed:string[], broken:string[], notGate:string[]}}>}
+ */
+async function gateCounterfactual(raw) {
+    const classify = require('../../agents/classify');
+    const golden = require('../golden/classify.json').entries;
+    const rawByQuestion = new Map(raw.classify.map(r => [r.questionText, r.data]));
+    const ctx = {
+        llm: { generateJson: async () => { throw new Error('閘門不該呼叫 LLM'); } },
+        db: null, job: { id: 0, budget_usd: 1, cost_usd: 0 }, jq: { id: 0, idx: 0, payload: {}, retries: {} },
+        logger: { info() {}, warn() {}, error() {} },
+        config: { models: {}, thresholds: { classifyMinConf: 0.8 }, features: {} }, signal: undefined
+    };
+    const out = {
+        golden: { n: 0, misfires: [], notGate: [] },
+        proxy: { n: 0, rawCorrect: 0, gateCorrect: 0, fixed: [], broken: [], notGate: [] }
+    };
+    for (const e of golden) {
+        const text = String(e.question_text).trim();
+        const g = await classify.run(ctx, { subject: e.subject, chapter: e.chapter, chapter_confidence: 1, question_text: text });
+        out.golden.n += 1;
+        if (!g.data || g.data.source !== 'gate') out.golden.notGate.push(e.id);
+        else if (g.data.chapter !== e.chapter || g.data.adjustments) out.golden.misfires.push(`${e.id}（${e.chapter} → ${g.data.chapter}）`);
+
+        const data = rawByQuestion.get(text);
+        if (!data) continue;
+        const p = await classify.run(ctx, { subject: e.subject, chapter: data.chapter, chapter_confidence: 1, question_text: text });
+        out.proxy.n += 1;
+        if (!p.data || p.data.source !== 'gate') { out.proxy.notGate.push(e.id); continue; }
+        const before = data.chapter === e.chapter;
+        const after = p.data.chapter === e.chapter;
+        if (before) out.proxy.rawCorrect += 1;
+        if (after) out.proxy.gateCorrect += 1;
+        if (!before && after) out.proxy.fixed.push(e.id);
+        if (before && !after) out.proxy.broken.push(e.id);
+    }
+    return out;
+}
+
 function fmt(v) {
     return v === null || v === undefined ? 'n/a' : String(v);
 }
@@ -95,6 +144,16 @@ async function main() {
         console.log(`反事實回放：${path.relative(process.cwd(), RAW_FILE)}（${raw.source.model}，${raw.source.recorded}，` +
             `${raw.source.templates.classify}／${raw.source.templates.nlq}，commit ${raw.source.commit}）`);
         console.log('模型的回答固定為當時的原始回應；agent、後處理與計分是現行程式。這不是重錄後的分數。\n');
+
+        if (args.gate) {
+            const g = await gateCounterfactual(raw);
+            console.log('── classify 零成本閘門＋界線規則（Owner 第五輪 LC-3）──');
+            console.log(`① golden 當拆題模型的章（信心 1）：${g.golden.n} 題、被改 ${g.golden.misfires.length} 題、沒走閘門 ${g.golden.notGate.length} 題` +
+                `${g.golden.misfires.length ? `：${g.golden.misfires.join('、')}` : ''}`);
+            console.log(`② 2026-09-25 分類模型的回答當拆題模型的章（代用，信心 1）：${g.proxy.n} 題；閘門前 ${g.proxy.rawCorrect} 對 → 閘門後 ${g.proxy.gateCorrect} 對` +
+                `（改對 ${g.proxy.fixed.length}：${g.proxy.fixed.join('、') || '—'}；改錯 ${g.proxy.broken.length}：${g.proxy.broken.join('、') || '—'}）`);
+            console.log('');
+        }
 
         if (args.suites.includes('classify')) {
             const { runClassifySuite } = require('../lib/suiteClassify');
@@ -152,4 +211,4 @@ if (require.main === module) {
     main().then(() => process.exit(0), (err) => { console.error(err); process.exit(1); });
 }
 
-module.exports = { installRawLlm, RAW_FILE };
+module.exports = { installRawLlm, RAW_FILE, gateCounterfactual };

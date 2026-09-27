@@ -1013,7 +1013,7 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 1. **餘裕很小**。classify 的 macro-F1 只算 golden 裡出現的 13 章，有幾章只有 1～3 題：反事實 0.908 對門檻 0.8956，重錄後多錯 1 題「題數很少的章」就可能掉到門檻下。nlq 的 llm 欄只有 8 句，filters_exact 0.75 對 0.72、recall10 0.875 對 0.845，**各只有一句的餘裕**。
 2. **模板變了，原本答對的題可能變錯**。反事實量測假設模型回答不變，但 v2 的界線規則、例句與 nlq 的範例都會改變回答。界線規則有反方向的保護（`exp_log_first`、`dimension_plane`、`coulomb`、`relative_2d`），但只在證據明確時才生效。
 3. **規則是看著這 15 題寫的**。證據字照錯題的型態挑，同一批題上的改善（13/15）會高估對新題的效果；已用知識點、例句、fixture 做「不誤觸」檢查，但正式題庫的寫法更雜。規則也會改變**正式上傳**時第二層的分類結果（改過的題在 `payload.classify.adjustments` 查得到）。
-4. **零成本閘門沒有套**：拆題模型（qwen3-vl）給的高信心章節不經第二層，相鄰章的錯照樣入庫（LC-3）。classify suite 刻意跳過閘門，量不到這一塊。
+4. **零成本閘門沒有套**：拆題模型（qwen3-vl）給的高信心章節不經第二層，相鄰章的錯照樣入庫（LC-3）。classify suite 刻意跳過閘門，量不到這一塊。〔Owner 2026-09-27 選 LC-3＝2，`dec/r6-gates` 已改成閘門也套，見 10.18 第 3 點〕
 5. **信心沒有鑑別力**：本機模型幾乎只給 0.95 與 1，「信心低就送人工」這條路在本機模式等於不存在（第 2 點最後）。
 6. **nlq-036** 的計分與模板規則 6 互相拉扯（LC-4），重錄後這一句很可能仍算錯，吃掉 nlq llm 欄唯一的一句餘裕。
 7. **反斜線損壞**：`dec/latex-escape-repair` 還在審查。不影響這兩個 suite 的分數（只壞在 classify 的 `rationale`），但沒併之前，複核頁看到的分類理由仍會有「rac」「an」這種殘字。〔整合 2026-09-27 `dec/integration-final5`〕已併入：classify 的 `rationale` 回放時也會補回反斜線；`chapter` 欄不受影響，這兩個 suite 的分數不變。〔整合審查 2026-09-27 `dec/integration-final5-fix`〕加註移到本點末尾（原文不動）。`test/unit/localV1Regression.test.js` 的替身與 `eval/tools/local_v1_counterfactual.js` 的 `installRawLlm` 原本直接回傳原始回應、沒經過 LaTeX 修復，現在回傳前都先過 `latexEscapeRepair.applyToResult`，與正式回放路徑一致。實測：修復改動 10 支 classify 的 `rationale`，`chapter` 與 nlq 8 支都不變，分數與既有斷言不受影響；其中 cls-fx-027 有一處 `\f` 後接 `dg` 判不出指令，留在 `latexRepair.unresolved`，那一支的理由仍有一個控制字元。
@@ -1061,6 +1061,8 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 
 建議選 2：規則只看題幹，與章節是哪個模型猜的無關；選 3 多花一次呼叫與錄製，多數情況最後得到的章與選 2 相同，但不保證——第二層的分類模型可能挑任何一章，界線規則只在它挑的剛好是規則的起點章時才會動，若第二層挑了其他章，結果以第二層為準。kNN 投票（人工標籤多數決）維持不套用。
 
+〔Owner 2026-09-27 選 2〕已落實於 `dec/r6-gates`（10.18 第 3 點）。
+
 **LC-4　nlq-036「斜面上物體受力平衡的題目」怎麼計分（決策單 A3 的後續）**
 
 背景：這一句的 golden 期望章是〔摩擦力與向心力、牛頓運動定律〕兩章（2026-09-25 以「放寬」從一章改成兩章），但計分（`filters_exact`）要求「兩章都回、而且只回這兩章」才算對。`nlq.v2` 的模板規則 6 要模型「通常只回一章」（為了修 nlq-042 多列一章），兩者方向相反：模型只回〔摩擦力與向心力〕時檢索找得到相關題，這一句仍算錯。自然語言查題的 LLM 欄只有 8 句、門檻 0.72，一句就是 0.125。問題：重錄後這一句怎麼計分？
@@ -1071,6 +1073,8 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 | 2. golden 改回單一章〔摩擦力與向心力〕 | 推翻 2026-09-25 的放寬；回〔牛頓運動定律〕或兩章都回的答案都算錯 |
 | 3. **（建議）** 只對走 LLM 輔路徑（`expect_path` 為 `llm`）、期望章有兩章以上的句子，改成「回的章都在期望內、至少一章」就算對（改 `eval/lib/suiteNlq.js` 的 `filtersExact`；目前只影響 nlq-036） | **這是放寬計分**：同一個 0.72 門檻變得比較容易過，llm 欄的分數與 2026-09-25 以前不能直接比；要在 `thresholds.json` 旁註明；以後新增的多章期望 llm 句也照這個規則。規則路徑不受影響——golden 裡另一句多章期望的 nlq-050（規則路徑，期望〔向量內積、空間向量內積〕）仍要兩章全對；若不限 `llm`，nlq-050 只回一章也會算對，規則層的檢查會跟著變鬆 |
 
+〔Owner 2026-09-27 選 3〕已落實於 `dec/r6-gates`（10.18 第 4 點）。
+
 建議選 3：最符合當初「放寬」的本意（兩章都是合理答案），也與模板規則 6 一致；不必改 golden 的期望章、不必重錄；限定 `llm` 的句子，規則層（決定性的程式）的檢查不跟著變鬆。代價是放寬計分，Owner 若認為門檻不該被實質降低，就選 1 或 2。A3 原本說「重錄完看分數再決定」，也可以先重錄、看這一句的實際回答再選。
 
 #### 7. 重錄後怎麼看
@@ -1080,6 +1084,7 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 - `npm run eval:classify`：看 accuracy／macro-F1，以及「程式後處理改了 N 題的章」那一行——N 很大表示模型仍常挑到相鄰章，分數主要是程式補的；逐題的規則在報表的逐題表。
 - `npm run eval:nlq`：llm 欄的逐句 `adjustments`（哪幾句被證據檢查、平面／空間、界線規則動過）。
 - 兩個 suite 若只差一題未達，先看是不是 LC-2、LC-4 那幾題，再回來決定 LC-1～LC-4。
+- 〔Owner 2026-09-27 選 LC-3＝2、LC-4＝3〕已落實於 `dec/r6-gates`，見 10.18。
 
 ### 10.16 第五輪 A 模板與 schema（2026-09-27）
 
@@ -1255,3 +1260,68 @@ C-f 的細節：
 2. `job_events.detail.finish_reason` 原本不分供應商都寫，Gemini 的 error 事件也會多這一欄 → 改成只在本機模型時寫，Gemini 路徑的事件與之前相同（單元與整合測試都改成斷言 Gemini 事件**沒有**這一欄）。
 3. 變式產生與拆題分塊不在截斷不重試的範圍內 → 寫進第 1 點 C-f 細節的「範圍限制」。程式不改（Owner 核准的是狀態機節點）。
 4. 沒套 0020、退回 `schema_invalid` 時複核頁說明與實情不符 → 程式行為不改（過渡情況），在伺服器視窗訊息 `OUTPUT_TRUNCATED_SCHEMA_MESSAGE` 與第 1 點 C-f 細節註明。
+
+### 10.18 第五輪 C 閘門與計分（2026-09-27）
+
+分支 `dec/r6-gates`（從 `local/integration-r5` `a670783` 開；節號原暫編 10.16，〔整合 2026-09-27 dec/integration-r6〕依併入順序改號為 10.18）。五題都照 Owner 第五輪的決定做，程式、測試與 commit 都標「Owner 第五輪 <題號> 核准」。**`eval/thresholds.json`、golden、既有 cassette 一個位元都沒動**；沒有改任何模板、schema 或 prompt。
+
+#### 1. L-1＝1：公式閘門擋下換行以外的控制字元（Owner 第五輪 L-1 核准）
+
+- `utils/formulaLint.js` 的 `ISSUE_RULES` **最後面**加一條 `control_char`（`error`）。這個名字會永久進 `job_events.detail` 與 `report:jobs`，之後不能改。訊息寫出是哪個字元（例「換頁 U+000C」）與「多半是 LaTeX 的反斜線被 JSON 吃掉」。
+- 範圍：C0 控制字元 U+0000～U+001F 與 U+007F（與 `latexEscapeRepair.hasNonNewlineControl`、`docs/llm.md` 第 10 節「帶控制字元」的定義相同，但 Windows 換行 `\r\n` 裡的歸位不算；`hasNonNewlineControl` 是回歸量測用的計數，連這個歸位也算進去）。**例外只有換行**：U+000A，以及 Windows 換行 `\r\n` 裡的歸位；單獨的歸位照擋（`\rho` 被吃掉＝歸位＋`ho`），定位也擋（`\times`、`\theta`）。同一條規則最多回報 5 筆（`MAX_PER_RULE`）。
+- 走到哪裡：題幹（含選項，選項寫在 `question_text` 裡）與答案經 `agents/lint.js` 的 `gate` → 有 `control_char` 就是 error → **送第三層公式重寫**（`cacheKeyParts.issues` 帶 `control_char`）；重寫後還有控制字元照樣 `fail(formula_unparsable)`。複核頁送出（`reviewController`）也用同一個 `formulaLint`，所以老師核准時仍帶控制字元會被擋（可勾「接受純文字降級」）。**手動貼上的定位字元（tab）也算**：例如老師從 Word 貼上用 tab 對齊的選項排版，送出會回 400，要先把 tab 換成空白，或勾「接受純文字降級」；拆題模型（含 Gemini）的輸出若帶 tab，也會多走一次 lint 重寫。repo 內現有的 Gemini extract、verify 回放檔經 `latexEscapeRepair` 修過之後控制字元都是 0，目前資料不受影響。〔審查意見補充，`dec/r6-gates-fix`〕
+- 詳解：verify 在 lint **之後**才跑，詳解沒有公式重寫可以送。`workers/jobRunner.js` 的 `buildSolutionFields` 與 `scripts/backfill_solutions.js` 改成「詳解還有換行以外的控制字元就不寫」（兩欄 NULL；回填腳本的略過原因記 `control_char`）。判準共用 `formulaLint` 新匯出的 `findControlChars`。
+- 量測（repo 內現有 cassette，經 `latexEscapeRepair` 修過之後跑 `lint.gate`；工具就是 `test/unit/latexEscapeRepair.test.js` 第 5 組）：
+
+  | | 本機 variant 60 支（qwen3:8b，2026-09-25） | Gemini variant 87 支 |
+  |---|---|---|
+  | 改之前（`a670783`） | 47 過／13 擋；帶控制字元卻通過 3 支 | 86 過／1 擋；帶控制字元卻通過 0 |
+  | 只做 L-1 | **44 過／16 擋**（與 `docs/llm.md` 第 10 節的估計相同：剩下「換頁＋`dg`」的 3 支 `38d651f8`、`85e979cf`、`aabdbb41` 改成擋下） | **86／1 不變**（剩下那支本來就被擋） |
+  | 只做 L-3 | 53 過／7 擋；帶控制字元卻通過 3 支 | 86／1 |
+  | L-1＋L-3（本分支） | **50 過／10 擋**；帶控制字元卻通過 **0** | 86／1；0 |
+
+  修復**之前**的原始回應也一起算：本機 49 過 → 11 過、Gemini 86 → 76 過（帶控制字元的一支都過不了）。剩下擋下的 10 支：`\root` 2 支、`\norm` 2 支、`\big`／`\bigg` 2 支（解析器不支援，`unknown_command`）、「換頁＋`dg`」3 支（`control_char`）、`$` 不成對 1 支。
+
+#### 2. L-3＝1：解析器支援 `\bullet`、`\textbf`（Owner 第五輪 L-3 核准）
+
+- `utils/textFormatter.js`：`\bullet` 加進 **`EXTRA_SYMBOLS`**（只給 Word 匯出，排成 U+2219 `∙`）；`\textbf{…}` 是 `parseCommand` 的特判（與 `\mathbf` 相同只取內容，不另設粗體），列進 `PARSER_COMMANDS`。**沒有動 `SYMBOLS`**，`utils/embedText.js` 也沒動。
+- 既有題目的 `embed_text` 不變：`test/unit/formulaBulletTextbf.test.js` 把含 `\bullet`、`\textbf` 的三句在 `a670783` 算出的 `embed_text` 寫死比對，並確認 fixture 62 題的 `sha256(embed_text)` 仍全部查得到本機向量檔。
+- `services/llm/latexEscapeRepair.js` 的 `UNSUPPORTED_LATEX_COMMANDS` 移出這兩個（修復表照樣認得：`supportedCommandNames()` 涵蓋）。
+- 效果：還原出 `\bullet`／`\textbf` 的 6 支本機變式（`288f5abc`、`42633f8b`、`578ea572`、`fc040873`、`7bdc13c6`、`c55a3ee6`）改為通過閘門、不必走 lint 重寫。`docs/llm.md` 第 10 節原本寫「4 支由通過變擋下」，另外 2 支（`7bdc13c6`、`c55a3ee6`）是修復前就被擋、修復後仍因這兩個指令被擋的。
+
+#### 3. LC-3＝2：界線規則也套在分類的零成本閘門（Owner 第五輪 LC-3 核准）
+
+- `agents/classify.js`：拆題模型的章在白名單內、信心 ≥ `CLASSIFY_MIN_CONF` 時，先用同一張界線規則表（`utils/chapterPostRules.js` 的 `boundaryTarget`）看題幹；規則判定要換章就**直接改章，仍記為閘門通過**（`source:'gate'`、不呼叫 LLM），`data.adjustments` 記規則、原本的章與證據，`rationale` 前面加「〔界線規則：拆題模型給「…」，依題幹的「…」改為「…」〕」。沒觸發的題 `outcome.data` 與改版前逐鍵相同。kNN 投票照舊不套。入庫的 `chapter_src` 仍是 `ai`（`gate` → `ai`，對照表不變）。
+- 不誤觸（`node eval/tools/local_v1_counterfactual.js --gate`，新選項；單元測試釘住同樣的數字）：
+  - ① classify golden 92 題以「拆題模型給對的章、信心 1」走閘門：**被改 0 題**。fixture 62 題以自己的章走閘門：被改 0 題。
+  - ② 以 2026-09-25 分類模型的原始回答**代用**成拆題模型的章（拆題模型的章沒有錄過）：閘門前 77／92 對 → 閘門後 90／92 對，改對 13 題、**改錯 0 題**（就是 10.15 第 2 點那 13 題）。
+  - classify suite 本身刻意跳過閘門，反事實量測仍是 0.9783（90/92）、macro-F1 0.908，不變。
+- 不影響任何 cassette 的鍵（閘門不呼叫 LLM）；pipeline eval 與 e2e 的閘門結果可能跟著變，要等 `extract_ocr` 錄好才看得到。
+
+#### 4. LC-4＝3：nlq 的多章期望放寬計分（Owner 第五輪 LC-4 核准）
+
+- `eval/lib/suiteNlq.js` 的 `filtersExact(expect, got, { expectPath })`：**只有** `expect_path` 為 `llm`、期望兩章以上的句子，`chapters` 一欄改成「回的章都在期望內、至少一章」就算對；其餘三欄照舊 exact。rules 路徑（例：nlq-050 期望〔向量內積、空間向量內積〕）與單章期望照舊兩章全對。不傳 `expectPath` 時與改版前逐位元相同（`localV1Regression` 的既有斷言不變）。目前 golden 只有 **nlq-036** 套用。
+- 報表註明：`eval:nlq` 的警告多一行「llm 欄 filters_exact 為放寬計分（Owner 第五輪 LC-4 核准）…與 2026-09-25 以前的分數不可直接比」，報表 JSON 的 `meta.scoring` 記計分規則與套用的句子，逐句的 `perEntry[].lenient` 標出用了放寬規則的句子。**門檻 0.72 不動。**
+- 反事實量測：同一份 2026-09-25 回答仍是 6/8（nlq-036 回的是期望外的〔直線運動〕，放寬後照樣錯）；放寬只在重錄後模型回〔摩擦力與向心力〕或〔牛頓運動定律〕其中一章時才有差。
+
+#### 5. D-2＝3：pipeline eval 在 OCR 模式把 saved_rate 印成 n/a、加替代指標（Owner 第五輪 D-2 核准）
+
+- OCR 模式的判斷（`eval/lib/suitePipeline.js` 的 `isOcrOnlyRun`）：拆題模型是 ollama 而且 `LOCAL_EXTRACT_MODE=ocr`（與 runner 相同），或任何一題的 `payload.extract.extract_mode` 是 `ocr`。
+- `saved_rate`：OCR 模式印 `n/a`（報表註明「OCR 模式每題都停在人工複核，設計上恆為 0，不比門檻（Owner 第五輪 D-2）」），**不比門檻**。做法是 suite 回報 `notApplicable`，`eval/lib/thresholds.js` 的 `compareSuite` 只認白名單 `NOT_APPLICABLE_ALLOWED`（目前只有 `pipeline.pipeline.saved_rate`；其他組合丟錯），略過的列在「未設門檻（只報告不擋）」那一行。交叉驗證與 Gemini 模式照舊比 0.87。`thresholds.json` 不動；`--write-baseline` 遇到 n/a 照舊保留原值。
+- 替代指標「**人工核准前的通過率**」＝ `needs_review` 且原因 `ocr_only` 的題 ÷ 全部題（走完全部閘門、只因「只用 OCR 拆題」停下）。印在報表「結果分佈」、存在報表 JSON 的 `ocrOnly.pre_approval`；**不進 `measured`、不設門檻**，累積兩三次實測後再請 Owner 定。OCR 模式卻有題自動入庫時另印警告。
+- 現在 `extract_ocr` 還沒錄，pipeline 一輪都跑不起來，兩個欄位都是 n/a（0／0）。
+
+#### 6. 測試與 eval（2026-09-27）
+
+- `npm test` 3645 過、0 失敗、2 略過（新增 `formulaControlChar`、`formulaBulletTextbf`、`evalPipelineOcrMode` 三個檔，並擴充 `chapterPostRules`、`nlqSuite`、`localV1Regression`）；`check:html` 通過；`test:integration` 615 過（5433 上另建的 UTF8 測試庫，用完刪掉）。
+- 為了這五題改了的既有斷言（都是 Owner 核准的合約變更，不是放寬）：`latexEscapeRepair.test.js` 第 5 組的閘門數字（見第 1 點的表）；`chapterPostRules.test.js` 原本釘「零成本閘門不套用」；`classifyKnn.test.js` 的「閘門優先」一案（題幹是二維坐標，閘門現在把「空間向量內積」改成「向量內積」，另外斷言 `adjustments`）；`localPerfThinking.test.js` 注入的「公式寫錯」題由 `\textbf` 改成仍不支援的 `\vecc`（斷言不變）；`localModeSections.test.js` 原本釘「只有 10.12～10.15 四節」，改成前四節不變、末尾允許第五輪的 10.18（整合重編時一併改）。
+- eval replay（CI 的本機模型設定）與 `a670783` 比對：classify、variant、retrieval 輸出相同；nlq 只多放寬計分那一行警告；pipeline 只多 D-2 的兩處說明。**本分支沒有造成新的 replay miss**：classify 92／92、nlq 8、variant 2 次生成＋29 次缺向量、pipeline 的 `extract_ocr` 都是基準本來就有的。
+- 重錄影響：沒有改模板、schema、prompt。L-1 會讓 lint 的 `cacheKeyParts.issues` 在輸入帶控制字元時多一個 `control_char`、L-3 讓帶 `\bullet`／`\textbf` 的題不再呼叫 lint——repo 裡 4 支本機 lint 回放檔（2026-09-25）的輸入是修復前的原始字串，`latexEscapeRepair` 併入後本來就對不上，本分支沒有讓任何原本讀得到的回放檔失效。variant 照 O-1 本來就要整步重錄（連帶 lint、verify），不必為本分支另外錄；classify、nlq、pipeline 的回放鍵不變。
+
+#### 7. 審查意見修正（`dec/r6-gates-fix`，2026-09-27）
+
+審查結論是通過，3 條 minor 都先驗證再改，只動文件與註解，程式行為、測試斷言都沒變：
+
+- 第 1 點「範圍與 `hasNonNewlineControl` 相同」不精確（確認屬實）：`hasNonNewlineControl` 用 `/[\x00-\x09\x0B-\x1F\x7F]/`，`\r\n` 的歸位也算；`control_char`（`CONTROL_CHAR_RE`）把它排除。第 1 點與 `utils/formulaLint.js` 的 JSDoc 都改成「相同，但 `\r\n` 裡的歸位不算」。
+- `latexEscapeRepair.test.js` 第 5 組 Gemini 那一案的註解寫「11 支」（確認屬實）：斷言是修前 86 → 76，少的是「修前帶控制字元而通過」的 10 支（與改之前的 `passedWithCtrl[0]＝10` 相同），註解改成 10 支；斷言不動。
+- 複核頁會擋手動貼上的 tab（確認屬實，在 Owner L-1 核准範圍內，行為不改）：第 1 點補一句說明，並記下目前 Gemini extract、verify 回放檔修復後控制字元為 0。

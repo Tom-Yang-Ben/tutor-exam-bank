@@ -96,7 +96,8 @@ jobs:
       # 'cross' 模式由單元與整合測試（假模型）覆蓋，不靠回放。
       # 〔審查 2026-09-26〕這一行與 e2e 的 ocr 分支一起進：ocr 模式一題都不自動入庫，所以 test/e2e/pipeline.e2e.test.js 的
       # 「部分入庫」兩項在 ocr 模式改驗「每一題停在複核（ocr_only）→ 經複核 API 核准一題入庫」（檔頭；10.12 第 7 點選項 ①，
-      # 測試契約變更、待 Owner 裁決）。eval:pipeline 的 saved_rate 在 ocr 模式固定是 0（設計如此，10.12 第 7 點）。
+      # 測試契約變更、待 Owner 裁決）。eval:pipeline 的 saved_rate 在 ocr 模式固定是 0（設計如此，10.12 第 7 點）；
+      # 〔Owner 第五輪 D-2 核准〕ocr 模式印 n/a、不比門檻，另報「人工核准前的通過率」（只報告，docs/local-mode.md 10.18 第 5 點）。
       LOCAL_EXTRACT_MODE: ocr
       # 向量檔 eval/fixtures/embeddings.<模型>.768.json 的模型段（`:`、`/`、`\` 換成 `-`）：
       # 這一行對應 embeddings.ollama-qwen3-embedding-0.6b.768.json。沒有前綴的舊值（gemini-embedding-001）視為 Gemini。

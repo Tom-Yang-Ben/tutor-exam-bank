@@ -588,7 +588,8 @@ describe('報告', () => {
     });
 
     test('新段落都在；「（不思考）」另列一組；第 4 段的一份卷大小可以改', () => {
-        const fixtureQuestions = [{ question_text: '求 $\\frac{1}{2}$ 的值', answer_text: '$\\frac{1}{2}$' }, { question_text: '求 $\\textbf{v}$', answer_text: '1' }];
+        // 〔Owner 第五輪 L-3〕\textbf 之後解析器支援，「公式寫錯」的那一題改用不支援的 \vecc（斷言不變）
+        const fixtureQuestions = [{ question_text: '求 $\\frac{1}{2}$ 的值', answer_text: '$\\frac{1}{2}$' }, { question_text: '求 $\\vecc{v}$', answer_text: '1' }];
         const { markdown, data } = perf.buildReport(perf.parseArgs(['--cassettes', dir]), { env: {}, now: new Date(2026, 8, 26, 12), fixtureQuestions });
         for (const h of ['### 1.2 ', '### 1.3 ', '### 1.4 ', '### 1.5 ', '### 1.6 ', '## 4. ', '### 4.1 ']) assert.ok(markdown.includes(h), h);
         assert.match(markdown, /\| `lint`（不思考） \| `qwen3:8b` \| 1（樣本少：p90 等於最大值） \|/);
