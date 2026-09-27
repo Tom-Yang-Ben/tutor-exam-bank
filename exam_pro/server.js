@@ -3,7 +3,7 @@ const app = require('./app');
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`🚀 家教題庫後端系統已成功安全啟動：http://localhost:${PORT}`);
 });
 
@@ -13,4 +13,9 @@ app.listen(PORT, () => {
 // 開發時用 nodemon 熱重載會殺掉跑到一半的節點；租約過期後那一列會被重新認領，
 // 已記進 job_events 的用量不會遺失（規劃 §3.9 的風險表第 1 列）。
 const { startInlineRunner } = require('./workers/jobRunner');
-startInlineRunner();
+const runner = startInlineRunner();
+
+// 桌面啟動器（docs/desktop-launcher.md）：把 server 與 runner 交給「優雅關閉」通道。
+// 只是記住參照；關閉路由只有在環境有 LAUNCHER_CONTROL_TOKEN（由啟動器開的後端）時才掛（app.js 3b），
+// npm start／npm run dev 的行為不變。
+require('./services/launcherControl').attach({ server, runner });
