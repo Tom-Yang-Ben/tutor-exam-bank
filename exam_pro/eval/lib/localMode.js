@@ -114,8 +114,13 @@ function effectiveModels(ci = {}) {
         EMBED_MODEL: ci.EMBED_MODEL || LOCAL_DEFAULTS.EMBED_MODEL,
         MODEL_NLQ: ci.MODEL_NLQ || NLQ_CODE_DEFAULT,
         OCR_ENGINE: String(ci.OCR_ENGINE || LOCAL_DEFAULTS.OCR_ENGINE).trim().toLowerCase(),
-        // 〔OCR 為主 2026-09-26〕與程式同一條解讀規則（config/localExtractMode.js）；非法值在子行程裡也會退回 cross
-        LOCAL_EXTRACT_MODE: String(ci.LOCAL_EXTRACT_MODE || '').trim().toLowerCase() === 'ocr' ? 'ocr' : 'cross'
+        // 〔OCR 為主 2026-09-26〕與程式同一條解讀規則（config/localExtractMode.js）；
+        // 〔Owner 第五輪 D-3〕沒寫、空白、非法值＝程式預設 ocr（原本是 cross），只有明寫 cross 才是交叉驗證
+        LOCAL_EXTRACT_MODE: (() => {
+            const cfg = require('../../config/localExtractMode');
+            const raw = String(ci.LOCAL_EXTRACT_MODE || '').trim().toLowerCase();
+            return cfg.LOCAL_EXTRACT_MODES.includes(raw) ? raw : cfg.DEFAULT_LOCAL_EXTRACT_MODE;
+        })()
     };
 }
 
@@ -136,7 +141,7 @@ function extractChainFor(mode) {
  *
  * @param {{models?:Record<string,string>, suites:string[], withSimilar?:boolean}} opts
  *        withSimilar：rerecord 的 --no-similar 關掉時，e2e 不錄 dedup1 的向量
- * 〔OCR 為主 2026-09-26〕ci.yml 寫了 LOCAL_EXTRACT_MODE=ocr 而且拆題模型是 ollama 時，本機拆題不呼叫視覺模型：
+ * 〔OCR 為主 2026-09-26〕ci.yml 寫了 LOCAL_EXTRACT_MODE=ocr（〔Owner 第五輪 D-3〕或沒寫：預設 ocr）而且拆題模型是 ollama 時，本機拆題不呼叫視覺模型：
  * MODEL_EXTRACT 不列進 uses（不必下載、不檢查 qwen3-vl）；OCR 仍然要。與 OCR_ENGINE=none 同時寫是矛盾設定（configError）。
  *
  * @returns {{models:object, uses:Array<{key:string, spec:string}>, gemini:Array<{key:string, spec:string}>,
@@ -167,8 +172,10 @@ function recordingPlan({ models = {}, suites, withSimilar = true }) {
     // 拆題只在 pipeline（e2e 由 pipeline 那一步順帶錄）；本機路徑且 OCR_ENGINE=paddle 才需要 PaddleOCR
     const extractRuns = want.has('pipeline') || want.has('e2e');
     const needOcr = extractRuns && vendorOf(eff.MODEL_EXTRACT) === 'ollama' && eff.OCR_ENGINE === 'paddle';
+    // 〔Owner 第五輪 D-3〕ci.yml 沒寫 LOCAL_EXTRACT_MODE＝預設 ocr；只寫 OCR_ENGINE=none 也矛盾（訊息講「要看圖就明寫 cross」）
     const configError = require('../../config/localExtractMode').localExtractConflict({
-        localExtract, mode: eff.LOCAL_EXTRACT_MODE, ocrEngine: eff.OCR_ENGINE
+        localExtract, mode: eff.LOCAL_EXTRACT_MODE, ocrEngine: eff.OCR_ENGINE,
+        explicit: require('../../config/localExtractMode').isLocalExtractModeExplicit(models)
     });
     return {
         models: eff, uses, gemini, ollama, needGeminiKey: gemini.length > 0, needOcr, local: ollama.length > 0,

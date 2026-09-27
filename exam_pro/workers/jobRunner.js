@@ -95,6 +95,9 @@ function loadConfig(env = process.env) {
         const n = Number.parseFloat(env[name]);
         return Number.isFinite(n) ? n : dflt;
     };
+    // 〔Owner 第五輪 V5-3、V5-4、V5-5 核准 2026-09-27〕去重兩個門檻的預設依向量模型決定（config/similarityThresholds.js：
+    // 本機 0.99／0.90、Gemini 0.97／0.90）；.env 明寫仍優先。回傳形狀不變（鍵一個都沒加）。
+    const sim = require('../config/similarityThresholds').resolveSimilarityThresholds(env);
     return {
         pollMs: int('JOB_POLL_MS', 2000),
         concurrency: Math.max(1, int('JOB_CONCURRENCY', 2)),
@@ -105,8 +108,8 @@ function loadConfig(env = process.env) {
         pdfChunkPages: Math.max(1, int('JOB_PDF_CHUNK_PAGES', 20)),
         inlineMaxBytes: int('GEMINI_INLINE_MAX_BYTES', 15728640),
         classifyMinConf: num('CLASSIFY_MIN_CONF', 0.8),
-        dedupDup: num('DEDUP_DUP_THRESHOLD', 0.97),
-        dedupVariant: num('DEDUP_VARIANT_THRESHOLD', 0.90)
+        dedupDup: sim.dedupDup,
+        dedupVariant: sim.dedupVariant
     };
 }
 
@@ -141,13 +144,16 @@ function loadStage3Config(env = process.env) {
     // 裁決 S3-R9：`VARIANT_SIM_MIN` 拆成兩個，因為同一個數字兼任「檢索下限」與「跑題閾值」時
     // 最佳值方向相反（docs/variants.md 第 3 節）。舊名仍是**退路**（只在新變數沒設時生效），
     // 讓還沒更新 .env 的環境行為不變；.env.example 註明過渡期後移除。
-    const legacySimMin = num('VARIANT_SIM_MIN', null);
+    // 〔Owner 第五輪 V5-1、V5-2、O-2、V5-5 核准 2026-09-27〕三個餘弦門檻的預設依向量模型決定
+    // （config/similarityThresholds.js：本機 0.72／0.87（暫定）／0.90、Gemini 0.80／0.90／0.90）；
+    // 優先順序不變：.env 明寫 > 舊名 VARIANT_SIM_MIN（只給兩個變式門檻）> 預設。
+    const sim = require('../config/similarityThresholds').resolveSimilarityThresholds(env);
     return {
         // 四個門檻會進 ctx.config.thresholds（agent 一律不得自己讀 process.env）
-        variantRetrieveSimMin: num('VARIANT_RETRIEVE_SIM_MIN', legacySimMin ?? 0.80),
-        variantOfftopicSimMin: num('VARIANT_OFFTOPIC_SIM_MIN', legacySimMin ?? 0.90),   // S3-R29：0.92 → 0.90
+        variantRetrieveSimMin: sim.variantRetrieveSimMin,
+        variantOfftopicSimMin: sim.variantOfftopicSimMin,   // S3-R29：0.92 → 0.90（Gemini）；Owner 第五輪 V5-2：本機 0.87（暫定）
         variantMinEdit: num('VARIANT_MIN_EDIT', 0.08),
-        knnVoteSim: num('KNN_VOTE_SIM', 0.90),
+        knnVoteSim: sim.knnVoteSim,
         // 只影響變式 job 的 lint 重試上限（第 4.6 條），預設與階段 2 同值
         variantLintRetries: int('VARIANT_LINT_RETRIES', DEFAULT_LIMITS.maxRetries.lint),
         // false（首輪預設）＝ 全部閘門過了仍停在 needs_review('awaiting_approval') 等人核准
@@ -222,7 +228,8 @@ function loadLocalModeConfig(env = process.env, opts = {}) {
 
 /**
  * 〔OCR 為主 2026-09-26〕本機拆題的模式 LOCAL_EXTRACT_MODE（config/localExtractMode.js；docs/local-mode.md 10.12）：
- * 'cross'（預設，交叉驗證）｜'ocr'（只用 OCR 拆題，每題停在 needs_review('ocr_only')）。
+ * 'ocr'（預設；〔Owner 第五輪 D-3 核准 2026-09-27〕原本預設是 cross，只用 OCR 拆題，每題停在 needs_review('ocr_only')）｜
+ * 'cross'（交叉驗證，要明寫）。
  *
  * 與 loadLocalModeConfig 分開另一支的理由相同：那一支的回傳形狀被 test/unit/extractLocalRunner.test.js 用 deepEqual 釘住。
  * `createRunner()` 把它疊在 loadLocalModeConfig 之後，經 ctx.config.localExtract 帶給 agent（agent 不讀 process.env）。
@@ -233,6 +240,17 @@ function loadLocalModeConfig(env = process.env, opts = {}) {
  */
 function loadLocalExtractModeConfig(env = process.env) {
     return { localExtractMode: require('../config/localExtractMode').resolveLocalExtractMode(env) };
+}
+
+/**
+ * 〔Owner 第五輪 D-3 2026-09-27〕啟動訊息裡的拆題方式（只在拆題模型是 ollama 時印）。
+ * @param {'cross'|'ocr'} mode
+ * @returns {string}
+ */
+function startupExtractModeText(mode) {
+    return mode === 'cross'
+        ? 'cross（PaddleOCR＋看圖模型交叉驗證；.env 明寫 LOCAL_EXTRACT_MODE=cross）'
+        : 'ocr（只用 PaddleOCR＋文字模型拆題，每題停在人工複核；程式預設，要交叉驗證就在 .env 明寫 LOCAL_EXTRACT_MODE=cross）';
 }
 
 /** 〔審查 2026-09-26〕沒套 0019 就開 LOCAL_EXTRACT_MODE=ocr 時，runner 印的那一句（只印一次） */
@@ -537,8 +555,10 @@ function createRunner(opts = {}) {
     };
     // 〔OCR 為主〕矛盾設定（拆題模型是 ollama、LOCAL_EXTRACT_MODE=ocr、OCR_ENGINE=none）在建立 runner 時就丟錯：
     // server.js 的 startInlineRunner 與 node workers/jobRunner.js 都在啟動時停下、印出要改哪一行，不會等到上傳才失敗。
+    // 〔Owner 第五輪 D-3〕預設改成 ocr 之後，只寫 OCR_ENGINE=none 也會撞到；explicit 讓訊息講清楚「沒寫＝預設 ocr、要看圖就明寫 cross」
     require('../config/localExtractMode').assertLocalExtractConfig({
-        localExtract: config.localExtract === true, mode: config.localExtractMode, ocrEngine: config.ocrEngine
+        localExtract: config.localExtract === true, mode: config.localExtractMode, ocrEngine: config.ocrEngine,
+        explicit: (opts.config && 'localExtractMode' in opts.config) || require('../config/localExtractMode').isLocalExtractModeExplicit()
     });
     if (!Number.isFinite(config.renewIntervalMs) || config.renewIntervalMs <= 0) {
         config.renewIntervalMs = renewIntervalFor(config.leaseMs);
@@ -1658,7 +1678,14 @@ function createRunner(opts = {}) {
 
     function start() {
         if (timer) return;
-        logger.info({ msg: 'jobRunner 啟動', poll_ms: config.pollMs, concurrency: config.concurrency });
+        // 〔Owner 第五輪 D-3、V5-5 2026-09-27〕啟動訊息帶出實際生效的拆題方式（只在拆題模型是 ollama 時）與餘弦門檻，
+        // Owner 從伺服器視窗就看得到「沒寫 .env 時用的是哪一組」，不必翻文件（docs/local-mode.md 10.16）
+        logger.info({
+            msg: 'jobRunner 啟動', poll_ms: config.pollMs, concurrency: config.concurrency,
+            ...(config.localExtract === true ? { local_extract_mode: startupExtractModeText(config.localExtractMode) } : {}),
+            thresholds: require('../config/similarityThresholds').describeSimilarityThresholds(
+                require('../config/similarityThresholds').resolveSimilarityThresholds())
+        });
         timer = setInterval(() => { tick(); }, config.pollMs);
         if (typeof timer.unref === 'function') timer.unref();
         tick();
@@ -1693,6 +1720,7 @@ module.exports = {
     // 〔本機模式 L2〕
     loadLocalModeConfig, renewIntervalFor, crossCheckStopReason,
     loadLocalExtractModeConfig,   // 〔OCR 為主 2026-09-26〕
+    startupExtractModeText,   // 〔Owner 第五輪 D-3〕
     ocrOnlySchemaProblem, OCR_ONLY_SCHEMA_MESSAGE,   // 〔審查 2026-09-26〕
     LOCAL_NODE_TIMEOUT_MS, LOCAL_PDF_CHUNK_PAGES, LOCAL_CONCURRENCY, RENEW_MIN_INTERVAL_MS,
     LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES,   // 〔第四輪 V3〕

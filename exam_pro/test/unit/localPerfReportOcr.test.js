@@ -97,6 +97,12 @@ describe('perf:local — 只用 OCR 拆題', () => {
         assert.ok(!/\n{3,}/.test(markdown));
         const roomy = perf.buildReport(args, { env: { LOCAL_EXTRACT_MODE: 'ocr', OLLAMA_NUM_CTX: '32768' } }).markdown;
         assert.match(roomy, /放得下（還有/);
+        // 〔Owner 第五輪 D-3 2026-09-27〕.env 沒寫＝程式預設 ocr：報告與明寫 ocr 相同（產生時間以外逐字相同）
+        const now = new Date('2026-09-27T12:00:00Z');
+        const unset = perf.buildReport(args, { env: {}, now }).markdown;
+        assert.match(unset, /`LOCAL_EXTRACT_MODE=ocr`（只用 OCR：一塊＝ocr → extract_ocr，不看圖；沒寫時的程式預設）/);
+        assert.equal(unset, perf.buildReport(args, { env: { LOCAL_EXTRACT_MODE: 'ocr' }, now }).markdown);
+        assert.match(perf.buildReport(args, { env: { LOCAL_EXTRACT_MODE: 'cross' }, now }).markdown, /交叉驗證（`\.env` 明寫 `LOCAL_EXTRACT_MODE=cross`/);
     });
 
     // 〔整合 r5 審查〕加速分支的逐步驟設定（OLLAMA_NUM_CTX_EXTRACT_OCR、OLLAMA_MAX_OUTPUT_EXTRACT_OCR）才是實際送出的值：

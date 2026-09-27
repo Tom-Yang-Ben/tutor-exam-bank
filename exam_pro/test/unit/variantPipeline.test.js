@@ -18,7 +18,14 @@ const { TERMINAL_STATES } = require('../../pipeline/stateMachine');
 
 describe('loadStage3Config（第 9 條的五個新變數）', () => {
     test('全空的環境用預設值（裁決 S3-R9：兩個門檻分家，預設不同）', () => {
+        // 〔Owner 第五輪 V5-1、V5-2、O-2、V5-5 核准 2026-09-27〕依向量模型：全空＝本機 → 0.72／0.87（暫定）／kNN 0.90
         assert.deepEqual(runner.loadStage3Config({}), {
+            variantRetrieveSimMin: 0.72, variantOfftopicSimMin: 0.87,
+            variantMinEdit: 0.08, knnVoteSim: 0.90,
+            variantLintRetries: 2, variantAutoApprove: false
+        });
+        // Gemini 向量：S3-R9／S3-R29 的原值
+        assert.deepEqual(runner.loadStage3Config({ EMBED_MODEL: 'gemini-embedding-001' }), {
             variantRetrieveSimMin: 0.80, variantOfftopicSimMin: 0.90,   // S3-R29
             variantMinEdit: 0.08, knnVoteSim: 0.90,
             variantLintRetries: 2, variantAutoApprove: false
@@ -63,9 +70,13 @@ describe('loadStage3Config（第 9 條的五個新變數）', () => {
 
     test('亂填的數字退回預設，不會變成 NaN', () => {
         const c = runner.loadStage3Config({ VARIANT_RETRIEVE_SIM_MIN: 'abc', VARIANT_SIM_MIN: 'x', KNN_VOTE_SIM: '' });
-        assert.equal(c.variantRetrieveSimMin, 0.80);
-        assert.equal(c.variantOfftopicSimMin, 0.90);   // S3-R29
+        assert.equal(c.variantRetrieveSimMin, 0.72);   // 〔Owner 第五輪 V5-1〕本機預設
+        assert.equal(c.variantOfftopicSimMin, 0.87);   // 〔Owner 第五輪 V5-2〕本機預設（暫定）
         assert.equal(c.knnVoteSim, 0.90);
+        const g = runner.loadStage3Config({ EMBED_MODEL: 'gemini-embedding-001', VARIANT_RETRIEVE_SIM_MIN: 'abc', VARIANT_SIM_MIN: 'x', KNN_VOTE_SIM: '' });
+        assert.equal(g.variantRetrieveSimMin, 0.80);
+        assert.equal(g.variantOfftopicSimMin, 0.90);   // S3-R29
+        assert.equal(g.knnVoteSim, 0.90);
     });
 
     test('既有的 loadConfig 形狀一個鍵都沒變（階段 2 的契約）', () => {

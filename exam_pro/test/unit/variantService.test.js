@@ -120,14 +120,19 @@ describe('設定與旗標', () => {
     test('三個門檻都有預設值，缺 .env 也跑得起來', () => {
         assert.equal(typeof svc.maxPerRequest({}), 'number');
         assert.equal(svc.maxPerRequest({}), 3);
-        assert.equal(svc.simMin({}), 0.8);
+        // 〔Owner 第五輪 V5-1、V5-5 核准 2026-09-27〕檢索下限依向量模型：沒寫 EMBED_MODEL＝本機 → 0.72；Gemini 維持 0.80
+        assert.equal(svc.simMin({}), 0.72);
+        assert.equal(svc.simMin({ EMBED_MODEL: 'ollama:qwen3-embedding:0.6b' }), 0.72);
+        assert.equal(svc.simMin({ EMBED_MODEL: 'gemini-embedding-001' }), 0.8);
         assert.equal(svc.tokenBudgetUsd({}), 0.3);
     });
 
     test('環境變數讀得到，壞值退回預設', () => {
         assert.equal(svc.maxPerRequest({ VARIANT_MAX_PER_REQUEST: '5' }), 5);
         assert.equal(svc.simMin({ VARIANT_SIM_MIN: '0.85' }), 0.85);
-        assert.equal(svc.simMin({ VARIANT_SIM_MIN: 'abc' }), 0.8);
+        assert.equal(svc.simMin({ VARIANT_SIM_MIN: 'abc' }), 0.72, '壞值退回預設（本機）');
+        assert.equal(svc.simMin({ VARIANT_SIM_MIN: 'abc', EMBED_MODEL: 'gemini-embedding-001' }), 0.8, '壞值退回預設（Gemini）');
+        assert.equal(svc.simMin({ VARIANT_RETRIEVE_SIM_MIN: '0.66', VARIANT_SIM_MIN: '0.85' }), 0.66, '新名優先於舊名');
     });
 
     test('FEATURE_VARIANTS 經 config/features.js 的凍結布林規則', () => {

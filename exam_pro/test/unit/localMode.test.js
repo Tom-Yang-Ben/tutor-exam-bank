@@ -57,7 +57,9 @@ describe('本機預設與 repo 的設定一致', () => {
 });
 
 describe('recordingPlan：這一輪錄製用到哪些模型、要不要金鑰與 OCR', () => {
-    const LOCAL_CI = { MODEL_EXTRACT: 'ollama:qwen3-vl:8b', MODEL_VERIFY: 'ollama:qwen3:8b', EMBED_MODEL: 'ollama:qwen3-embedding:0.6b', MODEL_NLQ: 'ollama:qwen3:8b' };
+    // 〔Owner 第五輪 D-3 2026-09-27〕程式預設改成 ocr（不看圖）；本段測的是交叉驗證的錄製計畫（三個模型），所以明寫 cross，
+    // 斷言不變。沒寫（預設 ocr）的計畫在 localExtractMode.test.js。
+    const LOCAL_CI = { MODEL_EXTRACT: 'ollama:qwen3-vl:8b', MODEL_VERIFY: 'ollama:qwen3:8b', EMBED_MODEL: 'ollama:qwen3-embedding:0.6b', MODEL_NLQ: 'ollama:qwen3:8b', LOCAL_EXTRACT_MODE: 'cross' };
     const ALL = ['retrieval', 'classify', 'pipeline', 'nlq', 'variant', 'e2e'];
 
     test('全部本機：不需要金鑰；三個模型各列一次；錄 pipeline 就要 OCR', () => {

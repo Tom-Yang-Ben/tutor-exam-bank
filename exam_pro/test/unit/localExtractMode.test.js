@@ -1,6 +1,6 @@
 // LOCAL_EXTRACT_MODE（〔OCR 為主 2026-09-26〕Owner 決定這台電腦的拆題改成 OCR 為主；docs/local-mode.md 10.12）
 //
-//   - config/localExtractMode.js：cross（預設）｜ocr；未設或空字串＝預設、非法值退回預設並警告一次；
+//   - config/localExtractMode.js：ocr（預設；〔Owner 第五輪 D-3 2026-09-27〕原本是 cross）｜cross；未設或空字串＝預設、非法值退回預設並警告一次；
 //     OCR_ENGINE=none 與 LOCAL_EXTRACT_MODE=ocr 同時設是矛盾設定：拆題模型是 ollama 時啟動就報錯
 //   - workers/jobRunner.js：設定疊進 runner、ctx.config.localExtract 帶給 agent、只用 OCR 拆的題停在 needs_review('ocr_only')
 //   - 0019 與 reviewController 的複核原因白名單
@@ -44,18 +44,27 @@ const QUIET = { info() { }, warn() { }, error() { } };
 describe('config/localExtractMode — 解析', () => {
     beforeEach(() => modeCfg._resetForTest());
 
-    test('兩個值、預設 cross', () => {
+    test('兩個值、預設 ocr（Owner 第五輪 D-3）', () => {
         assert.deepEqual(modeCfg.LOCAL_EXTRACT_MODES, ['cross', 'ocr']);
-        assert.equal(modeCfg.DEFAULT_LOCAL_EXTRACT_MODE, 'cross');
+        assert.equal(modeCfg.DEFAULT_LOCAL_EXTRACT_MODE, 'ocr');
     });
 
-    test('未設、空字串、空白 → cross（不警告）', () => {
+    test('未設、空字串、空白 → ocr（不警告）；只有明寫 cross 才是交叉驗證', () => {
         const warns = captureWarn(() => {
-            assert.equal(modeCfg.resolveLocalExtractMode({}), 'cross');
-            assert.equal(modeCfg.resolveLocalExtractMode({ LOCAL_EXTRACT_MODE: '' }), 'cross');
-            assert.equal(modeCfg.resolveLocalExtractMode({ LOCAL_EXTRACT_MODE: '   ' }), 'cross');
+            assert.equal(modeCfg.resolveLocalExtractMode({}), 'ocr');
+            assert.equal(modeCfg.resolveLocalExtractMode({ LOCAL_EXTRACT_MODE: '' }), 'ocr');
+            assert.equal(modeCfg.resolveLocalExtractMode({ LOCAL_EXTRACT_MODE: '   ' }), 'ocr');
+            assert.equal(modeCfg.resolveLocalExtractMode({ LOCAL_EXTRACT_MODE: 'cross' }), 'cross');
         });
         assert.deepEqual(warns, []);
+    });
+
+    test('isLocalExtractModeExplicit：只有寫了合法值才算明寫', () => {
+        assert.equal(modeCfg.isLocalExtractModeExplicit({}), false);
+        assert.equal(modeCfg.isLocalExtractModeExplicit({ LOCAL_EXTRACT_MODE: '  ' }), false);
+        assert.equal(modeCfg.isLocalExtractModeExplicit({ LOCAL_EXTRACT_MODE: 'vision' }), false);
+        assert.equal(modeCfg.isLocalExtractModeExplicit({ LOCAL_EXTRACT_MODE: ' Cross ' }), true);
+        assert.equal(modeCfg.isLocalExtractModeExplicit({ LOCAL_EXTRACT_MODE: 'ocr' }), true);
     });
 
     test('ocr／cross 照用（不分大小寫、前後空白）', () => {
@@ -64,11 +73,11 @@ describe('config/localExtractMode — 解析', () => {
         assert.equal(modeCfg.resolveLocalExtractMode({ LOCAL_EXTRACT_MODE: 'Cross' }), 'cross');
     });
 
-    test('非法值 → cross，同一個值只警告一次（訊息指名變數與可用值）', () => {
+    test('非法值 → 預設 ocr，同一個值只警告一次（訊息指名變數與可用值）', () => {
         const warns = captureWarn(() => {
-            assert.equal(modeCfg.resolveLocalExtractMode({ LOCAL_EXTRACT_MODE: 'vision' }), 'cross');
-            assert.equal(modeCfg.resolveLocalExtractMode({ LOCAL_EXTRACT_MODE: 'vision' }), 'cross');
-            assert.equal(modeCfg.resolveLocalExtractMode({ LOCAL_EXTRACT_MODE: 'ocr_only' }), 'cross');
+            assert.equal(modeCfg.resolveLocalExtractMode({ LOCAL_EXTRACT_MODE: 'vision' }), 'ocr');
+            assert.equal(modeCfg.resolveLocalExtractMode({ LOCAL_EXTRACT_MODE: 'vision' }), 'ocr');
+            assert.equal(modeCfg.resolveLocalExtractMode({ LOCAL_EXTRACT_MODE: 'ocr_only' }), 'ocr');
         });
         assert.equal(warns.length, 2);
         assert.match(warns[0], /LOCAL_EXTRACT_MODE/);
@@ -81,8 +90,10 @@ describe('config/localExtractMode — 解析', () => {
         try {
             process.env.LOCAL_EXTRACT_MODE = 'ocr';
             assert.equal(modeCfg.resolveLocalExtractMode(), 'ocr');
-            delete process.env.LOCAL_EXTRACT_MODE;
+            process.env.LOCAL_EXTRACT_MODE = 'cross';
             assert.equal(modeCfg.resolveLocalExtractMode(), 'cross');
+            delete process.env.LOCAL_EXTRACT_MODE;
+            assert.equal(modeCfg.resolveLocalExtractMode(), 'ocr');
         } finally {
             if (saved === undefined) delete process.env.LOCAL_EXTRACT_MODE; else process.env.LOCAL_EXTRACT_MODE = saved;
         }
@@ -95,6 +106,20 @@ describe('config/localExtractMode — 解析', () => {
         assert.match(msg, /\.env/);
         assert.throws(() => modeCfg.assertLocalExtractConfig({ localExtract: true, mode: 'ocr', ocrEngine: 'none' }),
             (err) => err.code === 'LOCAL_EXTRACT_CONFLICT' && err.message === msg);
+    });
+
+    test('〔Owner 第五輪 D-3〕沒寫 LOCAL_EXTRACT_MODE（預設 ocr）＋OCR_ENGINE=none 也是矛盾：訊息講清楚「沒寫＝預設 ocr、要看圖就明寫 cross」', () => {
+        const msg = modeCfg.localExtractConflict({ localExtract: true, mode: 'ocr', ocrEngine: 'none', explicit: false });
+        assert.match(msg, /沒寫 LOCAL_EXTRACT_MODE/);
+        assert.match(msg, /預設是 LOCAL_EXTRACT_MODE=ocr/);
+        assert.match(msg, /OCR_ENGINE=none/);
+        assert.match(msg, /LOCAL_EXTRACT_MODE=cross/);
+        assert.throws(() => modeCfg.assertLocalExtractConfig({ localExtract: true, mode: 'ocr', ocrEngine: 'none', explicit: false }),
+            (err) => err.code === 'LOCAL_EXTRACT_CONFLICT' && err.message === msg);
+        // 明寫的 ocr：訊息提醒「刪掉那一行會回到預設 ocr」，要看圖得改成 cross
+        assert.match(modeCfg.localExtractConflict({ localExtract: true, mode: 'ocr', ocrEngine: 'none', explicit: true }), /改成 cross/);
+        // Gemini 模式照舊不矛盾
+        assert.equal(modeCfg.localExtractConflict({ localExtract: false, mode: 'ocr', ocrEngine: 'none', explicit: false }), null);
     });
 
     test('其餘組合都不是矛盾（Gemini 模式完全不受影響）', () => {
@@ -116,7 +141,8 @@ describe('workers/jobRunner — LOCAL_EXTRACT_MODE', () => {
 
     test('loadLocalExtractModeConfig 另開一支（loadLocalModeConfig 的回傳形狀不變）', () => {
         assert.deepEqual(runner.loadLocalExtractModeConfig({ LOCAL_EXTRACT_MODE: 'ocr' }), { localExtractMode: 'ocr' });
-        assert.deepEqual(runner.loadLocalExtractModeConfig({}), { localExtractMode: 'cross' });
+        assert.deepEqual(runner.loadLocalExtractModeConfig({}), { localExtractMode: 'ocr' }, '〔Owner 第五輪 D-3〕沒寫＝ocr');
+        assert.deepEqual(runner.loadLocalExtractModeConfig({ LOCAL_EXTRACT_MODE: 'cross' }), { localExtractMode: 'cross' });
         assert.ok(!('localExtractMode' in runner.loadLocalModeConfig({ MODEL_EXTRACT: 'ollama:qwen3-vl:8b', LOCAL_EXTRACT_MODE: 'ocr' })));
     });
 
@@ -142,6 +168,14 @@ describe('workers/jobRunner — LOCAL_EXTRACT_MODE', () => {
             assert.equal(runner.createRunner({ db: fakeDb, llm: {}, logger: QUIET, config: { localExtractMode: 'cross' } }).config.localExtractMode, 'cross');
             process.env.OCR_ENGINE = 'none';
             assert.throws(() => runner.createRunner({ db: fakeDb, llm: {}, logger: QUIET }), /LOCAL_EXTRACT_MODE=ocr/);
+            // 〔Owner 第五輪 D-3〕沒寫 LOCAL_EXTRACT_MODE（預設 ocr）＋OCR_ENGINE=none：同樣在建立時就丟錯，訊息講「沒寫＝預設 ocr」
+            delete process.env.LOCAL_EXTRACT_MODE;
+            assert.equal(runner.createRunner({ db: fakeDb, llm: {}, logger: QUIET, config: { ocrEngine: 'paddle' } }).config.localExtractMode, 'ocr');
+            assert.throws(() => runner.createRunner({ db: fakeDb, llm: {}, logger: QUIET }),
+                (err) => err.code === 'LOCAL_EXTRACT_CONFLICT' && /沒寫 LOCAL_EXTRACT_MODE/.test(err.message));
+            // 要只用看圖模型：明寫 cross 就照常建立
+            process.env.LOCAL_EXTRACT_MODE = 'cross';
+            assert.equal(runner.createRunner({ db: fakeDb, llm: {}, logger: QUIET }).config.localExtractMode, 'cross');
         } finally {
             for (const [k, v] of [['LOCAL_EXTRACT_MODE', saved.m], ['MODEL_EXTRACT', saved.e], ['OCR_ENGINE', saved.o]]) {
                 if (v === undefined) delete process.env[k]; else process.env[k] = v;
@@ -362,7 +396,7 @@ describe('CI 設定：LOCAL_EXTRACT_MODE=ocr（CI 回放與 Owner 實際用的�
         const rec = sp.ciEnv({ base: { PATH: '/bin', LOCAL_EXTRACT_MODE: 'cross' }, models: ci, envFileKeys: ['LOCAL_EXTRACT_MODE'], llmMode: 'record' });
         assert.equal(rec.LOCAL_EXTRACT_MODE, 'ocr', '錄製也照 ci.yml');
         const none = sp.ciEnv({ base: { PATH: '/bin', LOCAL_EXTRACT_MODE: 'ocr' }, models: { MODEL_EXTRACT: 'ollama:a', MODEL_VERIFY: 'ollama:b' }, envFileKeys: [] });
-        assert.equal(none.LOCAL_EXTRACT_MODE, '', 'ci.yml 沒寫 → 空字串＝程式預設 cross（shell 裡設的也擋）');
+        assert.equal(none.LOCAL_EXTRACT_MODE, '', 'ci.yml 沒寫 → 空字串＝程式預設 ocr（〔Owner 第五輪 D-3〕；shell 裡設的也擋）');
     });
 
     test('.env.example 說明 LOCAL_EXTRACT_MODE（兩個值、Owner 要設 ocr）', () => {
@@ -383,10 +417,11 @@ describe('eval/lib/localMode：ocr 模式的錄製計畫與時間粗估', () => 
         assert.deepEqual(local.extractChainFor(undefined), local.LOCAL_EXTRACT_CHAIN);
     });
 
-    test('effectiveModels 帶出 LOCAL_EXTRACT_MODE（沒寫＝cross）', () => {
-        assert.equal(local.effectiveModels(LOCAL_CI).LOCAL_EXTRACT_MODE, 'cross');
+    test('effectiveModels 帶出 LOCAL_EXTRACT_MODE（沒寫、非法值＝預設 ocr；〔Owner 第五輪 D-3〕）', () => {
+        assert.equal(local.effectiveModels(LOCAL_CI).LOCAL_EXTRACT_MODE, 'ocr');
         assert.equal(local.effectiveModels({ ...LOCAL_CI, LOCAL_EXTRACT_MODE: 'OCR' }).LOCAL_EXTRACT_MODE, 'ocr');
-        assert.equal(local.effectiveModels({ ...LOCAL_CI, LOCAL_EXTRACT_MODE: 'weird' }).LOCAL_EXTRACT_MODE, 'cross');
+        assert.equal(local.effectiveModels({ ...LOCAL_CI, LOCAL_EXTRACT_MODE: 'weird' }).LOCAL_EXTRACT_MODE, 'ocr');
+        assert.equal(local.effectiveModels({ ...LOCAL_CI, LOCAL_EXTRACT_MODE: ' Cross ' }).LOCAL_EXTRACT_MODE, 'cross');
     });
 
     test('ocr 模式：不需要看圖模型（qwen3-vl 不在要下載的清單），仍需要 OCR', () => {
@@ -398,10 +433,19 @@ describe('eval/lib/localMode：ocr 模式的錄製計畫與時間粗估', () => 
         assert.ok(!p.uses.some(u => u.key === 'MODEL_EXTRACT'));
     });
 
-    test('cross 模式（沒寫）與之前完全相同', () => {
-        const p = local.recordingPlan({ models: LOCAL_CI, suites: ALL });
+    test('cross 模式（〔Owner 第五輪 D-3〕要明寫）與之前完全相同', () => {
+        const p = local.recordingPlan({ models: { ...LOCAL_CI, LOCAL_EXTRACT_MODE: 'cross' }, suites: ALL });
         assert.deepEqual(p.ollama, ['qwen3-vl:8b', 'qwen3:8b', 'qwen3-embedding:0.6b']);
         assert.equal(p.extractMode, 'cross');
+    });
+
+    test('〔Owner 第五輪 D-3〕沒寫＝預設 ocr：錄製計畫與明寫 ocr 相同（不下載看圖模型）；只寫 OCR_ENGINE=none 是矛盾', () => {
+        const p = local.recordingPlan({ models: LOCAL_CI, suites: ALL });
+        assert.equal(p.extractMode, 'ocr');
+        assert.deepEqual(p.ollama, ['qwen3:8b', 'qwen3-embedding:0.6b']);
+        assert.equal(p.configError, null);
+        const none = local.recordingPlan({ models: { ...LOCAL_CI, OCR_ENGINE: 'none' }, suites: ALL });
+        assert.match(none.configError, /沒寫 LOCAL_EXTRACT_MODE/);
     });
 
     test('ci.yml 寫了 ocr＋OCR_ENGINE=none → configError（重錄工具據此停下）', () => {

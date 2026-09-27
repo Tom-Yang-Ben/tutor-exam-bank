@@ -32,7 +32,9 @@ describe('docs/local-mode.md 10.12～10.15（整合 r5、final5 改號）', () =
 
     test('四個標題依併入順序各出現一次：10.12 OCR 為主、10.13 餘弦門檻、10.14 拆題以外的時間、10.15 classify／nlq 重錄前修正', () => {
         const heads = [...doc.matchAll(/^### (10\.1[2-9]) (.*)$/gm)].map(m => [m[1], m[2]]);
-        assert.deepEqual(heads.map(h => h[0]), ['10.12', '10.13', '10.14', '10.15'], JSON.stringify(heads));
+        // 〔第五輪 D 2026-09-27〕多一節 10.16（節號整合時再重編）
+        assert.deepEqual(heads.map(h => h[0]), ['10.12', '10.13', '10.14', '10.15', '10.16'], JSON.stringify(heads));
+        assert.match(heads[4][1], /^第五輪 D 預設值與門檻（2026-09-27/);
         assert.match(heads[0][1], /只用 OCR 拆題/);
         assert.match(heads[1][1], /三個餘弦門檻/);
         assert.match(heads[2][1], /拆題以外的時間/);
@@ -50,7 +52,8 @@ describe('docs/local-mode.md 10.12～10.15（整合 r5、final5 改號）', () =
 
     const OWN = [
         // [檔案, 應該只指到的節]
-        ['exam_pro/config/localExtractMode.js', ['10.12']],
+        ['exam_pro/config/localExtractMode.js', ['10.12', '10.16']],   // 〔Owner 第五輪 D-3〕預設改 ocr 的說明指 10.16
+        ['exam_pro/config/similarityThresholds.js', ['10.16']],
         ['exam_pro/agents/extractOcrFigures.js', ['10.12']],
         ['exam_pro/migrations/0019_ocr_only_review.sql', ['10.12']],
         ['exam_pro/test/e2e/pipeline.e2e.test.js', ['10.12']],

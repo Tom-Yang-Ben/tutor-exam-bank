@@ -501,7 +501,9 @@ describe('建議的規則', () => {
 describe('報告與 main', () => {
     test('buildReport：三段都在；數字與建議寫進 Markdown', () => {
         const args = perf.parseArgs(['--cassettes', cassetteDir, '--log', logFile]);
-        const { markdown, data } = perf.buildReport(args, { env: {}, now: new Date(2026, 8, 26, 12, 0, 0) });
+        // 〔Owner 第五輪 D-3 2026-09-27〕程式預設改成 ocr；本檔的算法是交叉驗證（一塊三步），所以明寫 cross（斷言不變）。
+        // ocr 模式（含沒寫）見 localPerfReportOcr.test.js。
+        const { markdown, data } = perf.buildReport(args, { env: { LOCAL_EXTRACT_MODE: 'cross' }, now: new Date(2026, 8, 26, 12, 0, 0) });
         assert.match(markdown, /^# 本機效能實測\n/);
         assert.match(markdown, /產生時間：2026-09-26 12:00:00/);
         assert.match(markdown, /共 26 支；納入統計 22 支/, '26＝22＋供應商不符 2＋沒有 latency 1＋壞檔 1');
@@ -549,7 +551,7 @@ describe('報告與 main', () => {
 
     test('.env 明寫的逾時夠大時：判「夠用」，頁數可以維持', () => {
         const args = perf.parseArgs(['--cassettes', cassetteDir]);
-        const { markdown } = perf.buildReport(args, { env: { JOB_NODE_TIMEOUT_MS: '9000000', OLLAMA_TIMEOUT_MS: '5400000' } });
+        const { markdown } = perf.buildReport(args, { env: { LOCAL_EXTRACT_MODE: 'cross', JOB_NODE_TIMEOUT_MS: '9000000', OLLAMA_TIMEOUT_MS: '5400000' } });
         assert.match(markdown, /`OLLAMA_TIMEOUT_MS`（單次 Ollama 呼叫） \| 5400000（1 小時 30 分），\.env \|.*夠用/);
         assert.match(markdown, /目前的 2 頁在安全範圍內；在目前的設定下最多可到 4 頁/);
         assert.ok(!/線性外推在這個方向會/.test(markdown), '結論都不少於錄製時的 2 頁：不必提醒低估');
@@ -557,14 +559,14 @@ describe('報告與 main', () => {
 
     test('每塊 1 頁也不夠時：講「達不到安全餘裕」（不是「會超過」），並列出實際錄到的每塊最長', () => {
         const args = perf.parseArgs(['--cassettes', cassetteDir]);
-        const { markdown } = perf.buildReport(args, { env: { JOB_NODE_TIMEOUT_MS: '1000000' } });
+        const { markdown } = perf.buildReport(args, { env: { LOCAL_EXTRACT_MODE: 'cross', JOB_NODE_TIMEOUT_MS: '1000000' } });
         assert.ok(!/可能超過/.test(markdown), '舊的說法「即使每塊 1 頁也可能超過」已拿掉');
         assert.match(markdown, /建議：\*\*每塊 1 頁也達不到 max\(3 × p90, 2 × max\) 的安全餘裕\*\*。受限於 `JOB_NODE_TIMEOUT_MS`＝1000000（16 分 40 秒）：一塊（ocr＋extract_vision＋extract_ocr）每頁的安全秒數合計 2190 秒。請先照 3\.1 調高逾時/);
         assert.match(markdown, /實際錄到的每塊最長（成功留下回放檔的呼叫）：`ocr` 2 分 20 秒（2 頁）、`extract_vision` 15 分（2 頁）、`extract_ocr` 7 分（2 頁）；各步最長相加 24 分 20 秒（同一塊不一定每步都最慢，所以是上限）。/);
         assert.match(markdown, /注意：上面的結論推到每塊 1 頁，少於錄製時平均的 2 頁/);
 
         const ctx = perf.buildReport(args, { env: {
-            JOB_NODE_TIMEOUT_MS: '900000000', OLLAMA_TIMEOUT_MS: '900000000', OCR_TIMEOUT_MS: '900000000', OLLAMA_NUM_CTX: '3000'
+            LOCAL_EXTRACT_MODE: 'cross', JOB_NODE_TIMEOUT_MS: '900000000', OLLAMA_TIMEOUT_MS: '900000000', OCR_TIMEOUT_MS: '900000000', OLLAMA_NUM_CTX: '3000'
         } }).markdown;
         assert.match(ctx, /建議：\*\*每塊 1 頁，估計的 token 數也超過 `OLLAMA_NUM_CTX`＝3,000\*\*。extract_vision 每頁約 3,250 token（輸入＋輸出；固定的提示詞也按頁攤）。請先調高 `OLLAMA_NUM_CTX`/);
         assert.ok(!/安全餘裕\*\*/.test(ctx), 'token 放不下不是逾時的安全餘裕問題');
