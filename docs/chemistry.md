@@ -85,7 +85,7 @@ Word 端：`utils/chemFormula.js` 的 `ceToLatex` 先把 `\ce{…}` 轉成等價
 | :--- | :--- | :--- | :--- |
 | extract | `extract`／`extract.v2`（〔Owner 第五輪 L-2〕2026-09-27 起 `extract.v3`） | `extract_chem`／`extract_chem.v1`（同日起 `extract_chem.v2`） | SYSTEM、模板（化學式規範、結構式與實驗裝置寫進 figure_desc、週期表不是題目）、schema 值域（subject＝化學、chapter＝44 章） |
 | classify | `classify`／`classify.v2`（〔CR-9〕2026-09-26 起，原 v1；化學不受影響） | `classify_chem`／`classify_chem.v1` | SYSTEM、模板、schema；閘門、kNN 投票、few-shot 取材與 cacheKeyParts 共用（〔Owner 第五輪 LC-1〕schema 檔共用，欄位順序改成理由 → 章節 → 信心，化學一併生效） |
-| lint | `lint`／`lint.v2` | `lint_chem`／`lint_chem.v1` | 只有第三層（LLM 重寫）換模板——數學版會叫模型「改寫掉不支援的指令」，會把 `\ce` 拆掉 |
+| lint | `lint`／`lint.v2`（〔Owner 2026-09-27 O-5 選 2〕同日起 `lint.v3`） | `lint_chem`／`lint_chem.v1`（同日起 `lint_chem.v2`） | 只有第三層（LLM 重寫）換模板——數學版會叫模型「改寫掉不支援的指令」，會把 `\ce` 拆掉。v3／v2 在第三層「要求」段落最後加 L-2 的「JSON 字串裡的反斜線寫兩個」（`jsonBackslashRule()`）；schema 檔 `agents/schemas/lint.json` 的 `title` 仍寫 `lint.v2`，刻意不改（`title` 進 schemaHash，改了 cassette 鍵多變一次），以模板識別名為準 |
 | source_check | —（零成本） | — | 題幹先過 `ceToComparable` |
 | verify | `verify`／`verify.v1` | `verify_chem`／`verify_chem.v1` | SYSTEM 要求數值帶單位、化學式用 `$\ce{…}$`；比對時帶 `subject: '化學'` |
 | generate（變式） | `variant`／`variant.v1`（〔Owner 第五輪 L-2、V5-6〕2026-09-27 起 `variant.v2`） | `variant_chem`／`variant_chem.v1`（同日起 `variant_chem.v2`） | SYSTEM、模板（換物質與數據、反應式要平衡）、schema；兩道閘門共用 |
