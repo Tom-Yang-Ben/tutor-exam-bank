@@ -145,6 +145,7 @@ getTemplate(TEMPLATE);                            // 取回原文；沒註冊過
 - **replay miss 一律丟錯**，訊息逐字凍結：
   `LLM_MODE=replay 找不到 cassette（agent=<agent> key=<key>）。請在本機執行 npm run eval:record -- --suite <suite>`
   不會靜默回退成假資料。fork PR 把 miss 降成 warning 是 **CI（WS-D）** 的判斷，不在 `services/llm` 裡。
+  〔2026-09-27，`dec/r8-b1-abandon`〕前綴不變，之後改成依模式指向正確的重錄方式（原本寫的 `npm run eval:record` 只錄向量）：本機模式指向 Owner 電腦上的 `scripts\windows\record_local.bat <suite>`（＝`npm run cassettes:rerecord -- --suites <suite>`，重錄步驟見 `docs/local-mode.md` 的重錄計畫一節），Gemini 模式指向 `npm run cassettes:rerecord -- --suites <suite>`（要金鑰、會產生費用）。完整字句與比對標記見 `docs/interfaces-stage2.md` 第 5.2 條。
 - `meta.fixtureHash` 與現況的 `eval/fixtures/questions.public.json` 不符時：印一次 warning「few-shot 內容已變，cassette 可能過期」，**仍然回放**。few-shot 的鍵只納入 id 清單，題幹改寫不會改鍵，這個欄位是唯一的提醒管道。
 
 ---

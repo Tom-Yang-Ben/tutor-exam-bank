@@ -173,12 +173,13 @@ function ocrCassetteKey({ engineVersion, pdfSha256, fromPage, toPage, dpi }) {
     });
 }
 
-/** replay miss：與 services/llm/fake.js 同一串（前綴與 --suite 標記一字不差，eval/lib/replayMiss.js 靠它辨識） */
+/**
+ * replay miss：與 services/llm/fake.js 同一支訊息（前綴與重錄的標記一字不差，eval/lib/replayMiss.js 靠它辨識）。
+ * 〔dec/r8-b1-abandon〕OCR 一律是本機（PaddleOCR），訊息指向 Owner 電腦上的 record_local.bat（原本寫的 npm run eval:record 只錄向量）。
+ */
 function replayMissError(key) {
-    const err = new Error(
-        `LLM_MODE=replay 找不到 cassette（agent=${AGENT} key=${key}）。請在本機執行 npm run eval:record -- --suite <suite>` +
-        `\n（預期路徑：${cassette.cassettePath(AGENT, key)}）`
-    );
+    const { replayMissMessage } = require('../llm/fake');
+    const err = new Error(replayMissMessage({ agent: AGENT, key, vendor: 'ollama', path: cassette.cassettePath(AGENT, key) }));
     err.errorClass = 'provider_error';
     return err;
 }

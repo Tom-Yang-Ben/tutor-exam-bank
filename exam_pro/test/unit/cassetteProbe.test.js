@@ -123,7 +123,9 @@ describe('cassetteProbe', () => {
         const hitKey = cassetteKey({ agent: 'ocr', modelId: 'paddleocr@3.0.0', template: 'ocr.v1', cacheKeyParts: { pdfSha256, fromPage: 1, toPage: 2, dpi: 200 } });
         const missKey = 'f'.repeat(64);
         const result = { engine: 'paddleocr', engineVersion: '3.0.0', pages: [{ page: 1, markdown: '# 題 1', imagePath: null }] };
-        const missErr = new Error(`${REPLAY_MISS_PREFIX}（agent=ocr key=${missKey}）。請在本機執行 npm run eval:record -- --suite <suite>`);
+        // 〔dec/r8-b1-abandon〕OCR 的 miss 訊息改成指向 record_local.bat（前綴不變），用實作的那一支產生
+        const missErr = new Error(require('../../services/llm/fake').replayMissMessage({ agent: 'ocr', key: missKey, vendor: 'ollama' }));
+        assert.ok(missErr.message.startsWith(`${REPLAY_MISS_PREFIX}（agent=ocr key=${missKey}）。`));
         const mod = {
             ocrPdf: async ({ fromPage }) => {
                 if (fromPage === 3) throw missErr;
