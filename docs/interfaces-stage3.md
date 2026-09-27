@@ -346,6 +346,7 @@ module.exports = { run };
 - **模型**：`MODEL_VARIANT`（未設退回 `MODEL_VERIFY`）。`schema` = `buildSchema('variant')`（`agents/schemas/variant.json`，`chapter`／`question_type` 用 `x-enum` 佔位、`difficulty` 是 1–5 的整數）。
 - **模板**：`registerTemplate('variant.v1', PROMPT_TEMPLATE)`（`interfaces-stage2.md` 裁決 S2-5，四個 LLM 節點都要註冊，`generate` 是第五個）。
 - **cassette 鍵**：`agent = 'variant'`、`cacheKeyParts = { template, sourceQuestionId, difficultyDelta, idx, anchorIds }`（`anchorIds` 已排序）。**不放題幹全文**，理由同 `classify` 的 `fewShotIds`。
+  - 〔Owner 第五輪 V5-6 核准，2026-09-27，`dec/r6-templates`〕模板升為 `variant.v2`：prompt 多了「這是第 N 題（共 M 題）」與同一個 job 前面已生成的兄弟題幹，所以鍵在原本五個之後多 `total`（這次共幾題）與 `siblings`（兄弟題幹全文的 sha256 前 16 碼，依 idx 排；仍不放原文）。runner 依序生成（idx 1→N），兄弟從 `job_questions` 讀回。見 [`local-mode.md`](local-mode.md)「第五輪 A 模板與 schema」一節。
 - **錨點**：藍本 + 前 5 題鄰居，鄰居查詢**排除藍本整個家族**（避免近親繁殖），排除已封存題。
 - **章節閘門**：`chapter` 預設繼承藍本；模型回不同章節時要過 `isValidChapter(subject, chapter)` 才接受，否則改用藍本章節並在 `outcome.data` 加 `"chapter_overridden": true`。
 - 節點內部依序做兩道自己的閘門（見 4.3、4.4）；任一不過就 `{kind:'fail', reason:'text_gate'|'off_topic'}`，`feedback` 寫清楚是哪一道、數值多少（下一次重試會餵回 prompt）。

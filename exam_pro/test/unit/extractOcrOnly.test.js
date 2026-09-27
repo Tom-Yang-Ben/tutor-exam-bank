@@ -158,7 +158,7 @@ describe('extract — LOCAL_EXTRACT_MODE=ocr', () => {
             assert.deepEqual(ocrOnly[k], crossOcr[k], k);
         }
         const text = ocrService.pagesToText([{ page: 3, markdown: '第 3 頁的 OCR 文字' }, { page: 4, markdown: '第 4 頁的 OCR 文字' }]);
-        assert.deepEqual(ocrOnly.cacheKeyParts, { template: 'extract_ocr.v1', chunkNo: 2, pdfSha256: pdfSha, ocrSha256: sha256Hex(text) });
+        assert.deepEqual(ocrOnly.cacheKeyParts, { template: 'extract_ocr.v2', chunkNo: 2, pdfSha256: pdfSha, ocrSha256: sha256Hex(text) });
         assert.equal(ocrOnly.maxOutputTokens, extract.LOCAL_MAX_OUTPUT_TOKENS);
         assert.equal(ocrOnly.maxOutputTokens, 8192);
         assert.ok(!('thinkingBudget' in ocrOnly), 'services/llm/ollama.js：沒有 thinkingBudget＝think:false');
@@ -302,7 +302,7 @@ describe('extract — LOCAL_EXTRACT_MODE=ocr', () => {
         const outcome = await extract.run(ctx, { pdfBytes: pdf, chunk: CHUNK });
         assert.equal(outcome.kind, 'pass', JSON.stringify(outcome));
         assert.equal(calls[0].agent, 'extract_ocr_chem');
-        assert.equal(calls[0].template, 'extract_ocr_chem.v1');
+        assert.equal(calls[0].template, 'extract_ocr_chem.v2');
         assert.equal(calls[0].system, extract.SYSTEM_CHEM);
         assert.equal(calls[0].schema, buildSchema('extract', { group: 'chemistry' }));
         assert.deepEqual(outcome.data.questions[0].cross_check, OCR_CC);

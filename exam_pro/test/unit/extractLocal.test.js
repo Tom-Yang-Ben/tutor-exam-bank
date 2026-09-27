@@ -196,15 +196,15 @@ describe('extract 本機路徑', () => {
             assert.equal(c.parts[1].text, extract.buildPrompt());
             assert.equal(c.schema, buildSchema('extract'));
             assert.equal(c.agent, 'extract');
-            assert.equal(c.template, 'extract.v2');
-            assert.deepEqual(c.cacheKeyParts, { template: 'extract.v2', chunkNo: 2, pdfSha256: pdfSha });
+            assert.equal(c.template, 'extract.v3');
+            assert.deepEqual(c.cacheKeyParts, { template: 'extract.v3', chunkNo: 2, pdfSha256: pdfSha });
             assert.ok(!('cross_check' in outcome.data.questions[0]));
             assert.ok(!('cross_check_summary' in outcome.data));
         });
 
         test('Gemini 的模板註冊內容不變（本機模板是另外四個識別名）', () => {
-            assert.equal(getTemplate('extract.v2'), extract.PROMPT_TEMPLATE);
-            assert.equal(getTemplate('extract_chem.v1'), `${extract.SYSTEM_CHEM}\n---\n${extract.PROMPT_TEMPLATE_CHEM}`);
+            assert.equal(getTemplate('extract.v3'), extract.PROMPT_TEMPLATE);
+            assert.equal(getTemplate('extract_chem.v2'), `${extract.SYSTEM_CHEM}\n---\n${extract.PROMPT_TEMPLATE_CHEM}`);
         });
     });
 
@@ -233,8 +233,8 @@ describe('extract 本機路徑', () => {
             assert.equal(v.model, 'ollama:qwen3-vl:8b');
             assert.equal(v.system, extract.SYSTEM);
             assert.equal(v.agent, 'extract_vision');
-            assert.equal(v.template, 'extract_vision.v1');
-            assert.deepEqual(v.cacheKeyParts, { template: 'extract_vision.v1', chunkNo: 2, pdfSha256: pdfSha });
+            assert.equal(v.template, 'extract_vision.v2');
+            assert.deepEqual(v.cacheKeyParts, { template: 'extract_vision.v2', chunkNo: 2, pdfSha256: pdfSha });
             assert.equal(v.schema, buildSchema('extract'), '同一份 schema');
             assert.equal(v.maxOutputTokens, extract.LOCAL_MAX_OUTPUT_TOKENS);
             assert.equal(v.parts.length, 3);
@@ -251,13 +251,13 @@ describe('extract 本機路徑', () => {
             const o = calls[1];
             assert.equal(o.model, 'ollama:qwen3:8b-ocr');
             assert.equal(o.agent, 'extract_ocr');
-            assert.equal(o.template, 'extract_ocr.v1');
+            assert.equal(o.template, 'extract_ocr.v2');
             assert.equal(o.schema, buildSchema('extract'));
             const text = ocrService.pagesToText([
                 { page: 3, markdown: '第 3 頁的 OCR 文字' }, { page: 4, markdown: '第 4 頁的 OCR 文字' }
             ]);
             assert.deepEqual(o.cacheKeyParts, {
-                template: 'extract_ocr.v1', chunkNo: 2, pdfSha256: pdfSha, ocrSha256: sha256Hex(text)
+                template: 'extract_ocr.v2', chunkNo: 2, pdfSha256: pdfSha, ocrSha256: sha256Hex(text)
             });
             assert.equal(o.parts.length, 1, '一個 text part（不依賴 adapter 怎麼串接多個 text）');
             assert.equal(o.parts[0].text,
@@ -348,9 +348,9 @@ describe('extract 本機路徑', () => {
             assert.equal(outcome.kind, 'pass');
             assert.equal(outcome.data.questions[0].subject, '化學');
             assert.equal(calls[0].agent, 'extract_vision_chem');
-            assert.equal(calls[0].template, 'extract_vision_chem.v1');
+            assert.equal(calls[0].template, 'extract_vision_chem.v2');
             assert.equal(calls[1].agent, 'extract_ocr_chem');
-            assert.equal(calls[1].template, 'extract_ocr_chem.v1');
+            assert.equal(calls[1].template, 'extract_ocr_chem.v2');
             for (const c of calls) {
                 assert.equal(c.system, extract.SYSTEM_CHEM);
                 assert.equal(c.schema, buildSchema('extract', { group: 'chemistry' }));
@@ -368,7 +368,7 @@ describe('extract 本機路徑', () => {
             assert.equal(outcome.kind, 'pass');
             assert.equal(ocr.calls.length, 1);
             assert.deepEqual(calls[0].parts.map(p => Object.keys(p)), [['text']]);
-            assert.deepEqual(calls[0].cacheKeyParts, { template: 'extract_vision.v1', chunkNo: 2, pdfSha256: pdfSha }, '鍵不含圖片');
+            assert.deepEqual(calls[0].cacheKeyParts, { template: 'extract_vision.v2', chunkNo: 2, pdfSha256: pdfSha }, '鍵不含圖片');
         });
 
         test('OCR_ENGINE=none（ctx.config.ocr.engine）：不跑 OCR、只有一次視覺呼叫、每題都是 vision_only', async () => {
@@ -514,12 +514,12 @@ describe('extract 本機路徑', () => {
     describe('本機模板', () => {
         test('四個識別名都已註冊（SYSTEM + "\\n---\\n" + 模板），彼此不同也與 Gemini 的不同', () => {
             const pairs = [
-                ['extract_vision.v1', extract.SYSTEM, extract.LOCAL_VISION_TEMPLATE],
-                ['extract_vision_chem.v1', extract.SYSTEM_CHEM, extract.LOCAL_VISION_TEMPLATE_CHEM],
-                ['extract_ocr.v1', extract.SYSTEM, extract.LOCAL_OCR_TEMPLATE],
-                ['extract_ocr_chem.v1', extract.SYSTEM_CHEM, extract.LOCAL_OCR_TEMPLATE_CHEM]
+                ['extract_vision.v2', extract.SYSTEM, extract.LOCAL_VISION_TEMPLATE],
+                ['extract_vision_chem.v2', extract.SYSTEM_CHEM, extract.LOCAL_VISION_TEMPLATE_CHEM],
+                ['extract_ocr.v2', extract.SYSTEM, extract.LOCAL_OCR_TEMPLATE],
+                ['extract_ocr_chem.v2', extract.SYSTEM_CHEM, extract.LOCAL_OCR_TEMPLATE_CHEM]
             ];
-            const hashes = new Set([templateHash('extract.v2'), templateHash('extract_chem.v1')]);
+            const hashes = new Set([templateHash('extract.v3'), templateHash('extract_chem.v2')]);
             for (const [name, system, body] of pairs) {
                 assert.equal(getTemplate(name), `${system}\n---\n${body}`, name);
                 hashes.add(templateHash(name));

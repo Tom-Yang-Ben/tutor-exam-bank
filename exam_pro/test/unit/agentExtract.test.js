@@ -281,7 +281,7 @@ describe('extract.run', () => {
 
         // 送進 generateJson 的參數：agent／template／cacheKeyParts 必須齊全（第 5.2 條）
         assert.equal(calls[0].agent, 'extract');
-        assert.equal(calls[0].template, 'extract.v2');
+        assert.equal(calls[0].template, 'extract.v3');
         assert.deepEqual(Object.keys(calls[0].cacheKeyParts), ['template', 'chunkNo', 'pdfSha256']);
         assert.equal(calls[0].cacheKeyParts.pdfSha256, outcome.data.pdf_sha256);
         assert.ok(calls[0].parts[0].pdfBase64, 'PDF 要以 inlineData 送出');

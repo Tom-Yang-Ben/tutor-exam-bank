@@ -1402,9 +1402,14 @@ function createRunner(opts = {}) {
             // 錨點鄰居由 runner 查好（agent 不得自己連 DB，第 3.1 條）
             const neighbors = await variantService.findNeighbors(db, source);
 
+            // 〔Owner 第五輪 V5-6 核准〕依序生成（idx 1→N），每一題都把「這次已生成的兄弟題幹」與總題數傳給 agent，
+            // prompt 據此要求換情境與數字（agents/generateVariant.js variant.v2）。兄弟的題幹一律從 job_questions 讀回
+            // （payload.extract.question_text）：租約過期、整份 job 被重新認領時，前一輪已建好的列也算兄弟，
+            // 而 ON CONFLICT 沒建成的那一題，兄弟就是 DB 裡既有的那一列，不是這一輪被丟掉的生成結果。
             let created = 0;
             for (let i = 1; i <= requested.count; i++) {
-                created += await runGenerateOne(job, source, neighbors, requested, i);
+                const siblings = await readVariantSiblings(jobId, i);
+                created += await runGenerateOne(job, source, neighbors, requested, i, siblings);
             }
 
             if (created === 0) {
@@ -1423,10 +1428,27 @@ function createRunner(opts = {}) {
     }
 
     /**
+     * 〔Owner 第五輪 V5-6〕同一個變式 job 裡 idx 比 beforeIdx 小、已經建出來的兄弟（依 idx 排序）。
+     * @returns {Promise<Array<{idx:number, question_text:string}>>}
+     */
+    async function readVariantSiblings(jobId, beforeIdx) {
+        const { rows } = await db.query(
+            `SELECT idx, payload->'extract'->>'question_text' AS question_text
+               FROM job_questions
+              WHERE job_id = $1 AND idx < $2
+              ORDER BY idx`,
+            [jobId, beforeIdx]);
+        return rows
+            .filter(r => String(r.question_text ?? '').trim())
+            .map(r => ({ idx: r.idx, question_text: r.question_text }));
+    }
+
+    /**
      * 生成第 i 題（含 fail 重試 1 次與 error 退避，比照 extract）。
+     * 〔Owner 第五輪 V5-6〕siblings＝這次已生成的兄弟（readVariantSiblings），與 total（requested.count）一起傳給 agent。
      * @returns {Promise<number>} 這一題建出來的列數（0 或 1）
      */
-    async function runGenerateOne(job, source, neighbors, requested, idx) {
+    async function runGenerateOne(job, source, neighbors, requested, idx, siblings = []) {
         let failRetries = 0;
         let errorRetries = 0;
         let feedback = '';
@@ -1462,6 +1484,8 @@ function createRunner(opts = {}) {
                 neighbors,
                 difficulty_delta: requested.difficulty_delta,
                 idx,
+                total: requested.count,
+                siblings,
                 ...(feedback ? { feedback } : {})
             });
             await chargeJob(job.id, meter, cost);

@@ -422,6 +422,77 @@ function runSuite() {
             }
         });
 
+        // 〔Owner 第五輪 V5-6 核准〕依序生成，每一題都帶 total 與「這次已建好的兄弟題幹」（從 job_questions 讀回）
+        async function runWithSpy(jobId, runner = makeRunner()) {
+            const modPath = require.resolve(path.join(FAKE_AGENTS_DIR, 'generate.js'));
+            const original = require.cache[modPath].exports;
+            const inputs = [];
+            require.cache[modPath].exports = {
+                ...original,
+                run: async (ctx, input) => {
+                    inputs.push(JSON.parse(JSON.stringify({ idx: input.idx, total: input.total, siblings: input.siblings })));
+                    return original.run(ctx, input);
+                }
+            };
+            try {
+                await runner.runGenerateJob(jobId);
+            } finally {
+                require.cache[modPath].exports = original;
+            }
+            return inputs;
+        }
+
+        test('V5-6：依序生成，第 N 題收到 total＝count 與前面已建好的兄弟題幹（依 idx）', async () => {
+            const { jobId } = await seedVariantJob({ count: 3 });
+            const inputs = await runWithSpy(jobId);
+
+            const { rows } = await query(
+                `SELECT idx, payload->'extract'->>'question_text' AS t FROM job_questions WHERE job_id = $1 ORDER BY idx`, [jobId]);
+            assert.equal(rows.length, 3);
+            assert.deepEqual(inputs.map(i => i.idx), [1, 2, 3]);
+            assert.deepEqual(inputs.map(i => i.total), [3, 3, 3]);
+            assert.deepEqual(inputs[0].siblings, []);
+            assert.deepEqual(inputs[1].siblings, [{ idx: 1, question_text: rows[0].t }]);
+            assert.deepEqual(inputs[2].siblings, [{ idx: 1, question_text: rows[0].t }, { idx: 2, question_text: rows[1].t }]);
+        });
+
+        test('V5-6：重新認領（前一輪已建好第 1 題）時，兄弟是 DB 裡既有的那一列，不是這一輪重生的結果', async () => {
+            const { jobId, sourceId } = await seedVariantJob({ count: 2 });
+            const earlier = '前一輪已經建好的第 1 題：乙車以 $v=12$ 公尺每秒行駛，求其動能。';
+            await query(
+                `INSERT INTO job_questions (job_id, idx, state, payload) VALUES ($1, 1, 'extracted', $2::jsonb)`,
+                [jobId, JSON.stringify({ extract: { idx: 1, question_text: earlier, variant_of_root: sourceId }, variant: { source_question_id: sourceId } })]);
+            const inputs = await runWithSpy(jobId);
+
+            assert.deepEqual(inputs.map(i => i.idx), [1, 2]);
+            assert.deepEqual(inputs[1].siblings, [{ idx: 1, question_text: earlier }]);
+            const { rows } = await query('SELECT COUNT(*)::int AS n FROM job_questions WHERE job_id = $1', [jobId]);
+            assert.equal(rows[0].n, 2, 'ON CONFLICT：第 1 題不重複建');
+        });
+
+        test('V5-6：第 1 題沒建成（一直沒過閘門）時，第 2 題沒有兄弟', async () => {
+            const { jobId } = await seedVariantJob({ count: 2 });
+            const modPath = require.resolve(path.join(FAKE_AGENTS_DIR, 'generate.js'));
+            const original = require.cache[modPath].exports;
+            const inputs = [];
+            require.cache[modPath].exports = {
+                ...original,
+                run: async (ctx, input) => {
+                    inputs.push({ idx: input.idx, siblings: input.siblings });
+                    if (input.idx === 1) return { kind: 'fail', reason: 'text_gate', feedback: '只改字閘門未通過（identical）' };
+                    return original.run(ctx, input);
+                }
+            };
+            try {
+                await makeRunner().runGenerateJob(jobId);
+            } finally {
+                require.cache[modPath].exports = original;
+            }
+            // 第 1 題：第一次＋重試 1 次，都 fail；第 2 題：沒有兄弟
+            assert.deepEqual(inputs.map(i => i.idx), [1, 1, 2]);
+            assert.deepEqual(inputs[2].siblings, []);
+        });
+
         test('payload 的第七個鍵 variant 由 generate 節點寫（第 4.5 條）', async () => {
             const { jobId, sourceId } = await seedVariantJob({ count: 1, delta: -1 });
             await makeRunner().runGenerateJob(jobId);

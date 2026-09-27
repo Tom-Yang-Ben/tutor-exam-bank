@@ -19,7 +19,7 @@
 | V5-3 | 重複題門檻 `DEDUP_DUP_THRESHOLD` | 現在 | 3 改 0.99 |
 | V5-4 | 「是變式」標記門檻 `DEDUP_VARIANT_THRESHOLD` | 現在 | 1 維持 0.90 |
 | V5-5 | 新門檻怎麼落實 | 與 V5-1～V5-3 一起 | 1 只改本機模式的預設 |
-| V5-6 | 同一藍本的兄弟變式幾乎一樣 | 現在（選 2 要在 variant 重錄前做完） | 2 從生成端處理 |
+| V5-6 | 同一藍本的兄弟變式幾乎一樣 | 現在（選 2 要在 variant 重錄前做完） | 2 從生成端處理〔Owner 2026-09-27 選 2〕已落實於 `dec/r6-templates` |
 | C-a | 公式重寫（lint）要不要思考 | 重錄前 | 3 先量再決定 |
 | C-b | 知識點標註要不要思考 | 開自動標註或跑補標之前 | 3 先量（併進 B12 試標） |
 | C-c | 驗算：不思考、降輸出上限，或都不動 | 重錄前 | 2 只降輸出上限 |
@@ -164,6 +164,7 @@
 - **建議**：2，跟反斜線修好後的重錄一起做；3 等 2 做完看還剩多少再說。做之前維持 1 也可以（首輪每一題變式都要老師核准）。
 - **何時**：現在就能答；選 2 的話要在 variant 重錄之前做完。
 - 出處：10.13 第 3 點 V5-6。
+- 〔Owner 2026-09-27 選 2〕已落實於 `dec/r6-templates`：模板 `variant.v1` → `variant.v2`（化學 `variant_chem.v1` → `v2`），prompt 加「這是第 N 題（共 M 題）」、同一個 job 前面已生成的兄弟題幹與「換情境與數字」的規則；runner 依序生成、兄弟從 `job_questions` 讀回；cassette 鍵多 `total` 與兄弟題幹的雜湊。variant 的回放檔全部要重錄（與 L-2 的公式規範同一次）。見 [`local-mode.md`](local-mode.md)「第五輪 A 模板與 schema（2026-09-27）」一節。
 
 ---
 
@@ -292,6 +293,8 @@
 - **何時**：重錄 variant 之前。
 - 出處：10.13 第 4 點；10.14 第 5 點第 1 項；分支 `dec/latex-escape-repair-fix` 的 `docs/llm.md` 第 10 節。
 - 〔整合 2026-09-27 `dec/integration-final5`〕整合分支依主控指示已併入（等於照選項 1 的做法，但**不是 Owner 的裁決**，Owner 仍可改選）：與 `prune_cassettes.js`、`rerecord_all.js` 的衝突保留主線共用的 `eval/lib/exitAfterFlush.js`；`services/llm/index.js` 的本機調整與 LaTeX 修復合在同一條路上，`test/unit/latexEscapeRepair.test.js` 補一案釘住。variant 回放實測：向量檔查不到從 1 次變 29 次、分數欄不變（本來就是 n/a），與上面選項 1 的預估相同。
+
+〔Owner 第五輪 2026-09-27〕與 O-1 相關的 L-2（prompt 要求 JSON 字串裡的反斜線寫兩個；出處 [`llm.md`](llm.md) 第 10 節「沒有做」第 2 項）〔Owner 2026-09-27 選 1〕已落實於 `dec/r6-templates`；本表沒有這一題，對照記在這裡。見 [`local-mode.md`](local-mode.md)「第五輪 A 模板與 schema（2026-09-27）」一節。
 
 ### O-2　kNN 投票門檻 `KNN_VOTE_SIM` 要不要也重新校準
 

@@ -13,6 +13,7 @@
 > 〔整合 2026-09-26 `dec/integration-r5`〕三條分支（`dec/local-ocr-first-fix`、`dec/local-embed-thresholds-fix`、`dec/local-thinking-speed-fix`）各自新增了「10.12」。依併入順序保留全部內容、重新編號：**10.12** 只用 OCR 拆題、**10.13** 三個餘弦門檻、**10.14** 拆題以外的時間與加速選項；程式註解、測試、其他文件裡指到這三節的地方一併改號。三節裡「待 Owner 決定」的事項另有一份總表：[`owner-pending-decisions-r5.md`](owner-pending-decisions-r5.md)。
 > 〔整合審查 2026-09-27 `dec/integration-r5-fix`〕10.12 第 6 點補一條：OCR 整理的 num_ctx 預算與截斷判斷改用實際送出的值，認得 10.14 的 `OLLAMA_NUM_CTX_EXTRACT_OCR`、`OLLAMA_MAX_OUTPUT_EXTRACT_OCR`（兩條分支各自沒錯、合在一起才對不上）。之後併 `dec/local-classify-nlq-prep-fix` 時，它的「10.12 classify／nlq 重錄前修正」要改號為 **10.15**。
 > 〔整合 2026-09-27 `dec/integration-final5`〕`dec/integration-r5-fix`（`ed93665`）依序併入 `dec/local-classify-nlq-prep-fix`、`dec/latex-escape-repair-fix`、`dec/phys-spoken-reviewed`、`dec/cleanup-exam-legacy`。只有第一條新增了一節（原編 10.12），依併入順序改號為 **10.15**（classify／nlq 重錄前修正）；它的程式註解、eval 訊息、fixture 說明與測試一併改號，`test/unit/localModeSections.test.js` 加入 10.15。其餘三條沒有新增節：LaTeX 修復的說明在 [`llm.md`](llm.md) 第 10 節與 10.8 疑難排解一列，舊版原型移除只在 10.4、10.7 就地加註。10.13、10.14、10.15 裡寫「`dec/latex-escape-repair` 還沒併／在做」的地方就地加註，原文保留。
+> 〔Owner 第五輪 2026-09-27 `dec/r6-templates`〕依第五輪決策單 LC-1＝2、L-2＝1、V5-6＝2 改分類 schema 的欄位順序、公式規範與變式 prompt：新增 10.16「第五輪 A 模板與 schema」（節號暫編），10.13 的 V5-6、10.15 的 LC-1 就地加註。
 
 ## 0. Owner 裁決（2026-09-25，對話中）
 
@@ -749,6 +750,8 @@ node eval/tools/local_bench_vision.js --baseline
 
 **V5-6　同一藍本的兄弟變式幾乎一樣，卻都能走到最後（產品缺口，與門檻無關；新題）**
 
+〔Owner 2026-09-27 選 2〕已落實於 `dec/r6-templates`（`variant.v2`）。見 本檔「第五輪 A 模板與 schema（2026-09-27）」一節。
+
 發生了什麼（報告 5.4；已錄的 `qwen3:8b` 變式，每個藍本錄 idx 1、2 兩題，等於老師一次要 2 題）：
 
 - 30 個藍本裡 **14 個的兩題逐字相同**：同一個 job 的第 2 題被 dedup0 的 L0 雜湊擋下、以 `duplicate` 進複核——這一種有抓到。
@@ -1020,6 +1023,8 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 
 **LC-1　分類時要不要讓模型「先寫理由、再定章節」**
 
+〔Owner 2026-09-27 選 2〕已落實於 `dec/r6-templates`：`agents/schemas/classify.json` 的 properties、`propertyOrdering`、`required` 都改成「理由 → 章節 → 信心」，化學分類共用同一份 schema 一併生效；Ollama 與 Gemini 兩條路徑送出的 schema 都照這個順序（單元測試釘住）。見 本檔「第五輪 A 模板與 schema（2026-09-27）」一節。
+
 背景：分類模型輸出的 JSON 欄位順序是「章節 → 信心 → 理由」，本機的 qwen3:8b 又沒有開思考，等於先下結論、再補理由。2026-09-25 錯的 15 題裡，有的理由其實寫對了方向（自由落體題寫「需應用加速度與位移的關係式」，照 Owner 的規則該歸直線運動，章節卻填了必修的「物體的運動」）。本分支已用程式規則補上其中 13 題；剩下的圓周運動（運動學／受力）與三角（平方關係／疊合）兩類，只能靠模型照 prompt 裡的規則判斷。問題：重錄前要不要改變輸出方式，讓模型先寫理由再選章？
 
 | 選項 | 代價 |
@@ -1073,3 +1078,85 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 - `npm run eval:classify`：看 accuracy／macro-F1，以及「程式後處理改了 N 題的章」那一行——N 很大表示模型仍常挑到相鄰章，分數主要是程式補的；逐題的規則在報表的逐題表。
 - `npm run eval:nlq`：llm 欄的逐句 `adjustments`（哪幾句被證據檢查、平面／空間、界線規則動過）。
 - 兩個 suite 若只差一題未達，先看是不是 LC-2、LC-4 那幾題，再回來決定 LC-1～LC-4。
+
+### 10.16 第五輪 A 模板與 schema（2026-09-27）
+
+> 分支 `dec/r6-templates`，從 `local/integration-r5`（`a670783`）開。節號暫編，整合時再重編。依第五輪決策單落實三題：**LC-1＝2**（分類先寫理由）、**L-2＝1**（prompt 要求 JSON 字串裡的反斜線寫兩個）、**V5-6＝2**（同一藍本的兄弟變式從生成端就不一樣）。`eval/thresholds.json`、golden、既有 cassette 都沒改。三題都改了模板或 schema，對應的 cassette 要重錄，第 4 點逐一列出。
+
+#### 1. LC-1＝2：分類的欄位順序改成「理由 → 章節 → 信心」（Owner 第五輪 LC-1 核准）
+
+- `agents/schemas/classify.json`：`properties` 的鍵序、`propertyOrdering`、`required` 三處都改成 `rationale → chapter → confidence`。`rationale` 的說明改成「先寫這一欄，再選章節……規則裡若有相鄰兩章的界線，寫出你依哪一條判斷」，`chapter` 的說明改成「依上面的理由選出……」。值域、型別、`additionalProperties` 都沒動。
+- **化學分類共用這份 schema**（`buildSchema('classify', { group: 'chemistry' })` 讀同一個檔，只換 chapter 的值域），所以一併生效。
+- **兩條路徑都照這個順序**：
+  - Ollama：`services/llm/ollama.js` 的 `toOllamaSchema` 依 `propertyOrdering` 重排 `properties` 後當成 `format` 送出。Ollama 依 `properties` 的順序產生 JSON 文法，模型只能先寫 `rationale`。系統提示裡的欄位說明（`schemaGuide`）也照這個順序列。
+  - Gemini：`responseJsonSchema` 就是這份 schema 本身，`properties` 的鍵序與 `propertyOrdering` 都是理由在前。schema 被拒、拆掉 enum 重送的退路（`stripEnums`）也保留這個順序。
+  - `test/unit/r6Templates.test.js` 用假傳輸與假 client 釘住兩條路徑實際送出的內容，數學／物理與化學各一次。
+- 分類的 prompt 模板一個字都沒改。`classify.v2` 還沒錄過，不升版；`classify_chem.v1` 的模板也沒變，不升版。schema 的雜湊進 cassette 的鍵，兩者的鍵都會自動換掉，不會讀到舊答案。
+
+#### 2. L-2＝1：公式規範明講「JSON 字串裡的反斜線要寫成兩個」（Owner 第五輪 L-2 核准）
+
+- `agents/promptParts.js` 新增 `jsonBackslashRule()`。`LATEX_RULES` 加第 (5) 條，`CHEM_LATEX_RULES` 加第 (6) 條，是同一段文字，化學只把正例換成 `\ce`。原本的 (1)～(4)／(1)～(5) 一字未改。模型看到的文字：
+
+  > 你的輸出是 JSON：上面寫的是 LaTeX 本身，寫進 JSON 字串時，每一個反斜線都要寫成兩個。正確（JSON 原文）："$\\frac{1}{2}$"、"$\\theta$"、"$\\sqrt{2}\\times 3$"；LaTeX 的換列 \\ 在 JSON 裡要寫成 "\\\\"。錯誤："$\frac{1}{2}$"——只寫一個反斜線時，\f、\t、\n、\r、\b 會被 JSON 讀成換頁、定位、換行、歸位、退格字元（\frac 變成「換頁＋rac」，公式就壞了），\c、\s 這類則會讓 JSON 不合法。
+
+- **受影響的 agent 與模板**（都含這段規範；都錄過或可能在 Owner 私有層錄過，照慣例全部升版）：
+
+  | agent | 模板（舊 → 新） | 誰用 |
+  |---|---|---|
+  | `extract` | `extract.v2` → `extract.v3` | Gemini 拆題（數學／物理） |
+  | `extract_chem` | `extract_chem.v1` → `extract_chem.v2` | Gemini 拆題（化學） |
+  | `extract_vision` | `extract_vision.v1` → `extract_vision.v2` | 本機看圖拆題（交叉驗證模式） |
+  | `extract_vision_chem` | `extract_vision_chem.v1` → `extract_vision_chem.v2` | 同上，化學 |
+  | `extract_ocr` | `extract_ocr.v1` → `extract_ocr.v2` | 本機 OCR 整理（OCR 為主與交叉驗證都用） |
+  | `extract_ocr_chem` | `extract_ocr_chem.v1` → `extract_ocr_chem.v2` | 同上，化學 |
+  | `variant` | `variant.v1` → `variant.v2` | 變式（也含 V5-6 的改動） |
+  | `variant_chem` | `variant_chem.v1` → `variant_chem.v2` | 變式，化學（也含 V5-6） |
+
+  沒有用到這段規範、這次**沒有改**的：`classify`、`classify_chem`、`lint`、`lint_chem`、`verify`、`verify_chem`、`nlq`、知識點標註、家教。其中 `lint` 的第三層是請模型重寫公式，它有自己的規則文字，沒有共用 `LATEX_RULES`；要不要也加這條，要 Owner 另外決定（加了就是 `lint.v3`／`lint_chem.v2` 並重錄）。
+- **事後修復保留當第二道防線**（`services/llm/latexEscapeRepair.js`，`docs/llm.md` 第 10 節），程式沒改。模型照做時，JSON 原文是 `\\frac`，解析後就是正確的 `\frac`，修復必須是 no-op。`test/unit/r6Templates.test.js` 驗了三層：
+  1. 規則裡的每個正例當 JSON 字串解析，得到單一反斜線的 LaTeX，`repairString` 一字不改，`applyToResult` 回傳原物件（沒有 `latexRepair` 鍵）。
+  2. 假 Ollama 與假 Gemini 回一份「每個反斜線都寫兩個」的 JSON，內容含 b f n r t 開頭的指令、`\circ`、`\ce`、表格換列 `\\` 與真的換行。`services/llm.generateJson` 回的 data 等於原意，沒有 `latexRepair`。
+  3. repo 內全部 cassette（五百多支）：把修好的內容當作模型照做的輸出，再寫成 JSON、解析一次，修復一處都不動。帶著救不回來的字元（例如換頁＋`dg`）的幾支除外。
+  反例 `"$\frac{1}{2}$"` 解析後確實帶換頁字元，修復會補回。也就是說，規則寫的是事實，模型沒照做時修復照樣接手。
+
+#### 3. V5-6＝2：同一藍本的兄弟變式從生成端就不一樣（Owner 第五輪 V5-6 核准）
+
+- **呼叫方式（改之前）**：`workers/jobRunner.js` 的 `runGenerateJob` 本來就依序跑 idx 1→N，一題一次呼叫，不是平行。每次的 prompt 除了鍵裡的 idx 以外完全相同，溫度 0 下常常生出同一題（10.13 V5-6）。eval（`eval/lib/suiteVariant.js`）也是依序跑 idx 1、2。
+- **prompt**（`agents/generateVariant.js`，`variant.v2`／`variant_chem.v2`）：
+  - 規則加一條：數學／物理是第 6 條，化學是第 7 條。內容是「同一道藍本這次要出好幾題……若下面列有『這次已經出好的題目』，這一題必須換一個和它們都不同的情境、換一組不同的數字，不能只改問法或只換一兩個數字」。
+  - 接著是「【這是這次要出的第 N 題（共 M 題）】」，再列兄弟區塊「【這次已經出好的題目（同一道藍本），這一題的情境與數字必須和它們都不一樣】」，依 idx 列出，每題最多 400 字、壓成一行。第 1 題沒有兄弟，不出現這個區塊。
+  - 這兩段**放在規則之後，不放開頭**。兄弟之間，prompt 從系統提示、白名單、藍本、鄰居到規則都逐字相同，本機 Ollama 的 prompt 快取可以重用。放在第一行的話，第 2 題從第一行就分岔，白名單要整段重讀（這台電腦冷讀約每秒 8 個 token）。
+- **兄弟從哪裡來**：runner 每生一題之前，用 `readVariantSiblings` 從 `job_questions` 讀回同一個 job 裡 idx 較小、已建好的列（`payload.extract.question_text`），再連同 `total: requested.count` 傳給 agent。沒通過生成節點的題不算兄弟。租約過期、整份 job 被重新認領時，前一輪已建好的列也算兄弟；`ON CONFLICT` 沒建成的那一題，兄弟就是 DB 裡既有的那一列。eval 照同樣的規則：前面 `kind: 'pass'` 的才算兄弟，`total` 是 2。
+- **cassette 的鍵**：原本五個鍵後面多 `total` 與 `siblings`。`siblings` 是兄弟題幹全文 sha256 的前 16 碼，依 idx 排。題幹原文不進鍵（cassette 只存摘要，NOTICE 第 4 條）。前面兄弟不同的兩次請求，鍵一定不同，replay 不會撞同一捲帶；`feedback` 仍不進鍵。重錄時第 2 題的鍵含第 1 題**錄到的**題幹雜湊，回放時第 1 題讀回同一份回應，所以鍵對得上。
+- **還沒處理的**：同一藍本「另開一個 job 再出一次」時沒有兄弟（兄弟只在同一個 job 裡），仍靠 dedup0 的 L0 雜湊（只比已入庫的題）與老師把關。溫度 0 下也不保證兩題一定不同，重錄後要看 10.13 的「換句話說」代理有沒有下降。
+
+#### 4. 重錄影響（每一項都要重錄；本分支沒有錄任何 cassette）
+
+| agent | 模板版本 | 為什麼鍵變了 | 要不要重錄 |
+|---|---|---|---|
+| `classify` | `classify.v2`（不升版，還沒錄過） | schema 欄位順序（LC-1） | 要。本來就要錄（92 筆全 miss 是既有狀態）；pipeline／e2e 裡沒過零成本閘門的題的 classify cassette 也一樣 |
+| `classify_chem` | `classify_chem.v1`（模板沒變，不升版） | schema 欄位順序（LC-1） | repo 裡沒有；Owner 私有層若有，要重錄 |
+| `variant` | `variant.v1` → `variant.v2` | 模板（L-2＋V5-6）、鍵多 `total`／`siblings` | **要**：本機 60 支、Gemini 87 支全部對不上。整步重錄（LLM 與向量，`record_local.bat variant`，上次 17,292 秒）。variant 題幹變了，下游 lint／verify 的 cassette 與向量檔也跟著重錄 |
+| `variant_chem` | `variant_chem.v1` → `variant_chem.v2` | 同上 | repo 裡沒有；私有層若有，要重錄 |
+| `extract_ocr` | `extract_ocr.v1` → `extract_ocr.v2` | 模板（L-2） | 要。pipeline／e2e 本來就缺這支（既有的 miss），錄的時候照 v2 錄 |
+| `extract_vision` | `extract_vision.v1` → `extract_vision.v2` | 模板（L-2） | 只有交叉驗證模式用；repo 裡沒有。要切回交叉驗證時再錄 |
+| `extract` | `extract.v2` → `extract.v3` | 模板（L-2） | repo 裡 1 支（Gemini 樣卷）對不上；CI 現在走 OCR 為主，不讀它。切回 Gemini 時要重錄。`sourceCheckSample` 單元測試與 `calibrate_source_check` 讀的是那支檔案本身（依 `meta.template` 找），不受影響 |
+| `extract_chem`、`extract_vision_chem`、`extract_ocr_chem` | 各 +1（v2） | 模板（L-2） | repo 裡沒有；私有層若有，要重錄 |
+| `lint`、`verify`、`nlq`、知識點標註、家教 | 不變 | — | 鍵沒變；只有吃到新 variant 題幹的那幾支會 miss（上面 variant 那一列） |
+
+建議順序：classify 與 nlq（10.15 的 `record_local.bat classify,nlq`）→ variant 整步（LLM＋向量）→ pipeline＋e2e（OCR 為主，錄 `extract_ocr.v2`）。L-2 與 V5-6 都落在 variant，同一次重錄就好，不必錄兩次（O-1、V5-6 的原建議）。
+
+#### 5. 測試與 eval（replay）
+
+- 單元 3,640（3,638 過、2 略過；基準 3,611 → 新增 `test/unit/r6Templates.test.js` 29 項，另外 5 支單元測試與 1 支整合測試原本釘的是舊版號，改成新版號），`check:html` 通過，integration 618 全過（全新 UTF8 測試庫、埠 5433；基準 615，`variants.pg.test.js` 新增 3 項：依序帶兄弟、重新認領時兄弟取 DB 既有列、第 1 題沒建成時沒有兄弟）。`localModeSections` 的標題檢查放寬為「10.12～10.15 之後只能接暫編的 10.16 第五輪節」。
+- eval 在 replay 下與基準 `a670783` 逐項比對（同一台機器、同一組 CI 環境變數）：
+
+  | suite | 基準 `a670783` | 本分支 | 差別的原因 |
+  |---|---|---|---|
+  | retrieval | 通過 | 通過（相同） | — |
+  | classify | 92／92 replay miss，n/a | 92／92 replay miss，n/a | 鍵換了（schema），但 `classify.v2` 本來就沒錄過，不是新造成的 miss |
+  | pipeline | 缺 `extract_ocr`（鍵 `a47b37a0…`） | 缺 `extract_ocr`（鍵 `a5918283…`） | 本來就缺；鍵因 `extract_ocr.v2` 換了 |
+  | nlq | 8 筆 replay miss | 相同 | — |
+  | variant | `retrieved_coverage` 0.2333；replay miss 2、缺向量 29，`gate_pass_rate` n/a | `retrieved_coverage` 0.2333；**replay miss 60**，`gate_pass_rate` n/a | **本分支新造成**：`variant.v2` 讓 60 次生成全部對不上（原本 58 次讀得到），要整步重錄。分數欄仍是 n/a（原本就是） |
+  | classify_chem | 沒有 cassette，略過 | 相同 | — |
+  | e2e（`npm run test:e2e`，12 項） | 3 項紅（缺 `extract_ocr`） | 同樣 3 項紅（缺 `extract_ocr`，鍵 `a5918283…`） | 本來就缺；鍵因 `extract_ocr.v2` 換了 |

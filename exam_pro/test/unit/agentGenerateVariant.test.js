@@ -194,10 +194,11 @@ describe('cassette 與模型路由', () => {
         await agent.run(f.ctx, { ...INPUT, difficulty_delta: -1, idx: 2 });
         const opts = f.calls.generateJson[0];
         assert.equal(opts.agent, 'variant');
-        assert.equal(opts.template, 'variant.v1');
-        assert.deepEqual(Object.keys(opts.cacheKeyParts), ['template', 'sourceQuestionId', 'difficultyDelta', 'idx', 'anchorIds']);
+        // 〔Owner 第五輪 V5-6〕variant.v2：原本五個鍵之後多 total、siblings（沒傳時 total＝idx、siblings＝[]）
+        assert.equal(opts.template, 'variant.v2');
+        assert.deepEqual(Object.keys(opts.cacheKeyParts), ['template', 'sourceQuestionId', 'difficultyDelta', 'idx', 'anchorIds', 'total', 'siblings']);
         assert.deepEqual(opts.cacheKeyParts, {
-            template: 'variant.v1', sourceQuestionId: 12, difficultyDelta: -1, idx: 2, anchorIds: [87, 91]
+            template: 'variant.v2', sourceQuestionId: 12, difficultyDelta: -1, idx: 2, anchorIds: [87, 91], total: 2, siblings: []
         });
         const asText = JSON.stringify(opts.cacheKeyParts);
         assert.ok(!asText.includes('夾角'), 'cacheKeyParts 不得含題幹全文');

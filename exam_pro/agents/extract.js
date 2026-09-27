@@ -44,7 +44,11 @@ const { registerTemplate } = require('../services/llm/templates');
 const { crossCheck, summarize: summarizeCrossCheck, FIGURE_FIELDS } = require('./extractCrossCheck');
 const { matchOcrFigures } = require('./extractOcrFigures');
 
-const TEMPLATE = 'extract.v2';   // v2（2026-09-15）：加【表格】規範，見 docs/formulas.md §2
+// v2（2026-09-15）：加【表格】規範，見 docs/formulas.md §2
+// v3（2026-09-27，〔Owner 第五輪 L-2 核准〕dec/r6-templates）：共用的 LATEX_RULES 加第 (5) 條「JSON 字串裡的反斜線寫兩個」。
+//   本檔 6 個識別名（Gemini、本機看圖、本機 OCR，各分數學／物理與化學）都含這段規範（化學是 CHEM_LATEX_RULES 的第 (6) 條），
+//   一起升版；對應 cassette 全部要重錄。
+const TEMPLATE = 'extract.v3';
 
 // 預設值與 .env.example 一致；agent 不讀 process.env（第 3.1 條），
 // 這些只是 ctx.config.thresholds 沒帶到時的保底。
@@ -84,7 +88,7 @@ registerTemplate(TEMPLATE, PROMPT_TEMPLATE);
 // 註冊字串 = SYSTEM + '\n---\n' + 模板（第 1.2 條）：SYSTEM 一改，cassette 鍵就跟著變。
 
 const AGENT_CHEM = 'extract_chem';
-const TEMPLATE_CHEM = 'extract_chem.v1';
+const TEMPLATE_CHEM = 'extract_chem.v2';   // v2：〔Owner 第五輪 L-2〕CHEM_LATEX_RULES 加第 (6) 條
 
 const SYSTEM_CHEM = '你是一位資深的台灣高中化學家教老師，正在把一份化學考卷數位化進題庫。你只輸出 JSON，不輸出任何其他文字。';
 
@@ -137,14 +141,15 @@ const VARIANTS = {
 
 const AGENT_VISION = 'extract_vision';
 const AGENT_VISION_CHEM = 'extract_vision_chem';
-const TEMPLATE_VISION = 'extract_vision.v1';
-const TEMPLATE_VISION_CHEM = 'extract_vision_chem.v1';
+// 〔Owner 第五輪 L-2〕本機模板由上面兩份模板組成，公式規範跟著變：四個識別名都 v1 → v2
+const TEMPLATE_VISION = 'extract_vision.v2';
+const TEMPLATE_VISION_CHEM = 'extract_vision_chem.v2';
 const AGENT_OCR = 'extract_ocr';
 const AGENT_OCR_CHEM = 'extract_ocr_chem';
-const TEMPLATE_OCR = 'extract_ocr.v1';
-// 契約只寫了 'extract_ocr.v1'；化學卷的模板內容不同（化學白名單與化學式規範），
-// 同一個識別名不能註冊兩種內容（services/llm/templates.js 會丟錯），所以化學另取 'extract_ocr_chem.v1'。
-const TEMPLATE_OCR_CHEM = 'extract_ocr_chem.v1';
+const TEMPLATE_OCR = 'extract_ocr.v2';
+// 契約只寫了 'extract_ocr.v1'（〔Owner 第五輪 L-2〕現為 v2）；化學卷的模板內容不同（化學白名單與化學式規範），
+// 同一個識別名不能註冊兩種內容（services/llm/templates.js 會丟錯），所以化學另取 'extract_ocr_chem.v1'（現為 v2）。
+const TEMPLATE_OCR_CHEM = 'extract_ocr_chem.v2';
 
 /** 本機模型一次輸出的 token 上限：CPU 上一旦陷入重複輸出，沒有上限會一路寫到 num_ctx 用完（一兩個小時） */
 const LOCAL_MAX_OUTPUT_TOKENS = 8192;
