@@ -335,7 +335,7 @@
 
 題目原文在出處；這裡只記裁決與落實的分支，方便對照。
 
-- **L-1**（[`llm.md`](llm.md) 第 10 節「沒有做」第 1 項，公式閘門擋下殘留的控制字元）：〔Owner 2026-09-27 選 1〕已落實於 `dec/r6-gates`（rule 名 `control_char`；[`local-mode.md`](local-mode.md) 10.16 第 1 點）。
+- **L-1**（[`llm.md`](llm.md) 第 10 節「沒有做」第 1 項，公式閘門擋下殘留的控制字元）：〔Owner 2026-09-27 選 1〕已落實於 `dec/r6-gates`（rule 名 `control_char`；[`local-mode.md`](local-mode.md) 10.16 第 1 點）；審查意見的文件修正（`\r\n` 的歸位不算、複核頁會擋手動貼上的 tab）在 `dec/r6-gates-fix`（10.16 第 7 點）。
 - **L-3**（同一節第 3 項，解析器支援 `\bullet`、`\textbf`）：〔Owner 2026-09-27 選 1〕已落實於 `dec/r6-gates`（10.16 第 2 點）。
 - **LC-3**（[`local-mode.md`](local-mode.md) 10.15 第 6 點，界線規則套在零成本閘門）：〔Owner 2026-09-27 選 2〕已落實於 `dec/r6-gates`（10.16 第 3 點）。
 - **LC-4**（10.15 第 6 點，nlq-036 的計分）：〔Owner 2026-09-27 選 3〕已落實於 `dec/r6-gates`（10.16 第 4 點；放寬計分，與 2026-09-25 以前的分數不可直接比）。

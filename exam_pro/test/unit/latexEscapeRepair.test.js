@@ -700,7 +700,7 @@ describe('回歸：Gemini 的 variant 87／verify 58（04e9bd3 以前錄的）',
         assert.deepEqual(tally(GEMINI.variant).commands, { '\\times': 20, '\\frac': 7, '\\theta': 4, '\\text': 3, '\\boldsymbol': 1 });
     });
 
-    // 〔Owner 第五輪 L-1〕修前帶控制字元的 11 支，現在修前就被 control_char 擋下（修前 86 → 76 過）；修後照舊 86 過／1 擋。
+    // 〔Owner 第五輪 L-1〕修前帶控制字元而通過的 10 支，現在修前就被 control_char 擋下（修前 86 → 76 過）；修後照舊 86 過／1 擋。
     test('Gemini 的真換行（variant 71 處、verify 120 處）一個都沒動；公式閘門修前 76 過（L-1）→ 修後 86 過／1 擋，帶壞公式卻通過 0', () => {
         let nlBefore = 0;
         let nlAfter = 0;

@@ -66,7 +66,8 @@ const ISSUE_RULES = Object.freeze([
 
 /**
  * 〔Owner 第五輪 L-1 核准，2026-09-27〕換行以外的控制字元（C0 的 U+0000–U+001F 與 U+007F；與 latexEscapeRepair 的
- * hasNonNewlineControl、docs/llm.md 第 10 節「帶控制字元」同一個範圍）。
+ * hasNonNewlineControl、docs/llm.md 第 10 節「帶控制字元」同一個範圍，但 Windows 換行 `\r\n` 裡的歸位不算——
+ * hasNonNewlineControl 是回歸量測用的計數，連這個歸位也算）。
  * 例外只有換行：U+000A，以及 Windows 換行 `\r\n` 裡緊接在換行前的歸位（單獨的歸位照擋——`\rho`、`\rightarrow`
  * 被 JSON 吃掉就是「歸位＋ho」）。定位（U+0009）也擋：`\times`、`\theta` 被吃掉就是它。
  *

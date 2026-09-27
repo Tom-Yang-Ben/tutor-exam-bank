@@ -1086,8 +1086,8 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 #### 1. L-1＝1：公式閘門擋下換行以外的控制字元（Owner 第五輪 L-1 核准）
 
 - `utils/formulaLint.js` 的 `ISSUE_RULES` **最後面**加一條 `control_char`（`error`）。這個名字會永久進 `job_events.detail` 與 `report:jobs`，之後不能改。訊息寫出是哪個字元（例「換頁 U+000C」）與「多半是 LaTeX 的反斜線被 JSON 吃掉」。
-- 範圍：C0 控制字元 U+0000～U+001F 與 U+007F（與 `latexEscapeRepair.hasNonNewlineControl`、`docs/llm.md` 第 10 節「帶控制字元」的定義相同）。**例外只有換行**：U+000A，以及 Windows 換行 `\r\n` 裡的歸位；單獨的歸位照擋（`\rho` 被吃掉＝歸位＋`ho`），定位也擋（`\times`、`\theta`）。同一條規則最多回報 5 筆（`MAX_PER_RULE`）。
-- 走到哪裡：題幹（含選項，選項寫在 `question_text` 裡）與答案經 `agents/lint.js` 的 `gate` → 有 `control_char` 就是 error → **送第三層公式重寫**（`cacheKeyParts.issues` 帶 `control_char`）；重寫後還有控制字元照樣 `fail(formula_unparsable)`。複核頁送出（`reviewController`）也用同一個 `formulaLint`，所以老師核准時仍帶控制字元會被擋（可勾「接受純文字降級」）。
+- 範圍：C0 控制字元 U+0000～U+001F 與 U+007F（與 `latexEscapeRepair.hasNonNewlineControl`、`docs/llm.md` 第 10 節「帶控制字元」的定義相同，但 Windows 換行 `\r\n` 裡的歸位不算；`hasNonNewlineControl` 是回歸量測用的計數，連這個歸位也算進去）。**例外只有換行**：U+000A，以及 Windows 換行 `\r\n` 裡的歸位；單獨的歸位照擋（`\rho` 被吃掉＝歸位＋`ho`），定位也擋（`\times`、`\theta`）。同一條規則最多回報 5 筆（`MAX_PER_RULE`）。
+- 走到哪裡：題幹（含選項，選項寫在 `question_text` 裡）與答案經 `agents/lint.js` 的 `gate` → 有 `control_char` 就是 error → **送第三層公式重寫**（`cacheKeyParts.issues` 帶 `control_char`）；重寫後還有控制字元照樣 `fail(formula_unparsable)`。複核頁送出（`reviewController`）也用同一個 `formulaLint`，所以老師核准時仍帶控制字元會被擋（可勾「接受純文字降級」）。**手動貼上的定位字元（tab）也算**：例如老師從 Word 貼上用 tab 對齊的選項排版，送出會回 400，要先把 tab 換成空白，或勾「接受純文字降級」；拆題模型（含 Gemini）的輸出若帶 tab，也會多走一次 lint 重寫。repo 內現有的 Gemini extract、verify 回放檔經 `latexEscapeRepair` 修過之後控制字元都是 0，目前資料不受影響。〔審查意見補充，`dec/r6-gates-fix`〕
 - 詳解：verify 在 lint **之後**才跑，詳解沒有公式重寫可以送。`workers/jobRunner.js` 的 `buildSolutionFields` 與 `scripts/backfill_solutions.js` 改成「詳解還有換行以外的控制字元就不寫」（兩欄 NULL；回填腳本的略過原因記 `control_char`）。判準共用 `formulaLint` 新匯出的 `findControlChars`。
 - 量測（repo 內現有 cassette，經 `latexEscapeRepair` 修過之後跑 `lint.gate`；工具就是 `test/unit/latexEscapeRepair.test.js` 第 5 組）：
 
@@ -1135,3 +1135,11 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 - 為了這五題改了的既有斷言（都是 Owner 核准的合約變更，不是放寬）：`latexEscapeRepair.test.js` 第 5 組的閘門數字（見第 1 點的表）；`chapterPostRules.test.js` 原本釘「零成本閘門不套用」；`classifyKnn.test.js` 的「閘門優先」一案（題幹是二維坐標，閘門現在把「空間向量內積」改成「向量內積」，另外斷言 `adjustments`）；`localPerfThinking.test.js` 注入的「公式寫錯」題由 `\textbf` 改成仍不支援的 `\vecc`（斷言不變）；`localModeSections.test.js` 原本釘「只有 10.12～10.15 四節」，改成前四節不變、末尾允許第五輪的 10.16（整合重編時一併改）。
 - eval replay（CI 的本機模型設定）與 `a670783` 比對：classify、variant、retrieval 輸出相同；nlq 只多放寬計分那一行警告；pipeline 只多 D-2 的兩處說明。**本分支沒有造成新的 replay miss**：classify 92／92、nlq 8、variant 2 次生成＋29 次缺向量、pipeline 的 `extract_ocr` 都是基準本來就有的。
 - 重錄影響：沒有改模板、schema、prompt。L-1 會讓 lint 的 `cacheKeyParts.issues` 在輸入帶控制字元時多一個 `control_char`、L-3 讓帶 `\bullet`／`\textbf` 的題不再呼叫 lint——repo 裡 4 支本機 lint 回放檔（2026-09-25）的輸入是修復前的原始字串，`latexEscapeRepair` 併入後本來就對不上，本分支沒有讓任何原本讀得到的回放檔失效。variant 照 O-1 本來就要整步重錄（連帶 lint、verify），不必為本分支另外錄；classify、nlq、pipeline 的回放鍵不變。
+
+#### 7. 審查意見修正（`dec/r6-gates-fix`，2026-09-27）
+
+審查結論是通過，3 條 minor 都先驗證再改，只動文件與註解，程式行為、測試斷言都沒變：
+
+- 第 1 點「範圍與 `hasNonNewlineControl` 相同」不精確（確認屬實）：`hasNonNewlineControl` 用 `/[\x00-\x09\x0B-\x1F\x7F]/`，`\r\n` 的歸位也算；`control_char`（`CONTROL_CHAR_RE`）把它排除。第 1 點與 `utils/formulaLint.js` 的 JSDoc 都改成「相同，但 `\r\n` 裡的歸位不算」。
+- `latexEscapeRepair.test.js` 第 5 組 Gemini 那一案的註解寫「11 支」（確認屬實）：斷言是修前 86 → 76，少的是「修前帶控制字元而通過」的 10 支（與改之前的 `passedWithCtrl[0]＝10` 相同），註解改成 10 支；斷言不動。
+- 複核頁會擋手動貼上的 tab（確認屬實，在 Owner L-1 核准範圍內，行為不改）：第 1 點補一句說明，並記下目前 Gemini extract、verify 回放檔修復後控制字元為 0。
