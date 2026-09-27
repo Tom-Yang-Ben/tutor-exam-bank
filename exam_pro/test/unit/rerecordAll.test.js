@@ -23,10 +23,14 @@ const GEMINI_CI = Object.freeze({
     MODEL_EXTRACT: 'gemini:gemini-3.5-flash', MODEL_VERIFY: 'gemini:gemini-3.1-pro-preview',
     EMBED_MODEL: 'gemini-embedding-001', MODEL_NLQ: 'gemini:gemini-3.5-flash', source: 'test'
 });
-/** 本機模式的 CI 設定（與 docs/local-mode.md 第 2 條、repo 的 ci.yml 相同） */
+/**
+ * 本機模式的 CI 設定（模型與 docs/local-mode.md 第 2 條、repo 的 ci.yml 相同）。
+ * 〔Owner 第五輪 D-3 2026-09-27〕程式預設改成 ocr；本檔這幾則測的是交叉驗證的錄製流程（看圖模型要下載、OCR_ENGINE=none 只跑看圖），
+ * 所以明寫 cross，斷言不變（repo 的 ci.yml 寫 ocr，那條路在 localExtractMode.test.js）。
+ */
 const LOCAL_CI = Object.freeze({
     MODEL_EXTRACT: 'ollama:qwen3-vl:8b', MODEL_VERIFY: 'ollama:qwen3:8b',
-    EMBED_MODEL: 'ollama:qwen3-embedding:0.6b', MODEL_NLQ: 'ollama:qwen3:8b', source: 'test'
+    EMBED_MODEL: 'ollama:qwen3-embedding:0.6b', MODEL_NLQ: 'ollama:qwen3:8b', LOCAL_EXTRACT_MODE: 'cross', source: 'test'
 });
 
 let tmp;

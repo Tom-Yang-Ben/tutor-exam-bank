@@ -140,7 +140,10 @@ function useDeps({ ocr, render, mode = 'live', engine = 'paddle', dpi = 200 } = 
         ...(ocr ? { ocrPdf: ocr.ocrPdf } : { ocrPdf: async () => { throw new Error('不該呼叫 OCR'); } }),
         ...(render ? { renderPages: render.renderPages } : { renderPages: async () => { throw new Error('不該呼叫 renderPages'); } }),
         llmMode: () => mode,
-        ocrConfig: () => ({ engine, dpi })
+        ocrConfig: () => ({ engine, dpi }),
+        // 〔Owner 第五輪 D-3 2026-09-27〕程式預設改成 ocr：本檔測的是交叉驗證（cross）的本機路徑，
+        // 等同 .env 明寫 LOCAL_EXTRACT_MODE=cross（斷言一個字都沒改；ocr 模式在 extractOcrOnly.test.js）
+        localExtractMode: () => 'cross'
     });
 }
 

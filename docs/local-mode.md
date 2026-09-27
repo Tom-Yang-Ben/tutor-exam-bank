@@ -7,6 +7,7 @@
 > 〔2026-09-26 `dec/local-classify-nlq-prep`〕classify／nlq 重錄前修正：新增 10.15（原編 10.12，整合時改號；重現 2026-09-25 的失敗、逐題歸因、章節的程式後處理、決策草稿 LC-1～LC-4）。其餘各條沒有改。2026-09-27 依審查意見修正（`dec/local-classify-nlq-prep-fix`）：`exp_log_third` 不再把首數、尾數、位數的第一冊題改成第三冊；10.15 註明 nlq 的改善來自既有的證據檢查；LC-3、LC-4 的措辭與代價更正。
 > 〔Owner 決策單 2026-09-26 第四輪〕依 Owner 2026-09-26「上線與本機速度決策單」答覆（分支 `dec/r4-decisions`）：第 2 條的表、LM-12、10.7 第 9 點、10.11 的逾時表（#4、#6）、加速選項表與 (a)(c) 的細節就地加註（V1～V5）；程式改了兩處（V3 本機拆題逾時只重試 1 次、V4 舊流程 `/analyze-pdf` 本機預設每塊 2 頁），其餘預設值不變。總表見 [`HANDOFF.md`](HANDOFF.md) §0.00b。
 > 〔OCR 為主 2026-09-26〕Owner 實測看圖拆題 1 頁 54 分鐘後，決定這台電腦的拆題改成「OCR 為主」（分支 `dec/local-ocr-first`）：新增設定 `LOCAL_EXTRACT_MODE`（`cross` 預設＝第 4 條原本的交叉驗證，一個字都沒改；`ocr`＝只用 PaddleOCR＋文字模型）、複核原因 `ocr_only`（migration 0019）、依 OCR 版面配附圖；CI 與重錄改照 `ocr`。說明全部在 **10.12**；第 0～9 條沒有改（第 0 條「交叉驗證」與第 4 條仍是 `cross` 模式的契約，`ocr` 模式是它旁邊多的一條路，建議主控另登 LM 條目）。
+> 〔Owner 第五輪 D-3 核准 2026-09-27，`dec/r6-defaults`〕`LOCAL_EXTRACT_MODE` 的**程式預設改成 `ocr`**（只在拆題模型是 ollama 時有作用；Gemini 不受影響），要交叉驗證的在 `.env` 明寫 `cross`。第 0 條「交叉驗證」與第 4 條從此是「明寫 `cross`」時的契約，內容一個字都沒改；本機模式沒寫這一行時走 10.12 的 `ocr`。見 **10.19**。
 > 〔2026-09-26 `dec/local-embed-thresholds`〕V5 的分析：新增 10.13（原編 10.12，整合時改號；三個餘弦門檻依本機向量的分布、選項與建議，**待 Owner 核准，未改任何門檻**）、`npm run embed:thresholds`；10.7 第 9 點加一句指過去。第 0～9 條沒有改。
 > 〔2026-09-26 `dec/local-thinking-speed`〕新增 10.14（原編 10.12，整合時改號；拆題以外的時間花在哪裡、加速選項 a～e，**待 Owner 決定，預設未改**）：可選設定 `OLLAMA_NO_THINK`、`OLLAMA_MAX_OUTPUT_<AGENT>`、`OLLAMA_NUM_CTX_<AGENT>`（都不寫＝與之前逐位元相同）、`npm run local:bench-text`、`npm run perf:local` 第 1.2～1.5、4 段。第 0～9 條沒有改。
 > 〔2026-09-26 `dec/local-thinking-speed-fix`，審查修正〕10.14 的「冷的讀 prompt 約 17 token/秒」其實是部分快取，改用只推冷呼叫的方法（約 8 token/秒）並重算受影響的估計；「分類的快取每題被擠掉」改成條件句（回放檔顯示 Ollama 至少留著 3 份快取）；公式反斜線的支數改稱「至少」；驗算不一致不重跑的建議改成先收集資料。`perf:local` 加第 1.5 段的公式閘門統計、第 1.6 段溫度 0 的重現性、`--backfill`；`report:jobs` 加「answer_mismatch 之後原地重跑的結果」；啟動時印出生效的本機調整、名稱寫錯時警告。10.5 的逐題步驟一併更正。
@@ -554,7 +555,7 @@ node eval/tools/local_bench_vision.js --baseline
 
 #### 1. 兩種模式
 
-| | `cross`（程式預設；第 4 條的交叉驗證） | `ocr`（Owner 的電腦用這個） |
+| | `cross`（第 4 條的交叉驗證；〔Owner 第五輪 D-3〕要明寫，原本是程式預設） | `ocr`（Owner 的電腦用這個；〔Owner 第五輪 D-3 2026-09-27〕程式預設，10.19） |
 |---|---|---|
 | 一塊（2 頁）做什麼 | PaddleOCR → 看圖模型拆一次 → 文字模型整理 OCR 拆一次 → 兩版逐題比對 | PaddleOCR → 文字模型整理 OCR（`extract_ocr`），**不呼叫看圖模型、不轉圖** |
 | 用到的模型 | `qwen3-vl:8b`＋`qwen3:8b` | 只有 `qwen3:8b`（拆題這一步用不到 `qwen3-vl:8b`） |
@@ -574,11 +575,12 @@ node eval/tools/local_bench_vision.js --baseline
    LOCAL_EXTRACT_MODE=ocr
    ```
 
+   〔Owner 第五輪 D-3 2026-09-27〕程式預設已改成 `ocr`，Owner 的 `.env` 沒有這一行也走 `ocr`；寫上去（與 `.env.example` 一致）也沒關係。
    `OCR_ENGINE` 不要寫 `none`（不寫＝`paddle`）；`JOB_PDF_CHUNK_PAGES` 照舊不寫（本機 2 頁）；V1 放寬的 `OLLAMA_TIMEOUT_MS=5400000`、`JOB_NODE_TIMEOUT_MS=7200000` 留著（`ocr` 模式一塊約 35～45 分，綽綽有餘）。
 3. 重啟伺服器（`npm start`）。之後上傳的卷就走 `ocr`；已經在跑的 job 不受影響（模式是每一塊拆題時讀的）。
-4. 要改回交叉驗證：刪掉那一行（或寫 `cross`），重啟。
+4. 要改回交叉驗證：~~刪掉那一行（或寫 `cross`）~~〔Owner 第五輪 D-3〕把那一行改成 `LOCAL_EXTRACT_MODE=cross`（刪掉會回到預設 `ocr`），重啟。
 
-**矛盾設定**：`LOCAL_EXTRACT_MODE=ocr` 與 `OCR_ENGINE=none` 同時寫，伺服器（與 `node workers/jobRunner.js`）**啟動時就報錯停下**，訊息寫明要刪哪一行（`config/localExtractMode.js`；只在拆題模型是 ollama 時檢查，Gemini 模式不受影響）。沒有經過工作排程的呼叫端（eval、舊的 `/analyze-pdf`）遇到同一個矛盾，拆題那一塊回錯誤、訊息相同。`LOCAL_EXTRACT_MODE` 亂寫（例如 `vision`）＝`cross`，伺服器視窗警告一次（與 `OCR_ENGINE` 同一個規則）。
+**矛盾設定**：`LOCAL_EXTRACT_MODE=ocr` 與 `OCR_ENGINE=none` 同時寫，伺服器（與 `node workers/jobRunner.js`）**啟動時就報錯停下**，訊息寫明要刪哪一行（`config/localExtractMode.js`；只在拆題模型是 ollama 時檢查，Gemini 模式不受影響）。沒有經過工作排程的呼叫端（eval、舊的 `/analyze-pdf`）遇到同一個矛盾，拆題那一塊回錯誤、訊息相同。`LOCAL_EXTRACT_MODE` 亂寫（例如 `vision`）＝~~`cross`~~〔Owner 第五輪 D-3〕預設 `ocr`，伺服器視窗警告一次（與 `OCR_ENGINE` 同一個規則）。〔Owner 第五輪 D-3〕預設改成 `ocr` 之後，**只寫 `OCR_ENGINE=none`、沒寫 `LOCAL_EXTRACT_MODE`** 也是這個矛盾，同樣啟動就報錯，訊息講明「沒寫＝預設 ocr；要只用看圖模型就加一行 `LOCAL_EXTRACT_MODE=cross`」（10.19 第 1 點）。
 
 #### 3. 代價與複核怎麼做
 
@@ -651,6 +653,8 @@ node eval/tools/local_bench_vision.js --baseline
 ### 10.13 三個餘弦門檻依本機向量重新校準（V5；2026-09-26，`dec/local-embed-thresholds`）——**待 Owner 核准，未改任何門檻**
 
 > 本節只提建議與證據。`.env.example`、程式預設、`eval/thresholds.json` 一個都沒改；`test/unit/embedThresholds.test.js` 釘住現值（0.80／0.90／0.97／0.90）。Owner 核准哪一個選項之後才另開分支改。
+>
+> 〔Owner 第五輪核准 2026-09-27，`dec/r6-defaults`〕V5-1＝2（0.72）、V5-2＝2（0.87，**仍是暫定**，variant 重錄後依 O-4 抽查再定案）、V5-3＝3（0.99）、V5-4＝1（維持 0.90）、V5-5＝1（只改本機模式的預設）、O-2＝1（`KNN_VOTE_SIM` 維持 0.90）已落實，見 **10.19**；`eval/thresholds.json` 沒動。下面的「現行」是核准前的值（Gemini 的值沒變）。
 >
 > 〔審查修正 2026-09-26 `dec/local-embed-thresholds-fix`〕① V5-3 的「換句話說」一欄原本寫成「現行門檻抓到幾組」，其實產品不拿同一藍本的變式互相比（dedup1 排除整個家族），改標成代理，另列產品缺口 **V5-6**；② V5-2 改依不同題幹計，並標成**暫定**（等 LaTeX 反斜線修好、variant 重錄後重跑再定，先後順序寫在 V5-5）；③ 反斜線受損的證據（第 4 點）改由工具算出、可以重跑；④ 報告第 5 節「重複不入庫」的措辭改成「進複核（`review_reason='duplicate'`）」。
 
@@ -1325,3 +1329,52 @@ C-f 的細節：
 - 第 1 點「範圍與 `hasNonNewlineControl` 相同」不精確（確認屬實）：`hasNonNewlineControl` 用 `/[\x00-\x09\x0B-\x1F\x7F]/`，`\r\n` 的歸位也算；`control_char`（`CONTROL_CHAR_RE`）把它排除。第 1 點與 `utils/formulaLint.js` 的 JSDoc 都改成「相同，但 `\r\n` 裡的歸位不算」。
 - `latexEscapeRepair.test.js` 第 5 組 Gemini 那一案的註解寫「11 支」（確認屬實）：斷言是修前 86 → 76，少的是「修前帶控制字元而通過」的 10 支（與改之前的 `passedWithCtrl[0]＝10` 相同），註解改成 10 支；斷言不動。
 - 複核頁會擋手動貼上的 tab（確認屬實，在 Owner L-1 核准範圍內，行為不改）：第 1 點補一句說明，並記下目前 Gemini extract、verify 回放檔修復後控制字元為 0。
+
+### 10.19 第五輪 D 預設值與門檻（2026-09-27，`dec/r6-defaults`；Owner 第五輪 D-3、V5-1～V5-5、O-2 核准）
+
+> 節號原暫編 10.16，〔整合 2026-09-27 dec/integration-r6〕依併入順序改號為 10.19。本節只改「沒寫 `.env` 時的預設」：`eval/thresholds.json`、golden、既有 cassette 一個都沒動。
+
+#### 1. D-3＝2：`LOCAL_EXTRACT_MODE` 的程式預設改成 `ocr`（Owner 第五輪 D-3 核准）
+
+- `config/localExtractMode.js` 的 `DEFAULT_LOCAL_EXTRACT_MODE` 由 `cross` 改成 `ocr`：沒寫、空白、亂寫（警告一次）都是 `ocr`；**只有明寫 `cross` 才是交叉驗證**。只在拆題模型是 ollama 時有作用（`agents/extract.js` 的本機路徑才讀）；Gemini 模式完全不讀它，行為一個字都沒變。
+- 一致的地方：`.env.example`（仍寫 `LOCAL_EXTRACT_MODE=ocr`，說明改成「與程式預設相同，要交叉驗證就明寫 cross」）、`eval/lib/localMode.js` 的 `effectiveModels`（`ci.yml` 沒寫＝`ocr`，重錄計畫不再下載看圖模型）、`rerecord_all` 的「CI 沒寫時實際用什麼」、`npm run perf:local` 3.4 段的說明、10.12 第 1、2 點與矛盾設定一段。`ci.yml` 與 `eval/.env.replay` 照舊明寫 `ocr`（CI 讀哪一組回放檔在 workflow 檔上看得見），所以 **CI 的回放與重錄內容完全不變**。
+- **啟動訊息**：`jobRunner 啟動` 那一行（`npm start` 與 `node workers/jobRunner.js`）多兩個欄位：拆題模型是 ollama 時 `local_extract_mode`（例：「ocr（只用 PaddleOCR＋文字模型拆題，每題停在人工複核；程式預設，要交叉驗證就在 .env 明寫 LOCAL_EXTRACT_MODE=cross）」），以及 `thresholds`（第 2 點的五個門檻、哪幾個是 `.env` 明寫的）。
+- **矛盾設定多一種**：只寫 `OCR_ENGINE=none`、沒寫 `LOCAL_EXTRACT_MODE` 以前是「只看圖、不做 OCR」，現在等於 `ocr`＋`none`。仍然不猜（不自動退回看圖：在沒有獨立顯示卡的電腦上一頁幾十分鐘，會被當成當機），**啟動時就報錯**，訊息講明「.env 沒寫 LOCAL_EXTRACT_MODE，程式預設是 ocr……要只用看圖模型、不做 OCR，加一行 LOCAL_EXTRACT_MODE=cross」。重錄工具（`recordingPlan` 的 `configError`）同一條規則。
+- **受影響的測試**：原本靠「沒寫＝cross」測交叉驗證的單元測試（`extractLocal`、`visionMaxEdge`、`legacyAnalyzePdfFigures`、`extractLocalRunner`、`localMode`、`rerecordAll`、`localPerfReport`、`textModelLm15`）改成**明寫 `cross`**，斷言一個字都沒改；釘預設的測試（`localExtractMode.test.js`）改釘 `ocr`，另加：沒寫＋`OCR_ENGINE=none` 啟動就報錯、明寫 `cross` 照常建立、舊流程 `/analyze-pdf` 沒寫時只呼叫 `extract_ocr`、`perf:local` 沒寫與明寫 `ocr` 的報告逐字相同。
+- `test/unit/evalPipeline.test.js` 那兩則「replay 找不到 cassette 就 skip」的：單元測試的環境沒有 `LOCAL_EXTRACT_MODE`，以前走 `cross`、缺的是 `extract_vision`（在這台電腦上錄不出來，等於永遠 skip）；改了預設之後走 `ocr`、缺的是 `extract_ocr`，**與 CI 同一支回放檔**，樣卷的 `extract_ocr` 錄好之後就會自動轉成硬斷言。〔審查更正 `dec/r6-defaults-fix`〕原本這裡寫「兩則在 `ocr` 模式下斷言的都成立，不必改」，**是錯的**：「10 題全部走到終態」那一則成立（`ocr_only` 的複核是終態），但「同一份 PDF 跑第二次」那一則有 `assert.ok(s1.saved > 0)`，`ocr` 模式每題停在 `ocr_only`、`saved` 恆為 0，錄好之後一定紅（`dup === s1.saved` 也退化成 0＝0）。已照第 4 點改。
+
+#### 2. V5-1～V5-5、O-2：五個餘弦門檻依向量模型取預設（Owner 第五輪 V5-1、V5-2、V5-3、V5-4、V5-5、O-2 核准）
+
+集中在一支 `config/similarityThresholds.js`（`resolveSimilarityThresholds`）：`EMBED_MODEL` 是 `ollama:`（含沒寫＝本機預設）用本機值，沒有前綴的 `gemini-embedding-001` 或 `gemini:…` 用 Gemini 值。優先順序：`.env` 明寫 > 舊名 `VARIANT_SIM_MIN`（只給兩個變式門檻）> 依模型的預設。`workers/jobRunner.js`（`loadConfig`、`loadStage3Config`；回傳形狀不變）、`services/variantService.js`（`simMin`）、`eval/lib/suiteVariant.js`、`eval/lib/pipelineDriver.js`、`npm run embed:thresholds` 的「現行值」都從這裡讀，不再各寫一份 0.97／0.80。
+
+| 變數 | 題號 | 本機（`ollama:`） | Gemini | 說明 |
+|---|---|---:|---:|---|
+| `VARIANT_RETRIEVE_SIM_MIN` | V5-1＝2 | **0.72**（原 0.80） | 0.80 | 找現成相似題：fixture 上 7／30 → 15／30 個藍本有 2 題可推 |
+| `VARIANT_OFFTOPIC_SIM_MIN` | V5-2＝2 | **0.87**（原 0.90，**暫定**） | 0.90 | 變式跑題；反斜線修好、variant 重錄後依 O-4 抽查再定案 |
+| `DEDUP_DUP_THRESHOLD` | V5-3＝3 | **0.99**（原 0.97） | 0.97 | 重複題：dedup golden 換數字錯 3／7 → 1／7 |
+| `DEDUP_VARIANT_THRESHOLD` | V5-4＝1 | 0.90 | 0.90 | 維持 |
+| `KNN_VOTE_SIM` | O-2＝1 | 0.90 | 0.90 | 維持 |
+
+- `.env.example` 這五行（與舊名 `VARIANT_SIM_MIN`）改成註解並寫明兩組預設：**明寫就一律照寫的值、不分模型**。Owner 的 `.env` 若是照舊範本建的（明寫 0.80／0.90／0.97／0.90、`VARIANT_SIM_MIN=0.80`），新預設不會生效——升級時把這幾行刪掉；啟動訊息的 `thresholds` 會把 `.env` 明寫的標成「（.env）」，一眼看得出來。
+- `agents/dedup.js`、`agents/generateVariant.js`、`agents/classify.js` 裡的 `DEFAULT_*` 沒改：那是「ctx 沒帶門檻」時的保底（agent 不讀 `process.env`、也不知道向量模型；runner 與 eval 一律會帶），不是產品預設。
+- `npm run embed:thresholds` 重跑、覆寫 [`local-embed-thresholds-report.md`](local-embed-thresholds-report.md)：只有「現行值」相關的幾行變了——開頭一行改列兩組預設、第 3 節「現行 0.72：覆蓋 15/30（0.5000）」、第 4、5 節標題、5.1 表本機欄依 0.99 重判（dd-nc-03、dd-nc-06 由 duplicate 改判 variant）；2.3 與第 6 節的「Gemini 現行門檻的等效值」照舊用 Gemini 的值，數字不變。
+- 新測試 `test/unit/similarityThresholds.test.js`：兩組預設、依向量模型判斷（看的是向量模型、不是拆題模型）、優先順序、壞值、runner／variantService／embed:thresholds 讀到同一組數字（兩種模式）、eval 兩支不再寫死、啟動訊息。釘現值的既有測試（`jobRunner`、`variantPipeline`、`variantService`、`embedThresholds`）改成本機新值，並加上 Gemini 仍是舊值的斷言（只改數字、加覆蓋，不放寬）。
+
+#### 3. 回放檔與 eval（replay，與 `local/integration-r5`（`a670783`）同機比對）
+
+- **沒有任何模板、schema、prompt 改動**：沒有 agent 的回放檔鍵改變，不必為這次改動升版或重錄。
+- retrieval、classify、nlq：報表與基準逐字相同（classify、nlq 本來就因缺 `classify.v2`／`nlq.v2` 的回放檔紅燈，不算）。pipeline：與基準相同（仍缺 `extract_ocr/a47b37a0…`，本來就缺）。
+- variant：`retrieved_coverage` 0.2333 → **0.5000**（V5-1；門檻 0.8367 不動，仍未達）；replay miss 2 → **6**：多出的 4 筆都是 `verify`，來自 var-004、var-015、var-017——跑題門檻 0.87 之後，這幾題原本停在 `off_topic` 的變式現在過了跑題、往下走到驗算，而驗算這一步從來沒錄過（模板沒改，是「新走到的呼叫」）。這 4 筆是**本分支新造成、要重錄**的；照 V5-2 的先後順序，併進反斜線修好後那一次 variant 重錄即可（`record_local.bat variant`），不必另外錄。另外 29 筆「向量檔查無此文本」與 2 筆 `variant` miss 與基準相同。
+- e2e 不受影響：`ci.yml` 明寫 `ocr`，預設改了也是同一條路。
+
+#### 4. 審查修正（2026-09-27，`dec/r6-defaults-fix`）
+
+- **`evalPipeline.test.js`「同一份 PDF 跑第二次」加 `ocr` 分支（測試契約變更，比照 D-1 列給 Owner：`owner-pending-decisions-r5.md` D-1 內文）**。比照 e2e 的 ①a／①b（`test/e2e/pipeline.e2e.test.js` 檔頭）：
+  - 交叉驗證（明寫 `LOCAL_EXTRACT_MODE=cross`）與 Gemini 拆題：跑原本那一則，**一個字都沒改**（含 `s1.saved > 0`）。
+  - `ocr` 模式（`npm test` 沒寫＝預設）：改跑另一則——第一輪 `saved`＝0、每題 `extract_mode` 都是 `ocr`、沒有 `extract_disagree`、**至少一題**走完全部閘門（六個閘門的 payload 都在）停在 `ocr_only`；模擬老師在複核頁核准這些題（把它們的 `text_hash` 放進 `dbHashes`，與 driver 對「已入庫」的同一條規則），第二輪**核准過的每一題**都被 dedup0 攔成 `duplicate`（`hit.scope＝db`）、沒核准的題（例如驗算不一致）逐題與第一輪相同、`saved` 仍是 0。
+  - 模式用與 driver 相同的設定來源判斷（`MODEL_EXTRACT` 是 ollama＋`resolveLocalExtractMode()`），不看結果；`ocr` 那一則逐題斷言 `extract_mode === 'ocr'`，判斷與實際路徑不一致時直接紅。
+  - 驗證：兩則目前仍因缺 `extract_ocr/a47b37a0…` skip（與基準相同）。另外用「把 LLM agent 換成確定性假件」的 preload 讓它們跑成硬斷言：`ocr`（沒寫）與明寫 `cross` 兩種模式、有無一題驗算不一致，四種組合全綠；同一個 preload 下，`510f4ea` 原本那一則在 `ocr` 模式確實紅在「第一輪至少要有入庫的題」——審查的判斷屬實。假件只在驗證時用，沒有進 repo。
+- **舊範本 `.env` 的啟動提醒**（`config/similarityThresholds.js` 的 `legacyTemplateWarning`）：向量模型是本機（`ollama:`，含沒寫），`.env` 卻明寫了**剛好等於 Gemini 舊預設、又不等於本機新預設**的值（`VARIANT_RETRIEVE_SIM_MIN=0.80`、`VARIANT_OFFTOPIC_SIM_MIN=0.90`、`DEDUP_DUP_THRESHOLD=0.97`），或舊名 `VARIANT_SIM_MIN` 正在生效時，`jobRunner 啟動` 之後多印一則 warn，點名這幾行、說明「刪掉後重啟才會用本機新預設」。「`.env` 明寫優先」的規則不變（不自動忽略）；`DEDUP_VARIANT_THRESHOLD`、`KNN_VOTE_SIM` 兩組預設都是 0.90，寫了也不影響，不點名；Gemini 向量不提醒。**交付 Owner 電腦時的檢查清單**：看伺服器視窗有沒有這則提醒，有就照它刪。
+- **啟動訊息照 runner 實際的 config**：`thresholds` 改由 `effectiveSimilarityThresholds(config)` 組（`workers/jobRunner.js`）——`createRunner({config})` 覆寫的門檻照實印、標「（createRunner 設定）」；`local_extract_mode` 的「程式預設／明寫」也照 `createRunner` 當下的判斷（`opts.config` 給了或 `.env` 明寫都算明寫；明寫 `ocr` 不再說「程式預設」）。正式啟動（`npm start`、`node workers/jobRunner.js`）不帶這幾個 `opts.config` 鍵，印的與原本相同。
+- 測試：`similarityThresholds.test.js` 加 5 則（`createRunner` 覆寫照實印、舊範本點名三個變數、只剩舊名也提醒、三種不提醒、`runner.start()` warn 一次且門檻仍照 `.env`）。
+- 沒有改模板、schema、prompt、`eval/thresholds.json`、golden、cassette；回放檔鍵都沒變，不必升版或重錄（`dec/r6-defaults` 已知要重錄的 4 筆 `verify` 照舊，見第 3 點）。

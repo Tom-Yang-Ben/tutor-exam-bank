@@ -153,12 +153,6 @@ function cosine(a, b) {
 
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 
-/** 讀環境變數的浮點數；缺值或壞值退回預設 */
-function numFromEnv(name, dflt) {
-    const n = Number.parseFloat(process.env[name]);
-    return Number.isFinite(n) ? n : dflt;
-}
-
 /**
  * 記憶體版的第 3.1 條候選條件。fixture 沒有 `archived_at`／`attempts`／`variant_of`，
  * 所以那三條在這裡分別是「恆真」「恆真」「家族鍵 = id」——與 pgEngine.seedFixture 灌進去的
@@ -315,10 +309,10 @@ async function runVariantSuite(args = {}) {
 
     // 裁決 S3-R9：兩個門檻分家。retrieved_coverage 量的是「檢索側」，用 RETRIEVE；
     // 生成後的跑題檢查（gate_pass_rate 的第二道）用 OFFTOPIC。舊名 VARIANT_SIM_MIN 是退路。
-    const legacySimMin = Number.parseFloat(process.env.VARIANT_SIM_MIN);
-    const legacy = Number.isFinite(legacySimMin) ? legacySimMin : null;
-    const retrieveSimMin = numFromEnv('VARIANT_RETRIEVE_SIM_MIN', legacy ?? 0.80);
-    const offtopicSimMin = numFromEnv('VARIANT_OFFTOPIC_SIM_MIN', legacy ?? 0.90);   // S3-R29
+    // 〔Owner 第五輪 V5-5 核准 2026-09-27〕預設依向量模型（本機 0.72／0.87、Gemini 0.80／0.90），與 runner 同一支 resolver
+    const sim = require('../../config/similarityThresholds').resolveSimilarityThresholds(process.env);
+    const retrieveSimMin = sim.variantRetrieveSimMin;
+    const offtopicSimMin = sim.variantOfftopicSimMin;   // S3-R29（Gemini 0.90）；V5-2 本機 0.87（暫定）
     const engine = args.engine === 'pg' ? 'pg' : 'memory';
 
     // ── ① retrieved_coverage（零 LLM、零 embedding 呼叫）──
@@ -603,7 +597,7 @@ function currentEmbedMode() {
  * @returns {Promise<{ok:boolean, miss?:string}>}
  */
 async function dedup1InMemory({ fields, source, fixture, emb, buildEmbedText, embed }) {
-    const dupTh = Number(process.env.DEDUP_DUP_THRESHOLD || 0.97);
+    const dupTh = require('../../config/similarityThresholds').resolveSimilarityThresholds(process.env).dedupDup;   // 〔Owner 第五輪 V5-3〕
     let vec;
     try {
         const text = buildEmbedText(fields);
@@ -629,6 +623,7 @@ async function dedup1InMemory({ fields, source, fixture, emb, buildEmbedText, em
 /** eval 的 ctx：ctx.db 一律 null（裁決 S2-8，cassette 鍵才可重現） */
 function makeCtx({ llm, models, offtopicSimMin }) {
     const usage = { calls: 0, costUsd: 0 };
+    const sim = require('../../config/similarityThresholds').resolveSimilarityThresholds(process.env);
     const pricing = safeRequire(path.resolve(ROOT, 'config', 'pricing.js'));
     return {
         __usage: usage,
@@ -667,11 +662,12 @@ function makeCtx({ llm, models, offtopicSimMin }) {
             limits: {},
             thresholds: {
                 classifyMinConf: Number(process.env.CLASSIFY_MIN_CONF || 0.8),
-                dedupDup: Number(process.env.DEDUP_DUP_THRESHOLD || 0.97),
-                dedupVariant: Number(process.env.DEDUP_VARIANT_THRESHOLD || 0.90),
+                // 〔Owner 第五輪 V5-5〕去重與 kNN 門檻依向量模型（config/similarityThresholds.js，與 runner 相同）
+                dedupDup: sim.dedupDup,
+                dedupVariant: sim.dedupVariant,
                 variantOfftopicSimMin: offtopicSimMin,
                 variantMinEdit: Number(process.env.VARIANT_MIN_EDIT || 0.08),
-                knnVoteSim: Number(process.env.KNN_VOTE_SIM || 0.90)
+                knnVoteSim: sim.knnVoteSim
             },
             features: { similar: false, pipeline: true }
         },

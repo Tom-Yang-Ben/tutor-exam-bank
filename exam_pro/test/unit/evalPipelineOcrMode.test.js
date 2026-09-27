@@ -52,10 +52,14 @@ describe('thresholds.compareSuite：notApplicable 白名單', () => {
 });
 
 describe('suitePipeline：OCR 模式的判斷與替代指標', () => {
-    test('isOcrOnlyRun：ollama＋ocr 才算；Gemini、cross、沒設都不算；payload 帶 extract_mode=ocr 也算', () => {
+    // 〔整合 2026-09-27 dec/integration-r6〕C 組（D-2）× D 組（D-3）：D 組把 LOCAL_EXTRACT_MODE 的程式預設改成 ocr
+    // （Owner 第五輪 D-3＝2 核准），isOcrOnlyRun 經 resolveLocalExtractMode 取預設，所以「ollama、沒設」現在算 OCR 模式
+    //（saved_rate 印 n/a、報人工核准前的通過率）；寫錯字也落回預設 ocr。要比 0.87 的交叉驗證必須明寫 cross。
+    test('isOcrOnlyRun：ollama＋ocr（含沒設＝程式預設 ocr）才算；Gemini、明寫 cross 不算；payload 帶 extract_mode=ocr 也算', () => {
         assert.equal(suite.isOcrOnlyRun({ MODEL_EXTRACT: 'ollama:qwen3-vl:8b', LOCAL_EXTRACT_MODE: 'ocr' }), true);
         assert.equal(suite.isOcrOnlyRun({ MODEL_EXTRACT: 'ollama:qwen3-vl:8b', LOCAL_EXTRACT_MODE: 'cross' }), false);
-        assert.equal(suite.isOcrOnlyRun({ MODEL_EXTRACT: 'ollama:qwen3-vl:8b' }), false);
+        assert.equal(suite.isOcrOnlyRun({ MODEL_EXTRACT: 'ollama:qwen3-vl:8b' }), true);
+        assert.equal(suite.isOcrOnlyRun({ MODEL_EXTRACT: 'ollama:qwen3-vl:8b', LOCAL_EXTRACT_MODE: 'ocrr' }), true);
         assert.equal(suite.isOcrOnlyRun({ MODEL_EXTRACT: 'gemini:gemini-3.5-flash', LOCAL_EXTRACT_MODE: 'ocr' }), false);
         assert.equal(suite.isOcrOnlyRun({ MODEL_EXTRACT: 'gemini:gemini-3.5-flash' }, [{ payload: { extract: { extract_mode: 'ocr' } } }]), true);
     });

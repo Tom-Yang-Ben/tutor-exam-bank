@@ -48,17 +48,20 @@ const DEFAULT_COMPARE_LLM = 'gemini-3.1-pro-preview';
 
 /**
  * 程式裡的現行預設值（直接讀程式，不讀 .env：本報告分析的是「沒寫 .env 時」的行為）。
+ * 〔Owner 第五輪 V5-5 核准 2026-09-27〕預設依向量模型而定（config/similarityThresholds.js）：
+ * 給哪個向量模型就回那個模型實際會用的預設（本機 ollama: → 0.72／0.87／0.99／0.90；Gemini → 0.80／0.90／0.97／0.90）。
  * minEdit 不是這次要校準的門檻，只拿來重算「補回反斜線後文字閘門會不會擋」（與 generateVariant 同一個預設）。
+ * @param {string} [model] 向量模型（EMBED_MODEL 的寫法）；沒給＝沒寫 EMBED_MODEL 時的預設（本機）
  * @returns {{retrieve:number, offtopic:number, dedupDup:number, dedupVariant:number, minEdit:number}}
  */
-function currentDefaults() {
-    const dedup = require('../../agents/dedup');
+function currentDefaults(model) {
     const gv = require('../../agents/generateVariant');
+    const d = require('../../config/similarityThresholds').similarityDefaultsFor(model === undefined ? {} : String(model));
     return {
-        retrieve: require('../../services/variantService').simMin({}),
-        offtopic: gv.DEFAULT_OFFTOPIC_SIM_MIN,
-        dedupDup: dedup.DEFAULT_DUP,
-        dedupVariant: dedup.DEFAULT_VARIANT,
+        retrieve: d.variantRetrieveSimMin,
+        offtopic: d.variantOfftopicSimMin,
+        dedupDup: d.dedupDup,
+        dedupVariant: d.dedupVariant,
         minEdit: gv.DEFAULT_MIN_EDIT
     };
 }
@@ -367,11 +370,14 @@ function equivDescribe(eq) {
 /**
  * 組出整份報告（純函式：吃 analyzeModel 的結果）。
  * @param {{primary:object, compare:object|null, primaryCommon:object|null, compareCommon:object|null,
- *          current:object, fixtureCount:number, commonIds:number[], missingInCompare:number[]}} a
+ *          current:object, compareCurrent?:object, fixtureCount:number, commonIds:number[], missingInCompare:number[]}} a
+ *        current＝主要向量模型的現行預設；compareCurrent＝對照模型的（〔Owner 第五輪 V5-5〕兩者依模型不同；沒給＝與 current 相同）
  * @returns {{lines:string[], candidates:object}}
  */
 function buildReport(a) {
     const { primary: P, compare: C, primaryCommon: PC, compareCommon: CC, current: cur } = a;
+    // 〔Owner 第五輪 V5-5〕對照模型（Gemini）自己的現行預設；「對照現行門檻的等效值」一律用它（沒給＝與主要相同，舊呼叫端不變）
+    const curC = a.compareCurrent || cur;
     const L = [];
     const pName = shortModel(P.model), cName = C ? shortModel(C.model) : null;
     const candidates = {};
@@ -387,7 +393,9 @@ function buildReport(a) {
     const sibNonIdent = P.siblings.filter(s => !s.identical);
     L.push(`> 生成題的初判（Claude 讀過題幹的判斷，**不是量測**）：\`eval/tools/embed_threshold_labels.json\`，以題幹 sha256 對上——跑題 ${labeledDistinct}/${P.distinct.length} 段、` +
         `兄弟變式 ${sibNonIdent.filter(s => s.label).length}/${sibNonIdent.length} 組對得上（對不上的列「未標註」）。計數都由本工具算。`);
-    L.push(`> 現行預設（程式，不讀 .env）：VARIANT_RETRIEVE_SIM_MIN＝${cur.retrieve}、VARIANT_OFFTOPIC_SIM_MIN＝${cur.offtopic}、DEDUP_DUP_THRESHOLD＝${cur.dedupDup}、DEDUP_VARIANT_THRESHOLD＝${cur.dedupVariant}。`);
+    const curLine = c => `VARIANT_RETRIEVE_SIM_MIN＝${c.retrieve}、VARIANT_OFFTOPIC_SIM_MIN＝${c.offtopic}、DEDUP_DUP_THRESHOLD＝${c.dedupDup}、DEDUP_VARIANT_THRESHOLD＝${c.dedupVariant}`;
+    L.push(`> 現行預設（程式，不讀 .env；〔Owner 第五輪 V5-5〕依向量模型而定，config/similarityThresholds.js）：${pName} ${curLine(cur)}` +
+        (C ? `；${cName} ${curLine(curC)}` : '') + '。');
     L.push('> 百分位數用線性內插；「≥ 門檻」算通過／算相似（與程式相同）。', '');
 
     // ── 1. 題對分布 ──
@@ -430,10 +438,10 @@ function buildReport(a) {
         const REL_LABEL = { same_concept: '同概念換數字', same_chapter: '同章不同概念', different_chapter: '不同章（3.2 算法）', cross_chapter: '跨章同科' };
         const all = Object.keys(REL_LABEL);
         const plan = [
-            ['retrieve', 'VARIANT_RETRIEVE_SIM_MIN', cur.retrieve, all],
-            ['offtopic', 'VARIANT_OFFTOPIC_SIM_MIN', cur.offtopic, all],
-            ['dedupDup', 'DEDUP_DUP_THRESHOLD', cur.dedupDup, ['same_concept', 'same_chapter']],
-            ['dedupVariant', 'DEDUP_VARIANT_THRESHOLD', cur.dedupVariant, ['same_concept', 'same_chapter']]
+            ['retrieve', 'VARIANT_RETRIEVE_SIM_MIN', curC.retrieve, all],
+            ['offtopic', 'VARIANT_OFFTOPIC_SIM_MIN', curC.offtopic, all],
+            ['dedupDup', 'DEDUP_DUP_THRESHOLD', curC.dedupDup, ['same_concept', 'same_chapter']],
+            ['dedupVariant', 'DEDUP_VARIANT_THRESHOLD', curC.dedupVariant, ['same_concept', 'same_chapter']]
         ];
         for (const [key, envName, t, rels] of plan) {
             for (const rel of rels) {
@@ -561,8 +569,8 @@ function buildReport(a) {
     L.push('verbatim／resend 16 組：L0 雜湊已全部擋下（`npm test` 守著）；resend 的題幹改過格式，向量檔沒有錄，量不到餘弦。下表是其餘 14 組。', '');
     const dgRows = P.dedupPairs.map((d, i) => {
         const c = C ? C.dedupPairs[i] : null;
-        const v = cos => (cos === null ? '—' : `${T.fmt(cos)} → ${T.dedupVerdict(cos, cur.dedupDup, cur.dedupVariant)}`);
-        return [d.id, `#${d.a}×#${d.b}`, d.expect, v(d.cos), ...(C ? [v(c.cos)] : [])];
+        const v = (cos, k = cur) => (cos === null ? '—' : `${T.fmt(cos)} → ${T.dedupVerdict(cos, k.dedupDup, k.dedupVariant)}`);
+        return [d.id, `#${d.a}×#${d.b}`, d.expect, v(d.cos), ...(C ? [v(c.cos, curC)] : [])];
     });
     L.push(...T.mdTable(['組', '題對', 'golden 預期', `${pName}（現行門檻）`, ...(C ? [`${cName}（現行門檻）`] : [])], dgRows, 'lllll'), '');
     L.push('### 5.2 門檻掃描：換數字的現成題對被判「重複」幾對', '');
@@ -626,13 +634,13 @@ function buildReport(a) {
     L.push('## 6. 依寫明規則算出的候選值（不是建議，Owner 裁決前一個都不改）', '');
     const cRows = [
         ['VARIANT_RETRIEVE_SIM_MIN', `推薦出去的前 2 題沒有其他跨章題的最低門檻（3.1）`, T.fmt(candidates.retrieve_clean, 2)],
-        ['VARIANT_RETRIEVE_SIM_MIN', `${cName || '對照'} ${cur.retrieve} 的等效值：不同章誤收同比例（2.3）`, T.fmt(candidates.retrieve_equiv_different_chapter)],
-        ['VARIANT_RETRIEVE_SIM_MIN', `${cName || '對照'} ${cur.retrieve} 的等效值：同章不同概念同比例（2.3）`, T.fmt(candidates.retrieve_equiv_same_chapter)],
-        ['VARIANT_OFFTOPIC_SIM_MIN', `${cName || '對照'} ${cur.offtopic} 的等效值：不同章誤收同比例（2.3）`, T.fmt(candidates.offtopic_equiv_different_chapter)],
-        ['VARIANT_OFFTOPIC_SIM_MIN', `${cName || '對照'} ${cur.offtopic} 的等效值：同章不同概念同比例（2.3）`, T.fmt(candidates.offtopic_equiv_same_chapter)],
-        ['DEDUP_DUP_THRESHOLD', `${cName || '對照'} ${cur.dedupDup} 的等效值：換數字題被判重複同比例（2.3）`, T.fmt(candidates.dedupDup_equiv_same_concept)],
+        ['VARIANT_RETRIEVE_SIM_MIN', `${cName || '對照'} ${curC.retrieve} 的等效值：不同章誤收同比例（2.3）`, T.fmt(candidates.retrieve_equiv_different_chapter)],
+        ['VARIANT_RETRIEVE_SIM_MIN', `${cName || '對照'} ${curC.retrieve} 的等效值：同章不同概念同比例（2.3）`, T.fmt(candidates.retrieve_equiv_same_chapter)],
+        ['VARIANT_OFFTOPIC_SIM_MIN', `${cName || '對照'} ${curC.offtopic} 的等效值：不同章誤收同比例（2.3）`, T.fmt(candidates.offtopic_equiv_different_chapter)],
+        ['VARIANT_OFFTOPIC_SIM_MIN', `${cName || '對照'} ${curC.offtopic} 的等效值：同章不同概念同比例（2.3）`, T.fmt(candidates.offtopic_equiv_same_chapter)],
+        ['DEDUP_DUP_THRESHOLD', `${cName || '對照'} ${curC.dedupDup} 的等效值：換數字題被判重複同比例（2.3）`, T.fmt(candidates.dedupDup_equiv_same_concept)],
         ['DEDUP_DUP_THRESHOLD', '不把任何一對換數字的現成題判成重複（高於最大值的 0.001 格點）', T.fmt(candidates.dedup_above_all_numeric, 3)],
-        ['DEDUP_VARIANT_THRESHOLD', `${cName || '對照'} ${cur.dedupVariant} 的等效值：換數字題標成「變式」同比例（2.3）`, T.fmt(candidates.dedupVariant_equiv_same_concept)]
+        ['DEDUP_VARIANT_THRESHOLD', `${cName || '對照'} ${curC.dedupVariant} 的等效值：換數字題標成「變式」同比例（2.3）`, T.fmt(candidates.dedupVariant_equiv_same_concept)]
     ];
     L.push(...T.mdTable(['門檻', '規則', '值'], cRows, 'llr'), '');
 
@@ -690,7 +698,8 @@ async function run(args) {
     const fixture = loadFixture();
     const golden = loadVariantGolden({ fixtureById: fixture.byId });
     const dedupGolden = JSON.parse(fs.readFileSync(DEDUP_GOLDEN, 'utf8'));
-    const current = currentDefaults();
+    const current = currentDefaults(args.model);
+    const compareCurrent = args.compare ? currentDefaults(args.compare) : null;
     const labels = loadLabels(args.labels || LABELS_FILE);
     const common = { fixture, golden, dedupGolden, cassetteRoot: args.cassettes, dim, labels, minEdit: current.minEdit };
 
@@ -709,7 +718,7 @@ async function run(args) {
             compareCommon = await analyzeModel({ ...common, model: args.compare, llm: null, optional: true, questionFilter: onlyCommon });
         }
     }
-    return buildReport({ primary, compare, primaryCommon, compareCommon, current,
+    return buildReport({ primary, compare, primaryCommon, compareCommon, current, compareCurrent,
         fixtureCount: fixture.questions.length, commonIds, missingInCompare, cassetteDamage: scanCassetteDamage(args.cassettes) });
 }
 

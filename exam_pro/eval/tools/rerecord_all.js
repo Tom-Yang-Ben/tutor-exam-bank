@@ -262,7 +262,7 @@ const CI_UNSET_TEXT = Object.freeze({
     MODEL_NLQ: `未設，services/nlqService.js 的預設 ${local.NLQ_CODE_DEFAULT}`,
     EMBED_MODEL: `未設，程式預設 ${local.LOCAL_DEFAULTS.EMBED_MODEL}`,
     OCR_ENGINE: `未設，程式預設 ${local.LOCAL_DEFAULTS.OCR_ENGINE}`,
-    LOCAL_EXTRACT_MODE: '未設，程式預設 cross（交叉驗證）'
+    LOCAL_EXTRACT_MODE: '未設，程式預設 ocr（只用 OCR 拆題；Owner 第五輪 D-3）'
 });
 
 /**

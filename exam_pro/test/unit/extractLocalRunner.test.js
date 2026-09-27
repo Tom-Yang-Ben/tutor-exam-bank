@@ -327,7 +327,8 @@ describe('jobRunner 本機模式 — 長節點執行中持續續租（假 db）'
 
     test('ctx.config 帶 OCR 引擎與 MODEL_OCR_STRUCTURE（未設＝MODEL_VERIFY）', async () => {
         globalThis.__slowMs = 1;
-        await withEnv({ OCR_ENGINE: 'none', MODEL_OCR_STRUCTURE: undefined, MODEL_VERIFY: 'gemini:verify-x' }, async () => {
+        // 〔Owner 第五輪 D-3〕OCR_ENGINE=none 只能配明寫的 cross（預設 ocr＋none 是矛盾設定，啟動就報錯；localExtractMode.test.js）
+        await withEnv({ OCR_ENGINE: 'none', LOCAL_EXTRACT_MODE: 'cross', MODEL_OCR_STRUCTURE: undefined, MODEL_VERIFY: 'gemini:verify-x' }, async () => {
             const db = fakeDb(jqRow('hashed', { extract: { question_text: 'x' } }));
             await createRunner({ db, llm: {}, logger: QUIET, agentsDir }).runJobQuestion(77);
             assert.deepEqual(globalThis.__slowCtxConfig.ocr, { engine: 'none' });

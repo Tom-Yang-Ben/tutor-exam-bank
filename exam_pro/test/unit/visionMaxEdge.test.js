@@ -102,6 +102,8 @@ function useDeps({ mode = 'live', fitLongEdge, visionMaxEdge } = {}) {
         renderPages: async () => { throw new Error('有 OCR 的圖就不該再渲染'); },
         llmMode: () => mode,
         ocrConfig: () => ({ engine: 'paddle', dpi: 200 }),
+        // 〔Owner 第五輪 D-3〕程式預設改成 ocr（不看圖）；縮圖只在交叉驗證（明寫 cross）的看圖那一步才有，斷言不變
+        localExtractMode: () => 'cross',
         ...(fitLongEdge ? { fitLongEdge: async (pngs, maxEdge) => { state.fitCalls.push(maxEdge); return fitLongEdge(pngs, maxEdge); } } : {}),
         ...(visionMaxEdge ? { visionMaxEdge } : {})
     });

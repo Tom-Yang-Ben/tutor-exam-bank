@@ -333,17 +333,27 @@ describe('工具：eval/tools/embed_threshold_report.js', () => {
         assert.throws(() => tool.parseArgs(['--out'], { env: {} }), /後面要接一個值/);
     });
 
-    test('現行預設值直接讀程式（不讀 .env）', () => {
-        const cur = tool.currentDefaults();
-        assert.deepEqual(cur, {
-            retrieve: require('../../services/variantService').simMin({}),
-            offtopic: require('../../agents/generateVariant').DEFAULT_OFFTOPIC_SIM_MIN,
-            dedupDup: require('../../agents/dedup').DEFAULT_DUP,
-            dedupVariant: require('../../agents/dedup').DEFAULT_VARIANT,
-            minEdit: require('../../agents/generateVariant').DEFAULT_MIN_EDIT
-        });
-        // 本分支不改任何門檻：這四個數字與 2026-09-26 之前相同（minEdit 只拿來重算補回反斜線後的文字閘門，也沒改）
-        assert.deepEqual(cur, { retrieve: 0.80, offtopic: 0.90, dedupDup: 0.97, dedupVariant: 0.90, minEdit: 0.08 });
+    test('現行預設值直接讀程式（不讀 .env）；〔Owner 第五輪 V5-5〕依向量模型', () => {
+        const runner = require('../../workers/jobRunner');
+        const same = (embed) => {
+            const env = embed === undefined ? {} : { EMBED_MODEL: embed };
+            const cfg = { ...runner.loadConfig(env), ...runner.loadStage3Config(env) };
+            return {
+                retrieve: require('../../services/variantService').simMin(env),
+                offtopic: cfg.variantOfftopicSimMin,
+                dedupDup: cfg.dedupDup,
+                dedupVariant: cfg.dedupVariant,
+                minEdit: require('../../agents/generateVariant').DEFAULT_MIN_EDIT
+            };
+        };
+        // 報告的「現行值」就是 runner／variantService 沒寫 .env 時實際用的值
+        assert.deepEqual(tool.currentDefaults(), same(undefined));
+        assert.deepEqual(tool.currentDefaults('ollama:qwen3-embedding:0.6b'), same('ollama:qwen3-embedding:0.6b'));
+        assert.deepEqual(tool.currentDefaults('gemini-embedding-001'), same('gemini-embedding-001'));
+        // Owner 第五輪：本機 V5-1＝0.72、V5-2＝0.87（暫定）、V5-3＝0.99、V5-4＝0.90；Gemini 四個數字與 2026-09-26 之前相同
+        // （minEdit 只拿來重算補回反斜線後的文字閘門，沒改）
+        assert.deepEqual(tool.currentDefaults(), { retrieve: 0.72, offtopic: 0.87, dedupDup: 0.99, dedupVariant: 0.90, minEdit: 0.08 });
+        assert.deepEqual(tool.currentDefaults('gemini-embedding-001'), { retrieve: 0.80, offtopic: 0.90, dedupDup: 0.97, dedupVariant: 0.90, minEdit: 0.08 });
     });
 
     test('loadLabels：repo 的初判檔格式正確；檔案不存在時全部算未標註', () => {

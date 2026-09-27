@@ -244,7 +244,8 @@ describe('services/aiService — 舊流程 /analyze-pdf 補裁附圖〔Owner 決
         assert.equal(fs.readdirSync(figuresDir).length, 2);
     });
 
-    test('本機模式（MODEL_EXTRACT=ollama，預設值）：交叉驗證後的題帶視覺版的框，一樣會裁圖', async () => {
+    test('本機模式（MODEL_EXTRACT=ollama，明寫 LOCAL_EXTRACT_MODE=cross）：交叉驗證後的題帶視覺版的框，一樣會裁圖', async () => {
+        // 〔Owner 第五輪 D-3 2026-09-27〕程式預設改成 ocr；本則測交叉驗證，所以明寫 cross（斷言不變）。預設 ocr 的舊流程見下一則。
         // OCR 版不帶附圖欄位（本機模板要求它不輸出），合併時附圖欄位取視覺版的（extractLocalCrossCheck.test.js）
         const { figure_desc, figure_page, figure_box, ...ocrVersion } = WITH_FIG;
         const llm = fakeLlm({ 1: [WITH_FIG] }, { ocrByChunk: { 1: [ocrVersion] } });
@@ -255,7 +256,8 @@ describe('services/aiService — 舊流程 /analyze-pdf 補裁附圖〔Owner 決
             }),
             renderPages: async () => { throw new Error('replay 不送圖片，不該渲染'); },
             llmMode: () => 'replay',
-            ocrConfig: () => ({ engine: 'paddle', dpi: 200 })
+            ocrConfig: () => ({ engine: 'paddle', dpi: 200 }),
+            localExtractMode: () => 'cross'
         });
         aiService._setDepsForTest({
             llm, models: { extract: 'ollama:qwen3-vl:8b', verify: 'ollama:qwen3:8b', text: 'ollama:qwen3:8b' },
@@ -269,6 +271,35 @@ describe('services/aiService — 舊流程 /analyze-pdf 補裁附圖〔Owner 決
         assert.deepEqual(Object.keys(out[0]), [...LEGACY_KEYS, 'question_img'], 'cross_check 等管線欄位不外漏到舊形狀');
         assert.equal(out[0].question_img, `/figures/legacy-${RUN}-1001.png`);
         assert.ok(fs.existsSync(path.join(figuresDir, `legacy-${RUN}-1001.png`)));
+    });
+
+    test('〔Owner 第五輪 D-3〕本機模式、沒寫 LOCAL_EXTRACT_MODE（程式預設 ocr）：舊流程也只做 OCR＋extract_ocr，不呼叫看圖模型', async () => {
+        const { figure_desc, figure_page, figure_box, ...ocrVersion } = WITH_FIG;
+        const llm = fakeLlm({ 1: [WITH_FIG] }, { ocrByChunk: { 1: [ocrVersion] } });
+        extract._setLocalDepsForTest({
+            ocrPdf: async ({ fromPage, toPage }) => ({
+                engine: 'paddleocr', engineVersion: 'test', dpi: 200, replayed: true, dispose() { },
+                pages: Array.from({ length: toPage - fromPage + 1 }, (_, i) => ({ page: fromPage + i, markdown: '假 OCR 文字', imagePath: null }))
+            }),
+            renderPages: async () => { throw new Error('ocr 模式不看圖，不該渲染'); },
+            llmMode: () => 'replay',
+            ocrConfig: () => ({ engine: 'paddle', dpi: 200 }),
+            // 不注入 localExtractMode：走 config/localExtractMode.js 讀 process.env（本則先把 LOCAL_EXTRACT_MODE 拿掉）
+        });
+        aiService._setDepsForTest({
+            llm, models: { extract: 'ollama:qwen3-vl:8b', verify: 'ollama:qwen3:8b', text: 'ollama:qwen3:8b' },
+            logger: captureLogger().logger, runId: () => RUN, cropFigures: realCropInto(figuresDir)
+        });
+        const saved = process.env.LOCAL_EXTRACT_MODE;
+        delete process.env.LOCAL_EXTRACT_MODE;
+        let out;
+        try {
+            out = await aiService.analyzePdfContent(sampleBase64);
+        } finally {
+            if (saved !== undefined) process.env.LOCAL_EXTRACT_MODE = saved;
+        }
+        assert.deepEqual(llm.calls.map(c => c.agent), ['extract_ocr'], '預設 ocr：看圖模型一次都不呼叫');
+        assert.equal(out.length, 1);
     });
 
     test('toLegacyShape：figure_img 不是非空字串就不加 question_img', () => {

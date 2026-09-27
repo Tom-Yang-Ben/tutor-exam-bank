@@ -223,7 +223,11 @@ describe('eval/lib/localMode 與 suiteProcess', () => {
         const ALL = ['retrieval', 'classify', 'pipeline', 'nlq', 'variant', 'e2e'];
         const plain = local.recordingPlan({ models: {}, suites: ALL });
         assert.ok(!plain.uses.some(u => u.key === 'MODEL_TEXT'));
-        assert.deepEqual(plain.ollama, ['qwen3-vl:8b', 'qwen3:8b', 'qwen3-embedding:0.6b']);
+        // 〔Owner 第五輪 D-3 2026-09-27〕沒寫 LOCAL_EXTRACT_MODE＝預設 ocr：拆題不看圖，看圖模型不必下載；MODEL_TEXT 仍不多列一列
+        assert.deepEqual(plain.ollama, ['qwen3:8b', 'qwen3-embedding:0.6b']);
+        const cross = local.recordingPlan({ models: { LOCAL_EXTRACT_MODE: 'cross' }, suites: ALL });
+        assert.ok(!cross.uses.some(u => u.key === 'MODEL_TEXT'));
+        assert.deepEqual(cross.ollama, ['qwen3-vl:8b', 'qwen3:8b', 'qwen3-embedding:0.6b'], '明寫 cross 時與改預設之前相同');
         const gem = local.recordingPlan({ models: GEMINI, suites: ['classify'] });
         assert.deepEqual(gem.uses.map(u => u.key), ['MODEL_EXTRACT', 'MODEL_VERIFY']);
 

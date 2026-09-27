@@ -78,7 +78,7 @@ const LOCAL_SHIELD = Object.freeze([
     'OLLAMA_HOST', 'OLLAMA_CONCURRENCY', 'OLLAMA_RPM', 'OLLAMA_TIMEOUT_MS', 'OLLAMA_NUM_CTX', 'OLLAMA_KEEP_ALIVE',
     'OLLAMA_PROGRESS_MS', 'VISION_MAX_EDGE_PX',
     'OCR_ENGINE', 'OCR_PYTHON', 'OCR_DPI', 'OCR_TIMEOUT_MS', 'NLQ_TIMEOUT_MS', 'JOB_NODE_TIMEOUT_MS', 'E2E_NODE_TIMEOUT_MS',
-    // 〔OCR 為主 2026-09-26〕.env／shell 的值不帶進子行程：照 ci.yml（CI_OPTIONAL_KEYS），沒寫就是空字串＝程式預設 cross
+    // 〔OCR 為主 2026-09-26〕.env／shell 的值不帶進子行程：照 ci.yml（CI_OPTIONAL_KEYS），沒寫就是空字串＝程式預設 ocr（〔Owner 第五輪 D-3〕原本是 cross）
     'LOCAL_EXTRACT_MODE'
 ]);
 /**

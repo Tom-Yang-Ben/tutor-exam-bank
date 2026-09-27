@@ -2195,7 +2195,7 @@ function buildReport(args, { env = {}, now = new Date(), readFile = (p) => fs.re
         // 〔OCR 為主 2026-09-26〕只用 OCR 拆題時，一塊的 OCR 文字全部塞進一次 extract_ocr：讀的＋輸出上限要放得進 num_ctx
         L.push('### 3.4 OCR 整理一次讀多少（`OLLAMA_NUM_CTX`）');
         L.push('');
-        L.push(`拆題方式：${rec.mode === 'ocr' ? '`LOCAL_EXTRACT_MODE=ocr`（只用 OCR：一塊＝ocr → extract_ocr，不看圖）' : '交叉驗證（`LOCAL_EXTRACT_MODE` 沒寫或是 cross：一塊＝ocr → extract_vision → extract_ocr）'}。`);
+        L.push(`拆題方式：${rec.mode === 'ocr' ? '`LOCAL_EXTRACT_MODE=ocr`（只用 OCR：一塊＝ocr → extract_ocr，不看圖；沒寫時的程式預設）' : '交叉驗證（`.env` 明寫 `LOCAL_EXTRACT_MODE=cross`：一塊＝ocr → extract_vision → extract_ocr）'}。`);
         L.push('');
         if (!rec.ocrCtx) {
             L.push('沒有 `extract_ocr` 的 cassette（或沒有 token 數），算不出來。');

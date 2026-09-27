@@ -39,7 +39,8 @@ describe('docs/local-mode.md 10.12～10.15（整合 r5、final5 改號）', () =
         ['10.15', /classify／nlq 重錄前修正/],
         ['10.16', /^第五輪 A 模板與 schema（2026-09-27）$/],
         ['10.17', /^第五輪 B 本機呼叫調整（2026-09-27）$/],
-        ['10.18', /^第五輪 C 閘門與計分（2026-09-27）$/]
+        ['10.18', /^第五輪 C 閘門與計分（2026-09-27）$/],
+        ['10.19', /^第五輪 D 預設值與門檻（2026-09-27，`dec\/r6-defaults`；Owner 第五輪 D-3、V5-1～V5-5、O-2 核准）$/]
     ];
 
     test(`第 10 章 10.12 之後的標題依併入順序各出現一次：${EXPECTED.map(e => e[0]).join('、')}`, () => {
@@ -63,7 +64,8 @@ describe('docs/local-mode.md 10.12～10.15（整合 r5、final5 改號）', () =
 
     const OWN = [
         // [檔案, 應該只指到的節]
-        ['exam_pro/config/localExtractMode.js', ['10.12']],
+        ['exam_pro/config/localExtractMode.js', ['10.12', '10.19']],   // 〔Owner 第五輪 D-3〕預設改 ocr 的說明指 10.19（整合 r6 改號）
+        ['exam_pro/config/similarityThresholds.js', ['10.19']],
         ['exam_pro/agents/extractOcrFigures.js', ['10.12']],
         ['exam_pro/migrations/0019_ocr_only_review.sql', ['10.12']],
         ['exam_pro/test/e2e/pipeline.e2e.test.js', ['10.12']],

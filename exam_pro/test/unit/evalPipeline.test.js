@@ -406,7 +406,84 @@ describe('pipelineDriver 端到端', () => {
         }
     });
 
-    test('同一份 PDF 跑第二次時，dbHashes 會讓每一題都被 dedup0 攔下', async (t) => {
+    // 〔審查 dec/r6-defaults 2026-09-27；測試契約變更，比照 D-1 列給 Owner〕Owner 第五輪 D-3 把本機拆題的程式預設改成 ocr，
+    // npm test 不帶 --env-file（沒有 LOCAL_EXTRACT_MODE），這一支就走 ocr：每一題在 save 前停在 needs_review('ocr_only')
+    //（jobRunner.crossCheckStopReason），第一輪 saved 恆為 0。下面原本那一則的 `s1.saved > 0` 在 ocr 模式結構上不可能綠
+    //（樣卷的 extract_ocr 回放檔錄好、skip 轉成硬斷言那一刻就會紅），`dup === s1.saved` 也退化成 0 === 0、沒有鑑別力。
+    // 所以比照 e2e 的 ①a／①b（test/e2e/pipeline.e2e.test.js 檔頭）：
+    //   交叉驗證（明寫 LOCAL_EXTRACT_MODE=cross）與 Gemini 拆題 → 原本那一則，一個字都沒改（testCross）；
+    //   ocr 模式 → 另一則（testOcr）：第一輪一題都不自動入庫、至少一題走完全部閘門停在 ocr_only；
+    //              模擬老師在複核頁核准這些題（把它們的 text_hash 放進 dbHashes——與本檔 driver 對「已入庫」的同一條規則，
+    //              pipelineDriver 第 518 行附近），第二輪這些題**全部**被 dedup0 攔成 duplicate、其餘題的結果與第一輪逐題相同。
+    // 判斷模式用與 driver 相同的設定來源（config/models 的 MODEL_EXTRACT＋config/localExtractMode），不看結果本身；
+    // ocr 那一則另外逐題斷言 payload.extract.extract_mode === 'ocr'，判斷與實際路徑不一致時直接紅。
+    const OCR_MODE = (() => {
+        let localExtract = false;
+        try {
+            const models = require('../../config/models');
+            localExtract = models.parseModel(models.MODEL_EXTRACT).vendor === 'ollama';
+        } catch (_) { localExtract = false; }
+        return localExtract && require('../../config/localExtractMode').resolveLocalExtractMode() === 'ocr';
+    })();
+    const testCross = OCR_MODE ? () => { } : test;
+    const testOcr = OCR_MODE ? test : () => { };
+
+    testOcr('〔ocr 模式〕同一份 PDF 跑第二次：第一輪一題都不自動入庫；人工核准的題第二輪全部被 dedup0 攔下，其餘逐題不變', async (t) => {
+        const dbHashes = new Map();
+        const first = await runOnce({ dbHashes });
+        if (first.skip) { t.skip(first.skip); return; }
+        assert.equal(first.res.ok, true, first.res.reason);
+        const s1 = driver.summarizePipeline(first.res);
+
+        // ① 一題都不自動入庫（ocr 模式的設計），dbHashes 也就沒有被 driver 動過
+        assert.equal(s1.saved, 0, 'ocr 模式不該有任何一題自動入庫');
+        assert.equal(dbHashes.size, 0);
+        assert.equal(s1.pending, 0);
+        for (const row of first.res.jq) {
+            assert.equal(row.payload.extract && row.payload.extract.extract_mode, 'ocr',
+                `idx=${row.idx} 不是只用 OCR 拆的（測試判斷的模式與 driver 實際走的路徑不一致）`);
+            assert.notEqual(row.review_reason, 'extract_disagree', `idx=${row.idx}：ocr 模式不會有交叉比對不一致`);
+        }
+        const approved = first.res.jq.filter(r => r.state === 'needs_review' && r.review_reason === 'ocr_only');
+        assert.ok(approved.length > 0,
+            `沒有任何一題走完全部閘門停在 ocr_only（${s1.reviewReasons.join('、')}）：這一則沒有鑑別力`);
+        // 停在 ocr_only 的題是**走完全部閘門**才停（save 之前），不是閘門被跳過（e2e ①a 守的同一件事）
+        for (const r of approved) {
+            for (const k of ['dedup0', 'classify', 'lint', 'source_check', 'verify', 'dedup1']) {
+                assert.ok(r.payload[k], `idx=${r.idx} 停在 ocr_only 卻沒跑 ${k}`);
+            }
+        }
+
+        // ② 模擬老師在複核頁核准停在 ocr_only 的題：它們進了題庫（dbHashes＝questions 表的 text_hash）
+        const { textHash } = require('../../eval/lib/stage2Shims');
+        for (const r of approved) dbHashes.set(textHash(r.payload.extract.question_text), 20000 + r.id);
+        assert.equal(dbHashes.size, approved.length, '核准的題 text_hash 有重複，這個測試的計數會失真');
+
+        const { res: second } = await runOnce({ dbHashes });
+        assert.equal(second.ok, true, second.reason);
+        const s = driver.summarizePipeline(second);
+        assert.equal(s.saved, 0, '重傳同一份 PDF 不該再入庫任何題');
+        assert.equal(s.pending, 0);
+        const dup = s.reviewReasons.filter(r => r === 'duplicate').length;
+        assert.equal(dup, approved.length, `duplicate ${dup} 筆 ≠ 第一輪核准 ${approved.length} 筆：${s.reviewReasons.join('、')}`);
+
+        // ③ 逐題：核准過的 → 第二輪 dedup0 攔成 duplicate；沒核准的（例如驗算不一致停在 answer_mismatch）→ 與第一輪相同
+        const approvedIdx = new Set(approved.map(r => r.idx));
+        const firstByIdx = new Map(first.res.jq.map(r => [r.idx, r]));
+        assert.equal(second.jq.length, first.res.jq.length);
+        for (const row of second.jq) {
+            const before = firstByIdx.get(row.idx);
+            assert.ok(before, `第二輪多出 idx=${row.idx}`);
+            if (approvedIdx.has(row.idx)) {
+                assert.deepEqual([row.state, row.review_reason], ['needs_review', 'duplicate'], `idx=${row.idx} 已核准卻沒被 dedup0 攔下`);
+                assert.equal(row.payload.dedup0 && row.payload.dedup0.hit && row.payload.dedup0.hit.scope, 'db', `idx=${row.idx}`);
+            } else {
+                assert.deepEqual([row.state, row.review_reason], [before.state, before.review_reason], `idx=${row.idx} 沒核准，第二輪結果卻變了`);
+            }
+        }
+    });
+
+    testCross('同一份 PDF 跑第二次時，dbHashes 會讓每一題都被 dedup0 攔下', async (t) => {
         const dbHashes = new Map();
         const first = await runOnce({ dbHashes });
         if (first.skip) { t.skip(first.skip); return; }

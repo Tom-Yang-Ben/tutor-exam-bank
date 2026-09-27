@@ -5,7 +5,7 @@
 > 對照：`gemini-embedding-001`（`eval/fixtures/embeddings.gemini-embedding-001.768.json`，57 題）；變式 cassette：`gemini-3.1-pro-preview`（60 支）。
 > 對照模型的向量檔少了 5 題（#51、#53、#54、#55、#62）：兩個模型並排的數字只用兩邊都有的 57 題（「共同題」）。
 > 生成題的初判（Claude 讀過題幹的判斷，**不是量測**）：`eval/tools/embed_threshold_labels.json`，以題幹 sha256 對上——跑題 41/41 段、兄弟變式 13/13 組對得上（對不上的列「未標註」）。計數都由本工具算。
-> 現行預設（程式，不讀 .env）：VARIANT_RETRIEVE_SIM_MIN＝0.8、VARIANT_OFFTOPIC_SIM_MIN＝0.9、DEDUP_DUP_THRESHOLD＝0.97、DEDUP_VARIANT_THRESHOLD＝0.9。
+> 現行預設（程式，不讀 .env；〔Owner 第五輪 V5-5〕依向量模型而定，config/similarityThresholds.js）：本機 VARIANT_RETRIEVE_SIM_MIN＝0.72、VARIANT_OFFTOPIC_SIM_MIN＝0.87、DEDUP_DUP_THRESHOLD＝0.99、DEDUP_VARIANT_THRESHOLD＝0.9；Gemini VARIANT_RETRIEVE_SIM_MIN＝0.8、VARIANT_OFFTOPIC_SIM_MIN＝0.9、DEDUP_DUP_THRESHOLD＝0.97、DEDUP_VARIANT_THRESHOLD＝0.9。
 > 百分位數用線性內插；「≥ 門檻」算通過／算相似（與程式相同）。
 
 ## 1. fixture 題對的餘弦分布（docs/variants.md 3.1 的四組）
@@ -111,7 +111,7 @@ fixture 標的「2D／3D 內積」對照組（`lookalike_of`，算在跨章同�
 | DEDUP_VARIANT_THRESHOLD（Gemini 0.9） | 同概念換數字 | 0.8981（參考 19/19＝100.0%；目標 19/19） |
 | DEDUP_VARIANT_THRESHOLD（Gemini 0.9） | 同章不同概念 | 0.8671（參考 15/126＝11.9%；目標 15/126） |
 
-## 3. VARIANT_RETRIEVE_SIM_MIN（現行 0.8）：變式 golden 每個藍本的最近與第 2 近
+## 3. VARIANT_RETRIEVE_SIM_MIN（現行 0.72）：變式 golden 每個藍本的最近與第 2 近
 
 候選條件與 `retrieved_coverage` 相同：同科、同難度、排除自己；第 2 近 ≥ 門檻才算覆蓋（`expect.min_retrieved`＝2）。類別：同概念／同章／2D／3D 對照（fixture 的 lookalike）／其他跨章。
 
@@ -180,10 +180,10 @@ fixture 標的「2D／3D 內積」對照組（`lookalike_of`，算在跨章同�
 
 Gemini 那兩欄只用它有向量的題（少的那幾題當作不存在），僅供對照。
 
-- 現行 0.8：覆蓋 7/30（0.2333）。
+- 現行 0.72：覆蓋 15/30（0.5000）。
 - 「推薦出去的前 2 題沒有其他跨章題」的最低門檻（0.01 格點）：**0.77**，覆蓋 9/30（0.3000）；組成 同概念 7、同章 4、2D／3D 對照 7。
 
-## 4. VARIANT_OFFTOPIC_SIM_MIN（現行 0.9）：已錄生成題與藍本的餘弦
+## 4. VARIANT_OFFTOPIC_SIM_MIN（現行 0.87）：已錄生成題與藍本的餘弦
 
 把已錄的生成結果餵回 `agents/generateVariant.js`（跑題門檻設 -1），向量查向量檔：就是跑題檢查在 CI 回放時看到的分數。文字閘門先擋下的題系統不會算向量。
 
@@ -337,7 +337,7 @@ V5-2 的三個選項（0.90／0.87／0.80）：
 - 0.87 擋下的：換了概念 var-013#2 0.7328、var-013#1 0.7528、var-004#2 0.7726、var-001#1 0.7876、var-001#2 0.7877、var-014#1＝var-014#2 0.8089；同概念改寫 var-002#1 0.7617、var-002#2 0.7770、var-015#1 0.8485、var-003#1＝var-003#2 0.8555；補回反斜線後文字閘門就擋 —；放過的換了概念 var-009#1＝var-009#2 0.8864、var-005#1 0.8875。
 - 0.80 擋下的：換了概念 var-013#2 0.7328、var-013#1 0.7528、var-004#2 0.7726、var-001#1 0.7876、var-001#2 0.7877；同概念改寫 var-002#1 0.7617、var-002#2 0.7770；補回反斜線後文字閘門就擋 —；放過的換了概念 var-014#1＝var-014#2 0.8089、var-009#1＝var-009#2 0.8864、var-005#1 0.8875。
 
-## 5. DEDUP_DUP_THRESHOLD（現行 0.97）與 DEDUP_VARIANT_THRESHOLD（現行 0.9）
+## 5. DEDUP_DUP_THRESHOLD（現行 0.99）與 DEDUP_VARIANT_THRESHOLD（現行 0.9）
 
 dedup1 的判定（`agents/dedup.js`）：與同科最近一題的餘弦 ≥ DEDUP_DUP_THRESHOLD → 回 fail／`duplicate`，dedup1 沒有重試，經 `pipeline/stateMachine.js` 的 `REVIEW_REASON_FOR_FAIL` 進複核（`review_reason='duplicate'`；不自動入庫、也不刪，老師決定）；≥ DEDUP_VARIANT_THRESHOLD → 標「變式」照常往下走（只是標記）；其餘 unique。
 
@@ -351,10 +351,10 @@ verbatim／resend 16 組：L0 雜湊已全部擋下（`npm test` 守著）；res
 |---|---|---|---|---|
 | dd-nc-01 | #1×#2 | variant | 0.8981 → unique | 0.9450 → variant |
 | dd-nc-02 | #3×#4 | variant | 0.9079 → variant | 0.9279 → variant |
-| dd-nc-03 | #9×#10 | variant | 0.9849 → duplicate | 0.9540 → variant |
+| dd-nc-03 | #9×#10 | variant | 0.9849 → variant | 0.9540 → variant |
 | dd-nc-04 | #32×#33 | variant | 0.9604 → variant | 0.9451 → variant |
 | dd-nc-05 | #42×#43 | variant | 0.9981 → duplicate | 0.9884 → duplicate |
-| dd-nc-06 | #49×#50 | variant | 0.9718 → duplicate | 0.9691 → variant |
+| dd-nc-06 | #49×#50 | variant | 0.9718 → variant | 0.9691 → variant |
 | dd-nc-07 | #56×#57 | variant | 0.9676 → variant | 0.9789 → duplicate |
 | dd-df-01 | #9×#17 | unique | 0.9454 → variant | 0.9402 → variant |
 | dd-df-02 | #11×#19 | unique | 0.9577 → variant | 0.9615 → variant |
