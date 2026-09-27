@@ -240,6 +240,11 @@ describe('nextAction：migration、後端、完成', () => {
         assert.match(a.message, /PID 7100/);
         assert.match(a.hint.join('\n'), /關閉出題系統/);
         assert.match(a.hint.join('\n'), /server-2026-09-26\.log/, '指向那個後端實際寫的 log（跨夜的後端還在寫前一天的檔）');
+        // 〔dec/desktop-launcher-fix2〕強制結束的後果照實說（與關閉捷徑同一句 UNFINISHED_WORK_NOTE）
+        assert.ok(a.hint.some(h => h.includes(plan.UNFINISHED_WORK_NOTE)), '提示要說清楚強制結束後沒跑完的工作會怎樣');
+        assert.match(plan.UNFINISHED_WORK_NOTE, /單題的檢查從中斷那一步接著做/);
+        assert.match(plan.UNFINISHED_WORK_NOTE, /整份卷的拆題、變式生成會從頭再跑一次/);
+        assert.doesNotMatch(a.hint.join('\n'), /沒跑完的那一步下次開啟時會自動重跑/);
         assert.equal(a.detail, f.health.detail);
         assert.equal(plan.stepOfFailure('server-busy', f), 'check');
         assert.equal(next({ ...f, portOwner: { pid: 7100, name: 'node.exe', text: 'node.exe（PID 7100）', pids: [7100], ownServer: false } }).code, 'port-in-use');

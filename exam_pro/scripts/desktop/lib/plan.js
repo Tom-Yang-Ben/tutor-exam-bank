@@ -37,6 +37,16 @@ const UPGRADE_DOC = 'engineering_docs/06_ops/deployment_and_operations.md §3.3�
 const LAUNCHER_DOC = 'docs/desktop-launcher.md';
 
 /**
+ * 後端被中途結束後，沒跑完的背景工作會怎樣（給 Owner 的一句話；關閉捷徑 lib/stopper.js 也用這一句）。
+ * 〔dec/desktop-launcher-fix2〕更正：只有單題的節點（job_questions）是從中斷那一格接著跑；拆題（runExtractJob）與
+ * 變式生成（runGenerateJob）是整份 job 一個工作單位，重新認領時不看哪幾塊／哪幾題已經做完，從第 1 塊／第 1 題整份重跑
+ * （workers/jobRunner.js；docs/desktop-launcher.md 第 4 節、7.3、DL-1）。「1 小時以上」是本機 OCR 為主拆一份 4 頁卷的估計
+ * （docs/local-mode.md 10.12 第 5 點）。
+ */
+const UNFINISHED_WORK_NOTE = '沒跑完的工作下次開啟時會自動接著做：單題的檢查從中斷那一步接著做；' +
+    '整份卷的拆題、變式生成會從頭再跑一次（本機拆一份卷可能要 1 小時以上）';
+
+/**
  * @typedef {object} Facts
  * @property {string[]} [configWarnings]  data/launcher/config.json 讀不懂的地方（啟動前就放進來）
  * @property {{state:'ours', dbOk:boolean, legacy?:boolean, version?:string}|{state:'other', detail?:string}|{state:'down'}} [health]
@@ -251,7 +261,8 @@ function failureMessage(code, f = {}, ctx = {}, extra = {}) {
                 message: `${port} 埠上是之前由桌面圖示開的出題系統後端${pid ? `（PID ${pid}）` : ''}，但它沒有回應健康檢查。通常是電腦正忙（例如本機 AI 正在拆題）。`,
                 hint: [
                     '等一兩分鐘再點一次圖示：它一回應就會直接開畫面。',
-                    `一直沒有回應：先點「關閉出題系統」；還是不行，到工作管理員 → 詳細資料，結束${pid ? ` PID ${pid} 的` : ''} node.exe（沒跑完的那一步下次開啟時會自動重跑），再點一次圖示。`,
+                    `一直沒有回應：先點「關閉出題系統」；還是不行，到工作管理員 → 詳細資料，結束${pid ? ` PID ${pid} 的` : ''} node.exe，再點一次圖示。`,
+                    `強制結束的話，${UNFINISHED_WORK_NOTE}。`,
                     `打開 log：${ownLog}`
                 ],
                 ...(detail ? { detail } : {})
@@ -575,5 +586,6 @@ function stepOfFailure(code, f = {}) {
 
 module.exports = {
     nextAction, isTerminal, fail, failureMessage, collectWarnings, describeSteps, stepOfFailure, portHeldByOther,
-    STEP_DEFS, STEP_OF_ACTION, RUNNING_TEXT, TERMINAL, AI_WARNING_CODES, MIGRATION_WARNING_CODES, UPGRADE_DOC, LAUNCHER_DOC, EXCLUDED_PORTS_CMD
+    STEP_DEFS, STEP_OF_ACTION, RUNNING_TEXT, TERMINAL, AI_WARNING_CODES, MIGRATION_WARNING_CODES, UPGRADE_DOC, LAUNCHER_DOC, EXCLUDED_PORTS_CMD,
+    UNFINISHED_WORK_NOTE
 };

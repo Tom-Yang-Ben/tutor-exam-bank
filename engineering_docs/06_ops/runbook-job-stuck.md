@@ -62,7 +62,7 @@ SELECT COALESCE(SUM(cost_usd),0) FROM job_events WHERE created_at >= date_trunc(
 
 ## 5. Mitigation（短期緩解）
 
-1. worker 中斷：重啟 `npm start` 即可——租約過期後自動重新認領；extract 重跑靠 `UNIQUE (job_id, idx)` + `ON CONFLICT DO NOTHING` 不會重複建列（斷點續跑為設計保證）。
+1. worker 中斷：重啟 `npm start` 即可——租約過期後自動重新認領；extract 重跑靠 `UNIQUE (job_id, idx)` + `ON CONFLICT DO NOTHING` 不會重複建列（斷點續跑為設計保證）。〔修訂 2026-09-27〕斷點只到逐題節點這一層：`job_questions` 從中斷的那一格重跑那一個節點；拆題（`jobs.state='extracting'` 的 pdf job）與變式生成是整份 job 一個工作單位，會從第 1 塊／第 1 題整份重跑——列不會重複，但前面做完的塊／題會再呼叫一次模型（Gemini 模式再計一次費用；本機模式一份 4 頁卷約 1～1.5 小時，見 `docs/desktop-launcher.md` 7.3）。
 2. 租約殘留且確認無 worker 在跑：`UPDATE job_questions SET locked_until = NULL WHERE id = <id>;`（jobs 表同理）。
 3. `budget_exceeded` 進 needs_review：至人工複核佇列（首頁 `#review` 分頁，`exam_pro/public/js/review.js` 掛載）approve／reject，或提高 `JOB_COST_BUDGET_USD` 後重送。
 4. 當日觸頂：等隔日視窗重置，或確認費用合理後調高 `.env` 的 `DAILY_COST_BUDGET_USD` 並重啟。

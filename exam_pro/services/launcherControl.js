@@ -19,8 +19,14 @@
 //   2. server.close()：不再接新連線；
 //   3. 每 pollMs 看一次 runner.inFlight，歸零（再等 settleMs 確認沒有剛認領到的）或到 grace_ms 為止；
 //   4. 在途歸零：關連線池、exit(0)。
-// 時限到了還有在途工作就**不關連線池**、直接結束：那一列的租約（JOB_LEASE_MS，預設 3 分）到期後，下次開機會被重新認領、
-// 從那一格重跑——與當機、nodemon 重啟同一條既有的保證（jobRunner.js 檔頭），已記進 job_events 的用量不會遺失。
+// 時限到了還有在途工作就**不關連線池**、直接結束：在途的工作單位停在原狀態，租約（JOB_LEASE_MS，預設 3 分）到期後，
+// 下次開機會被重新認領——與當機、nodemon 重啟同一條既有的保證（jobRunner.js 檔頭），已記進 job_events 的用量不會遺失。
+// 〔dec/desktop-launcher-fix2 更正〕重跑的粒度看工作單位，不是一律「從那一格」：
+//   - 單題（job_questions，runJobQuestion）一次只跑一個節點、跑完就寫回狀態 → 從中斷的那一格重跑那一個節點；
+//   - 拆題（jobs kind='pdf'，runExtractJob）與變式生成（kind='variant'，runGenerateJob）整份 job 是一個工作單位，
+//     重新認領時不看哪幾塊／哪幾題已經做完 → 從第 1 塊／第 1 題整份重跑（已建的列靠 ON CONFLICT 不會重複，
+//     但前面的塊／題會再呼叫一次模型）。
+//   runner.stop() 也不會在塊與塊之間停下，所以「等在途工作收尾」對拆題而言是等整份卷拆完。見 docs/desktop-launcher.md 7.3。
 // 要等多久由關閉捷徑決定（scripts/desktop/stop.js：有在途工作時先問 Owner；待決事項 DL-1）。
 // ─────────────────────────────────────────────────────────────
 const crypto = require('crypto');
@@ -28,7 +34,7 @@ const express = require('express');
 
 const TOKEN_ENV = 'LAUNCHER_CONTROL_TOKEN';
 const TOKEN_HEADER = 'x-launcher-token';
-/** 預設最多等在途工作 2 分鐘（Gemini 模式一個節點的逾時是 2 分；本機模式一個節點可能跑數十分鐘，見文件待決事項 DL-1） */
+/** 預設最多等在途工作 2 分鐘（Gemini 模式一個節點的逾時是 2 分；本機模式一個節點可能跑數十分鐘，拆題更是整份卷算一件工作，見文件待決事項 DL-1） */
 const DEFAULT_GRACE_MS = 120_000;
 /** 上限 6 小時：關閉捷徑設成「等到跑完」時也不會無限期掛著 */
 const MAX_GRACE_MS = 6 * 60 * 60 * 1000;
@@ -137,8 +143,8 @@ function createLifecycle(opts = {}) {
             // 〔續作 2026-09-27〕時限到了還有在途工作：**不關連線池**，直接結束——與當機同一條路。
             // 先關池的話，在途工作接下來的查詢會失敗、走進 jobRunner 的錯誤處理路徑；那條路在「池已關閉」下的行為
             // 沒有被驗證過（可能印一串錯誤，也可能在等關池的最後幾秒寫進半套狀態）。直接結束則那一列停在原狀態，
-            // 租約到期後下次開機重新認領、從那一格重跑——這是 jobRunner.js 檔頭已有、已測過的保證。
-            logger.warn(`[launcher] 還有 ${left} 件工作沒在時限內結束，直接關閉；租約到期後下次開機會重新認領那一格（已記錄的用量不會遺失）。`);
+            // 租約到期後下次開機重新認領——這是 jobRunner.js 檔頭已有、已測過的保證（單題從那一格重跑；拆題、變式 job 整份從頭，見檔頭）。
+            logger.warn(`[launcher] 還有 ${left} 件工作沒在時限內結束，直接關閉；租約到期後下次開機會重新認領：單題的檢查從中斷那一步接著做，整份卷的拆題、變式生成從頭再跑一次（已記錄的用量不會遺失）。`);
             exit(0);
             return { left };
         }

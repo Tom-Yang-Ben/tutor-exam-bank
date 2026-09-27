@@ -57,7 +57,7 @@ function rig({ inFlight = 0, finishAfterMs = Infinity } = {}) {
     const exits = [];
     const lifecycle = lc.createLifecycle({
         exit: code => { events.push(`exit(${code})`); exits.push(code); },
-        logger: { info: () => { }, warn: m => events.push(`warn:${m.slice(0, 20)}`), error: m => events.push(`error:${m}`) },
+        logger: { info: () => { }, warn: m => events.push(`warn:${m}`), error: m => events.push(`error:${m}`) },
         closePool: async () => { events.push('pool.end'); },
         sleep: async ms => { now += ms; },
         now: () => now,
@@ -91,6 +91,10 @@ describe('生命週期（shutdown）', () => {
         assert.ok(!r.events.includes('pool.end'), '在途工作還在用連線池，不能先關');
         assert.equal(r.events[r.events.length - 1], 'exit(0)');
         assert.ok(r.events.some(e => e.startsWith('warn:')));
+        // 〔dec/desktop-launcher-fix2〕log 照實說重新認領後從哪裡接著跑（單題接著做；拆題、變式整份從頭）
+        const warn = r.events.find(e => e.startsWith('warn:'));
+        assert.match(warn, /單題的檢查從中斷那一步接著做/);
+        assert.match(warn, /整份卷的拆題、變式生成從頭再跑一次/);
     });
 
     test('冪等：第二次呼叫回同一個 promise；status 反映 shutting_down', async () => {

@@ -12,6 +12,7 @@
 // ─────────────────────────────────────────────────────────────
 const path = require('path');
 const w = require('./windows');
+const { UNFINISHED_WORK_NOTE } = require('./plan');
 
 /** 「等它們跑完」＝後端接受的上限（services/launcherControl.js 的 MAX_GRACE_MS，6 小時） */
 const WAIT_ALL_MS = require(path.resolve(__dirname, '..', '..', '..', 'services', 'launcherControl')).MAX_GRACE_MS;
@@ -36,8 +37,8 @@ function askText(inFlight, graceMs) {
     return [
         `背景有 ${inFlight} 件工作正在跑（上傳考卷的拆題、驗算等）。`,
         '',
-        `「是」：等它們跑完再關閉後端（最多 ${fmtDuration(WAIT_ALL_MS)}；本機 AI 一步可能要數十分鐘）。`,
-        `「否」：最多等 ${fmtDuration(graceMs)}；沒跑完的那一步，下次開啟時會自動從那一步重跑（已完成的不會重做）。`,
+        `「是」：等它們跑完再關閉後端（最多 ${fmtDuration(WAIT_ALL_MS)}；本機拆一份卷可能要 1 小時以上）。`,
+        `「否」：最多等 ${fmtDuration(graceMs)}就關。${UNFINISHED_WORK_NOTE}。`,
         '「取消」：不要關閉。'
     ].join('\n');
 }
@@ -73,7 +74,8 @@ async function runStop({ sys, config, env, paths, probes, ui, log = () => { }, p
             await ui.messageBox({
                 text: `出題系統的後端（PID ${owner.pid}）正在執行，但沒有回應（${health.detail || '健康檢查沒有回應'}），通常是電腦正忙。\n` +
                     '請等一兩分鐘再按一次「關閉出題系統」。\n' +
-                    `一直沒有回應的話，到工作管理員 → 詳細資料，結束 PID ${owner.pid} 的 node.exe（沒跑完的那一步下次開啟時會自動重跑）。`,
+                    `一直沒有回應的話，到工作管理員 → 詳細資料，結束 PID ${owner.pid} 的 node.exe。\n` +
+                    `強制結束的話，${UNFINISHED_WORK_NOTE}。`,
                 icon: info.ICON_WARNING
             });
             return { result: 'busy' };
@@ -145,7 +147,7 @@ async function runStop({ sys, config, env, paths, probes, ui, log = () => { }, p
     const extrasNote = config.stopDocker !== 'no' || config.stopOllama ? '\nDocker／Ollama 這次沒有關（後端還在用）。' : '';
     await ui.messageBox({
         text: `已送出關閉要求。背景還有工作在收尾，後端會在它們結束後自己關閉（最多 ${fmtDuration(graceMs)}）。${extrasNote}\n` +
-            '在那之前關機或重新開機也可以：沒跑完的那一步下次開啟時會自動重跑。',
+            `在那之前關機或重新開機也可以，${UNFINISHED_WORK_NOTE}。`,
         icon: info.ICON_INFO, seconds: 20
     });
     return { result: 'draining' };
