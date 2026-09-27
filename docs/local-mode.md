@@ -15,6 +15,7 @@
 > 〔整合審查 2026-09-27 `dec/integration-r5-fix`〕10.12 第 6 點補一條：OCR 整理的 num_ctx 預算與截斷判斷改用實際送出的值，認得 10.14 的 `OLLAMA_NUM_CTX_EXTRACT_OCR`、`OLLAMA_MAX_OUTPUT_EXTRACT_OCR`（兩條分支各自沒錯、合在一起才對不上）。之後併 `dec/local-classify-nlq-prep-fix` 時，它的「10.12 classify／nlq 重錄前修正」要改號為 **10.15**。
 > 〔整合 2026-09-27 `dec/integration-final5`〕`dec/integration-r5-fix`（`ed93665`）依序併入 `dec/local-classify-nlq-prep-fix`、`dec/latex-escape-repair-fix`、`dec/phys-spoken-reviewed`、`dec/cleanup-exam-legacy`。只有第一條新增了一節（原編 10.12），依併入順序改號為 **10.15**（classify／nlq 重錄前修正）；它的程式註解、eval 訊息、fixture 說明與測試一併改號，`test/unit/localModeSections.test.js` 加入 10.15。其餘三條沒有新增節：LaTeX 修復的說明在 [`llm.md`](llm.md) 第 10 節與 10.8 疑難排解一列，舊版原型移除只在 10.4、10.7 就地加註。10.13、10.14、10.15 裡寫「`dec/latex-escape-repair` 還沒併／在做」的地方就地加註，原文保留。
 > 〔Owner 第五輪 2026-09-27 `dec/r6-templates`〕依第五輪決策單 LC-1＝2、L-2＝1、V5-6＝2 改分類 schema 的欄位順序、公式規範與變式 prompt：新增 10.16「第五輪 A 模板與 schema」（節號暫編），10.13 的 V5-6、10.15 的 LC-1 就地加註。
+> 〔整合 2026-09-27 `dec/integration-r6`〕`local/integration-r5`（`a670783`）依序以 `--no-ff` 併入第五輪五組：`dec/r6-templates-fix`（A）、`dec/r6-local-tuning-fix`（B）、`dec/r6-gates-fix`（C）、`dec/r6-defaults-fix`（D）、`dec/r6-docs-kc-fix`（E）。五組各自暫編的「10.16」依併入順序改號為 **10.16（A 模板與 schema）、10.17（B 本機呼叫調整）、10.18（C 閘門與計分）、10.19（D 預設值與門檻）、10.20（E 文件與知識點）**，交互參照（文件、程式註解、測試）一併改號；新增最後一節 **10.21 重錄計畫**（Owner 電腦要依序跑的重錄步驟）。
 
 ## 0. Owner 裁決（2026-09-25，對話中）
 
@@ -1426,3 +1427,123 @@ C-f 的細節：
 4. **那一次無法重現的 integration 失敗——無法確認和本分支有關，照建議加防護。** `test/integration/kcLoadPhysicsDraft.pg.test.js` 的 `spawnSync` 加 `timeout: 120000`（`killSignal: SIGKILL`），失敗訊息改帶 `status`、`signal`、spawn 錯誤與子行程輸出；斷言本身一條都沒改、沒放寬。
 
 - 沒有改任何程式、模板、schema、prompt、`eval/thresholds.json`、golden 或 cassette，**不需要重錄**。
+
+### 10.21 重錄計畫（2026-09-27，第五輪之後）
+
+> 〔整合 2026-09-27 `dec/integration-r6`〕第五輪五組（10.16～10.20）併進 `dec/integration-r6` 之後，要在 **Owner 的電腦**上重錄的回放檔全部整理在這裡，照順序做。分支本身沒有錄任何 cassette、沒有改 `eval/thresholds.json` 與 golden。
+> 為什麼要重錄：classify 的 schema 改了欄位順序（10.16 第 1 點；`classify.v2` 本來就還沒錄）、`nlq.v2` 還沒錄（10.15）、`variant.v2` 的 prompt 加了兄弟題幹與 L-2 規則（10.16 第 2、3 點，60 支全部對不上）、`extract_ocr.v2` 加了 L-2 規則（pipeline／e2e 本來就缺這一支）。
+> 以下的指令都在 `exam_pro` 資料夾的命令提示字元（cmd）執行；`record_local.bat` 也可以在檔案總管雙擊（雙擊＝全部 suite 一次錄完，時間是下面四步相加）。
+
+#### 0. 開始之前（約 15 分）
+
+1. 拉到這次交付的版本，確認 `git log -1` 是整合後的那一個 commit。`package.json` 沒改，不必 `npm install`。
+2. 正式庫套 migration 0020（本機被截斷的題進複核用的 `output_truncated`，10.17）：`npm run migrate`。只影響正式上傳；重錄用的測試庫由 `record_local.bat` 自己套。
+3. `.env` 若照舊範本明寫了 `VARIANT_RETRIEVE_SIM_MIN=0.80`、`VARIANT_OFFTOPIC_SIM_MIN=0.90`、`DEDUP_DUP_THRESHOLD=0.97`、`VARIANT_SIM_MIN` 這幾行，刪掉（10.19 第 2 點；不刪的話正式上傳用的是舊值，伺服器視窗啟動時會提醒）。**重錄不受影響**：錄製子行程一律把這幾個變數清成空白、照程式預設（本機 0.72／0.87／0.99），與 CI 回放相同。
+4. **O-5 要先答**（[`owner-pending-decisions-r5.md`](owner-pending-decisions-r5.md) O-5：lint 的模板要不要也加「JSON 字串裡的反斜線寫兩個」）。lint 沒有自己的 suite，它的回放檔是在第 2 步 variant 與第 3 步 pipeline 裡順帶錄的；錄製模式每次都整步重呼叫模型，**variant 錄完才改 lint 的話，第 2、3 步要整個再錄一次**（再花 8～12 小時）。
+5. 盤點（只回放、不連網、幾分鐘）：`npm run cassettes:rerecord -- --dry-run`。整合當天（CI 環境）的盤點：classify 92、nlq 8、variant 60、pipeline 1（`extract_ocr`）、e2e 1（同一支 `extract_ocr`）筆 replay miss，缺向量 0。
+
+#### 1. classify.v2＋nlq.v2（約 1.5～2 小時）
+
+```bat
+scripts\windows\record_local.bat classify,nlq
+```
+
+rerecord 依序跑（模式由工具設定，不必自己設環境變數）：
+- `embeddings`：`LLM_MODE=replay`、`EMBED_MODE=live`（只補 fixture 題缺的向量；目前不缺，幾秒）
+- `classify`：`LLM_MODE=record`、`EMBED_MODE=fixture`（92 題；10.15 估約 1.5 小時）
+- `nlq`：`LLM_MODE=record`、`EMBED_MODE=record`（8 句，含查詢句的向量；約 5～10 分）
+
+**怎麼確認成功**：視窗最後印「[OK] 重錄與回放驗證都通過」；log 最後的「回放驗證」表 classify、nlq 兩列的 replay miss 都是 0。門檻那一欄若是 ❌ 不算失敗（Owner 已裁決門檻不放寬、照實紅燈，10.7 第 7 點），照 10.15 第 7 點「重錄後怎麼看」看 accuracy／macro-F1 與 nlq 的 llm 欄。
+
+#### 1a. （條件步驟）O-5 選 2 時：先讓 lint.v3 進來，不另外錄
+
+- O-5 選 2（lint 升 `lint.v3`／`lint_chem.v2`）：等維護的人把 lint 的模板改好、併進來，**拉下來之後**再做第 2、3 步。`lint.v3` 的回放檔會在第 2 步（變式的 lint）與第 3 步（樣卷的 lint）裡一起錄到，不必另外跑指令；錄完用第 4 步的盤點確認 lint 沒有 replay miss。
+- O-5 選 1（不加）：跳過本步，lint 維持 `lint.v2`；第 2、3 步照樣會補錄吃到新題幹的那幾支 `lint.v2`。
+
+#### 2. variant 整步（variant.v2；LLM＋向量，連帶 classify／lint／verify；約 5～6 小時）
+
+```bat
+scripts\windows\record_local.bat variant
+```
+
+- `embeddings`：`LLM_MODE=replay`、`EMBED_MODE=live`
+- `variant`：`LLM_MODE=record`、`EMBED_MODE=record`（30 個藍本 × 2 題＝60 次生成，每題再跑分類、lint、驗算；生成題的向量同一步錄。上次 `variant.v1` 花 17,292 秒≈4.8 小時；`variant.v2` 的 prompt 多了兄弟題幹、第 2 題多讀幾百字，估 5～6 小時）
+
+**怎麼確認成功**：同第 1 步，variant 那一列 replay miss 0、缺向量 0，`gate_pass_rate` 是數字（不是 n/a）。`retrieved_coverage` 0.5000 低於門檻 0.8367 是已知狀況（10.19，V5-1 之後），與重錄無關。
+
+#### 3. pipeline＋e2e（OCR 為主，`extract_ocr.v2`；約 2.5～5.5 小時）
+
+```bat
+scripts\windows\record_local.bat pipeline,e2e
+```
+
+- `pipeline`：`LLM_MODE=record`、`EMBED_MODE=fixture`（樣卷 10 題、4 頁：PaddleOCR → `extract_ocr.v2` 整理成題目〔2 塊約 1～1.5 小時，10.12〕→ 每題分類、lint、驗算〔約 1.5～3.8 小時，10.14〕；工具自動把單次呼叫與節點逾時放寬到 3 小時、每 5 分印一次進度，10.11）
+- `e2e-similar`：`LLM_MODE=replay`、`EMBED_MODE=record`（e2e 入庫時的向量，`FEATURE_SIMILAR=true`；LLM 全部回放上一步錄好的，幾分鐘）
+
+`ci.yml` 寫的是 `LOCAL_EXTRACT_MODE: ocr`：只錄 `ocr` 與 `extract_ocr`，**不呼叫看圖模型**，錄前檢查也不要求 `qwen3-vl:8b`，但要 PaddleOCR 自我檢查通過。
+
+**怎麼確認成功**：回放驗證表 pipeline 的 replay miss 0，`saved_rate` 印 n/a（OCR 模式設計如此，10.18 第 5 點）、另有「人工核准前的通過率」一行是數字；e2e 那一列是 `pass 12／fail 0`（OCR 模式下 e2e 驗的是「每題停在複核 → 核准一題入庫」，10.12 第 7 點）。
+
+#### 4. 全部錄完之後（只讀檔，不呼叫模型）
+
+1. 盤點一次，確認五個 eval 與 e2e 的 replay miss、缺向量都是 0（幾分鐘）：
+
+   ```bat
+   npm run cassettes:rerecord -- --dry-run
+   ```
+
+2. `git add eval/cassettes eval/fixtures/embeddings.ollama-qwen3-embedding-0.6b.768.json`，commit、push（或交給維護的人）。
+3. 這台電腦的實際速度（幾秒；三次重錄的 log 都給，檔名換成你那三份）：
+
+   ```bat
+   npm run perf:local -- --log data\local_ai\record_<第1步>.log --log data\local_ai\record_<第2步>.log --log data\local_ai\record_<第3步>.log --since 2026-09-27 --out data\local_ai\perf.md
+   ```
+
+   看「建議」那一段的逾時與 `RERECORD_TIME_SCALE`；10.5 的粗估請換成這份的實測值。
+4. 向量門檻重算（V5-2 定案的前置，幾秒）：
+
+   ```bat
+   npm run embed:thresholds -- --out data\local_ai\embed_thresholds.md
+   ```
+
+   variant 題幹換了，`embed_threshold_labels.json` 的初判對不上，報告會列「未標註」：把報告交給維護的人，由 Claude 重標初判。
+5. **O-4 抽查**（Claude 重標之後；約 20～30 分）：Owner 抽 10～15 支，或只看「換了概念」與餘弦 0.85～0.92 之間的那幾支，把不同意的題號貼回來；之後才定案 V5-2（現在的 0.87 是暫定）。
+6. 過期回放檔（只列、**不刪**）：
+
+   ```bat
+   npm run cassettes:prune
+   ```
+
+   清單會有舊模板或舊 schema 的 classify、`variant.v1`、`extract_ocr.v1`、看圖拆題與原本 Gemini 錄的檔。要不要刪由 Owner 決定（10.7 第 6 點：刪了就不能不花錢地切回 Gemini）；這一步不加 `--apply`。
+
+#### 5. C-e 量測（與重錄分開做，約 30 分；10.17 第 5 點）
+
+重錄期間 Ollama 很忙，量測請在重錄**之前或之後**、電腦閒著時做：
+
+1. 先讓模型載入一次（例如先跑一次下面第 3 項），再執行 `ollama ps`：看載入的模型、各佔多少記憶體、CONTEXT 欄（應是 16384）。
+2. 用記事本開 `%LOCALAPPDATA%\Ollama\server.log`（在檔案總管的網址列貼上這串即可），搜尋：
+   - `parallel`：並行槽數（3～4 就是 10.14 (e) 說的多份 KV cache）；
+   - `n_ctx`：實際的 context（＝num_ctx × 槽數，例 16384 × 4＝65536）；
+   - `loading model`：一份卷換載幾次模型。
+3. 開著「工作管理員 → 效能 → 記憶體」（使用中、認可、已使用的插槽）與「資源監視器 → 記憶體」（硬錯誤/秒），同時跑：
+
+   ```bat
+   npm run local:bench-text -- --agent verify
+   ```
+
+   不加參數＝正式上傳的設定（驗算上限 3072 是本機預設，C-c）。要比較時同一題再跑 `--num-ctx 8192`、`--no-think`、`--max-output 8192`。
+4. 把 parallel、n_ctx、記憶體使用中／認可、硬錯誤/秒、bench 的「輸出 token/秒」貼回來，再決定 C-e 的後續與 C-d、C-i。
+
+#### 6. 時間總表
+
+| 步驟 | 指令 | 預估 |
+|---|---|---|
+| 0 | `npm run migrate`、清 `.env`、答 O-5、`--dry-run` 盤點 | 約 15 分 |
+| 1 | `record_local.bat classify,nlq` | 1.5～2 小時 |
+| 1a | （O-5 選 2 時）拉 lint.v3 | 幾分鐘（不另錄） |
+| 2 | `record_local.bat variant` | 5～6 小時 |
+| 3 | `record_local.bat pipeline,e2e` | 2.5～5.5 小時 |
+| 4 | 盤點、commit、`perf:local`、`embed:thresholds`、O-4 抽查、`cassettes:prune`（只列） | 約 1 小時（O-4 另需 Claude 重標） |
+| 5 | C-e 量測 | 約 30 分 |
+
+合計約 10～15 小時的錄製，建議第 1 步白天做（順便確認流程），第 2、3 步各排一個晚上。工具在問 yes 之前印的「粗估」是保守上限（整合當天 `--dry-run --json` 的粗估：第 1 步 6.4～54.5、第 2 步 5.0～53.1、第 3 步 0.4～48.4 小時），以上表的實測推估為準；錄完用 `perf:local` 的 `RERECORD_TIME_SCALE` 校正。
