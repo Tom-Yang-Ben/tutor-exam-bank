@@ -3,7 +3,8 @@
 //
 // 設計稿 docs/desktop-app-design.md 2.3 節第 3、4 點、第 3 條第 2 項、R-17：
 //   陷阱：一般的 abort 會被 classifyError 歸成 timeout、寫進 job_events、累加重試次數，拆題與變式的迴圈還會立刻重試。
-//   放棄走另一條路：被放棄的節點不寫 outcome、不動 retries、不寫 job_events、不記用量、迴圈不重試，只放掉**自己的**租約。
+//   放棄走另一條路：被放棄的節點不寫 outcome、不動 retries、不寫 job_events、迴圈不重試，只放掉**自己的**租約；
+//   被中止的那一次呼叫不記用量（〔審查 dec/r8-b1-abandon-fix〕放棄之前已經回來的照記進 jobs，見檔尾那一組）。
 // 這裡用假 db 釘住細節（租約憑證、續租換值、lost、save 不中止、退避睡眠中放棄）；三種工作單位在真的 PostgreSQL 上的行為
 // （重開後立刻被認領、沒有 timeout／failed、重試次數不變）在 test/integration/jobAbandon.pg.test.js。
 // ─────────────────────────────────────────────────────────────
@@ -303,5 +304,227 @@ describe('shutdown 本身', () => {
         await r.shutdown({ abandon: true });
         await r.tick();
         assert.equal(claims, before);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────
+// 〔審查 dec/r8-b1-abandon-fix〕審查意見的修正
+//   1. 退避睡眠（pause）不再 race 一個常駐的 promise：沒有 shutdown 時睡完就不留任何東西（pausing 歸零）。
+//   2. shutdown 開始時 tick 正卡在 claim 的交易裡：shutdown 先等那一輪 tick；剛認領到的那一列不開始、用這次的憑證放掉租約。
+//   3. 被放棄的節點裡，放棄之前就已經回來的呼叫照記進 jobs（不寫事件）；放棄之後 agent 在背景叫的不算。
+//   4. lost 也看系統時間（單調時鐘可能不含系統睡眠）。
+// ─────────────────────────────────────────────────────────────
+describe('〔審查 dec/r8-b1-abandon-fix〕', () => {
+    /** claim 用的假連線池：SELECT … FOR UPDATE SKIP LOCKED 依表名決定回什麼（可以卡在 gate 上） */
+    function claimPool(selectFor) {
+        const clientLog = [];
+        return {
+            clientLog,
+            pool: {
+                async connect() {
+                    return {
+                        async query(text) {
+                            clientLog.push(text.split('\n')[0].trim());
+                            const m = /SELECT id FROM (\w+)[\s\S]*FOR UPDATE SKIP LOCKED/.exec(text);
+                            if (m) return selectFor(m[1], text);
+                            if (/RETURNING locked_until::text AS lease_until/.test(text)) return { rows: [{ lease_until: TOKEN }], rowCount: 1 };
+                            return { rows: [], rowCount: 0 };
+                        },
+                        release() { }
+                    };
+                }
+            }
+        };
+    }
+    const tickDb = (pool, extra = []) => fakeDb([
+        [/SUM\(cost_usd\)/, () => ({ rows: [{ spent: 0 }], rowCount: 1 })],
+        ...extra
+    ], pool);
+
+    test('退避睡眠（沒有 shutdown）：睡的時候登記一個喚醒函式，睡完就移除——不會隨退避次數累積', async () => {
+        reset();
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pause-pdf-'));
+        const pdf = path.join(tmp, 'x.pdf');
+        fs.writeFileSync(pdf, '%PDF-1.4 假');
+        try {
+            const db = fakeDb([
+                [/FROM jobs WHERE id = \$1/, (p, text) => /pdf_path/.test(text)
+                    ? { rows: [{ id: 9, pdf_path: pdf, pdf_sha256: 'a'.repeat(64), page_count: 1, subject_group: 'math_physics', budget_usd: 0.5, cost_usd: 0 }], rowCount: 1 }
+                    : { rows: [{ cost_usd: 0 }], rowCount: 1 }]
+            ]);
+            const seen = [];
+            let r = null;
+            r = createRunner({
+                db, llm: {}, logger: capture().logger, agentsDir,
+                sleep: async () => { seen.push(r.pausing); },
+                config: { renewIntervalMs: 60000, pdfChunkPages: 20, localExtract: false }
+            });
+            await r.runExtractJob(9);
+            assert.ok(seen.length >= 2, `前提：退避了不只一次（${seen.length}）`);
+            assert.deepEqual(seen, seen.map(() => 1), '睡的當下只有自己這一個');
+            assert.equal(r.pausing, 0, '睡完都移除了');
+            assert.ok(db.log.some(q => /UPDATE jobs SET state = 'failed'/.test(q.text)), '前提：沒有 shutdown 時照舊重試到用完、failed');
+        } finally {
+            fs.rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+
+    test('shutdown 時 tick 正卡在 claim 的交易裡（題目層）：shutdown 先等那一輪 tick；剛認領到的列不開始、用這次的憑證放掉租約', async () => {
+        reset();
+        let openGate;
+        const gate = new Promise(res => { openGate = res; });
+        let selecting = 0;
+        const { pool, clientLog } = claimPool(async (table) => {
+            if (table !== 'job_questions') return { rows: [], rowCount: 0 };
+            selecting += 1;
+            await gate;
+            return { rows: [{ id: 77 }], rowCount: 1 };
+        });
+        const db = tickDb(pool, [[RELEASE_OWN, () => ({ rows: [], rowCount: 1 })]]);
+        const { lines, logger } = capture();
+        const r = createRunner({ db, llm: {}, logger, agentsDir, config: { renewIntervalMs: 60000 } });
+        const t = r.tick();
+        await until(() => selecting === 1);
+
+        let done = false;
+        const s = r.shutdown({ abandon: true, waitMs: 2000 }).then(v => { done = true; return v; });
+        await new Promise(res => setTimeout(res, 30));
+        assert.equal(done, false, 'shutdown 要先等正在認領的那一輪 tick（否則回 left=0、呼叫的人就關連線池）');
+        openGate();
+        const out = await s;
+        await t;
+
+        assert.ok(clientLog.includes('COMMIT'), '前提：認領那一句已經提交（租約已寫進去）');
+        const rel = db.log.filter(q => RELEASE_OWN.test(q.text));
+        assert.equal(rel.length, 1, '剛認領到的列用這次的憑證放掉');
+        assert.deepEqual(rel[0].params, [77, TOKEN]);
+        assert.ok(!db.log.some(q => /FROM job_questions q JOIN jobs j/.test(q.text)), '工作單位沒有開始');
+        assert.ok(!db.log.some(q => WROTE_RESULT.test(q.text)));
+        assert.equal(globalThis.__abandonTest.started, 0);
+        assert.equal(r.inFlight, 0);
+        assert.deepEqual(out, { left: 0, abandoned: 0, released: 0, kept: 0 }, '沒有工作單位被放棄（根本沒開始）');
+        const w = lines.warn.find(o => /關閉中：剛認領到的工作不開始/.test(o.msg));
+        assert.ok(w, JSON.stringify(lines.warn));
+        assert.deepEqual([w.unit, w.id, w.lease], ['job_question', 77, 'released']);
+        // 之後再 tick 也不會認領
+        const before = selecting;
+        await r.tick();
+        assert.equal(selecting, before);
+    });
+
+    test('沒有 abandon 的 shutdown 也一樣（拆題 job）：認領回來的 job 不開始、放掉租約（jobs 表）', async () => {
+        reset();
+        let openGate;
+        const gate = new Promise(res => { openGate = res; });
+        let selectingJobs = 0;
+        const { pool } = claimPool(async (table, text) => {
+            if (table !== 'jobs' || !/kind = 'pdf'/.test(text)) return { rows: [], rowCount: 0 };
+            selectingJobs += 1;
+            await gate;
+            return { rows: [{ id: 9 }], rowCount: 1 };
+        });
+        const RELEASE_JOB = /UPDATE jobs SET locked_until = NULL WHERE id = \$1 AND locked_until = \$2::timestamptz/;
+        const db = tickDb(pool, [[RELEASE_JOB, () => ({ rows: [], rowCount: 1 })]]);
+        const { lines, logger } = capture();
+        const r = createRunner({ db, llm: {}, logger, agentsDir, config: { renewIntervalMs: 60000 } });
+        const t = r.tick();
+        await until(() => selectingJobs === 1);
+        const s = r.shutdown({ waitMs: 2000 });
+        setTimeout(openGate, 20);
+        const out = await s;
+        await t;
+        const rel = db.log.filter(q => RELEASE_JOB.test(q.text));
+        assert.equal(rel.length, 1);
+        assert.deepEqual(rel[0].params, [9, TOKEN]);
+        assert.ok(!db.log.some(q => /SELECT id, pdf_path/.test(q.text)), '拆題沒有開始');
+        assert.equal(r.abandoning, false, '沒有 abandon 就不標記放棄');
+        assert.deepEqual(out, { left: 0, abandoned: 0, released: 0, kept: 0 });
+        assert.equal(lines.warn.find(o => /關閉中/.test(o.msg)).unit, 'extract');
+    });
+
+    test('被放棄的節點：放棄之前已經回來的呼叫照記進 jobs（token、cost_usd），不寫事件；放棄之後 agent 在背景叫的不算', async () => {
+        reset();
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'abandon-charge-agents-'));
+        try {
+            // 先叫一次模型（回來了），再等 signal；被 abort 之後不理它、又叫一次（慢一點回來）
+            fs.writeFileSync(path.join(dir, 'classify.js'), `
+                module.exports = { async run(ctx) {
+                    const s = globalThis.__abandonTest;
+                    await ctx.llm.generateJson({ model: 'gemini-3.5-flash', agent: 'classify', parts: [], schema: {} });
+                    s.started += 1;
+                    await new Promise(resolve => ctx.signal.addEventListener('abort', resolve, { once: true }));
+                    await ctx.llm.generateJson({ model: 'gemini-3.5-flash', agent: 'classify', parts: [], schema: {}, slow: true });
+                    s.lateCall = true;
+                    return { kind: 'error', errorClass: 'timeout', message: '被 abort' };
+                } };`);
+            const llm = {
+                async generateJson(args) {
+                    if (args.slow) await new Promise(res => setTimeout(res, 20));
+                    return { data: {}, usage: args.slow ? { tokenIn: 9999, tokenOut: 9999 } : { tokenIn: 100, tokenOut: 20, tokenThinking: 5 } };
+                }
+            };
+            const db = fakeDb([
+                [/FROM job_questions q JOIN jobs j/, () => ({ rows: [jqRow('hashed', { extract: { question_text: 'x' } })], rowCount: 1 })],
+                [RELEASE_OWN, () => ({ rows: [], rowCount: 1 })]
+            ]);
+            const r = createRunner({
+                db, llm, logger: capture().logger, agentsDir: dir,
+                estimateCost: m => ({ cost_usd: m.tokenIn / 100000, cost_estimated: true }),
+                config: { renewIntervalMs: 60000 }
+            });
+            const running = r.runJobQuestion(77, lease());
+            await until(() => globalThis.__abandonTest.started === 1);
+            await r.shutdown({ abandon: true, waitMs: 1000 });
+            await running;
+            await until(() => globalThis.__abandonTest.lateCall === true);
+            await new Promise(res => setTimeout(res, 20));
+
+            const charges = db.log.filter(q => /UPDATE jobs SET token_in = token_in \+ \$2/.test(q.text));
+            assert.equal(charges.length, 1, '只記一次');
+            assert.deepEqual(charges[0].params, [9, 100, 25, 0.001], '放棄之前回來的那一次（tokenOut＋tokenThinking）；背景那一次不算');
+            assert.ok(!db.log.some(q => /INSERT INTO job_events|UPDATE job_questions SET state/.test(q.text)), '不寫事件、不寫回狀態');
+            const rel = db.log.filter(q => RELEASE_OWN.test(q.text));
+            assert.equal(rel.length, 1);
+            assert.ok(db.log.indexOf(charges[0]) < db.log.indexOf(rel[0]), '先記用量再放租約（放掉之後這個工作單位就沒有任何寫入）');
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('lost 也看系統時間：單調時鐘沒走（例如系統睡眠不算進去），系統時間已過一個租約長度 → lost，不放租約', async () => {
+        reset();
+        const db = fakeDb([
+            [/FROM job_questions q JOIN jobs j/, () => ({ rows: [jqRow('hashed', { extract: { question_text: 'x' } })], rowCount: 1 })],
+            [/RETURNING locked_until::text AS lease_until/, () => ({ rows: [{ lease_until: 'V-after-sleep' }], rowCount: 1 })],
+            [RELEASE_OWN, () => ({ rows: [], rowCount: 1 })]
+        ]);
+        const { lines, logger } = capture();
+        const r = createRunner({ db, llm: {}, logger, agentsDir, config: { leaseMs: 1000, renewIntervalMs: 20 } });
+        const L = lease({ okSentAt: performance.now(), okSentWall: Date.now() - 5000 });
+        const running = r.runJobQuestion(77, L);
+        await until(() => L.until === 'V-after-sleep');
+        await r.shutdown({ abandon: true });
+        await running;
+        assert.equal(L.lost, true);
+        assert.ok(!db.log.some(q => RELEASE_OWN.test(q.text)), '不放');
+        assert.equal(lines.warn.find(o => o.unit).lease, 'lost');
+    });
+
+    test('兩個時鐘都在一個租約長度之內：照常用續租的新值放租約（沒有誤判成 lost）', async () => {
+        reset();
+        const db = fakeDb([
+            [/FROM job_questions q JOIN jobs j/, () => ({ rows: [jqRow('hashed', { extract: { question_text: 'x' } })], rowCount: 1 })],
+            [/RETURNING locked_until::text AS lease_until/, () => ({ rows: [{ lease_until: 'V-fresh' }], rowCount: 1 })],
+            [RELEASE_OWN, () => ({ rows: [], rowCount: 1 })]
+        ]);
+        const r = createRunner({ db, llm: {}, logger: capture().logger, agentsDir, config: { leaseMs: 60000, renewIntervalMs: 20 } });
+        const L = lease({ okSentAt: performance.now(), okSentWall: Date.now() });
+        const running = r.runJobQuestion(77, L);
+        await until(() => L.until === 'V-fresh');
+        await r.shutdown({ abandon: true });
+        await running;
+        assert.equal(L.lost, false);
+        assert.ok(Number.isFinite(L.okSentWall), '續租之後也記下系統時間');
+        assert.deepEqual(db.log.filter(q => RELEASE_OWN.test(q.text)).map(q => q.params), [[77, 'V-fresh']]);
     });
 });

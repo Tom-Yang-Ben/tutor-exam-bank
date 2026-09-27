@@ -40,14 +40,17 @@ function isLocalReplay({ agent, vendor, model }) {
  * replay miss 的訊息。前綴「LLM_MODE=replay 找不到 cassette（agent=… key=…）。」不變，之後依模式寫怎麼重錄：
  *   本機模式：在 Owner 的電腦執行 scripts\windows\record_local.bat <suite>（它跑的就是 npm run cassettes:rerecord -- --suites <suite>，
  *            模型、OCR、測試庫照 ci.yml；docs/local-mode.md 10.21）；
- *   Gemini 模式：npm run cassettes:rerecord -- --suites <suite>（要 GEMINI_API_KEY，會產生費用）。
+ *   Gemini 模式：npm run cassettes:rerecord -- --suites <suite>（ci.yml 的模型要是 Gemini；要 GEMINI_API_KEY，會產生費用）。
+ *   〔審查 dec/r8-b1-abandon-fix〕eval/tools/rerecord_all.js 一律照 .github/workflows/ci.yml 的模型錄（.env 的 MODEL_* 不帶進去），
+ *   所以只有 ci.yml 的模型也是 Gemini 時，照做才錄得到這一支；開發者自己在 .env 設了 Gemini 模型回放、ci.yml 卻是 ollama 時
+ *   錄不到（cassette 的鍵含模型 ID）。本機那一句同理（照 ci.yml 的本機模型錄），目前 ci.yml 就是本機模型。
  * 最後一行是預期路徑。services/ocr 的回放 miss 也用這一支（同一串前綴與標記）。
  * @param {{agent:string, key:string, vendor?:string, model?:string, path?:string}} o
  */
 function replayMissMessage({ agent, key, vendor, model, path }) {
     const how = isLocalReplay({ agent, vendor, model })
         ? `本機模式：請在 Owner 的電腦（exam_pro 資料夾）執行 scripts\\windows\\record_local.bat <suite> 重錄（它跑的就是 ${RERECORD_CMD}；步驟見 docs/local-mode.md 10.21）`
-        : `Gemini 模式：請在本機執行 ${RERECORD_CMD} 重錄（要 GEMINI_API_KEY，會產生費用）`;
+        : `Gemini 模式：請在本機執行 ${RERECORD_CMD} 重錄（ci.yml 的模型要是 Gemini；要 GEMINI_API_KEY，會產生費用）`;
     return `${REPLAY_MISS_PREFIX}（agent=${agent} key=${key}）。${how}` + (path ? `\n（預期路徑：${path}）` : '');
 }
 

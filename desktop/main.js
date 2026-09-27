@@ -400,7 +400,8 @@ function startApp() {
      * @param {'graceful'|'wait'|'abandon'} mode
      *   graceful：沒有工作時（最多等剛認領到的 10 秒）；wait：等處理完再結束（最多 6 小時）；abandon：現在放棄
      *   〔dec/r8-b1-abandon〕abandon（含等處理完途中改選放棄）：後端中止在途節點、只放掉自己的租約後結束（host.abandon）；
-     *   graceful／wait 的時限到了還有在途工作時，後端也是先放棄再結束（services/launcherControl.js）
+     *   graceful／wait 的時限到了還有在途工作時，後端也是先放棄再結束（services/launcherControl.js）；
+     *   〔審查 dec/r8-b1-abandon-fix〕所以 host.shutdown 的強制結束時限是 graceMs＋ABANDON_WAIT_MS＋KILL_AFTER_MS（原本少算放棄那一段）
      */
     async function quitApp(mode) {
         if (quitting) {
@@ -421,7 +422,7 @@ function startApp() {
         try {
             if (host && host.alive) {
                 if (mode === 'wait') {
-                    const r = await host.shutdown({ graceMs: D.WAIT_ALL_MS, killAfterMs: D.KILL_AFTER_MS });
+                    const r = await host.shutdown({ graceMs: D.WAIT_ALL_MS, abandonWaitMs: D.ABANDON_WAIT_MS, killAfterMs: D.KILL_AFTER_MS });
                     log(`等處理完：後端已結束（結束碼 ${r.code}）`);
                     if (!abandoned) {
                         notify(D.drainedNotice());
@@ -430,7 +431,7 @@ function startApp() {
                 } else if (mode === 'abandon') {
                     await host.abandon({ waitMs: D.ABANDON_WAIT_MS, killAfterMs: D.KILL_AFTER_MS });
                 } else {
-                    await host.shutdown({ graceMs: D.QUIT_GRACE_MS, killAfterMs: D.KILL_AFTER_MS });
+                    await host.shutdown({ graceMs: D.QUIT_GRACE_MS, abandonWaitMs: D.ABANDON_WAIT_MS, killAfterMs: D.KILL_AFTER_MS });
                 }
             }
         } catch (err) {

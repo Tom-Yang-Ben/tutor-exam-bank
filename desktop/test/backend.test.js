@@ -208,12 +208,62 @@ describe('主行程這一側（createBackendHost）', () => {
         assert.equal(host.alive, false);
     });
 
-    test('時限加 killAfterMs 還沒結束：強制結束', async () => {
+    test('時限加 abandonWaitMs 加 killAfterMs 還沒結束：強制結束', async () => {
         const f = fakeFork({ exitOnShutdown: false });
         const host = newHost(f);
         await host.start({ env: {} });
         f.child.emit('message', { type: 'ready', port: 1, url: 'u' });
-        await host.shutdown({ graceMs: 10, killAfterMs: 10 });
+        await host.shutdown({ graceMs: 10, abandonWaitMs: 10, killAfterMs: 10 });
+        assert.equal(f.child.killed, 1);
+    });
+
+    // 〔審查 dec/r8-b1-abandon-fix〕後端在 graceMs 到了還有在途工作時會先放棄（最多 ABANDON_WAIT_MS，再關連線池），
+    // 強制結束的時限要把放棄那一段算進去（原本 graceMs＋killAfterMs，放棄只剩約 5 秒）；預設與 abandon() 的 waitMs 相同（10 秒）
+    test('強制結束的時限＝graceMs＋abandonWaitMs＋killAfterMs（放棄那一段不會被提早砍掉）；abandonWaitMs 預設 10 秒', async () => {
+        // 記下每個計時器的長度；長的（強制結束那一個）不真的等，也不讓它撐住測試行程（unref）
+        const recordingTimers = delays => ({
+            setTimeout: (fn, ms) => {
+                delays.push(ms);
+                if (ms <= 1000) return setTimeout(fn, ms);
+                const t = setTimeout(fn, 1e9);
+                t.unref();
+                return t;
+            },
+            clearTimeout: t => clearTimeout(t)
+        });
+        const delays = [];
+        const f = fakeFork({ exitOnShutdown: false });
+        const host = newHost(f, { timers: recordingTimers(delays) });
+        await host.start({ env: {} });
+        f.child.emit('message', { type: 'ready', port: 1, url: 'u' });
+        const p = host.shutdown({ graceMs: 10_000, abandonWaitMs: 10_000, killAfterMs: 5_000 });
+        await tick(5);
+        assert.ok(delays.includes(25_000), `時限 10＋10＋5 秒（${delays.join(',')}）`);
+        assert.equal(f.child.killed, 0);
+        f.child.emit('exit', 0);
+        await p;
+
+        const g = fakeFork({ exitOnShutdown: false });
+        const d2 = [];
+        const h2 = newHost(g, { timers: recordingTimers(d2) });
+        await h2.start({ env: {} });
+        g.child.emit('message', { type: 'ready', port: 1, url: 'u' });
+        const q = h2.shutdown({ graceMs: 10_000, killAfterMs: 5_000 });
+        await tick(5);
+        assert.ok(d2.includes(25_000), `沒給 abandonWaitMs 時用 10 秒（${d2.join(',')}）`);
+        g.child.emit('exit', 0);
+        await q;
+    });
+
+    test('時限到了、放棄那一段還在跑：在 graceMs＋killAfterMs 時還不強制結束，到 graceMs＋abandonWaitMs＋killAfterMs 才強制結束', async () => {
+        const f = fakeFork({ exitOnShutdown: false });
+        const host = newHost(f);
+        await host.start({ env: {} });
+        f.child.emit('message', { type: 'ready', port: 1, url: 'u' });
+        const p = host.shutdown({ graceMs: 10, abandonWaitMs: 150, killAfterMs: 10 });
+        await tick(60);
+        assert.equal(f.child.killed, 0, '原本的 graceMs＋killAfterMs（20 毫秒）已過，還在等放棄');
+        await p;
         assert.equal(f.child.killed, 1);
     });
 

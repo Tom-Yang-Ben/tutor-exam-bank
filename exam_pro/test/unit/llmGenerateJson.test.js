@@ -268,12 +268,13 @@ describe('LLM_MODE=replay（services/llm/fake.js）', () => {
 
     // 〔dec/r8-b1-abandon〕前綴不變；「怎麼重錄」依模式寫（原本的 npm run eval:record -- --suite 其實只錄向量，
     // 本機模式的重錄在 Owner 的電腦用 record_local.bat／cassettes:rerecord，docs/local-mode.md 10.21）
-    test('miss：丟錯，前綴逐字凍結；Gemini 模式指向 npm run cassettes:rerecord（要金鑰、會產生費用），且不得回假資料', () => {
+    // 〔審查 dec/r8-b1-abandon-fix〕rerecord_all.js 一律照 ci.yml 的模型錄：Gemini 那一句註明「ci.yml 的模型要是 Gemini」（跟著字句改，不是放寬）
+    test('miss：丟錯，前綴逐字凍結；Gemini 模式指向 npm run cassettes:rerecord（ci.yml 的模型要是 Gemini、要金鑰、會產生費用），且不得回假資料', () => {
         const missOpts = { ...opts, cacheKeyParts: { template: opts.template, questionText: '沒錄過的題', fewShotIds: [] } };
         const key = cassette.cassetteKey({ ...missOpts, modelId: missOpts.model });
         assert.throws(() => fake.generateJson(missOpts), (err) => {
             assert.ok(err.message.startsWith(
-                `LLM_MODE=replay 找不到 cassette（agent=classify key=${key}）。Gemini 模式：請在本機執行 npm run cassettes:rerecord -- --suites <suite> 重錄（要 GEMINI_API_KEY，會產生費用）\n（預期路徑：`
+                `LLM_MODE=replay 找不到 cassette（agent=classify key=${key}）。Gemini 模式：請在本機執行 npm run cassettes:rerecord -- --suites <suite> 重錄（ci.yml 的模型要是 Gemini；要 GEMINI_API_KEY，會產生費用）\n（預期路徑：`
             ), err.message);
             return true;
         });

@@ -30,9 +30,10 @@ describe('isReplayMiss（裁決 S2-14：只比前綴與重錄的標記）', () =
             'LLM_MODE=replay 找不到 cassette（agent=classify key=3f2a8c1d）。本機模式：請在 Owner 的電腦（exam_pro 資料夾）執行 ' +
             'scripts\\windows\\record_local.bat <suite> 重錄（它跑的就是 npm run cassettes:rerecord -- --suites <suite>；步驟見 docs/local-mode.md 10.21）' +
             '\n（預期路徑：eval/cassettes/classify/3f2a8c1d.json）');
+        // 〔審查 dec/r8-b1-abandon-fix〕rerecord_all.js 照 ci.yml 的模型錄：Gemini 那一句註明「ci.yml 的模型要是 Gemini」
         assert.equal(REAL_MISS_GEMINI,
             'LLM_MODE=replay 找不到 cassette（agent=classify key=3f2a8c1d）。Gemini 模式：請在本機執行 npm run cassettes:rerecord -- --suites <suite> 重錄' +
-            '（要 GEMINI_API_KEY，會產生費用）\n（預期路徑：eval/cassettes/classify/3f2a8c1d.json）');
+            '（ci.yml 的模型要是 Gemini；要 GEMINI_API_KEY，會產生費用）\n（預期路徑：eval/cassettes/classify/3f2a8c1d.json）');
         for (const m of [REAL_MISS, REAL_MISS_GEMINI]) {
             assert.equal(rm.isReplayMiss(new Error(m)), true);
             assert.equal(rm.isReplayMiss(m), true);

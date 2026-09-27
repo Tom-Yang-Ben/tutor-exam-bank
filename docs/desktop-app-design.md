@@ -4,7 +4,7 @@
 > **版本**：第一版草稿是 `325c52b`（作者中斷時留下）；`c3cd57f` 是逐節自我檢查、查證後的正式版（改了什麼見文末「自我檢查紀錄」）；本版依審查意見再修一次，逐條的查證結果與改法見文末「審查修正紀錄」。〔2026-09-27〕第六輪決策的登錄見文末「第六輪決策登錄紀錄」，其審查小修見「審查修正紀錄（`dec/r7-decisions-host-fix`）」。
 > **Owner 的決定（2026-09-27）**：先做 A（啟動器）；B 與 D2 同時開始規劃，先不實作。A 在另一條分支 `dec/desktop-launcher` 上實作，目前有一個**未審查、未合併**的進行中 commit `d730422`（第 6.1 節列出它已經有的模組）。B1 開工前要先和 A 對齊（第 6.1 節）。
 > **〔2026-09-27，分支 `dec/r7-electron-b1`，審查修正 `dec/r7-electron-b1-fix`〕B 部分的現況：B1 已實作（待 Owner 驗收）；B2、D2、B3 仍是設計稿。**B1 依第六輪答案 DA-2＝3、DA-3＝2、DA-6＝1、DA-11＝1 做完，做了什麼、雲端驗了什麼、Owner 的驗收步驟都在第 6.2 節；本文件其他各節的「現況」仍是 B1 之前的描述。
-> **〔2026-09-27，分支 `dec/r8-b1-abandon`，B1 收尾〕**第 3 條第 2 項（jobRunner 的 `shutdown({ abandon })`）已實作：系統匣的「現在放棄」改成中止在途節點、只放掉自己的租約後結束，下次開啟立刻重新認領（不必等 `JOB_LEASE_MS`）；關閉的時限到了還有在途工作時（桌面版與桌面啟動器 A 的「否」）也先放棄再結束。做了什麼、和原本設計的差異、測試與 Owner 驗收見 6.2 節與文末「B1 收尾紀錄」。
+> **〔2026-09-27，分支 `dec/r8-b1-abandon`，B1 收尾〕**第 3 條第 2 項（jobRunner 的 `shutdown({ abandon })`）已實作：系統匣的「現在放棄」改成中止在途節點、只放掉自己的租約後結束，下次開啟立刻重新認領（不必等 `JOB_LEASE_MS`）；關閉的時限到了還有在途工作時（桌面版與桌面啟動器 A 的「否」）也先放棄再結束。做了什麼、和原本設計的差異、測試與 Owner 驗收見 6.2 節與文末「B1 收尾紀錄」；其審查小修（6 條，都屬實、都已改）見文末「審查修正紀錄（`dec/r8-b1-abandon-fix`）」。
 > **名詞**：
 > - **A**：啟動器。雙擊一個檔案，它會開 Docker Desktop、開資料庫、檢查 Ollama、開伺服器和瀏覽器。
 > - **B**：Electron 桌面殼（本文件）。
@@ -184,7 +184,7 @@ if (require.main === module) { require('dotenv').config(); /* 照舊：listen(PO
      - 變式（`runGenerateJob`／`runGenerateOne`，`:1513` 起）：它同樣呼叫 `invokeNode`，被 abort 時一樣記成 `timeout`、退避後重試（`:1665-1669`），全部題都沒建成時整份變式 job 會 `failed`（`:1545-1548`）。第一版正式稿漏了這一條。
 
      這樣下次開 app 立刻就能重新認領，不必等 180 秒的租約。
-     〔2026-09-27 已實作，`dec/r8-b1-abandon`〕`workers/jobRunner.js` 的 `shutdown({ abandon, waitMs })`，三種工作單位都走這條路。和上面的設計相比多了三條規則（理由見文末「B1 收尾紀錄」）：① **只放自己的租約**：認領與續租時記下寫進 `locked_until` 的值（租約憑證），放租約用 `UPDATE … WHERE id = $1 AND locked_until = <那個值>`，網頁版等別的後端接手後寫的值不同、清不到；續租曾經中斷超過一個租約長度（可能已被別人接手）就不放，留給到期。② **放棄之前就已經回來的結果照常寫回**（那是真的結果，不是中止造成的）；save 節點一旦開始就讓它做完（它開交易寫題庫，中途放租約會讓重跑再入庫一次）。③ 被放棄的那一次呼叫**不記用量**（與當機相同；Gemini 那一次可能已經計費）。
+     〔2026-09-27 已實作，`dec/r8-b1-abandon`〕`workers/jobRunner.js` 的 `shutdown({ abandon, waitMs })`，三種工作單位都走這條路。和上面的設計相比多了三條規則（理由見文末「B1 收尾紀錄」）：① **只放自己的租約**：認領與續租時記下寫進 `locked_until` 的值（租約憑證），放租約用 `UPDATE … WHERE id = $1 AND locked_until = <那個值>`，網頁版等別的後端接手後寫的值不同、清不到；續租曾經中斷超過一個租約長度（可能已被別人接手）就不放，留給到期。② **放棄之前就已經回來的結果照常寫回**（那是真的結果，不是中止造成的）；save 節點一旦開始就讓它做完（它開交易寫題庫，中途放租約會讓重跑再入庫一次）。③ 被中止的那一次呼叫**不記用量**（它沒有回來；與當機相同；Gemini 那一次可能已經計費）。〔審查修正 `dec/r8-b1-abandon-fix`〕原本寫成「被放棄的那一次呼叫」，範圍講小了：實作是整個節點的用量都不記（同一個節點裡放棄之前已經回來的呼叫也丟掉，例如本機 cross 模式的 extract、Gemini 模式的 verify 會叫好幾次）。現在改成放棄之前已經回來的呼叫照記進 `jobs` 的 token 與 `cost_usd`（每份 job 的預算因此是準的），但**不寫 `job_events`**（一列事件＝一次嘗試），所以每日預算（`DAILY_COST_BUDGET_USD`，加總 `job_events`）不含這一段。
      **重跑點要分清楚**（第一版正式稿寫成一律「從那個節點的開頭重跑」，只對題目層成立）：
      - 題目層：從被放棄的那個節點重跑，前面已完成的節點不重跑。
      - 拆題 job：`runExtractJob` 每次都從**第 1 塊**跑到最後一塊（`:1311`），中間沒有逐塊的檢查點。本機模式一塊只有 2 頁（`LOCAL_PDF_CHUNK_PAGES`，`:191`），6～8 頁的卷就有 3～4 塊。在第 3 塊放棄的話，重開後前兩塊（本機每塊可能數十分鐘）會整個重跑，也會重新裁圖、重寫 extract 事件。已建的題靠 `insertJobQuestions` 的 `ON CONFLICT (job_id, idx) DO NOTHING`（`:1490-1494`）防重複，但只在重拆出**相同的 idx** 時有效。本機模型重拆出不同的題數或編號時會多出列：題幹完全相同的，會被 `agents/dedup.js:96-108` 的「同一份任務較早的題」比對擋下；文字略有差異的，可能多一題進後續流程〔推論〕。
@@ -267,7 +267,7 @@ if (require.main === module) { require('dotenv').config(); /* 照舊：listen(PO
   6. 執行 `pg_ctl stop -m fast`。
   7. 結束 app。
 
-  〔2026-09-27，`dec/r8-b1-abandon`〕第 2 步的「放棄」已照這裡實作（系統匣「現在放棄」、等處理完途中改選放棄、以及時限到了還有在途工作時）；放棄後 `ABANDON_WAIT_MS`（10 秒）＋`KILL_AFTER_MS`（5 秒）內後端還沒結束才強制結束，那一次就退回當機的那條路（租約要等到期）。
+  〔2026-09-27，`dec/r8-b1-abandon`〕第 2 步的「放棄」已照這裡實作（系統匣「現在放棄」、等處理完途中改選放棄、以及時限到了還有在途工作時）；放棄後 `ABANDON_WAIT_MS`（10 秒）＋`KILL_AFTER_MS`（5 秒）內後端還沒結束才強制結束，那一次就退回當機的那條路（租約要等到期）。〔審查修正 `dec/r8-b1-abandon-fix`〕時限到了才放棄的（沒有工作時的 10 秒、「等處理完」的 6 小時），主行程的強制結束時限原本是「時限＋`KILL_AFTER_MS`」，放棄只剩約 5 秒可用；現在是「時限＋`ABANDON_WAIT_MS`＋`KILL_AFTER_MS`」（`desktop/lib/backendHost.js` 的 `shutdown({ graceMs, abandonWaitMs, killAfterMs })`），與後端的放棄預算一致。
   被放棄的工作下次開 app 會立刻被重新認領：題目層從那個節點重跑；拆題 job 從第 1 塊整份重拆，變式 job 從第 1 題重來（2.3 節第 4 點，除非 DA-13 選做逐塊檢查點）。〔DA-13 選 2，定案〕檢查點做了之後（第 3 條第 36 項），拆題改從沒完成的那一塊、變式改從沒完成的那一題接著跑。如果是當機或被強制結束（沒走到第 2 步），租約要等 `JOB_LEASE_MS`（預設 180 秒，`workers/jobRunner.js:111`）到期才會被認領，重跑點相同，同樣不會吃掉重試次數。本機的 OCR 整理一塊可能要十幾到幾十分鐘，拆題後段被放棄可能白費一小時以上，所以放棄之前一定要問使用者。
 
   這個順序和 A 的關閉通道（`d730422` 的 `services/launcherControl.js`：停止認領 → `server.close()` → 等在途工作到寬限時間 → 關 `pool` → 結束）是同一套想法；B1 要沿用同一份程式，只是 B 多了第 5、6 步，以及「放棄」這個選項。
@@ -597,7 +597,7 @@ B1 刻意**不搬任何資料**：記錄檔放 `exam_pro\data\logs\`（`desktop-
   - 縮到系統匣之後，在途工作歸零並**持續 10 秒**才算「處理完」（runner 每 2 秒認領一次，單題的下一步要等下一輪，只看一次歸零會在兩步之間誤判），跳通知「背景工作都處理完了」，**約 8 秒後自動結束**。〔實作時的解讀〕DA-2＝3 的「完成時再通知」之後沒有寫要不要結束；這裡照「沒工作直接結束」與設計稿「沒事時就該把後端關掉」的理由，視窗已經關了就當作要結束。期間點系統匣圖示或再開一次捷徑把視窗叫回來，就取消這個自動結束；通知跳出後那幾秒又認領到工作，也不結束、繼續等。
 - **系統匣選「結束」**：沒有工作 → 直接結束。有工作（或問不到）→ 對話框「等處理完再結束／現在放棄／取消」：
   - **等處理完再結束**：不再認領新工作，等在途的做完（最多 6 小時，與 A 的「是」相同）；拆題是整份卷算一件，正在拆的卷會拆到完，排隊中的留到下次。**單題的檢查只做完正在跑的那一步**：jobRunner 的單題一次只跑一個節點（`runJobQuestion`），`runner.stop()` 之後不再認領，後面的步驟（例如 lint、驗算、入庫）下次開啟才接著做；剛拆出來或剛生成的題目也是下次開啟才開始檢查。對話框照這個寫（〔審查修正〕原本只講了拆題與排隊中的工作）。等的時候系統匣選單多一個「現在放棄」。
-  - **現在放棄**：~~後端馬上結束，**不關連線池、不寫結果**——與當機、A 的「時限到了直接結束」同一條既有的路，不記成失敗、不動重試次數；租約（`JOB_LEASE_MS`，預設 3 分鐘；在途時每 30 秒續一次，所以從放棄那一刻算起最多約 3 分鐘）到期後重新認領，馬上重開的話要先等一下。~~〔2026-09-27，`dec/r8-b1-abandon`，改成〕主行程送「現在放棄」（`{ type:'shutdown', grace_ms:0, abandon:true }`），後端走 jobRunner 的 `shutdown({ abandon: true })`：中止在途的節點（OCR 的 python 被殺、模型呼叫被中止），被放棄的**不寫結果、不記成失敗或逾時、不動重試次數、不記用量**，只放掉**自己的**租約，然後照常關連線池結束（通常幾秒內）。**下次開啟立刻重新認領，不必等租約。**後端在 `ABANDON_WAIT_MS`（10 秒）＋`KILL_AFTER_MS`（5 秒）內沒結束（例如同步運算卡住、收不到訊息）才強制結束，那樣就退回當機的那條路：一樣不記成失敗、不動重試次數，但要等租約到期（從放棄那一刻算起最多約 3 分鐘）。等處理完的途中從系統匣改選「現在放棄」也走同一條路（原本是直接強制結束）。重跑範圍照現行 `workers/jobRunner.js`：單題的檢查從中斷那一步接著做；整份卷的拆題、變式生成從頭再跑一次。對話框直接引用 A 的 `UNFINISHED_WORK_NOTE`（`exam_pro/scripts/desktop/lib/plan.js`），**DA-13 的逐塊檢查點（另一條分支 `dec/r7-checkpoints`）合併時，更新那一句，桌面版的對話框就跟著變**。〔2026-09-27 更新：兩條都已併入 `dec/integration-r8`，那一句已是檢查點之後的說法：拆題從中斷的那一塊重拆、變式只補還沒建成的題；上面「從頭再跑一次」是合併前的行為。〕
+  - **現在放棄**：~~後端馬上結束，**不關連線池、不寫結果**——與當機、A 的「時限到了直接結束」同一條既有的路，不記成失敗、不動重試次數；租約（`JOB_LEASE_MS`，預設 3 分鐘；在途時每 30 秒續一次，所以從放棄那一刻算起最多約 3 分鐘）到期後重新認領，馬上重開的話要先等一下。~~〔2026-09-27，`dec/r8-b1-abandon`，改成〕主行程送「現在放棄」（`{ type:'shutdown', grace_ms:0, abandon:true }`），後端走 jobRunner 的 `shutdown({ abandon: true })`：中止在途的節點（OCR 的 python 被殺、模型呼叫被中止），被放棄的**不寫結果、不記成失敗或逾時、不動重試次數**（被中止的那一次呼叫不記用量；〔審查修正 `dec/r8-b1-abandon-fix`〕同一個節點裡放棄之前已經回來的呼叫照記進 `jobs`，不寫事件），只放掉**自己的**租約，然後照常關連線池結束（通常幾秒內）。**下次開啟立刻重新認領，不必等租約。**後端在 `ABANDON_WAIT_MS`（10 秒）＋`KILL_AFTER_MS`（5 秒）內沒結束（例如同步運算卡住、收不到訊息）才強制結束，那樣就退回當機的那條路：一樣不記成失敗、不動重試次數，但要等租約到期（從放棄那一刻算起最多約 3 分鐘）。等處理完的途中從系統匣改選「現在放棄」也走同一條路（原本是直接強制結束）。重跑範圍照現行 `workers/jobRunner.js`：單題的檢查從中斷那一步接著做；整份卷的拆題、變式生成從頭再跑一次。對話框直接引用 A 的 `UNFINISHED_WORK_NOTE`（`exam_pro/scripts/desktop/lib/plan.js`），**DA-13 的逐塊檢查點（另一條分支 `dec/r7-checkpoints`）合併時，更新那一句，桌面版的對話框就跟著變**。〔2026-09-27 更新：兩條都已併入 `dec/integration-r8`，那一句已是檢查點之後的說法：拆題從中斷的那一塊重拆、變式只補還沒建成的題；上面「從頭再跑一次」是合併前的行為。〕
   - ~~設計稿 2.3 節第 4 點的 `shutdown({ abandon: true })`（abort 在途節點、立刻放掉租約，下次開啟不必等 3 分鐘）要改 `workers/jobRunner.js`，**不在這一版**：B1 的「放棄」走既有的直接結束，代價只是下次開啟要等租約到期。第 3 條第 2 項的單元與整合測試因此也還沒有。~~〔2026-09-27，`dec/r8-b1-abandon`〕已實作，見上一點與文末「B1 收尾紀錄」。
   - 〔`dec/r8-b1-abandon`〕「等處理完再結束」（6 小時）與沒有工作時的結束（最多等剛認領到的 10 秒）時限到了還有在途工作，後端也是先放棄再結束（`services/launcherControl.js`），不再直接結束、留著租約。
 - **後端異常結束**（不是桌面版要它結束的）：10 分鐘內第一次 → 通知並自動重開（畫面回到啟動畫面，換一個埠）；再一次 → 停下來，啟動畫面顯示「後端一直異常結束」與記錄檔最後幾行。視窗已經關掉（在系統匣等處理完）時不重開，直接結束並通知。
@@ -632,9 +632,9 @@ B1 刻意**不搬任何資料**：記錄檔放 `exam_pro\data\logs\`（`desktop-
 - 冒煙測試發現的兩件 Linux 專屬的事：① Linux 的 Chromium 用 locale 的編碼當檔名編碼，**C locale 下中文的下載檔名會退回「download」**（改成 UTF-8 locale 就正常）。Windows 的路徑是 UTF-16，應該不受影響〔推論〕，列在驗收第 3 步。② 在 Electron 裡載入 sharp 時，Linux 會印 `SharpElectronLinux` 警告與一串 GLib 訊息（sharp 官方說 Linux 上 Electron 自帶的函式庫可能和 sharp 不合），但產生與讀回 PNG 都正常；Windows 沒有這個問題〔推論，依 sharp 文件〕，一樣以驗收第 4 步的裁圖為準。
 
 - 〔2026-09-27，`dec/r8-b1-abandon`，B1 收尾〕放棄在途工作的測試（本分支的數字見文末「B1 收尾紀錄」）：
-  - `exam_pro/test/unit/jobRunnerAbandon.test.js`（假 db）：被中止的節點不寫事件、不經 transition、不記用量，只放自己的租約（值對得上才清）；放棄之後的節點不開始；租約被別人接手（清不到）、沒有租約憑證、續租曾中斷（lost）時不放；續租換值後用新值放；save 開始了就做完、照常寫回；拆題的退避睡眠中放棄不再重試、不 failed；放棄後 tick 不再認領。
+  - `exam_pro/test/unit/jobRunnerAbandon.test.js`（假 db）：被中止的節點不寫事件、不經 transition、不記用量，只放自己的租約（值對得上才清）；放棄之後的節點不開始；租約被別人接手（清不到）、沒有租約憑證、續租曾中斷（lost）時不放；續租換值後用新值放；save 開始了就做完、照常寫回；拆題的退避睡眠中放棄不再重試、不 failed；放棄後 tick 不再認領。〔審查修正 `dec/r8-b1-abandon-fix`〕再加 6 則：退避睡眠睡完不留東西（沒有 shutdown 時不累積）；shutdown 時 tick 正卡在 claim 的交易裡（題目層＋放棄、拆題 job＋一般關閉各一則：shutdown 先等那一輪 tick，剛認領到的列不開始、用這次的憑證放租約）；放棄之前已經回來的呼叫照記進 `jobs`、不寫事件、放棄後背景叫的不算；lost 也看系統時間（單調時鐘沒走、系統時間已過一個租約長度）；兩個時鐘都正常時不誤判。
   - `exam_pro/test/integration/jobAbandon.pg.test.js`（5433 全新 UTF8 庫）：題目層、拆題、變式各一則——放棄後沒有新的 `job_events`（沒有 timeout）、`retries` 不變、job 沒有 `failed`、`locked_until` 已清空；不動租約，另一個 runner 在原租約（60 秒、剛續過）到期之前就接手，照 DA-13 的重跑點接著做完（拆題從第 2 塊、變式只補第 2、3 題、題目層從 classify；attempt 沒有被多算）；另一則是多個後端：放棄只清自己的租約，別的 runner 手上的列不動、被別人接手的列清不到。
-  - `desktopLauncherControl`／`desktopStartServer`：`shutdown({ abandon: true })` 馬上放棄、時限到了先放棄、等處理完途中改成放棄、放棄後收不了尾才退回舊路；`close({ abandon: true })` 交給 runner。`desktop` 的 `backend.test.js`／`decisions.test.js`：「現在放棄」的訊息、等處理完途中也送放棄、`waitMs＋killAfterMs` 內沒結束才強制結束；對話框的新說法。
+  - `desktopLauncherControl`／`desktopStartServer`：`shutdown({ abandon: true })` 馬上放棄、時限到了先放棄、等處理完途中改成放棄、放棄後收不了尾才退回舊路；`close({ abandon: true })` 交給 runner。`desktop` 的 `backend.test.js`／`decisions.test.js`：「現在放棄」的訊息、等處理完途中也送放棄、`waitMs＋killAfterMs` 內沒結束才強制結束；對話框的新說法。〔審查修正 `dec/r8-b1-abandon-fix`〕`backend.test.js` 加 2 則：`host.shutdown` 的強制結束時限是 `graceMs＋abandonWaitMs＋killAfterMs`（預設 `abandonWaitMs` 10 秒），在原本的 `graceMs＋killAfterMs` 時還不強制結束。
 
 **接手時的修正（`d9aac68` 之後）**
 
@@ -674,6 +674,13 @@ B1 刻意**不搬任何資料**：記錄檔放 `exam_pro\data\logs\`（`desktop-
 10. **登出或關機**：桌面版開著時直接登出或關機，不會被它擋住。**關機被取消之後**也測一次：先開一個會問「要不要存檔」的程式、留著沒存的內容（例如 Word 新文件打幾個字；Windows 11 的新版記事本會自動保留內容，不一定擋得住），讓拆題在跑，然後選關機；出現「這些應用程式正在阻止關機」時按「取消」（沒有出現這個畫面就改用別的程式再試，這一步的重點是「關機被取消」）。回到桌面後按桌面版右上角的 X：要縮到系統匣並跳「出題系統仍在背景處理」，**不能**直接結束（記錄檔有「Windows 詢問要不要登出或關機」那一行，後面接的是「關視窗：{"action":"hide"…}」）。
 11. **記錄檔**：系統匣「開啟記錄檔資料夾」打得開，裡面有 `desktop-日期.log`、`desktop-server-日期.log`。
 12. **錄製中**：`record_local.bat` 在跑時開桌面版，照 A 的 `jobsWhileRecording` 設定（DL-4＝2 的預設改成 `pause` 之後）暫停背景工作，啟動畫面有對應的注意事項。
+13. **〔要實測〕多個後端同時開著時放棄**（〔審查修正 `dec/r8-b1-abandon-fix`〕；雲端只用兩個 runner 連同一個測試庫驗過「只放自己的租約」，沒有在 Windows 上讓兩個真的後端同時跑過）：先在 `exam_pro` 執行 `npm start`（網頁版），再開桌面版（啟動畫面有第 7 步那一條注意事項，照常進入）。在桌面版上傳**兩份**卷（或一份卷＋一組變式），等兩邊都在做事：網頁版的命令提示字元視窗與桌面版的 `desktop-server-日期.log` 各自出現不同 `job_id` 的拆題／檢查紀錄（本機模式每個後端一次只做一件；兩份沒有分到兩邊的話，再多上傳一份）。記下兩邊各在做哪一個 `job_id`，然後在桌面版從系統匣選「結束 → 現在放棄」：
+    - 桌面版幾秒內結束，`desktop-server-日期.log` 有「放棄在途工作……已放掉自己的租約」。
+    - **網頁版手上的那一份不受影響**：網頁版視窗裡沒有「放棄在途工作」；那一份的進度照常往前（任務頁的進度不倒退、不從頭來），複核頁沒有多出逾時紀錄，job 沒有變 `failed`。
+    - 桌面版放掉的那一份：網頁版做完手上的工作後（或重開桌面版時）馬上就被接手，不必等約 3 分鐘。
+    - 網頁版還在做的時候重開桌面版：`desktop-server-日期.log` 裡**沒有**網頁版手上那個 `job_id` 的紀錄（同一份不會被兩邊同時做），直到網頁版做完。
+    任何一點不符，留下網頁版視窗的輸出與兩份桌面版記錄檔。
+14. **〔要實測〕桌面啟動器 A 的「否」到時限後，重開立刻接手**（〔審查修正 `dec/r8-b1-abandon-fix`〕；這是 `dec/r8-b1-abandon` 的**行為變更**，`docs/desktop-launcher.md` 第 4 節）：先把桌面版結束，用 A 的「出題系統」圖示開，上傳一份卷，在拆題途中（OCR 或模型正在跑的時候）點「關閉出題系統」→ 選「否」。約 2 分鐘後跳「出題系統已關閉」；`exam_pro\data\logs\server-日期.log` 最後有「[launcher] 放棄在途工作：1 件被中止（不寫結果、不動重試次數），其中 1 件已放掉租約、下次開機立刻重新接手」與「後端已關閉」。**馬上**再點「出題系統」：那份卷在幾秒內就從沒拆完的那一塊接著拆（原本要等約 3 分鐘租約到期）；複核頁沒有多出逾時紀錄、job 沒有變 `failed`。再在**單題的步驟**執行中（分類、驗算等）測一次「否」：重開後那一題馬上從同一步重跑。重開後過了約 30 秒還沒接著做的話，留下最新的 `launcher-日期.log` 與 `server-日期.log`（記錄檔若有「還有 N 件在 10 秒內沒有收尾」，就是放棄後有工作單位沒收尾、退回了「直接結束、等租約到期」）。
 
 更新方式（DA-6＝1，U1）：`git pull` 之後，`exam_pro\package-lock.json` 有變就在 `exam_pro` 執行 `npm ci`；`desktop\package-lock.json` 有變就雙擊 `install_desktop_app.bat --reinstall`（命令提示字元裡加參數；桌面版要先從系統匣結束，否則 `electron.exe` 被鎖住、安裝會失敗）。
 
@@ -779,7 +786,7 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 | R-14 | 網頁版和桌面版同時開、連同一個庫，runner 會加倍 | 低、中 | 2.8 節的偵測與警告：看 `pg_stat_activity` 的 `application_name`（第 3 條第 35 項），不看租約（當機後 180 秒內重開會誤判） | B1 驗收第 6 點 |
 | R-15 | 開機時 Ollama 還沒起來，app 先打開 | 中、低 | 健康檢查每 5 秒重試一次、最多 60 秒；逾時只警告，不影響題庫和組卷 | B1 驗收 |
 | R-16 | 我查不到、不確定的事 | — | 列在這裡，實作時逐項確認 | 見第 9 條最後的「查不到或不確定的事」 |
-| R-17 | 「關閉時中止在途節點」被記成逾時，吃掉重試次數（2.3 節第 3 點） | 高（照直覺寫就會踩到）、高：題目被送進人工複核，拆題中的整份卷可能直接 `failed`，事件表多出假逾時 | 2.3 節第 4 點的 `abandon` 路徑；單元與整合測試釘住（6.2 節），題目層、拆題迴圈、變式生成三條路都要測。〔2026-09-27，`dec/r8-b1-abandon`〕已實作並測過（`jobRunnerAbandon`、`jobAbandon.pg`） | B1 自動化驗收（雲端已過）；Windows 上的實際放棄見 6.2 節驗收第 5、6 步 |
+| R-17 | 「關閉時中止在途節點」被記成逾時，吃掉重試次數（2.3 節第 3 點） | 高（照直覺寫就會踩到）、高：題目被送進人工複核，拆題中的整份卷可能直接 `failed`，事件表多出假逾時 | 2.3 節第 4 點的 `abandon` 路徑；單元與整合測試釘住（6.2 節），題目層、拆題迴圈、變式生成三條路都要測。〔2026-09-27，`dec/r8-b1-abandon`〕已實作並測過（`jobRunnerAbandon`、`jobAbandon.pg`） | B1 自動化驗收（雲端已過）；Windows 上的實際放棄見 6.2 節驗收第 5、6 步，以及〔`dec/r8-b1-abandon-fix`〕第 13 步（多個後端）、第 14 步（A 的「否」） |
 | R-18 | A 和 B 都改 `server.js`、`app.js`，而且 A 的 `d730422` 還沒審查 | 中、低：合併衝突與重工 | 先合併 A，B1 在它上面改（6.1 節） | B1 開工時核對 A 的最終版本 |
 | R-19 | D2 之後舊的 Docker 正式庫被 `docker compose up` 帶起來。`record_local.bat`、`啟動資料庫.bat`、A 或 app 代開 Docker 的邏輯都會跑它：app 開著時錄製失敗；app 沒開時舊庫在 5442 復活，網頁版、維護工具、migrate 都寫進舊庫，形成兩份分歧的正式庫；`backup.js` 的 docker 模式還會把舊庫備份下來並記成 OK | 高（每次錄製都會跑 `db:up`）、高 | 第 3 條第 23 項（profile 加上 `COMPOSE_PROFILES`）；第 19 項（備份前比對 `system_identifier`）；第 24 項（`啟動資料庫.bat` 不再 migrate 正式庫）；2.5 節的埠判斷（遇到不是自己的叢集就報錯、不沿用） | D2 驗收第 5 點 |
 | R-20 | 放棄或中斷之後，拆題從第 1 塊整份重拆、變式從第 1 題重來（2.3 節第 4 點） | 中、中：本機模式可能白費一小時以上；重拆出不同編號時可能多出重複的題目列 | DA-13 的逐塊檢查點；DA-2 讓「放棄」一定要先問（兩題都定案：DA-13 選 2、DA-2 選 3）。〔2026-09-27〕兩者都已實作並併入 `dec/integration-r8`：拆題最多白費被中斷的那一塊，變式只補還沒建成的題 | B1 驗收第 4 點 |
@@ -1342,10 +1349,31 @@ Owner 2026-09-27 在第六輪決策單答了本文件的 DA-1～DA-14（與 `doc
 1. **只放自己的租約**（任務要求：網頁版 `npm start` 同時開著時不能放掉別人的租約）。`locked_until` 沒有「是誰的」欄位，不加 migration 的前提下用「值」當憑證：認領與續租都用 `RETURNING locked_until::text` 記下自己寫的值（文字形式含微秒與時區，比 JS 的 `Date` 精確），放租約時 `WHERE id = $1 AND locked_until = $2::timestamptz`。別的後端接手後寫的值不同，清不到。剩一個洞：自己的續租（`WHERE locked_until IS NOT NULL`，本來就不看是誰的）在租約中斷、被別人接手之後又把值蓋成自己的——所以相鄰兩次成功寫入租約之間隔了超過一個租約長度，就標成 lost、不放。續租本身的行為沒有改（只多回傳一欄；上一次續租還沒回來時不疊一次）。
 2. **放棄之前就回來的結果照常寫回**。只有「在放棄時還在跑」的節點算被放棄；已經回來的是真的結果（例如拆完一塊正在裁圖、寫檢查點），照常寫完，迴圈在下一塊之前停。這樣最多白費的是被中止的那一步，不會把剛做完的也丟掉。
 3. **save 不中止**：它開交易寫 `questions`，幾毫秒就完成；中途放租約的話，交易可能在背景提交、狀態卻沒寫回，重跑就會再入庫一次。所以 save 一旦開始就讓它做完、照常寫回；還沒開始的 save 在放棄後不會開始。
-4. **不記用量**：被中止的那一次呼叫（Gemini 可能已經計費）和當機一樣不記進 `jobs.cost_usd`／`job_events`。
+4. **不記用量**：被中止的那一次呼叫（Gemini 可能已經計費）和當機一樣不記進 `jobs.cost_usd`／`job_events`。〔審查修正 `dec/r8-b1-abandon-fix`〕這一點原本講小了：實作是**整個節點**的用量都不記，同一個節點裡放棄之前已經回來的呼叫也丟掉。現在改成那些照記進 `jobs`（`chargeAbandoned`），不寫 `job_events`；每日預算（加總 `job_events`）因此仍不含這一段。
 5. **時限到了也放棄**（A 的「否＝最多等 2 分鐘」、桌面版 6 小時的「等處理完」與沒工作時的 10 秒）：原本是直接結束、下次開機要等租約。改成同一條放棄的路，行為變更寫在 `docs/desktop-launcher.md` 第 4 節與 7.3。A 的關閉捷徑（`stop.js`）與 HTTP 通道的形狀都沒改。
 6. **沒做的**：Windows 登出或關機（`session-end`）仍是直接強制結束後端（與當機同一條路，租約要等到期）——Windows 給應用程式結束的時間很短，送訊息等後端收尾不一定來得及〔推論〕，這次不改；`node workers/jobRunner.js` 單獨跑時的 Ctrl+C 也照舊（`stop()` 後直接結束）。
 
-**雲端驗了什麼**：見 6.2 節「自動化驗收」的 `dec/r8-b1-abandon` 那一點，數字在本分支的 commit 訊息。Windows 上要確認的（OCR 的 python 真的被中止、Ollama 那一端、重開後幾秒內接手、`electron.exe`／`node.exe`／`python.exe` 沒有殘留）在 6.2 節驗收第 5、6 步。
+**雲端驗了什麼**：見 6.2 節「自動化驗收」的 `dec/r8-b1-abandon` 那一點，數字在本分支的 commit 訊息。Windows 上要確認的（OCR 的 python 真的被中止、Ollama 那一端、重開後幾秒內接手、`electron.exe`／`node.exe`／`python.exe` 沒有殘留）在 6.2 節驗收第 5、6 步。〔審查修正 `dec/r8-b1-abandon-fix`〕原本只寫在實作回報裡、沒進文件的兩項也補成驗收步驟：網頁版與桌面版同時開、兩邊都有工作時在桌面版「現在放棄」，網頁版手上的工作不能被中斷（第 13 步）；A 的「否」到時限後重開立刻接手（第 14 步，行為變更）。
 
 **replay miss 的訊息**（同一條分支的另一件小事）：`LLM_MODE=replay` 找不到 cassette 時原本叫人「請在本機執行 npm run eval:record -- --suite <suite>」，但 `eval:record` 只錄向量，本機模式的重錄也要在 Owner 的電腦用 `record_local.bat`／`npm run cassettes:rerecord`（`docs/local-mode.md` 10.21）。改成依模式寫（`services/llm/fake.js` 的 `replayMissMessage`，OCR 的回放 miss 共用）；前綴與比對方式不變，`eval/lib/replayMiss.js` 新舊兩種標記都認；cassette 鍵與回放行為沒動。字句見 `docs/interfaces-stage2.md` 第 5.2 條。
+
+---
+
+## 審查修正紀錄（2026-09-28，`dec/r8-b1-abandon-fix`）
+
+審查的對象是 `9f272a0`（`dec/r8-b1-abandon`，相對 `dec/integration-r8` 的 `9d27210`），結論是「通過（可進 r9），附 6 項低嚴重度的小問題」。每一條都先回到程式查證（能量的就量），屬實才改：
+
+| # | 嚴重度 | 審查意見 | 查證結果 | 怎麼改 |
+|---|---|---|---|---|
+| 1 | 低 | 網頁版不是逐位元照舊：`pause()` 每次 `Promise.race([sleep, abandonSignal])`，`abandonSignal` 沒有 shutdown 時永遠不 settle，每次退避都在它身上留一個 reaction；檔頭「沒有呼叫 shutdown 時行為不變」嚴格說不成立；續租多了「上一次還沒回來就跳過」 | 屬實。用同一個 runner、沒有 shutdown 跑 9 萬次退避（`runExtractJob` 連續供應商錯誤）量 heap：改之前多 27 MB（每次約 315 位元組），改之後 0.27 MB（每次約 3 位元組，量測雜訊）。續租的差異也屬實 | `pause` 改成每次自己登記一個喚醒函式、睡完（或被叫醒）就移除，放棄時逐一叫醒（`jobRunner.js` 的 `pauseWakers`），runner 多一個 `pausing` 讀值（測試與診斷用）。檔頭改成逐項列出與之前的差別：認領與續租多回傳一欄、續租不疊、退避改走 `pause`。續租不疊**保留**：兩句續租走不同連線時，最後留在列上的是哪一句寫的值無法確定，疊了之後放租約會對不上；只有資料庫卡住超過續租間隔（30 秒）時才會跳過一次。單元 1 則（睡的當下只有自己、睡完歸零） |
+| 2 | 低 | 放棄和正在跑的 tick 之間的窄競態：tick 卡在 claim 的交易裡時 `shutdown` 先以 `left=0` 回傳、連線池被關，之後那一列才 spawn，放租約失敗、要等 `JOB_LEASE_MS` | 屬實：`tick` 的迴圈只在開頭看 `abandoning`，`claim` 回來就 spawn；`waitIdle` 在在途數是 0 時立刻回 | `jobRunner.js` 加 `closing`（呼叫過 `shutdown` 就標記，不論有沒有 `abandon`）與 `currentTick`：`shutdown` 在 `waitMs > 0` 時先等正在跑的那一輪 tick（算在 `waitMs` 裡）再等在途的工作單位；`tick` 每一次 `claim` 回來都再看 `closing`，是的話用這一次的租約憑證放掉租約、不 spawn（`returnClaim`）；`closing` 之後不開新的一輪。所以 `shutdown` 回傳之後在途數不會再變多。測試：單元 2 則（題目層＋放棄、拆題 job＋一般關閉）、整合 1 則（`jobAbandon.pg.test.js` ⑤，真的 PostgreSQL）；換回改之前的 `jobRunner.js`，這 3 則都會紅。**沒改的**：`services/launcherControl.js` 在時限內在途就歸零時（`left=0`）不呼叫 `runner.shutdown`、直接關連線池，那條路本來就有同樣的窄競態（A 合併時就有；`settleMs` 300 毫秒擋掉大部分）；要改得在 A 與桌面版的一般關閉多一步、改既有測試的事件順序，這次不動，最壞仍是那一列等租約到期 |
+| 3 | 低 | 兩項雲端驗不到的步驟只寫在實作回報的 ownerSteps，沒進文件 | 屬實 | 6.2 節驗收加第 13 步（網頁版與桌面版同時開、兩邊都有工作時在桌面版「現在放棄」，網頁版手上的工作不受影響）、第 14 步（A 的「否」到時限後重開立刻接手，行為變更），都標〔要實測〕；`docs/desktop-launcher.md` 第 4 節與 7.3 指向第 14 步；「B1 收尾紀錄」與 R-17 跟著改 |
+| 4 | 低 | 主行程的強制結束時限在 graceful、wait 兩種模式沒把放棄的時間算進去（`graceMs＋KILL_AFTER_MS`），放棄只剩約 5 秒 | 屬實：後端等到 `graceMs` 用完才開始放棄（最多 `ABANDON_WAIT_MS` 10 秒），再最多 5 秒關連線池 | `desktop/lib/backendHost.js` 的 `shutdown` 多一個 `abandonWaitMs`（預設 10 秒，與 `abandon()` 的 `waitMs` 相同），時限＝`graceMs＋abandonWaitMs＋killAfterMs`；`main.js` 兩處傳 `D.ABANDON_WAIT_MS`。`desktop/test/backend.test.js` 加 2 則（時限是 10＋10＋5 秒；在原本的 `graceMs＋killAfterMs` 時還不強制結束），原本那一則的參數跟著多給 `abandonWaitMs`。A 不受影響：它判斷「上一個後端還在等」的時限是 `graceMs`＋60 秒（`scripts/desktop/lib/actions.js` 的 `drainingFrom`），也不會強制結束後端 |
+| 5 | 低 | 「被放棄的那一次模型呼叫不記用量」講小了：`invokeNode` 在 abandoned 時整個節點的 meter 都丟掉 | 屬實（本機 cross 模式的 extract、Gemini 模式的 verify 一個節點會叫好幾次） | 照審查的精確做法：`invokeNode` 放棄時回 meter 在放棄那一刻的快照，三種工作單位看到 `abandoned` 就 `chargeAbandoned`：放棄之前已經回來的呼叫記進 `jobs` 的 token 與 `cost_usd`（每份 job 的預算因此是準的），**不寫 `job_events`**；放棄之後 agent 不理 signal、在背景叫的不算。每日預算（`DAILY_COST_BUDGET_USD`）加總的是 `job_events`，所以不含這一段；被中止的那一次呼叫沒有回來，無從記起（Gemini 那一次可能已經計費）。2.3 節第 4 點③、6.2 節、「B1 收尾紀錄」第 4 點照這個改。單元 1 則 |
+| 6 | nit | ① Gemini 模式的 miss 訊息叫人跑 `cassettes:rerecord`，但 `rerecord_all.js` 一律照 ci.yml 的模型錄；② lost 判斷用 `performance.now()`，系統睡眠可能不算進去〔推論〕 | ① 屬實（`eval/tools/rerecord_all.js` 檔頭：`.env` 的 `MODEL_*` 不帶進去）。② Linux 的 `CLOCK_MONOTONIC` 不含睡眠屬實；Windows 上 `performance.now()`（QueryPerformanceCounter）算不算睡眠時間我也沒有查證 | ① 訊息改成「……重錄（ci.yml 的模型要是 Gemini；要 GEMINI_API_KEY，會產生費用）」，前綴、比對標記、cassette 鍵都沒動；`llmGenerateJson.test.js`、`replayMiss.test.js` 釘住整句的兩處跟著新字句改（不是放寬）；`docs/interfaces-stage2.md` 5.2、`docs/llm.md` 跟著改。② 不只標〔推論〕：「兩次成功寫入租約之間隔多久」改成單調時鐘與系統時間（`Date.now()`，含睡眠）取大的（`leaseGapMs`），睡眠超過一個租約長度一定判成 lost；最壞是系統時間被校時往前調時誤判成 lost，只會少放一次租約、退回等到期，不會放掉別人的。檔頭標〔推論〕。單元 2 則（只有系統時間過了一個租約長度 → lost；兩個時鐘都正常 → 不誤判） |
+
+**沒有做過頭**：模板、schema、prompt、`cacheKeyParts`、golden、既有 cassette、`eval/thresholds.json` 都沒改；沒有新的環境變數或設定。網頁版（`npm start`）不呼叫 `shutdown`，功能上與改之前相同（差別見第 1 條，已寫進 `jobRunner.js` 檔頭）。A 的行為只在「時限到了、放棄的那一刻 tick 正在認領」這個窄競態上變好（剛認領到的列放掉租約，而不是在連線池關掉後才開始、失敗）。
+
+**雲端驗了什麼**（本分支）：`exam_pro` 的 `npm test` 4,175 則（4,172 過、3 略過；比 `9f272a0` 多 6 則）；`check:html` 通過；5433 全新 UTF8 庫上 integration 646/646（多 1 則），`jobAbandon.pg.test.js` 連跑 5 次都 5/5；e2e 9 過、3 紅、2 略過——另用一個全新庫在 `9d27210` 跑 e2e，是同樣的 3 紅（`extract_ocr` 缺回放檔），沒有新增紅燈；`desktop` 的 `npm test` 126/126（多 2 則）；xvfb 冒煙測試 55/55。第 2、5、6 條的新測試另外拿改之前的 `jobRunner.js` 跑過一次，確認會紅（「兩個時鐘都正常時不誤判」是防誤判的對照，改之前也會過）；第 1 條那一則在改之前會紅只是因為沒有 `pausing` 讀值，記憶體的差別以上表的 heap 量測為準；第 4 條的 2 則拿改之前的時限算法跑過一次，確認會紅。
+
+**Windows 上要確認的**：6.2 節驗收第 5、6 步（原本就有）與第 13、14 步（這次補的），都標〔要實測〕。

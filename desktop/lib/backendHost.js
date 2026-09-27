@@ -193,11 +193,15 @@ function createBackendHost({ fork, entryPath, cwd, serviceName = 'TutorExamBank 
     }
 
     /**
-     * 優雅關閉：送 shutdown，最多等 graceMs＋killAfterMs，還沒結束就強制結束。
+     * 優雅關閉：送 shutdown，最多等 graceMs＋abandonWaitMs＋killAfterMs，還沒結束就強制結束。
+     * 〔審查 dec/r8-b1-abandon-fix〕後端在 graceMs 到了還有在途工作時會先放棄（services/launcherControl.js：最多 ABANDON_WAIT_MS
+     * 等工作單位收尾，再最多 5 秒關連線池），所以強制結束的時限要把 abandonWaitMs 算進去；原本只有 graceMs＋killAfterMs，
+     * 放棄只剩約 5 秒可用，超過就被強制結束、退回等租約到期。
      * 還沒聽到埠（沒有任何工作可等）時直接強制結束。
-     * @param {{graceMs:number, killAfterMs?:number}} o
+     * @param {{graceMs:number, abandonWaitMs?:number, killAfterMs?:number}} o
+     *        abandonWaitMs 與後端的 ABANDON_WAIT_MS（services/launcherControl.js；desktop/lib/decisions.js 同名常數）相同
      */
-    async function shutdown({ graceMs, killAfterMs = 5000 }) {
+    async function shutdown({ graceMs, abandonWaitMs = 10_000, killAfterMs = 5000 }) {
         if (!child || exited) return exited ? { ...exited } : { code: null, expected: true };
         stopRequested = true;
         if (!ready) { kill(); return waitExit(); }
@@ -205,10 +209,11 @@ function createBackendHost({ fork, entryPath, cwd, serviceName = 'TutorExamBank 
             shutdownGraceMs = graceMs;
             try { child.postMessage({ type: TYPES.SHUTDOWN, grace_ms: graceMs }); } catch (_) { kill(); }
         }
+        const limitMs = graceMs + abandonWaitMs + killAfterMs;
         const timer = timers.setTimeout(() => {
-            log(`後端在 ${Math.round((graceMs + killAfterMs) / 1000)} 秒內沒有結束，強制結束`);
+            log(`後端在 ${Math.round(limitMs / 1000)} 秒內沒有結束（時限 ${Math.round(graceMs / 1000)} 秒＋放棄在途工作 ${Math.round(abandonWaitMs / 1000)} 秒＋${Math.round(killAfterMs / 1000)} 秒），強制結束`);
             kill();
-        }, graceMs + killAfterMs);
+        }, limitMs);
         try {
             return await waitExit();
         } finally {

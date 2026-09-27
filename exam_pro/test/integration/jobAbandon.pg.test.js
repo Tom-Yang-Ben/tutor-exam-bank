@@ -14,6 +14,8 @@
 // ④ 多個後端（桌面版與網頁版 npm start 同時開著）：放棄只放自己的租約——別的 runner 手上的列不動；
 //   自己手上的列若已被別人接手（租約的值不是自己寫的），也清不到。
 // 續租間隔設得很短（100 毫秒），放棄前已經續過幾次：放租約用的是最後一次續租寫的值（租約憑證跟著換）。
+// ⑤〔審查 dec/r8-b1-abandon-fix〕shutdown 時 tick 正卡在認領的交易裡：shutdown 先等那一輪 tick，剛認領到的 job 不開始、
+//   用這次的憑證放掉租約（原本會在 shutdown 回傳、連線池關掉之後才開始，租約要等到期）。
 //
 // 防線與 extractCheckpoints.pg.test.js 相同：只讀 TEST_DATABASE_URL、庫名必須 _test 結尾。
 // ─────────────────────────────────────────────────────────────
@@ -445,6 +447,70 @@ function runSuite() {
             assert.equal(ev[0].n, 0, '三個 runner 放棄的都沒有寫事件');
             const { rows: rt } = await query('SELECT DISTINCT retries::text AS r FROM job_questions WHERE job_id = $1', [job.id]);
             assert.deepEqual(rt.map(x => x.r), ['{}'], 'retries 都沒動');
+        });
+
+        // ───────────────────────── ⑤ shutdown 時 tick 正在認領 ─────────────────────────
+        // 〔審查 dec/r8-b1-abandon-fix〕原本 shutdown 不等正在跑的 tick：tick 卡在 claim 的交易裡時 shutdown 先回 left=0，
+        // launcherControl 接著關連線池；之後那一列才被 spawn，放租約時連線池已關，要等 JOB_LEASE_MS 才會被重新認領。
+        test('⑤ shutdown 時 tick 正卡在認領的交易裡：shutdown 先等它；剛認領到的 job 不開始、用這次的憑證放掉租約，馬上認領得到', async () => {
+            const { rows: [job] } = await query(
+                `INSERT INTO jobs (kind, pdf_sha256, state, budget_usd, page_count) VALUES ('pdf', $1, 'queued', 0.5, 1) RETURNING id`,
+                [crypto.randomBytes(32).toString('hex')]);
+            jobIds.push(job.id);
+            // 認領用的連線：SELECT … FOR UPDATE SKIP LOCKED 拿到列（已經鎖住）之後先卡在 gate，放行後才照常 UPDATE、COMMIT
+            let openGate;
+            const gate = new Promise(res => { openGate = res; });
+            let held = 0;
+            const gatedPool = {
+                async connect() {
+                    const client = await pool.connect();
+                    return {
+                        async query(text, params) {
+                            const res = await client.query(text, params);
+                            if (/FOR UPDATE SKIP LOCKED/.test(text) && res.rows.length > 0) { held += 1; await gate; }
+                            return res;
+                        },
+                        release: (...args) => client.release(...args)
+                    };
+                }
+            };
+            const a = capture();
+            const A = createRunner({
+                db: { pool: gatedPool, query }, llm: {}, agentsDir: FAKE_AGENTS_DIR, logger: a.logger,
+                sleep: async () => { }, estimateCost: () => ({ cost_usd: 0, cost_estimated: false }),
+                config: { nodeTimeoutMs: 600000, renewIntervalMs: 100, leaseMs: 60000, concurrency: 1 }
+            });
+            const t = A.tick();
+            let r;
+            try {
+                await waitFor(async () => held === 1);
+                let done = false;
+                const s = A.shutdown({ abandon: true, waitMs: 5000 }).then(v => { done = true; return v; });
+                await sleep(50);
+                assert.equal(done, false, 'shutdown 要先等正在認領的那一輪 tick');
+                openGate();
+                r = await s;
+            } finally {
+                // 斷言失敗時也要放行：認領的交易握著列鎖，不放行的話 after() 的 TRUNCATE 會一直等
+                openGate();
+                await t;
+                while (A.inFlight > 0) await sleep(10);
+            }
+            assert.deepEqual(r, { left: 0, abandoned: 0, released: 0, kept: 0 }, '沒有工作單位開始，也就沒有被放棄的');
+            assert.equal(A.inFlight, 0);
+            const { rows: [j] } = await query('SELECT state, locked_until, error FROM jobs WHERE id = $1', [job.id]);
+            assert.deepEqual(j, { state: 'extracting', locked_until: null, error: null },
+                '認領時已改成 extracting（與當機後的樣子相同）；租約用這次的憑證放掉了');
+            const { rows: ev } = await query('SELECT COUNT(*)::int AS n FROM job_events WHERE job_id = $1', [job.id]);
+            assert.equal(ev[0].n, 0, '拆題沒有開始，沒有任何事件');
+            const w = a.warns.find(x => /關閉中：剛認領到的工作不開始/.test(x.msg));
+            assert.ok(w, JSON.stringify(a.warns));
+            assert.deepEqual([w.unit, w.id, w.lease], ['extract', job.id, 'released']);
+            // 認領條件（jobRunner 的 claim）現在就對得上：不必等 60 秒的租約
+            const { rows: claimable } = await query(
+                `SELECT id FROM jobs WHERE id = $1 AND kind = 'pdf' AND state IN ('queued','extracting')
+                   AND (locked_until IS NULL OR locked_until < now())`, [job.id]);
+            assert.equal(claimable.length, 1);
         });
     });
 }

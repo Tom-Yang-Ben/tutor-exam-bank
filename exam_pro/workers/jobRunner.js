@@ -46,7 +46,7 @@
 //
 // 〔dec/r8-b1-abandon，設計稿 docs/desktop-app-design.md 2.3 節第 4 點、第 3 條第 2 項〕shutdown({ abandon: true })：
 // 桌面版從系統匣選「現在放棄」、或關閉的時限到了還有在途工作時用。先停止認領，再中止在途的節點（AbortController；
-// OCR 的 python 會被殺掉），被放棄的工作單位**不寫 outcome、不動 retries、不寫 job_events、不記用量、迴圈不重試**，
+// OCR 的 python 會被殺掉），被放棄的工作單位**不寫 outcome、不動 retries、不寫 job_events、迴圈不重試**（被中止的那一次呼叫不記用量），
 // 只放掉**自己的**租約（UPDATE … WHERE locked_until = 自己最後寫的值），下次開啟立刻被重新認領，不必等 JOB_LEASE_MS。
 // 陷阱（2.3 節第 3 點）：一般的 abort 會被 classifyError 歸成 timeout、寫進事件表並累加重試次數，拆題迴圈還會立刻重試；
 // 所以 invokeNode 另外記「這一次是被放棄的」，回 { abandoned: true }，三種工作單位看到就只放租約、直接結束。
@@ -55,7 +55,20 @@
 // （它開交易寫題庫，只要幾毫秒；中途放掉租約會讓重跑再入庫一次）。
 // 多個後端同時連同一個庫（桌面版與網頁版 npm start 都開著）時不會放掉別人的租約：只清值等於自己認領／續租時寫的那一個，
 // 而且續租曾經中斷超過一個租約長度（可能已被別人接手、又被自己的續租蓋過）就不放，留給租約到期（leaseLost）。
-// 沒有呼叫 shutdown 時（npm start、npm run dev、node workers/jobRunner.js）行為不變。
+// 「中斷多久」同時用單調時鐘（performance.now）與系統時間（Date.now）量、取大的：〔推論〕Linux 的單調時鐘（CLOCK_MONOTONIC）
+// 不含系統睡眠的時間，Windows 上 performance.now（QueryPerformanceCounter）算不算睡眠時間沒有查證；系統時間含睡眠，
+// 但可能被校時往前調。兩者取大，筆電睡眠超過一個租約長度時一定判成 lost（最壞是誤判：不放租約、退回等到期，不會放掉別人的）。
+// 〔審查 dec/r8-b1-abandon-fix〕shutdown 開始時 tick 可能正卡在 claim 的交易裡：shutdown 先等那一輪 tick 結束（最多 waitMs），
+// tick 看到「正在關閉」就不開始剛認領到的那一列、用這一次的租約憑證把租約放掉（returnClaim），所以 shutdown 回傳之後
+// 在途數不會再變多（呼叫的人接著就關連線池）。被放棄的節點裡，放棄之前就已經回來的模型呼叫照記進 jobs 的 token 與 cost_usd
+// （chargeAbandoned）；不寫 job_events，所以每日預算（加總 job_events）不含這一段，被中止的那一次呼叫本身沒回來、無從記起。
+// 沒有呼叫 shutdown 時（npm start、npm run dev、node workers/jobRunner.js）功能上與 dec/r8-b1-abandon 之前相同；實作上的差別
+// （〔審查 dec/r8-b1-abandon-fix〕原本檔頭寫「行為不變」，嚴格說不成立，逐項列出）：
+//   ① 認領與續租的 UPDATE 多回傳一欄（租約憑證），多記兩個時間戳；
+//   ② 續租：上一次續租還沒回來時不再疊一次（放租約時值才對得上；續租間隔 30 秒，只有資料庫卡住超過 30 秒時才會跳過一次）；
+//   ③ 退避睡眠改走 pause，沒有放棄時等同 sleep(ms)：每次自己登記一個喚醒函式、睡完就移除。〔審查 dec/r8-b1-abandon-fix〕
+//      dec/r8-b1-abandon 原本讓每次退避 race 一個常駐的 promise，沒有 shutdown 時那個 promise 永遠不 settle，每次退避都在它身上
+//      留下一個永遠不釋放的 reaction（每次約 300 位元組），長時間開著的伺服器記憶體會緩慢增加；現在不會。
 // ─────────────────────────────────────────────────────────────
 const fs = require('fs');
 const path = require('path');
@@ -118,6 +131,17 @@ const ABANDON_REASON = '放棄在途工作（shutdown({ abandon: true })）';
 /** 單調時鐘（毫秒）：租約是否一直握在手上用它量（系統時間被調整也不受影響） */
 function monoNow() {
     return performance.now();
+}
+
+/**
+ * 〔審查 dec/r8-b1-abandon-fix〕相鄰兩次成功寫入租約之間隔了多久：單調時鐘與系統時間取大的（見檔頭：單調時鐘可能不含系統睡眠）。
+ * 沒有記下系統時間（舊的憑證、測試自己組的）時只看單調時鐘，與原本相同。
+ * @param {{okSentAt:number|null, okSentWall?:number|null}} lease
+ */
+function leaseGapMs(lease) {
+    const mono = lease.okSentAt !== null && lease.okSentAt !== undefined ? monoNow() - lease.okSentAt : 0;
+    const wall = Number.isFinite(lease.okSentWall) ? Date.now() - lease.okSentWall : 0;
+    return Math.max(mono, wall);
 }
 
 // ─────────────────────────── 純函式（可單元測試，不連 DB）───────────────────────────
@@ -778,7 +802,7 @@ function makeLogger(sink = console) {
  *        預設查 config/pricing.js（WS-B）；整合測試塞一個假的才測得到預算累加
  * @param {(questionId:number)=>Promise<object>} [opts.kcTagger]
  *        〔stage5 WS-C〕入庫後的知識點標註；預設 services/kcTagService.tagQuestion（FEATURE_KC_TAGGING 開啟才會被呼叫）
- * @returns {{tick, start, stop, shutdown, runJobQuestion, runExtractJob, runGenerateJob, config, inFlight:number, abandoning:boolean}}
+ * @returns {{tick, start, stop, shutdown, runJobQuestion, runExtractJob, runGenerateJob, config, inFlight:number, abandoning:boolean, pausing:number}}
  *          shutdown（〔dec/r8-b1-abandon〕）見檔頭與下方 shutdown() 的說明
  */
 function createRunner(opts = {}) {
@@ -829,11 +853,18 @@ function createRunner(opts = {}) {
     let truncatedSchemaWarned = false;
     // 〔dec/r8-b1-abandon〕放棄在途工作（shutdown({ abandon: true })）
     let abandoning = false;
+    /** 〔審查 dec/r8-b1-abandon-fix〕呼叫過 shutdown（不論有沒有 abandon）：tick 不再認領，正在認領的那一列不開始、放掉租約 */
+    let closing = false;
+    /** 〔審查 dec/r8-b1-abandon-fix〕正在跑的那一輪 tick（結束時 resolve）；shutdown 要先等它，見 returnClaim */
+    let currentTick = null;
     /** 執行中、可以中止的節點（invokeNode 登記；save 一旦開始就不在這裡） */
     const activeNodes = new Set();
-    let wakeAbandon = () => { };
-    /** 放棄時 resolve：退避睡眠一起醒來（pause） */
-    const abandonSignal = new Promise(resolve => { wakeAbandon = resolve; });
+    /**
+     * 〔審查 dec/r8-b1-abandon-fix〕正在退避睡眠的喚醒函式（pause 登記、睡完自己移除）；放棄時逐一叫醒。
+     * 原本是讓每次退避 race 一個 runner 存活期間都在的 promise，沒有 shutdown 時那個 promise 永遠不 settle，
+     * 每次退避都在它身上多掛一個 reaction、永遠不釋放。
+     */
+    const pauseWakers = new Set();
     /** inFlight 歸零時要叫醒的人（shutdown 等在途工作單位收尾） */
     const idleWaiters = new Set();
     const abandonStats = { units: 0, released: 0, kept: 0 };
@@ -962,7 +993,7 @@ function createRunner(opts = {}) {
                   ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED`, params);
             if (rows.length === 0) { await client.query('COMMIT'); return null; }
             const id = rows[0].id;
-            const sentAt = monoNow();
+            const sent = { mono: monoNow(), wall: Date.now() };
             const upd = await client.query(
                 `UPDATE ${table} SET locked_until = now() + ($1 || ' milliseconds')::interval,
                         updated_at = now()${extraSet} WHERE id = $2
@@ -970,7 +1001,7 @@ function createRunner(opts = {}) {
                 [String(config.leaseMs), id]);
             await client.query('COMMIT');
             const until = upd && Array.isArray(upd.rows) && upd.rows[0] ? upd.rows[0].lease_until : null;
-            return { id, lease: newLease(table, id, until, sentAt) };
+            return { id, lease: newLease(table, id, until, sent) };
         } catch (err) {
             await client.query('ROLLBACK').catch(() => { });
             throw err;
@@ -983,21 +1014,27 @@ function createRunner(opts = {}) {
      * 〔dec/r8-b1-abandon〕租約憑證：認領時寫進 locked_until 的值（原字串，含微秒與時區，比 JS 的 Date 精確），
      * 續租成功就換成新的值。放棄時用它放租約：UPDATE … WHERE id = $1 AND locked_until = <這個值>——
      * 別的後端（例如同時開著的網頁版）接手之後寫的值不同，所以清不到別人的租約。
-     * okSentAt＝最後一次成功寫入（認領或續租）的送出時間（單調時鐘）。相鄰兩次成功寫入之間隔了超過一個租約長度，
+     * okSentAt＝最後一次成功寫入（認領或續租）的送出時間（單調時鐘）；okSentWall＝同一刻的系統時間（〔審查 dec/r8-b1-abandon-fix〕
+     * 單調時鐘可能不含系統睡眠，見檔頭與 leaseGapMs）。相鄰兩次成功寫入之間隔了超過一個租約長度，
      * 表示中間有一段租約可能已經到期、被別人認領，之後自己的續租（WHERE locked_until IS NOT NULL，不看是誰的）又把值蓋成自己的——
      * 這時憑證對得上也不能放（lost），留給租約到期。
+     * @param {{mono:number, wall:number}|null} sent  送出認領那一句的時刻
      */
-    function newLease(table, id, until, sentAt) {
-        return { table, id, until: typeof until === 'string' && until ? until : null, okSentAt: sentAt ?? null, lost: false, pending: null };
+    function newLease(table, id, until, sent) {
+        return {
+            table, id, until: typeof until === 'string' && until ? until : null,
+            okSentAt: sent ? sent.mono : null, okSentWall: sent ? sent.wall : null, lost: false, pending: null
+        };
     }
 
-    /** 續租回來了：記下新的值；兩次成功寫入之間隔太久就標成 lost（見 newLease） */
-    function noteRenew(lease, res, sentAt) {
+    /** 續租回來了：記下新的值；兩次成功寫入之間隔太久就標成 lost（見 newLease、leaseGapMs） */
+    function noteRenew(lease, res, sent) {
         const row = res && Array.isArray(res.rows) ? res.rows[0] : null;
         if (!row || typeof row.lease_until !== 'string' || !row.lease_until) return;   // 0 列：已經放掉了（或列不在）
-        if (lease.okSentAt !== null && monoNow() - lease.okSentAt >= config.leaseMs) lease.lost = true;
+        if (leaseGapMs(lease) >= config.leaseMs) lease.lost = true;
         lease.until = row.lease_until;
-        lease.okSentAt = sentAt;
+        lease.okSentAt = sent.mono;
+        lease.okSentWall = sent.wall;
     }
 
     /**
@@ -1012,12 +1049,12 @@ function createRunner(opts = {}) {
     function startRenew(table, id, lease = null) {
         const h = setInterval(() => {
             if (lease && lease.pending) return;
-            const sentAt = monoNow();
+            const sent = { mono: monoNow(), wall: Date.now() };
             const p = db.query(`UPDATE ${table} SET locked_until = now() + ($1 || ' milliseconds')::interval
                        WHERE id = $2 AND locked_until IS NOT NULL
                        RETURNING locked_until::text AS lease_until`,
                 [String(config.leaseMs), id])
-                .then(res => { if (lease) noteRenew(lease, res, sentAt); })
+                .then(res => { if (lease) noteRenew(lease, res, sent); })
                 .catch(err => logger.warn({ msg: '續租失敗', table, id, error: err.message }));
             if (lease) {
                 lease.pending = p;
@@ -1069,17 +1106,70 @@ function createRunner(opts = {}) {
         logger.warn({ msg: `放棄在途工作：不寫結果、不動重試次數；${why}`, lease: r, ...info });
     }
 
-    /** 〔dec/r8-b1-abandon〕退避睡眠：放棄時馬上醒來（不再重試）。沒有放棄時就是 sleep(ms)。 */
+    /**
+     * 〔審查 dec/r8-b1-abandon-fix〕被放棄的節點裡，放棄之前就已經回來的模型呼叫照記進 jobs（token_in／token_out／cost_usd），
+     * 所以 jobs.cost_usd 與每份 job 的預算是準的。**不寫 job_events**（一列事件＝一次嘗試，寫了會被當成 attempt、也會被當成檢查點），
+     * 所以每日預算（DAILY_COST_BUDGET_USD，加總 job_events）不含這一段；被中止的那一次呼叫本身沒有回來，無從記起
+     * （Gemini 那一次可能已經計費）。本機模式成本是 0，只多記 token。
+     * @param {number} jobId
+     * @param {{meter?:object}} res  invokeNode 回的 { abandoned: true, meter }（meter 是放棄那一刻的快照）
+     */
+    async function chargeAbandoned(jobId, res) {
+        const m = res && res.meter;
+        if (!m || !(m.calls > 0)) return;
+        try {
+            await chargeJob(jobId, m, estimateCost(m));
+        } catch (err) {
+            logger.warn({ msg: '放棄時記用量失敗（jobs 少記這個節點放棄前已完成的呼叫）', job_id: jobId, error: err.message });
+        }
+    }
+
+    /**
+     * 〔審查 dec/r8-b1-abandon-fix〕shutdown 開始時 tick 正卡在 claim 的交易裡：認領回來的這一列不開始（不 spawn），
+     * 用這一次拿到的租約憑證把租約放掉——什麼都還沒做（狀態、重試次數、事件都沒動），下次開啟立刻重新認領。
+     * 拆題／變式的 job 在認領時已被改成 extracting（claim 的 extraSet），與當機後的樣子相同，下次照樣認領得到。
+     * 原本這一列會被 spawn，呼叫 shutdown 的人卻已經看到在途 0 件、關掉連線池，那一列就要等租約到期。
+     * @param {{id:number, lease:object}} c  claim 的回傳值
+     * @param {string} unit
+     */
+    async function returnClaim(c, unit) {
+        const r = await releaseOwnLease(c.lease, null);
+        logger.warn({
+            msg: `關閉中：剛認領到的工作不開始；${r === 'released' ? '已放掉租約，下次開啟立刻重新認領' : '租約留給它自己到期'}`,
+            node: 'claim', unit, id: c.id, lease: r
+        });
+    }
+
+    /**
+     * 〔dec/r8-b1-abandon〕退避睡眠：放棄時馬上醒來（不再重試）。沒有放棄時就是 sleep(ms)。
+     * 〔審查 dec/r8-b1-abandon-fix〕每次自己登記一個喚醒函式、睡完（或被叫醒）就移除，不留任何東西在 runner 上。
+     */
     function pause(ms) {
         if (abandoning) return Promise.resolve();
-        return Promise.race([sleep(ms), abandonSignal]);
+        return new Promise((resolve, reject) => {
+            let woke = false;
+            const settle = (fn, arg) => {
+                if (woke) return;
+                woke = true;
+                pauseWakers.delete(wake);
+                fn(arg);
+            };
+            const wake = () => settle(resolve);
+            pauseWakers.add(wake);
+            // sleep 失敗（只有測試注入的 sleep 會）照舊往上丟，與 sleep(ms) 相同
+            let slept;
+            try { slept = Promise.resolve(sleep(ms)); } catch (err) { slept = Promise.reject(err); }
+            slept.then(wake, err => settle(reject, err));
+        });
     }
 
     // ── 跑一個節點：逾時、計量、事件、狀態機 ──────────────────
     /**
      * @returns {{outcome, meter, cost, latencyMs, abandoned?:true}}
      *          〔dec/r8-b1-abandon〕abandoned＝這個節點是被 shutdown({ abandon: true }) 中止的（或放棄之後才要開始）：
-     *          outcome 是 null，呼叫的人**不得**寫事件、記用量、動重試次數，只放租約。
+     *          outcome 是 null，呼叫的人**不得**寫事件、動重試次數，只放租約。
+     *          〔審查 dec/r8-b1-abandon-fix〕meter 是放棄那一刻的快照、cost 是 null：放棄之前已經回來的呼叫由呼叫的人用
+     *          chargeAbandoned 記進 jobs（不寫事件）。
      */
     async function invokeNode(node, ctxBase, input) {
         const controller = new AbortController();
@@ -1166,8 +1256,11 @@ function createRunner(opts = {}) {
         }
 
         // 〔dec/r8-b1-abandon〕被放棄的節點：不論 agent 回了什麼（被 abort 的 agent 常回 timeout／provider_error），一律不算結果
+        // 〔審查 dec/r8-b1-abandon-fix〕meter 取放棄那一刻的快照：放棄之前已經回來的呼叫由呼叫的人記進 jobs（chargeAbandoned）；
+        // agent 若不理 signal、之後還在背景叫模型，那些不算進來（這個工作單位已經收尾了）。cost 由 chargeAbandoned 從 meter 估。
         if (abandonedHere) {
-            return { outcome: null, meter, cost: { cost_usd: 0, cost_estimated: false }, latencyMs: Date.now() - startedAt, abandoned: true };
+            const snapshot = { ...meter, usageMetadata: [...meter.usageMetadata] };
+            return { outcome: null, meter: snapshot, cost: null, latencyMs: Date.now() - startedAt, abandoned: true };
         }
         return { outcome, meter, cost: estimateCost(meter), latencyMs: Date.now() - startedAt };
     }
@@ -1474,8 +1567,10 @@ function createRunner(opts = {}) {
                 };
                 const res = await invokeNode(node, ctxBase, buildInput(node, jq));
                 if (res.abandoned) {
-                    // 〔dec/r8-b1-abandon〕不記用量、不經 transition（retries 不變）、不寫事件、不寫回狀態：這一列停在原狀態，
+                    // 〔dec/r8-b1-abandon〕不經 transition（retries 不變）、不寫事件、不寫回狀態：這一列停在原狀態，
                     // 只放掉自己的租約，下次開啟從這個節點重跑
+                    // 〔審查 dec/r8-b1-abandon-fix〕放棄之前已經回來的呼叫照記進 jobs（不寫事件）；被中止的那一次沒回來、不記
+                    await chargeAbandoned(jq.job_id, res);
                     await abandonUnit(lease, stopRenew, { unit: 'job_question', job_id: jq.job_id, jq_id: jq.id, node, state: jq.state });
                     released = true;
                     return;
@@ -1739,8 +1834,12 @@ function createRunner(opts = {}) {
                 jq: null, logger, models: loadModels(), limits: { ...DEFAULT_LIMITS, budgetLeft }
             };
             const res = await invokeNode('extract', ctxBase, { jobId: job.id, pdfPath: resolveJobPath(job.pdf_path), chunk });
-            // 〔dec/r8-b1-abandon〕被放棄：不記用量、不裁圖、不建題目列、不寫事件（檢查點），迴圈不重試
-            if (res.abandoned) return { ok: false, abandoned: true };
+            // 〔dec/r8-b1-abandon〕被放棄：不裁圖、不建題目列、不寫事件（檢查點），迴圈不重試
+            // 〔審查 dec/r8-b1-abandon-fix〕放棄之前已經回來的呼叫（例如 cross 模式先回來的幾次）照記進 jobs，不寫事件
+            if (res.abandoned) {
+                await chargeAbandoned(job.id, res);
+                return { ok: false, abandoned: true };
+            }
             const { outcome, meter, cost, latencyMs } = res;
             await chargeJob(job.id, meter, cost);
 
@@ -2058,8 +2157,12 @@ function createRunner(opts = {}) {
                 siblings,
                 ...(feedback ? { feedback } : {})
             });
-            // 〔dec/r8-b1-abandon〕被放棄：不記用量、不建列、不寫事件，迴圈不重試
-            if (res.abandoned) return ABANDONED;
+            // 〔dec/r8-b1-abandon〕被放棄：不建列、不寫事件，迴圈不重試
+            // 〔審查 dec/r8-b1-abandon-fix〕放棄之前已經回來的呼叫照記進 jobs，不寫事件
+            if (res.abandoned) {
+                await chargeAbandoned(job.id, res);
+                return ABANDONED;
+            }
             const { outcome, meter, cost, latencyMs } = res;
             await chargeJob(job.id, meter, cost);
 
@@ -2204,7 +2307,11 @@ function createRunner(opts = {}) {
     // ── tick：認領到滿槽為止 ─────────────────────────────────
     async function tick() {
         if (ticking) return;
+        // 〔審查 dec/r8-b1-abandon-fix〕呼叫過 shutdown 就不再開新的一輪（連 dailySpentUsd 都不查：呼叫的人接著會關連線池）
+        if (closing) return;
         ticking = true;
+        let tickDone = () => { };
+        currentTick = new Promise(resolve => { tickDone = resolve; });
         try {
             // 〔審查 2026-09-26〕LOCAL_EXTRACT_MODE=ocr 卻沒套 0019：不認領任何工作（否則每題在 save 撞 CHECK、無限重試），
             // 伺服器視窗印一次「先 npm run migrate」。每一輪都再查一次：Owner 套完 migrate 後不必重啟也會恢復。
@@ -2235,26 +2342,40 @@ function createRunner(opts = {}) {
                 : ADVANCEABLE_STATES;
 
             // 〔dec/r8-b1-abandon〕放棄之後不再認領（stop() 只清計時器，已經在跑的這一輪 tick 要自己停）
-            while (inFlight.size < config.concurrency && !abandoning) {
+            // 〔審查 dec/r8-b1-abandon-fix〕改看 closing（呼叫過 shutdown，不論有沒有 abandon）；每一次 claim 回來之後也再看一次：
+            // shutdown 可能是在 claim 的交易進行中被呼叫的，剛認領到的那一列不開始、放掉租約（returnClaim）
+            while (inFlight.size < config.concurrency && !closing) {
                 // 先清在途的列（讓已經花過錢的 job 早點結案），再開新的 PDF
                 // 〔dec/r8-b1-abandon〕claim 多回一個租約憑證，交給工作單位（放棄時只放掉自己的租約）
                 const jq = await claim('job_questions', 'state = ANY($1::text[])', [states]);
-                if (jq !== null) { spawn(`jq:${jq.id}`, () => runJobQuestion(jq.id, jq.lease)); continue; }
+                if (jq !== null) {
+                    if (closing) { await returnClaim(jq, 'job_question'); break; }
+                    spawn(`jq:${jq.id}`, () => runJobQuestion(jq.id, jq.lease));
+                    continue;
+                }
 
-                if (overDaily) break;
+                if (overDaily || closing) break;
                 const job = await claim('jobs', `kind = 'pdf' AND state IN ('queued','extracting')`, [], `, state = 'extracting'`);
-                if (job !== null) { spawn(`job:${job.id}`, () => runExtractJob(job.id, job.lease)); continue; }
+                if (job !== null) {
+                    if (closing) { await returnClaim(job, 'extract'); break; }
+                    spawn(`job:${job.id}`, () => runExtractJob(job.id, job.lease));
+                    continue;
+                }
 
                 // 第 4.1 條：**第二條認領分支，只加不改**。變式 job 也用 'extracting' 當
                 // 「job 層節點正在跑」的狀態（jobs.state 的五個值沒有新增，DDL 不必動）。
+                if (closing) break;
                 const variantJob = await claim('jobs', `kind = 'variant' AND state IN ('queued','extracting')`, [], `, state = 'extracting'`);
                 if (variantJob === null) break;
+                if (closing) { await returnClaim(variantJob, 'variant'); break; }
                 spawn(`job:${variantJob.id}`, () => runGenerateJob(variantJob.id, variantJob.lease));
             }
         } catch (err) {
             logger.error({ msg: 'tick 失敗', node: 'claim', error: err.message });
         } finally {
             ticking = false;
+            currentTick = null;
+            tickDone();
         }
     }
 
@@ -2308,17 +2429,22 @@ function createRunner(opts = {}) {
      * 〔dec/r8-b1-abandon〕關閉（docs/desktop-app-design.md 2.3 節第 4 點、2.8 節）。
      *   - 一律先 stop()（不再認領）。
      *   - abandon: true → 放棄在途工作：標記「正在放棄」、中止每一個執行中的節點（save 除外）。被放棄的工作單位
-     *     不寫 outcome、不動 retries、不寫 job_events、不記用量、迴圈不重試，只放掉自己的租約（abandonUnit）；
+     *     不寫 outcome、不動 retries、不寫 job_events、迴圈不重試，只放掉自己的租約（abandonUnit）；被中止的那一次呼叫不記用量，
+     *     同一個節點裡放棄之前已經回來的呼叫照記進 jobs（chargeAbandoned，〔審查 dec/r8-b1-abandon-fix〕）；
      *     之後才要開始的節點一律不開始。可以重複呼叫（第二次只多等）。
      *   - waitMs：最多等在途的工作單位收尾多久（放棄時通常幾百毫秒：中止、一句 UPDATE）。等不到的就留著（呼叫的人通常接著結束行程，
      *     那幾個工作單位的租約照舊等 JOB_LEASE_MS 到期）。
-     * 沒有 abandon 時只是 stop()＋等，和原本的「等在途工作收尾」相同。
+     *   - 〔審查 dec/r8-b1-abandon-fix〕標記 closing：tick 不再開新的一輪；正在跑的那一輪 tick 若剛好卡在 claim 的交易裡，
+     *     認領回來的那一列不開始、放掉租約（returnClaim）。waitMs > 0 時先等那一輪 tick 結束（算在 waitMs 裡），再等在途的工作單位，
+     *     所以回傳的 left 之後不會再變多——呼叫的人（services/launcherControl.js）看到 left＝0 就關連線池。
+     * 沒有 abandon 時只是 stop()＋等，和原本的「等在途工作收尾」相同（正在認領的那一列一樣不開始、放掉租約）。
      * @param {{abandon?:boolean, waitMs?:number}} [o]
      * @returns {Promise<{left:number, abandoned:number, released:number, kept:number}>}
      *          left＝等完之後還在途的工作單位數；abandoned／released／kept＝被放棄的工作單位數、其中放掉租約／沒放的
      */
     async function shutdown({ abandon = false, waitMs = 0 } = {}) {
         stop();
+        closing = true;
         if (abandon && !abandoning) {
             abandoning = true;
             const nodes = [...activeNodes];
@@ -2327,17 +2453,28 @@ function createRunner(opts = {}) {
                     '被放棄的不寫結果、不動重試次數，只放掉自己的租約（下次開啟立刻重新認領）',
                 node: 'shutdown', in_flight: inFlight.size, nodes: nodes.map(n => n.node)
             });
-            wakeAbandon();
+            for (const w of [...pauseWakers]) w();
             for (const n of nodes) n.abandon();
         }
-        await waitIdle(waitMs);
+        const deadline = Date.now() + (waitMs > 0 ? waitMs : 0);
+        if (currentTick && waitMs > 0) await waitAtMost(currentTick, waitMs);
+        await waitIdle(deadline - Date.now());
         return { left: inFlight.size, abandoned: abandonStats.units, released: abandonStats.released, kept: abandonStats.kept };
+    }
+
+    /** 等 p 最多 ms 毫秒（p 本身不會 reject：tick 自己接住錯誤） */
+    function waitAtMost(p, ms) {
+        let t = null;
+        return Promise.race([p, new Promise(resolve => { t = setTimeout(resolve, ms); })])
+            .finally(() => clearTimeout(t));
     }
 
     return {
         tick, start, stop, shutdown, runJobQuestion, runExtractJob, runGenerateJob, config,
         get inFlight() { return inFlight.size; },
-        get abandoning() { return abandoning; }
+        get abandoning() { return abandoning; },
+        /** 〔審查 dec/r8-b1-abandon-fix〕正在退避睡眠的數目（測試與診斷用：睡完就歸零，不會隨退避次數累積） */
+        get pausing() { return pauseWakers.size; }
     };
 }
 
