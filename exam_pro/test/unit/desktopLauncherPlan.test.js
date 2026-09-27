@@ -244,7 +244,10 @@ describe('nextAction：migration、後端、完成', () => {
         assert.ok(a.hint.some(h => h.includes(plan.UNFINISHED_WORK_NOTE)), '提示要說清楚強制結束後沒跑完的工作會怎樣');
         assert.match(plan.UNFINISHED_WORK_NOTE, /單題的檢查從中斷那一步接著做/);
         // 〔DA-13，dec/r7-checkpoints〕拆題與變式從中斷的那一塊／那一題重做（原本整份從頭再跑一次）
-        assert.match(plan.UNFINISHED_WORK_NOTE, /整份卷的拆題從中斷的那一塊重拆、變式生成從中斷的那一題重做/);
+        // 〔dec/r7-checkpoints-fix，依審查〕變式不是只重做中斷的那一題：還沒建成的題（含之前沒過閘門的）都會再生成
+        assert.match(plan.UNFINISHED_WORK_NOTE, /整份卷的拆題從中斷的那一塊重拆，已經拆完的塊不會重拆（本機拆一塊約 30～45 分鐘）/);
+        assert.match(plan.UNFINISHED_WORK_NOTE, /變式生成只補還沒建成的題，已經建好的題不會重做（中斷的那一題與之前沒通過檢查的題會再生成一次）/);
+        assert.doesNotMatch(plan.UNFINISHED_WORK_NOTE, /變式生成從中斷的那一題重做/);
         assert.doesNotMatch(plan.UNFINISHED_WORK_NOTE, /從頭再跑一次/);
         assert.doesNotMatch(a.hint.join('\n'), /沒跑完的那一步下次開啟時會自動重跑/);
         assert.equal(a.detail, f.health.detail);

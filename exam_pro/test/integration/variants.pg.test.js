@@ -611,6 +611,79 @@ function runSuite() {
             assert.deepEqual(rows[0], { state: 'processing', error: null });
         });
 
+        // 〔dec/r7-checkpoints-fix，依審查〕比照拆題：建好一題時「建列＋寫 generate pass 事件」在同一個交易。
+        // 原本兩句各自提交：列建了、事件還沒寫就被殺的話，重新認領時這一題被當成做完而跳過，它的 pass 事件
+        // （text_gate、sim、jq_id、cost_usd）永遠不會寫入，每日預算（dailySpentUsd 讀 job_events）少算這一次。
+        test('DA-13＋審查：寫第 2 題的 pass 事件時當機 → 交易 ROLLBACK、第 2 題的列不留；重新認領時第 2 題重做，列與 pass 事件（含 jq_id）都在', async () => {
+            const { jobId } = await seedVariantJob({ count: 2 });
+            let sawUncommitted = null;
+            const crashingDb = {
+                query,
+                pool: {
+                    async connect() {
+                        const client = await pool.connect();
+                        return {
+                            async query(text, params) {
+                                if (/INSERT INTO job_events/.test(text) && JSON.parse(params[14]).idx === 2) {
+                                    const { rows: inTx } = await client.query('SELECT idx FROM job_questions WHERE job_id = $1 ORDER BY idx', [jobId]);
+                                    const { rows: outside } = await query('SELECT idx FROM job_questions WHERE job_id = $1 ORDER BY idx', [jobId]);
+                                    sawUncommitted = { inTx: inTx.map(r => r.idx), outside: outside.map(r => r.idx) };
+                                    throw new Error('模擬當機：寫 generate 事件時連線中斷');
+                                }
+                                return client.query(text, params);
+                            },
+                            release: (...a) => client.release(...a)
+                        };
+                    }
+                }
+            };
+            const crashed = createRunner({
+                db: crashingDb, llm: fakeLlm, agentsDir: FAKE_AGENTS_DIR, logger: { info() { }, warn() { }, error() { } },
+                sleep: async () => { }, estimateCost: fakeEstimateCost, config: { nodeTimeoutMs: 2000, leaseMs: 60000, concurrency: 1 }
+            });
+            await assert.rejects(crashed.runGenerateJob(jobId), /模擬當機/);
+            assert.deepEqual(sawUncommitted, { inTx: [1, 2], outside: [1] }, '前提：第 2 題的列與它的事件在同一個還沒提交的交易裡');
+
+            const passEvents = async () => (await query(
+                `SELECT (detail->>'idx')::int AS idx, (detail->>'jq_id')::bigint AS jq_id FROM job_events
+                  WHERE job_id = $1 AND node = 'generate' AND outcome = 'pass' ORDER BY id`, [jobId])).rows;
+            const { rows: mid } = await query('SELECT idx FROM job_questions WHERE job_id = $1 ORDER BY idx', [jobId]);
+            assert.deepEqual(mid.map(r => r.idx), [1], 'ROLLBACK：第 2 題的列沒留下');
+            assert.deepEqual((await passEvents()).map(e => e.idx), [1]);
+
+            const inputs = await runWithSpy(jobId);
+            assert.deepEqual(inputs.map(i => i.idx), [2], '第 2 題沒有列＝沒做完：重新認領時重做；第 1 題照舊跳過');
+            const { rows } = await query('SELECT id, idx FROM job_questions WHERE job_id = $1 ORDER BY idx', [jobId]);
+            assert.deepEqual(rows.map(r => r.idx), [1, 2]);
+            const ev = await passEvents();
+            assert.deepEqual(ev.map(e => e.idx), [1, 2], '每一題正好一列 pass 事件');
+            assert.deepEqual(ev.map(e => String(e.jq_id)), rows.map(r => String(r.id)), 'pass 事件的 jq_id 對得上那一題的列');
+            const { rows: job } = await query('SELECT state FROM jobs WHERE id = $1', [jobId]);
+            assert.equal(job[0].state, 'processing');
+        });
+
+        // 〔dec/r7-checkpoints-fix，依審查〕「只生成缺的」＝job_questions 沒有的 idx 都會再生成（設計稿第 36 項）：
+        // 不只被中斷的那一題，中斷點之前沒過閘門而沒建成的題也會再呼叫一次模型。文件與關閉時的提示照這個說法寫，這裡釘住。
+        test('DA-13：中斷點之前沒過閘門（沒建成）的題，重新認領時也會再生成一次；已建好的照舊跳過', async () => {
+            const { jobId, sourceId } = await seedVariantJob({ count: 3 });
+            const earlier = '前一輪已經建好的第 1 題：丙車以 $v=8$ 公尺每秒行駛，求其動能。';
+            await query(
+                `INSERT INTO job_questions (job_id, idx, state, payload) VALUES ($1, 1, 'extracted', $2::jsonb)`,
+                [jobId, JSON.stringify({ extract: { idx: 1, question_text: earlier, variant_of_root: sourceId }, variant: { source_question_id: sourceId } })]);
+            // 前一輪：第 2 題第一次＋重試 1 次都沒過閘門（放棄、沒建列），接著在第 3 題被殺
+            for (const attempt of [1, 2]) {
+                await query(
+                    `INSERT INTO job_events (job_id, node, attempt, latency_ms, outcome, detail)
+                     VALUES ($1, 'generate', $2, 5, 'fail', $3::jsonb)`,
+                    [jobId, attempt, JSON.stringify({ idx: 2, rejected: [{ idx: 2, reason: 'text_gate', feedback: '只改字閘門未通過（identical）' }] })]);
+            }
+            const inputs = await runWithSpy(jobId);
+            assert.deepEqual(inputs.map(i => i.idx), [2, 3], '第 2 題（之前沒建成）與第 3 題（被中斷）都生成；第 1 題跳過');
+            assert.deepEqual(inputs[0].siblings, [{ idx: 1, question_text: earlier }]);
+            const { rows } = await query('SELECT idx FROM job_questions WHERE job_id = $1 ORDER BY idx', [jobId]);
+            assert.deepEqual(rows.map(r => r.idx), [1, 2, 3]);
+        });
+
         test('V5-6：第 1 題沒建成（一直沒過閘門）時，第 2 題沒有兄弟', async () => {
             const { jobId } = await seedVariantJob({ count: 2 });
             const modPath = require.resolve(path.join(FAKE_AGENTS_DIR, 'generate.js'));

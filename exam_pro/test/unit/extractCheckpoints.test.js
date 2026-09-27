@@ -6,6 +6,7 @@
 //    切法沒變時塊號與一次跑完相同；切法變了時新塊的塊號接在舊的後面，題號不會撞到已經建好的列。
 // 2. runExtractJob（假 db＋當場寫的假 extract agent）：有檢查點的塊不再呼叫 agent；
 //    建題目列與寫檢查點事件在同一個交易（client），寫事件失敗時整個 ROLLBACK、不留半塊的題目列。
+//    〔dec/r7-checkpoints-fix〕檢查點對不上（inconsistent）時直接 failed；每一塊都拆完、PDF 已刪時直接轉 processing。
 //
 // 真的 PostgreSQL 上「拆到一半被殺、租約到期、重新認領」的端到端驗證在 test/integration/extractCheckpoints.pg.test.js。
 // ─────────────────────────────────────────────────────────────
@@ -161,11 +162,103 @@ describe('planResumeChunks — 切法變了（換了本機／Gemini 模式或 JO
         }
     });
 
-    test('檢查點不是從第 1 頁連續（不該發生）→ inconsistent：只跳過頁碼範圍相同的塊，其餘照這次的塊號', () => {
-        const r = planResumeChunks(40, 20, [{ chunk: 2, page_range: [3, 4], created: 1 }]);
-        assert.equal(r.mode, 'inconsistent');
-        assert.deepEqual(r.todo, planChunks(40, 20));
-        assert.deepEqual(r.done, []);
+    // 〔dec/r7-checkpoints-fix，依審查〕原本這裡斷言 inconsistent 時「只跳過頁碼範圍相同的塊，其餘照這次的塊號」
+    // （todo＝planChunks(40, 20) 整份），審查實測那樣會撞號又重拆（見 planResumeChunks 的說明）。改成不排任何塊、交給呼叫端 failJob。
+    const INCONSISTENT = { todo: [], done: [], doneCreated: 0, mode: 'inconsistent' };
+
+    test('審查實例一：40 頁、每塊 20 頁，只有「第 2 塊＝第 3～4 頁」→ inconsistent、不排任何塊（原本排出第 1、2 塊：2001 撞號、第 3～4 頁重拆）', () => {
+        assert.deepEqual(planResumeChunks(40, 20, [{ chunk: 2, page_range: [3, 4], created: 1 }]), INCONSISTENT);
+    });
+
+    test('審查實例二：6 頁、「第 1 塊＝1～2 頁」＋「第 3 塊＝5～6 頁」→ inconsistent（原本排出第 4 塊＝3～6 頁：第 5～6 頁重拆）', () => {
+        assert.deepEqual(planResumeChunks(6, 20, [
+            { chunk: 1, page_range: [1, 2], created: 2 },
+            { chunk: 3, page_range: [5, 6], created: 1 }
+        ]), INCONSISTENT);
+    });
+
+    test('從第 1 頁連續的一串之外還有檢查點（同一個起頁兩種頁數）→ inconsistent', () => {
+        assert.deepEqual(planResumeChunks(30, 4, [
+            { chunk: 1, page_range: [1, 2], created: 2 },
+            { chunk: 1, page_range: [1, 20], created: 9 }
+        ]), INCONSISTENT);
+    });
+
+    test('從第 1 頁連續、但塊號沒有照頁碼遞增 → inconsistent（題號先後會和頁碼對不上）', () => {
+        assert.deepEqual(planResumeChunks(10, 20, [
+            { chunk: 2, page_range: [1, 2], created: 1 },
+            { chunk: 1, page_range: [3, 4], created: 1 }
+        ]), INCONSISTENT);
+    });
+
+    test('同一個頁碼範圍記成兩個塊號 → inconsistent（否則第 5 塊會被排給第 9～10 頁，5001 起和既有的列撞號）', () => {
+        assert.deepEqual(planResumeChunks(10, 2, [
+            { chunk: 1, page_range: [1, 2], created: 1 },
+            { chunk: 5, page_range: [1, 2], created: 1 }
+        ]), INCONSISTENT);
+    });
+
+    test('頁數不明、檢查點又對不上 → inconsistent（沒辦法算出剩下的頁）', () => {
+        assert.deepEqual(planResumeChunks(null, 20, [{ chunk: 1, page_range: [1, 2], created: 1 }]), INCONSISTENT);
+    });
+
+    test('性質（亂數檢查點）：不是 inconsistent 時，要跑的塊不重拆任何檢查點涵蓋的頁、塊號不和任何檢查點相同；拆完的＋要跑的從第 1 頁起不重疊地涵蓋到最後一頁，塊號照頁碼遞增', () => {
+        let seed = 20260927;
+        const rnd = (n) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
+        const modes = new Set();
+        for (let round = 0; round < 3000; round++) {
+            const pages = 1 + rnd(45);
+            const size = 1 + rnd(21);
+            const cps = [];
+            const kind = rnd(3);
+            if (kind === 0) {
+                // 正常流程：先用某一種切法拆了前幾塊，可能再換一種切法接著拆（塊號接在後面）
+                const oldSize = 1 + rnd(21);
+                const first = planChunks(pages, oldSize);
+                const n = rnd(first.length + 1);
+                for (const c of first.slice(0, n)) cps.push({ chunk: c.no, page_range: [c.fromPage, c.toPage], created: rnd(4) });
+                const next = n === 0 ? 1 : first[n - 1].toPage + 1;
+                if (n > 0 && next <= pages && rnd(2) === 0) {
+                    const r = planResumeChunks(pages, 1 + rnd(21), cps);
+                    for (const c of r.todo.slice(0, rnd(r.todo.length + 1))) {
+                        cps.push({ chunk: c.no, page_range: [c.fromPage, c.toPage], created: rnd(4) });
+                    }
+                }
+            } else {
+                // 亂來的檢查點（舊資料、人工改過）
+                for (let k = rnd(4); k >= 0; k--) {
+                    const from = 1 + rnd(pages);
+                    const to = Math.min(pages, from + rnd(size + 2));
+                    cps.push({ chunk: 1 + rnd(6), page_range: [from, to], created: rnd(4) });
+                }
+            }
+            // 偶爾把某個檢查點的頁碼範圍再記一次、換個塊號（舊資料裡同一個範圍兩個塊號）
+            if (cps.length > 0 && rnd(5) === 0) {
+                const dup = cps[rnd(cps.length)];
+                cps.push({ chunk: 1 + rnd(8), page_range: [...dup.page_range], created: rnd(4) });
+            }
+            const r = planResumeChunks(pages, size, cps);
+            modes.add(r.mode);
+            const label = `${pages} 頁、每塊 ${size} 頁、檢查點 ${JSON.stringify(cps.map(c => [c.chunk, ...c.page_range]))}`;
+            if (r.mode === 'inconsistent') { assert.deepEqual(r, INCONSISTENT, label); continue; }
+
+            const covered = new Set();
+            for (const c of cps) for (let p = c.page_range[0]; p <= c.page_range[1]; p++) covered.add(p);
+            const cpNos = new Set(cps.map(c => c.chunk));
+            for (const t of r.todo) {
+                assert.ok(!cpNos.has(t.no), `要跑的第 ${t.no} 塊和已有檢查點同號：${label}`);
+                for (let p = t.fromPage; p <= t.toPage; p++) assert.ok(!covered.has(p), `第 ${p} 頁已經拆過又排進第 ${t.no} 塊：${label}`);
+            }
+            const all = [...r.done, ...r.todo].sort((a, b) => a.fromPage - b.fromPage);
+            let next = 1;
+            for (let i = 0; i < all.length; i++) {
+                assert.equal(all[i].fromPage, next, `頁碼要從第 1 頁起不重疊、不留洞：${label}`);
+                if (i > 0) assert.ok(all[i].no > all[i - 1].no, `塊號要照頁碼遞增：${label}`);
+                next = all[i].toPage + 1;
+            }
+            assert.equal(next - 1, pages, `要涵蓋到最後一頁：${label}`);
+        }
+        assert.deepEqual([...modes].sort(), ['fresh', 'inconsistent', 'replanned', 'resume'], '四種情形都要被亂數碰到');
     });
 });
 
@@ -293,5 +386,42 @@ describe('runExtractJob — 逐塊檢查點（假 db）', () => {
         assert.equal(second[4], 'RELEASE');
         assert.ok(!db.log.some(q => /state = 'processing'|state = 'failed'/.test(q.text)), '留在 extracting 等重新認領');
         assert.ok(fs.existsSync(pdfPath), 'PDF 要留著給重新認領時接著拆');
+    });
+
+    // 〔dec/r7-checkpoints-fix，依審查〕inconsistent 不再退回「只跳過頁碼範圍相同的塊」，直接 failed、寫明原因
+    test('檢查點對不上（inconsistent）：不呼叫 agent、不開交易、不建任何列；job 轉 failed 寫明「檢查點對不上」，PDF 留著、不轉 processing', async () => {
+        const { db, pdfPath } = fakeDb({ checkpoints: [{ chunk: 2, page_range: [3, 6], created: 2 }] });
+        await makeRunner(db).runExtractJob(7);
+        assert.deepEqual(globalThis.__ckptCalls, []);
+        assert.equal(db.tx.length, 0);
+        assert.ok(!db.log.some(q => /INSERT INTO/.test(q.text)));
+        const failed = db.log.filter(q => /SET state = 'failed'/.test(q.text));
+        assert.equal(failed.length, 1);
+        assert.match(failed[0].params[1], /拆題檢查點對不上/);
+        assert.match(failed[0].params[1], /按重試也會停在這裡/);
+        assert.ok(!db.log.some(q => /state = 'processing'/.test(q.text)));
+        assert.ok(fs.existsSync(pdfPath), 'PDF 不刪（人處理時還用得到）');
+    });
+
+    // 〔dec/r7-checkpoints-fix〕上一輪在「刪 PDF」之後、「轉 processing」之前被殺：每一塊都有檢查點，PDF 已經不在
+    test('每一塊都已拆完、PDF 已經刪了：不 failed，直接轉 processing（題目列與檢查點都在，用不到 PDF）', async () => {
+        const { db, pdfPath } = fakeDb({ checkpoints: planChunks(6, 2).map(c => ({ chunk: c.no, page_range: [c.fromPage, c.toPage], created: 1 })) });
+        fs.rmSync(pdfPath);
+        await makeRunner(db).runExtractJob(7);
+        assert.deepEqual(globalThis.__ckptCalls, []);
+        assert.ok(!db.log.some(q => /state = 'failed'/.test(q.text)), '原本（先檢查 PDF）這裡會 failed，按重試也一樣');
+        assert.ok(db.log.some(q => /SET pdf_path = NULL, state = 'processing'/.test(q.text)));
+        assert.ok(db.log.some(q => /UPDATE jobs SET state = 'done'/.test(q.text)), '轉 processing 後照樣檢查一次能不能收尾');
+    });
+
+    test('還有塊沒拆、PDF 卻不在：照舊 failed「PDF 原檔不存在」，不呼叫 agent', async () => {
+        const { db, pdfPath } = fakeDb({ checkpoints: [{ chunk: 1, page_range: [1, 2], created: 1 }] });
+        fs.rmSync(pdfPath);
+        await makeRunner(db).runExtractJob(7);
+        assert.deepEqual(globalThis.__ckptCalls, []);
+        const failed = db.log.filter(q => /SET state = 'failed'/.test(q.text));
+        assert.equal(failed.length, 1);
+        assert.equal(failed[0].params[1], 'PDF 原檔不存在，無法拆題。');
+        assert.ok(!db.log.some(q => /state = 'processing'/.test(q.text)));
     });
 });

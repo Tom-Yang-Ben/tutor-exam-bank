@@ -83,7 +83,7 @@ flowchart TD
 | 機制 | 實作 | 參數（預設） |
 | :--- | :--- | :--- |
 | 認領 | 同一交易兩句：`SELECT id … WHERE state 可推進 AND (locked_until IS NULL OR locked_until < now()) ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED` → `UPDATE … SET locked_until = now() + lease`；兩個槽不會搶到同一列 | `JOB_CONCURRENCY=2` 槽 |
-| 租約 | 認領時設 `locked_until`；呼叫進行中每 30 秒續租；完成時清 NULL；崩潰後租約過期即可被重新認領（斷點續跑，NFR-005）。〔修訂 2026-09-27〕斷點的粒度：`job_questions` 從中斷的那一格重跑那一個節點。〔修訂 2026-09-27，`dec/r7-checkpoints`，DA-13＝2〕`jobs` 的拆題／變式生成有逐塊／逐題的檢查點：拆題每塊的「建題目列＋寫 `extract` 事件」在同一個交易，重新認領時跳過已有 pass／skipped 事件的塊（`planResumeChunks`：頁碼範圍與塊號都對得上才跳；每塊頁數變了時已拆完的前幾頁照跳、其餘頁塊號接在後面）；變式跳過已有該 idx 的題。只重做被中斷的那一塊／那一題 | `JOB_LEASE_MS=180000`、續租 30s |
+| 租約 | 認領時設 `locked_until`；呼叫進行中每 30 秒續租；完成時清 NULL；崩潰後租約過期即可被重新認領（斷點續跑，NFR-005）。〔修訂 2026-09-27〕斷點的粒度：`job_questions` 從中斷的那一格重跑那一個節點。〔修訂 2026-09-27，`dec/r7-checkpoints`，DA-13＝2〕`jobs` 的拆題／變式生成有逐塊／逐題的檢查點：拆題每塊的「建題目列＋寫 `extract` 事件」在同一個交易，重新認領時跳過已有 pass／skipped 事件的塊（`planResumeChunks`：頁碼範圍與塊號都對得上才跳；每塊頁數變了時已拆完的前幾頁照跳、其餘頁塊號接在後面；〔`dec/r7-checkpoints-fix`〕檢查點不是從第 1 頁起連續、塊號遞增的一串時不排任何塊，job 直接 failed「拆題檢查點對不上」，不自動重拆）；變式跳過已有該 idx 的題、只補還沒建成的 idx（含中斷點之前沒過閘門的），建好一題時「建列＋寫 generate pass 事件」同一個交易。拆題只重做被中斷的那一塊 | `JOB_LEASE_MS=180000`、續租 30s |
 | 認領優先序 | 每 tick 先清在途 `job_questions`（使已產生成本的 job 優先完結）→ 再認領 `kind='pdf'` 的 jobs → 最後 `kind='variant'` | `JOB_POLL_MS=2000` |
 | 重試預算 | fail：extract／generate 整包重試 1 次（`EXTRACT_MAX_RETRIES=1`）；節點層見 §5.2。error：獨立計數器，退避 1s→2s→4s… 封頂 60s，睡眠由 runner 做、狀態機只計數 | `maxErrorRetries=3` |
 | 節點逾時 | `Promise.race` ＋ AbortController，逾時歸類 `error:timeout` | `JOB_NODE_TIMEOUT_MS=120000` |

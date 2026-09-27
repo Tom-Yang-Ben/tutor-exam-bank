@@ -353,5 +353,71 @@ function runSuite() {
                 `SELECT COUNT(*)::int AS n FROM job_events WHERE job_id = $1 AND node = 'extract' AND outcome = 'error'`, [jobId]);
             assert.equal(errs[0].n, 4);
         });
+
+        // 〔dec/r7-checkpoints-fix，依審查〕檢查點不是從第 1 頁起連續的一串（正常流程到不了；舊資料或人工改過）：
+        // 原本退回「只跳過頁碼範圍相同的塊、其餘照這次的塊號跑」，會撞號也會重拆；改成直接 failed、寫明原因
+        test('⑤ 檢查點對不上（第 2～3 頁記成第 2 塊，這次每塊 1 頁）→ failed、寫明原因；不呼叫 OCR 與模型、不建任何列、PDF 留著；按重試也停在這裡', async () => {
+            const jobId = await seedPdfJob();
+            await query(
+                `INSERT INTO job_events (job_id, node, attempt, latency_ms, outcome, detail)
+                 VALUES ($1, 'extract', 1, 5, 'pass', $2::jsonb)`,
+                [jobId, JSON.stringify({ chunk: 2, page_range: [2, 3], created: 0, rejected: 0 })]);
+
+            phase = 'inconsistent';
+            script = {};
+            assert.equal(await drain(makeRunner(), jobId), 'failed');
+            assert.deepEqual(callsOf(llmCalls, 'inconsistent'), []);
+            assert.deepEqual(callsOf(ocrCalls, 'inconsistent'), []);
+            const { rows: [job] } = await query('SELECT state, error, pdf_path FROM jobs WHERE id = $1', [jobId]);
+            assert.match(job.error, /拆題檢查點對不上/);
+            assert.ok(job.pdf_path && fs.existsSync(path.join(APP_DIR, job.pdf_path)), 'PDF 不刪');
+            const { rows: jq } = await query('SELECT COUNT(*)::int AS n FROM job_questions WHERE job_id = $1', [jobId]);
+            assert.equal(jq[0].n, 0);
+
+            const res = await request(app).post(`/api/jobs/${jobId}/retry`).send({});
+            assert.equal(res.status, 202);
+            phase = 'inconsistent-retried';
+            assert.equal(await drain(makeRunner(), jobId), 'failed');
+            assert.deepEqual(callsOf(llmCalls, 'inconsistent-retried'), [], '按重試也不自動重拆');
+            const { rows: [again] } = await query('SELECT error FROM jobs WHERE id = $1', [jobId]);
+            assert.match(again.error, /按重試也會停在這裡/);
+        });
+
+        // 〔dec/r7-checkpoints-fix〕上一輪在「刪 PDF」之後、「轉 processing」之前被殺：每一塊都有檢查點、題目列都在，只是 PDF 沒了。
+        // 原本（先檢查 PDF）重新認領會 failed「PDF 原檔不存在」，按重試也一樣（PDF 已刪），但其實不缺任何東西
+        test('⑥ 刪完 PDF、轉 processing 之前被殺 → 租約到期 → 重新認領：不呼叫模型、不 failed，直接轉 processing，結果與一次跑完相同', async () => {
+            const jobId = await seedPdfJob();
+            phase = 'unlinked';
+            script = {};
+            const dyingDb = {
+                pool,
+                async query(text, params) {
+                    if (/SET pdf_path = NULL, state = 'processing'/.test(text)) throw new Error('模擬當機：刪完 PDF、還沒轉 processing');
+                    return query(text, params);
+                }
+            };
+            const dying = makeRunner({ db: dyingDb });
+            await dying.tick();
+            while (dying.inFlight > 0) await new Promise(r => setTimeout(r, 10));
+            assert.deepEqual(callsOf(llmCalls, 'unlinked'), [1, 2, 3]);
+            const { rows: [mid] } = await query(
+                `SELECT j.state, j.pdf_path, j.locked_until > now() AS leased,
+                        (SELECT array_agg(idx ORDER BY idx) FROM job_questions WHERE job_id = j.id) AS idx
+                   FROM jobs j WHERE j.id = $1`, [jobId]);
+            assert.equal(mid.state, 'extracting');
+            assert.equal(mid.leased, true);
+            assert.deepEqual(mid.idx, [1001, 1002, 2001, 3001]);
+            assert.ok(mid.pdf_path && !fs.existsSync(path.join(APP_DIR, mid.pdf_path)), '前提：PDF 已刪、pdf_path 還在');
+
+            phase = 'after-unlink';
+            await expireLease(jobId);
+            assert.equal(await drain(makeRunner(), jobId), 'done');
+            assert.deepEqual(callsOf(llmCalls, 'after-unlink'), [], '每一塊都有檢查點：不再呼叫模型');
+            assert.deepEqual(callsOf(ocrCalls, 'after-unlink'), []);
+            const got = await snapshot(jobId);
+            assert.deepEqual(got.questions, baseline.questions);
+            assert.deepEqual(got.events, baseline.events);
+            assert.deepEqual(got.job, baseline.job, 'state done、pdf_path NULL、error NULL、用量與一次跑完相同');
+        });
     });
 }

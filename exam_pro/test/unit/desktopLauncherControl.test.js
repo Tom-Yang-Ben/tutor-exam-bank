@@ -95,7 +95,10 @@ describe('生命週期（shutdown）', () => {
         // 〔DA-13，dec/r7-checkpoints〕拆題、變式改成逐塊／逐題的檢查點：從中斷的那一塊／那一題重做，不再整份從頭
         const warn = r.events.find(e => e.startsWith('warn:'));
         assert.match(warn, /單題的檢查從中斷那一步接著做/);
-        assert.match(warn, /整份卷的拆題從中斷的那一塊重拆、變式生成從中斷的那一題重做/);
+        // 〔dec/r7-checkpoints-fix，依審查〕變式照實說「只補還沒建成的題」（含之前沒過閘門的），不說「從中斷的那一題重做」
+        assert.match(warn, /整份卷的拆題從中斷的那一塊重拆；/);
+        assert.match(warn, /變式生成只補還沒建成的題（中斷的那一題與之前沒通過檢查的題會再生成一次，已經建好的不重做）/);
+        assert.doesNotMatch(warn, /變式生成從中斷的那一題重做/);
         assert.doesNotMatch(warn, /從頭再跑一次/);
     });
 
