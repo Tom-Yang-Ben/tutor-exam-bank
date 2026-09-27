@@ -615,10 +615,12 @@ async function run(ctx, input = {}) {
         if (post.adjustments.length) out.adjustments = post.adjustments;
         return { kind: 'pass', data: out };
     } catch (err) {
+        // 〔Owner 第五輪 C-f 核准〕供應商回報的 finishReason（'MAX_TOKENS'＝寫到輸出上限被截斷）帶給 runner：本機模式被截斷的不重試、直接進複核
         return {
             kind: 'error',
             errorClass: err.errorClass || 'provider_error',
-            message: err.message
+            message: err.message,
+            ...(err && err.finishReason ? { finishReason: String(err.finishReason) } : {})
         };
     }
 }

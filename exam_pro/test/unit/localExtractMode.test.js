@@ -315,24 +315,26 @@ describe('複核原因白名單與 0019', () => {
         return REVIEW_REASONS;
     }
 
-    test('reviewController：ocr_only 接在 extract_disagree 之後（第 11 個）', () => {
+    test('reviewController：ocr_only 接在 extract_disagree 之後（第 11 個）；〔Owner 第五輪 C-f〕0020 的 output_truncated 在第 12 個', () => {
         const R = reasons();
-        assert.equal(R.length, 11);
+        assert.equal(R.length, 12);
         assert.equal(R[9], 'extract_disagree');
         assert.equal(R[10], 'ocr_only');
+        assert.equal(R[11], 'output_truncated');
     });
 
-    test('0019 以完整值域重建 CHECK（白名單每個值都在），可重複套用（DROP … IF EXISTS 再 ADD）', () => {
-        for (const r of reasons()) assert.ok(SQL.includes(`'${r}'`), `0019 的 CHECK 少了 ${r}`);
+    test('0019 以完整值域重建 CHECK（0019 當時的白名單每個值都在），可重複套用（DROP … IF EXISTS 再 ADD）', () => {
+        for (const r of reasons().slice(0, 11)) assert.ok(SQL.includes(`'${r}'`), `0019 的 CHECK 少了 ${r}`);
+        assert.ok(!SQL.includes("'output_truncated'"), '0019 凍結：output_truncated 走 0020');
         const body = SQL.replace(/--.*$/gm, '');
         assert.match(body, /ALTER TABLE job_questions DROP CONSTRAINT IF EXISTS job_questions_review_reason_check;/);
         assert.match(body, /ADD CONSTRAINT job_questions_review_reason_check\s+CHECK \(review_reason IN \(/);
         assert.ok(!/job_events/.test(body), 'job_events.error_class 不變（政策停等寫 NULL）');
     });
 
-    test('0019 是最新的一支；0015 沒被改（凍結）', () => {
+    test('0019 之後只有〔Owner 第五輪 C-f〕的 0020；0015 沒被改（凍結）', () => {
         const files = fs.readdirSync(path.join(APP_DIR, 'migrations')).filter(f => f.endsWith('.sql')).sort();
-        assert.equal(files[files.length - 1], '0019_ocr_only_review.sql');
+        assert.deepEqual(files.slice(-2), ['0019_ocr_only_review.sql', '0020_output_truncated_review.sql']);
         const f15 = fs.readFileSync(path.join(APP_DIR, 'migrations', '0015_extract_disagree.sql'), 'utf8');
         assert.ok(!f15.includes('ocr_only'));
     });

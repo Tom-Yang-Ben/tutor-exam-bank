@@ -16,7 +16,8 @@
 //      〔審查修正〕例外是 classify：這裡沒有資料庫（ctx.db=null），few-shot 全部來自設定檔的自製例句（同一科每題相同，
 //      與 eval 的 classify 回放檔同一種 prompt）；正式上傳時 few-shot 由題庫組（FEATURE_SIMILAR 開時是向量近鄰、每題不同），
 //      prompt 的長度與內容都不一樣，量到的讀 prompt 秒數只能參考（報告裡會註明）；
-//   3. 套上 .env 裡的本機調整（OLLAMA_NO_THINK、OLLAMA_MAX_OUTPUT_<AGENT>、OLLAMA_NUM_CTX_<AGENT>；services/llm/localTuning.js），
+//   3. 套上本機調整（OLLAMA_NO_THINK、OLLAMA_MAX_OUTPUT_<AGENT>、OLLAMA_NUM_CTX_<AGENT>；services/llm/localTuning.js；
+//      .env 沒寫時是本機預設：kc_tag 不思考、verify 上限 3072〔Owner 第五輪 C-b、C-c〕），
 //      再套上這次的參數（--no-think／--think、--max-output、--num-ctx、--num-thread）——不加參數＝正式上傳現在的樣子；
 //   4. 先請 Ollama 卸載模型（--warm 可略過），**只呼叫一次**，印出載入、讀 prompt、輸出（含思考）的時間、token 數與速度，
 //      思考約占多少、回答對不對（驗算對照 fixture 的答案、分類對照 fixture 的章節），以及「一份 10 題卷這一步大約多久」。
@@ -242,12 +243,18 @@ function resolveCallParams(captured, args, env = {}) {
     const agentBudget = Number(captured.thinkingBudget) > 0 ? Number(captured.thinkingBudget) : 0;
     const t = tuning.resolveOllamaOverrides({ agent: captured.agent, thinkingBudget: captured.thinkingBudget, maxOutputTokens: captured.maxOutputTokens }, env);
     let thinkingBudget = Number(t.thinkingBudget) > 0 ? Number(t.thinkingBudget) : 0;
-    let thinkWhy = agentBudget > 0 ? (t.applied.think === false ? '關（.env 的 OLLAMA_NO_THINK）' : '開（agent 預設）') : '關（agent 本來就不思考）';
+    // 〔Owner 第五輪 C-b、C-c〕本機預設（kc_tag 不思考、verify 上限 3072）與 .env 分開標示（t.sources）
+    const thinkOff = t.sources && t.sources.think === 'default' ? '關（本機預設，Owner 第五輪 C-b；OLLAMA_NO_THINK 可覆寫）' : '關（.env 的 OLLAMA_NO_THINK）';
+    let thinkWhy = agentBudget > 0 ? (t.applied.think === false ? thinkOff : '開（agent 預設）') : '關（agent 本來就不思考）';
     if (args.think === false) { thinkingBudget = 0; thinkWhy = '關（--no-think）'; }
     if (args.think === true) { thinkingBudget = agentBudget || THINK_ON_BUDGET; thinkWhy = '開（--think）'; }
 
     let maxOutputTokens = t.maxOutputTokens;
-    let maxWhy = t.applied.numPredict ? `.env 的 OLLAMA_MAX_OUTPUT_${tuning.agentEnvSuffix(captured.agent)}（或基本名稱）` : (maxOutputTokens ? 'agent 預設' : 'agent 不設上限');
+    let maxWhy = t.applied.numPredict
+        ? (t.sources && t.sources.numPredict === 'default'
+            ? `本機預設（Owner 第五輪 C-c；OLLAMA_MAX_OUTPUT_${tuning.agentEnvSuffix(tuning.baseAgent(captured.agent))} 可覆寫）`
+            : `.env 的 OLLAMA_MAX_OUTPUT_${tuning.agentEnvSuffix(captured.agent)}（或基本名稱）`)
+        : (maxOutputTokens ? 'agent 預設' : 'agent 不設上限');
     if (args.maxOutput) { maxOutputTokens = args.maxOutput; maxWhy = '--max-output'; }
 
     let numCtx = t.numCtx || ollama.numCtx(env);

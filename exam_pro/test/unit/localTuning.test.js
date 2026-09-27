@@ -10,6 +10,9 @@
 //      record 有套用才在 request.ollamaOverrides 記下來，沒套用就沒有這個欄位；
 //   6. THINKING_AGENTS 與各模組匯出的常數一致，而且原始碼裡傳 thinkingBudget 的地方都列到了；
 //   7. eval 重錄的子行程：回放時擋掉、錄製時放行（eval/lib/suiteProcess.js）。
+// 〔Owner 第五輪 C-b、C-c 核准，dec/r6-local-tuning〕第 1 點改成：什麼都沒寫＝本機預設（kc_tag 不思考、verify／verify_chem
+// 上限 3072），其他 agent 與加這個功能之前逐位元相同；OLLAMA_NO_THINK=none＋OLLAMA_MAX_OUTPUT_VERIFY=8192（NO_DEFAULTS）
+// 取消預設後，全部 agent 與之前逐位元相同。原本測「明寫的設定」的幾則改在 NO_DEFAULTS 上疊加，斷言本身不變。
 // 不連 Ollama、不連 Gemini（假的傳輸與假的 client）。
 // ─────────────────────────────────────────────────────────────
 
@@ -72,6 +75,9 @@ function fakeOllama(content = '{"final_answer":"(A)","answer_form":"option","ste
     return calls;
 }
 
+/** 〔C-b、C-c〕取消兩個本機預設的寫法（與 .env.example 說明的一致） */
+const NO_DEFAULTS = Object.freeze({ OLLAMA_NO_THINK: 'none', OLLAMA_MAX_OUTPUT_VERIFY: '8192' });
+
 const VERIFY_CALL = Object.freeze({
     model: 'ollama:qwen3:8b', system: '你是解題老師。', parts: [{ text: '請解 1+1' }], schema: buildSchema('verify'),
     maxOutputTokens: 8192, thinkingBudget: 1024, agent: 'verify', template: 'verify.v1',
@@ -81,18 +87,66 @@ const VERIFY_CALL = Object.freeze({
 // ───────────────────────── 純函式 ─────────────────────────
 
 describe('resolveOllamaOverrides', () => {
-    test('什麼都沒寫：applied 是空的，數字原樣', () => {
-        for (const agent of ['verify', 'lint', 'kc_tag', 'classify', 'extract_ocr', undefined]) {
+    test('〔C-b、C-c〕什麼都沒寫：kc_tag 不思考、verify／verify_chem 上限 3072（本機預設）；其他 agent 的 applied 是空的，數字原樣', () => {
+        for (const agent of ['lint', 'lint_chem', 'tutor', 'classify', 'extract_ocr', undefined]) {
             const r = tuning.resolveOllamaOverrides({ agent, thinkingBudget: 1024, maxOutputTokens: 8192 }, {});
-            assert.deepEqual(r, { thinkingBudget: 1024, maxOutputTokens: 8192, numCtx: undefined, applied: {} }, String(agent));
+            assert.deepEqual(r, { thinkingBudget: 1024, maxOutputTokens: 8192, numCtx: undefined, applied: {}, sources: {} }, String(agent));
         }
+        for (const agent of ['verify', 'verify_chem', 'VERIFY']) {
+            const r = tuning.resolveOllamaOverrides({ agent, thinkingBudget: 1024, maxOutputTokens: 8192 }, {});
+            assert.deepEqual(r, { thinkingBudget: 1024, maxOutputTokens: 3072, numCtx: undefined, applied: { numPredict: 3072 }, sources: { numPredict: 'default' } }, agent);
+        }
+        const kc = tuning.resolveOllamaOverrides({ agent: 'kc_tag', thinkingBudget: 512, maxOutputTokens: 4096 }, {});
+        assert.deepEqual(kc, { thinkingBudget: 0, maxOutputTokens: 4096, numCtx: undefined, applied: { think: false }, sources: { think: 'default' } });
         const none = tuning.resolveOllamaOverrides({ agent: 'classify' }, {});
-        assert.deepEqual(none, { thinkingBudget: undefined, maxOutputTokens: undefined, numCtx: undefined, applied: {} });
+        assert.deepEqual(none, { thinkingBudget: undefined, maxOutputTokens: undefined, numCtx: undefined, applied: {}, sources: {} });
+        // 空字串、只有空白＝沒寫＝本機預設（與 eval 回放時把這些變數擋成空字串一致）
+        for (const blank of ['', '  ']) {
+            assert.deepEqual(tuning.resolveOllamaOverrides({ agent: 'kc_tag', thinkingBudget: 512 }, { OLLAMA_NO_THINK: blank }).applied, { think: false }, `「${blank}」`);
+        }
+    });
+
+    test('〔C-b、C-c〕取消本機預設（OLLAMA_NO_THINK=none、OLLAMA_MAX_OUTPUT_VERIFY=8192）：每個 agent 與加這個功能之前逐位元相同', () => {
+        for (const agent of ['verify', 'verify_chem', 'lint', 'kc_tag', 'classify', 'extract_ocr', undefined]) {
+            const r = tuning.resolveOllamaOverrides({ agent, thinkingBudget: 1024, maxOutputTokens: 8192 }, NO_DEFAULTS);
+            assert.deepEqual(r, { thinkingBudget: 1024, maxOutputTokens: 8192, numCtx: undefined, applied: {}, sources: {} }, String(agent));
+        }
+        // none 不分大小寫；只寫 _CHEM 時數學／物理版仍是預設
+        assert.equal(tuning.noThinkFor('kc_tag', { OLLAMA_NO_THINK: 'NONE' }), false);
+        const chemOnly = { OLLAMA_MAX_OUTPUT_VERIFY_CHEM: '8192' };
+        assert.equal(tuning.resolveOllamaOverrides({ agent: 'verify_chem', maxOutputTokens: 8192 }, chemOnly).maxOutputTokens, 8192);
+        assert.equal(tuning.resolveOllamaOverrides({ agent: 'verify', maxOutputTokens: 8192 }, chemOnly).maxOutputTokens, 3072);
+    });
+
+    test('〔C-b〕OLLAMA_NO_THINK 有寫就整個取代預設：只寫 lint → kc_tag 恢復思考；lint,kc_tag → 兩個都關；sources 標 env', () => {
+        const lintOnly = tuning.resolveOllamaOverrides({ agent: 'kc_tag', thinkingBudget: 512 }, { OLLAMA_NO_THINK: 'lint' });
+        assert.deepEqual([lintOnly.thinkingBudget, lintOnly.applied], [512, {}]);
+        for (const a of ['lint', 'kc_tag']) {
+            const r = tuning.resolveOllamaOverrides({ agent: a, thinkingBudget: 512 }, { OLLAMA_NO_THINK: 'lint,kc_tag' });
+            assert.deepEqual([r.thinkingBudget, r.applied, r.sources], [0, { think: false }, { think: 'env' }], a);
+        }
+        assert.deepEqual(tuning.noThinkSpec({}), { all: false, names: new Set(['kc_tag']), source: 'default' });
+        assert.deepEqual(tuning.noThinkSpec({ OLLAMA_NO_THINK: 'none' }), { all: false, names: new Set(), source: 'env' });
+    });
+
+    test('〔C-c〕驗算的上限：只降不升照舊（寫更小的值照寫的、agent 本身更小時不動）；亂填＝沒寫＝本機預設', () => {
+        const r = (env, maxOutputTokens = 8192) => tuning.resolveOllamaOverrides({ agent: 'verify', thinkingBudget: 1024, maxOutputTokens }, env);
+        assert.deepEqual([r({ OLLAMA_MAX_OUTPUT_VERIFY: '2048' }).maxOutputTokens, r({ OLLAMA_MAX_OUTPUT_VERIFY: '2048' }).sources], [2048, { numPredict: 'env' }]);
+        assert.deepEqual([r({ OLLAMA_MAX_OUTPUT_VERIFY: '4096' }).maxOutputTokens, r({ OLLAMA_MAX_OUTPUT_VERIFY: '4096' }).sources], [4096, { numPredict: 'env' }], '寫比預設大、比原本小的值：照寫的');
+        assert.deepEqual([r({}, 2048).maxOutputTokens, r({}, 2048).applied], [2048, {}], '不會調高');
+        for (const bad of ['abc', '0', '-5', '3.5', '', ' ']) {
+            assert.deepEqual(r({ OLLAMA_MAX_OUTPUT_VERIFY: bad }).applied, { numPredict: 3072 }, `「${bad}」`);
+        }
+        assert.equal(tuning.defaultMaxOutputFor('verify_chem'), 3072);
+        assert.equal(tuning.defaultMaxOutputFor('lint'), null);
+        assert.equal(tuning.defaultMaxOutputFor(undefined), null);
+        assert.deepEqual(JSON.parse(JSON.stringify(tuning.LOCAL_DEFAULTS)), { noThink: ['kc_tag'], maxOutput: { verify: 3072 } });
     });
 
     test('OLLAMA_NO_THINK：列出的才關；基本名稱連化學版一起；不分大小寫；全形逗號、頓號、空白都能分隔', () => {
-        const env = { OLLAMA_NO_THINK: ' Lint，kc_tag、 tutor ' };
-        const off = (agent) => tuning.resolveOllamaOverrides({ agent, thinkingBudget: 512 }, env);
+        const env = { ...NO_DEFAULTS, OLLAMA_NO_THINK: ' Lint，kc_tag、 tutor ' };
+        // 〔C-c〕verify 帶正式流程的上限 8192：NO_DEFAULTS 的 8192 不降，applied 只看思考
+        const off = (agent) => tuning.resolveOllamaOverrides({ agent, thinkingBudget: 512, maxOutputTokens: 8192 }, env);
         for (const a of ['lint', 'lint_chem', 'LINT', 'kc_tag', 'tutor']) {
             assert.deepEqual([off(a).thinkingBudget, off(a).applied], [0, { think: false }], a);
         }
@@ -107,13 +161,14 @@ describe('resolveOllamaOverrides', () => {
 
     test('OLLAMA_NO_THINK=all／*：每個會思考的都關；本來就不思考的（budget 0 或沒給）不記 applied', () => {
         for (const w of ['all', '*', 'ALL']) {
-            const env = { OLLAMA_NO_THINK: w };
-            assert.deepEqual(tuning.resolveOllamaOverrides({ agent: 'verify', thinkingBudget: 1024 }, env).applied, { think: false });
+            const env = { ...NO_DEFAULTS, OLLAMA_NO_THINK: w };
+            assert.deepEqual(tuning.resolveOllamaOverrides({ agent: 'verify', thinkingBudget: 1024, maxOutputTokens: 8192 }, env).applied, { think: false });
             assert.deepEqual(tuning.resolveOllamaOverrides({ agent: undefined, thinkingBudget: 1024 }, env).applied, { think: false }, '沒給 agent 也關');
             assert.deepEqual(tuning.resolveOllamaOverrides({ agent: 'classify' }, env).applied, {});
             assert.deepEqual(tuning.resolveOllamaOverrides({ agent: 'classify', thinkingBudget: 0 }, env).applied, {});
         }
         assert.equal(tuning.noThinkFor('verify', { OLLAMA_NO_THINK: '' }), false);
+        assert.equal(tuning.noThinkFor('kc_tag', { OLLAMA_NO_THINK: '' }), true, '〔C-b〕空字串＝沒寫＝本機預設');
         assert.equal(tuning.noThinkFor('', { OLLAMA_NO_THINK: 'verify' }), false);
     });
 
@@ -127,7 +182,7 @@ describe('resolveOllamaOverrides', () => {
         assert.equal(r('lint', 8192).maxOutputTokens, 4096);
         assert.deepEqual([r('classify', undefined).maxOutputTokens, r('classify', undefined).applied], [256, { numPredict: 256 }]);
         for (const bad of ['abc', '0', '-5', '3.5', '', ' ']) {
-            assert.deepEqual(tuning.resolveOllamaOverrides({ agent: 'verify', maxOutputTokens: 8192 }, { OLLAMA_MAX_OUTPUT_VERIFY: bad }).applied, {}, `「${bad}」`);
+            assert.deepEqual(tuning.resolveOllamaOverrides({ agent: 'lint', maxOutputTokens: 8192 }, { OLLAMA_MAX_OUTPUT_LINT: bad }).applied, {}, `「${bad}」`);
         }
     });
 
@@ -137,14 +192,17 @@ describe('resolveOllamaOverrides', () => {
             const r = tuning.resolveOllamaOverrides({ agent: a, maxOutputTokens: 8192 }, env);
             assert.deepEqual([r.numCtx, r.applied], [16384, { numCtx: 16384 }], a);
         }
-        const v = tuning.resolveOllamaOverrides({ agent: 'verify', thinkingBudget: 1024, maxOutputTokens: 8192 }, env);
+        const v = tuning.resolveOllamaOverrides({ agent: 'verify', thinkingBudget: 1024, maxOutputTokens: 8192 }, { ...NO_DEFAULTS, ...env });
         assert.deepEqual([v.numCtx, v.applied], [undefined, {}]);
     });
 
     test('三個一起：applied 全記下', () => {
         const env = { OLLAMA_NO_THINK: 'verify', OLLAMA_MAX_OUTPUT_VERIFY: '3072', OLLAMA_NUM_CTX_VERIFY: '8192' };
         const r = tuning.resolveOllamaOverrides({ agent: 'verify', thinkingBudget: 1024, maxOutputTokens: 8192 }, env);
-        assert.deepEqual(r, { thinkingBudget: 0, maxOutputTokens: 3072, numCtx: 8192, applied: { think: false, numPredict: 3072, numCtx: 8192 } });
+        assert.deepEqual(r, {
+            thinkingBudget: 0, maxOutputTokens: 3072, numCtx: 8192, applied: { think: false, numPredict: 3072, numCtx: 8192 },
+            sources: { think: 'env', numPredict: 'env', numCtx: 'env' }
+        });
     });
 
     test('agentEnvSuffix／baseAgent／describeOverrides', () => {
@@ -199,14 +257,31 @@ describe('THINKING_AGENTS 與程式一致', () => {
 // ───────────────────────── 〔審查修正〕啟動時印出生效的本機調整、名稱寫錯時警告 ─────────────────────────
 
 describe('checkOverrides／announceOverrides', () => {
-    test('什麼都沒寫：沒有生效的、沒有警告', () => {
-        assert.deepEqual(tuning.checkOverrides({}), { active: [], warnings: [] });
-        assert.deepEqual(tuning.checkOverrides({ OLLAMA_NO_THINK: '  ', OLLAMA_NUM_CTX: '8192', OLLAMA_MAX_OUTPUT_VERIFY: '' }), { active: [], warnings: [] },
+    const DEFAULT_LINES = [
+        '不思考：kc_tag（本機預設，Owner 第五輪 C-b；OLLAMA_NO_THINK 有寫就整個取代）',
+        '輸出上限：verify、verify_chem 3072（本機預設，Owner 第五輪 C-c；OLLAMA_MAX_OUTPUT_VERIFY 可覆寫）'
+    ];
+
+    test('什麼都沒寫：沒有生效的、沒有警告；〔C-b、C-c〕本機預設另列在 defaults', () => {
+        assert.deepEqual(tuning.checkOverrides({}), { active: [], warnings: [], defaults: DEFAULT_LINES });
+        assert.deepEqual(tuning.checkOverrides({ OLLAMA_NO_THINK: '  ', OLLAMA_NUM_CTX: '8192', OLLAMA_MAX_OUTPUT_VERIFY: '' }), { active: [], warnings: [], defaults: DEFAULT_LINES },
             '空字串＝沒寫；全域的 OLLAMA_NUM_CTX 不是本分支的設定');
     });
 
+    test('〔C-b、C-c〕取消預設列在生效的裡面、不警告；只寫 _CHEM 時數學／物理版仍列在預設', () => {
+        assert.deepEqual(tuning.checkOverrides(NO_DEFAULTS), {
+            active: ['不思考：無（OLLAMA_NO_THINK=none，取消本機預設 kc_tag）', '輸出上限：OLLAMA_MAX_OUTPUT_VERIFY=8192（不降：取消本機預設 3072）'],
+            warnings: [], defaults: []
+        });
+        assert.deepEqual(tuning.checkOverrides({ OLLAMA_NO_THINK: 'lint', OLLAMA_MAX_OUTPUT_VERIFY_CHEM: '2048' }), {
+            active: ['不思考：lint（寫基本名稱的連化學版一起）', '輸出上限：OLLAMA_MAX_OUTPUT_VERIFY_CHEM=2048'],
+            warnings: [], defaults: ['輸出上限：verify 3072（本機預設，Owner 第五輪 C-c；OLLAMA_MAX_OUTPUT_VERIFY 可覆寫）']
+        });
+        assert.deepEqual(tuning.checkOverrides({ OLLAMA_MAX_OUTPUT_VERIFY: 'abc' }).defaults, DEFAULT_LINES, '亂填＝沒寫：仍用預設（另有警告）');
+    });
+
     test('生效的列成一段；寫錯的 agent（verfy）、本來就不思考的（classify）、後綴拼錯、值不是正整數、輸出上限沒有比較小，各一行警告', () => {
-        const { active, warnings } = tuning.checkOverrides({
+        const { active, warnings, defaults } = tuning.checkOverrides({
             OLLAMA_NO_THINK: 'verfy, classify，lint、kc_tag',
             OLLAMA_MAX_OUTPUT_VERIFY: '3072', OLLAMA_MAX_OUTPUT_LINT: '9000', OLLAMA_MAX_OUTPUT_VARIANT: '2048',
             OLLAMA_NUM_CTX_EXTRCT_OCR: '16384', OLLAMA_NUM_CTX_EXTRACT_OCR: 'abc', OLLAMA_NUM_CTX_EXTRACT_VISION_CHEM: '16384'
@@ -217,39 +292,56 @@ describe('checkOverrides／announceOverrides', () => {
             'num_ctx：OLLAMA_NUM_CTX_EXTRACT_VISION_CHEM=16384'
         ]);
         assert.equal(warnings.length, 5, warnings.join('\n'));
+        assert.deepEqual(defaults, [], '兩個預設都被明寫的取代');
         assert.match(warnings.find(w => w.includes('verfy')), /不是認得的 agent（寫錯了？這個名字會被忽略）.*會思考的 agent：verify、lint、kc_tag、tutor、voice/);
         assert.match(warnings.find(w => w.includes('classify')), /本來就不思考，寫了沒有作用/);
         assert.match(warnings.find(w => w.includes('OLLAMA_MAX_OUTPUT_LINT')), /9000 不比 lint 原本的輸出上限 8192 小（只降不升），沒有作用/);
         assert.match(warnings.find(w => w.includes('EXTRCT_OCR')), /「EXTRCT_OCR」不是認得的 agent/);
         assert.match(warnings.find(w => w.includes('=abc')), /OLLAMA_NUM_CTX_EXTRACT_OCR=abc 不是正整數，被忽略/);
         // 警告的名稱真的被忽略（與 resolveOllamaOverrides 一致）
-        assert.deepEqual(tuning.resolveOllamaOverrides({ agent: 'verify', thinkingBudget: 1024 }, { OLLAMA_NO_THINK: 'verfy' }).applied, {});
+        assert.deepEqual(tuning.resolveOllamaOverrides({ agent: 'verify', thinkingBudget: 1024, maxOutputTokens: 8192 }, { ...NO_DEFAULTS, OLLAMA_NO_THINK: 'verfy' }).applied, {});
     });
 
     test('all／*：全部會思考的；化學版寫全名也認得', () => {
         assert.deepEqual(tuning.checkOverrides({ OLLAMA_NO_THINK: 'all' }).active, ['不思考：全部會思考的 agent（verify、lint、kc_tag、tutor、voice）']);
-        assert.deepEqual(tuning.checkOverrides({ OLLAMA_NO_THINK: 'verify_chem' }), { active: ['不思考：verify_chem（寫基本名稱的連化學版一起）'], warnings: [] });
+        assert.deepEqual(tuning.checkOverrides({ OLLAMA_NO_THINK: 'verify_chem' }), { active: ['不思考：verify_chem（寫基本名稱的連化學版一起）'], warnings: [], defaults: [DEFAULT_LINES[1]] });
         assert.deepEqual(tuning.checkOverrides({ OLLAMA_NUM_CTX_CLASSIFY_CHEM: '8192' }).warnings, []);
     });
 
-    test('announceOverrides：live／record 才印、同一行程只印一次；replay 或什麼都沒寫不印', () => {
+    test('announceOverrides：live／record 才印、同一行程只印一次；replay 或什麼都沒寫（文字模型是 Gemini）不印', () => {
+        // 〔C-b、C-c〕文字模型是 Gemini：本機預設不印（這一則測明寫的設定；本機預設的印法見下一則）
+        const GEM = { MODEL_VERIFY: 'gemini:gemini-3.1-pro-preview' };
         const logs = [];
         const warns = [];
         const out = { log: (s) => logs.push(s), warn: (s) => warns.push(s) };
         tuning._resetAnnounceForTest();
         assert.equal(tuning.announceOverrides({ LLM_MODE: 'replay', OLLAMA_NO_THINK: 'verify' }, out), false, 'replay 不套用，不印');
         assert.equal(tuning.announceOverrides({ OLLAMA_NO_THINK: 'verify' }, out), false, '沒設 LLM_MODE＝replay');
-        assert.equal(tuning.announceOverrides({ LLM_MODE: 'live' }, out), false, '什麼都沒寫');
+        assert.equal(tuning.announceOverrides({ LLM_MODE: 'live', ...GEM }, out), false, '什麼都沒寫');
         assert.deepEqual([logs, warns], [[], []]);
-        assert.equal(tuning.announceOverrides({ LLM_MODE: 'LIVE', OLLAMA_NO_THINK: 'verify,verfy' }, out), true);
+        assert.equal(tuning.announceOverrides({ LLM_MODE: 'LIVE', OLLAMA_NO_THINK: 'verify,verfy', ...GEM }, out), true);
         assert.deepEqual(logs, ['[ollama] 本機調整（docs/local-mode.md 第 10.14 條；只在模型是 ollama:… 時套用）：不思考：verify（寫基本名稱的連化學版一起）']);
         assert.equal(warns.length, 1);
         assert.match(warns[0], /^\[ollama\] ⚠ OLLAMA_NO_THINK 裡的「verfy」/);
         assert.equal(tuning.announceOverrides({ LLM_MODE: 'record', OLLAMA_NO_THINK: 'lint' }, out), false, '同一行程只印一次');
         tuning._resetAnnounceForTest();
-        assert.equal(tuning.announceOverrides({ LLM_MODE: 'record', OLLAMA_NUM_CTX_VERFY: '8192' }, out), true, '只有警告也印');
+        assert.equal(tuning.announceOverrides({ LLM_MODE: 'record', OLLAMA_NUM_CTX_VERFY: '8192', ...GEM }, out), true, '只有警告也印');
         assert.equal(logs.length, 1);
         assert.match(warns[1], /OLLAMA_NUM_CTX_VERFY/);
+        tuning._resetAnnounceForTest();
+    });
+
+    test('〔C-b、C-c〕文字模型是 ollama（含沒寫 MODEL_VERIFY 的預設）：什麼都沒寫也印一行本機預設；replay 不印', () => {
+        const logs = [];
+        const out = { log: (s) => logs.push(s), warn: () => assert.fail('不該警告') };
+        tuning._resetAnnounceForTest();
+        assert.equal(tuning.announceOverrides({ LLM_MODE: 'replay' }, out), false);
+        assert.equal(tuning.announceOverrides({ LLM_MODE: 'live' }, out), true);
+        assert.deepEqual(logs, [`[ollama] 本機調整（docs/local-mode.md 第 10.14 條；只在模型是 ollama:… 時套用）：${DEFAULT_LINES.join('；')}`]);
+        tuning._resetAnnounceForTest();
+        assert.equal(tuning.textModelIsLocal({}), true, 'MODEL_VERIFY 沒寫＝ollama:qwen3:8b');
+        assert.equal(tuning.textModelIsLocal({ MODEL_VERIFY: 'gemini:x' }), false);
+        assert.equal(tuning.textModelIsLocal({ MODEL_VERIFY: 'gemini:x', MODEL_KC_TAG: 'ollama:qwen3:8b' }), true);
         tuning._resetAnnounceForTest();
     });
 
@@ -285,20 +377,39 @@ describe('checkOverrides／announceOverrides', () => {
 // ───────────────────────── services/llm 的套用 ─────────────────────────
 
 describe('services/llm：vendor 是 ollama 時套用', () => {
-    test('什麼都沒寫：送出的 think、options 與之前逐位元相同（沒有 num_thread）', async () => {
+    test('〔C-b、C-c〕什麼都沒寫：verify 送 num_predict 3072（照舊思考）、kc_tag 送 think:false；其他（家教、lint）與之前逐位元相同（沒有 num_thread）', async () => {
         process.env.LLM_MODE = 'live';
         const calls = fakeOllama();
         await llm.generateJson({ ...VERIFY_CALL });
         assert.equal(calls[0].think, true);
-        assert.deepEqual(calls[0].options, { temperature: 0, num_ctx: 16384, num_predict: 8192 });
+        assert.deepEqual(calls[0].options, { temperature: 0, num_ctx: 16384, num_predict: 3072 });
         await llm.generateText({ ...VERIFY_CALL, schema: undefined, agent: 'tutor', thinkingBudget: 2048 });
         assert.equal(calls[1].think, true);
         assert.deepEqual(calls[1].options, { temperature: 0, num_ctx: 16384, num_predict: 8192 });
+        await llm.generateJson({ ...VERIFY_CALL, agent: 'kc_tag', thinkingBudget: 512, maxOutputTokens: 4096 });
+        assert.equal(calls[2].think, false);
+        assert.deepEqual(calls[2].options, { temperature: 0, num_ctx: 16384, num_predict: 4096 });
+        await llm.generateJson({ ...VERIFY_CALL, agent: 'lint' });
+        assert.equal(calls[3].think, true);
+        assert.deepEqual(calls[3].options, { temperature: 0, num_ctx: 16384, num_predict: 8192 });
+    });
+
+    test('〔C-b、C-c〕取消本機預設（OLLAMA_NO_THINK=none、OLLAMA_MAX_OUTPUT_VERIFY=8192）：送出的 think、options 與之前逐位元相同', async () => {
+        process.env.LLM_MODE = 'live';
+        Object.assign(process.env, NO_DEFAULTS);
+        const calls = fakeOllama();
+        await llm.generateJson({ ...VERIFY_CALL });
+        await llm.generateJson({ ...VERIFY_CALL, agent: 'kc_tag', thinkingBudget: 512, maxOutputTokens: 4096 });
+        assert.deepEqual(calls.map(c => [c.think, c.options]), [
+            [true, { temperature: 0, num_ctx: 16384, num_predict: 8192 }],
+            [true, { temperature: 0, num_ctx: 16384, num_predict: 4096 }]
+        ]);
     });
 
     test('OLLAMA_NO_THINK=verify：verify 送 think:false，lint 照樣思考；generateText（家教）同一套規則', async () => {
         process.env.LLM_MODE = 'live';
         process.env.OLLAMA_NO_THINK = 'verify,tutor';
+        process.env.OLLAMA_MAX_OUTPUT_VERIFY = '8192';   // 〔C-c〕取消驗算的本機預設上限：這一則只看思考
         const calls = fakeOllama();
         await llm.generateJson({ ...VERIFY_CALL });
         await llm.generateJson({ ...VERIFY_CALL, agent: 'verify_chem' });
@@ -372,9 +483,15 @@ describe('services/llm：vendor 是 ollama 時套用', () => {
         console.log = (m) => logs.push(String(m));
         const key = cassette.cassetteKey({ agent: 'verify', modelId: 'qwen3:8b', template: 'verify.v1', schema: VERIFY_CALL.schema, cacheKeyParts: VERIFY_CALL.cacheKeyParts });
         try {
+            Object.assign(process.env, NO_DEFAULTS);   // 〔C-b、C-c〕取消本機預設：什麼都沒套用
             await llm.generateJson({ ...VERIFY_CALL });
             const plain = cassette.readCassette('verify', key);
             assert.deepEqual(Object.keys(plain.request), ['parts', 'cacheKeyParts']);
+
+            // 〔C-c〕本機預設（沒寫 OLLAMA_MAX_OUTPUT_VERIFY）照樣記在 ollamaOverrides；鍵不變
+            delete process.env.OLLAMA_MAX_OUTPUT_VERIFY;
+            await llm.generateJson({ ...VERIFY_CALL });
+            assert.deepEqual(cassette.readCassette('verify', key).request.ollamaOverrides, { numPredict: 3072 });
 
             process.env.OLLAMA_NO_THINK = 'verify';
             process.env.OLLAMA_MAX_OUTPUT_VERIFY = '3072';

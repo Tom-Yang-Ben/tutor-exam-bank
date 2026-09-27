@@ -1284,16 +1284,18 @@ function currentStats(thinkStats, noThinkStats, env = {}) {
     const info = new Map();
     for (const agent of new Set([...thinkStats.keys(), ...noThinkStats.keys()])) {
         const wantNoThink = thinksByDefault(agent) && tuning.noThinkFor(agent, env);
+        // 〔Owner 第五輪 C-b〕.env 沒寫 OLLAMA_NO_THINK 時是本機預設（kc_tag 不思考）
+        const noThinkWhy = tuning.noThinkSpec(env).source === 'default' ? '本機預設不思考（Owner 第五輪 C-b）' : '`.env` 設了 `OLLAMA_NO_THINK`';
         const first = wantNoThink ? noThinkStats.get(agent) : thinkStats.get(agent);
         const second = wantNoThink ? thinkStats.get(agent) : noThinkStats.get(agent);
         if (first) {
             stats.set(agent, first);
-            info.set(agent, { noThink: wantNoThink, note: wantNoThink ? '（`.env` 設了 `OLLAMA_NO_THINK`：用不思考版的回放檔）' : null });
+            info.set(agent, { noThink: wantNoThink, note: wantNoThink ? `（${noThinkWhy}：用不思考版的回放檔）` : null });
         } else if (second) {
             stats.set(agent, second);
             info.set(agent, {
                 noThink: !wantNoThink,
-                note: wantNoThink ? '（`.env` 設了 `OLLAMA_NO_THINK`，但只有思考版的回放檔：實際會比這快）'
+                note: wantNoThink ? `（${noThinkWhy}，但只有思考版的回放檔：實際會比這快）`
                     : '（只有不思考版的回放檔〔`OLLAMA_NO_THINK` 錄的〕：`.env` 沒設時實際會思考、比這慢）'
             });
         }
@@ -1643,7 +1645,8 @@ function effectiveOllamaLimits(agent, settings, env = {}, maxOutputTokens) {
             ? { numCtx: r.numCtx, numCtxEnv: nameOf('OLLAMA_NUM_CTX_'), numCtxSource: '.env' }
             : { numCtx: settings.OLLAMA_NUM_CTX.value, numCtxEnv: 'OLLAMA_NUM_CTX', numCtxSource: settings.OLLAMA_NUM_CTX.source },
         r.applied.numPredict
-            ? { maxOutputTokens: r.maxOutputTokens, maxOutputEnv: nameOf('OLLAMA_MAX_OUTPUT_') }
+            // 〔Owner 第五輪 C-c〕本機預設（verify 3072）沒有環境變數名稱：標成「本機預設」
+            ? { maxOutputTokens: r.maxOutputTokens, maxOutputEnv: nameOf('OLLAMA_MAX_OUTPUT_') || '本機預設（C-c）' }
             : { maxOutputTokens, maxOutputEnv: null }
     );
 }
@@ -2452,7 +2455,7 @@ function paperSection(paper, settings) {
     L.push('沒算進去的：模型載入（Ollama 換模型或 `OLLAMA_KEEP_ALIVE` 過期後每次 1～2 分鐘，見 docs/local-mode.md 第 10.14 條的「換載」）、' +
         '找相似題的向量（`qwen3-embedding:0.6b`，一次幾秒）、排隊、驗算失敗後的人工複核。');
     L.push('');
-    L.push('### 4.1 加速選項能省多少（估計；預設都沒有改，待 Owner 決定）');
+    L.push('### 4.1 加速選項能省多少（估計；Owner 第五輪：(b) 知識點標註不思考、(c) 驗算輸出上限 3072 已是本機預設，其餘維持）');
     L.push('');
     const optLabel = { a: '(a) lint 不思考（`OLLAMA_NO_THINK=lint`）', b: '(b) 知識點標註不思考（`OLLAMA_NO_THINK=kc_tag`）', c: '(c) 驗算不思考（`OLLAMA_NO_THINK=verify`）' };
     L.push(table(['選項', '每次省（估）', '一份卷省（估）', '依據'], paper.savings.map(s => [
@@ -2463,7 +2466,7 @@ function paperSection(paper, settings) {
         s.note
     ])));
     L.push('');
-    L.push('(c) 還有「只降輸出上限」（`OLLAMA_MAX_OUTPUT_VERIFY`）：平常的呼叫省不到時間（實測最多只寫一千多 token），只縮短模型思考繞圈時的最壞情況；' +
+    L.push('(c) 還有「只降輸出上限」（本機預設 3072，Owner 第五輪 C-c；`OLLAMA_MAX_OUTPUT_VERIFY` 可覆寫）：平常的呼叫省不到時間（實測最多只寫一千多 token），只縮短模型思考繞圈時的最壞情況；' +
         '(d) `OLLAMA_NUM_CTX` 降到 8192、(e) Ollama 伺服器設定與關掉其他程式：只有在記憶體不夠、系統在換頁時才會變快，回放檔量不出來，' +
         '要照 docs/local-mode.md 第 10.14 條在自己的電腦上量。');
     L.push('');

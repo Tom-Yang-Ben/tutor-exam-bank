@@ -794,6 +794,8 @@ node eval/tools/local_bench_vision.js --baseline
 
 ### 10.14 拆題以外的時間花在哪裡、加速選項（2026-09-26，`dec/local-thinking-speed`；**待 Owner 決定，預設未改**）
 
+> 〔第五輪 B，2026-09-27，`dec/r6-local-tuning`〕Owner 已決定本節的選項：(b) 知識點標註不思考、(c2) 驗算上限 3072、截斷不重試已做成**本機模式的程式預設**，其餘維持；見 10.17。下面「預設未改」「待 Owner 決定」是 2026-09-26 當時的狀態。
+
 > 本節的程式只加了「可以開、預設關」的設定與兩個量測工具：`.env` 不寫任何新設定時，送給 Ollama 的內容與之前逐位元相同（`test/unit/localTuning.test.js`）。拆題本身（OCR 為主）在另一條分支，本節不動〔整合：見 10.12〕。
 >
 > 〔審查修正 2026-09-26，`dec/local-thinking-speed-fix`〕原本寫的「冷的讀 prompt 約 17 token/秒」其實大多是**部分快取**（連送兩次的第一次，前面多半剛送過同一個 agent 的上一題，Ollama 只讀了後半段）；改用「這個 agent 第一次出現」的呼叫推，約 **8 token/秒**，受影響的估計（冷的分類、OCR 整理、知識點標註與補標、合計、選項 a／c 扣掉的讀 prompt）都重算了。「分類的快取每題都被擠掉」改成條件句（回放檔顯示 Ollama 至少留著 3 份 prompt 快取）。**本節每個數字都能用 `npm run perf:local` 重跑**，旁邊註明第幾段；Owner 自己量的（看圖 1 頁）另註出處。
@@ -1081,7 +1083,7 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 
 ### 10.16 第五輪 A 模板與 schema（2026-09-27）
 
-> 分支 `dec/r6-templates`，從 `local/integration-r5`（`a670783`）開。節號暫編，整合時再重編。依第五輪決策單落實三題：**LC-1＝2**（分類先寫理由）、**L-2＝1**（prompt 要求 JSON 字串裡的反斜線寫兩個）、**V5-6＝2**（同一藍本的兄弟變式從生成端就不一樣）。`eval/thresholds.json`、golden、既有 cassette 都沒改。三題都改了模板或 schema，對應的 cassette 要重錄，第 4 點逐一列出。
+> 分支 `dec/r6-templates`，從 `local/integration-r5`（`a670783`）開。節號暫編 10.16，〔整合 2026-09-27 dec/integration-r6〕併入順序第一，維持 10.16。依第五輪決策單落實三題：**LC-1＝2**（分類先寫理由）、**L-2＝1**（prompt 要求 JSON 字串裡的反斜線寫兩個）、**V5-6＝2**（同一藍本的兄弟變式從生成端就不一樣）。`eval/thresholds.json`、golden、既有 cassette 都沒改。三題都改了模板或 schema，對應的 cassette 要重錄，第 4 點逐一列出。
 
 #### 1. LC-1＝2：分類的欄位順序改成「理由 → 章節 → 信心」（Owner 第五輪 LC-1 核准）
 
@@ -1171,3 +1173,85 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 4. **`generateVariant.js` 註解版號過時；`calibrate_source_check.js` 綁死 `extract.v2`**——註解屬實，已改成 `variant_chem.v2`（只是註解，不進模板雜湊）。`calibrate_source_check.js`（與 `test/unit/sourceCheckSample.test.js`）依 `meta.template === 'extract.v2'` 找樣卷 cassette：repo 裡現在就是那一支，行為正確，依審查建議**現在不改程式**，只在工具裡加註「切回 Gemini、用 `extract.v3` 重錄並刪掉舊檔時，這裡與 `sourceCheckSample` 測試要一起改」。
 
 驗證：unit、`check:html`、integration（5433 全新 UTF8 測試庫，用完已刪）都重跑通過。
+
+### 10.17 第五輪 B 本機呼叫調整（2026-09-27）
+
+> 分支 `dec/r6-local-tuning`（從 `local/integration-r5` `a670783` 開）。節號原暫編 10.16，〔整合 2026-09-27 dec/integration-r6〕依併入順序改號為 10.17。
+> 依據：[`owner-pending-decisions-r5.md`](owner-pending-decisions-r5.md) C 系列，Owner 2026-09-27 第五輪的選擇。C-b、C-c、C-f 照做（程式改動，**Owner 第五輪核准**）；C-a、C-d、C-e、C-g、C-h、C-i 只記錄、不改程式。
+
+#### 1. 做了什麼（三項，都只在本機模式生效）
+
+「本機模式」＝這一次呼叫的模型是 `ollama:…`（`services/llm/index.js` 的 `adapterOpts` 依 vendor 分派；runner 看這個節點實際呼叫的模型）。Gemini 路徑與回放（replay）一個字都不讀。
+
+| 題號 | Owner 的選擇 | 程式預設 | 怎麼覆寫（`exam_pro\.env`） |
+|---|---|---|---|
+| C-b | 2 知識點標註不思考 | `OLLAMA_NO_THINK` **沒寫或空字串**＝`kc_tag`（`services/llm/localTuning.js` 的 `LOCAL_DEFAULTS.noThink`） | 寫了就**整個取代**預設：`OLLAMA_NO_THINK=none`＝kc_tag 照舊思考；`OLLAMA_NO_THINK=lint,kc_tag`＝兩個都關（只寫 `lint` 的話 kc_tag 會恢復思考） |
+| C-c | 2 驗算只降輸出上限 | `OLLAMA_MAX_OUTPUT_VERIFY` 沒寫＝3072，`verify` 與 `verify_chem` 都是（`LOCAL_DEFAULTS.maxOutput`）；**思考照舊** | 寫別的值就照寫的（只降不升照舊）；寫 `8192`（程式原本的上限）＝取消預設；化學版可另寫 `OLLAMA_MAX_OUTPUT_VERIFY_CHEM` |
+| C-f | 2 截斷不重試、進複核 | Ollama 回 `done_reason: length`（`finishReason='MAX_TOKENS'`）而 JSON 不完整時，classify／lint／verify 不退避重跑，**一次就** `needs_review('output_truncated')` | 沒有開關（與第四輪 V3「本機逾時只重試 1 次」同一個慣例）；Gemini 模式照舊重試 3 次 |
+
+C-f 的細節：
+
+- 節點：`agents/verify.js`、`agents/lint.js`、`agents/classify.js` 的 error outcome 多帶 `finishReason`（供應商有回報才帶；沒有時 outcome 與之前逐鍵相同）。`agents/tagKc.js` 也帶，但知識點標註不在狀態機裡（入庫後的掛鉤），只記下來。
+- 狀態機（`pipeline/stateMachine.js`）規則 6a：error、`finishReason='MAX_TOKENS'`、`limits.retryTruncated === false` → `needs_review('output_truncated')`，計數器不動。`retryTruncated` 沒給＝照舊重試，`DEFAULT_LIMITS` 沒有多欄位。預算用盡仍先是 `budget_exceeded`。
+- runner（`workers/jobRunner.js`）：`meteredLlm` 記下這個節點最後一次呼叫的模型（`meter.lastModel`；失敗時也有），是 `ollama:…` 才給 `retryTruncated:false`。`job_events` 照實記 `error_class='schema_invalid'`（JSON 確實不完整），`detail.finish_reason` 另記截斷——`report:jobs` 的 review_reason 分佈會多一列 `output_truncated`。`detail.finish_reason` **只在這次呼叫的模型是 `ollama:…` 時記**（本機沒被截斷的 error 也記，例 `STOP`）；Gemini 的 `schema_invalid` 雖然也帶 finishReason（`services/llm/gemini.js`），Gemini 路徑的事件 detail 照舊、不多這一欄。其餘事件（沒有 finishReason 的 error、pass、fail、skipped）的 detail 與之前相同。
+- 複核原因選**新值** `output_truncated`（migration `0020_output_truncated_review.sql`，照 0009／0015／0019 以完整值域重建 CHECK、可重複套用），不沿用 `schema_invalid`：後者的說明是「JSON 損壞，重跑通常就會過」，對截斷的題正好相反。複核頁標籤「本機模型回應被截斷」。classify、lint、verify 被截斷都進這個原因，而複核頁拿不到是哪一步（error 路徑不寫 payload），所以說明句不綁特定步驟：叫老師自己核對；驗算被截斷可調高 `OLLAMA_MAX_OUTPUT_VERIFY`（本機預設 3072，最高到原本的 8192）後重跑；分類（沒設上限）與題目檢查（已是原本的 8192）的 `OLLAMA_MAX_OUTPUT_<步驟>` 只降不升、調不高，被截斷多半是上下文長度不夠（`OLLAMA_NUM_CTX_CLASSIFY`／`_LINT`），或 `.env` 自己把上限調低過。要知道是哪一步，看 `job_events` 那一題最後一筆 error 事件的 `node`。
+- **資料庫還沒套 0020**（Owner 忘了 `npm run migrate`）：runner 寫之前查一次約束，不接受 `output_truncated` 就退回原本的原因（`schema_invalid`）、仍然不重試，伺服器視窗印一次「先 npm run migrate」。不會撞 CHECK、也不會卡住佇列（與 0019 的處理不同：ocr 模式每題都會用到 `ocr_only`，所以整個佇列先停；截斷很少見，不值得為它停佇列）。**已知的過渡落差**：這段期間以 `schema_invalid` 進複核的本機題，其實是被截斷、一次都沒重試；複核頁對 `schema_invalid` 的說明（「重試已用盡。重跑這一題通常就會過」）對它們不成立，重跑多半還是會截斷。伺服器視窗那一行訊息也寫明這點；套上 0020 之後新進複核的題就是 `output_truncated`（已經進複核的舊題不會自動改原因）。
+- **範圍限制**：截斷不重試只接在狀態機的節點（classify、lint、verify）。**變式產生（`runGenerateOne`）與拆題分塊（`runExtractChunk`）不在範圍內**——兩者各有自己的重試迴圈（`DEFAULT_LIMITS.maxErrorRetries`），本機被截斷時仍照舊重試最多 3 次（拆題分塊的逾時另有第四輪 V3 的 1 次上限）。知識點標註（kc_tag）不在狀態機裡，只把 finishReason 帶出來、不影響重試。
+
+啟動時（`LLM_MODE` 是 live／record、文字模型是 ollama）印的那一行多列本機預設，例：
+
+```
+[ollama] 本機調整（docs/local-mode.md 第 10.14 條；只在模型是 ollama:… 時套用）：不思考：kc_tag（本機預設，Owner 第五輪 C-b；OLLAMA_NO_THINK 有寫就整個取代）；輸出上限：verify、verify_chem 3072（本機預設，Owner 第五輪 C-c；OLLAMA_MAX_OUTPUT_VERIFY 可覆寫）
+```
+
+`npm run local:bench-text` 的「思考」「輸出上限」會標「本機預設」或「.env 的 …」；`npm run perf:local` 第 4 段的「現狀」把 kc_tag 當成不思考。
+
+#### 2. 回放檔（cassette）要不要重錄
+
+- **鍵不變**：cassette 的鍵是 agent／modelId／模板雜湊／schemaHash／cacheKeyParts（`services/llm/cassette.js`），思考開關（`think`）與輸出上限（`num_predict`）**都不在鍵裡**；本分支沒有改任何模板、schema、prompt。所以既有回放檔全部照樣命中，`npm run eval` 在回放下與 `a670783` 相同（第 4 點）。
+- **內容**：錄製時會把實際送出的值記在 `request.ollamaOverrides`（例 `{ "numPredict": 3072 }`、`{ "think": false }`），不在鍵裡。
+  - verify（`verify.v1`、`qwen3:8b` 20 支）：錄的時候上限 8192，但實際最多寫 1,285 token，**沒有一支超過 3072**，照新預設重錄預期結果相同。不必為了這個重錄；下次照 10.7 整步重錄時自然會帶上新的上限。
+  - kc_tag：repo 裡沒有任何 kc_tag 回放檔（B12 試標還沒做），沒有東西要重錄；之後錄的就是不思考的版本。
+  - C-f 不影響回放：回放讀不到「被截斷的錯誤」（cassette 只存成功的回應）。
+
+#### 3. 同時記錄、不改程式的決定
+
+| 題號 | Owner 的選擇 | 現狀／說明 |
+|---|---|---|
+| C-a | 1 lint 維持思考 | `OLLAMA_NO_THINK` 的預設不含 lint |
+| C-d | 1 `num_ctx` 維持 16384 | `.env.example` 的 `OLLAMA_NUM_CTX=16384` 不動；C-e 量完若確定在換頁再回頭看 |
+| C-e | 2 先量再決定 | 在 Owner 的電腦上量，見下面第 5 點 |
+| C-g | 1 驗算不一致維持重跑一次 | `DEFAULT_LIMITS.maxRetries.verify=1` 不動（注意：這是 `answer_mismatch` 的重跑，與 C-f 的截斷無關） |
+| C-h | 1 溫度 0 | `services/llm/ollama.js` 照舊送 `temperature: 0` |
+| C-i | 1 分類一題接一題 | runner 的認領順序不動 |
+
+#### 4. 測試與 eval
+
+- 單元：`test/unit/localTruncation.test.js`（新：狀態機規則 6a、四個節點帶 finishReason、Ollama `done_reason=length` 經 services/llm 送出 3072、runner 假 db 的本機／Gemini／沒套 0020 三種情況、複核頁標籤）；`test/unit/localTuning.test.js`、`localBenchText.test.js`、`localPerfThinking.test.js` 補本機預設與覆寫（原本「什麼都沒寫＝與之前逐位元相同」的斷言改在「取消預設」的設定上做，斷言本身不變）；複核原因白名單的三則枚舉照 LM-3 先例由 11 個更新為 12 個。
+- 整合：`test/integration/localTruncation.pg.test.js`（真 PostgreSQL：0019 為止拒絕 `output_truncated`、套 0020 後接受、再套一次不動；runner＋真的 verify agent 在本機模型截斷時一次就停在 `output_truncated`，Gemini 時照舊重試）。
+- eval（回放）：與 `local/integration-r5`（`a670783`）逐 suite 比對相同，本分支沒有新造成的 replay miss（第 2 點）。
+
+#### 5. C-e 要量什麼（在 Owner 的電腦上，約 30 分）
+
+照 10.14「(e) 的細節 → 怎麼量」，順序：
+
+1. `ollama ps`：看載入了哪些模型、各佔多少記憶體（新版有 CONTEXT 欄，應是 16384）。
+2. `%LOCALAPPDATA%\Ollama\server.log` 搜 `parallel`（並行槽數；3～4 就是 10.14 說的多份 KV cache）、`n_ctx`（實際 context＝num_ctx×槽數）、`loading model`（一份卷換載幾次）。
+3. 開著「工作管理員 → 效能 → 記憶體」（使用中、認可、**已使用的插槽**看是不是單通道）與「資源監視器 → 記憶體」（硬錯誤/秒），同時跑：
+
+   ```bat
+   cd /d C:\你的路徑\tutor-exam-bank\exam_pro
+   npm run local:bench-text -- --agent verify
+   ```
+
+   不加參數＝正式上傳現在的樣子，已經帶本機預設的上限 3072（報告的「輸出上限」一欄會寫「本機預設」）。要比「降 num_ctx」或「不思考」時同一題再跑 `--num-ctx 8192`、`--no-think`；要比加預設之前的樣子加 `--max-output 8192`。這幾個參數 `local:bench-text` 都支援（`test/unit/localBenchText.test.js` 釘住）。
+4. 把 1～3 的結果（parallel、n_ctx、記憶體使用中／認可、硬錯誤/秒、bench 的「輸出 token/秒」）貼回來，再決定 C-e 的 3／4 與 C-d、C-i。
+
+#### 6. 審查修正（2026-09-27，`dec/r6-local-tuning-fix`）
+
+審查（approve、4 個小問題）逐條驗證都成立，修正如下（仍是 Owner 第五輪 C-f 核准的範圍，沒有新決定）：
+
+1. 複核頁 `output_truncated` 的說明句原本寫死「驗算上限 3072 token」與「調高 `OLLAMA_MAX_OUTPUT_VERIFY`」，classify／lint 被截斷時建議是錯的 → 改成不綁步驟的寫法（第 1 點 C-f 細節）。複核頁拿不到節點，所以沒有依節點分列；也沒有為此在 payload 多寫鍵（payload 的鍵是凍結的）。
+2. `job_events.detail.finish_reason` 原本不分供應商都寫，Gemini 的 error 事件也會多這一欄 → 改成只在本機模型時寫，Gemini 路徑的事件與之前相同（單元與整合測試都改成斷言 Gemini 事件**沒有**這一欄）。
+3. 變式產生與拆題分塊不在截斷不重試的範圍內 → 寫進第 1 點 C-f 細節的「範圍限制」。程式不改（Owner 核准的是狀態機節點）。
+4. 沒套 0020、退回 `schema_invalid` 時複核頁說明與實情不符 → 程式行為不改（過渡情況），在伺服器視窗訊息 `OUTPUT_TRUNCATED_SCHEMA_MESSAGE` 與第 1 點 C-f 細節註明。

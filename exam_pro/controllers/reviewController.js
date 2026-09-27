@@ -24,13 +24,14 @@ async function followsOf(client, questionId) {
 }
 
 /**
- * DDL CHECK 的十一個 review_reason，順序 = 介面第 2 條（0009 追加 transcription_mismatch；
+ * DDL CHECK 的十二個 review_reason，順序 = 介面第 2 條（0009 追加 transcription_mismatch；
  * 〔本機模式 L2〕0015 追加 extract_disagree——本機拆題的兩版不一致，docs/local-mode.md 第 4 條第 4 點；
- * 〔OCR 為主 2026-09-26〕0019 追加 ocr_only——LOCAL_EXTRACT_MODE=ocr 只用 OCR 拆的題，docs/local-mode.md 10.12）。
+ * 〔OCR 為主 2026-09-26〕0019 追加 ocr_only——LOCAL_EXTRACT_MODE=ocr 只用 OCR 拆的題，docs/local-mode.md 10.12；
+ * 〔Owner 第五輪 C-f〕0020 追加 output_truncated——本機模型的回應寫到輸出上限被截斷、不重試，docs/local-mode.md 10.17）。
  */
 const REVIEW_REASONS = ['chapter_invalid', 'formula_unparsable', 'answer_mismatch',
     'duplicate', 'budget_exceeded', 'provider_error', 'schema_invalid', 'awaiting_approval',
-    'transcription_mismatch', 'extract_disagree', 'ocr_only'];
+    'transcription_mismatch', 'extract_disagree', 'ocr_only', 'output_truncated'];
 
 const NOT_FOUND = '找不到該待複核題目';
 const ALREADY_DONE = '該題目已處理完畢，不能重複複核。';

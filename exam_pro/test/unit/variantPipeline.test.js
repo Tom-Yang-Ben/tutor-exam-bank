@@ -210,10 +210,12 @@ describe('政策停等（第 4.7 條）', () => {
         // transcription_mismatch（docs/source-check.md），與停等無關。
         // 〔本機模式 L2〕0015 為本機拆題交叉驗證加了第十個 extract_disagree（docs/local-mode.md 第 4 條），同樣與變式停等無關。
         // 〔OCR 為主 2026-09-26〕0019 為「只用 OCR 拆題」加了第十一個 ocr_only（docs/local-mode.md 10.12），同樣與變式停等無關。
-        assert.equal(REVIEW_REASONS.length, 11);
+        // 〔Owner 第五輪 C-f〕0020 為「本機模型回應被截斷」加了第十二個 output_truncated（docs/local-mode.md 10.17），同樣與變式停等無關。
+        assert.equal(REVIEW_REASONS.length, 12);
         assert.equal(REVIEW_REASONS[8], 'transcription_mismatch');
         assert.equal(REVIEW_REASONS[9], 'extract_disagree');
         assert.equal(REVIEW_REASONS[10], 'ocr_only');
+        assert.equal(REVIEW_REASONS[11], 'output_truncated');
     });
 
     test('停等寫的 error_class 是 NULL（不在九個合法值內的字串會撞 CHECK）', () => {

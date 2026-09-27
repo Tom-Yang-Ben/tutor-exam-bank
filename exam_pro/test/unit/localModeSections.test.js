@@ -23,29 +23,34 @@ const read = (rel) => fs.readFileSync(path.join(REPO, rel), 'utf8');
 /** 檔內所有「local-mode.md …10.1x」與「第 10.1x 條」的節號（去重、排序） */
 function sectionRefs(text) {
     const out = new Set();
-    for (const m of text.matchAll(/10\.1([0-9])(?![0-9])/g)) out.add(`10.1${m[1]}`);
+    // 〔整合 r6〕第五輪之後有 10.20，一併收 10.2x
+    for (const m of text.matchAll(/10\.([12][0-9])(?![0-9])/g)) out.add(`10.${m[1]}`);
     return [...out].sort();
 }
 
 describe('docs/local-mode.md 10.12～10.15（整合 r5、final5 改號）', () => {
     const doc = read('docs/local-mode.md');
 
-    test('四個標題依併入順序各出現一次：10.12 OCR 為主、10.13 餘弦門檻、10.14 拆題以外的時間、10.15 classify／nlq 重錄前修正', () => {
-        const all = [...doc.matchAll(/^### (10\.1[2-9]) (.*)$/gm)].map(m => [m[1], m[2]]);
-        // 〔Owner 第五輪 2026-09-27〕各組在末尾新增「### 10.16 第五輪 <組名>（2026-09-27）」，整合時再重編；
-        // 這裡只要求 10.12～10.15 照舊在前、之後只能是這種暫編的第五輪節
-        const heads = all.slice(0, 4);
-        assert.deepEqual(heads.map(h => h[0]), ['10.12', '10.13', '10.14', '10.15'], JSON.stringify(all));
-        for (const [no, title] of all.slice(4)) {
-            assert.equal(no, '10.16', JSON.stringify(all));
-            assert.match(title, /^第五輪 .+（2026-09-27）$/);
-        }
+    // 〔整合 2026-09-27 dec/integration-r6〕第五輪五組各自暫編的「10.16」依併入順序改號，這裡逐一釘住節號與標題（不再允許暫編）
+    const EXPECTED = [
+        ['10.12', /只用 OCR 拆題/],
+        ['10.13', /三個餘弦門檻/],
+        ['10.14', /拆題以外的時間/],
+        ['10.15', /classify／nlq 重錄前修正/],
+        ['10.16', /^第五輪 A 模板與 schema（2026-09-27）$/],
+        ['10.17', /^第五輪 B 本機呼叫調整（2026-09-27）$/]
+    ];
+
+    test(`第 10 章 10.12 之後的標題依併入順序各出現一次：${EXPECTED.map(e => e[0]).join('、')}`, () => {
+        const heads = [...doc.matchAll(/^### (10\.(?:1[2-9]|[2-9][0-9])) (.*)$/gm)].map(m => [m[1], m[2]]);
+        assert.deepEqual(heads.map(h => h[0]), EXPECTED.map(e => e[0]), JSON.stringify(heads));
+        EXPECTED.forEach(([, re], i) => assert.match(heads[i][1], re));
         assert.match(heads[0][1], /只用 OCR 拆題/);
         assert.match(heads[1][1], /三個餘弦門檻/);
         assert.match(heads[2][1], /拆題以外的時間/);
         assert.match(heads[3][1], /classify／nlq 重錄前修正/);
-        const i12 = doc.indexOf('### 10.12 '), i13 = doc.indexOf('### 10.13 '), i14 = doc.indexOf('### 10.14 '), i15 = doc.indexOf('### 10.15 ');
-        assert.ok(i12 < i13 && i13 < i14 && i14 < i15, '依編號排列');
+        const idx = EXPECTED.map(([no]) => doc.indexOf(`### ${no} `));
+        assert.ok(idx.every((v, i) => v >= 0 && (i === 0 || idx[i - 1] < v)), `依編號排列：${JSON.stringify(idx)}`);
         assert.equal(/^<{7}|^={7}$|^>{7}/m.test(doc), false, '沒有殘留的衝突標記');
     });
 
@@ -67,6 +72,7 @@ describe('docs/local-mode.md 10.12～10.15（整合 r5、final5 改號）', () =
         ['exam_pro/eval/tools/embed_threshold_labels.json', ['10.13']],
         ['docs/local-embed-thresholds-report.md', ['10.13']],
         ['exam_pro/services/llm/localTuning.js', ['10.14']],
+        ['exam_pro/migrations/0020_output_truncated_review.sql', ['10.17']],   // 〔第五輪 B；整合 r6 改號〕
         ['exam_pro/eval/tools/local_bench_text.js', ['10.14']],
         ['exam_pro/test/unit/localTuning.test.js', ['10.14']],
         ['exam_pro/test/unit/localBenchText.test.js', ['10.14']],
@@ -91,7 +97,8 @@ describe('docs/local-mode.md 10.12～10.15（整合 r5、final5 改號）', () =
         assert.match(rj, /本機模式要不要關掉這次重跑（docs\/local-mode\.md 第 10\.14 條）/);
         const env = read('exam_pro/.env.example');
         assert.match(env, /本機拆題的方式（〔OCR 為主 2026-09-26〕docs\/local-mode\.md 10\.12；/);
-        assert.match(env, /加速選項 a／b／c／d，預設都不改；待 Owner 決定，docs\/local-mode\.md 第 10\.14 條/);
+        // 〔Owner 第五輪 C-b、C-c〕加速選項已有本機預設：說明行改寫，仍指到 10.14（第五輪的決定另指 10.17，整合 r6 改號）
+        assert.match(env, /（加速選項，docs\/local-mode\.md 第 10\.14 條；Owner 第五輪決定見 10\.17）/);
         assert.deepEqual(sectionRefs(read('exam_pro/eval/tools/local_perf_report.js')), ['10.10', '10.11', '10.14']);
         assert.match(read('docs/variants.md'), /\[`local-mode\.md` 10\.13\]\(local-mode\.md\)/);
     });

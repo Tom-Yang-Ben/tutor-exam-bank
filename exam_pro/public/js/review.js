@@ -47,7 +47,9 @@ const REASON_LABEL = {
     // 〔本機模式 L2〕0015：本機拆題（PaddleOCR 與視覺模型）兩版不一致或只有一版（docs/local-mode.md 第 4 條）
     extract_disagree: '拆題交叉驗證不一致',
     // 〔OCR 為主 2026-09-26〕0019：LOCAL_EXTRACT_MODE=ocr 只用 OCR 拆題，沒有第二版可以比對，每題都要人工確認（docs/local-mode.md 10.12）
-    ocr_only: '只用 OCR 拆題'
+    ocr_only: '只用 OCR 拆題',
+    // 〔Owner 第五輪 C-f〕0020：本機模型的回應寫到輸出上限被截斷，不重試直接進複核（docs/local-mode.md 10.17）
+    output_truncated: '本機模型回應被截斷'
 };
 
 const REASON_TONE = {
@@ -61,7 +63,8 @@ const REASON_TONE = {
     provider_error: 'slate',
     awaiting_approval: 'indigo',
     extract_disagree: 'amber',
-    ocr_only: 'amber'
+    ocr_only: 'amber',
+    output_truncated: 'slate'
 };
 
 const TONE_CLASS = {
@@ -364,6 +367,16 @@ export function reasonSentence(reason, payload) {
                 (auto ? '附圖是依 OCR 的版面位置自動配的，請確認裁到的是這一題的圖。' : '') +
                 figureHintNote(p);
         }
+        case 'output_truncated':
+            // 〔Owner 第五輪 C-f〕workers/jobRunner.js：本機模式被截斷（Ollama done_reason=length）不重試。
+            // classify、lint、verify 三步被截斷都進這個原因，複核頁拿不到是哪一步（error 路徑不寫 payload），
+            // 所以說明句不綁特定步驟。OLLAMA_MAX_OUTPUT_<步驟> 只降不升（services/llm/localTuning.js）：
+            // 只有驗算有低於原本上限的本機預設（3072，原本 8192）可以調高；分類沒設上限、題目檢查已是原本的 8192，
+            // 這兩步被截斷多半是 num_ctx 不夠（OLLAMA_NUM_CTX_<步驟>），或 .env 自己把上限調低過。
+            return '本機模型寫到這一步的輸出上限被截斷，依設定不重試、直接交給老師。請自己核對題目與答案。' +
+                '要讓模型再跑一次：被截斷的是驗算的話，可在 .env 調高 OLLAMA_MAX_OUTPUT_VERIFY（本機預設 3072，最高 8192）後重跑這一題；' +
+                '分類或題目檢查被截斷，多半是上下文長度不夠（OLLAMA_NUM_CTX_CLASSIFY／_LINT），' +
+                '或 .env 設過較低的 OLLAMA_MAX_OUTPUT_CLASSIFY／_LINT。';
         default:
             return `複核原因：${reason}`;
     }

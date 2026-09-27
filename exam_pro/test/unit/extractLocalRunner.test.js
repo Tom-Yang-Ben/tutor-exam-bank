@@ -186,17 +186,20 @@ describe('jobRunner 本機模式 — crossCheckStopReason（extract_disagree 的
 
     // 〔OCR 為主 2026-09-26〕0019 在 extract_disagree 後面接了 ocr_only（比照 LM-3 當時 variantPipeline.test.js 的 9 → 10）：
     // 「0015 加的是第 10 個、0015 以當時的完整值域重建」兩件事照舊逐一驗，另加 0019 的完整值域。
-    test('extract_disagree 在複核原因白名單的第 10 個（0015）；0019 接 ocr_only 在最後', () => {
+    test('extract_disagree 在複核原因白名單的第 10 個（0015）；0019 接 ocr_only（第 11 個）；〔C-f〕0020 接 output_truncated 在最後', () => {
         const original = process.env.DATABASE_URL;
         process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://x:x@127.0.0.1:1/x_test';
         const { REVIEW_REASONS } = require('../../controllers/reviewController');
         if (original === undefined) delete process.env.DATABASE_URL;
         assert.equal(REVIEW_REASONS[9], 'extract_disagree');
-        assert.equal(REVIEW_REASONS[REVIEW_REASONS.length - 1], 'ocr_only');
+        assert.equal(REVIEW_REASONS[10], 'ocr_only');
+        assert.equal(REVIEW_REASONS[REVIEW_REASONS.length - 1], 'output_truncated');
         const sql = fs.readFileSync(path.resolve(__dirname, '..', '..', 'migrations', '0015_extract_disagree.sql'), 'utf8');
         for (const r of REVIEW_REASONS.slice(0, 10)) assert.ok(sql.includes(`'${r}'`), `0015 的 CHECK 少了 ${r}（必須以完整值域重建）`);
         const sql19 = fs.readFileSync(path.resolve(__dirname, '..', '..', 'migrations', '0019_ocr_only_review.sql'), 'utf8');
-        for (const r of REVIEW_REASONS) assert.ok(sql19.includes(`'${r}'`), `0019 的 CHECK 少了 ${r}（必須以完整值域重建）`);
+        for (const r of REVIEW_REASONS.slice(0, 11)) assert.ok(sql19.includes(`'${r}'`), `0019 的 CHECK 少了 ${r}（必須以完整值域重建）`);
+        const sql20 = fs.readFileSync(path.resolve(__dirname, '..', '..', 'migrations', '0020_output_truncated_review.sql'), 'utf8');
+        for (const r of REVIEW_REASONS) assert.ok(sql20.includes(`'${r}'`), `0020 的 CHECK 少了 ${r}（必須以完整值域重建）`);
     });
 });
 

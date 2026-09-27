@@ -24,6 +24,14 @@
 // 名稱寫錯（例 OLLAMA_NO_THINK=verfy、OLLAMA_NUM_CTX_EXTRCT_OCR）、值不是正整數、寫了沒有作用的，各印一行警告（checkOverrides）。
 // 本來寫錯只會被靜默忽略。
 //
+// 〔Owner 第五輪 C-b、C-c 核准，dec/r6-local-tuning〕本機模式的**程式預設**（LOCAL_DEFAULTS；只在 vendor 是 ollama 時套用）：
+//   C-b＝2：知識點標註（kc_tag）不思考——OLLAMA_NO_THINK **沒寫或空字串**時等同 OLLAMA_NO_THINK=kc_tag。
+//           OLLAMA_NO_THINK 有寫就整個取代預設：要 kc_tag 照舊思考寫 OLLAMA_NO_THINK=none；
+//           要再多關 lint 寫 OLLAMA_NO_THINK=lint,kc_tag（只寫 lint 的話 kc_tag 會恢復思考）。
+//   C-c＝2：驗算（verify、verify_chem）輸出上限 3072——OLLAMA_MAX_OUTPUT_VERIFY（或 _VERIFY_CHEM）沒寫時等同寫了 3072；
+//           寫了就用寫的值（只降不升照舊）：寫 8192（原本的上限）＝取消這個預設。思考照舊（不在 NO_THINK 預設裡）。
+//   Gemini 路徑與 replay 仍然一個字都不讀；這兩個數字不在 cassette 的鍵裡，改了不必重錄。
+//
 // 這支檔案只讀環境變數、不碰網路；除了 announceOverrides 會印字，全部是純函式（env 可注入）。
 // ─────────────────────────────────────────────────────────────
 
@@ -49,6 +57,18 @@ const THINKING_AGENTS = Object.freeze({
 
 /** OLLAMA_NO_THINK 裡代表「全部」的寫法 */
 const ALL_WORDS = Object.freeze(['all', '*']);
+/** 〔Owner 第五輪 C-b〕OLLAMA_NO_THINK 裡代表「一個都不關」的寫法（用來取消本機預設） */
+const NONE_WORDS = Object.freeze(['none']);
+
+/**
+ * 〔Owner 第五輪 C-b＝2、C-c＝2 核准〕本機模式（vendor 是 ollama）的程式預設。環境變數沒寫（或空字串）時才用它：
+ *   noThink：OLLAMA_NO_THINK 沒寫時不思考的 agent（寫基本名稱，連化學版一起）；
+ *   maxOutput：OLLAMA_MAX_OUTPUT_<AGENT> 沒寫時的輸出上限（基本名稱；化學版一起，化學版另寫 _CHEM 可單獨覆寫）。
+ */
+const LOCAL_DEFAULTS = Object.freeze({
+    noThink: Object.freeze(['kc_tag']),
+    maxOutput: Object.freeze({ verify: 3072 })
+});
 
 /** 化學版 agent 的後綴（agents/*.js 的 AGENT_CHEM 慣例：<基本名稱>_chem） */
 const CHEM_SUFFIX = '_chem';
@@ -81,17 +101,45 @@ function parseAgentList(raw) {
     const names = new Set(String(raw ?? '').split(/[,，、\s]+/).map(s => s.trim().toLowerCase()).filter(Boolean));
     const all = ALL_WORDS.some(w => names.has(w));
     for (const w of ALL_WORDS) names.delete(w);
+    for (const w of NONE_WORDS) names.delete(w);   // 〔C-b〕none＝一個都不關（只用來取消本機預設）
     return { all, names };
 }
 
 /**
- * 這個 agent 在不在 OLLAMA_NO_THINK 裡（寫基本名稱會連化學版一起）。
+ * 〔Owner 第五輪 C-b〕實際生效的「不思考」清單：OLLAMA_NO_THINK 沒寫（或空白）→ 本機預設（LOCAL_DEFAULTS.noThink）；
+ * 有寫 → 整個照寫的（none＝一個都不關）。純函式。
+ * @param {object} [env]
+ * @returns {{all:boolean, names:Set<string>, source:'default'|'env'}}
+ */
+function noThinkSpec(env = process.env) {
+    const raw = String(env.OLLAMA_NO_THINK ?? '').trim();
+    if (!raw) return { all: false, names: new Set(LOCAL_DEFAULTS.noThink), source: 'default' };
+    return { ...parseAgentList(raw), source: 'env' };
+}
+
+/**
+ * 〔Owner 第五輪 C-c〕這個 agent 的本機預設輸出上限（LOCAL_DEFAULTS.maxOutput；化學版吃基本名稱）；沒有時 null。
+ * @param {string|undefined} agent
+ * @returns {number|null}
+ */
+function defaultMaxOutputFor(agent) {
+    const a = String(agent ?? '').trim().toLowerCase();
+    if (!a) return null;
+    const own = Object.prototype.hasOwnProperty.call(LOCAL_DEFAULTS.maxOutput, a) ? LOCAL_DEFAULTS.maxOutput[a] : null;
+    if (own) return own;
+    const base = baseAgent(a);
+    return Object.prototype.hasOwnProperty.call(LOCAL_DEFAULTS.maxOutput, base) ? LOCAL_DEFAULTS.maxOutput[base] : null;
+}
+
+/**
+ * 這個 agent 在不在生效的不思考清單裡（寫基本名稱會連化學版一起）。
+ * 〔Owner 第五輪 C-b〕OLLAMA_NO_THINK 沒寫時用本機預設（kc_tag）。
  * @param {string|undefined} agent
  * @param {object} [env]
  * @returns {boolean}
  */
 function noThinkFor(agent, env = process.env) {
-    const { all, names } = parseAgentList(env.OLLAMA_NO_THINK);
+    const { all, names } = noThinkSpec(env);
     if (all) return true;
     const a = String(agent ?? '').trim().toLowerCase();
     if (!a) return false;
@@ -130,11 +178,15 @@ function perAgentInt(prefix, agent, env = process.env) {
  * @param {{agent?:string, thinkingBudget?:number, maxOutputTokens?:number}} opts  services/llm 收到的呼叫參數
  * @param {object} [env]
  * @returns {{thinkingBudget:number|undefined, maxOutputTokens:number|undefined, numCtx:number|undefined,
- *            applied:{think?:false, numPredict?:number, numCtx?:number}}}
+ *            applied:{think?:false, numPredict?:number, numCtx?:number},
+ *            sources:{think?:'default'|'env', numPredict?:'default'|'env', numCtx?:'env'}}}
  *          applied 是「和 agent 原本要的不一樣」的部分；空物件＝這次什麼都沒改（services/llm 就原封不動地轉交）。
+ *          sources〔Owner 第五輪 C-b／C-c〕：applied 的每一項來自本機預設（default）還是環境變數（env）；給量測工具與報告標示來源，
+ *          不寫進 cassette。
  */
 function resolveOllamaOverrides({ agent, thinkingBudget, maxOutputTokens } = {}, env = process.env) {
     const applied = {};
+    const sources = {};
     let budget = thinkingBudget;
     let maxOut = maxOutputTokens;
     let numCtx;
@@ -142,21 +194,30 @@ function resolveOllamaOverrides({ agent, thinkingBudget, maxOutputTokens } = {},
     if (Number(thinkingBudget) > 0 && noThinkFor(agent, env)) {
         budget = 0;
         applied.think = false;
+        sources.think = noThinkSpec(env).source;
     }
-    const cap = perAgentInt('OLLAMA_MAX_OUTPUT_', agent, env);
+    // 〔Owner 第五輪 C-c〕沒寫 OLLAMA_MAX_OUTPUT_<AGENT>（或亂填）時用本機預設（verify 3072）；寫了就照寫的
+    let cap = perAgentInt('OLLAMA_MAX_OUTPUT_', agent, env);
+    let capSource = 'env';
+    if (!cap) {
+        const d = defaultMaxOutputFor(agent);
+        if (d) { cap = { value: d, name: null }; capSource = 'default'; }
+    }
     if (cap) {
         const current = Number(maxOutputTokens) > 0 ? Number(maxOutputTokens) : null;
         if (current === null || cap.value < current) {
             maxOut = cap.value;
             applied.numPredict = cap.value;
+            sources.numPredict = capSource;
         }
     }
     const ctx = perAgentInt('OLLAMA_NUM_CTX_', agent, env);
     if (ctx) {
         numCtx = ctx.value;
         applied.numCtx = ctx.value;
+        sources.numCtx = 'env';
     }
-    return { thinkingBudget: budget, maxOutputTokens: maxOut, numCtx, applied };
+    return { thinkingBudget: budget, maxOutputTokens: maxOut, numCtx, applied, sources };
 }
 
 /**
@@ -202,13 +263,16 @@ function thinkingBaseNames() {
  * 目前環境裡的本機調整：生效的（給人看的一段話）與寫錯、沒有作用的（警告）。純函式。
  *   OLLAMA_NO_THINK：不認得的名稱（例 verfy）→ 警告；認得但本來就不思考的（例 classify）→ 警告「沒有作用」。
  *   OLLAMA_MAX_OUTPUT_<X>／OLLAMA_NUM_CTX_<X>：<X> 不是認得的 agent → 警告；值不是正整數 → 警告「被忽略」；
- *   輸出上限不比 agent 原本的小（只降不升）→ 警告「沒有作用」。
+ *   輸出上限不比 agent 原本的小（只降不升）→ 警告「沒有作用」；〔C-c〕例外是有本機預設的 agent（verify）：
+ *   寫原本的上限（8192）＝取消預設，列在生效的裡面。
+ * 〔Owner 第五輪 C-b、C-c〕defaults：沒被環境變數取代、仍然生效的本機預設（只在模型是 ollama 時套用）。
  * @param {object} [env]
- * @returns {{active:string[], warnings:string[]}}
+ * @returns {{active:string[], warnings:string[], defaults:string[]}}
  */
 function checkOverrides(env = process.env) {
     const active = [];
     const warnings = [];
+    const defaults = [];
     const knownSuffix = new Map(KNOWN_AGENTS.map(a => [agentEnvSuffix(a), a]));
     const thinkers = thinkingBaseNames();
 
@@ -228,6 +292,9 @@ function checkOverrides(env = process.env) {
         }
         if (all) active.push(`不思考：全部會思考的 agent（${thinkers.join('、')}）`);
         else if (effective.length) active.push(`不思考：${effective.join('、')}（寫基本名稱的連化學版一起）`);
+        else if (!names.size) active.push(`不思考：無（OLLAMA_NO_THINK=${rawNoThink}，取消本機預設 ${LOCAL_DEFAULTS.noThink.join('、')}）`);
+    } else {
+        defaults.push(`不思考：${LOCAL_DEFAULTS.noThink.join('、')}（本機預設，Owner 第五輪 C-b；OLLAMA_NO_THINK 有寫就整個取代）`);
     }
 
     for (const [prefix, what] of [['OLLAMA_MAX_OUTPUT_', '輸出上限'], ['OLLAMA_NUM_CTX_', 'num_ctx']]) {
@@ -247,6 +314,11 @@ function checkOverrides(env = process.env) {
             }
             const own = THINKING_AGENTS[agent] || THINKING_AGENTS[baseAgent(agent)];
             if (prefix === 'OLLAMA_MAX_OUTPUT_' && own && n >= own.maxOutputTokens) {
+                const d = defaultMaxOutputFor(agent);
+                if (d) {
+                    items.push(`${key}=${n}（不降：取消本機預設 ${d}）`);
+                    continue;
+                }
                 warnings.push(`${key}=${n} 不比 ${agent} 原本的輸出上限 ${own.maxOutputTokens} 小（只降不升），沒有作用。`);
                 continue;
             }
@@ -254,14 +326,44 @@ function checkOverrides(env = process.env) {
         }
         if (items.length) active.push(`${what}：${items.join('、')}`);
     }
-    return { active, warnings };
+
+    // 〔C-c〕還在用本機預設輸出上限的 agent（環境變數沒寫、或亂填被忽略）
+    const byValue = new Map();
+    for (const base of Object.keys(LOCAL_DEFAULTS.maxOutput)) {
+        for (const agent of [base, `${base}${CHEM_SUFFIX}`]) {
+            if (!KNOWN_AGENTS.includes(agent) || perAgentInt('OLLAMA_MAX_OUTPUT_', agent, env)) continue;
+            const d = defaultMaxOutputFor(agent);
+            if (!byValue.has(d)) byValue.set(d, []);
+            byValue.get(d).push(agent);
+        }
+    }
+    for (const [d, agents] of byValue) {
+        defaults.push(`輸出上限：${agents.join('、')} ${d}（本機預設，Owner 第五輪 C-c；OLLAMA_MAX_OUTPUT_${agentEnvSuffix(baseAgent(agents[0]))} 可覆寫）`);
+    }
+    return { active, warnings, defaults };
+}
+
+/**
+ * 〔Owner 第五輪 C-b、C-c〕文字模型是不是本機（ollama）：本機預設只在這時候印出來（Gemini 模式印了只會誤導）。純函式。
+ * 看 MODEL_VERIFY（沒寫＝config/models.js 的預設 ollama:qwen3:8b）、MODEL_TEXT、MODEL_KC_TAG 任一個是 ollama。
+ * @param {object} [env]
+ * @returns {boolean}
+ */
+function textModelIsLocal(env = process.env) {
+    const models = require('../../config/models');
+    const specs = [String(env.MODEL_VERIFY ?? '').trim() || models.DEFAULT_VERIFY,
+        String(env.MODEL_TEXT ?? '').trim(), String(env.MODEL_KC_TAG ?? '').trim()].filter(Boolean);
+    return specs.some((spec) => {
+        try { return models.parseModel(spec).vendor === 'ollama'; } catch (_) { return false; }
+    });
 }
 
 let announced = false;
 
 /**
  * 啟動時印一次（同一行程只印一次）：LLM_MODE 是 live／record 時，把生效的本機調整印成一行，寫錯或沒有作用的各印一行警告。
- * 什麼都沒寫、或 replay（這些設定不會套用）時什麼都不印。services/llm/index.js 載入時呼叫（伺服器與 worker 啟動時都會載入它）。
+ * 〔Owner 第五輪 C-b、C-c〕文字模型是 ollama 時，生效的本機預設（kc_tag 不思考、verify 上限 3072）也列在同一行。
+ * 什麼都沒寫而且不是本機、或 replay（這些設定不會套用）時什麼都不印。services/llm/index.js 載入時呼叫（伺服器與 worker 啟動時都會載入它）。
  * @param {object} [env]
  * @param {{log?:Function, warn?:Function}} [out]  測試注入點（預設 console）
  * @returns {boolean} 這次有沒有印東西
@@ -271,10 +373,11 @@ function announceOverrides(env = process.env, { log = (s) => console.log(s), war
     // 與 services/llm/index.js 的 llmMode() 同一個讀法：沒設或空字串＝replay
     const mode = String(env.LLM_MODE ?? '').trim().toLowerCase() || 'replay';
     if (mode !== 'live' && mode !== 'record') return false;
-    const { active, warnings } = checkOverrides(env);
-    if (!active.length && !warnings.length) return false;
+    const { active, warnings, defaults } = checkOverrides(env);
+    const lines = [...active, ...(textModelIsLocal(env) ? defaults : [])];
+    if (!lines.length && !warnings.length) return false;
     announced = true;
-    if (active.length) log(`[ollama] 本機調整（docs/local-mode.md 第 10.14 條；只在模型是 ollama:… 時套用）：${active.join('；')}`);
+    if (lines.length) log(`[ollama] 本機調整（docs/local-mode.md 第 10.14 條；只在模型是 ollama:… 時套用）：${lines.join('；')}`);
     for (const w of warnings) warn(`[ollama] ⚠ ${w}`);
     return true;
 }
@@ -286,5 +389,7 @@ module.exports = {
     resolveOllamaOverrides, noThinkFor, perAgentInt, parseAgentList, agentEnvSuffix, baseAgent, describeOverrides,
     THINKING_AGENTS, OVERRIDE_ENV_PATTERN, ALL_WORDS,
     // 〔審查修正〕
-    KNOWN_AGENTS, checkOverrides, announceOverrides, _resetAnnounceForTest
+    KNOWN_AGENTS, checkOverrides, announceOverrides, _resetAnnounceForTest,
+    // 〔Owner 第五輪 C-b、C-c〕本機預設
+    LOCAL_DEFAULTS, NONE_WORDS, noThinkSpec, defaultMaxOutputFor, textModelIsLocal
 };
