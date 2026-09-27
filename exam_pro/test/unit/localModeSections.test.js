@@ -31,8 +31,15 @@ describe('docs/local-mode.md 10.12～10.15（整合 r5、final5 改號）', () =
     const doc = read('docs/local-mode.md');
 
     test('四個標題依併入順序各出現一次：10.12 OCR 為主、10.13 餘弦門檻、10.14 拆題以外的時間、10.15 classify／nlq 重錄前修正', () => {
-        const heads = [...doc.matchAll(/^### (10\.1[2-9]) (.*)$/gm)].map(m => [m[1], m[2]]);
-        assert.deepEqual(heads.map(h => h[0]), ['10.12', '10.13', '10.14', '10.15'], JSON.stringify(heads));
+        const all = [...doc.matchAll(/^### (10\.1[2-9]) (.*)$/gm)].map(m => [m[1], m[2]]);
+        // 〔Owner 第五輪 2026-09-27〕各組在末尾新增「### 10.16 第五輪 <組名>（2026-09-27）」，整合時再重編；
+        // 這裡只要求 10.12～10.15 照舊在前、之後只能是這種暫編的第五輪節
+        const heads = all.slice(0, 4);
+        assert.deepEqual(heads.map(h => h[0]), ['10.12', '10.13', '10.14', '10.15'], JSON.stringify(all));
+        for (const [no, title] of all.slice(4)) {
+            assert.equal(no, '10.16', JSON.stringify(all));
+            assert.match(title, /^第五輪 .+（2026-09-27）$/);
+        }
         assert.match(heads[0][1], /只用 OCR 拆題/);
         assert.match(heads[1][1], /三個餘弦門檻/);
         assert.match(heads[2][1], /拆題以外的時間/);

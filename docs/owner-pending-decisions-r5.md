@@ -19,7 +19,7 @@
 | V5-3 | 重複題門檻 `DEDUP_DUP_THRESHOLD` | 現在 | 3 改 0.99 |
 | V5-4 | 「是變式」標記門檻 `DEDUP_VARIANT_THRESHOLD` | 現在 | 1 維持 0.90 |
 | V5-5 | 新門檻怎麼落實 | 與 V5-1～V5-3 一起 | 1 只改本機模式的預設 |
-| V5-6 | 同一藍本的兄弟變式幾乎一樣 | 現在（選 2 要在 variant 重錄前做完） | 2 從生成端處理 |
+| V5-6 | 同一藍本的兄弟變式幾乎一樣 | 現在（選 2 要在 variant 重錄前做完） | 2 從生成端處理〔Owner 2026-09-27 選 2〕已落實於 `dec/r6-templates` |
 | C-a | 公式重寫（lint）要不要思考 | 重錄前 | 3 先量再決定 |
 | C-b | 知識點標註要不要思考 | 開自動標註或跑補標之前 | 3 先量（併進 B12 試標） |
 | C-c | 驗算：不思考、降輸出上限，或都不動 | 重錄前 | 2 只降輸出上限 |
@@ -33,6 +33,7 @@
 | O-2 | kNN 投票門檻 `KNN_VOTE_SIM` 要不要也重新校準 | 與 V5-2 一起 | 2 一起分析 |
 | O-3 | ADR-017（本機模式）要不要改寫成 OCR 為主並定案 | 重錄與實際上傳之後 | 2 有數字再定案 |
 | O-4 | 要不要抽查 Claude 對 55 支變式的「跑題」初判（V5-2 的證據） | V5-2 定案之前（反斜線修好、variant 重錄後重標時） | 2 重標後抽查 |
+| O-5 | 公式重寫（lint）的模板要不要也加 L-2「JSON 字串裡的反斜線寫兩個」 | 重錄 variant 之前（下游 lint 本來就要跟著重錄） | 2 加，升 lint.v3／lint_chem.v2 |
 
 ---
 
@@ -164,6 +165,7 @@
 - **建議**：2，跟反斜線修好後的重錄一起做；3 等 2 做完看還剩多少再說。做之前維持 1 也可以（首輪每一題變式都要老師核准）。
 - **何時**：現在就能答；選 2 的話要在 variant 重錄之前做完。
 - 出處：10.13 第 3 點 V5-6。
+- 〔Owner 2026-09-27 選 2〕已落實於 `dec/r6-templates`：模板 `variant.v1` → `variant.v2`（化學 `variant_chem.v1` → `v2`），prompt 加「這是第 N 題（共 M 題）」、同一個 job 前面已生成的兄弟題幹與「換情境與數字」的規則；runner 依序生成、兄弟從 `job_questions` 讀回；cassette 鍵多 `total` 與兄弟題幹的雜湊。variant 的回放檔全部要重錄（與 L-2 的公式規範同一次）。見 [`local-mode.md`](local-mode.md)「第五輪 A 模板與 schema（2026-09-27）」一節。
 
 ---
 
@@ -293,6 +295,8 @@
 - 出處：10.13 第 4 點；10.14 第 5 點第 1 項；分支 `dec/latex-escape-repair-fix` 的 `docs/llm.md` 第 10 節。
 - 〔整合 2026-09-27 `dec/integration-final5`〕整合分支依主控指示已併入（等於照選項 1 的做法，但**不是 Owner 的裁決**，Owner 仍可改選）：與 `prune_cassettes.js`、`rerecord_all.js` 的衝突保留主線共用的 `eval/lib/exitAfterFlush.js`；`services/llm/index.js` 的本機調整與 LaTeX 修復合在同一條路上，`test/unit/latexEscapeRepair.test.js` 補一案釘住。variant 回放實測：向量檔查不到從 1 次變 29 次、分數欄不變（本來就是 n/a），與上面選項 1 的預估相同。
 
+〔Owner 第五輪 2026-09-27〕與 O-1 相關的 L-2（prompt 要求 JSON 字串裡的反斜線寫兩個；出處 [`llm.md`](llm.md) 第 10 節「沒有做」第 2 項）〔Owner 2026-09-27 選 1〕已落實於 `dec/r6-templates`；本表沒有這一題，對照記在這裡。見 [`local-mode.md`](local-mode.md)「第五輪 A 模板與 schema（2026-09-27）」一節。
+
 ### O-2　kNN 投票門檻 `KNN_VOTE_SIM` 要不要也重新校準
 
 - **背景**：分類時若題庫裡夠像的題（餘弦 ≥ 0.90）章節投票一致，就不呼叫模型。0.90 也是照 Gemini 定的；本機向量下同章不同概念 ≥ 0.90 只有 3.1%，這條捷徑會更少發生——多呼叫幾次模型分類（本機每次 51 秒～7 分），慢但不會更不準。10.13 沒有分析它。
@@ -327,3 +331,14 @@
 - **建議**：2。V5-2 本來就要等重錄才定案（見 V5-2「何時」）；在最後那一版資料上抽查，花的時間最少，門檻又不必只靠 Claude 的判斷。
 - **何時**：V5-2 定案之前；照選項 2，是反斜線修好、variant 重錄、重跑 `npm run embed:thresholds` 並重標初判之後。
 - 出處：`local-mode.md` 10.13 第 1 點第 3 項、第 5 點；`local-embed-thresholds-report.md` 4.2。
+
+### O-5　公式重寫（lint）的模板要不要也加 L-2「JSON 字串裡的反斜線寫兩個」
+
+- **背景**：第五輪 L-2〔Owner 2026-09-27 選 1〕要求「`LATEX_RULES` 或等效共用段落」加一條「JSON 字串裡的反斜線要寫成兩個」，已落實於 `dec/r6-templates`，涵蓋共用 `LATEX_RULES`／`CHEM_LATEX_RULES` 的 8 個模板（拆題與變式）。公式重寫（`agents/lint.js` 第三層，模板 `lint.v2`、`lint_chem.v1`）的工作就是請模型把 LaTeX 重寫後照 JSON 輸出，它有自己的一段公式規則，意思相近，但不共用 `LATEX_RULES`，所以這次沒有加。它算不算「等效共用段落」，需要 Owner 裁定。（審查 `dec/r6-templates` 時提出；`dec/r6-templates-fix` 新增本題。）
+- **問題**：lint 的模板要不要也加同一條規則？
+- **選項**：
+  1. **不加**：lint 模板與 cassette 不動；模型在 lint 若把反斜線只寫一個，仍靠事後修復（`latexEscapeRepair`）救回，救不回的（例如換頁＋不像指令的字母）照樣進複核或帶壞公式。
+  2. **加，`lint.v2` → `lint.v3`、`lint_chem.v1` → `lint_chem.v2`**：約 1 小時（規則文字沿用 `promptParts.jsonBackslashRule()`、補測試）；repo 內 `lint.v2` cassette 5 支要重錄。variant 題幹重錄後下游 lint 本來就會 miss、要跟著錄，趁同一次重錄做，不多花一次。
+- **建議**：2。lint 正是「把公式寫進 JSON」的那一步，最容易踩到單一反斜線；和 variant 同一次重錄，額外成本幾乎只有改模板的時間。
+- **何時**：重錄 variant 之前。
+- 出處：[`local-mode.md`](local-mode.md)「第五輪 A 模板與 schema（2026-09-27）」第 2 點與第 6 點第 2 項。

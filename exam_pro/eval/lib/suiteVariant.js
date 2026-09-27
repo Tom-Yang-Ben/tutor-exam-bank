@@ -486,14 +486,18 @@ async function runGeneration({ golden, fixture, emb, offtopicSimMin, generateFn,
 
         let entryPassed = 0;
         let stoppedAt = null;
+        // 〔Owner 第五輪 V5-6〕與 workers/jobRunner.js 的 runGenerateJob 相同：依序生成，
+        // 前面通過生成節點的兄弟（runner 會建成 job_questions 的那幾題）連同總題數一起傳給下一題。
+        const siblings = [];
         for (let idx = 1; idx <= PER_SOURCE; idx++) {
             generations += 1;
             const ctx = makeCtx({ llm, models, offtopicSimMin });
+            const input = { source, neighbors, difficulty_delta: 0, idx, total: PER_SOURCE, siblings: siblings.slice() };
             let outcome;
             try {
                 outcome = generateFn
-                    ? await generateFn(ctx, { source, neighbors, difficulty_delta: 0, idx })
-                    : await variantAgent.run(ctx, { source, neighbors, difficulty_delta: 0, idx });
+                    ? await generateFn(ctx, input)
+                    : await variantAgent.run(ctx, input);
             } catch (err) {
                 outcome = { kind: 'error', errorClass: 'provider_error', message: err.message };
             }
@@ -502,6 +506,10 @@ async function runGeneration({ golden, fixture, emb, offtopicSimMin, generateFn,
                 if (replayMiss.isReplayMiss(outcome.message)) misses.push(outcome.message);
                 else failures.push(`${e.id}#${idx}：${outcome.message}`);
                 continue;
+            }
+
+            if (outcome.kind === 'pass' && outcome.data && String(outcome.data.question_text ?? '').trim()) {
+                siblings.push({ idx, question_text: outcome.data.question_text });
             }
 
             const variant = {

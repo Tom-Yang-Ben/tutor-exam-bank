@@ -235,7 +235,7 @@ function runSuite() {
                 const agents = fakeLlm.calls.map(c => c.agent).sort();
                 assert.deepEqual(agents, ['extract_chem', 'verify_chem', 'verify_chem']);
                 const ex = fakeLlm.calls.find(c => c.agent === 'extract_chem');
-                assert.equal(ex.template, 'extract_chem.v1');
+                assert.equal(ex.template, 'extract_chem.v2');
                 assert.deepEqual(ex.schema.properties.questions.items.properties.subject.enum, ['化學']);
                 assert.equal(ex.schema.properties.questions.items.properties.chapter.enum.length, 44);
             });

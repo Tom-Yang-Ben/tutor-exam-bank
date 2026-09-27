@@ -441,5 +441,6 @@ verify 與 lint 的 cassette 鍵含題幹，還是會 replay miss。重錄時 ca
    要擋就是在 `formulaLint` 的 `ISSUE_RULES` 後面加一條新規則。以 repo 內的 cassette 估：本機 variant 修後 47／13 → 44／16（剩下「換頁＋`dg`」那 3 支改成擋下）；Gemini variant 86／1 不變（剩下那支本來就被擋）。
    沒有在修正分支裡直接做：這是閘門的政策（新 rule 名一旦定案就會進 `job_events.detail` 與 `report:jobs`、不能再改；本機模式下每擋一支就多一次 lint 重寫的時間），由老師決定。
 2. **prompt 要求模型在 JSON 裡把反斜線寫兩次**：從源頭減少（尤其 `\circ`、`\cdot`、`\sqrt` 這種會被文法換字母、事後救不回來的）。改 prompt ＝ 模板雜湊變 ＝ 對應 agent 的 cassette 全部重錄。
+   〔Owner 第五輪 L-2，2026-09-27 選 1〕已落實於 `dec/r6-templates`：`agents/promptParts.js` 的 `LATEX_RULES` 加第 (5) 條、`CHEM_LATEX_RULES` 加第 (6) 條（同一段，附正反例）；用到它們的 8 個模板全部升版（`extract.v3`、`extract_chem.v2`、`extract_vision.v2`、`extract_vision_chem.v2`、`extract_ocr.v2`、`extract_ocr_chem.v2`、`variant.v2`、`variant_chem.v2`）。本層的修復保留當第二道防線；模型照做（JSON 原文兩個反斜線、解析後一個）時修復是 no-op，`test/unit/r6Templates.test.js` 以規則裡的正例、假 Ollama／Gemini 回應與 repo 內全部 cassette 驗證。見 [`local-mode.md`](local-mode.md)「第五輪 A 模板與 schema（2026-09-27）」一節。
 3. **解析器支援 `\bullet`、`\textbf`**：上面 4 支由通過變擋下的就會回到通過（`\bullet` 的原意多半是內積的點或度數，不一定該照字面排）。要加在 `EXTRA_SYMBOLS` 這類只給 Word 匯出用的表，不要加進 `SYMBOLS`（會改到既有題目的 `embed_text`）。
 4. **`latexRepair` 摘要還沒進 `job_events`**：現在只在 `generateJson` 的回傳物件上，runner 沒有記。要追蹤「哪個模型、哪個節點最常被修」時再接。
