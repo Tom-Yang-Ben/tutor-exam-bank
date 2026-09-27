@@ -13,7 +13,7 @@ const { resolveConfig } = require('../../scripts/desktop/lib/config');
 const { createProbes, appPaths, portFromEnv } = require('../../scripts/desktop/lib/probes');
 const { createActions, drainingFrom } = require('../../scripts/desktop/lib/actions');
 const { createUi } = require('../../scripts/desktop/lib/ui');
-const { runLaunch, lockDecision, acquireLock, summarize } = require('../../scripts/desktop/lib/launcher');
+const { runLaunch, initialFacts, lockDecision, acquireLock, summarize } = require('../../scripts/desktop/lib/launcher');
 const { listMigrationFiles } = require('../../utils/migrationStatus');
 
 const STATUS_URL = 'http://127.0.0.1:50123/';
@@ -70,7 +70,8 @@ async function launch(worldOpts = {}, { env = {}, config = {}, pageWorks = true,
     const ui = createUi({ sys: world.sys, config: cfg, statusHtml: '<html></html>', log, startServer });
     const probes = createProbes({ sys: world.sys, config: cfg, env: fullEnv, paths, port });
     const actions = { ...createActions({ sys: world.sys, config: cfg, env: fullEnv, paths, ctx, ui, probes, log }), ...actionsOverride };
-    const result = await runLaunch({ actions, ui, ctx, log });
+    // 與 launch.js 相同：HOST 只聽某個區網位址時一開始就放進 facts.listen（〔Owner 第六輪 DA-11＝1〕）
+    const result = await runLaunch({ actions, ui, ctx, log, facts: initialFacts({ listen: probes.listen }) });
     const steps = lines.filter(l => l.startsWith('→ ')).map(l => l.slice(2));
     const finalState = page.states.length ? page.states[page.states.length - 1] : ui.getState();
     return { world, result, steps, lines, ui, paths, finalState, cfg };
@@ -115,6 +116,67 @@ describe('已經在跑', () => {
         assert.ok(r.steps.includes('compose-up'));
         assert.ok(!r.steps.includes('check-setup'));
         assert.deepEqual(serverSpawns(r.world), []);
+    });
+});
+
+// 〔Owner 第六輪 DA-11＝1，2026-09-27〕後端改聽 .env 的 HOST（預設 127.0.0.1；config/listenHost.js）
+describe('HOST（後端聽的位址）', () => {
+    const healthUrls = r => r.world.calls.filter(c => c.kind === 'request' && /\/api\/health$/.test(c.url)).map(c => c.url);
+
+    test('沒寫 HOST（預設 127.0.0.1）、HOST=0.0.0.0、HOST=:: → 健康檢查連 127.0.0.1，app 視窗照舊開 localhost', async () => {
+        for (const env of [{}, { HOST: '127.0.0.1' }, { HOST: ' 0.0.0.0 ' }, { HOST: '::' }]) {
+            const r = await launch({ health: 'ours', db: true }, { env });
+            assert.equal(r.result.action.type, 'open-app', JSON.stringify(env));
+            assert.deepEqual([...new Set(healthUrls(r))], ['http://127.0.0.1:3000/api/health'], JSON.stringify(env));
+            assert.equal(r.world.windows[0].url, 'http://localhost:3000/');
+        }
+    });
+
+    test('HOST=localhost、::1、[::1] → 照那個本機位址連（Node 聽 localhost 時可能只綁 ::1）', async () => {
+        const r1 = await launch({ health: 'ours', db: true }, { env: { HOST: 'localhost' } });
+        assert.deepEqual([...new Set(healthUrls(r1))], ['http://localhost:3000/api/health']);
+        for (const HOST of ['::1', '[::1]']) {
+            const r2 = await launch({ health: 'ours', db: true }, { env: { HOST } });
+            assert.deepEqual([...new Set(healthUrls(r2))], ['http://[::1]:3000/api/health'], HOST);
+            assert.equal(r2.result.action.type, 'open-app');
+        }
+    });
+
+    test('冷開機、HOST=0.0.0.0：流程與預設相同，後端的環境不多也不少（後端自己讀 .env 的 HOST）', async () => {
+        const r = await launch({}, { env: { HOST: '0.0.0.0' } });
+        assert.equal(r.result.action.type, 'finish');
+        assert.equal(serverSpawns(r.world).length, 1);
+        assert.deepEqual(Object.keys(r.world.serverEnv).sort(), [...Object.keys(r.world.env), 'LAUNCHER_CONTROL_TOKEN'].sort());
+        assert.ok(healthUrls(r).every(u => u === 'http://127.0.0.1:3000/api/health'));
+    });
+
+    test('HOST 只聽某個區網位址（例 192.168.1.10）→ 開啟動畫面說明，不做健康檢查、不碰 Docker、不起後端', async () => {
+        const r = await launch({}, { env: { HOST: '192.168.1.10' } });
+        assert.equal(r.result.action.type, 'fail');
+        assert.equal(r.result.action.code, 'host-unsupported');
+        assert.deepEqual(r.steps, ['open-status-window']);
+        assert.deepEqual(healthUrls(r), []);
+        assert.deepEqual(dockerCalls(r.world), []);
+        assert.deepEqual(serverSpawns(r.world), []);
+        assert.match(r.result.action.message, /192\.168\.1\.10/);
+        assert.match(r.result.action.hint.join('\n'), /HOST=0\.0\.0\.0/);
+        assert.match(r.result.action.hint.join('\n'), /區網存取/);
+        assert.equal(r.finalState.phase, 'failed');
+        const check = r.finalState.steps.find(s => s.id === 'check');
+        assert.equal(check.state, 'error');
+    });
+
+    // 〔審查 dec/r7-decisions-host〕原本 127.0.0.0/8 整段都算支援：HOST=127.0.0.2 時健康檢查連 127.0.0.2 判定成功，
+    // app 視窗（http://localhost:3000/）卻打不開。現在與區網位址一樣一開始就停下說明。
+    test('HOST=127.0.0.2（127.0.0.1 以外的 127.x）→ 同樣報 host-unsupported，不做健康檢查、不起後端', async () => {
+        const r = await launch({}, { env: { HOST: '127.0.0.2' } });
+        assert.equal(r.result.action.type, 'fail');
+        assert.equal(r.result.action.code, 'host-unsupported');
+        assert.deepEqual(r.steps, ['open-status-window']);
+        assert.deepEqual(healthUrls(r), []);
+        assert.deepEqual(serverSpawns(r.world), []);
+        assert.match(r.result.action.message, /HOST 是「127\.0\.0\.2」/);
+        assert.match(r.result.action.message, /localhost 只對應 127\.0\.0\.1 與 ::1/);
     });
 });
 
@@ -261,23 +323,33 @@ describe('錄製進行中（record_local.bat／cassettes:rerecord）', () => {
         assert.equal(r.result.facts.recording.active, false);
     });
 
-    // 〔審查 dec/desktop-launcher 第 4 件；DL-4〕
-    test('預設（jobsWhileRecording:run）：後端照常跑背景工作，警告寫明佇列裡的工作也會開跑', async () => {
+    // 〔審查 dec/desktop-launcher 第 4 件；DL-4〕〔Owner 第六輪 DL-4＝2，2026-09-27〕預設改成 pause
+    test('預設（沒有 config.json＝jobsWhileRecording:pause）→ 後端以 JOB_RUNNER=off 啟動，警告說明錄完後怎麼恢復；沒在錄製時不受影響', async () => {
         const r = await launch({ processes: recording, dockerEngine: true, db: true });
-        assert.equal(r.world.serverEnv.JOB_RUNNER, undefined);
-        assert.match(r.result.warnings[0].text, /佇列裡已有的背景工作/);
-    });
-
-    test('jobsWhileRecording:pause → 後端以 JOB_RUNNER=off 啟動，警告說明錄完後怎麼恢復；沒在錄製時不受影響', async () => {
-        const r = await launch({ processes: recording, dockerEngine: true, db: true }, { config: { jobsWhileRecording: 'pause' } });
+        assert.equal(r.cfg.jobsWhileRecording, 'pause');
         assert.equal(r.result.action.type, 'finish');
         assert.equal(r.world.serverEnv.JOB_RUNNER, 'off');
         assert.equal(r.result.facts.server.jobsPaused, true);
         assert.equal(JSON.parse(r.world.files.get(r.paths.serverInfo)).jobsPaused, true);
+        assert.match(r.world.files.get(P('data', 'logs', `server-${TODAY}.log`)), /錄製中，暫停背景工作（JOB_RUNNER=off）/);
         assert.match(r.result.warnings[0].text, /暫停背景工作/);
-        const normal = await launch({ dockerEngine: true, db: true }, { config: { jobsWhileRecording: 'pause' } });
+        assert.match(r.result.warnings[0].text, /預設/);
+        // 沒在錄製：同樣是預設設定，後端照常跑背景工作（環境不多 JOB_RUNNER）
+        const normal = await launch({ dockerEngine: true, db: true });
         assert.equal(normal.world.serverEnv.JOB_RUNNER, undefined);
         assert.equal(normal.result.facts.server.jobsPaused, undefined);
+        assert.deepEqual(codes(normal), []);
+    });
+
+    test('jobsWhileRecording:run（Owner 自己改回）→ 後端照常跑背景工作，警告寫明設定是 run、佇列裡的工作也會開跑、怎麼改回 pause', async () => {
+        const r = await launch({ processes: recording, dockerEngine: true, db: true }, { config: { jobsWhileRecording: 'run' } });
+        assert.equal(r.result.action.type, 'finish');
+        assert.equal(r.world.serverEnv.JOB_RUNNER, undefined);
+        assert.equal(r.result.facts.server.jobsPaused, undefined);
+        assert.equal(JSON.parse(r.world.files.get(r.paths.serverInfo)).jobsPaused, undefined);
+        assert.match(r.result.warnings[0].text, /佇列裡已有的背景工作/);
+        assert.match(r.result.warnings[0].text, /jobsWhileRecording 是 run/);
+        assert.match(r.result.warnings[0].text, /改回 pause/);
     });
 
     test('讀不到程序清單 → 不當成錄製中（照常開 Docker），但警告無法確認', async () => {

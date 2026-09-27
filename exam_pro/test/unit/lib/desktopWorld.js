@@ -20,8 +20,9 @@ const { listenFailureText } = require('../../../utils/listenFailure');
 
 /** 修正後的 server.js 聽不了埠時寫進 log 的內容（與真的一樣由 listenFailureText 產生） */
 function listenLog(code, port = 3000) {
-    const msg = code === 'EACCES' ? `listen EACCES: permission denied 0.0.0.0:${port}` : `listen EADDRINUSE: address already in use :::${port}`;
-    return `${listenFailureText(Object.assign(new Error(msg), { code }), port)}\n`;
+    // 〔Owner 第六輪 DA-11＝1〕server.js 改聽 HOST（預設 127.0.0.1），Node 的訊息帶的是 127.0.0.1
+    const msg = code === 'EACCES' ? `listen EACCES: permission denied 127.0.0.1:${port}` : `listen EADDRINUSE: address already in use 127.0.0.1:${port}`;
+    return `${listenFailureText(Object.assign(new Error(msg), { code }), port, '127.0.0.1')}\n`;
 }
 
 const NODE = 'C:\\node\\node.exe';

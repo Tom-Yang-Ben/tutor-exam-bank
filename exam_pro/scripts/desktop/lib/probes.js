@@ -6,6 +6,8 @@
 // ─────────────────────────────────────────────────────────────
 const path = require('path');
 const w = require('./windows');
+// 後端聽哪個位址（HOST）：與 server.js 同一支純函式（只依賴 node:net，node_modules 還沒裝時也載入得了）
+const listenHost = require('../../../config/listenHost');
 
 /** 與 controllers/healthController.js 的 SERVICE_NAME 相同（單元測試比對兩邊） */
 const SERVICE_NAME = 'tutor-exam-bank';
@@ -56,6 +58,21 @@ function portFromEnv(env) {
     return Number.isInteger(n) && n > 0 && n < 65536 ? n : DEFAULT_PORT;
 }
 
+/**
+ * 後端聽的位址（HOST），以及從這台電腦要連哪個位址才問得到它。純函式。
+ * 〔Owner 第六輪 DA-11＝1，2026-09-27〕後端改聽 HOST、預設 127.0.0.1；判斷規則與 server.js 同一支（config/listenHost.js）。
+ *   supported:false＝HOST 只聽 localhost 連不到的位址（某個區網位址，或 127.0.0.1 以外的 127.x）：app 視窗
+ *   （http://localhost:<埠>/）開不起來，啟動器與關閉捷徑直接說明（plan.js 的 host-unsupported、stopper.js），不去開這種後端。
+ *   〔審查 dec/r7-decisions-host〕127.0.0.2 這類位址健康檢查連得到，原本被當成支援：啟動器說成功、視窗卻打不開。
+ * @param {Record<string,string|undefined>} env  effectiveEnv()
+ * @returns {{host:string, scope:'loopback'|'wildcard'|'specific', probeHost:string|null, supported:boolean}}
+ */
+function listenFromEnv(env) {
+    const host = listenHost.resolveListenHost(env || {});
+    const probeHost = listenHost.localProbeHost(host);
+    return { host, scope: listenHost.hostScope(host), probeHost, supported: probeHost !== null };
+}
+
 // ─────────────────────────── 健康檢查 ───────────────────────────
 
 /**
@@ -95,7 +112,11 @@ function looksLikeLegacyIndex(html) {
  * @param {number} deps.port
  */
 function createProbes({ sys, config, env, paths, port }) {
-    const base = `http://127.0.0.1:${port}`;
+    // 健康檢查與關閉通道連的位址：HOST 沒寫（預設 127.0.0.1）、0.0.0.0、:: → 127.0.0.1；localhost、::1 照原值
+    // （config/listenHost.js 的 localProbeHost）。HOST 只聽 localhost 連不到的位址時 listen.supported 是 false，
+    // 啟動器與關閉捷徑一開始就停下說明，不會走到這裡的檢查；base 仍給 127.0.0.1，只為了不留 undefined。
+    const listen = listenFromEnv(env);
+    const base = `http://${listenHost.urlHost(listen.probeHost || listenHost.DEFAULT_HOST)}:${port}`;
 
     /** @returns {Promise<{state:'ours',dbOk:boolean,legacy?:boolean,version?:string}|{state:'other',detail?:string}|{state:'down'}>} */
     async function probeHealth({ timeoutMs = 3000, retryOnTimeout = true } = {}) {
@@ -194,7 +215,7 @@ function createProbes({ sys, config, env, paths, port }) {
         }
     }
 
-    return { base, probeHealth, describePort, detectRecording, resolveDockerCli, dockerInfo, readServerInfo, appDir: paths.appDir, env };
+    return { base, listen, probeHealth, describePort, detectRecording, resolveDockerCli, dockerInfo, readServerInfo, appDir: paths.appDir, env };
 }
 
 /**
@@ -218,5 +239,5 @@ function appPaths(appDir) {
 }
 
 module.exports = {
-    SERVICE_NAME, DEFAULT_PORT, parseEnvText, effectiveEnv, portFromEnv, classifyHealth, looksLikeLegacyIndex, createProbes, appPaths
+    SERVICE_NAME, DEFAULT_PORT, parseEnvText, effectiveEnv, portFromEnv, listenFromEnv, classifyHealth, looksLikeLegacyIndex, createProbes, appPaths
 };

@@ -113,7 +113,7 @@ app.use((err, req, res, next) => {
 | kcRateLimit〔修訂 2026-09-24〕 | 120/min | 知識點四支（共用一桶） | 不呼叫 LLM，只是防呆；逐張審定口語版綽綽有餘 |
 | tutorRateLimit〔修訂 2026-09-24〕 | 10/min（`TUTOR_RATE_LIMIT_PER_MIN`，非正整數退回 10） | `POST /api/tutor` | 每次呼叫 LLM；另有每日預算 `TUTOR_DAILY_BUDGET_USD`（NFR-007） |
 | voiceRateLimit〔修訂 2026-09-24〕 | 10/min（`VOICE_RATE_LIMIT_PER_MIN`） | `POST /api/voice/transcribe` | 每次呼叫 LLM；成本併入家教的每日預算 |
-| healthRateLimit〔修訂 2026-09-27 桌面啟動器〕 | 60/min（只算本機以外的來源） | `GET /api/health` | 不經金鑰、每次查一次資料庫，後端又綁在所有網路介面（DA-11）；本機（socket 對端是 127.0.0.1／::1）不限，啟動器等後端時每秒問一次 |
+| healthRateLimit〔修訂 2026-09-27 桌面啟動器〕 | 60/min（只算本機以外的來源） | `GET /api/health` | 不經金鑰、每次查一次資料庫；本機（socket 對端是 127.0.0.0/8／::1）不限，啟動器等後端時每秒問一次。〔修訂 2026-09-27 Owner 第六輪 DA-11＝1〕後端預設只聽 127.0.0.1（`HOST`），這時只有本機來源、限流不會觸發；設了 `HOST=0.0.0.0` 時區網來源才會被限流 |
 
 〔修訂 2026-09-24〕`FEATURE_REMEDIAL` 的四支與 WS-A 的三支唯讀端點不套限流（只讀資料庫、不呼叫 LLM；裁決 S5-25）。
 

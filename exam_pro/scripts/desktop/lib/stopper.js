@@ -7,7 +7,7 @@
 //   3. 有背景工作在跑時先問（設定 askBeforeStopWithJobs）：是＝等它們跑完；否＝最多等 stopGraceSec 秒；取消＝不關。
 //   4. POST /api/launcher/shutdown：後端停止認領新工作、等在途工作收尾、關連線池、結束（services/launcherControl.js）。
 //   5. 後端真的結束了，才依設定關 Docker／Ollama（預設都不關；偵測到本機重錄時一律不關）。
-// 關掉 app 視窗本身**不會**關後端（背景拆題可能還在跑），這是預設行為，列為待 Owner 確認事項 DL-2。
+// 關掉 app 視窗本身**不會**關後端（背景拆題可能還在跑）：DL-2，〔Owner 2026-09-27 第六輪〕選 1＝關視窗不停後端（定案）。
 // I/O 全部經注入的 sys 與 ui。
 // ─────────────────────────────────────────────────────────────
 const path = require('path');
@@ -58,6 +58,21 @@ function askText(inFlight, graceMs) {
 async function runStop({ sys, config, env, paths, probes, ui, log = () => { }, pollMs = 1000 }) {
     const info = w.POPUP;
     const apiKey = String(env.API_KEY || '').trim();
+
+    // 〔Owner 第六輪 DA-11＝1〕HOST 只聽 localhost 連不到的位址（區網位址、127.0.0.1 以外的 127.x）：
+    // 啟動器不會開這種後端（plan.js 的 host-unsupported），關閉捷徑也不去連
+    if (probes.listen && probes.listen.supported === false) {
+        log(`HOST=${probes.listen.host}：桌面圖示不支援這個位址，不送關閉要求`);
+        await ui.messageBox({
+            text: `exam_pro\\.env（或系統環境變數）的 HOST 是「${probes.listen.host}」，桌面圖示與關閉捷徑不支援這個設定` +
+                '（支援：不寫、127.0.0.1、localhost、::1、0.0.0.0、::）。\n' +
+                '桌面圖示不會開這種設定的後端；如果是在命令提示字元用 npm start 開的，請到那個視窗按 Ctrl+C。\n' +
+                '改 HOST 之前就由圖示開著的後端：先把 .env 的 HOST 改回來，再按一次「關閉出題系統」。\n' +
+                '要改回只給本機用：刪掉 .env 的 HOST 這一行（區網用 HOST=0.0.0.0，見 exam_pro\\README.md「區網存取」）。',
+            icon: info.ICON_WARNING
+        });
+        return { result: 'host-unsupported' };
+    }
 
     const health = await probes.probeHealth();
     log(`健康檢查：${JSON.stringify(health)}`);

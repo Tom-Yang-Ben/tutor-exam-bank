@@ -27,14 +27,14 @@
 //     重新認領時不看哪幾塊／哪幾題已經做完 → 從第 1 塊／第 1 題整份重跑（已建的列靠 ON CONFLICT 不會重複，
 //     但前面的塊／題會再呼叫一次模型）。
 //   runner.stop() 也不會在塊與塊之間停下，所以「等在途工作收尾」對拆題而言是等整份卷拆完。見 docs/desktop-launcher.md 7.3。
-// 要等多久由關閉捷徑決定（scripts/desktop/stop.js：有在途工作時先問 Owner；待決事項 DL-1）。
+// 要等多久由關閉捷徑決定（scripts/desktop/stop.js：有在途工作時先問 Owner；DL-1，〔Owner 2026-09-27 第六輪〕選 1＝每次問）。
 // ─────────────────────────────────────────────────────────────
 const crypto = require('crypto');
 const express = require('express');
 
 const TOKEN_ENV = 'LAUNCHER_CONTROL_TOKEN';
 const TOKEN_HEADER = 'x-launcher-token';
-/** 預設最多等在途工作 2 分鐘（Gemini 模式一個節點的逾時是 2 分；本機模式一個節點可能跑數十分鐘，拆題更是整份卷算一件工作，見文件待決事項 DL-1） */
+/** 預設最多等在途工作 2 分鐘（Gemini 模式一個節點的逾時是 2 分；本機模式一個節點可能跑數十分鐘，拆題更是整份卷算一件工作，見文件 DL-1；Owner 第六輪選 1＝每次問） */
 const DEFAULT_GRACE_MS = 120_000;
 /** 上限 6 小時：關閉捷徑設成「等到跑完」時也不會無限期掛著 */
 const MAX_GRACE_MS = 6 * 60 * 60 * 1000;

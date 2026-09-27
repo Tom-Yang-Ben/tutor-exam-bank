@@ -1,7 +1,7 @@
 # 桌面應用程式設計稿：B（Electron 桌面殼）＋ D2（原生 PostgreSQL、拿掉 Docker）
 
-> **狀態：設計稿與決策草稿，尚未實作。** 分支 `dec/desktop-app-design-fix`（接在 `dec/desktop-app-design` 的 `c3cd57f` 之後），基底 `local/integration-r6`（`0ba9bc6`）。只改文件，沒有產品程式。
-> **版本**：第一版草稿是 `325c52b`（作者中斷時留下）；`c3cd57f` 是逐節自我檢查、查證後的正式版（改了什麼見文末「自我檢查紀錄」）；本版依審查意見再修一次，逐條的查證結果與改法見文末「審查修正紀錄」。
+> **狀態：設計稿，尚未實作；〔2026-09-27〕第 8 條的 14 題決策 Owner 已全部答覆（第六輪），依答案確定的段落改成「定案」語氣、原文脈絡保留。** 分支 `dec/desktop-app-design-fix`（接在 `dec/desktop-app-design` 的 `c3cd57f` 之後），基底 `local/integration-r6`（`0ba9bc6`）。只改文件，沒有產品程式。
+> **版本**：第一版草稿是 `325c52b`（作者中斷時留下）；`c3cd57f` 是逐節自我檢查、查證後的正式版（改了什麼見文末「自我檢查紀錄」）；本版依審查意見再修一次，逐條的查證結果與改法見文末「審查修正紀錄」。〔2026-09-27〕第六輪決策的登錄見文末「第六輪決策登錄紀錄」，其審查小修見「審查修正紀錄（`dec/r7-decisions-host-fix`）」。
 > **Owner 的決定（2026-09-27）**：先做 A（啟動器）；B 與 D2 同時開始規劃，先不實作。A 在另一條分支 `dec/desktop-launcher` 上實作，目前有一個**未審查、未合併**的進行中 commit `d730422`（第 6.1 節列出它已經有的模組）。B1 開工前要先和 A 對齊（第 6.1 節）。
 > **名詞**：
 > - **A**：啟動器。雙擊一個檔案，它會開 Docker Desktop、開資料庫、檢查 Ollama、開伺服器和瀏覽器。
@@ -10,6 +10,7 @@
 > - **D2**：改用 Windows 原生的 PostgreSQL 16，平常不需要 Docker（本文件）。
 >
 > D1、D2 的定義以本文件為準。
+> **〔Owner 第六輪決策 2026-09-27，分支 `dec/r7-decisions-host`〕** DA-1～DA-14 的答案逐題登錄在第 8 條（一覽表多一欄「Owner 2026-09-27」，各題開頭加註〔Owner 2026-09-27 選 N〕），一覽表也在 `docs/HANDOFF.md` §0.00d。十四題之中，十三題選的就是本文件的建議；DA-12 原本建議「演練時比對後再定」，Owner 直接定 ICU（選 2）。**程式這次只落實 DA-11 的網頁版那一半**（後端改聽 `HOST`、預設 `127.0.0.1`，`exam_pro/config/listenHost.js`）；B、D2 的其餘部分仍未實作。還沒定的只剩兩件：DA-9 的前提（Smart App Control 是否關閉，Owner 確認）與 DA-14 的量測結果（Owner 自己做，第 10 節）。第 10 節是給 Owner 的操作說明（WSL 記憶體上限、`wsl_memory_check.bat`）。
 > **查證標記**：
 > - 〔查證 Sn〕：有來源，見第 9 條。
 > - 〔未查證〕：查不到或不確定。
@@ -39,8 +40,8 @@
 
 | 期別 | 做什麼 | 做完後 Owner 看得到的差別 | 估計工時 |
 |---|---|---|---|
-| B1 | Electron 殼加內嵌後端（資料庫仍在 Docker） | 雙擊圖示就出現視窗，有系統匣圖示。關視窗的行為照 DA-2 決定。Docker Desktop 還是要在跑，但由 app 代為啟動 | 約 58～60h，約 7.5 人日（含 DA-13 的逐塊檢查點 5～7h） |
-| B2 | 路徑與設定搬出程式資料夾（`%LOCALAPPDATA%`／`%APPDATA%`，見 DA-1） | 程式和資料分開放，更新程式時不會動到題庫附圖、考卷 PDF 或備份 | 約 33～35h，約 4～4.5 人日 |
+| B1 | Electron 殼加內嵌後端（資料庫仍在 Docker） | 雙擊圖示就出現視窗，有系統匣圖示。關視窗的行為照 DA-2（〔定案〕選 3：有工作縮到系統匣並通知，沒工作直接結束）。Docker Desktop 還是要在跑，但由 app 代為啟動 | 約 58～60h，約 7.5 人日（含 DA-13 的逐塊檢查點 5～7h） |
+| B2 | 路徑與設定搬出程式資料夾（〔定案 DA-1＝2〕設定在 `%APPDATA%`，資料庫、附圖、日誌在 `%LOCALAPPDATA%`，備份在「文件\TutorExamBank\backups」） | 程式和資料分開放，更新程式時不會動到題庫附圖、考卷 PDF 或備份 | 約 33～35h，約 4～4.5 人日 |
 | D2 | 原生 PostgreSQL 16 加 pgvector，把資料搬過去 | 不必開 Docker Desktop，省下 WSL2 虛擬機吃掉的記憶體（省多少先照 DA-14 量） | 約 48～57h，約 6～7 人日（含 pgvector 的取得與舊庫防護） |
 | B3 | 打包成安裝檔 | 有正式的安裝和解除安裝，也有開始選單捷徑 | 約 23～26h，約 3～3.5 人日 |
 
@@ -51,7 +52,7 @@
 - **B1 期間**：資料庫還在 Docker，由 app（或沿用 A 的邏輯）代為開 Docker Desktop 並執行 `docker compose up -d --wait`。
 - **D2 之後**：正式庫改成原生 PostgreSQL，平常用 app 完全不需要 Docker。切換時一定要讓 `docker compose up` 不再帶起舊的正式庫（第 3 條第 23 項）。`record_local.bat`、`啟動資料庫.bat` 每次都會跑 `docker compose up`；沒有這道防護，舊庫會在 5442 復活，變成兩份正式庫（R-19）。
 
-建議（DA-7）：Docker Desktop **保留安裝，但不要開機自動啟動**，只在三種情況才開：
+~~建議（DA-7）~~〔Owner 2026-09-27 DA-7 選 2，定案〕：Docker Desktop **保留安裝，但不要開機自動啟動**，只在三種情況才開：
 
 - 錄製 cassette：`record_local.bat` 用 Docker 的 5433 測試庫，和 CI 是同一顆映像。
 - 在自己電腦上跑整合測試。
@@ -59,7 +60,7 @@
 
 舊庫的 Docker volume 至少保留 30 天，當作回退用的備援（也就是 D1 狀態）。
 
-Docker 自己的省資源模式不省記憶體：Resource Saver 在 WSL 2 上只會暫停 Docker 引擎，**不會減少記憶體用量**，Docker 的文件改建議開 WSL 的 `autoMemoryReclaim`（〔查證 S30b〕）。但這不代表「只能讓 Docker Desktop 不要開著」（第一版正式稿這樣寫，講過頭了）：WSL 的 `.wslconfig` 可以給虛擬機設記憶體上限（`[wsl2] memory=`，預設是實體記憶體的一半，也就是 8 GB），也可以讓它自動歸還快取（`[experimental] autoMemoryReclaim`，〔查證 S29〕），約 0.5 小時就能做完。**建議先做這一步並量測，再決定 D2 值不值得花約 48～57 小時**（DA-14）。
+Docker 自己的省資源模式不省記憶體：Resource Saver 在 WSL 2 上只會暫停 Docker 引擎，**不會減少記憶體用量**，Docker 的文件改建議開 WSL 的 `autoMemoryReclaim`（〔查證 S30b〕）。但這不代表「只能讓 Docker Desktop 不要開著」（第一版正式稿這樣寫，講過頭了）：WSL 的 `.wslconfig` 可以給虛擬機設記憶體上限（`[wsl2] memory=`，預設是實體記憶體的一半，也就是 8 GB），也可以讓它自動歸還快取（`[experimental] autoMemoryReclaim`，〔查證 S29〕），約 0.5 小時就能做完。**建議先做這一步並量測，再決定 D2 值不值得花約 48～57 小時**（DA-14）。〔Owner 2026-09-27 DA-14 選 1，定案〕Owner 自己設 `memory=3GB`、`autoMemoryReclaim=dropCache` 並量測，步驟與檢查工具在第 10 節；D2 做不做，等量測結果再定。
 
 ---
 
@@ -98,8 +99,8 @@ Owner 的電腦：Windows 11 筆電，i5-8265U 等級、只有內顯、16 GB 記
 - 每天 02:00 由 Windows 工作排程器的「題庫每日備份」跑 `備份資料庫.bat`，借用容器裡的 `pg_dump`（`engineering_docs/06_ops/deployment_and_operations.md` §6）。
 - 這台電腦**另外有一個原生的 PostgreSQL 17 服務占著 5432**（`exam_pro/docker-compose.yml` 檔頭的註解）。但 `scripts/backup.js` 的檔頭記載 `where pg_dump` 沒有結果，所以 PG17 的工具**不在 `PATH` 裡**；它的 `bin` 資料夾在哪裡〔要實測〕。
 - 啟動用的 `.bat`（`exam_pro\啟動資料庫.bat`、`備份資料庫.bat` 等）都在版控裡。
-- Windows 11 的 Smart App Control（SAC）是開、評估還是關〔要實測：「Windows 安全性 → 應用程式與瀏覽器控制 → Smart App Control」〕。它開著時，本機 build 的未簽章 exe 會被擋（DA-9、R-5）。
-- WSL 的版本與 `.wslconfig` 有沒有設記憶體上限〔要實測：`wsl --version`、`%UserProfile%\.wslconfig`〕（DA-14）。
+- Windows 11 的 Smart App Control（SAC）是開、評估還是關〔要實測：「Windows 安全性 → 應用程式與瀏覽器控制 → Smart App Control」〕。它開著時，本機 build 的未簽章 exe 會被擋（DA-9、R-5）。〔2026-09-27〕DA-9 定案選 1（不簽章），前提是 SAC 關閉；`wsl_memory_check.bat` 會一併讀出 SAC 的狀態（第 10 節），Owner 看畫面或 log 確認。
+- WSL 的版本與 `.wslconfig` 有沒有設記憶體上限〔要實測：`wsl --version`、`%UserProfile%\.wslconfig`〕（DA-14）。〔2026-09-27〕`wsl_memory_check.bat` 讀出這兩項並寫進 log（第 10 節）。
 
 ---
 
@@ -114,7 +115,7 @@ Owner 的電腦：Windows 11 筆電，i5-8265U 等級、只有內顯、16 GB 記
 │   ├─ 設定：讀 %APPDATA%\TutorExamBank\.env ＋ 執行期算出的值（埠、DATABASE_URL…）  │
 │   ├─ pgManager：原生 PostgreSQL 的 initdb／啟動／健康檢查／停止（D2 之後）         │
 │   ├─ 健康檢查：Ollama（/api/version、/api/tags）、OCR 的 python 是否存在          │
-│   └─ backendHost：用 utilityProcess 開後端（DA-3），監看、崩潰時重開               │
+│   └─ backendHost：用 utilityProcess 開後端（DA-3 定案），監看、崩潰時重開          │
 │                                                                                 │
 │ 後端行程（exam_pro/server.js 匯出的 startServer）                                  │
 │   └─ Express（只綁 127.0.0.1）＋ inline jobRunner ＋ 靜態 public/、/vendor、/figures │
@@ -163,10 +164,11 @@ async function startServer({ port = 0, host = '127.0.0.1', onLog } = {}) → {
     runner,         // startInlineRunner() 的回傳值（JOB_RUNNER=off 時為 null）
     close(opts)     // 停止認領新工作 → 等在途節點（或放棄，見下面第 3 點）→ server.close() → pool.end()
 }
-if (require.main === module) { require('dotenv').config(); /* 照舊：listen(PORT)，行為完全不變 */ }
+if (require.main === module) { require('dotenv').config(); /* 照舊：listen(PORT, HOST)（〔DA-11〕HOST 預設 127.0.0.1） */ }
 ```
 
 - `node server.js` 和 `npm start` 的行為一個字都不變：一樣讀 `.env`、一樣聽 `PORT`、一樣綁所有網路介面。改不改綁定位址由 DA-11 決定。
+  〔Owner 2026-09-27 DA-11 選 1，定案，已實作〕網頁版改用 `HOST` 設定、**預設 `127.0.0.1`**（分支 `dec/r7-decisions-host`：`server.js` 呼叫 `app.listen(PORT, HOST)`，判斷集中在 `exam_pro/config/listenHost.js`，A 的啟動器用同一支決定連哪個位址）。所以「一樣綁所有網路介面」這句已不成立：B1 改 `server.js` 時以這一版為基底，`require.main === module` 的分支沿用 `HOST`；`startServer()` 由桌面版呼叫時一律傳 `host: '127.0.0.1'`（桌面版只綁本機，不讀 `HOST`）。
 - `startServer()` 本身**不讀 `.env`**。環境變數由呼叫它的人事先放好，因為 `config/db.js`、`config/features.js`、`routes/index.js` 都在 require 的當下讀 `process.env`（`config/db.js:26-31` 缺 `DATABASE_URL` 會直接丟錯）。
 - **「中止在途節點」不能直接用現有的 abort**。現況與陷阱：
   1. `runner.stop()` 只會停止計時器（`workers/jobRunner.js:1833-1835`），不會中止還在跑的節點。
@@ -200,7 +202,7 @@ if (require.main === module) { require('dotenv').config(); /* 照舊：listen(PO
 - `BrowserWindow` 載入 `http://127.0.0.1:<後端埠>/`，也就是現在的首頁，由 `serveIndex` 注入旗標和 API 金鑰（`app.js:122-155`）。
 - 設定用 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`，不需要 preload。前端只用 `fetch`，完全不用 Node 的功能。
 - 為什麼不用自訂協定（例如 `app://`）：Electron 的安全指引建議用自訂協定取代 `file://`（〔查證 S12〕），但我們兩者都不用。前端到處都用相對路徑 `fetch('/api/...')`，還有 multipart 上傳、`/figures`、`/vendor`，用自訂協定就得把全部請求轉手給 Express，工多又容易出錯。改走本機迴路的 http，再用下面三點把風險收小。
-  1. 後端只綁 `127.0.0.1`，區網連不到。
+  1. 後端只綁 `127.0.0.1`，區網連不到（〔DA-11 定案〕桌面版不提供區網模式）。
   2. `will-navigate` 只允許同一個來源；`setWindowOpenHandler` 一律拒絕開新視窗，要開外部網址時交給 `shell.openExternal`。現在的前端沒有任何外部連結（`public/` 裡找不到 `href="http`）。
   3. 權限處理器（第 3 條第 6 項）只放行麥克風，而且只放行我們自己的來源。
 - 前端只用到 `confirm()`（`public/index.html:1070`、`:1080`），Electron 會跳原生對話框。前端沒有用到 Electron 不支援的 `window.prompt()`。
@@ -213,14 +215,14 @@ if (require.main === module) { require('dotenv').config(); /* 照舊：listen(PO
 | 二進位檔 | EDB 提供的 Windows x86-64 PostgreSQL 16 zip。寫這份文件時 PG16 只列 16.15 一個版本（〔查證 S18〕）。只取 `bin/`、`lib/`、`share/`，不要 pgAdmin、StackBuilder 和文件。B3 用 `extraResources` 把它包進安裝檔；B3 之前先解壓到 `%LOCALAPPDATA%\TutorExamBank\pgsql16\`。**下載後自己算 SHA-256 記在文件裡**：EDB 沒有公布這個 zip 的雜湊值，2026-09-12 有人在 EDB 的 repo 開 issue 要求，到寫這份文件時沒有回應（〔查證 S18b〕） | EDB 的原話是：這些壓縮檔是「our PostgreSQL installers」安裝的檔案，「provided as a convenience for expert users」，一般人應該用安裝程式（〔查證 S18〕）。我們需要的正好是不裝 Windows 服務、由 app 自己管的形式。大小：16.1 的 zip 約 330 MB，其中 pgAdmin 4 解開後約 760 MB（〔查證 S18c〕，第三方腳本的說明）；只取執行需要的部分會小很多，確切數字〔要實測〕 |
 | pgvector | 版本要和 Docker 裡那一版**完全相同**：先在舊庫查 `SELECT extversion FROM pg_extension WHERE extname='vector'`。映像標籤 `pg16` 目前對應 0.8.6（〔查證 S20〕），CI 每次都拉最新的 `pg16`，所以 CI 已經是 0.8.6；但 Owner 拉映像的時間比較早，實際版本**要查**。版本比 0.8.6 舊時的處理見 4.1 節。取得方式見 DA-5；pgvector 官方的 Windows 說明只有 Visual Studio 加 `nmake /F Makefile.win` 的編譯流程（〔查證 S19〕） | 第 7 條 R-1 |
 | pg_trgm | 屬於 contrib（Additional Supplied Modules），是 trusted 擴充（〔查證 S23〕）。EDB 說 zip 就是安裝程式裝的那些檔案（〔查證 S18〕），所以〔推論〕應該有 `share/extension/pg_trgm.control` 和 `lib/pg_trgm.dll`；解壓後確認〔要實測〕 | migration 0002 會 `CREATE EXTENSION pg_trgm`。專案只用它建 `idx_questions_text_trgm` 索引（`migrations/0002_vector.sql:25`），程式裡沒有 `similarity()` 之類的呼叫 |
-| 資料夾 | `%LOCALAPPDATA%\TutorExamBank\pgdata16\`，**路徑只用英數字**（DA-1） | Windows 上 PostgreSQL 碰到非 ASCII 路徑有已知問題：二進位檔所在路徑含非 ASCII 字元時 initdb 會失敗（PG13，〔查證 S27〕）；PG17 的 EDB 安裝程式在使用者暫存路徑含中文時，initdb 找不到密碼檔（〔查證 S28〕） |
-| initdb | `initdb -D <pgdata> -U exam -E UTF8 --auth=scram-sha-256 --pwfile=<暫存檔> <locale 參數>`。locale 參數照 DA-12 在演練時決定。密碼檔放在 `pgdata` 旁邊用完就刪，不放 `%TEMP%` | Windows 上 UTF-8 可以搭配任何 locale（〔查證 S24〕）。排序規則的差異見 R-3 |
+| 資料夾 | `%LOCALAPPDATA%\TutorExamBank\pgdata16\`，**路徑只用英數字**（DA-1 定案） | Windows 上 PostgreSQL 碰到非 ASCII 路徑有已知問題：二進位檔所在路徑含非 ASCII 字元時 initdb 會失敗（PG13，〔查證 S27〕）；PG17 的 EDB 安裝程式在使用者暫存路徑含中文時，initdb 找不到密碼檔（〔查證 S28〕） |
+| initdb | `initdb -D <pgdata> -U exam -E UTF8 --auth=scram-sha-256 --pwfile=<暫存檔> <locale 參數>`。~~locale 參數照 DA-12 在演練時決定。~~〔Owner 2026-09-27 DA-12 選 2，定案〕locale 參數是 `--locale-provider=icu --icu-locale=<值>`；`<值>` 的候選（例 `und`、`zh-Hant-TW`、`en-US`）在 D2 第 0 步演練時依 4.3 節最後一列比對後記錄。密碼檔放在 `pgdata` 旁邊用完就刪，不放 `%TEMP%` | Windows 上 UTF-8 可以搭配任何 locale（〔查證 S24〕）。排序規則的差異見 R-3 |
 | 設定 | 在 `postgresql.conf` 追加：`listen_addresses = '127.0.0.1'`、`port = <DA 選的埠>`、`maintenance_work_mem = 256MB`（和 `docker-compose.yml` 的 `command` 相同）、`timezone = 'Asia/Taipei'`（和 compose 的 `TZ` 相同）、`logging_collector = on`（日誌寫在 `pgdata\log`） | 時區不同會影響重練排程的「日期」計算，搬家後要比對 `SHOW timezone` |
 | 啟動 | **一定用 `pg_ctl start -w -D <pgdata> -l <日誌檔>`，不可直接執行 `postgres.exe`**。從 Node 執行 `pg_ctl` 時，stdio 設成 `'ignore'` 或導到檔案，並等 `'exit'` 事件，不要等 `'close'` | PostgreSQL 不肯在有系統管理員權限的帳號下執行（〔查證 S25〕），`pg_ctl` 會先降權再啟動（〔查證 S26〕）。Owner 的帳號資料夾叫 `Administrator`，如果真的是內建的 Administrator 帳號，所有行程都帶系統管理員權限〔要實測〕。stdio 的理由〔推論〕：用 pipe 時，常駐的 postgres 可能繼承這些 handle，pipe 一直不關，`'close'` 事件就永遠等不到 |
 | 健康檢查 | 先跑 `pg_isready -h 127.0.0.1 -p <埠>`，再用 `pg` 連線執行 `SELECT 1`。啟動逾時 60 秒；失敗時把 `pgdata\log` 的最後 30 行顯示在狀態畫面 | 異常關機後的崩潰回復可能要多幾秒 |
 | 埠 | 平時預設 **5442**：D2 切換完成、Docker 停掉之後，沿用舊的埠號，`.env` 和文件都不必改。和 Docker 並行演練期間用 **5452**。啟動前先檢查埠有沒有被占用；被占用時，如果回應的是我們自己的叢集（`SELECT system_identifier FROM pg_control_system()` 和記下的值相同）就直接沿用，否則報錯，不會自動換埠，免得和舊的 Docker 庫搞混。**「記下的值」由 pgManager 自己寫**：第一次 initdb 後啟動成功時，把 `system_identifier` 與 `data_directory` 記進 `state.json`；D2 的演練與切換都用 pgManager 的命令列建叢集（第 3 條第 25 項、4.2 節第 0 步），不手動 initdb，否則沒有這筆紀錄，app 會把自己的叢集當成別人的而報錯。**沿用 5442 的前提**是舊的 Docker 正式庫不會再被 `docker compose up` 帶起來（第 3 條第 23 項）；否則 app 沒開時舊庫會在 5442 復活，下次開 app 時這一列會報「不是自己的叢集」，而在那之前網頁版、維護工具都已經寫進舊庫（R-19） | 5432 被 Owner 的 PG17 服務占著。自動換埠會讓 `DATABASE_URL` 每次不同，排查時很難看懂，所以寧可報錯。另一個做法是原生庫改用新的埠、不動 compose，比較見第 3 條第 23 項 |
 | 停止 | 結束 app 時，照 2.8 節的順序最後執行 `pg_ctl stop -m fast -w`。Windows 關機、重開或登出時，在 `query-session-end` 延遲一下並盡快停止（〔查證 S16〕） | 就算被強制中斷，PostgreSQL 下次啟動也會用 WAL 自動回復〔推論〕。**app 當掉時 PostgreSQL 不會跟著結束**：`pg_ctl` 是 app 的子行程，但 postgres 是 `pg_ctl` 再開出來的孫行程，不在 libuv 那個「父行程結束就終止」的 job 裡（〔查證 S41〕的 `SILENT_BREAKAWAY_OK`，〔推論〕）。下次開 app 時由上面「埠」那一列的判斷認出是自己的叢集並沿用 |
-| 誰來管 | app 管理：開 app 才啟動，結束 app 就停止，不裝 Windows 服務（DA-4） | 備份的時機跟著改，見 DA-4 |
+| 誰來管 | app 管理：開 app 才啟動，結束 app 就停止，不裝 Windows 服務（〔DA-4 選 1，定案〕） | 備份的時機跟著改（定案）：每天第一次開啟、結束前有寫入、migrate 前各備份一次，停用 02:00 排程（DA-4） |
 
 ### 2.6 Ollama
 
@@ -251,17 +253,17 @@ if (require.main === module) { require('dotenv').config(); /* 照舊：listen(PO
   - **怎麼偵測**：app 在開後端**之前**，先查 `pg_stat_activity` 有沒有 `application_name = 'tutor-exam-bank'` 的連線（第 3 條第 35 項讓用 `config/db.js` 的後端與工具都帶這個名稱）。有的話，再打 `http://127.0.0.1:3000/api/health`（A 的 healthController）分辨是不是網頁版開著，然後警告。行程一結束，它的連線就斷了，`pg_stat_activity` 不會留下已經死掉的行程〔推論〕。
   - **不用租約判斷**：第一版正式稿打算看「有沒有還沒到期的租約」（`locked_until > now()`），但 app 當機後 180 秒內重開時，上一個行程留下的租約還沒到期，會被誤判成別人在跑。
 - **系統匣選單**：開啟視窗；狀態（PostgreSQL、Ollama、背景工作 N 件）；立即備份；開啟資料夾（資料、備份、日誌）；OCR 自我檢查；維護命令列（第 3 條第 21 項）；結束。
-- **關閉視窗**：照 DA-2。建議做法：有工作在處理時縮到系統匣繼續跑，並跳通知說明；沒有工作時直接結束。
+- **關閉視窗**：照 DA-2。建議做法：有工作在處理時縮到系統匣繼續跑，並跳通知說明；沒有工作時直接結束。〔Owner 2026-09-27 DA-2 選 3，定案〕照這個做法；從系統匣選「結束」而有工作時，問「等處理完再結束／現在放棄」，對話框寫明重跑範圍（DA-13 定案做了檢查點：題目層從那個節點、拆題從沒完成的那一塊、變式從沒完成的那一題接著跑）。
 - **結束的順序**：
   1. runner 停止認領新工作。
-  2. 在途節點最多等 10 秒；等不到就依使用者的選擇（DA-2）：繼續等，或「放棄」。放棄走 2.3 節的 `shutdown({ abandon: true })`：abort 在途節點（OCR 子行程被殺掉），**不寫 outcome、不動重試次數**，只放掉租約。
+  2. 在途節點最多等 10 秒；等不到就依使用者的選擇（DA-2 定案）：繼續等，或「放棄」。放棄走 2.3 節的 `shutdown({ abandon: true })`：abort 在途節點（OCR 子行程被殺掉），**不寫 outcome、不動重試次數**，只放掉租約。
   3. 關閉 HTTP 伺服器。
   4. 關閉 `pool`。
   5. 需要時做結束前備份（DA-4）。
   6. 執行 `pg_ctl stop -m fast`。
   7. 結束 app。
 
-  被放棄的工作下次開 app 會立刻被重新認領：題目層從那個節點重跑；拆題 job 從第 1 塊整份重拆，變式 job 從第 1 題重來（2.3 節第 4 點，除非 DA-13 選做逐塊檢查點）。如果是當機或被強制結束（沒走到第 2 步），租約要等 `JOB_LEASE_MS`（預設 180 秒，`workers/jobRunner.js:111`）到期才會被認領，重跑點相同，同樣不會吃掉重試次數。本機的 OCR 整理一塊可能要十幾到幾十分鐘，拆題後段被放棄可能白費一小時以上，所以放棄之前一定要問使用者。
+  被放棄的工作下次開 app 會立刻被重新認領：題目層從那個節點重跑；拆題 job 從第 1 塊整份重拆，變式 job 從第 1 題重來（2.3 節第 4 點，除非 DA-13 選做逐塊檢查點）。〔DA-13 選 2，定案〕檢查點做了之後（第 3 條第 36 項），拆題改從沒完成的那一塊、變式改從沒完成的那一題接著跑。如果是當機或被強制結束（沒走到第 2 步），租約要等 `JOB_LEASE_MS`（預設 180 秒，`workers/jobRunner.js:111`）到期才會被認領，重跑點相同，同樣不會吃掉重試次數。本機的 OCR 整理一塊可能要十幾到幾十分鐘，拆題後段被放棄可能白費一小時以上，所以放棄之前一定要問使用者。
 
   這個順序和 A 的關閉通道（`d730422` 的 `services/launcherControl.js`：停止認領 → `server.close()` → 等在途工作到寬限時間 → 關 `pool` → 結束）是同一套想法；B1 要沿用同一份程式，只是 B 多了第 5、6 步，以及「放棄」這個選項。
 - **開機自動啟動**：預設關閉，可以在設定裡用 `app.setLoginItemSettings` 打開（〔查證 S15〕）。
@@ -290,19 +292,19 @@ if (require.main === module) { require('dotenv').config(); /* 照舊：listen(PO
 
 | # | 檔案／位置 | 現況 | 改法 | 期別 | 工時 |
 |---|---|---|---|---|---|
-| 1 | `exam_pro/server.js`（基底 16 行；A 的 `d730422` 已改成留下 `server`、`runner` 並交給 `launcherControl`） | 載入時就 `dotenv.config()`、`app.listen(PORT)`（綁所有網路介面） | 照 2.3 節匯出 `startServer()`；`require.main === module` 時保留原本的行為。**在 A 合併之後的版本上改** | B1 | 3h |
+| 1 | `exam_pro/server.js`（基底 16 行；A 的 `d730422` 已改成留下 `server`、`runner` 並交給 `launcherControl`） | 載入時就 `dotenv.config()`、`app.listen(PORT)`（綁所有網路介面）。〔DA-11 定案，`dec/r7-decisions-host`〕改成 `app.listen(PORT, HOST)`、`HOST` 預設 `127.0.0.1` | 照 2.3 節匯出 `startServer()`；`require.main === module` 時保留原本的行為。**在 A 合併之後的版本上改** | B1 | 3h |
 | 2 | `workers/jobRunner.js`（`stop()` 在 `:1833-1835`、`invokeNode` 在 `:825-887`、拆題迴圈 `runExtractChunk` 在 `:1336-1427`、變式 `runGenerateJob`／`runGenerateOne` 在 `:1513-1672`、租約釋放在 `:1265-1269`） | `stop()` 只清計時器；每個節點雖然有自己的 AbortController，但被 abort 會記成 `timeout`、吃掉重試次數；拆題與變式的迴圈還會立刻重試 | 新增 `shutdown({ abandon, waitMs })`：先標記正在關閉，再 abort 在途節點；被這樣中止的節點**不寫 outcome、不動 `retries`、不寫 `job_events`、拆題與變式的迴圈不重試**，只放掉 `job_questions`／`jobs` 的 `locked_until`（2.3 節第 3、4 點）。題目層、拆題、變式三種工作單位都要走這條路。單元與整合測試要逐一釘住三種單位：「shutdown 中止後 `retries` 不變、沒有新的 `job_events`、job 不會變 `failed`、`locked_until` 已清空」 | B1 | 10h |
 | 3 | `app.js:31-43` 的 CORS（`ALLOWED_ORIGINS`，預設 `http://localhost:3000`） | 瀏覽器對同源請求，只要方法不是 GET 或 HEAD 就會帶 `Origin` 標頭（〔查證 S42〕）。來源不在清單時 `cors()` 丟錯，結果是 500。視窗如果載入 `http://127.0.0.1:<埠>`，每一個 POST 都會失敗〔推論〕（今天在瀏覽器打開 `http://127.0.0.1:3000` 應該也是同樣情形） | 由桌面版在執行期把 `http://127.0.0.1:<埠>,http://localhost:<埠>` 設進 `ALLOWED_ORIGINS`；程式不改，網頁版預設不變。B1 驗收要實際測一次上傳和組卷的 POST | B1 | 1h |
-| 4 | `middleware/auth.js` 與 `app.js:122-153` 的 `serveIndex` 金鑰注入 | 沒設 `API_KEY` 就不檢查；設了就注入首頁，所以任何能打開首頁的人都拿得到金鑰（`roadmap-plan.md` 擱置區第 8 項：它不是存取控制） | 桌面版在第一次啟動時產生一組隨機金鑰存進設定，每次啟動時設進 `API_KEY`。本機其他程式要打 API 就得先讀首頁，門檻稍微提高。後端只綁 127.0.0.1，所以區網碰不到。程式不改。區網模式另外處理（DA-11） | B1 | 1h |
+| 4 | `middleware/auth.js` 與 `app.js:122-153` 的 `serveIndex` 金鑰注入 | 沒設 `API_KEY` 就不檢查；設了就注入首頁，所以任何能打開首頁的人都拿得到金鑰（`roadmap-plan.md` 擱置區第 8 項：它不是存取控制） | 桌面版在第一次啟動時產生一組隨機金鑰存進設定，每次啟動時設進 `API_KEY`。本機其他程式要打 API 就得先讀首頁，門檻稍微提高。後端只綁 127.0.0.1，所以區網碰不到。程式不改。~~區網模式另外處理（DA-11）~~〔DA-11 選 1，定案〕桌面版不做區網模式；要用平板時開網頁版並設 `HOST=0.0.0.0`（`exam_pro/README.md`「區網存取」），或走 Tailscale | B1 | 1h |
 | 5 | Word 下載（`public/index.html:1888-1917`、`public/js/remedial.js:976-990`、`public/js/retrain.js:989-1000`，都是 Blob 加 `<a download>`） | 在瀏覽器裡直接下載到「下載」資料夾 | 前端不改。Electron 沒有指定存檔路徑時，會照一般流程處理，通常是跳出「另存新檔」對話框（〔查證 S14〕）。主行程在 `will-download` 用 `setSaveDialogOptions` 把預設資料夾設為「文件\出卷」，並記住上次用的資料夾。B1 驗收要確認對話框預填的檔名就是前端 `download` 屬性給的檔名（例如「XX 段考（學生版）.docx」）〔要實測〕 | B1 | 3h |
 | 6 | 家教的「按住說話」麥克風（`public/js/tutor.js:157-168`、`:300-315`、`:496`） | 只在安全來源（localhost 或 HTTPS）才顯示按鈕 | `http://127.0.0.1` 在 Chromium 裡屬於安全來源，`isSecureContext` 為真，前端不改〔推論〕。Electron 預設會**自動核准所有權限請求**（〔查證 S12〕），所以要用 `setPermissionRequestHandler`／`setPermissionCheckHandler` 只放行「自己的來源、`media`、audio」，其他一律拒絕（〔查證 S13〕）。Windows 的「隱私權 → 麥克風 → 允許桌面應用程式存取」要打開。**注意**：語音路由只在 `MODEL_VOICE` 是 Gemini 時才掛上（`app.js` 的 `VOICE_ROUTE`），本機模式本來就不提供語音 | B1 | 2h |
-| 7 | `desktop/`（新增） | 不存在 | `main.js`（單一實例、視窗、系統匣、關閉行為、狀態畫面、日誌）、`lib/backendHost.js`（utilityProcess，DA-3）、`lib/config.js`（讀 `.env` 加執行期的值）、`lib/health.js`（Ollama、Docker、OCR）。**B1 期間**仍要用 Docker 的庫，Docker Desktop 的啟動和 `docker compose up -d --wait` 沿用 A 的邏輯（第 6.1 節：A 的 `plan.js` 是純函式，可以直接 `require`；如果 A 合併時它還在，本項約可省 4h） | B1 | 26h |
+| 7 | `desktop/`（新增） | 不存在 | `main.js`（單一實例、視窗、系統匣、關閉行為、狀態畫面、日誌）、`lib/backendHost.js`（utilityProcess，DA-3 定案：`utilityProcess.fork`）、`lib/config.js`（讀 `.env` 加執行期的值）、`lib/health.js`（Ollama、Docker、OCR）。**B1 期間**仍要用 Docker 的庫，Docker Desktop 的啟動和 `docker compose up -d --wait` 沿用 A 的邏輯（第 6.1 節：A 的 `plan.js` 是純函式，可以直接 `require`；如果 A 合併時它還在，本項約可省 4h） | B1 | 26h |
 | 8 | `desktop/` 的測試 | 無 | 純函式（埠、設定合併、來源清單、結束順序的狀態機）用 `node --test` 測，不需要 Electron。**先只在本機跑**；要進 CI 得改 `ci.yml`，要 Owner 同意 | B1 | 6h |
 | 9 | `exam_pro/config/paths.js`（新增） | 路徑散在各檔，而且各自以 `__dirname` 或目前工作目錄為基準 | 集中成單一來源：`APP_DATA_DIR`（沒寫時等於 `exam_pro/`，也就是預設不變）→ `dataDir()`、`uploadsDir()`、`figuresDir()`、`jobsDir()`、`backupsDir()`。資料夾結構刻意保留 `data/`，所以 `APP_DATA_DIR\data\jobs\<id>.pdf` 和資料庫裡存的相對路徑 `data/jobs/<id>.pdf` 對得上，**不必改資料庫** | B2 | 4h |
 | 10 | `app.js:9-27`（uploads）、`routes/index.js:7-10`（multer 的 `dest: 'uploads/'`） | 建目錄和 multer 用的是**目前工作目錄**，開機清理用的卻是 `__dirname/uploads`，兩者不一致。現在沒出事，只是因為 `npm start` 剛好在 `exam_pro` 執行 | 三處都改用 `paths.uploadsDir()` | B2 | 2h |
 | 11 | `app.js:177-179`、`services/figureService.js:16`（`wordService.js:6`、`scripts/backfill_figures.js:1074` 都沿用它的 `FIGURES_DIR`） | 固定是 `exam_pro/data/figures` | 改用 `paths.figuresDir()`，沿用的地方自然跟著改。資料庫的 `question_img` 存的是網址 `/figures/<檔名>`，不必改 | B2 | 1h |
 | 12 | `controllers/jobController.js:27-31`、`workers/jobRunner.js:43-49`（`resolveJobPath`） | PDF 存在 `exam_pro/data/jobs`，相對路徑以 `exam_pro/` 為基準解析。拆題完成後 worker 會刪檔、把 `jobs.pdf_path` 清成 NULL（根目錄 `.gitignore` 的說明），所以這裡平常只有排隊中或拆到一半的 PDF | 相對路徑改以 `APP_DATA_DIR` 為基準；絕對路徑照舊。測試裡有 7 個檔（18 處，都在 integration、e2e 與假 agent）假設 `APP_DIR/data/jobs`，因為預設不變所以都不用改；另外加一則 `APP_DATA_DIR` 指向暫存目錄的測試 | B2 | 3h |
-| 13 | `.env` 的讀取：`server.js:1`、`migrate.js:12`、`scripts/` 底下 15 支、根目錄的 `audit_formulas.js`／`fix_formulas.js`／`seed_questions.js` 等，都用不帶路徑的 `dotenv.config()` 讀**目前工作目錄**的 `.env`；`services/ocr/cli.js:37` 則固定讀 `exam_pro/.env` | 全部依賴「在 `exam_pro` 資料夾執行」 | 桌面版：主行程用 `dotenv.parse` 讀 `%APPDATA%\TutorExamBank\.env`，疊上執行期的值（`PORT`、`DATABASE_URL`、`ALLOWED_ORIGINS`、`API_KEY`、`APP_DATA_DIR`、`OCR_PYTHON`）後，傳給後端行程的 `env`。桌面版的 `.env` 由 `.env.example` **全量產生**（每個鍵都寫出來，空值也寫），減少「桌面版沒寫、repo 的 `.env` 有寫」的鍵被 dotenv 補進來的機會（dotenv 預設不覆寫已經存在的變數；第 21 項）。命令列腳本不改，從維護命令列（第 21 項）執行。**要檢查兩個預設值**：`LLM_MODE` 沒寫時是 `replay`（`services/llm/index.js:101`），`EMBED_MODE` 沒寫時是 `fixture`（`:92-97`，會讀 `eval/fixtures`）。安裝版不帶 `eval/`，所以桌面版的設定缺 `LLM_MODE=live` 或 `EMBED_MODE=live` 時都要擋下並說明，不能靜靜地跑成回放或 fixture 模式 | B2 | 4h |
+| 13 | `.env` 的讀取：`server.js:1`、`migrate.js:12`、`scripts/` 底下 15 支、根目錄的 `audit_formulas.js`／`fix_formulas.js`／`seed_questions.js` 等，都用不帶路徑的 `dotenv.config()` 讀**目前工作目錄**的 `.env`；`services/ocr/cli.js:37` 則固定讀 `exam_pro/.env` | 全部依賴「在 `exam_pro` 資料夾執行」 | 桌面版：主行程用 `dotenv.parse` 讀 `%APPDATA%\TutorExamBank\.env`（〔DA-1、DA-8 定案〕Gemini 金鑰照舊明文寫在這一份），疊上執行期的值（`PORT`、`DATABASE_URL`、`ALLOWED_ORIGINS`、`API_KEY`、`APP_DATA_DIR`、`OCR_PYTHON`）後，傳給後端行程的 `env`。桌面版的 `.env` 由 `.env.example` **全量產生**（每個鍵都寫出來，空值也寫），減少「桌面版沒寫、repo 的 `.env` 有寫」的鍵被 dotenv 補進來的機會（dotenv 預設不覆寫已經存在的變數；第 21 項）。命令列腳本不改，從維護命令列（第 21 項）執行。**要檢查兩個預設值**：`LLM_MODE` 沒寫時是 `replay`（`services/llm/index.js:101`），`EMBED_MODE` 沒寫時是 `fixture`（`:92-97`，會讀 `eval/fixtures`）。安裝版不帶 `eval/`，所以桌面版的設定缺 `LLM_MODE=live` 或 `EMBED_MODE=live` 時都要擋下並說明，不能靜靜地跑成回放或 fixture 模式 | B2 | 4h |
 | 14 | `services/ocr/index.js:39-42`（`OCR_DIR = APP_DIR/ocr_service`）與 `:105-126`（預設的 python） | 腳本放在程式資料夾裡；打包後會在 asar 裡，外部的 python 讀不到 | `ocr_service/**` 解開放在 asar 外面；`SCRIPT_PATH` 在打包環境指向 `app.asar.unpacked`。`OCR_PYTHON` 由桌面版設定：U1 期間沿用 repo 的 venv，B3 才指向新建的 `ocr-venv`（2.7 節）。`requirements.txt` 用來當 cassette 鍵的版本來源，在 asar 外面照樣讀得到 | B2 | 3h |
 | 15 | `scripts/windows/setup_local_ai.bat:22-31`（另外 `:46-48` 要求 `node` 在 `PATH`、用 `eval\tools\tee_run.js` 寫 log） | venv 固定建在 `exam_pro\ocr_service\.venv`，log 寫在 `exam_pro\data\local_ai` | 新增可選的環境變數 `SETUP_VENV_DIR`、`SETUP_LOG_DIR`，沒設時完全照舊。B3 的首次啟動精靈帶這兩個變數去呼叫它：這支 `.bat` 與 `tee_run.js` 要解開放在 asar 外面，`node` 用 Owner 電腦上已經裝好的 Node，不能用 `node.cmd` 墊片（2.7、2.9 節）。U1 期間 venv 留在 repo，所以這一項從 B2 移到 B3 | B3 | 4h |
 | 16 | `scripts/windows/record_local.bat` | 用 Docker 的 5433 測試庫（`TEST_DATABASE_URL`）與 repo 裡的 `node_modules`。但它的第 1 步 `npm run db:up`（`:49-53`）就是 `docker compose up -d --wait`，會把 5442 的正式庫 `postgres` 服務一起啟動；`:44` 還要求 `exam_pro\.env` 存在 | **不改**（原則）。D2 之前和今天一樣。**D2 之後要靠第 23 項**，讓 `db:up` 不再帶起舊的正式庫。沒有第 23 項的話（第一版正式稿寫「互不干擾」，不成立）：<br>① app 開著時，5442 已經被原生庫占用，舊庫起不來，`db:up` 失敗就中止錄製（`:124-126`）。兩個行程能不能同時聽 `127.0.0.1:5442`，在 Windows 上〔要實測〕；README 記過 5432 上「先啟動的那個吃掉連線」的情形，那更糟。<br>② app 沒開時，舊庫在 5442 復活。之後網頁版、維護工具、`啟動資料庫.bat` 的 migrate 都會寫進舊庫，變成兩份分歧的正式庫（R-19）。<br>有了第 23 項，錄製只碰 5433，才和桌面版互不干擾 | — | 0 |
@@ -313,9 +315,9 @@ if (require.main === module) { require('dotenv').config(); /* 照舊：listen(PO
 | 21 | 命令列維護工具（`backfill_*`、`kc:load`、`report:jobs`、`chapters:migrate`、公式健檢三支等，會寫 `data/` 底下）；`exam_pro` 根目錄的 `回填向量.bat`、`執行公式健檢.bat`、`預覽公式修正.bat`、`套用公式修正.bat`，以及 `scripts/windows/backfill_figures.bat` | 在 `exam_pro` 用 `npm run …` 或雙擊 `.bat` 執行，資料庫由 Docker 常駐 | 系統匣選單加「維護命令列」：開一個 cmd，做到三件事。<br>① **怎麼執行**：安裝版的 `exam_pro` 在 `app.asar` 裡，cmd 不能 `cd` 進去，系統的 node 讀不到 asar，安裝版也沒有 npm，所以第一版正式稿「工作目錄是 `resources` 裡的 `exam_pro`」行不通。改成提供兩支小檔：`tutor-node.cmd` 照 VS Code 的 `code.cmd` 做法（〔查證 S47〕），`set ELECTRON_RUN_AS_NODE=1` 後用 app 自己的 exe 執行腳本；`tool.cmd <npm script 名稱>` 從 `exam_pro/package.json` 的 `scripts` 取出 `node <檔>` 形式的指令來跑，舊的 `npm run backfill:figures` 改打 `tool backfill:figures`。前提與未知見 2.9 節（`runAsNode` fuse 要開著；run-as-node 讀不讀得到 asar〔要實測〕）。上面那幾支 `.bat` 在安裝版不提供，改成 `tool` 的子命令。開發版（U1）也走 `tutor-node.cmd`，不依賴系統的 node。<br>② **設定只有一份**：cmd 的工作目錄設在桌面版 `.env` 所在的資料夾，讓不帶路徑的 `dotenv.config()` 讀到的就是它；另外把桌面版 `.env` 的全部鍵與執行期的值（`APP_DATA_DIR`、`DATABASE_URL`、PG16 的 `bin` 加進 `PATH`）注入環境變數。dotenv 預設不覆寫已經存在的變數，所以 repo 的 `.env` 補不進來（例外是 `services/ocr/cli.js` 固定讀 `exam_pro/.env`，它只能補桌面版沒寫的鍵，第 13 項的全量產生就是為了這個）。空值的鍵在 Windows 的環境區塊裡能不能保留〔要實測〕。開啟時比對 repo 的 `exam_pro\.env`，有桌面版沒有的鍵就列出警告。**不採用**「把 repo 的 `.env` 改名」：`record_local.bat` 找不到 `exam_pro\.env` 就停（`record_local.bat:44`），錄製還要用它。腳本本身都用 `__dirname` 找路徑，不依賴工作目錄。<br>③ 資料庫會一直開著，直到 app 結束 | B2 | 6～8h |
 | 22 | `package.json:49-51`（`db:up`／`db:down`／`db:backup`） | `db:up`／`db:down` 呼叫 docker compose，`db:up` 會啟動 compose 裡的所有服務 | **不改**。但 D2 切換之後效果會變：第 23 項讓 `db:up`／`db:down` 只管 `postgres_test`，舊的 `postgres` 要指名才會動。Docker 路線（D1 回退、錄製、整合測試）照樣用。`db:backup` 照第 19 項，D2 之後設 `BACKUP_MODE=native` | — | 0 |
 | 23 | `docker-compose.yml` | 5442 正式庫與 5433 測試庫，`docker compose up` 兩個都會啟動；`postgres` 設了 `restart: unless-stopped` | `postgres_test` 不改。`postgres` 服務加 `profiles: ["prod"]`，**同一次變更**在 repo 的 `exam_pro\.env` 加一行 `COMPOSE_PROFILES=prod`（還有 `.env.example` 與 README 的說明）。Compose 會從專案資料夾的 `.env` 讀這類預先定義的變數（〔查證 S46〕），所以合併之後、切換之前，`docker compose up` 的行為不變；A 與 B1 代開 Docker 的邏輯也不受影響。D2 第 6 步刪掉這一行，之後 `docker compose up`（`db:up`、`record_local.bat`、`啟動資料庫.bat`、A 與 app 代開 Docker 的邏輯）就只啟動測試庫。明確指定服務名（`docker compose start postgres`）時不受 profile 限制（〔查證 S46〕），回退時用得到。CI 用 `services:`、不用 compose，不受影響。**要實測**：從 `.env` 讀 `COMPOSE_PROFILES` 的行為，文件只寫了「`.env` 可以設預先定義的變數」，沒有逐項寫明（4.2 節第 0 步驗）。<br>**為什麼不能只加 profile、要配那一行**（審查建議的首選少了這一步）：只加 profile 的話，compose 檔一合併，`db:up` 就不再啟動正式庫。這時還沒切換，B1、B2 的 app 與 A 仍在用 Docker 的正式庫，會全部連不上。要嘛像這裡用 `.env` 的一行控制，要嘛把 compose 的變更留到切換當天才合併。<br>**另一個做法**是原生庫改用新的埠（例如 5462），並改 `.env` 的 `DATABASE_URL`，compose 不動。不採用，理由有二：舊庫每次 `db:up` 都會復活，整天的錄製期間白吃記憶體；而且一直留著一個會被連錯的舊庫。第 19 項的檢查兩種做法都要 | D2 | 1h |
-| 24 | `啟動資料庫.bat`、`備份資料庫.bat`、工作排程器的「題庫每日備份」（02:00） | 依賴 Docker；`啟動資料庫.bat` 在 `docker compose up -d --wait`（`:17`）之後接著對正式庫 `npm run migrate`（`:28`） | 網頁版照舊可以用。D2 之後：`啟動資料庫.bat` 先顯示「正式庫已改由 app 管理」，只啟動測試庫，**不再對正式庫跑 migrate**（正式庫的 migrate 走第 5.3 節的升級流程，要先備份與快照）；`備份資料庫.bat` 照第 19 項；排程改成 DA-4 的方案，建議停用 02:00 那一個，改由 app 在每天第一次開啟時和結束前備份 | D2 | 3h |
+| 24 | `啟動資料庫.bat`、`備份資料庫.bat`、工作排程器的「題庫每日備份」（02:00） | 依賴 Docker；`啟動資料庫.bat` 在 `docker compose up -d --wait`（`:17`）之後接著對正式庫 `npm run migrate`（`:28`） | 網頁版照舊可以用。D2 之後：`啟動資料庫.bat` 先顯示「正式庫已改由 app 管理」，只啟動測試庫，**不再對正式庫跑 migrate**（正式庫的 migrate 走第 5.3 節的升級流程，要先備份與快照）；`備份資料庫.bat` 照第 19 項；排程改成 DA-4 的方案，~~建議~~〔DA-4 選 1，定案〕停用 02:00 那一個，改由 app 在每天第一次開啟時、結束前（有寫入時）和 migrate 前備份 | D2 | 3h |
 | 25 | pgManager（新增，`desktop/lib/pgManager.js`） | 無 | 照 2.5 節處理 initdb、`pg_ctl` 啟停、健康檢查、`postgresql.conf`、埠的判斷；把 pgvector 的 `vector.dll`、`vector.control`、`vector--*.sql` 放進 `lib/` 與 `share/extension/`。第一次 initdb 後啟動成功時，把 `system_identifier` 與 `data_directory` 記進 `state.json`。另外提供命令列 `desktop/scripts/pg.js`（`init`／`start`／`stop`／`status`／`set-port`），D2 的演練與切換都用它（4.2 節），不手動 initdb。`pg_ctl` 的 stdio 用 `'ignore'` 或導到檔案，等 `'exit'`（2.5 節） | D2 | 14h |
-| 26 | pgvector 的 Windows 二進位 | 無 | 照 DA-5 取得；只接受有 SHA256 和建置紀錄的檔案 | D2 | 4～12h |
+| 26 | pgvector 的 Windows 二進位 | 無 | 照 DA-5 取得（〔選 2，定案〕另一支只能手動觸發的 GitHub Actions，在 Windows runner 對同版 EDB PG16 編 pgvector，產出 zip 與 SHA-256；`ci.yml` 不改）；只接受有 SHA256 和建置紀錄的檔案 | D2 | 4～12h |
 | 27 | 通用快照比對腳本（新增，`scripts/snapshot_db.js`） | 只有 `scripts/snapshot_attempt_views.js`，專為 0016 前後的作答檢視設計 | 輸出第 4.3 節列的版本、列數、逐表雜湊、向量雜湊、索引、行為檢查；`--compare a.json b.json` 相同時回 0。D2 搬家與每次升級都用它 | D2 | 5h |
 | 28 | 文件：`deployment_and_operations.md` §3、§6、`runbook-pg-down.md`、`exam_pro/README.md` 快速開始、`local-mode.md` 10.2 | 以 Docker 為前提 | 補上桌面版的啟動、備份、回退與疑難排解 | D2／B3 | 6h |
 | 29 | 打包：staging 腳本、`electron-builder.yml`、圖示、捷徑、`tutor-node.cmd`／`tool.cmd`（第 21 項） | 無 | 照 2.9 節。`runAsNode` fuse 維持預設的開啟；`setup_local_ai.bat`、`tee_run.js` 解開放在 asar 外面 | B3 | 11h |
@@ -325,7 +327,7 @@ if (require.main === module) { require('dotenv').config(); /* 照舊：listen(PO
 | 33 | 維護工具寫進程式資料夾的輸出：<br>・`scripts/backfill_figures.js:76`（`data/figure-backfill/`）<br>・`scripts/migrate_chapters.js:66`（`DEFAULT_OUT_DIR`，產出 `data/chapter-migration-<日期>.csv`）<br>・公式健檢三支：`執行公式健檢.bat`／`預覽公式修正.bat`／`套用公式修正.bat` 經 `scripts/formulas.js` 執行 `audit_formulas.js`、`fix_formulas.js`，把 `公式健檢報告.html`（`audit_formulas.js:111`）、`公式修正預覽.html`（`fix_formulas.js:127`），以及**套用修正前的資料備份** `formulas_backup_<時間>.json`（`fix_formulas.js:130-132`）寫進 `__dirname`，也就是 `exam_pro/` 本身<br>・`回填向量.bat` 執行的 `scripts/backfill_embeddings.js:102-105`，把失敗清單寫到 `eval/local/backfill_failed.json`<br>・`setup_local_ai.bat` 與 `record_local.bat` 的 `data\local_ai\`、`data\rerecord\`（Owner 手動放的量測 log 與 `.env` 備份） | 都以 `exam_pro/` 為基準 | 會被 Owner 從桌面版維護命令列執行的（前四項）都改用 `paths.dataDir()`。安裝版的程式資料夾更新時會整個替換，寫在那裡的檔會不見；在 asar 裡則根本寫不進去。其中 `formulas_backup_*.json` 是資料備份，最不能丟。`record_local.bat` 照原則不改（它只在 repo checkout 裡跑）；`data\local_ai\`、`data\rerecord\` 屬於 repo 的開發與錄製紀錄，不搬 | B2 | 3h |
 | 34 | A 的啟動器寫的檔（`d730422`）：`data/launcher/config.json`、`data/launcher/server.json`（關閉捷徑讀的權杖）、`data/logs/server-<日期>.log` | 以 `exam_pro/` 為基準 | 桌面版不用 A 的 `server.json` 權杖（主行程直接握著後端）；`config.json` 的設定項目併進桌面版的 `settings.json`；日誌照 2.8 節寫到 `%LOCALAPPDATA%`。要在 A 合併後依它的實際檔名再核對一次 | B2 | 1h |
 | 35 | `config/db.js:31`（`new Pool({ connectionString, max: 10 })`） | 連線沒有帶 `application_name`，從 `pg_stat_activity` 分不出是誰連進來 | 加上 `application_name`，預設 `'tutor-exam-bank'`；用的是 `config/db.js` 的後端與工具都會帶這個名稱。只多一個連線參數，查詢行為不變。app 開後端之前據此偵測有沒有別的後端連著同一個庫（2.8 節），取代第一版正式稿「看租約」的做法 | B1 | 1h |
-| 36 | 拆題與變式的逐塊檢查點（DA-13；選 2 時才做，合計照建議算進去） | `runExtractJob` 每次從第 1 塊跑起（`workers/jobRunner.js:1311`），`runGenerateJob` 每次從第 1 題跑起（`:1540`） | **拆題**：跑每一塊之前，查這份 job 有沒有同一個頁碼範圍（`detail.page_range`）已經 `pass` 或 `skipped` 的 extract 事件，有就跳過。比對頁碼範圍，不比塊號，因為本機與 Gemini 模式的塊大小不同，換模式後切法會變。**變式**：`job_questions` 已經有那個 idx 的題就跳過。「失敗後按重試」（`POST /api/jobs/:id/retry`，`controllers/jobController.js:291`）也會跟著變成從沒完成的塊接著跑；既有整合測試對重試後事件數的斷言要逐一確認〔要查〕 | B1 | 5～7h |
+| 36 | 拆題與變式的逐塊檢查點（DA-13；~~選 2 時才做，合計照建議算進去~~〔Owner 2026-09-27 選 2，定案〕要做，合計已算進去） | `runExtractJob` 每次從第 1 塊跑起（`workers/jobRunner.js:1311`），`runGenerateJob` 每次從第 1 題跑起（`:1540`） | **拆題**：跑每一塊之前，查這份 job 有沒有同一個頁碼範圍（`detail.page_range`）已經 `pass` 或 `skipped` 的 extract 事件，有就跳過。比對頁碼範圍，不比塊號，因為本機與 Gemini 模式的塊大小不同，換模式後切法會變。**變式**：`job_questions` 已經有那個 idx 的題就跳過。「失敗後按重試」（`POST /api/jobs/:id/retry`，`controllers/jobController.js:291`）也會跟著變成從沒完成的塊接著跑；既有整合測試對重試後事件數的斷言要逐一確認〔要查〕 | B1 | 5～7h |
 
 **對照 Owner 指定要看的項目**：
 
@@ -346,10 +348,10 @@ if (require.main === module) { require('dotenv').config(); /* 照舊：listen(PO
 
 **盤點時發現、和桌面版無關但值得知道的四件事**：
 
-1. `npm start` 目前綁在**所有網路介面**（`server.js` 呼叫 `app.listen(PORT)` 時沒有指定 host），而且金鑰會注入首頁。資料庫早就只綁 127.0.0.1（`docker-compose.yml` 的 `ports` 註解），網頁伺服器還沒有。同一個 Wi-Fi 的其他裝置實際上打不打得開，還要看 Windows Defender 防火牆：`node.exe` 第一次監聽所有網路介面時，Windows 會跳出是否允許存取的對話框，當時的選擇決定了輸入規則〔要實測〕。要不要改列在 DA-11。
+1. `npm start` 目前綁在**所有網路介面**（`server.js` 呼叫 `app.listen(PORT)` 時沒有指定 host），而且金鑰會注入首頁。資料庫早就只綁 127.0.0.1（`docker-compose.yml` 的 `ports` 註解），網頁伺服器還沒有。同一個 Wi-Fi 的其他裝置實際上打不打得開，還要看 Windows Defender 防火牆：`node.exe` 第一次監聽所有網路介面時，Windows 會跳出是否允許存取的對話框，當時的選擇決定了輸入規則〔要實測〕。要不要改列在 DA-11。〔DA-11 選 1，已改〕`server.js` 改聽 `HOST`、預設 `127.0.0.1`（`dec/r7-decisions-host`）；要區網存取時設 `HOST=0.0.0.0` 並照 `exam_pro/README.md`「區網存取」處理防火牆、`ALLOWED_ORIGINS` 與 `API_KEY`。
 2. 第 10 項提到的 uploads 路徑不一致。
 3. 關伺服器時如果讓在途節點被 abort，會被記成逾時、吃掉重試次數（2.3 節）。題目層、拆題、變式三種工作單位都一樣。今天的 `npm start` 關視窗是直接結束行程，不會踩到；但任何人之後要做「優雅關閉並中止」都要避開這個陷阱。
-4. 當機或關掉 `npm start` 之後，拆題 job 會從第 1 塊整份重拆、變式 job 從第 1 題重來（2.3 節第 4 點）。今天就是這樣，DA-13 可以改善。
+4. 當機或關掉 `npm start` 之後，拆題 job 會從第 1 塊整份重拆、變式 job 從第 1 題重來（2.3 節第 4 點）。今天就是這樣，DA-13 可以改善（〔定案〕選 2：要做，第 36 項）。
 
 ---
 
@@ -376,7 +378,7 @@ if (require.main === module) { require('dotenv').config(); /* 照舊：listen(PO
    SELECT datcollate, datctype, datlocprovider FROM pg_database WHERE datname = current_database();
    SELECT pg_size_pretty(pg_database_size(current_database()));
    ```
-2. 準備好 PostgreSQL 16 和同版 pgvector（DA-5），用 `desktop/scripts/pg.js init --port 5452`（第 3 條第 25 項）建原生叢集。它會執行 initdb、寫 `postgresql.conf`，第一次啟動成功後把 `system_identifier` 與 `data_directory` 記進 `state.json`。**不要手動 initdb**：手動建的叢集沒有這筆紀錄，之後 app 會把它當成別人的叢集而報錯（2.5 節「埠」那一列）。locale 照 DA-12 的候選各建一個庫。
+2. 準備好 PostgreSQL 16 和同版 pgvector（DA-5），用 `desktop/scripts/pg.js init --port 5452`（第 3 條第 25 項）建原生叢集。它會執行 initdb、寫 `postgresql.conf`，第一次啟動成功後把 `system_identifier` 與 `data_directory` 記進 `state.json`。**不要手動 initdb**：手動建的叢集沒有這筆紀錄，之後 app 會把它當成別人的叢集而報錯（2.5 節「埠」那一列）。~~locale 照 DA-12 的候選各建一個庫。~~〔DA-12 選 2，定案〕只建 ICU（`--locale-provider=icu`）的庫：`--icu-locale` 的候選各建一個，照 4.3 節最後一列比對後選定並記錄。
 3. **演練**：
    1. 取最新一份 `npm run db:backup` 的 `.dump`，還原成 `tutor_exam_bank_rehearsal`。
    2. 用第 27 項的 `snapshot_db.js` 比對 Docker 庫和演練庫（4.3 節）。兩張快照要**在同一天、相隔不久時拍**（4.3 節最後一段）。
@@ -421,7 +423,7 @@ node scripts/snapshot_attempt_views.js --out=before-d2-attempts.json
 **第 4 步：還原到原生庫（5452）**
 
 ```
-createdb -h 127.0.0.1 -p 5452 -U exam -T template0 -E UTF8 <DA-12 選的 locale 參數> tutor_exam_bank
+createdb -h 127.0.0.1 -p 5452 -U exam -T template0 -E UTF8 --locale-provider=icu --icu-locale=<演練選定的值> tutor_exam_bank
 pg_restore -h 127.0.0.1 -p 5452 -U exam --no-owner --no-acl -d tutor_exam_bank <第 2 步的 .dump>
 ```
 
@@ -445,8 +447,8 @@ pg_restore -h 127.0.0.1 -p 5452 -U exam --no-owner --no-acl -d tutor_exam_bank <
 
 **第 7 步：收尾**
 
-1. Docker Desktop 改成不隨開機啟動（DA-7）。
-2. 停用工作排程器的「題庫每日備份」，改由 app 備份（DA-4）。
+1. Docker Desktop 改成不隨開機啟動（DA-7 定案）。
+2. 停用工作排程器的「題庫每日備份」，改由 app 備份（DA-4 定案）。
 3. 確認 `啟動資料庫.bat` 已經是 D2 版（第 3 條第 24 項）：只啟動測試庫、不對正式庫跑 migrate。
 4. 在 `HANDOFF.md` 記錄搬家時間與快照檔的位置。
 
@@ -466,7 +468,7 @@ pg_restore -h 127.0.0.1 -p 5452 -U exam --no-owner --no-acl -d tutor_exam_bank <
 | 行為：精確近鄰 | 關掉索引掃描（`SET enable_indexscan=off; SET enable_bitmapscan=off`），挑 5 題各查距離最近的 10 題 | id 與距離逐項相同 |
 | 行為：HNSW 近似 | 同樣查詢但開著索引 | **可以有小差異**：HNSW 是近似搜尋，還原時索引會重建。差異只記錄，不視為失敗 |
 | 作答檢視 | `snapshot_attempt_views.js --compare` | 應該相同。**例外**：弱點表在錯誤率與批改數都相同時，用章名、題型等欄位的預設排序規則排（`services/weaknessService.js:61` 的 `<分組欄> ASC`），而這支腳本沒有把弱點表重新排序（`:105-107`）。中文的排序規則不同時，同分的列順序可能不一樣（R-3）。這種差異要逐筆確認只是順序不同。學生本身依 `id` 排（`:99`），不受影響。**時間窗**：弱點查詢以 `CURRENT_DATE - days` 為起點（`services/weaknessService.js:34-36`，預設 90 與 365 天，`snapshot_attempt_views.js:103`），每週趨勢也跟著這個窗走，所以兩張快照要在同一天、相隔不久時拍，否則跨日會出現假差異 |
-| 排序與三字組 | `SELECT string_agg(chapter, '|' ORDER BY chapter) FROM (SELECT DISTINCT chapter FROM questions) t`；`SELECT show_trgm('牛頓第二定律 f=ma')` | 用來挑 DA-12 的 locale。不同的話只記錄 |
+| 排序與三字組 | `SELECT string_agg(chapter, '|' ORDER BY chapter) FROM (SELECT DISTINCT chapter FROM questions) t`；`SELECT show_trgm('牛頓第二定律 f=ma')` | 用來挑 DA-12 的 locale（〔定案〕ICU；這一列改用來挑 `--icu-locale` 的值）。不同的話只記錄 |
 
 ### 4.4 回退方案
 
@@ -485,12 +487,12 @@ pg_restore -h 127.0.0.1 -p 5452 -U exam --no-owner --no-acl -d tutor_exam_bank <
 
   同樣是 16 對 16，約 15～30 分鐘。
 - 附圖和 PDF 都在磁碟上，D2 不會動到，回退時也不用處理。
-- Docker 的 volume **至少保留 30 天**才能刪除（DA-7），刪除前再做一次 dump 放進備份資料夾。
+- Docker 的 volume **至少保留 30 天**才能刪除（DA-7 定案），刪除前再做一次 dump 放進備份資料夾。
 
 ### 4.5 停機時間與時機
 
 - 估計停機 **30～45 分鐘**，從第 1 步到第 6 步，多數時間花在比對和冒煙測試；dump 和還原本身以秒計〔推論〕。演練時量到的時間會取代這個估計。
-- 時機（DA-10）：挑一個**沒有重錄、也沒有要上傳考卷**的空檔，例如週末早上。重錄跑一整天，而且吃 CPU 和記憶體，和搬家同時進行的話，量到的時間與比對都會失真，也增加出錯時要排查的變數。
+- 時機（DA-10，〔Owner 2026-09-27 選 2，定案〕B2 完成、演練通過之後）：挑一個**沒有重錄、也沒有要上傳考卷**的空檔，例如週末早上。重錄跑一整天，而且吃 CPU 和記憶體，和搬家同時進行的話，量到的時間與比對都會失真，也增加出錯時要排查的變數。
 
 ---
 
@@ -505,6 +507,8 @@ pg_restore -h 127.0.0.1 -p 5452 -U exam --no-owner --no-acl -d tutor_exam_bank <
 | U3：electron-updater 自動更新 | app 啟動時檢查 GitHub Releases，有新版就下載並安裝 | 最省事；NSIS target 支援自動更新（〔查證 S4〕） | **repo 是私有的**。從私有 repo 更新要在使用者電腦上設 `GH_TOKEN`，並打開 `private` 選項；官方文件說這個 token「絕不要寫進設定檔」（〔查證 S5〕）。舊版官方 wiki 說私有 repo 更新「只適用非常特殊的情況」，而且受 GitHub API 每小時 5000 次的限制，每次檢查最多用 3 次（〔查證 S6〕，這段在現行文件裡找不到，現況〔未查證〕）。也就是說，Owner 的電腦上要長期放一把能讀私有 repo 的 token。另一條路是自己架 generic HTTP 伺服器，但檔案要手動上傳（〔查證 S4〕），對一個人來說太重 |
 
 建議（DA-6）：B1 到 D2 用 **U1**，B3 之後用 **U2**，**不做 U3**。
+
+〔Owner 2026-09-27 DA-6 選 1，定案〕維持 git＋bundle，從 repo 啟動 Electron（**U1**）；不做 U3。建議裡「B3 之後改 U2」這一半，這次的答案沒有選：B3 開工前再問 Owner 一次（DA-6 的註記）。
 
 ### 5.2 版本號
 
@@ -629,10 +633,10 @@ A 的程式在合併前還可能改，以上以 `d730422` 為準，B1 開工時�
 
 | 期別 | 開發工時 | 前置條件 | 可以單獨交付嗎 |
 |---|---|---|---|
-| B1 | 約 58～60h（約 7.5 人日，含 DA-13 的 5～7h） | A 合併（沿用它的檢查邏輯與關閉通道）、DA-2、DA-3、DA-11、DA-13 | 可以：Owner 從此雙擊圖示使用，Docker 仍由 app 代開 |
-| B2 | 約 33～35h（4～4.5 人日） | B1、DA-1、DA-8 | 可以 |
-| D2 | 約 48～57h（6～7 人日，含 pgvector 與舊庫防護） | B2（路徑穩定後再搬）、DA-14 的量測結果、DA-4、DA-5、DA-7、DA-12 | 可以：也能不經 B，改由 A 的啟動器去開原生 PostgreSQL（〔推論〕，A 要加約 0.5 人日） |
-| B3 | 約 23～26h（3～3.5 人日） | B2、D2、DA-6、DA-9 | 可以 |
+| B1 | 約 58～60h（約 7.5 人日，含 DA-13 的 5～7h） | A 合併（沿用它的檢查邏輯與關閉通道）、DA-2、DA-3、DA-11、DA-13（四題 2026-09-27 都已答） | 可以：Owner 從此雙擊圖示使用，Docker 仍由 app 代開 |
+| B2 | 約 33～35h（4～4.5 人日） | B1、DA-1、DA-8（兩題已答） | 可以 |
+| D2 | 約 48～57h（6～7 人日，含 pgvector 與舊庫防護） | B2（路徑穩定後再搬）、DA-14 的量測結果（**等 Owner 量**）、DA-4、DA-5、DA-7、DA-12（四題已答） | 可以：也能不經 B，改由 A 的啟動器去開原生 PostgreSQL（〔推論〕，A 要加約 0.5 人日） |
+| B3 | 約 23～26h（3～3.5 人日） | B2、D2、DA-6、DA-9（已答；DA-9 的前提 SAC 關閉待 Owner 確認；DA-6 的「B3 之後改不改 U2」B3 開工前再問） | 可以 |
 | 合計（不含緩衝） | **約 162～178h，約 20～22.5 人日** | | |
 | 合計（加 20～30% 緩衝） | **約 195～232h，約 24.5～29 人日** | | |
 
@@ -640,10 +644,12 @@ A 的程式在合併前還可能改，以上以 `d730422` 為準，B1 開工時�
 
 - mupdf 的 WASM 在 asar 裡讀不讀得到（2.2 節），以及 run-as-node 讀不讀得到 asar 裡的腳本（2.9 節）。讀不到時要把 `exam_pro` 移出 asar，約 +2～4h。
 - pgvector 的取得（DA-5）：GitHub Actions 卡關時改走 conda-forge，4～12h 的範圍可能不夠。
-- Smart App Control 開著時（DA-9）：要嘛 Owner 關掉它，要嘛多出簽章的流程與費用。
+- Smart App Control 開著時（DA-9）：要嘛 Owner 關掉它，要嘛多出簽章的流程與費用。〔DA-9 選 1 的前提就是 SAC 關閉；第 10 節的檢查會讀出狀態〕
 - `pg_ctl` 在 Owner 的帳號下能不能正常降權啟動（R-2）。
 - Windows 內建 `tar` 產生 zip 的實際行為（第 19 項），以及從 `.env` 讀 `COMPOSE_PROFILES` 的實際行為（第 23 項）。
 - 拿掉對系統 Node 的依賴、把 `setup_local_ai.bat` 改寫成 Node 版（2.7 節），約 +4h，只有真的要時才做。
+
+〔2026-09-27〕14 題的答案裡，13 題就是上面工時所依據的建議，DA-12 直接定 ICU 也不影響工時；DA-11 網頁版那一半（約 1h，不在上面的合計裡）已在 `dec/r7-decisions-host` 做完。所以工時與緩衝都不變。
 
 Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的演練加搬家約 2～3 小時；B3 試裝約 1 小時；B3 重建 OCR 的 venv 約 30～60 分鐘（2.7 節）。
 
@@ -657,48 +663,50 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 | R-2 | 在系統管理員帳號下 PostgreSQL 起不來 | 中、高 | 一律用 `pg_ctl` 啟動（〔查證 S25、S26〕） | 在 Owner 的帳號下實際執行 `pg_ctl start`〔要實測〕 |
 | R-3 | 排序規則與字元分類不同。Docker 庫〔推論〕是 Debian glibc 的 `en_US.utf8`（4.1 節，〔查證 S39、S40〕），要以第 0 步查到的 `datcollate` 為準；Windows 原生庫是 Windows 或 ICU 的 locale | 中、低：資料不會壞 | 影響範圍〔推論〕：① `ORDER BY` 中文欄位的順序，包括學生名單（`studentController.js:190`、`assistantService.js:109`）、弱點表同分時的次序（`weaknessService.js:61`）和分類 few-shot 的章節順序（`agents/classify.js:438`）。few-shot 順序只影響正式環境 prompt 裡例題的排列；cassette 的鍵用的是由小到大排好的 `fewShotIds`，錄製時 `ctx.db` 也一律是 null（裁決 S2-8，`agents/classify.js:35-36`），**所以不會讓 CI 的回放對不上**。② pg_trgm 只從「英數字」抽三字組（〔查證 S23〕），中文字算不算英數字要看 locale 的字元分類；抽不到三字組時，索引搜尋會退化成掃過整個索引（〔查證 S23〕）。專案只用它建 `ILIKE` 的索引，沒有用 `similarity()`（2.5 節），所以**結果一樣正確，只差速度** | DA-12：演練時比對章名排序和 `show_trgm` |
 | R-4 | 非 ASCII 路徑 | 中、高 | PostgreSQL 的二進位、資料夾和密碼檔都放在純英數的路徑（〔查證 S27、S28〕） | initdb 成功 |
-| R-5 | Defender、防毒軟體或 Smart App Control 擋下程式：沒簽章的 Electron exe、由 app spawn 的 `postgres.exe` 和 `python.exe`、自己編的 `vector.dll` | Defender 誤判：中、中。**SAC 開著時：高、高**。SAC 不看網路標記，無法預測安全性的 exe 沒有受信任的簽章就擋（〔查證 S45〕）；已有 Electron 專案回報本機 build 的未簽章 exe 被擋（〔查證 S45b〕）。U1 的 `electron.exe` 與自編的 `vector.dll` 會不會被擋〔未查證〕 | DA-9：先看 SAC 的狀態再選。必要時把 `%LOCALAPPDATA%\TutorExamBank\pgdata16` 加入 Defender 的排除清單，減少即時掃描拖慢資料庫，要不要排除由 Owner 決定 | B1 開工前看 SAC 狀態；B1、D2 的冒煙測試；B3 驗收第 8 點 |
+| R-5 | Defender、防毒軟體或 Smart App Control 擋下程式：沒簽章的 Electron exe、由 app spawn 的 `postgres.exe` 和 `python.exe`、自己編的 `vector.dll` | Defender 誤判：中、中。**SAC 開著時：高、高**。SAC 不看網路標記，無法預測安全性的 exe 沒有受信任的簽章就擋（〔查證 S45〕）；已有 Electron 專案回報本機 build 的未簽章 exe 被擋（〔查證 S45b〕）。U1 的 `electron.exe` 與自編的 `vector.dll` 會不會被擋〔未查證〕 | ~~DA-9：先看 SAC 的狀態再選。~~〔DA-9 選 1，定案〕不簽章、只在 Owner 電腦 build；前提 SAC 關閉（Owner 用第 10 節的檢查確認，開著就回到 DA-9 選 4）。必要時把 `%LOCALAPPDATA%\TutorExamBank\pgdata16` 加入 Defender 的排除清單，減少即時掃描拖慢資料庫，要不要排除由 Owner 決定 | B1 開工前看 SAC 狀態；B1、D2 的冒煙測試；B3 驗收第 8 點 |
 | R-6 | Electron 的 Node 和原生模組：`sharp`、`@node-rs/jieba` 是 Node-API 模組，不必重新編譯，但要解開放在 asar 外（〔查證 S9〕）；`mupdf`（ESM 加 WASM）在 asar 裡能不能載入不確定；平台專用的二進位最簡單是在 Windows 上 `npm ci` 取得（2.2 節） | 中、中 | 2.2、2.9 節；B1 先在不包 asar 的開發模式確認三者都能動，B3 再確認打包後也能動 | B1、B3 的冒煙測試：拆題會用到 mupdf 和 sharp，查題會用到 jieba |
 | R-7 | Electron 的支援期短：只支援最新三個大版本，約半年（〔查證 S1、S3〕） | 高、低：單機、只載入自己的頁面 | 每半年升一次大版本；升級也走 5.3 節的流程 | — |
-| R-8 | 記憶體：D2 的主要效益，但省多少不確定 | 中、正面 | D2 之後 WSL2 虛擬機不開。但比較的基準應該是「D1 加上 WSL 記憶體上限」（DA-14），不是預設的上限：WSL2 預設最多吃實體記憶體的一半，也就是 8 GB，可以用 `.wslconfig` 的 `memory=` 壓低，也可以開 `autoMemoryReclaim` 歸還快取（〔查證 S29〕；Docker 在 WSL 2 下的記憶體上限也是改 `.wslconfig`，見 S30）。Docker 的 Resource Saver 在 WSL 2 上只暫停引擎、不減記憶體，Docker 的文件改建議開 `autoMemoryReclaim`（〔查證 S30b〕）。社群回報 Docker Desktop 閒置時約 3 GB、vmmem 約 2.5 GB（〔查證 S31〕，2023 年、非官方數字，沒有設上限）。Electron 本身的主行程、視窗和 GPU 行程約一兩百 MB（〔未查證〕），大約是一個 Chrome 分頁的量級。對 `local-mode.md` 10.14 (e) 的記憶體帳（Owner 第五輪 C-e：先量再決定，10.17）應該是淨省，省多少要量 | 先照 DA-14 設上限並量測；做 D2 的話，搬家前後各在工作管理員記一次「使用中」的記憶體〔要實測〕 |
+| R-8 | 記憶體：D2 的主要效益，但省多少不確定 | 中、正面 | D2 之後 WSL2 虛擬機不開。但比較的基準應該是「D1 加上 WSL 記憶體上限」（DA-14），不是預設的上限：WSL2 預設最多吃實體記憶體的一半，也就是 8 GB，可以用 `.wslconfig` 的 `memory=` 壓低，也可以開 `autoMemoryReclaim` 歸還快取（〔查證 S29〕；Docker 在 WSL 2 下的記憶體上限也是改 `.wslconfig`，見 S30）。Docker 的 Resource Saver 在 WSL 2 上只暫停引擎、不減記憶體，Docker 的文件改建議開 `autoMemoryReclaim`（〔查證 S30b〕）。社群回報 Docker Desktop 閒置時約 3 GB、vmmem 約 2.5 GB（〔查證 S31〕，2023 年、非官方數字，沒有設上限）。Electron 本身的主行程、視窗和 GPU 行程約一兩百 MB（〔未查證〕），大約是一個 Chrome 分頁的量級。對 `local-mode.md` 10.14 (e) 的記憶體帳（Owner 第五輪 C-e：先量再決定，10.17）應該是淨省，省多少要量 | 先照 DA-14 設上限並量測（〔選 1，定案〕第 10 節）；做 D2 的話，搬家前後各在工作管理員記一次「使用中」的記憶體〔要實測〕 |
 | R-9 | 關閉時留下孤兒行程：Python 或 PostgreSQL | 低、中 | python：venv 的 `Scripts\python.exe` 是轉導器（〔查證 S44b〕），後端的直接子行程是轉導器，真正的直譯器是孫行程，不在 libuv 的 job 裡（〔查證 S41〕的 `SILENT_BREAKAWAY_OK`）。它會跟著結束，靠的是轉導器自己建的 kill-on-close job（〔查證 S44〕）。所以「不會變孤兒」是〔推論〕，而且依賴 Python 啟動器的實作（2.3 節）。postgres 則刻意讓它在 app 當掉時繼續跑，下次開 app 沿用（2.5 節）。啟動時如果發現上次沒有正常結束（`postmaster.pid` 還在，但行程不在），交給 `pg_ctl` 處理 | B1 驗收第 5 點（OCR 執行中結束也要測）；D2 驗收第 4 點 |
-| R-10 | app 關著的時候沒有備份 | 中、中 | DA-4：資料只有在 app 開著時才會變動，所以改成「每天第一次開啟時」和「結束前、有寫入時」備份 | D2 驗收 |
+| R-10 | app 關著的時候沒有備份 | 中、中 | DA-4（〔選 1，定案〕）：資料只有在 app 開著時才會變動，所以改成「每天第一次開啟時」和「結束前、有寫入時」備份 | D2 驗收 |
 | R-11 | NSIS 超過 2 GB 會壞掉（〔查證 S8〕） | 低 | 不包 venv 和模型（1.2 節） | B3 記錄大小 |
 | R-12 | mupdf 是 AGPL：只自用不觸發義務；安裝檔一旦交給別人就算散布（`roadmap-plan.md` 擱置區第 7 項） | 低 | 安裝檔只在 Owner 的電腦上 build 和安裝，不上傳到公開的 Release | — |
-| R-13 | 完全拿掉 Docker 會讓 `record_local.bat` 和本機整合測試不能用 | 看 DA-7 的選擇 | 建議保留 Docker 但不開機啟動 | — |
+| R-13 | 完全拿掉 Docker 會讓 `record_local.bat` 和本機整合測試不能用 | ~~看 DA-7 的選擇~~〔DA-7 選 2〕不會發生 | 〔定案〕保留 Docker 但不開機啟動 | — |
 | R-14 | 網頁版和桌面版同時開、連同一個庫，runner 會加倍 | 低、中 | 2.8 節的偵測與警告：看 `pg_stat_activity` 的 `application_name`（第 3 條第 35 項），不看租約（當機後 180 秒內重開會誤判） | B1 驗收第 6 點 |
 | R-15 | 開機時 Ollama 還沒起來，app 先打開 | 中、低 | 健康檢查每 5 秒重試一次、最多 60 秒；逾時只警告，不影響題庫和組卷 | B1 驗收 |
 | R-16 | 我查不到、不確定的事 | — | 列在這裡，實作時逐項確認 | 見第 9 條最後的「查不到或不確定的事」 |
 | R-17 | 「關閉時中止在途節點」被記成逾時，吃掉重試次數（2.3 節第 3 點） | 高（照直覺寫就會踩到）、高：題目被送進人工複核，拆題中的整份卷可能直接 `failed`，事件表多出假逾時 | 2.3 節第 4 點的 `abandon` 路徑；單元與整合測試釘住（6.2 節），題目層、拆題迴圈、變式生成三條路都要測 | B1 自動化驗收 |
 | R-18 | A 和 B 都改 `server.js`、`app.js`，而且 A 的 `d730422` 還沒審查 | 中、低：合併衝突與重工 | 先合併 A，B1 在它上面改（6.1 節） | B1 開工時核對 A 的最終版本 |
 | R-19 | D2 之後舊的 Docker 正式庫被 `docker compose up` 帶起來。`record_local.bat`、`啟動資料庫.bat`、A 或 app 代開 Docker 的邏輯都會跑它：app 開著時錄製失敗；app 沒開時舊庫在 5442 復活，網頁版、維護工具、migrate 都寫進舊庫，形成兩份分歧的正式庫；`backup.js` 的 docker 模式還會把舊庫備份下來並記成 OK | 高（每次錄製都會跑 `db:up`）、高 | 第 3 條第 23 項（profile 加上 `COMPOSE_PROFILES`）；第 19 項（備份前比對 `system_identifier`）；第 24 項（`啟動資料庫.bat` 不再 migrate 正式庫）；2.5 節的埠判斷（遇到不是自己的叢集就報錯、不沿用） | D2 驗收第 5 點 |
-| R-20 | 放棄或中斷之後，拆題從第 1 塊整份重拆、變式從第 1 題重來（2.3 節第 4 點） | 中、中：本機模式可能白費一小時以上；重拆出不同編號時可能多出重複的題目列 | DA-13 的逐塊檢查點；DA-2 讓「放棄」一定要先問 | B1 驗收第 4 點 |
+| R-20 | 放棄或中斷之後，拆題從第 1 塊整份重拆、變式從第 1 題重來（2.3 節第 4 點） | 中、中：本機模式可能白費一小時以上；重拆出不同編號時可能多出重複的題目列 | DA-13 的逐塊檢查點；DA-2 讓「放棄」一定要先問（兩題都定案：DA-13 選 2、DA-2 選 3） | B1 驗收第 4 點 |
 | R-21 | 安裝版的維護工具與 `setup_local_ai.bat` 在 asar 裡不能執行：cmd 不能 `cd` 進 asar，系統的 node 讀不到 asar，安裝版沒有 npm | 高（照第一版正式稿的寫法一定會踩到）、中 | 第 3 條第 21 項的 `tutor-node.cmd`（run-as-node）；`setup_local_ai.bat`、`tee_run.js`、`ocr_service` 解開放在 asar 外面（2.9 節）；run-as-node 讀不到 asar 時把 `exam_pro` 整個放在 asar 外 | B3 驗收第 9、10 點 |
 
 ---
 
-## 8. 決策草稿
+## 8. 決策草稿（〔2026-09-27〕Owner 第六輪已全部答覆）
 
-每一題都可以單獨看懂。**還沒有任何一題的答案落實在程式裡。**「何時」指的是最晚要答的時間點。第 3、6 條的工時是照每一題的「建議」估的；選項裡寫的「+Nh」是和最省事的選項相比多出來的工時，選了建議以外的選項時再照它調整總數。
+每一題都可以單獨看懂。~~**還沒有任何一題的答案落實在程式裡。**~~〔2026-09-27〕Owner 第六輪已答全部 14 題：下表最後一欄是答案，各題開頭另加一段「〔Owner 2026-09-27 選 N〕定案」，原本的背景、選項與建議保留。落實在程式裡的只有 DA-11 的網頁版那一半（`dec/r7-decisions-host`）；其餘在 B1、B2、D2、B3 實作時照答案做。「何時」指的是最晚要答的時間點。第 3、6 條的工時是照每一題的「建議」估的；選項裡寫的「+Nh」是和最省事的選項相比多出來的工時，選了建議以外的選項時再照它調整總數。
 
-| 編號 | 題目 | 什麼時候要答 | 建議 |
-|---|---|---|---|
-| DA-1 | 資料夾放在哪裡 | B2 開工前 | 2：設定和資料分開，路徑只用英數字 |
-| DA-2 | 關閉視窗時，背景工作怎麼辦 | B1 開工前 | 3：有工作時縮到系統匣，沒工作時直接結束 |
-| DA-3 | 後端跑在哪一個行程 | B1 開工前 | 2：utilityProcess |
-| DA-4 | 原生 PostgreSQL 由誰管理、什麼時候備份 | D2 開工前 | 1：由 app 管理，app 負責備份 |
-| DA-5 | pgvector 的 Windows 二進位從哪裡來 | D2 開工前 | 2：另開一支只能手動觸發的 GitHub Actions |
-| DA-6 | 更新方式 | B3 開工前（B1 起就先照建議） | B1～D2 用 1、B3 起用 2，不做自動更新 |
-| DA-7 | Docker 是否完全移除 | D2 搬家前 | 2：保留但不開機啟動，當作備援（前提：DA-14 量完仍決定做 D2） |
-| DA-8 | Gemini 金鑰怎麼保管 | B2 開工前 | 1，重新啟用 Gemini 時改 2 |
-| DA-9 | 要不要簽章 | 看 SAC 狀態：B1 開工前；選項：B3 開工前 | 先看 Smart App Control：關著選 1（不簽章）；開著建議 4（關掉 SAC），不想降低防護就選 3 |
-| DA-10 | 什麼時候搬家 | 演練通過後 | 2：重錄結束、當週沒有要上傳的考卷時 |
-| DA-11 | 要不要保留區網存取 | B1 開工前 | 1：桌面版只綁本機；網頁版的綁定位址另外決定 |
-| DA-12 | 原生庫的 locale（排序規則） | D2 演練時 | 演練時比對後再定 |
-| DA-13 | 要不要做拆題與變式的逐塊檢查點 | B1 開工前（和 DA-2 一起） | 2：拆題逐塊、變式逐題都做 |
-| DA-14 | 要不要先限制 WSL 的記憶體，量完再決定 D2 做不做 | 現在就能做；D2 開工前看結果 | 1：現在就設上限並量測 |
+| 編號 | 題目 | 什麼時候要答 | 建議 | Owner 2026-09-27 |
+|---|---|---|---|---|
+| DA-1 | 資料夾放在哪裡 | B2 開工前 | 2：設定和資料分開，路徑只用英數字 | 選 2：設定放 `%APPDATA%`，資料庫、附圖、日誌放 `%LOCALAPPDATA%`，備份放「文件\TutorExamBank\backups」 |
+| DA-2 | 關閉視窗時，背景工作怎麼辦 | B1 開工前 | 3：有工作時縮到系統匣，沒工作時直接結束 | 選 3：看狀況（有工作縮到系統匣並通知，沒工作直接結束；從系統匣結束時問等完或放棄，寫明重跑範圍） |
+| DA-3 | 後端跑在哪一個行程 | B1 開工前 | 2：utilityProcess | 選 2：`utilityProcess.fork` |
+| DA-4 | 原生 PostgreSQL 由誰管理、什麼時候備份 | D2 開工前 | 1：由 app 管理，app 負責備份 | 選 1：app 管理；每天第一次開啟、結束前有寫入、migrate 前備份；停用 02:00 排程 |
+| DA-5 | pgvector 的 Windows 二進位從哪裡來 | D2 開工前 | 2：另開一支只能手動觸發的 GitHub Actions | 選 2：手動觸發的 GitHub Actions，在 Windows runner 對 EDB PG16 編 pgvector，產出 zip 與 SHA-256 |
+| DA-6 | 更新方式 | B3 開工前（B1 起就先照建議） | B1～D2 用 1、B3 起用 2，不做自動更新 | 選 1：維持 git＋bundle，從 repo 啟動 Electron（U1）（B3 之後改不改 U2，B3 開工前再問） |
+| DA-7 | Docker 是否完全移除 | D2 搬家前 | 2：保留但不開機啟動，當作備援（前提：DA-14 量完仍決定做 D2） | 選 2：保留安裝但不自動啟動（D1 備援），舊 volume 至少留 30 天 |
+| DA-8 | Gemini 金鑰怎麼保管 | B2 開工前 | 1，重新啟用 Gemini 時改 2 | 選 1：照舊明文寫在 `.env`，搬到 `%APPDATA%\TutorExamBank\.env` |
+| DA-9 | 要不要簽章 | 看 SAC 狀態：B1 開工前；選項：B3 開工前 | 先看 Smart App Control：關著選 1（不簽章）；開著建議 4（關掉 SAC），不想降低防護就選 3 | 選 1：不簽章，只在 Owner 電腦 build（**前提 SAC 關閉，待 Owner 確認**，第 10 節） |
+| DA-10 | 什麼時候搬家 | 演練通過後 | 2：重錄結束、當週沒有要上傳的考卷時 | 選 2：B2 完成且演練通過後挑空檔 |
+| DA-11 | 要不要保留區網存取 | B1 開工前 | 1：桌面版只綁本機；網頁版的綁定位址另外決定 | 選 1：桌面版只綁 127.0.0.1；網頁版改用 `HOST`、預設 127.0.0.1（**網頁版已實作**） |
+| DA-12 | 原生庫的 locale（排序規則） | D2 演練時 | 演練時比對後再定 | 選 2：ICU（`--locale-provider=icu`） |
+| DA-13 | 要不要做拆題與變式的逐塊檢查點 | B1 開工前（和 DA-2 一起） | 2：拆題逐塊、變式逐題都做 | 選 2：拆題逐塊、變式逐題都做 |
+| DA-14 | 要不要先限制 WSL 的記憶體，量完再決定 D2 做不做 | 現在就能做；D2 開工前看結果 | 1：現在就設上限並量測 | 選 1：Owner 設 `memory=3GB`、`autoMemoryReclaim=dropCache` 並量測（Owner 自己做，第 10 節） |
 
 ### DA-1　資料夾放在哪裡
+
+> 〔Owner 2026-09-27 選 2〕**定案**：設定（`.env`、`settings.json`）放 `%APPDATA%\TutorExamBank`；資料庫（`pgdata16`）、附圖、考卷 PDF、`uploads`、日誌放 `%LOCALAPPDATA%\TutorExamBank`；備份放「文件\TutorExamBank\backups」（`BACKUP_COPY_DIR` 照舊複製到 OneDrive）。資料夾名稱一律英數字 `TutorExamBank`。B2 照這個做。
 
 - **背景**：現在所有資料都在 repo 的 `exam_pro` 底下：附圖 `data\figures`（唯一需要長期保存的檔案）、考卷 PDF `data\jobs`（拆題完成就刪，平常只有排隊中的）、上傳暫存 `uploads`（每小時清一次）、備份 `backups`（每份 dump 另外複製一份到 OneDrive）。A 的啟動器還會加上 `data\launcher`、`data\logs`。資料庫在 Docker 的 volume 裡。repo 放在桌面上（`C:\Users\Administrator\Desktop\tutor-exam-bank`，`docs/HANDOFF.md`）。做成 app 以後，程式會裝在 `%LOCALAPPDATA%\Programs\...`，更新時整個替換，所以資料一定要搬出來。另外，PostgreSQL 在 Windows 上碰到非 ASCII 路徑有已知問題（〔查證 S27、S28〕），而資料庫的資料夾絕對不能放在 OneDrive 同步的資料夾裡，同步程式會在資料庫寫到一半時鎖住或複製檔案〔推論〕。
 - **問題**：設定、資料庫、附圖、備份要放在哪裡？
@@ -717,6 +725,8 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 
 ### DA-2　關閉視窗時，背景工作怎麼辦
 
+> 〔Owner 2026-09-27 選 3〕**定案**：看狀況。有工作在處理時按 X 縮到系統匣繼續跑並跳通知；沒有工作時直接結束；從系統匣選「結束」而有工作時，問「等處理完再結束／現在放棄」，對話框寫明重跑範圍（DA-13 定案要做檢查點：題目層從那個節點、拆題從沒完成的那一塊、變式從沒完成的那一題接著跑）。和 A 的 DL-1（Owner 選 1：每次問）一致。B1 照這個做（約 +4h，已在合計內）。
+
 - **背景**：上傳考卷之後，拆題在後端的背景工作裡跑。本機模式下一份卷要跑幾十分鐘到幾小時：OCR 整理一塊（2 頁）就可能十幾到幾十分鐘，分類和驗算每題也要數分鐘。後端和視窗在同一個 app 裡，app 結束，工作就停。被中斷的工作下次開 app 會重跑，資料不會壞，也不會被算成一次失敗（2.3 節的做法），但已經跑的時間就白費了。**重跑點依工作而不同**（2.3 節第 4 點；第一版正式稿寫成一律「從那個節點的開頭重跑」，低估了代價）：
   - 分類、驗算等題目層的節點：從那個節點重跑。
   - 拆題：從**第 1 塊**整份重拆。6～8 頁的卷有 3～4 塊，後段被中斷可能白費一小時以上。
@@ -733,6 +743,8 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 
 ### DA-3　後端跑在哪一個行程
 
+> 〔Owner 2026-09-27 選 2〕**定案**：用 `utilityProcess.fork` 開後端；後端崩潰時主行程還在，顯示原因並自動重開。直接在主行程 `require` 保留當除錯的退路。B1 照這個做（+6h，已在合計內）。
+
 - **背景**：後端是 Express，背景工作 runner 跑在同一個行程裡。拆題時 Node 端會做一些吃 CPU 的事：mupdf 用 WASM 同步把頁面渲染成圖、JSON 處理、jieba 分詞。Electron 的主行程負責視窗、系統匣和對話框；主行程一卡住，這些都會跟著卡。Electron 官方建議把吃 CPU、容易崩潰的元件放進 utility process（〔查證 S10、S11〕）。
 - **問題**：`startServer()` 要在哪裡執行？
 - **選項**：
@@ -744,6 +756,8 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 
 ### DA-4　原生 PostgreSQL 由誰管理、什麼時候備份
 
+> 〔Owner 2026-09-27 選 1〕**定案**：原生 PostgreSQL 由 app 管理（開 app 才啟動、結束 app 就停止，不裝 Windows 服務）。備份時機：每天第一次開啟（距上一份成功的備份超過 20 小時）、結束前（這次有寫入時）、migrate 前；工作排程器的 02:00「題庫每日備份」停用（4.2 節第 7 步）。
+
 - **背景**：現在 PostgreSQL 在 Docker 裡，Docker Desktop 開著就一直在跑；每天 02:00 由工作排程器備份（借用容器裡的 `pg_dump`）。換成原生 PostgreSQL 之後，要決定它什麼時候開著。題庫只有在 Owner 使用系統時才會變動（上傳、複核、批改、組卷都在 app 裡）。
 - **問題**：原生 PostgreSQL 要常駐嗎？備份什麼時候做？
 - **選項**：
@@ -754,6 +768,8 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 - **何時**：D2 開工前。
 
 ### DA-5　pgvector 的 Windows 二進位從哪裡來
+
+> 〔Owner 2026-09-27 選 2〕**定案**：另開一支只能手動觸發（`workflow_dispatch`）的 GitHub Actions，在 Windows runner 下載同版的 EDB PG16 zip、編同版 pgvector，產出 zip 與 SHA-256（連同自己下載到的 EDB zip 的雜湊）當 artifact；`ci.yml` 不改。建議裡的退路（卡關超過半天改走 3、最後才 1）這次沒有另外答，要改走退路時再問 Owner。
 
 - **背景**：原生 PostgreSQL 要能 `CREATE EXTENSION vector`，得有一份 Windows 版的 pgvector（`vector.dll` 加上 `share/extension` 裡的控制檔與 SQL）。pgvector 官方的 Windows 說明只有「用 Visual Studio 的 C++ 工具執行 `nmake /F Makefile.win`」這條編譯路線（〔查證 S19〕），沒有官方預先編好的檔案。版本要和 Docker 庫完全相同（2.5 節；Docker 庫比 0.8.6 舊時，建議先升到 0.8.6，見 4.1 節）。DLL 必須和我們用的 PostgreSQL 16 二進位相容。
 - **問題**：`vector.dll` 要怎麼取得？
@@ -767,6 +783,8 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 
 ### DA-6　更新方式
 
+> 〔Owner 2026-09-27 選 1〕**定案**：維持 git＋bundle，從 repo 啟動 Electron（5.1 節 U1）；不做自動更新（U3）。建議原本是「B1～D2 用 1、B3 起用 2」，這次的答案只選了 1：B3 的安裝檔做完之後要不要改成 U2（手動安裝檔覆蓋安裝），**B3 開工前再問 Owner 一次**；在那之前一律 U1。
+
 - **背景**：現在用 git（或 bundle）更新 repo，再照 README 的步驟升級，包括備份、migrate、快照比對。app 化之後可以繼續這樣做，也可以改成安裝檔或自動更新。repo 是私有的。
 - **問題**：app 化之後怎麼更新？
 - **選項**：
@@ -777,6 +795,8 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 - **何時**：B3 開工前，B1 起先照建議執行。
 
 ### DA-7　Docker 是否完全移除（保留 D1 當備援？）
+
+> 〔Owner 2026-09-27 選 2〕**定案**：Docker Desktop 保留安裝、不開機自動啟動，當 D1 備援；只在錄製、跑整合測試、回退時手動開。舊的 5442 volume 至少保留 30 天，刪除前再 dump 一次。前提照舊：DA-14 量完仍決定做 D2。
 
 - **背景**：D2 之後，平常用 app 已經不需要 Docker。但 Docker 還有三個用途：
   - 錄製 cassette 的 `record_local.bat` 用 Docker 的 5433 測試庫，和 CI 同一顆 `pgvector/pgvector:pg16` 映像。
@@ -796,6 +816,8 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 
 ### DA-8　Gemini 金鑰怎麼保管
 
+> 〔Owner 2026-09-27 選 1〕**定案**：金鑰照舊以明文寫在 `.env`，但這份 `.env` 搬到 `%APPDATA%\TutorExamBank\.env`（確認不在 OneDrive 同步範圍、不打包進備份）。建議裡「重新啟用 Gemini 時改 2（`safeStorage`）」這一半這次沒有答，屆時再問。
+
 - **背景**：Gemini 的金鑰現在以明文寫在 `exam_pro\.env`，但本機模式之後系統預設不用 Gemini（預付額度已經用完），所以金鑰可能是空的。app 化之後 `.env` 會搬到 `%APPDATA%`。Electron 內建的 `safeStorage` 在 Windows 上用 DPAPI 加密：可以擋住同一台電腦的其他使用者，但擋不住同一個使用者身分下的其他程式；而且要等 app 就緒後才能使用（〔查證 S17〕）。
 - **問題**：金鑰要怎麼存？
 - **選項**：
@@ -806,6 +828,8 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 - **何時**：B2 開工前（決定 `.env` 的位置時）。
 
 ### DA-9　要不要簽章
+
+> 〔Owner 2026-09-27 選 1〕**定案**：不簽章，只在 Owner 的電腦上 build 與安裝。**前提是 Smart App Control 關閉，尚待 Owner 確認**：第 10 節的 `wsl_memory_check.bat` 會讀出 SAC 的狀態（`Get-MpComputerStatus` 與登錄值）；讀出來是開啟或評估模式時，先不要改，回到本題重新選（10.4 節；建議 4：關掉 SAC）。下面選項 1 與建議裡的「或評估模式下沒有擋」是答覆前的原文，以這段定案為準。
 
 - **背景**：
   - 從網路下載、帶有「網路標記」的程式，執行時 SmartScreen 會依信譽決定要不要警告；沒有信譽的檔案會跳警告（〔查證 S32、S34〕）。微軟的簽章選項說明把「不簽章」列為 SmartScreen 會強烈攔截、不建議公開散布（〔查證 S35〕）。
@@ -832,6 +856,8 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 
 ### DA-10　什麼時候搬家（D2 正式切換）
 
+> 〔Owner 2026-09-27 選 2〕**定案**：B2 完成、D2 演練通過之後，挑一個沒有重錄、當週也沒有要上傳考卷的空檔搬家。前提照舊：DA-14 量完仍決定做 D2。
+
 - **背景**：搬家要停止寫入約 30～45 分鐘（4.5 節），而且前後要做快照比對。目前還有重錄在排程上（`local-mode.md` 10.21），重錄會跑一整天、吃滿 CPU 和記憶體；上傳考卷也會寫入正式庫。這一題的前提是 DA-14 量測之後仍決定做 D2。
 - **問題**：D2 的正式切換要挑什麼時候做？
 - **選項**：
@@ -843,8 +869,10 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 
 ### DA-11　要不要保留區網存取（網頁版）
 
+> 〔Owner 2026-09-27 選 1〕**定案**：桌面版（B）只綁 `127.0.0.1`；網頁版改用 `HOST` 設定、預設 `127.0.0.1`。**網頁版這一半已實作**（分支 `dec/r7-decisions-host`）：`exam_pro/config/listenHost.js`＋`server.js` 的 `app.listen(PORT, HOST)`；A 的啟動器、關閉捷徑與 `/api/health` 的本機判斷用同一套規則（`HOST` 只聽某個區網位址、或 `127.0.0.1` 以外的 `127.x` 時，app 視窗的 `http://localhost` 連不到，啟動器停下說明）；`.env.example`、`exam_pro/README.md`「區網存取」、`deployment_and_operations.md` §3.2、§4.1 寫明要區網存取時設 `HOST=0.0.0.0`，並處理防火牆（只允許私人網路）、`ALLOWED_ORIGINS` 與 `API_KEY`。要在課堂穩定用平板，仍照建議走 Tailscale 加 HTTPS。
+
 - **背景**：
-  - `npm start` 目前綁在所有網路介面（`server.js`），同一個 Wi-Fi 裡的平板或手機**可能**打得開題庫。實際能不能連，還要看 Windows Defender 防火牆：`node.exe` 第一次監聽所有網路介面時，Windows 會跳出是否允許存取的對話框，當時的選擇決定了輸入規則〔要實測：「控制台 → Windows Defender 防火牆 → 允許應用程式通過」看 Node.js 那一列〕。
+  - `npm start` 目前綁在所有網路介面（`server.js`），同一個 Wi-Fi 裡的平板或手機**可能**打得開題庫（〔2026-09-27〕已改成預設只聽 `127.0.0.1`，見本題開頭的定案）。實際能不能連，還要看 Windows Defender 防火牆：`node.exe` 第一次監聽所有網路介面時，Windows 會跳出是否允許存取的對話框，當時的選擇決定了輸入規則〔要實測：「控制台 → Windows Defender 防火牆 → 允許應用程式通過」看 Node.js 那一列〕。
   - 金鑰會注入首頁，所以它不是存取控制（擱置區第 8 項）。
   - 在非 HTTPS 的區網位址下，瀏覽器不會開放麥克風（`public/js/tutor.js:157-168`）。
   - 2026-09-24 的 gap analysis 曾建議：要在課堂上用平板時，改走 Tailscale 取得 HTTPS。
@@ -858,6 +886,8 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 
 ### DA-12　原生庫的 locale（排序規則）
 
+> 〔Owner 2026-09-27 選 2〕**定案**：原生庫用 ICU（`initdb`／`createdb` 帶 `--locale-provider=icu --icu-locale=<值>`）。建議原本是「演練時比對後再定」，Owner 直接定 ICU。`--icu-locale` 的值與 Docker 庫（glibc `en_US.utf8`〔推論〕）的排序差異，在 D2 第 0 步演練時照 4.3 節最後一列比對並記錄；影響只到排序與 `ILIKE` 的速度（R-3）。
+
 - **背景**：Docker 的 PostgreSQL 用 Linux 的 locale，原生庫用 Windows 或 ICU 的 locale，兩者對中文的排序可能不同。受影響的有：學生名單的順序、分類時例題的排列順序，以及 pg_trgm 能不能替中文建三字組索引，這一項只影響 `ILIKE` 的速度，不影響結果（R-3）。**CI 和 cassette 不受影響**：CI 仍用 Linux 映像，cassette 的鍵也和順序無關。Windows 上 UTF-8 可以搭配任何 locale（〔查證 S24〕）。
 - **問題**：initdb 和 createdb 要用哪一種 locale？
 - **選項**：
@@ -868,6 +898,8 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 - **何時**：D2 第 0 步的演練時。
 
 ### DA-13　要不要做拆題與變式的逐塊檢查點
+
+> 〔Owner 2026-09-27 選 2〕**定案**：拆題逐塊、變式逐題的檢查點都做（第 3 條第 36 項，約 5～7h，已在 B1 的合計內；也可以更早做，網頁版一樣受益）。這次沒有實作。
 
 - **背景**：放棄、當機、斷電、Windows 更新重開機，或 `npm start` 的視窗被關之後，拆題 job 會從第 1 塊整份重拆（`runExtractJob` 每次都從頭跑，`workers/jobRunner.js:1311`），變式 job 會從第 1 題重新生成（`:1540`）。本機模式一塊 2 頁、每塊可能數十分鐘；6～8 頁的卷在後段被中斷，白跑的時間可能超過一小時。重拆出不同的題數或編號時，還可能多出重複的題目列（2.3 節第 4 點）。這不是桌面版才有的問題，今天的網頁版一樣；桌面版的「放棄」（DA-2）只是讓它多一種觸發方式。
 - **問題**：要不要讓拆題與變式從「還沒完成的那一塊或那一題」接著跑？
@@ -882,6 +914,8 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 - **何時**：B1 開工前，和 DA-2 一起定。
 
 ### DA-14　要不要先限制 WSL 的記憶體，量完再決定 D2 做不做
+
+> 〔Owner 2026-09-27 選 1〕**定案**：Owner 自己在 `%UserProfile%\.wslconfig` 設 `[wsl2] memory=3GB`、`[experimental] autoMemoryReclaim=dropCache` 並量測。步驟、**什麼時候不可以 `wsl --shutdown`**、閒置／上傳／重錄三種情況的檢查工具 `wsl_memory_check.bat`，都在第 10 節。D2 做不做，等量測結果再定。
 
 - **背景**：
   - D2 的主要效益是記憶體：不開 Docker Desktop，就沒有 WSL2 虛擬機。但 D2 要約 48～57h 的開發，加上 Owner 2～3 小時的演練與搬家。
@@ -980,21 +1014,110 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 | conda-forge 上 postgresql 16.15 的 win-64 套件 | 網頁清單沒列出；〔推論〕存在，因為 win-64 的 pgvector 就是對 libpq 16.15 建的（S21b） | 選 DA-5 的 3 時用 `micromamba search` |
 | Visual Studio Build Tools 的確切大小 | 查不到可靠數字 | 選 DA-5 的 1 時 |
 | Electron 的實際記憶體用量 | 沒有可靠的官方數字 | B1 冒煙測試時在工作管理員記錄 |
-| Owner 電腦上 Smart App Control 的狀態；它會不會擋 U1 的 `electron.exe` 與自編的 `vector.dll` | 狀態只能在 Owner 的電腦上看；後兩者沒查到文件（S45 只說未簽章又沒有信譽的會被擋） | 狀態：B1 開工前；後兩者：B1、D2 的冒煙測試 |
-| Owner 的 WSL 版本、`autoMemoryReclaim` 的實際預設，以及設了上限之後 Docker 的實際記憶體 | 微軟文件寫現行預設是 `dropCache`（S29），舊版可能不同 | DA-14（`wsl --version`、工作管理員） |
+| Owner 電腦上 Smart App Control 的狀態；它會不會擋 U1 的 `electron.exe` 與自編的 `vector.dll` | 狀態只能在 Owner 的電腦上看（〔2026-09-27〕`wsl_memory_check.bat` 讀得出來，第 10 節）；後兩者沒查到文件（S45 只說未簽章又沒有信譽的會被擋） | 狀態：B1 開工前（DA-9 定案選 1 的前提）；後兩者：B1、D2 的冒煙測試 |
+| Owner 的 WSL 版本、`autoMemoryReclaim` 的實際預設，以及設了上限之後 Docker 的實際記憶體 | 微軟文件寫現行預設是 `dropCache`（S29），舊版可能不同；〔DA-14 定案〕`.wslconfig` 明寫 `dropCache`，不依賴預設 | DA-14（`wsl_memory_check.bat` 記下 `wsl --version`、`.wslconfig`、vmmem，第 10 節） |
 | Compose 從專案的 `.env` 讀 `COMPOSE_PROFILES` 的實際行為 | 文件只寫「`.env` 可以設預先定義的變數」，沒有逐項寫明（S46） | D2 第 0 步第 4 點、第 6 步第 4 點 |
 | 原生庫與 Docker 同時要聽 `127.0.0.1:5442` 時，是報錯還是兩邊都聽得到 | 沒查；README 記過 5432 上「先啟動的那個吃掉連線」 | 有第 3 條第 23 項之後不該發生；回退時照 4.4 節的順序 |
 | Electron run-as-node 模式能不能讀 asar 裡的腳本 | 文件沒寫（S49） | B3 驗收第 9 點 |
 | Windows 內建 `tar` 實際產出的 zip | bsdtar 手冊有 `-a`（S50），Windows 版沒實測 | D2 實作第 19 項時 |
 | 從 Node 以 pipe 方式執行 `pg_ctl start` 會不會讓 `'close'` 等不到 | 〔推論〕，沒實測 | D2 實作第 25 項時（直接用 `'ignore'`，不必等結果） |
 | 空值的環境變數在 Windows 的環境區塊裡能不能保留 | 沒查 | B2 實作第 21 項時 |
-| Node.js 在 Windows Defender 防火牆的輸入規則 | 只能在 Owner 的電腦上看 | DA-11 決定前 |
+| Node.js 在 Windows Defender 防火牆的輸入規則 | 只能在 Owner 的電腦上看。〔DA-11 定案〕預設只聽 127.0.0.1，平常不必看；設 `HOST=0.0.0.0` 時照 `exam_pro/README.md`「區網存取」確認只允許私人網路 | ~~DA-11 決定前~~ 設 `HOST=0.0.0.0` 時 |
 | Blob 下載時 Electron 另存新檔對話框預填的檔名 | 文件沒寫（S14） | B1 手動驗收第 2 點 |
 | 後端結束、連線中斷時，Ollama 會不會立刻停止生成 | 沒查到文件 | B1 驗收「放棄」時觀察 Ollama 的 CPU |
 | Electron 主行程結束時，utility process 會不會一起結束 | 文件沒寫（S10） | B1 驗收第 5 點 |
 | `@node-rs/jieba` 能不能用 npm 的 `--os`／`--cpu` 旗標跨平台安裝 | 沒查 | 只有要在 Linux 上打 Windows 包時才需要 |
 | Owner 的 Windows 帳號是不是內建的 Administrator、Owner 電腦上的 Node 小版本、PG17 的 `bin` 在哪裡、Docker Desktop 是否設為登入時啟動 | 只能在 Owner 的電腦上看 | B1 開工前 |
 | Docker 庫實際的 pgvector 版本與 collation | 只能在 Owner 的電腦上查（〔推論〕是 `en_US.utf8`，S39、S40） | D2 第 0 步 |
+
+---
+
+## 10. Owner 手動操作：WSL 記憶體上限（DA-14）與 Smart App Control（DA-9）
+
+> 〔2026-09-27，Owner 第六輪 DA-14＝1、DA-9＝1〕這一節給 Owner 照著做，**全部由 Owner 自己在自己的電腦上操作**；AI 不在任何電腦上執行這些步驟。
+> 檢查工具 `exam_pro\scripts\windows\wsl_memory_check.bat` **只讀取與記錄**：讀 `.wslconfig`、記憶體、Docker Desktop（含 `docker info` 的總記憶體）與 Ollama 的狀態、Smart App Control，不改任何設定、不執行 `wsl --shutdown`、不開關任何程式，所以重錄或上傳進行中也可以跑。它要等 2026-09-27 這一輪重錄跑完、合併之後才會出現在 Owner 的電腦上；**重錄進行中不要為了拿它而更新 repo**（10.3 節）。
+
+### 10.1 先記住：什麼時候**不可以** `wsl --shutdown`
+
+`wsl --shutdown` 會把整個 WSL 虛擬機關掉。Docker Desktop 跑在裡面，所以**正式庫（5442）與測試庫（5433）會一起被切斷**。
+
+- **重錄進行中（`record_local.bat`、`cassettes:rerecord`）不可以**：測試庫放在記憶體裡（tmpfs），一切斷，錄到一半的東西全部作廢，重錄要從頭再跑（8～12 小時）。
+- **上傳考卷、拆題、變式生成進行中不可以**：後端連不到資料庫，進行中的工作會失敗或整份重跑。
+- 平常組卷、批改時也會被切斷一次；10.2 節全部做完約 5～10 分鐘，挑沒在用系統的時候做。
+
+動手之前確認兩件事都沒有在跑：
+
+1. **重錄**：錄製的視窗已經關掉；或跑一次 `wsl_memory_check.bat`，log 的「[本機重錄]」寫「沒有偵測到」。
+2. **背景工作**：點「關閉出題系統」。沒有背景工作時它會直接關；如果跳出「背景有 N 件工作正在跑」，按「取消」，等它們做完再來（`docs/desktop-launcher.md` 第 4 節）。
+
+### 10.2 設定上限（只做一次，約 10 分鐘）
+
+1. **設定前先量一次**：雙擊 `wsl_memory_check.bat`，按 `1`（閒置）。log 會原樣記下現在的 `.wslconfig`（等於備份一份）與設定前的記憶體。
+2. 確認 10.1 節的兩件事都沒有在跑，然後點「關閉出題系統」。
+3. 按 `Win`＋`R`，輸入 `notepad %UserProfile%\.wslconfig`，按 Enter。檔案不存在時記事本會問要不要建立，選「是」。
+4. 讓檔案裡有下面這幾行（檔案本來就有 `[wsl2]` 或 `[experimental]` 時，把那一行放進原本的區段，**不要**重複寫區段名稱；其他原有的行不動）：
+
+   ```ini
+   [wsl2]
+   memory=3GB
+
+   [experimental]
+   autoMemoryReclaim=dropCache
+   ```
+
+   存檔：「檔案 → 儲存」。如果是「另存新檔」，「存檔類型」選「所有檔案」、編碼選「UTF-8」，檔名要是 `.wslconfig`（不能變成 `.wslconfig.txt`）。
+5. 結束 Docker Desktop：右下角的鯨魚圖示按右鍵 →「Quit Docker Desktop」，等圖示消失。
+6. 開「命令提示字元」，輸入 `wsl --shutdown`，按 Enter（沒有任何輸出是正常的）。想確認的話再輸入 `wsl -l -v`，每一列都要是 `Stopped`。
+7. 等約 10 秒，從開始選單開 Docker Desktop，等鯨魚圖示變成正常（滑過去顯示 Engine running）。
+8. 點「出題系統」，確認系統照常開起來。
+9. **設定後再量一次**：`wsl_memory_check.bat` 按 `1`。看 log 的三個地方：
+   - 「[.wslconfig]」的「判讀」要是 `memory = 3GB`、`autoMemoryReclaim = dropCache`（檔案寫對了）。
+   - **「[.wslconfig 是否生效]」是直接證據**：`Docker 看到的記憶體`（`docker info` 的 `MemTotal`，也就是 WSL 虛擬機的總記憶體）要**不超過 3 GB**，判讀寫「上限已生效」；略小於 3 GB 是正常的（核心會先保留一部分）〔要實測：實際會小多少〕。寫「上限還沒生效」就是第 5～7 步沒有做完，WSL 還是舊的那一個；寫「讀不到」就等 Docker Desktop 的鯨魚圖示顯示 Engine running 再量一次。
+   - 「[WSL 虛擬機]」一段只是輔助（比 `.wslconfig` 的修改時間與虛擬機的啟動時間）：出現「新設定還沒生效」同樣表示第 5～7 步沒做完；寫「讀不到虛擬機的啟動時間，無法用時間判斷」時**不代表已生效**（一般權限可能讀不到 vmmem 的啟動時間），以上一點的 Docker 記憶體為準。
+
+- **設太低的症狀**：Docker Desktop 起不來、資料庫容器啟動失敗、重錄或上傳時容器被系統結束。處理：把 `memory=3GB` 改成 `memory=4GB`，在 10.1 節允許的時候照第 5～8 步再做一次〔要實測〕。
+- **要恢復原狀**：刪掉這幾行（或整個 `.wslconfig`），照第 5～8 步再做一次。
+- 這個上限對這台電腦上所有的 WSL 發行版都有效（不只 Docker）。
+
+### 10.3 三種情況各量一次
+
+| 情況 | 什麼時候跑 | 按 |
+| :--- | :--- | :--- |
+| 閒置 | Docker 開著、出題系統開著，但沒有上傳、沒有重錄，放著 5 分鐘之後 | `1` |
+| 上傳 | 上傳一份考卷、拆題跑到一半的時候（本機拆一份卷要 1 小時以上，中間任何時候都可以） | `2` |
+| 重錄 | `record_local.bat` 正在跑的時候。**只讀取，不會打斷重錄**；但重錄中不可以做 10.2 節的任何一步 | `3` |
+
+- 怎麼跑：雙擊 `exam_pro\scripts\windows\wsl_memory_check.bat`，按 `1`、`2` 或 `3`。大約 10～60 秒，畫面印出結果，同時附加到 `exam_pro\data\logs\wsl_check-日期.log`（同一天跑幾次都接在後面）。
+- log 記的東西：`.wslconfig` 的內容與判讀、vmmem／VmmemWSL 的記憶體、Docker 看到的總記憶體（`docker info` 的 `MemTotal`，和 `.wslconfig` 的 `memory` 比對）、總計／可用／使用中、Docker 容器各自的記憶體、Ollama 載入了哪些模型、node 與 python 的合計、有沒有偵測到重錄、`wsl --version`、Smart App Control。
+- 建議的順序：設上限**前**閒置一次（10.2 節第 1 步）→ 設上限**後**閒置一次（第 9 步）→ 上傳一次 → 重錄一次。
+- **重錄進行中不要更新 repo**（`git pull`、切分支都不要）：重錄的後段會重新載入工作樹裡的程式（e2e 會 `require` `app.js`），跑到一半換版本，錄出來的東西可能作廢。這個工具要等 2026-09-27 這一輪重錄跑完、合併之後才拿得到，這一輪量不到；想要「設上限**前**的重錄」當對照，就在**下一輪**重錄、還沒設上限時按 `3` 量一次（只讀取），設上限要等那一輪跑完。
+- 量完把 log 交給維護的人（或貼進對話）。D2（原生 PostgreSQL）值不值得花約 48～57 小時，就看這幾組數字（DA-14）。
+
+### 10.4 Smart App Control（DA-9 的前提）
+
+DA-9 選 1（不簽章、只在自己電腦 build）的前提是 **Smart App Control 關閉**。`wsl_memory_check.bat` 的 log 最後一段「[Smart App Control]」會列兩個讀法：
+
+- `Get-MpComputerStatus：SmartAppControlState = …`：`Off`＝關閉、`On`＝開啟、`Eval`＝評估模式。
+- `登錄 VerifiedAndReputablePolicyState = …`：`0`＝關閉、`1`＝開啟、`2`＝評估模式。
+- 讀不到的那一個會寫「讀不到」與原因（例如 Defender 被別的防毒軟體取代）。兩個都讀不到時，到「Windows 安全性 → 應用程式與瀏覽器控制 → Smart App Control 設定」用眼睛看。
+
+判讀：
+
+- **關閉**：DA-9 的前提成立，什麼都不用做。
+- **開啟或評估模式**：**先不要改**，把 log 交給維護的人，回到 DA-9 重新選（建議 4：關掉 SAC；Windows 還沒裝 KB5083769 的話，關掉之後要重灌才能再打開，S45c）。
+
+### 10.5 DA-11 之後在 Windows 上看一次
+
+更新到含 `dec/r7-decisions-host` 的版本之後，後端預設只聽 `127.0.0.1`：
+
+1. 點「出題系統」，app 視窗要照常開起來（網址仍是 `http://localhost:3000/`；Edge 會自己改試 `127.0.0.1`〔推論，這一步就是在驗證它〕）。打不開時把最新的 `exam_pro\data\logs\launcher-日期.log` 交給維護的人。
+2. `npm start` 的視窗會印「已成功安全啟動：http://localhost:3000（只接受這台電腦的連線；HOST=127.0.0.1）」。
+3. 平板、手機預設連不到。真的要用時才在 `.env` 設 `HOST=0.0.0.0`，照 `exam_pro\README.md`「區網存取」處理防火牆（只允許私人網路）、`ALLOWED_ORIGINS` 與 `API_KEY`。
+4. 〔要實測〕**同一個埠還有別的程式在聽**時，後端改綁 `127.0.0.1` 之後不一定報「埠被佔用」（`docs/desktop-launcher.md` 7.3 節最後一點）：
+   - Windows 的相容例外：別的程式已經聽 `0.0.0.0:3000` 時，`npm start` 照樣綁得上 `127.0.0.1:3000` 並印「已成功安全啟動」。這台電腦開 `localhost` 會到出題系統，區網連 3000 埠卻會到那個程式。
+   - 別的程式只聽 IPv6（`[::1]:3000`）時，兩邊不衝突；瀏覽器開 `localhost` 先試 `::1`，就會打開那個程式的畫面。
+   - 桌面圖示擋得住第一種（開後端之前先問 `127.0.0.1:3000`，有別的程式回應就報「埠被佔用」），擋不住第二種；直接 `npm start` 兩種都擋不住。
+   - 症狀：`npm start` 印成功，app 視窗或瀏覽器打開的卻不是出題系統。查法：命令提示字元執行 `netstat -ano | findstr ":3000"`，`LISTENING` 的列出現兩個以上的 PID，就是有別的程式也在聽 3000 埠；關掉那個程式，或在 `.env` 改 `PORT`，再把 log 交給維護的人。
 
 ---
 
@@ -1063,3 +1186,32 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 - B3 +5h：第 15 項 4h、第 29 項 +1h。
 
 **要轉給 A 的一點**：`d730422` 的 `services/launcherControl.js` 檔頭寫逾時結束後「從那一格重跑」，對拆題與變式 job 不成立，A 合併前要一起更正（6.1 節第 4 點）。
+
+---
+
+## 第六輪決策登錄紀錄（2026-09-27，`dec/r7-decisions-host`）
+
+Owner 2026-09-27 在第六輪決策單答了本文件的 DA-1～DA-14（與 `docs/desktop-launcher.md` 的 DL-1～DL-5，共 19 題；一覽表在 `docs/HANDOFF.md` §0.00d）。這一版只做登錄與「定案」語氣的改寫，原本的背景、選項、建議與查證都保留：
+
+- 第 8 條：一覽表加「Owner 2026-09-27」一欄；每題開頭加一段〔Owner 2026-09-27 選 N〕**定案**。
+- 依答案改成定案語氣的段落：檔頭、第 0 條（B1、B2 列、DA-7、DA-14）、1.3 節（SAC、WSL）、2.1 節、2.3 節（`server.js` 已改聽 `HOST`）、2.4 節、2.5 節（資料夾、initdb 的 ICU、誰來管）、2.8 節（關閉視窗、放棄後的重跑點）、第 3 條第 4、7、13、24、26、36 項與「四件事」第 1、4 點、4.2 節（第 0、4、7 步）、4.3 節最後一列、4.4、4.5 節、5.1 節、6.6 節（前置條件、工時說明）、第 7 條 R-5、R-8、R-10、R-13、R-20、第 9 條的三列「查不到」。
+- 新增第 10 節：Owner 手動操作（`.wslconfig` 的 `memory=3GB`、`autoMemoryReclaim=dropCache`，`wsl --shutdown` 什麼時候不可以做，三種情況的 `wsl_memory_check.bat`，SAC 的判讀，DA-11 之後的驗收）。
+- 程式：只有 DA-11 的網頁版那一半（`exam_pro/config/listenHost.js`、`server.js`、啟動器的連線位址與 `host-unsupported`、`/api/health` 的本機判斷）與第 10 節的唯讀檢查工具（`scripts/windows/wsl_memory_check.bat` → `scripts/desktop/wsl_memory_check.js`）。B、D2 的其餘部分都還沒實作；工時不變（6.6 節）。
+- 還要 Owner 回答或確認的：DA-9 的前提（SAC 關閉，10.4 節）、DA-14 的量測結果（10.3 節）；B3 開工前再問 DA-6 的「B3 之後改不改 U2」、要改走退路時再問 DA-5、重新啟用 Gemini 時再問 DA-8 的 `safeStorage`（這三項是建議裡的後半，這次的答案沒有涵蓋）。
+
+---
+
+## 審查修正紀錄（2026-09-27，`dec/r7-decisions-host-fix`）
+
+審查的對象是 `94eda86`（`dec/r7-decisions-host`），結論是「通過，附小修建議」，共 8 條。每一條都先回到程式、文件或來源查證，再決定怎麼改：
+
+| # | 嚴重度 | 審查意見 | 查證結果 | 怎麼改 |
+|---|---|---|---|---|
+| 1 | 中低 | 10.3 節與 ownerSteps 叫 Owner「趁這一輪重錄在跑時先量」，和交付時程對不上 | 屬實。本分支要等這一輪重錄跑完、`dec/integration-r7` 合併之後才送到 Owner 電腦；重錄中更新 repo 會讓後段重新載入的程式換版本 | 10.3 節刪掉那一句，改寫成「重錄進行中不要更新 repo；設上限前的重錄對照組在下一輪量」；第 10 節開頭補一句同樣的提醒；ownerSteps 同步改 |
+| 2 | 低 | 讀不到 vmmem 的啟動時間時，檢查什麼都不印，10.2 第 9 步卻把「沒出現『還沒生效』」當成生效的證據 | 屬實（`formatReport` 只在 `started` 有值時才比較） | 讀不到啟動時間、或讀不到 `.wslconfig` 修改時間時明寫「無法用時間判斷」；時間比較改用 `Date.parse`，判斷得出「已生效」時也寫一行。新增唯讀的直接證據 `docker info --format {{.MemTotal}}`，和 `.wslconfig` 的 `memory` 比對（新段落「[.wslconfig 是否生效]」）；指令白名單測試加上這一條（參數逐字比對）。10.2 第 9 步改成以 Docker 記憶體為準 |
+| 3 | 低 | Winsock 的相容例外可能讓 `npm start` 不再報 `EADDRINUSE` | 屬實（文件與原始碼層級）：微軟〈Using SO_REUSEADDR and SO_EXCLUSIVEADDRUSE〉的表格，先以預設選項綁萬用位址、再以預設選項綁特定位址 → Success；libuv `src/win/tcp.c` 的註解寫明兩個選項都不設。另外找到一個相關缺口：別的程式只聽 `[::1]` 時，綁 `127.0.0.1` 在任何作業系統都不衝突 | 只記錄〔要實測〕：`docs/desktop-launcher.md` 7.3 節、本文件 10.5 節第 4 點（症狀與 `netstat` 查法）。**沒有加自動檢查**：Linux 的測試重現不了 Winsock 的行為，而啟動器開後端之前的健康檢查已經擋住第一種情況；要補強時再在後端起來後用 `netstat` 找同一埠的其他 PID |
+| 4 | 低 | DA-9 定案多加了「或評估模式下沒有擋」 | 屬實，而且和 10.4 節「開啟或評估模式 → 先不要改」衝突 | 定案只寫「SAC 關閉」，並寫明開啟或評估模式都回到 DA-9；選項 1 與建議裡的原文保留，註明以定案為準 |
+| 5 | 低 | 第 8 條開頭的「還沒有任何一題的答案落實在程式裡」沒劃掉 | 屬實 | 加刪除線 |
+| 6 | 低 | `HOST=127.0.0.2` 這類值被當成支援：健康檢查成功、app 視窗卻打不開 | 屬實（app 視窗的網址固定是 `http://localhost:<埠>/`，`localhost` 只對應 `127.0.0.1` 與 `::1`） | `config/listenHost.js` 的 `localProbeHost` 只把 `127.0.0.1`、`localhost`、`::1`、`::ffff:127.0.0.1` 與萬用位址當成支援，其他 `127.x` 回 `null`（啟動器與關閉捷徑報 `host-unsupported`）；啟動訊息對這類位址印實際的網址。`hostScope` 與 `/api/health` 的 127.0.0.0/8 本機判斷不變 |
+| 7 | 低 | 舊範本整份複製成 `config.json` 時，`"jobsWhileRecording": "run"` 會蓋過新預設 | 屬實（`lib/config.js` 只在沒寫時用預設） | `docs/desktop-launcher.md` 第 6 節加一句；ownerSteps 加一步請 Owner 確認 |
+| 8 | 資訊 | 實作說明寫 integration 635 個，實際是 631 個 | 屬實：本分支重跑，數字見 `dec/r7-decisions-host-fix` 的 commit 訊息 | 更正回報；程式不改 |

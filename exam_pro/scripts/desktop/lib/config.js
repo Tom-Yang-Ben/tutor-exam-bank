@@ -52,10 +52,11 @@ const DEFAULTS = Object.freeze({
     askBeforeStopWithJobs: true,
     /**
      * 偵測到本機重錄正在執行時，這次開的後端要不要跑背景工作（DL-4，docs/desktop-launcher.md 第 8 節）：
-     *   run  （預設，與 npm start 相同）：照跑；佇列裡已有的工作會開跑，和錄製搶 CPU 與記憶體
-     *   pause：以 JOB_RUNNER=off 啟動後端；上傳的考卷先排隊，錄完後關閉再開啟才開始
+     *   pause（預設；〔Owner 第六輪 DL-4＝2，2026-09-27〕）：以 JOB_RUNNER=off 啟動後端；上傳的考卷先排隊，錄完後關閉再開啟才開始
+     *   run  ：照跑（與 npm start 相同）；佇列裡已有的工作會開跑，和錄製搶 CPU 與記憶體
+     * 沒在錄製時兩者沒有差別（後端照常跑背景工作）。
      */
-    jobsWhileRecording: 'run'
+    jobsWhileRecording: 'pause'
 });
 
 const BROWSERS = ['auto', 'edge', 'chrome', 'default'];
