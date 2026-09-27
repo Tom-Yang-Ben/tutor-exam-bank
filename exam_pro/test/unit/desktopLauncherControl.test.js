@@ -91,10 +91,12 @@ describe('生命週期（shutdown）', () => {
         assert.ok(!r.events.includes('pool.end'), '在途工作還在用連線池，不能先關');
         assert.equal(r.events[r.events.length - 1], 'exit(0)');
         assert.ok(r.events.some(e => e.startsWith('warn:')));
-        // 〔dec/desktop-launcher-fix2〕log 照實說重新認領後從哪裡接著跑（單題接著做；拆題、變式整份從頭）
+        // 〔dec/desktop-launcher-fix2〕log 照實說重新認領後從哪裡接著跑（單題接著做）
+        // 〔DA-13，dec/r7-checkpoints〕拆題、變式改成逐塊／逐題的檢查點：從中斷的那一塊／那一題重做，不再整份從頭
         const warn = r.events.find(e => e.startsWith('warn:'));
         assert.match(warn, /單題的檢查從中斷那一步接著做/);
-        assert.match(warn, /整份卷的拆題、變式生成從頭再跑一次/);
+        assert.match(warn, /整份卷的拆題從中斷的那一塊重拆、變式生成從中斷的那一題重做/);
+        assert.doesNotMatch(warn, /從頭再跑一次/);
     });
 
     test('冪等：第二次呼叫回同一個 promise；status 反映 shutting_down', async () => {

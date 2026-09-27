@@ -70,9 +70,11 @@ describe('關閉：先認清楚 3000 埠上是誰', () => {
         assert.match(r.world.popups[0].text, /PID 7100/);
         assert.match(r.world.popups[0].text, /稍後|等一兩分鐘/);
         assert.doesNotMatch(r.world.popups[0].text, /不是出題系統/);
-        // 〔dec/desktop-launcher-fix2〕強制結束的後果照實說：單題接著做、拆題與變式整份重跑
+        // 〔dec/desktop-launcher-fix2〕強制結束的後果照實說：單題接著做
+        // 〔DA-13，dec/r7-checkpoints〕拆題與變式從中斷的那一塊／那一題重做（原本整份重跑）
         assert.match(r.world.popups[0].text, /單題的檢查從中斷那一步接著做/);
-        assert.match(r.world.popups[0].text, /整份卷的拆題、變式生成會從頭再跑一次/);
+        assert.match(r.world.popups[0].text, /整份卷的拆題從中斷的那一塊重拆、變式生成從中斷的那一題重做/);
+        assert.doesNotMatch(r.world.popups[0].text, /從頭再跑一次/);
         assert.doesNotMatch(r.world.popups[0].text, /沒跑完的那一步下次開啟時會自動重跑/);
         assert.equal(r.posts.length, 0);
         // 聽著埠的是別的 PID → 照舊說不是出題系統
@@ -149,7 +151,7 @@ describe('關閉：優雅關閉', () => {
         assert.match(r.world.popups[1].text, /自己關閉/);
         // 〔dec/desktop-launcher-fix2〕等不及就關機的後果照實說
         assert.match(r.world.popups[1].text, /關機或重新開機也可以/);
-        assert.match(r.world.popups[1].text, /整份卷的拆題、變式生成會從頭再跑一次/);
+        assert.match(r.world.popups[1].text, /整份卷的拆題從中斷的那一塊重拆、變式生成從中斷的那一題重做/);
     });
 
     test('已經在關閉中 → 不重送', async () => {
@@ -211,8 +213,10 @@ describe('文字', () => {
         assert.match(t, /「否」：最多等 2 分鐘/);
         // 〔dec/desktop-launcher-fix2〕原本斷言「重跑」（舊句：從那一步重跑、已完成的不會重做）；改斷言更正後的說法：
         // 只有單題的檢查從中斷那一步接著做，整份卷的拆題、變式生成會從頭再跑（workers/jobRunner.js 的 runExtractJob／runGenerateJob）
+        // 〔DA-13，dec/r7-checkpoints〕拆題與變式改成逐塊／逐題的檢查點：從中斷的那一塊／那一題重做，做完的塊與題不重做
         assert.match(t, /單題的檢查從中斷那一步接著做/);
-        assert.match(t, /整份卷的拆題、變式生成會從頭再跑一次（本機拆一份卷可能要 1 小時以上）/);
+        assert.match(t, /整份卷的拆題從中斷的那一塊重拆、變式生成從中斷的那一題重做，已經做完的塊與題不會重做（本機拆一塊約 30～45 分鐘）/);
+        assert.doesNotMatch(t, /從頭再跑一次/);
         assert.match(t, /「是」：.*本機拆一份卷可能要 1 小時以上/);
         assert.doesNotMatch(t, /已完成的不會重做/);
         assert.match(t, /「取消」/);

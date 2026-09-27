@@ -243,7 +243,9 @@ describe('nextAction：migration、後端、完成', () => {
         // 〔dec/desktop-launcher-fix2〕強制結束的後果照實說（與關閉捷徑同一句 UNFINISHED_WORK_NOTE）
         assert.ok(a.hint.some(h => h.includes(plan.UNFINISHED_WORK_NOTE)), '提示要說清楚強制結束後沒跑完的工作會怎樣');
         assert.match(plan.UNFINISHED_WORK_NOTE, /單題的檢查從中斷那一步接著做/);
-        assert.match(plan.UNFINISHED_WORK_NOTE, /整份卷的拆題、變式生成會從頭再跑一次/);
+        // 〔DA-13，dec/r7-checkpoints〕拆題與變式從中斷的那一塊／那一題重做（原本整份從頭再跑一次）
+        assert.match(plan.UNFINISHED_WORK_NOTE, /整份卷的拆題從中斷的那一塊重拆、變式生成從中斷的那一題重做/);
+        assert.doesNotMatch(plan.UNFINISHED_WORK_NOTE, /從頭再跑一次/);
         assert.doesNotMatch(a.hint.join('\n'), /沒跑完的那一步下次開啟時會自動重跑/);
         assert.equal(a.detail, f.health.detail);
         assert.equal(plan.stepOfFailure('server-busy', f), 'check');
