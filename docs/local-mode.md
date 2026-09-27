@@ -1085,7 +1085,7 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 
 #### 1. LC-1＝2：分類的欄位順序改成「理由 → 章節 → 信心」（Owner 第五輪 LC-1 核准）
 
-- `agents/schemas/classify.json`：`properties` 的鍵序、`propertyOrdering`、`required` 三處都改成 `rationale → chapter → confidence`。`rationale` 的說明改成「先寫這一欄，再選章節……規則裡若有相鄰兩章的界線，寫出你依哪一條判斷」，`chapter` 的說明改成「依上面的理由選出……」。值域、型別、`additionalProperties` 都沒動。
+- `agents/schemas/classify.json`：`properties` 的鍵序、`propertyOrdering`、`required` 三處都改成 `rationale → chapter → confidence`。`rationale` 的說明只在開頭加「先寫這一欄，再選章節：」，其餘沿用原文（審查修正時刪掉一句 Owner 沒核准的新要求，見本節第 6 點），`chapter` 的說明改成「依上面的理由選出……」。值域、型別、`additionalProperties` 都沒動。
 - **化學分類共用這份 schema**（`buildSchema('classify', { group: 'chemistry' })` 讀同一個檔，只換 chapter 的值域），所以一併生效。
 - **兩條路徑都照這個順序**：
   - Ollama：`services/llm/ollama.js` 的 `toOllamaSchema` 依 `propertyOrdering` 重排 `properties` 後當成 `format` 送出。Ollama 依 `properties` 的順序產生 JSON 文法，模型只能先寫 `rationale`。系統提示裡的欄位說明（`schemaGuide`）也照這個順序列。
@@ -1112,7 +1112,7 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
   | `variant` | `variant.v1` → `variant.v2` | 變式（也含 V5-6 的改動） |
   | `variant_chem` | `variant_chem.v1` → `variant_chem.v2` | 變式，化學（也含 V5-6） |
 
-  沒有用到這段規範、這次**沒有改**的：`classify`、`classify_chem`、`lint`、`lint_chem`、`verify`、`verify_chem`、`nlq`、知識點標註、家教。其中 `lint` 的第三層是請模型重寫公式，它有自己的規則文字，沒有共用 `LATEX_RULES`；要不要也加這條，要 Owner 另外決定（加了就是 `lint.v3`／`lint_chem.v2` 並重錄）。
+  沒有用到這段規範、這次**沒有改**的：`classify`、`classify_chem`、`lint`、`lint_chem`、`verify`、`verify_chem`、`nlq`、知識點標註、家教。其中 `lint` 的第三層是請模型重寫公式，它有自己的規則文字，沒有共用 `LATEX_RULES`；要不要也加這條，要 Owner 另外決定（加了就是 `lint.v3`／`lint_chem.v2` 並重錄）。已列為待決題 O-5（[`owner-pending-decisions-r5.md`](owner-pending-decisions-r5.md)）。
 - **事後修復保留當第二道防線**（`services/llm/latexEscapeRepair.js`，`docs/llm.md` 第 10 節），程式沒改。模型照做時，JSON 原文是 `\\frac`，解析後就是正確的 `\frac`，修復必須是 no-op。`test/unit/r6Templates.test.js` 驗了三層：
   1. 規則裡的每個正例當 JSON 字串解析，得到單一反斜線的 LaTeX，`repairString` 一字不改，`applyToResult` 回傳原物件（沒有 `latexRepair` 鍵）。
   2. 假 Ollama 與假 Gemini 回一份「每個反斜線都寫兩個」的 JSON，內容含 b f n r t 開頭的指令、`\circ`、`\ce`、表格換列 `\\` 與真的換行。`services/llm.generateJson` 回的 data 等於原意，沒有 `latexRepair`。
@@ -1160,3 +1160,14 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
   | variant | `retrieved_coverage` 0.2333；replay miss 2、缺向量 29，`gate_pass_rate` n/a | `retrieved_coverage` 0.2333；**replay miss 60**，`gate_pass_rate` n/a | **本分支新造成**：`variant.v2` 讓 60 次生成全部對不上（原本 58 次讀得到），要整步重錄。分數欄仍是 n/a（原本就是） |
   | classify_chem | 沒有 cassette，略過 | 相同 | — |
   | e2e（`npm run test:e2e`，12 項） | 3 項紅（缺 `extract_ocr`） | 同樣 3 項紅（缺 `extract_ocr`，鍵 `a5918283…`） | 本來就缺；鍵因 `extract_ocr.v2` 換了 |
+
+#### 6. 審查修正（`dec/r6-templates-fix`，2026-09-27）
+
+審查意見 4 條（都是 minor），逐條驗證後處理如下：
+
+1. **LC-1 的 `rationale` 說明多了一句新要求**（「規則裡若有相鄰兩章的界線，寫出你依哪一條判斷」）——屬實。Owner 核准的是「先寫理由再選章」的欄位順序，沒有核准新的輸出要求，所以**刪掉這一句**，只留開頭的「先寫這一欄，再選章節：」，其餘回到 `a670783` 的原文。欄位順序、`chapter` 的「依上面的理由選出……」不變。schema 雜湊又換了一次，但 `classify.v2` 還沒錄過、repo 裡沒有 `classify_chem` cassette，不多造成重錄；`classify.v2` 不升版。
+2. **lint 第三層有一段意思相同的公式規則，沒有加 L-2 那條**——屬實（`agents/lint.js` 的 `lint.v2`、`lint_chem.v1` 各自寫規則，不共用 `LATEX_RULES`）。Owner 的原話是「`LATEX_RULES` 或等效共用段落」，lint 那段算不算「等效」要 Owner 裁定，這個分支不改。已在 `owner-pending-decisions-r5.md` 新增 **O-5**。repo 內 `lint.v2` cassette 5 支、`lint_chem.v1` 0 支。
+3. **`localModeSections` 的標題檢查放寬了**——屬實，但這一輪每組都要加暫編的 10.16 節，不放寬就過不了；10.12～10.15 的原檢查沒有降低。依審查建議**這個分支不改**，整合重編節號時改回逐一列出每個節號與標題。
+4. **`generateVariant.js` 註解版號過時；`calibrate_source_check.js` 綁死 `extract.v2`**——註解屬實，已改成 `variant_chem.v2`（只是註解，不進模板雜湊）。`calibrate_source_check.js`（與 `test/unit/sourceCheckSample.test.js`）依 `meta.template === 'extract.v2'` 找樣卷 cassette：repo 裡現在就是那一支，行為正確，依審查建議**現在不改程式**，只在工具裡加註「切回 Gemini、用 `extract.v3` 重錄並刪掉舊檔時，這裡與 `sourceCheckSample` 測試要一起改」。
+
+驗證：unit、`check:html`、integration（5433 全新 UTF8 測試庫，用完已刪）都重跑通過。

@@ -93,6 +93,8 @@ async function loadRows(shas, includeDups) {
 }
 
 /** 樣卷：extract.v2 cassette 的題目 ＋ 樣卷文字層 */
+// 第五輪 L-2 起拆題模板是 extract.v3；repo 裡的樣卷仍是 extract.v2 那一支。切回 Gemini、用 extract.v3
+// 重錄並刪掉舊檔時，這裡與 test/unit/sourceCheckSample.test.js 要一起改（dec/r6-templates-fix 審查意見 4）。
 async function loadSample() {
     const file = fs.readdirSync(CASSETTE_DIR).map(f => path.join(CASSETTE_DIR, f))
         .find(f => JSON.parse(fs.readFileSync(f, 'utf8')).meta?.template === 'extract.v2');

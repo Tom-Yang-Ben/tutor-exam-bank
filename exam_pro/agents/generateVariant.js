@@ -98,7 +98,7 @@ registerTemplate(TEMPLATE, PROMPT_TEMPLATE);
 
 // ───────────────────── 化學藍本（〔stage5 WS-B〕DEC-019、ADR-010）─────────────────────
 //
-// 藍本是化學題時改走這一組：agent 名 variant_chem、模板 variant_chem.v1、化學值域的 schema。
+// 藍本是化學題時改走這一組：agent 名 variant_chem、模板 variant_chem.v2、化學值域的 schema。
 // 兩道閘門（只改字、跑題）、章節繼承與 cacheKeyParts 的算法與數學／物理完全相同。
 // 上面數學／物理的 SYSTEM、模板與 schema 一個字都沒動（第 1.1 條）。
 // 註冊字串 = SYSTEM + '\n---\n' + 模板（第 1.2 條）。
