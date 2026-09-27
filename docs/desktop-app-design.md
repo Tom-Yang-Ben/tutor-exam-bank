@@ -3,6 +3,7 @@
 > **狀態：設計稿與決策草稿，尚未實作。** 分支 `dec/desktop-app-design-fix`（接在 `dec/desktop-app-design` 的 `c3cd57f` 之後），基底 `local/integration-r6`（`0ba9bc6`）。只改文件，沒有產品程式。
 > **版本**：第一版草稿是 `325c52b`（作者中斷時留下）；`c3cd57f` 是逐節自我檢查、查證後的正式版（改了什麼見文末「自我檢查紀錄」）；本版依審查意見再修一次，逐條的查證結果與改法見文末「審查修正紀錄」。
 > **Owner 的決定（2026-09-27）**：先做 A（啟動器）；B 與 D2 同時開始規劃，先不實作。A 在另一條分支 `dec/desktop-launcher` 上實作，目前有一個**未審查、未合併**的進行中 commit `d730422`（第 6.1 節列出它已經有的模組）。B1 開工前要先和 A 對齊（第 6.1 節）。
+> **〔2026-09-27，分支 `dec/r7-electron-b1`〕B1 已實作（待 Owner 驗收）**：依第六輪答案 DA-2＝3、DA-3＝2、DA-6＝1、DA-11＝1 做完，做了什麼、雲端驗了什麼、Owner 的驗收步驟都在第 6.2 節。B2、D2、B3 仍未實作；本文件其他各節的「現況」仍是 B1 之前的描述。
 > **名詞**：
 > - **A**：啟動器。雙擊一個檔案，它會開 Docker Desktop、開資料庫、檢查 Ollama、開伺服器和瀏覽器。
 > - **B**：Electron 桌面殼（本文件）。
@@ -554,27 +555,106 @@ A 的進行中 commit `d730422`（未審查、未合併；A 的文件 `docs/desk
 
 A 的程式在合併前還可能改，以上以 `d730422` 為準，B1 開工時要再核對一次。
 
-### 6.2 B1：殼加內嵌後端（仍用 Docker 的庫）
+### 6.2 B1：殼加內嵌後端（仍用 Docker 的庫）——已實作（待 Owner 驗收）
+
+> **狀態（2026-09-27，分支 `dec/r7-electron-b1`，基底 `dec/integration-r7` 的 `6757e25`）**：已實作，雲端（Linux）能驗的都驗過了，**Windows 上的行為待 Owner 照下面的驗收步驟確認**。依據：Owner 第六輪決策 DA-2＝3（看狀況）、DA-3＝2（`utilityProcess.fork`）、DA-6＝1（從 repo 啟動 Electron，U1）、DA-11＝1（桌面版只綁 127.0.0.1）；A 的 DL-1＝1（每次問）、DL-3＝1（結束時 Docker Desktop 與 Ollama 都不關，桌面版也一樣）、DL-4＝2（錄製中暫停背景工作）沿用 A 的設定。
+> 這條分支有兩個 commit：`d9aac68` 是前一位實作者中斷時留下的進行中版本；接手的 commit 檢查過整份、補完 README 與文件，並修了四件事（見本節最後「接手時的修正」）。
+> 原本的規劃（範圍：第 1～8、32、35、36 項；約 58～60h）見本節最後「原規劃」。
+
+**做了什麼、在哪裡**
+
+| 項目 | 檔案 | 說明 |
+|---|---|---|
+| Electron 殼 | `desktop/`（`package.json`、`package-lock.json`、`main.js`、`backend-entry.js`、`lib/*.js`） | `electron` 只列在 `desktop/package.json` 的 devDependencies，鎖定 **44.4.5**（2.2 節）。`exam_pro` 的 `package.json`／lock 一個字都沒改，CI 的 `npm ci` 不會多下載 Electron。**Electron 44 起 `npm ci` 不會下載執行檔**（npm 套件沒有 postinstall，第一次執行才下載，2026-09-27 實測），所以一鍵腳本在 `npm ci` 之後另外執行 `node_modules\electron\install.js` |
+| 可以呼叫的後端（第 1 項） | `exam_pro/startServer.js`（新） | `startServer({ port, host = '127.0.0.1' }) → { url, port, runner, status(), close({graceMs}) }`：不讀 `.env`；**聽到埠之後才啟動 runner**；關閉用 A 的 `launcherControl.createLifecycle`（同一份狀態機）。**`server.js` 沒有改**（`npm start` 逐位元不變）：同時進行中的 DA-11 分支要改 `server.js` 的綁定位址，兩邊不改同一支檔；之後要合成一份時，讓 `server.js` 的 `require.main` 分支呼叫 `startServer({ port: PORT, host: HOST })` 即可 |
+| 後端子行程（DA-3＝2） | `desktop/backend-entry.js`、`desktop/lib/backendHost.js`、`desktop/lib/backendProtocol.js` | 主行程用 `utilityProcess.fork` 開 `backend-entry.js`（工作目錄 `exam_pro`），它呼叫 `startServer({ host: '127.0.0.1' })`。主行程與後端之間走 utilityProcess 的訊息通道（ready／status／shutdown），不開 A 的 HTTP 關閉通道、也不用權杖（子行程的環境拿掉 `LAUNCHER_CONTROL_TOKEN`）。後端的 stdout／stderr 寫進 `exam_pro\data\logs\desktop-server-日期.log` |
+| 環境變數（第 3、13 項） | `desktop/lib/config.js` | 基底＝`exam_pro\.env` 的值被系統環境變數蓋過（與 `npm start` 相同，沿用 A 的 `effectiveEnv`；B1 仍用 repo 的 `.env`，搬到 `%APPDATA%` 是 B2／DA-8）；執行期疊上 `PORT`（主行程先挑一個 127.0.0.1 的空埠）與 `ALLOWED_ORIGINS=http://127.0.0.1:<埠>,http://localhost:<埠>`（同源 POST 才過得了 CORS）；錄製中而且設定要暫停時加 `JOB_RUNNER=off`（DL-4） |
+| 啟動前的檢查（沿用 A） | `desktop/lib/startup.js`、`desktop/lib/statusUi.js`、`desktop/lib/wording.js` | 直接用 A 的 `plan.js`（決策）、`actions.js`（Docker／資料庫、Ollama、migration、錄製偵測）、`probes.js`、`statusServer.js`＋`status.html`（啟動畫面，顯示在同一個 Electron 視窗裡）。只換掉「後端怎麼開」那幾步；埠的檢查換成「主行程挑一個 127.0.0.1 的空埠」，被搶走時換埠重開（最多再 2 次）。健康檢查自己的後端一律問 `127.0.0.1`（`OWN_BACKEND_HOST`），不照 `.env` 的 `HOST`（DA-11 網頁版那一半合併後 A 的健康檢查會看 `HOST`）。A 的文字裡「再點一次『出題系統』圖示」「關閉出題系統」換成桌面版的說法（單元測試把 A 的每一種失敗與警告都跑一遍，確認沒有留下 A 專用的說法）。A 的啟動設定 `exam_pro\data\launcher\config.json` 兩邊共用 |
+| 單一實例 | `desktop/main.js` | `app.requestSingleInstanceLock()`；第二次開啟只把原本的視窗叫到前面（縮在系統匣時也會叫回來） |
+| 關閉行為（DA-2＝3） | `desktop/lib/decisions.js`（規則，純函式）、`desktop/main.js`（照做） | 見下方「關閉行為」 |
+| Word 下載（第 5 項） | `desktop/lib/downloads.js` | `will-download` 不指定存檔路徑、只給 `setSaveDialogOptions`：第一次預設在「文件\出卷」（沒有就建立），之後記住上次存檔的資料夾；檔名用前端 `download` 屬性給的，Windows 不能用的字元換成「_」；`.docx` 列「Word 文件」 |
+| 麥克風（第 6 項） | `desktop/lib/security.js` | `setPermissionRequestHandler`／`setPermissionCheckHandler` 只放行「自己的來源＋`media`＋只要聲音」，攝影機與其他權限一律拒絕（Electron 預設是全部核准）。另外：導覽只允許自己的來源，開新視窗一律拒絕，外部 http(s) 交給預設瀏覽器 |
+| 執行期零外連（1.1 第 2 點） | `desktop/lib/security.js`、`desktop/main.js` | Chromium 預設會從 Google 的 CDN（`redirector.gvt1.com`）下載拼字字典，**視窗設了 `spellcheck:false`、session 關掉拼字檢查也照樣會連**（2026-09-27 在 Linux 實測）。session 關掉拼字檢查，並把字典的下載網址指到本機迴路上沒有人聽的埠（`http://127.0.0.1:9/`）。冒煙測試把 Chromium 的代理指到本機的陷阱，五個情境都驗「一筆往外的連線都沒有」 |
+| 另一個後端的警告（第 35 項） | `exam_pro/config/db.js`、`desktop/lib/startup.js` | 連線池帶 `application_name: 'tutor-exam-bank'`（只多一個連線參數）。桌面版開後端之前查 `pg_stat_activity`（同一個庫、不算自己）有沒有這個名稱的連線，並對 `.env` 的 `PORT` 做健康檢查；有的話啟動畫面列一條注意事項（不擋） |
+| 捷徑（DA-6＝1） | `exam_pro/scripts/windows/install_desktop_app.bat` | 雙擊：第一次在 `desktop` 執行 `npm ci` 並下載 Electron，再由 Electron 自己（`shell.writeShortcutLink`）在桌面建立「出題系統（桌面版）」：目標 `desktop\node_modules\electron\dist\electron.exe`、參數是 `desktop` 資料夾、帶 AppUserModelID `TutorExamBank.Desktop`（工作列分組與釘選對得上）。`--reinstall` 重裝 Electron（`desktop\package-lock.json` 有變時）；`--remove` 移除。A 的兩個捷徑與 `install_desktop_shortcut.bat` 不變 |
+| 其他 | `.gitignore`（第 32 項） | 加上 `desktop/dist/`、`desktop/out/`、`desktop/staging/` |
+
+B1 刻意**不搬任何資料**：記錄檔放 `exam_pro\data\logs\`（`desktop-日期.log`、`desktop-server-日期.log`，和 A 的放一起，保留 14 天；B2 一起搬）；Chromium 的設定檔（快取等）與 `desktop-state.json`（上次存檔的資料夾、視窗大小）放 `%LOCALAPPDATA%\TutorExamBank\electron`（DA-1＝2 的 Local 那一邊，路徑只有英數字）。
+
+**關閉行為（DA-2＝3）**
+
+- **按右上角 X**：
+  - 還在啟動或啟動失敗 → 直接結束。
+  - 問後端的在途工作數（launcherControl 的同一個數字）：**有工作 → 縮到系統匣繼續跑**，跳通知「出題系統仍在背景處理」；問不到（後端正忙，3 秒沒回）→ 同樣縮到系統匣（寧可多留，不要誤關長時間的工作）；**沒有工作 → 直接結束**（優雅關閉：停止認領 → 關 HTTP → 剛認領到的最多等 10 秒 → 關連線池）。
+  - 縮到系統匣之後，在途工作歸零並**持續 10 秒**才算「處理完」（runner 每 2 秒認領一次，單題的下一步要等下一輪，只看一次歸零會在兩步之間誤判），跳通知「背景工作都處理完了」，**約 8 秒後自動結束**。〔實作時的解讀〕DA-2＝3 的「完成時再通知」之後沒有寫要不要結束；這裡照「沒工作直接結束」與設計稿「沒事時就該把後端關掉」的理由，視窗已經關了就當作要結束。期間點系統匣圖示或再開一次捷徑把視窗叫回來，就取消這個自動結束；通知跳出後那幾秒又認領到工作，也不結束、繼續等。
+- **系統匣選「結束」**：沒有工作 → 直接結束。有工作（或問不到）→ 對話框「等處理完再結束／現在放棄／取消」：
+  - **等處理完再結束**：不再認領新工作，等在途的做完（最多 6 小時，與 A 的「是」相同）；拆題是整份卷算一件，正在拆的卷會拆到完，排隊中的留到下次。等的時候系統匣選單多一個「現在放棄」。
+  - **現在放棄**：後端馬上結束，**不關連線池、不寫結果**——與當機、A 的「時限到了直接結束」同一條既有的路，不記成失敗、不動重試次數；租約（`JOB_LEASE_MS`，預設 3 分鐘；在途時每 30 秒續一次，所以從放棄那一刻算起最多約 3 分鐘）到期後重新認領，馬上重開的話要先等一下。重跑範圍照現行 `workers/jobRunner.js`：單題的檢查從中斷那一步接著做；整份卷的拆題、變式生成從頭再跑一次。對話框直接引用 A 的 `UNFINISHED_WORK_NOTE`（`exam_pro/scripts/desktop/lib/plan.js`），**DA-13 的逐塊檢查點（另一條分支 `dec/r7-checkpoints`）合併時，更新那一句，桌面版的對話框就跟著變**。
+  - 設計稿 2.3 節第 4 點的 `shutdown({ abandon: true })`（abort 在途節點、立刻放掉租約，下次開啟不必等 3 分鐘）要改 `workers/jobRunner.js`，**不在這一版**：B1 的「放棄」走既有的直接結束，代價只是下次開啟要等租約到期。第 3 條第 2 項的單元與整合測試因此也還沒有。
+- **後端異常結束**（不是桌面版要它結束的）：10 分鐘內第一次 → 通知並自動重開（畫面回到啟動畫面，換一個埠）；再一次 → 停下來，啟動畫面顯示「後端一直異常結束」與記錄檔最後幾行。視窗已經關掉（在系統匣等處理完）時不重開，直接結束並通知。
+- **Windows 登出或關機**：不擋、不問，後端直接結束（與當機同一條路）。
+- 通知用系統匣氣球（`tray.displayBalloon`，Windows 10／11 會顯示成通知），不需要開始功能表捷徑或 AppUserModelID。
+
+**和原規劃的差異**
+
+| 原規劃 | 這一版 | 理由 |
+|---|---|---|
+| 第 1 項：`server.js` 匯出 `startServer()` | 另開 `exam_pro/startServer.js`，`server.js` 不動 | 不和 DA-11（網頁版改用 `HOST`）的分支改同一支檔；兩邊共用 `app.js`、jobRunner、launcherControl、listenFailure |
+| 第 2 項：jobRunner 的 `shutdown({ abandon })` | 沒做；「放棄」走既有的直接結束 | 任務要求「依現行 jobRunner 的行為」寫重跑範圍；jobRunner 同時被 DA-13 的分支改。差別只有下次開啟要等租約（約 3 分鐘） |
+| 第 4 項：桌面版自動產生 `API_KEY` | 沒做；照 `.env` 的 `API_KEY`（沒設就不檢查，與現在相同） | 後端只綁 127.0.0.1、埠每次不同，區網碰不到；自動產生金鑰改變的是 `/api` 的行為，留給 B2 和設定檔一起做 |
+| 第 36 項：逐塊檢查點（DA-13） | 不在這條分支 | 另一條分支 `dec/r7-checkpoints` |
+| 後端的埠 | 每次開啟由主行程挑一個 127.0.0.1 的空埠 | 和同時開著的網頁版（3000）不會搶；前端沒用 `localStorage`，換埠不掉資料（2.4 節） |
+| 記錄檔在 `%LOCALAPPDATA%\…\logs`（2.8 節） | B1 放 `exam_pro\data\logs\desktop-*.log` | 搬路徑是 B2（第 34 項），和 A 的記錄檔一起搬 |
+| 系統匣選單的立即備份、OCR 自我檢查、維護命令列（2.8 節） | 只有：開啟、狀態、開啟記錄檔／資料／備份資料夾、結束（等處理完時多「現在放棄」） | 立即備份是 D2（第 19 項）、維護命令列是 B2（第 21 項）；OCR 自我檢查要 121 秒，B1 先不放 |
+
+**自動化驗收（雲端，2026-09-27，接手後在最終版本上重跑）**
+
+- `exam_pro`：`npm test` 4,055 則，4,053 過、2 略過、0 失敗（略過的兩則是基底就有的「回放檔還沒錄」）。新增 `test/unit/desktopStartServer.test.js`：`startServer({port:0})` 回傳實際的埠且連得上、只綁 127.0.0.1；`close()` 後 runner 已停、埠已放掉、連線池已關；`close({graceMs:0})` 在途還在時不關連線池直接結束；聽不了埠時 reject 而且不啟動 runner；`config/db.js` 的 `application_name`。`npm run check:html` 全綠。
+- `desktop`：`npm test`（`node --test`，不需要 Electron）115 則全過：關閉／系統匣／第二次開啟／異常結束的規則、權限與導覽、拼字字典不外連、下載的預設值、環境變數、A 的文字換成桌面版說法、主行程↔後端的訊息（假的 utilityProcess）、啟動流程（真的 A 的 plan＋假的 I/O）、一鍵腳本的格式。**不在 CI**：要進 CI 得改 `ci.yml`，要 Owner 同意（第 3 條第 8 項）。
+- `desktop`：`npm run smoke`——在 Linux 的 xvfb 上跑**真的 Electron 44.4.5**（utilityProcess 裡是 Node 24.21.0），五個情境 53 項全過：
+  - basic：啟動畫面轉到 `http://127.0.0.1:<埠>/`、同源 POST 沒被 CORS 擋、健康檢查 ok、**utilityProcess 裡載得起後端的 `sharp`、`@node-rs/jieba`、`mupdf`**（`test/smoke/native-probe.js`：sharp 產生並讀回 PNG、jieba 切出「二次函數／圖形／頂點」、mupdf 打開自製樣卷；Linux 版二進位，R-6 的 Windows 版在驗收第 4 步）、權限（麥克風 granted，攝影機／定位／通知 denied；假裝置下攝影機 NotAllowedError、麥克風拿得到）、Blob 下載走 `will-download`（中文檔名、「文件/出卷」、Word 文件）、導覽到 `file:` 與本機別的埠被擋、`window.open` 不開視窗、第二個實例結束並叫出第一個、沒有工作時關視窗就結束。
+  - busy：有 2 件在途時關視窗 → 縮到系統匣＋通知 → 歸零 10 秒後「處理完了」→ 約 8 秒後結束。
+  - wait／abandon：系統匣「結束」→ 對話框（三個按鈕、A 的重跑範圍那一句、租約）→ 等處理完／現在放棄都正常結束。
+  - crash：後端被殺 → 自動重開（換埠）→ 再被殺 → 顯示「後端一直異常結束」。
+  - 每個情境都驗：沒有殘留的後端子行程；Chromium 一筆往外的連線都沒有（外連陷阱）。
+  - 另外驗過：`.env` 的 `PORT` 上開著網頁版（另一個 `node server.js`）時啟動，注意事項有「另一個後端」那一條（`other-backend`）。
+- 整合測試：本機 5433 的全新 UTF8 庫（照 `ci.yml` integration job 的環境變數）`npm run test:integration` 629 則全過。同一個庫接著跑 e2e：12 則 9 過 3 失敗，三則都是 **replay miss**（`agent=extract_ocr`：自製樣卷的 OCR 拆題回放檔在基底 `6757e25` 本來就沒有，單元測試的回放那兩則也因此略過；Owner 正在重錄），與這條分支無關（這條分支沒有改模板、schema、prompt 或 cacheKeyParts）。五個 eval 沒有跑（這條分支沒有碰 agent 與回放檔）。
+- **和同一輪其他分支的相容**：在暫存的 worktree 把這條分支和 `dec/r7-decisions-host`（DA-11 網頁版改聽 `HOST`、DL-4 預設改 `pause`）、`dec/r7-checkpoints-fix`（`10f7acd`，DA-13 的檢查點）合在一起（只有那兩條之間的 `docs/desktop-launcher.md` 有衝突，與本分支無關），`desktop` 的 `npm test`、`exam_pro` 的 `desktop*`／`listenHost` 單元測試（270 則）、冒煙測試都全過。為此：對話框的重跑範圍只引用 A 的 `UNFINISHED_WORK_NOTE`、測試不寫死「從頭再跑一次」；`desktopStartServer.test.js` 對 `server.js` 的檢查同時接受 `app.listen(PORT, …)` 與 `app.listen(PORT, HOST, …)`。
+- 冒煙測試發現的兩件 Linux 專屬的事：① Linux 的 Chromium 用 locale 的編碼當檔名編碼，**C locale 下中文的下載檔名會退回「download」**（改成 UTF-8 locale 就正常）。Windows 的路徑是 UTF-16，應該不受影響〔推論〕，列在驗收第 3 步。② 在 Electron 裡載入 sharp 時，Linux 會印 `SharpElectronLinux` 警告與一串 GLib 訊息（sharp 官方說 Linux 上 Electron 自帶的函式庫可能和 sharp 不合），但產生與讀回 PNG 都正常；Windows 沒有這個問題〔推論，依 sharp 文件〕，一樣以驗收第 4 步的裁圖為準。
+
+**接手時的修正（`d9aac68` 之後）**
+
+1. **拼字字典外連**（上表「執行期零外連」）：前一版每次開啟都會嘗試連 `redirector.gvt1.com`，違反本機模式的零外連；加了外連陷阱之後冒煙測試才抓得到。
+2. **自己後端的健康檢查固定問 127.0.0.1**：DA-11 網頁版那一半合併後，A 的健康檢查會照 `.env` 的 `HOST` 決定連哪個位址；桌面版的後端不管 `HOST` 一律只聽 127.0.0.1，兩者不能混用。
+3. **對話框的租約說法**：原本寫「下次開啟後約 3 分鐘才會重新接手」，實際是從放棄那一刻起算、最多約 3 分鐘（租約每 30 秒續一次），改成「要等租約到期才會重新接手（從現在算起最多 3 分鐘，馬上重開的話會先等一下）」。
+4. **測試不寫死會被其他分支改掉的字句**（上面「和同一輪其他分支的相容」）；冒煙測試多了 `native-probe.js` 與外連陷阱。另外補了 README 兩處的啟動說明。
+
+**雲端驗不到、要在 Windows 上確認的**：系統匣圖示與氣球通知、「另存新檔」對話框的預填、捷徑的建立與圖示、Electron 在 cmd 視窗印的中文、由 app 代開 Docker Desktop、`sharp`／`@node-rs/jieba` 的 Windows 版與 `mupdf` 在 utilityProcess 裡能不能載入（R-6）、OCR 的 python 會不會變孤兒（R-9）、Defender／Smart App Control 會不會擋未簽章的 `electron.exe`（R-5；DA-9 的前提是 SAC 關閉，尚待 Owner 確認）、登出與關機、真的麥克風。
+
+**Owner 驗收步驟**（約 30～45 分鐘；每一步有問題就記下畫面與 `exam_pro\data\logs\desktop-日期.log`）
+
+0. 前提：Smart App Control 是關的（「Windows 安全性 → 應用程式與瀏覽器控制 → Smart App Control」；DA-9 的前提）；Node.js 24 在 `PATH` 裡（一鍵腳本要用 `node`、`npm`）；`exam_pro` 已經 `npm install`；Docker Desktop 有裝。
+1. **建立圖示**：雙擊 `exam_pro\scripts\windows\install_desktop_app.bat`。第一次會安裝並下載 Electron（100 多 MB，幾分鐘），最後看到「已建立：…\出題系統（桌面版）.lnk」「[OK] 完成」。桌面多一個「出題系統（桌面版）」；A 的「出題系統」「關閉出題系統」還在。〔確認：cmd 視窗裡的中文沒有變亂碼；Defender 沒有跳出攔截〕
+2. **開啟**：先把 Docker Desktop 整個結束，再雙擊「出題系統（桌面版）」。同一個視窗先出現啟動畫面（六個步驟），Docker Desktop 被代開、資料庫起來，最後自動轉到系統首頁（有黃色注意事項時按「我知道了，進入出題系統」）。六個分頁都能用；右下角系統匣有出題系統的圖示；工作列只有一個按鈕。
+3. **Word 下載**：組一份卷、下載 Word → 跳「另存新檔」，預設在「文件\出卷」，檔名就是頁面給的（例如「XX 段考（學生版）.docx」，**不是「download」**）；存好後再下載一次，預設資料夾變成上次存的地方。打開 Word 檔確認內容正常。
+4. **上傳與背景工作**：上傳最小的樣卷，讓拆題開始跑（確認 mupdf、sharp 在桌面版裡正常：拆題有進度、附圖裁得出來；再用題庫的搜尋確認 jieba 正常）。拆題在跑的時候按右上角 X：視窗消失，右下角跳通知「出題系統仍在背景處理」；點系統匣圖示，視窗回來。再按一次 X，等拆題和後續的檢查都跑完：跳「背景工作都處理完了」，約 8 秒後系統匣圖示消失（app 結束）。
+5. **放棄與重跑點**：再上傳一次，在拆題途中從系統匣選「結束」：對話框有三個按鈕，文字寫著重跑範圍與「從現在算起最多 3 分鐘」；選「現在放棄」→ app 馬上結束。重開桌面版，放棄後最多約 3 分鐘（租約到期）那份卷從第 1 塊重拆（DA-13 合併後改成從沒完成的那一塊接著拆）。也在分類、驗算等**單題的步驟**執行中放棄一次：重開後那一題從同一個步驟重跑。兩種都確認：複核頁沒有多出逾時的紀錄、job 沒有變 `failed`。再測一次「等處理完再結束」：系統匣留著、選單多了「現在放棄」，處理完就自己結束。
+6. **沒有殘留**：從系統匣結束後，工作管理員 → 詳細資料：沒有殘留的 `electron.exe`（桌面版的）、`node.exe`、`python.exe`。**OCR 正在跑時**選「現在放棄」也測一次（python 會不會跟著結束，R-9）。
+7. **另一個後端**：開著網頁版（在 `exam_pro` 執行 `npm start`）時開桌面版，啟動畫面的注意事項有「網頁版（npm start）或桌面啟動器 A 的後端正在 http://localhost:3000 執行…」。關掉網頁版；在工作管理員強制結束桌面版的 `electron.exe` 之後馬上重開，**不會**出現這一條。
+8. **第二次開啟**：桌面版開著時再雙擊一次圖示，只會把原本的視窗叫到前面（縮在系統匣時也會叫回來），不會開第二個。
+9. **麥克風**（Gemini 模式而且開了語音時才需要；本機模式沒有語音，可以跳過）：家教的「按住說話」可以錄音；Windows「設定 → 隱私權與安全性 → 麥克風 →『讓桌面應用程式存取您的麥克風』」要打開。
+10. **登出或關機**：桌面版開著時直接登出或關機，不會被它擋住。
+11. **記錄檔**：系統匣「開啟記錄檔資料夾」打得開，裡面有 `desktop-日期.log`、`desktop-server-日期.log`。
+12. **錄製中**：`record_local.bat` 在跑時開桌面版，照 A 的 `jobsWhileRecording` 設定（DL-4＝2 的預設改成 `pause` 之後）暫停背景工作，啟動畫面有對應的注意事項。
+
+更新方式（DA-6＝1，U1）：`git pull` 之後，`exam_pro\package-lock.json` 有變就在 `exam_pro` 執行 `npm ci`；`desktop\package-lock.json` 有變就雙擊 `install_desktop_app.bat --reinstall`（命令提示字元裡加參數）。
+
+**原規劃**（B1 開工前的版本，保留對照）：
 
 - **範圍**：第 1～8、32、35、36 項（第 36 項照 DA-13 的建議算進去）。
 - **工時**：3＋10＋1＋1＋3＋2＋26＋6＋0.2＋1＋(5～7)，約 58～60h，約 **7.5 人日**。A 的 `plan.js` 合併後可以直接用時，約少 4h；DA-13 選 1 時少 5～7h。
-- **自動化驗收**：
-  - `exam_pro` 的 `npm test`、`npm run check:html` 全綠。CI 不改，所以一樣綠。
-  - 新增的單元測試涵蓋：`startServer({port:0})` 回傳實際的埠且可以連線；`close()` 之後埠已釋放、runner 已停；`shutdown({abandon:true})` 會觸發節點的 signal，而且**題目層、拆題、變式三種工作單位各有一則**，都釘住 `retries` 不變、沒有新增 `job_events`、job 不會變 `failed`、`locked_until` 已清空。
-  - 做了第 36 項的話：拆題在第 2 塊被放棄後重跑，第 1 塊不再呼叫模型；變式同理。
-  - `desktop/` 的 `node --test` 全綠（只在本機跑）。
-  - 整合測試 `npm run test:integration` 在本機一個全新的 UTF8 測試庫（5433）上全綠。
-- **手動驗收**（Owner）：
-  1. 雙擊捷徑，Docker 沒開時由 app 代開，最後視窗出現，六個分頁都能用。
-  2. 組卷後下載 Word，跳出「另存新檔」，預填的檔名正確。
-  3. 上傳最小的樣卷，工作開始跑。
-  4. 關閉視窗時，行為符合 DA-2。重跑點分兩種情形看，兩種都要確認複核頁沒有多出逾時的紀錄、job 沒有變 `failed`：
-     - 分類、驗算等題目層的節點執行中選「放棄」，重開後那一題從同一個節點重跑。
-     - 拆題中選「放棄」，重開後從第 1 塊重拆；做了第 36 項的話，改從還沒完成的那一塊接著拆。
-  5. 從系統匣結束後，工作管理員裡沒有殘留的 `node`、`python`、Electron 行程（B1 期間 PostgreSQL 還在 Docker，不在此列）。OCR 正在跑時結束也要測一次：python 會不會跟著結束靠的是 venv 轉導器的 job（2.3 節），要實測確認。
-  6. 開著網頁版（`npm start`）時再開 app，會跳出「另一個後端正連著同一個庫」的警告（第 35 項）；app 當機後馬上重開，**不會**跳出這個警告。
-  7. 第二次雙擊只會叫出原本那個視窗。
-  8. Gemini 模式下麥克風可用（本機模式本來就沒有語音，可以跳過）。
+- **自動化驗收**（原文）：`npm test`、`check:html` 全綠；`startServer({port:0})`、`close()` 的單元測試；`shutdown({abandon:true})` 對題目層、拆題、變式三種工作單位各一則（**這一版沒做 abandon，所以沒有**）；做了第 36 項的話拆題與變式的檢查點測試（在 DA-13 的分支）；`desktop/` 的 `node --test`；5433 全新 UTF8 庫上的整合測試。
+- **手動驗收**（原文的 8 點已併進上面的 Owner 驗收步驟：1→第 2 步、2→第 3 步、3→第 4 步、4→第 4、5 步、5→第 6 步、6→第 7 步、7→第 8 步、8→第 9 步）。
 
 ### 6.3 B2：路徑與設定搬到 `%LOCALAPPDATA%`／`%APPDATA%`
 

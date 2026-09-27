@@ -28,7 +28,11 @@ if (!process.env.DATABASE_URL) {
         'DATABASE_URL=postgres://exam:exam@localhost:5442/tutor_exam_bank（埠是 5442，見 docs/interfaces-stage1.md 第 9 條）。'
     );
 }
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
+// 〔桌面版 B1，docs/desktop-app-design.md 第 3 條第 35 項〕連線帶上 application_name，從 pg_stat_activity 分得出
+// 「是這套系統的後端或工具連進來的」：桌面版開後端之前據此警告「另一個後端正連著同一個庫」（兩個 runner 會一起認領工作）。
+// 只多一個連線參數，查詢行為不變。
+const APPLICATION_NAME = 'tutor-exam-bank';
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 10, application_name: APPLICATION_NAME });
 
 // 閒置連線被資料庫端切斷時，pg 會在 pool 上丟 error；沒有監聽器會直接讓整個行程崩潰。
 pool.on('error', err => console.error('【PostgreSQL 連線池】閒置連線錯誤:', err.message));

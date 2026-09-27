@@ -485,6 +485,8 @@ npm start                 # http://localhost:3000
 
 Windows 也可以雙擊 `exam_pro\scripts\windows\install_desktop_shortcut.bat` 在桌面建立「出題系統」圖示，之後點一下就會依序開 Docker、資料庫、Ollama、後端，最後開出操作視窗；用完點「關閉出題系統」（[`docs/desktop-launcher.md`](./docs/desktop-launcher.md)）。
 
+〔2026-09-27，待 Owner 驗收〕Electron 桌面版（B1）：雙擊 `exam_pro\scripts\windows\install_desktop_app.bat` 建立「出題系統（桌面版）」圖示，點一下就在同一個視窗裡開好整套系統（資料庫仍用 Docker，由它代開；有背景工作時關視窗會縮到系統匣繼續跑）。兩種圖示可以並存，說明與驗收步驟見 [`docs/desktop-app-design.md`](./docs/desktop-app-design.md) 第 6.2 節。
+
 完整安裝步驟、環境變數表、API 一覽與維運工具說明，請見 **[`exam_pro/README.md`](./exam_pro/README.md)**。
 
 ### 本機模式（預設）：不連外、不花錢〔2026-09-25〕
