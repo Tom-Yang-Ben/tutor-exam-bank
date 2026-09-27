@@ -61,6 +61,7 @@
 - **建議**：3。0 不是品質訊號；替代指標量的是 OCR 模式真正關心的「進複核之前有多少題是乾淨的」。門檻等有數字再定，不在沒資料時亂訂。
 - **何時**：重錄 pipeline 之前最好（第一次重錄的報表就看得懂）；不影響錄製內容，錄完再決定也不必重錄。
 - 出處：`local-mode.md` 10.12 第 7 點最後一段。
+- 〔Owner 2026-09-27 選 3〕已落實於 `dec/r6-gates`：OCR 模式 `saved_rate` 印 n/a、經 `eval/lib/thresholds.js` 的白名單不比門檻（`thresholds.json` 不動），另報「人工核准前的通過率」只報告不設門檻（[`local-mode.md`](local-mode.md) 10.16 第 5 點）。
 
 ### D-3　`LOCAL_EXTRACT_MODE`：範本寫 ocr、程式預設是 cross
 
@@ -327,3 +328,14 @@
 - **建議**：2。V5-2 本來就要等重錄才定案（見 V5-2「何時」）；在最後那一版資料上抽查，花的時間最少，門檻又不必只靠 Claude 的判斷。
 - **何時**：V5-2 定案之前；照選項 2，是反斜線修好、variant 重錄、重跑 `npm run embed:thresholds` 並重標初判之後。
 - 出處：`local-mode.md` 10.13 第 1 點第 3 項、第 5 點；`local-embed-thresholds-report.md` 4.2。
+
+---
+
+## 第五輪同一批裁決、題目不在本表的（`dec/r6-gates` 加註，2026-09-27）
+
+題目原文在出處；這裡只記裁決與落實的分支，方便對照。
+
+- **L-1**（[`llm.md`](llm.md) 第 10 節「沒有做」第 1 項，公式閘門擋下殘留的控制字元）：〔Owner 2026-09-27 選 1〕已落實於 `dec/r6-gates`（rule 名 `control_char`；[`local-mode.md`](local-mode.md) 10.16 第 1 點）。
+- **L-3**（同一節第 3 項，解析器支援 `\bullet`、`\textbf`）：〔Owner 2026-09-27 選 1〕已落實於 `dec/r6-gates`（10.16 第 2 點）。
+- **LC-3**（[`local-mode.md`](local-mode.md) 10.15 第 6 點，界線規則套在零成本閘門）：〔Owner 2026-09-27 選 2〕已落實於 `dec/r6-gates`（10.16 第 3 點）。
+- **LC-4**（10.15 第 6 點，nlq-036 的計分）：〔Owner 2026-09-27 選 3〕已落實於 `dec/r6-gates`（10.16 第 4 點；放寬計分，與 2026-09-25 以前的分數不可直接比）。

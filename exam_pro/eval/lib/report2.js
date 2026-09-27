@@ -96,8 +96,13 @@ function markdownPipeline(res) {
 
     lines.push('### 結果分佈', '',
         `- 已入庫 ${c.saved}／待複核 ${c.needs_review}／不採用 ${c.rejected}／未完成 ${c.pending}（共 ${c.total} 題）`,
-        `- saved_rate：${cell(m.saved_rate)}　classify 零成本閘門通過率：${cell(m.gate_pass_rate)}　answer_agree_rate：${cell(m.answer_agree_rate)}`,
+        `- saved_rate：${cell(m.saved_rate)}${res.ocrOnly ? `（${res.ocrOnly.saved_rate_note}）` : ''}　classify 零成本閘門通過率：${cell(m.gate_pass_rate)}　answer_agree_rate：${cell(m.answer_agree_rate)}`,
         '');
+    // 〔Owner 第五輪 D-2〕OCR 模式的替代指標：只報告、不設門檻
+    if (res.ocrOnly) {
+        const p = res.ocrOnly.pre_approval || { passed: 0, total: 0, rate: null };
+        lines.push(`- 人工核准前的通過率（OCR 模式）：${cell(p.rate)}（${p.passed}／${p.total} 題走完全部閘門、只因「只用 OCR 拆題」停下；只報告、不設門檻）`, '');
+    }
 
     lines.push('**needs_review 原因分佈**：', '');
     if (!res.reviewReasons || res.reviewReasons.length === 0) {

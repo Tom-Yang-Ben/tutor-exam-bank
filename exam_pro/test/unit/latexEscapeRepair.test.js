@@ -617,37 +617,50 @@ describe('回歸：2026-09-25 本機 cassette（f77d1a3：qwen3:8b 的 variant 6
         assert.ok(kept > 0, '這一批裡本來就有真的換行（選項分行），要確認它們留著');
     });
 
-    test('公式閘門（variant 的題幹＋答案）：帶壞公式卻通過的 38 支 → 3 支；整體 49 過／11 擋 → 47 過／13 擋', () => {
+    // 〔Owner 第五輪 L-1、L-3 核准，2026-09-27，dec/r6-gates〕閘門本身改了兩處，這一組的數字跟著重算：
+    //   L-1：formulaLint 多一條 control_char（換行以外的控制字元一律 error）→ 修前帶控制字元的一支都過不了；
+    //        修後剩下「換頁＋dg」的 3 支改成擋下。
+    //   L-3：解析器支援 \bullet、\textbf（EXTRA_SYMBOLS／parseCommand）→ 還原出這兩個指令的 6 支回到通過。
+    //   改之前（dec/latex-escape-repair-fix）釘的是：帶壞公式卻通過 38 → 3 支；49 過／11 擋 → 47 過／13 擋。
+    //   只做 L-1：44／16（docs/llm.md 第 10 節的估計）；只做 L-3：53／7；兩個都做：50／10（docs/local-mode.md 10.16）。
+    test('公式閘門（variant 的題幹＋答案；L-1、L-3 之後）：帶控制字元的一支都過不了；修前 11 過／49 擋 → 修後 50 過／10 擋', () => {
         let passedWithCtrl = [0, 0];
         const totals = { before: { ok: 0, fail: 0 }, after: { ok: 0, fail: 0 } };
         const flips = { okToFail: [], failToOk: [] };
+        const controlOnly = [];
+        const byKey = new Map();
         for (const c of LOCAL.variant) {
             const fixed = repairLatexEscapes(c.data).value;
             const g0 = gateOf(c.data);
             const g1 = gateOf(fixed);
+            byKey.set(c.key.slice(0, 8), { fixed, g1 });
             totals.before[g0.ok ? 'ok' : 'fail'] += 1;
             totals.after[g1.ok ? 'ok' : 'fail'] += 1;
             if (g0.ok && repair.hasNonNewlineControl(c.data)) passedWithCtrl[0] += 1;
             if (g1.ok && repair.hasNonNewlineControl(fixed)) passedWithCtrl[1] += 1;
-            if (g0.ok && !g1.ok) flips.okToFail.push({ key: c.key.slice(0, 8), fixed, g1 });
+            if (g0.ok && !g1.ok) flips.okToFail.push(c.key.slice(0, 8));
             if (!g0.ok && g1.ok) flips.failToOk.push(c.key.slice(0, 8));
+            const errs = g1.issues.filter(i => i.sev === 'error');
+            if (errs.length && errs.every(i => i.rule === 'control_char')) controlOnly.push(c.key.slice(0, 8));
         }
-        assert.deepEqual(passedWithCtrl, [38, 3]);
-        assert.deepEqual(totals, { before: { ok: 49, fail: 11 }, after: { ok: 47, fail: 13 } });
+        assert.deepEqual(passedWithCtrl, [0, 0]);
+        assert.deepEqual(totals, { before: { ok: 11, fail: 49 }, after: { ok: 50, fail: 10 } });
+        assert.deepEqual(flips.okToFail, []);
+        assert.equal(flips.failToOk.length, 39);
 
-        // 變成擋下的 4 支：還原出來的 \bullet／\textbf 解析器不支援（Word 會印出指令名），閘門第一次看得到它們
-        assert.deepEqual(flips.okToFail.map(f => f.key).sort(), ['288f5abc', '42633f8b', '578ea572', 'fc040873']);
-        for (const f of flips.okToFail) {
-            const errs = f.g1.issues.filter(i => i.sev === 'error');
-            assert.ok(errs.length > 0 && errs.every(i => i.rule === 'unknown_command'), f.key);
-            for (const text of [f.g1.questionText, f.g1.answerText]) {
-                for (const ev of tf.parseLatexStrict(text).events.filter(e => e.kind === 'unknown_command')) {
-                    assert.match(text.slice(ev.at), /^\\(bullet|textbf)(?![A-Za-z])/, f.key);
-                }
-            }
+        // L-1：只因 control_char 擋下的就是剩下「換頁＋dg」的 3 支（之前帶著壞公式通過）
+        assert.deepEqual(controlOnly.sort(), ['38d651f8', '85e979cf', 'aabdbb41']);
+        for (const k of controlOnly) {
+            for (const left of leftoverControls(byKey.get(k).fixed)) assert.equal(left, '\\fdg', k);
         }
-        // 變成通過的 2 支：「歸位＋circ」還原成 \circ 之後，原本被切斷的公式（bare_script／missing_rbrace）恢復正常
-        assert.deepEqual(flips.failToOk.sort(), ['8144b7b7', 'f241efa6']);
+        // L-3：還原出 \bullet／\textbf 的 6 支（之前 unknown_command 擋下）現在通過；「歸位＋circ」的 2 支照舊通過
+        for (const k of ['288f5abc', '42633f8b', '578ea572', 'fc040873', '7bdc13c6', 'c55a3ee6']) {
+            const { fixed, g1 } = byKey.get(k);
+            assert.ok(g1.ok, k);
+            assert.match(`${fixed.question_text}\n${fixed.answer_text}`, /\\(bullet|textbf)(?![A-Za-z])/, k);
+            assert.ok(flips.failToOk.includes(k), k);
+        }
+        for (const k of ['8144b7b7', 'f241efa6']) assert.ok(flips.failToOk.includes(k), k);
     });
 
     test('只改字閘門（utils/variantTextGate.js）：壞掉的 \\times／\\theta 讓 5 支「只換數字」的變式看起來改很多，修回後正確擋下', () => {
@@ -687,7 +700,8 @@ describe('回歸：Gemini 的 variant 87／verify 58（04e9bd3 以前錄的）',
         assert.deepEqual(tally(GEMINI.variant).commands, { '\\times': 20, '\\frac': 7, '\\theta': 4, '\\text': 3, '\\boldsymbol': 1 });
     });
 
-    test('Gemini 的真換行（variant 71 處、verify 120 處）一個都沒動；公式閘門 86 過／1 擋不變，帶壞公式卻通過的 10 支 → 0', () => {
+    // 〔Owner 第五輪 L-1〕修前帶控制字元的 11 支，現在修前就被 control_char 擋下（修前 86 → 76 過）；修後照舊 86 過／1 擋。
+    test('Gemini 的真換行（variant 71 處、verify 120 處）一個都沒動；公式閘門修前 76 過（L-1）→ 修後 86 過／1 擋，帶壞公式卻通過 0', () => {
         let nlBefore = 0;
         let nlAfter = 0;
         let passedWithCtrl = [0, 0];
@@ -707,8 +721,8 @@ describe('回歸：Gemini 的 variant 87／verify 58（04e9bd3 以前錄的）',
             if (g0.ok && repair.hasNonNewlineControl(c.data)) passedWithCtrl[0] += 1;
             if (g1.ok && repair.hasNonNewlineControl(fixed)) passedWithCtrl[1] += 1;
         }
-        assert.deepEqual(totals, { before: 86, after: 86 });
-        assert.deepEqual(passedWithCtrl, [10, 0]);
+        assert.deepEqual(totals, { before: 76, after: 86 });
+        assert.deepEqual(passedWithCtrl, [0, 0]);
     });
 });
 

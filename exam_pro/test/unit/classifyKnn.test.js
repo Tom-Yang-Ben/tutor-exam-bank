@@ -217,8 +217,12 @@ describe('kNN 短路接進節點', () => {
             subject: '數學', chapter: '空間向量內積', chapter_confidence: 0.95, question_text: QUESTION
         });
         assert.equal(outcome.data.source, 'gate');
-        assert.equal(outcome.data.chapter, '空間向量內積');
+        // 〔Owner 第五輪 LC-3 核准，2026-09-27〕閘門也套界線規則：題幹是二維坐標 (1,2)，「空間向量內積」改為「向量內積」，
+        // 仍記為閘門通過（原本這裡斷言閘門照抄「空間向量內積」）
+        assert.equal(outcome.data.chapter, '向量內積');
+        assert.deepEqual(outcome.data.adjustments.map(a => [a.rule, a.from, a.to]), [['dimension_plane', '空間向量內積', '向量內積']]);
         assert.equal(f.calls.queries.length, 0, '閘門過了就不該去查最近鄰');
+        assert.equal(f.calls.generateJson.length, 0);
     });
 
     test('KNN_VOTE_SIM 由 ctx.config.thresholds 決定（agent 不讀 process.env）', async () => {

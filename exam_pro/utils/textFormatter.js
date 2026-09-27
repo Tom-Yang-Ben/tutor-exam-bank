@@ -42,7 +42,10 @@ const SYMBOLS = {
 const EXTRA_SYMBOLS = {
     rightleftharpoons: '⇌', leftrightharpoons: '⇋', rightleftarrows: '⇄',
     uparrow: '↑', downarrow: '↓', updownarrow: '↕',
-    longrightarrow: '⟶', longleftarrow: '⟵', longleftrightarrow: '⟷'
+    longrightarrow: '⟶', longleftarrow: '⟵', longleftrightarrow: '⟷',
+    // 〔Owner 第五輪 L-3 核准，2026-09-27〕本機模型常寫的 \bullet（內積的點、度數），排成 U+2219 BULLET OPERATOR。
+    // 同樣只給 Word 匯出：不進 SYMBOLS，既有題目的 embed_text 不變（test/unit/formulaTables.test.js 釘住）。
+    bullet: '∙'
 };
 
 // \xrightarrow{上}、\xrightarrow[下]{上} 這一族：指令名 → 箭頭字元
@@ -597,6 +600,9 @@ function createParser(tokens, stopCJK, diag = null) {
             name === 'mathit' || name === 'operatorname' || name === 'mbox') {
             return parseArg();
         }
+        // 〔Owner 第五輪 L-3 核准，2026-09-27〕\textbf{…} 與 \mathbf 同樣只取內容（不另設粗體）。
+        // 只加在 Word 匯出的解析器：utils/embedText.js 不讀這裡，既有題目的 embed_text 不變。
+        if (name === 'textbf') return parseArg();
         // 〔stage5 WS-B〕mhchem 的 \ce{…}：本體還原成字串 → ceToLatex 轉成一般 LaTeX → 同一個解析器。
         // 子解析器的事件一律記在 \ce 這個指令的位置（使用者看得到的是 \ce，不是轉出來的中間字串）。
         if (name === 'ce' && tokens[pos] && tokens[pos].type === 'lbrace') {
@@ -852,7 +858,8 @@ const PARSER_COMMANDS = Object.freeze([
     'frac', 'dfrac', 'tfrac', 'sqrt', 'sum', 'int', 'lim', 'left', 'right',
     'mathrm', 'text', 'mathbf', 'mathit', 'operatorname', 'mbox', 'ce', 'prescript',
     'mathbb', 'mathcal', 'mathfrak', 'boldsymbol', 'hline', 'begin', 'end',
-    'matrix', 'pmatrix', 'bmatrix', 'cases', 'cr'
+    'matrix', 'pmatrix', 'bmatrix', 'cases', 'cr',
+    'textbf'   // 〔Owner 第五輪 L-3〕
 ]);
 
 let supportedNamesCache = null;

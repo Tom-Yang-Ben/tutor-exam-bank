@@ -440,6 +440,8 @@ verify 與 lint 的 cassette 鍵含題幹，還是會 replay miss。重錄時 ca
    補指令表只能一個一個補，這一條才是兜底：不管修復層認不認得，只要題幹裡還有換行以外的控制字元就擋下交給 lint 重寫。
    要擋就是在 `formulaLint` 的 `ISSUE_RULES` 後面加一條新規則。以 repo 內的 cassette 估：本機 variant 修後 47／13 → 44／16（剩下「換頁＋`dg`」那 3 支改成擋下）；Gemini variant 86／1 不變（剩下那支本來就被擋）。
    沒有在修正分支裡直接做：這是閘門的政策（新 rule 名一旦定案就會進 `job_events.detail` 與 `report:jobs`、不能再改；本機模式下每擋一支就多一次 lint 重寫的時間），由老師決定。
+   〔Owner 2026-09-27 選 L-1＝1〕已落實於 `dec/r6-gates`：rule 名 `control_char`；實測本機 47／13 → 44／16、Gemini 86／1 不變（與 L-3 一起是 50／10）；詳見 [`local-mode.md`](local-mode.md) 10.16 第 1 點。
 2. **prompt 要求模型在 JSON 裡把反斜線寫兩次**：從源頭減少（尤其 `\circ`、`\cdot`、`\sqrt` 這種會被文法換字母、事後救不回來的）。改 prompt ＝ 模板雜湊變 ＝ 對應 agent 的 cassette 全部重錄。
 3. **解析器支援 `\bullet`、`\textbf`**：上面 4 支由通過變擋下的就會回到通過（`\bullet` 的原意多半是內積的點或度數，不一定該照字面排）。要加在 `EXTRA_SYMBOLS` 這類只給 Word 匯出用的表，不要加進 `SYMBOLS`（會改到既有題目的 `embed_text`）。
+   〔Owner 2026-09-27 選 L-3＝1〕已落實於 `dec/r6-gates`：`\bullet` 進 `EXTRA_SYMBOLS`（U+2219）、`\textbf` 是 `parseCommand` 特判，`UNSUPPORTED_LATEX_COMMANDS` 移出這兩個；既有題目的 `embed_text` 不變（有測試）。實測回到通過的是 6 支（上面 4 支，加上修復前就被擋的 `7bdc13c6`、`c55a3ee6`）；詳見 [`local-mode.md`](local-mode.md) 10.16 第 2 點。
 4. **`latexRepair` 摘要還沒進 `job_events`**：現在只在 `generateJson` 的回傳物件上，runner 沒有記。要追蹤「哪個模型、哪個節點最常被修」時再接。

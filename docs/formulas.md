@@ -74,6 +74,7 @@ $$\begin{array}{|c|c|c|c|c|c|}
 | `dollar_before_script`、`dollar_before_rbrace` | error | `$X$^{n}`、`…$}` 這類錯位 |
 | `unknown_command`、`missing_rbrace`、`parser_error`、`tokenize_error`、`empty_fallback`、`bare_script` | error | 真的跑一次 Word 轉換器得到的事件（`parseLatexStrict`；六種事件凍結於 `docs/interfaces-stage2.md` §4.3） |
 | `slash_fraction`、`unicode_math`、`latex_without_dollar`、`bare_script_text` | warn | 建議改寫，不擋入庫 |
+| `control_char` | error | 換行以外的控制字元（U+0000–U+001F、U+007F；`\r\n` 的歸位不算）。多半是 LaTeX 反斜線被 JSON 吃掉（`\frac` → 換頁＋`rac`），Word 會把它刪掉或當空白。2026-09-27 加（Owner 第五輪 L-1 核准，[`local-mode.md`](local-mode.md) 10.16） |
 
 ## 5. 2026-09-15 全庫健檢結果
 

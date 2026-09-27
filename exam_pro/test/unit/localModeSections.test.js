@@ -32,11 +32,14 @@ describe('docs/local-mode.md 10.12～10.15（整合 r5、final5 改號）', () =
 
     test('四個標題依併入順序各出現一次：10.12 OCR 為主、10.13 餘弦門檻、10.14 拆題以外的時間、10.15 classify／nlq 重錄前修正', () => {
         const heads = [...doc.matchAll(/^### (10\.1[2-9]) (.*)$/gm)].map(m => [m[1], m[2]]);
-        assert.deepEqual(heads.map(h => h[0]), ['10.12', '10.13', '10.14', '10.15'], JSON.stringify(heads));
+        // 〔dec/r6-gates 2026-09-27〕第五輪各組在末尾新增的節先寫 10.16（整合時再重編）；前四節不變
+        assert.deepEqual(heads.map(h => h[0]).slice(0, 4), ['10.12', '10.13', '10.14', '10.15'], JSON.stringify(heads));
+        assert.ok(heads.slice(4).every(h => h[0] === '10.16' && /^第五輪 /.test(h[1])), JSON.stringify(heads));
         assert.match(heads[0][1], /只用 OCR 拆題/);
         assert.match(heads[1][1], /三個餘弦門檻/);
         assert.match(heads[2][1], /拆題以外的時間/);
         assert.match(heads[3][1], /classify／nlq 重錄前修正/);
+        assert.ok(heads.some(h => h[0] === '10.16' && h[1] === '第五輪 C 閘門與計分（2026-09-27）'), JSON.stringify(heads));
         const i12 = doc.indexOf('### 10.12 '), i13 = doc.indexOf('### 10.13 '), i14 = doc.indexOf('### 10.14 '), i15 = doc.indexOf('### 10.15 ');
         assert.ok(i12 < i13 && i13 < i14 && i14 < i15, '依編號排列');
         assert.equal(/^<{7}|^={7}$|^>{7}/m.test(doc), false, '沒有殘留的衝突標記');

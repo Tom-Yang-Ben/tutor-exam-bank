@@ -265,4 +265,17 @@ describe('nlq：2026-09-25 的原始回應（llm 欄 8 句）', () => {
         assert.equal(rate, 0.75);
         assert.ok(rate >= th.filters_exact, '同一份回答時達到門檻，但只多 1 句的餘裕（再錯 1 句就是 0.625）');
     });
+
+    // 〔Owner 第五輪 LC-4 核准，2026-09-27〕放寬計分（eval:nlq 實際用的，帶 expectPath）：nlq-036 回的是期望外的〔直線運動〕，
+    // 放寬後照樣算錯；這一份回答的分數仍是 6/8，放寬沒有改變反事實量測。
+    test('放寬計分（LC-4）下同一份回答仍是 6/8：nlq-036 回〔直線運動〕不在期望內，照樣錯', async () => {
+        const wrong = [];
+        for (const e of golden) {
+            const parsed = await nlq.parseOnly({ query: e.query, llm: fakeLlm(), noCache: true, logger: { info() {}, warn() {}, error() {} } });
+            const cmp = filtersExact(e.expect, parsed.filters, { expectPath: e.expect_path });
+            if (!cmp.ok) wrong.push(e.id);
+            if (e.id === 'nlq-036') assert.equal(cmp.lenient, true);
+        }
+        assert.deepEqual(wrong, ['nlq-036', 'nlq-042']);
+    });
 });

@@ -40,6 +40,8 @@
 //   在相鄰兩章之間換章（A5 的指數／對數分冊、平面／空間、靜電學／電場與電位、K2 的一維／二維相對速度、
 //   自由落體的數值題）。後處理在 generateJson 之後，**不進 cassette 的鍵**：模板、schema、cacheKeyParts 一個字都沒動，
 //   classify.v2 的版號不變；回放照樣吃得到後處理（改規則不必重錄）。
+// 〔Owner 第五輪 LC-3 核准，2026-09-27，dec/r6-gates〕同一套界線規則也套在第一層零成本閘門：拆題模型給的章
+//   規則判定要換時直接改章，仍記為閘門通過（source='gate'），data 多一個 adjustments。不呼叫 LLM、不動任何 cassette 的鍵。
 
 const { CHAPTERS, SUBJECTS, isValidChapter, isValidSubject } = require('../config/chapters');
 const { getChapterExample } = require('../config/chapterExamples');
@@ -258,7 +260,8 @@ function invalidChapterFeedback(subject, value) {
  *   ① 名稱容錯（canonicalChapter 已在呼叫端做完，這裡只記錄）；
  *   ② 相鄰兩章的界線：題幹有 Owner 規則寫明的證據時（A5 的底數、K2 的一維相對速度…），把模型挑的章換成另一章。
  * 換過章時 rationale 前面加一句說明（複核的人才看得懂為什麼理由寫的是另一章），並回傳 adjustments。
- * 只套在第二層（source='llm'）：零成本閘門與 kNN 投票照舊（kNN 的票來自人工標籤，不該被字面規則推翻）。
+ * 套在第二層（source='llm'）與零成本閘門（〔Owner 第五輪 LC-3〕閘門的接線在 run() 裡，只用界線規則、不做名稱容錯——
+ * 閘門的章本來就要在白名單內）；kNN 投票照舊不套（kNN 的票來自人工標籤，不該被字面規則推翻）。
  * @param {string} subject
  * @param {unknown} rawChapter 模型原本回的字串
  * @param {string} chapter 名稱容錯後的白名單章名
@@ -527,12 +530,29 @@ async function run(ctx, input = {}) {
         const confidence = Number(input.chapter_confidence);
         const confidenceUsable = Number.isFinite(confidence) && confidence > 0;
         if (isValidChapter(subject, input.chapter) && confidenceUsable && confidence >= minConf) {
+            const rationale = `拆題模型給的章節在白名單內，且信心 ${confidence} ≥ ${minConf}，零成本閘門直接採用。`;
+            // 〔Owner 第五輪 LC-3 核准，2026-09-27〕第二層的相鄰兩章界線規則也套在閘門上：規則只看題幹，
+            // 與章節是哪個模型猜的無關。規則判定要換章時直接改章，仍記為閘門通過（source 'gate'、不呼叫 LLM），
+            // 附上 adjustments；沒換的題 outcome.data 與改版前逐鍵相同。
+            const hit = boundaryTarget(input.chapter, questionText);
+            if (hit && isValidChapter(subject, hit.to)) {
+                return {
+                    kind: 'pass',
+                    data: {
+                        chapter: hit.to,
+                        confidence,
+                        rationale: `〔界線規則：拆題模型給「${input.chapter}」，依題幹的「${hit.evidence}」改為「${hit.to}」〕${rationale}`,
+                        source: 'gate',
+                        adjustments: [{ rule: hit.rule, from: input.chapter, to: hit.to, evidence: hit.evidence }]
+                    }
+                };
+            }
             return {
                 kind: 'pass',
                 data: {
                     chapter: input.chapter,
                     confidence,
-                    rationale: `拆題模型給的章節在白名單內，且信心 ${confidence} ≥ ${minConf}，零成本閘門直接採用。`,
+                    rationale,
                     source: 'gate'
                 }
             };

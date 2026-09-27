@@ -300,12 +300,64 @@ describe('agents/classify.js：第二層的章節後處理', () => {
         assert.match(failed.feedback, /^「「平面向量」」不在白名單內/);
     });
 
-    test('零成本閘門不套用（拆題模型給的章照舊直接採用；見決策草稿 LC-3）', async () => {
+    // 〔Owner 第五輪 LC-3 核准，2026-09-27，dec/r6-gates〕原本這裡釘的是「零成本閘門不套用」；Owner 選 2 之後改成套用。
+    test('零成本閘門也套界線規則：規則判定要換章 → 直接改章、仍是閘門通過（source gate、不呼叫 LLM）、附 adjustments', async () => {
         const { ctx, calls } = classifyCtx({});
         const outcome = await classify.run(ctx, { subject: '數學', chapter: '指數與對數', chapter_confidence: 0.9, question_text: '求 $\\log_{7} 49$ 的值。' });
+        assert.equal(outcome.kind, 'pass');
         assert.equal(outcome.data.source, 'gate');
-        assert.equal(outcome.data.chapter, '指數與對數');
+        assert.equal(outcome.data.chapter, '指數函數與對數函數');
+        assert.equal(outcome.data.confidence, 0.9, '信心照拆題模型給的');
+        assert.deepEqual(outcome.data.adjustments, [{ rule: 'exp_log_third', from: '指數與對數', to: '指數函數與對數函數', evidence: '\\log_{7}' }]);
+        assert.equal(outcome.data.rationale,
+            '〔界線規則：拆題模型給「指數與對數」，依題幹的「\\log_{7}」改為「指數函數與對數函數」〕拆題模型給的章節在白名單內，且信心 0.9 ≥ 0.8，零成本閘門直接採用。');
         assert.equal(calls.length, 0);
+    });
+
+    test('零成本閘門：規則沒觸發的題 outcome.data 與改版前逐鍵相同（沒有 adjustments）', async () => {
+        const { ctx, calls } = classifyCtx({});
+        const outcome = await classify.run(ctx, { subject: '數學', chapter: '指數與對數', chapter_confidence: 0.9, question_text: '已知 $\\log 2 = 0.3010$，求 $2^{20}$ 是幾位數。' });
+        assert.deepEqual(outcome.data, {
+            chapter: '指數與對數', confidence: 0.9,
+            rationale: '拆題模型給的章節在白名單內，且信心 0.9 ≥ 0.8，零成本閘門直接採用。', source: 'gate'
+        });
+        assert.equal(calls.length, 0);
+    });
+
+    test('零成本閘門沒過（信心不足）的題照舊走第二層，後處理照舊只由第二層做一次', async () => {
+        const { ctx, calls } = classifyCtx({ chapter: '指數與對數', confidence: 0.95, rationale: 'r' });
+        const outcome = await classify.run(ctx, { subject: '數學', chapter: '指數與對數', chapter_confidence: 0.5, question_text: '求 $\\log_{7} 49$ 的值。' });
+        assert.equal(outcome.data.source, 'llm');
+        assert.equal(outcome.data.chapter, '指數函數與對數函數');
+        assert.equal(outcome.data.adjustments.length, 1);
+        assert.equal(calls.length, 1);
+    });
+
+    test('不誤觸（local_v1_counterfactual --gate）：golden 92 題以正確的章走閘門一題都不改；以 2026-09-25 的回答代用時 77 → 90 對、改錯 0', async () => {
+        const { gateCounterfactual } = require('../../eval/tools/local_v1_counterfactual');
+        const raw = JSON.parse(fs.readFileSync(path.join(ROOT, 'eval', 'fixtures', 'local_raw_2026-09-25.json'), 'utf8'));
+        const g = await gateCounterfactual(raw);
+        assert.equal(g.golden.n, 92);
+        assert.deepEqual(g.golden.misfires, []);
+        assert.deepEqual(g.golden.notGate, []);
+        assert.equal(g.proxy.n, 92);
+        assert.deepEqual(g.proxy.notGate, []);
+        assert.equal(g.proxy.rawCorrect, 77);
+        assert.equal(g.proxy.gateCorrect, 90);
+        assert.equal(g.proxy.fixed.length, 13);
+        assert.deepEqual(g.proxy.broken, []);
+    });
+
+    test('不誤觸：fixture 62 題以自己的章走閘門，一題都不改', async () => {
+        const fixtureQs = JSON.parse(fs.readFileSync(path.join(ROOT, 'eval', 'fixtures', 'questions.public.json'), 'utf8')).questions;
+        const { ctx } = classifyCtx({});
+        for (const q of fixtureQs) {
+            const outcome = await classify.run(ctx, { subject: q.subject, chapter: q.chapter, chapter_confidence: 1, question_text: q.question_text });
+            if (outcome.data && outcome.data.source === 'gate') {
+                assert.equal(outcome.data.chapter, q.chapter, q.id);
+                assert.equal(outcome.data.adjustments, undefined, q.id);
+            }
+        }
     });
 
     test('化學題：界線規則全是數學／物理的章，不會動到化學', async () => {
