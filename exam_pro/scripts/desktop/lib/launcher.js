@@ -29,7 +29,8 @@ function summarize(patch) {
 /**
  * 啟動前就知道的事實（launch.js 與測試共用）。純函式。
  *   configWarnings：data/launcher/config.json 讀不懂的地方；
- *   listen：只在 HOST 只聽某個區網位址（supported:false）時放進來，plan.nextAction 一開始就報 host-unsupported
+ *   listen：只在 HOST 只聽 localhost 連不到的位址（區網位址、127.0.0.1 以外的 127.x；supported:false）時放進來，
+ *           plan.nextAction 一開始就報 host-unsupported
  *           （〔Owner 第六輪 DA-11＝1〕後端改聽 HOST、預設 127.0.0.1；probes.listenFromEnv）。
  * @param {{configWarnings?:string[], listen?:{host:string, scope?:string, supported:boolean}|null}} [o]
  */

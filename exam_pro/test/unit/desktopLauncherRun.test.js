@@ -165,6 +165,19 @@ describe('HOST（後端聽的位址）', () => {
         const check = r.finalState.steps.find(s => s.id === 'check');
         assert.equal(check.state, 'error');
     });
+
+    // 〔審查 dec/r7-decisions-host〕原本 127.0.0.0/8 整段都算支援：HOST=127.0.0.2 時健康檢查連 127.0.0.2 判定成功，
+    // app 視窗（http://localhost:3000/）卻打不開。現在與區網位址一樣一開始就停下說明。
+    test('HOST=127.0.0.2（127.0.0.1 以外的 127.x）→ 同樣報 host-unsupported，不做健康檢查、不起後端', async () => {
+        const r = await launch({}, { env: { HOST: '127.0.0.2' } });
+        assert.equal(r.result.action.type, 'fail');
+        assert.equal(r.result.action.code, 'host-unsupported');
+        assert.deepEqual(r.steps, ['open-status-window']);
+        assert.deepEqual(healthUrls(r), []);
+        assert.deepEqual(serverSpawns(r.world), []);
+        assert.match(r.result.action.message, /HOST 是「127\.0\.0\.2」/);
+        assert.match(r.result.action.message, /localhost 只對應 127\.0\.0\.1 與 ::1/);
+    });
 });
 
 describe('冷開機：什麼都沒開', () => {

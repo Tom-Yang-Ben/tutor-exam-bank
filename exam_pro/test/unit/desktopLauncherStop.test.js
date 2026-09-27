@@ -61,6 +61,12 @@ describe('關閉：先認清楚 3000 埠上是誰', () => {
         assert.equal(r.posts.length, 0);
         assert.match(r.world.popups[0].text, /HOST 是「192\.168\.1\.10」/);
         assert.match(r.world.popups[0].text, /Ctrl\+C/);
+        assert.match(r.world.popups[0].text, /支援：不寫、127\.0\.0\.1、localhost、::1、0\.0\.0\.0、::/);
+        // 〔審查 dec/r7-decisions-host〕127.0.0.1 以外的 127.x 也不支援（app 視窗的 localhost 連不到）
+        const lo2 = await stop({ health: 'ours', db: true, launcherStatus: launcher() }, { env: { HOST: '127.0.0.2' } });
+        assert.equal(lo2.out.result, 'host-unsupported');
+        assert.equal(lo2.world.calls.filter(c => c.kind === 'request').length, 0);
+        assert.equal(lo2.posts.length, 0);
         const wild = await stop({ health: 'ours', db: true, launcherStatus: launcher() }, { env: { HOST: '0.0.0.0' } });
         assert.notEqual(wild.out.result, 'host-unsupported');
         assert.ok(wild.world.calls.filter(c => c.kind === 'request').every(c => c.url.startsWith('http://127.0.0.1:3000/')));

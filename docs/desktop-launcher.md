@@ -5,6 +5,7 @@
 > 〔2026-09-27，分支 `dec/desktop-launcher-fix`〕依審查修正：瀏覽器、Docker Desktop、Ollama 與訊息框的視窗不再被藏起來（7.2）；後端聽不了連接埠時會說出原因並結束，不再變成看不到的背景程序（7.3、DL-5）；錄製中的背景工作可以設定暫停（DL-4）；健康檢查加上限流（7.3）；log 的找法（第 5 節）；VBScript 淘汰的風險（7.6）。
 > 〔2026-09-27，分支 `dec/desktop-launcher-fix2`〕更正「關閉後沒跑完的工作會怎樣」：原本寫「從那一步重跑、已完成的不會重做」，只對**單題的檢查**成立；**整份卷的拆題、變式生成**是整份一件工作，下次開啟會從頭再跑一次（第 4 節、7.3、DL-1；依據 `workers/jobRunner.js`）。
 > 〔2026-09-27，分支 `dec/r7-decisions-host`〕**Owner 第六輪決策已答**（第 8 節就地加註）：DL-1＝1 每次問、DL-2＝1 關視窗不停後端、DL-3＝1 都不關、DL-5＝1 保留聽埠失敗即結束，這四題就是原本的行為，程式不改；**DL-4＝2**：`jobsWhileRecording` 的預設從 `run` 改成 `pause`（錄製中開的後端暫停背景工作；第 6 節、7.1）。另依設計稿的 **DA-11＝1**，後端改聽 `.env` 的 `HOST`、**預設 `127.0.0.1`**，啟動器照它決定連哪個位址（第 5、6 節、7.3）。一覽表在 `docs/HANDOFF.md` §0.00d。
+> 〔2026-09-27，分支 `dec/r7-decisions-host-fix`〕依審查修正：`HOST` 寫成 `127.0.0.1` 以外的 `127.x` 時，原本健康檢查連得到、判定成功，app 視窗的 `http://localhost` 卻打不開；現在和區網位址一樣一開始就停下說明（第 5、6 節）。舊範本複製成的 `config.json` 裡的 `"jobsWhileRecording": "run"` 會蓋過新預設（第 6 節）。改綁 `127.0.0.1` 之後，同一個埠的衝突在 Windows 上不一定報 `EADDRINUSE`〔要實測〕（7.3 節最後一點）。
 
 ## 1. 這是什麼
 
@@ -92,7 +93,7 @@
 | 資料庫容器啟動失敗 | 多半是 5442／5433 埠被本機的 PostgreSQL 佔用；雙擊 `exam_pro\啟動資料庫.bat` 看完整訊息 |
 | 錄製進行中，而且資料庫連不上 | 偵測到 `record_local.bat` 在跑：啟動器不動 Docker 與資料庫。等錄完再點圖示 |
 | 注意事項：偵測到本機重錄正在執行…這次開的後端暫停背景工作 | 〔DL-4 選 2，預設〕系統可以照常用，但上傳的考卷只會排隊、不會開始拆。錄完後點「關閉出題系統」、再點「出題系統」，排隊的工作就會開始 |
-| .env 的 HOST 設定讓啟動器連不到後端 | `exam_pro\.env` 的 `HOST` 寫成某一個區網位址（例 `192.168.1.23`）：後端只聽那個位址，這台電腦的 `localhost` 連不到。只給這台電腦用就刪掉 `HOST` 那一行（預設 `127.0.0.1`）；要讓平板連進來就寫 `HOST=0.0.0.0`，並照 `exam_pro\README.md`「區網存取」設定防火牆與 `ALLOWED_ORIGINS` |
+| .env 的 HOST 設定讓啟動器連不到後端 | `exam_pro\.env` 的 `HOST` 寫成某一個區網位址（例 `192.168.1.23`），或 `127.0.0.1` 以外的 `127.x`：後端只聽那個位址，app 視窗的 `http://localhost` 連不到（`localhost` 只對應 `127.0.0.1` 與 `::1`）。只給這台電腦用就刪掉 `HOST` 那一行（預設 `127.0.0.1`）；要讓平板連進來就寫 `HOST=0.0.0.0`，並照 `exam_pro\README.md`「區網存取」設定防火牆與 `ALLOWED_ORIGINS` |
 | 後端啟動後立刻結束 | 紅框裡有 log 最後幾行；多半是 `.env` 的設定矛盾，照訊息改好再點圖示 |
 | 注意事項：Ollama 沒有在執行…拆題會失敗 | 從開始選單開 Ollama；右下角出現羊駝圖示後拆題就恢復，**不必重開系統** |
 | 注意事項：Ollama 還沒下載這些模型 | 雙擊 `exam_pro\scripts\windows\setup_local_ai.bat` |
@@ -105,7 +106,7 @@
 
 要改才建立 **`exam_pro\data\launcher\config.json`**（範本：`exam_pro\scripts\desktop\config.example.json`，複製過去、只留要改的那幾行）。寫錯的那一項會用預設值，並在啟動畫面的注意事項裡說明。系統本身的設定（埠、資料庫、模型、`OLLAMA_HOST`、`API_KEY`）一律照 `exam_pro\.env`，這裡不重複。
 
-〔2026-09-27，DA-11＝1〕後端聽的位址也在 `exam_pro\.env`：`HOST`，**不寫＝`127.0.0.1`**（只接受這台電腦的連線）。啟動器與關閉捷徑照它決定連哪裡：不寫、`127.0.0.1`、`0.0.0.0`、`::` → 連 `127.0.0.1`；`localhost`、`::1` → 照原值連。`HOST` 寫成某一個區網位址時，這台電腦的 `localhost` 連不到後端、app 視窗也開不起來，啟動器一開始就停下說明（第 5 節），不去開一個自己連不到的後端。app 視窗的網址照舊是 `http://localhost:<埠>/`。
+〔2026-09-27，DA-11＝1〕後端聽的位址也在 `exam_pro\.env`：`HOST`，**不寫＝`127.0.0.1`**（只接受這台電腦的連線）。啟動器與關閉捷徑照它決定連哪裡：不寫、`127.0.0.1`、`0.0.0.0`、`::` → 連 `127.0.0.1`；`localhost`、`::1` → 照原值連。`HOST` 寫成其他值（某一個區網位址，或 `127.0.0.1` 以外的 `127.x`）時，app 視窗的網址 `http://localhost:<埠>/` 連不到後端，啟動器一開始就停下說明（第 5 節），不去開一個開不了畫面的後端。app 視窗的網址照舊是 `http://localhost:<埠>/`（`localhost` 只對應 `127.0.0.1` 與 `::1`）。
 
 | 設定 | 預設 | 說明 |
 | :--- | :--- | :--- |
@@ -129,6 +130,8 @@
 
 偵測到本機重錄正在執行時，就算設了 `stopDocker`／`stopOllama` 也不會關（錄製要用測試庫與 Ollama）。
 
+〔2026-09-27，DL-4 審查〕`jobsWhileRecording` 的新預設 `pause` 只在 `config.json` **沒寫這一項**時生效。之前把舊範本（當時寫 `"run"`）整份複製成 `config.json` 的話，裡面的 `"jobsWhileRecording": "run"` 會繼續蓋過新預設：打開 `exam_pro\data\launcher\config.json`，把這一行刪掉（或改成 `"pause"`）。沒有這個檔案就什麼都不用做。
+
 app 視窗用**獨立的瀏覽器設定檔**：不影響平常用的 Edge（書籤、登入、擴充功能都分開，平常的 Edge 開著也沒關係）。Word 檔照樣下載到「下載」資料夾；視窗大小與縮放比例會被記住。
 
 ## 7. 給維護者：運作細節
@@ -146,7 +149,7 @@ app 視窗用**獨立的瀏覽器設定檔**：不影響平常用的 Edge（書�
 
 順序：（〔DA-11〕`.env` 的 `HOST` 只聽某個區網位址 → 開啟動畫面報 `host-unsupported`，後面都不做）→ 健康檢查（已在跑且資料庫正常 → 直接開 app 視窗）→ 啟動畫面 → `.env`／`node_modules`／`DATABASE_URL` → 錄製偵測 → 資料庫（連得上就不碰 Docker；錄製中又連不上 → 報錯、不動 Docker；否則 `docker info` →（需要時）開 Docker Desktop、輪詢就緒 → `docker compose up -d --wait` → 等資料庫）→ Ollama（`.env` 的模型有 `ollama:` 才做；失敗只警告）→ migration（只讀、只提示）→ 背景啟動 `node server.js` → 等健康檢查 → 啟動頁轉到系統首頁。
 
-- **後端聽的位址**（〔DA-11＝1〕）：`server.js` 聽 `.env` 的 `HOST`，預設 `127.0.0.1`（`config/listenHost.js`）。`lib/probes.js` 的 `listenFromEnv` 用同一支判斷健康檢查與關閉通道要連哪個位址（`probes.base`）；只聽某個區網位址時 `supported:false`，`launcher.initialFacts` 把它放進 `facts.listen`，`plan.nextAction` 一開始就報 `host-unsupported`；關閉捷徑同樣不送任何請求、只跳說明（`stopper.js`）。啟動器從不改後端的 `HOST`：後端與 `npm start` 同樣自己讀 `.env`。
+- **後端聽的位址**（〔DA-11＝1〕）：`server.js` 聽 `.env` 的 `HOST`，預設 `127.0.0.1`（`config/listenHost.js`）。`lib/probes.js` 的 `listenFromEnv` 用同一支判斷健康檢查與關閉通道要連哪個位址（`probes.base`）；只聽 `localhost` 連不到的位址（某個區網位址，或 `127.0.0.1` 以外的 `127.x`）時 `supported:false`，`launcher.initialFacts` 把它放進 `facts.listen`，`plan.nextAction` 一開始就報 `host-unsupported`；關閉捷徑同樣不送任何請求、只跳說明（`stopper.js`）。啟動器從不改後端的 `HOST`：後端與 `npm start` 同樣自己讀 `.env`。
 - **後端怎麼開**：`spawn(node.exe, [server.js], {detached:true, windowsHide:true})`，stdout／stderr 附加到 `data\logs\server-日期.log`（以啟動那天命名，之後不換檔；實際路徑記在 `server.json` 的 `logFile`）。環境＝啟動器自己的環境（與在命令提示字元 `npm start` 相同，後端照舊自己讀 `.env`）**只多一個** `LAUNCHER_CONTROL_TOKEN`（64 個十六進位字元的一次性權杖），同一份寫進 `data\launcher\server.json`。
 - **錄製偵測**：PowerShell `Get-CimInstance Win32_Process` 列出 node／cmd 的命令列，看有沒有 `record_local.bat`、`cassettes:rerecord`、`rerecord_all.js`、`eval:record`、`record_embeddings.js`、`record_cassettes.js`（`lib/windows.js` 的 `RECORDING_PATTERNS`）。重錄工具本身沒有鎖檔，所以不改它、只看程序。錄製中：資料庫本來就開著 → 照常起後端（它用 5442 的開發庫，錄製用 5433 的測試庫）；〔Owner 2026-09-27 DL-4 選 2〕**預設 `jobsWhileRecording:"pause"`：以 `JOB_RUNNER=off` 起後端**（背景工作暫停，`server.json` 記 `jobsPaused:true`，`server-日期.log` 的開頭那行也寫明），注意事項說明錄完後怎麼恢復；Owner 把它改成 `"run"` 時照常跑背景工作，注意事項改說**佇列裡已有的背景工作一起來就會開跑**、和錄製搶 CPU 與記憶體、怎麼改回 `pause`；資料庫沒開 → 報錯，不執行 `docker compose`（避免重建到 tmpfs 的測試庫）。讀不到程序清單 → 不當成錄製中，但加一條注意事項。
 - **Ollama 需不需要**：`lib/models.js` 依 `.env` 算各角色實際的模型（與 `config/models.js` 同一條預設與退回鏈，單元測試逐一比對），有任何一個會用到的是 `ollama:` 才需要。`LOCAL_EXTRACT_MODE=ocr`（預設）不要求看圖模型。`OLLAMA_HOST` 指向別台電腦時不去開本機的 Ollama。
@@ -206,6 +209,11 @@ app 視窗用**獨立的瀏覽器設定檔**：不影響平常用的 Edge（書�
 - 現在 callback 收到錯誤就在 stderr 印出錯誤碼、Node 原本的訊息（例：`listen EADDRINUSE: address already in use 127.0.0.1:3000`；〔DA-11〕之前沒指定位址時是 `:::3000`）與處理方式（`EACCES` 時提示 `netsh … excludedportrange`），寫完再以結束碼 1 結束（Windows 主控台的 stderr 是非同步的，直接 `process.exit` 可能截掉訊息）。`npm start` 也一樣；正常啟動的行為不變。
 - 由 `desktopServerListen.test.js` 真的執行 `server.js` 驗證：埠被佔用 → 結束碼 1、印 `EADDRINUSE`；埠空著 → 照印「成功安全啟動」。
 - 〔DA-11＝1〕`HOST` 寫成這台電腦沒有的位址（`EADDRNOTAVAIL`）或查不到的名稱（`ENOTFOUND`）時，說明改成刪掉 `HOST`（只給本機）或 `HOST=0.0.0.0`（區網）。同一支測試真的執行 `server.js` 驗證：沒寫 `HOST` → 只聽 `127.0.0.1`（這台電腦的區網位址連不到）；`HOST=0.0.0.0` → 區網位址也連得到；`.env` 的 `HOST` 讀得到、系統環境變數優先。連真的資料庫的版本在 `test/integration/listenHost.pg.test.js`。
+- 〔要實測；審查 `dec/r7-decisions-host`〕**同一個埠已經有別的程式在聽時，改綁 `127.0.0.1` 之後不一定報 `EADDRINUSE`**：
+  - Windows 的 Winsock 相容例外：沒設 `SO_EXCLUSIVEADDRUSE` 時，別的程式已經聽 `0.0.0.0:3000`，新的程式照樣綁得上 `127.0.0.1:3000`（微軟〈Using SO_REUSEADDR and SO_EXCLUSIVEADDRUSE〉的表格：先以預設選項綁萬用位址、再以預設選項綁特定位址 → Success）。Node 用的 libuv 在 Windows 上兩個選項都不設（`src/win/tcp.c` 的註解）。Linux 上同樣的情況會報 `EADDRINUSE`，所以 `desktopServerListen` 測不出這個差異。
+  - 別的程式只聽 IPv6（`[::1]:3000`，或只收 IPv6 的 `[::]:3000`）時，綁 `127.0.0.1:3000` 在任何作業系統都不衝突；瀏覽器開 `localhost` 先試 `::1`，就會連到那個程式。
+  - 啟動器開後端之前先問 `127.0.0.1:3000`：對方聽 `0.0.0.0` 或雙堆疊的 `[::]` 時會回應，被認成「埠被佔用」，所以第一種擋得住；只聽 IPv6 的第二種擋不住。直接 `npm start` 兩種都擋不住。
+  - 這次沒有加自動檢查（Linux 的測試重現不了 Winsock 的行為）。要補強時，在後端起來之後用 netstat（`probes.describePort` 同一套解析）找同一個埠上的其他 PID，有就當成埠衝突。Owner 端的症狀與查法在 `docs/desktop-app-design.md` 10.5 節第 4 點。
 
 ### 7.4 不影響既有行為
 

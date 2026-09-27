@@ -10,7 +10,8 @@
 //   2. 總記憶體、可用、使用中、認可（Win32_OperatingSystem、Win32_PerfFormattedData_PerfOS_Memory）；
 //   3. vmmem／VmmemWSL（WSL 虛擬機）、Docker Desktop、Ollama、node、python 各程序的記憶體（Get-Process）；
 //   4. Docker 容器各自的記憶體（docker stats --no-stream；Docker 沒開就記「沒在執行」）；
-//      Ollama 已載入的模型（GET /api/ps）；
+//      Docker 看到的總記憶體（docker info --format {{.MemTotal}}＝WSL 虛擬機的記憶體；和 .wslconfig 的 memory 比，
+//      是「上限生效了沒」的直接證據）；Ollama 已載入的模型（GET /api/ps）；
 //   5. 有沒有本機重錄正在跑（與桌面啟動器同一套程序比對，lib/windows.js 的 RECORDING_PATTERNS）；
 //   6. wsl --version、wsl -l -v（版本與各發行版是否在跑；這兩個指令不會啟動或停止 WSL）；
 //   7. Smart App Control：Get-MpComputerStatus 的 SmartAppControlState，以及登錄
@@ -69,6 +70,9 @@ const PS_MEMORY_SCRIPT = [
 /** 登錄 VerifiedAndReputablePolicyState 的值 → 狀態 */
 const SAC_REG_STATES = Object.freeze({ 0: '關閉', 1: '開啟', 2: '評估模式' });
 
+/** docker info 只取這一個欄位（位元組；Docker Desktop 的 WSL 2 後端＝WSL 虛擬機的總記憶體） */
+const DOCKER_MEM_ARGS = Object.freeze(['info', '--format', '{{.MemTotal}}']);
+
 // ─────────────────────────── 純函式 ───────────────────────────
 
 /**
@@ -101,6 +105,20 @@ function parseWslconfig(text) {
         (out[section] = out[section] || {})[kv[1].trim().toLowerCase()] = kv[2];
     }
     return out;
+}
+
+/**
+ * .wslconfig 的大小寫法 → 位元組（1024 進位；沒寫單位＝位元組，WSL 的規則）。看不懂回 null。純函式。
+ * 例：3GB、3 GB、3072MB、3G、3221225472
+ * @param {string|undefined|null} value
+ * @returns {number|null}
+ */
+function parseSizeBytes(value) {
+    const m = String(value === undefined || value === null ? '' : value).trim().match(/^(\d+(?:\.\d+)?)\s*([KMGT]?)B?$/i);
+    if (!m) return null;
+    const pow = { '': 0, K: 1, M: 2, G: 3, T: 4 }[m[2].toUpperCase()];
+    const n = Number(m[1]) * 1024 ** pow;
+    return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 /** 位元組 → 「2.41 GB」 */
@@ -186,13 +204,49 @@ function formatReport(report) {
     L.push('', '[WSL 虛擬機（vmmem／VmmemWSL）]');
     if (vm.length) {
         L.push(...describe(vm).map(s => `  ${s}`));
-        const started = vm.map(p => p.StartTime).filter(Boolean).sort()[0];
-        if (started) L.push(`  虛擬機啟動時間：${started}`);
-        if (started && ps.wslconfigWritten && ps.wslconfigWritten > started) {
-            L.push('  注意：.wslconfig 在虛擬機啟動之後才改過，新設定還沒生效（要在沒有重錄、沒有上傳時 wsl --shutdown 再開 Docker，見 docs/desktop-app-design.md 第 10 節）');
+        // 〔審查 dec/r7-decisions-host〕讀不到啟動時間（一般權限可能打不開 vmmem 這類程序）時要明寫無法判斷，
+        // 不可以什麼都不印：10.2 第 9 步原本把「沒出現『還沒生效』」當成生效的證據。直接證據改看下面 docker info 的 MemTotal。
+        const startedList = vm.map(p => ({ raw: p.StartTime, ms: Date.parse(p.StartTime) })).filter(x => x.raw && Number.isFinite(x.ms));
+        startedList.sort((a, b) => a.ms - b.ms);
+        const started = startedList[0];
+        const writtenMs = ps.wslconfigWritten ? Date.parse(ps.wslconfigWritten) : NaN;
+        if (started) L.push(`  虛擬機啟動時間：${started.raw}`);
+        if (report.wslconfig.text !== null) {
+            if (!started) {
+                L.push('  讀不到虛擬機的啟動時間，無法用時間判斷 .wslconfig 是否已生效（改看下面「[.wslconfig 是否生效]」的 Docker 記憶體）');
+            } else if (!Number.isFinite(writtenMs)) {
+                L.push('  讀不到 .wslconfig 的修改時間，無法用時間判斷 .wslconfig 是否已生效（改看下面「[.wslconfig 是否生效]」的 Docker 記憶體）');
+            } else if (writtenMs > started.ms) {
+                L.push('  注意：.wslconfig 在虛擬機啟動之後才改過，新設定還沒生效（要在沒有重錄、沒有上傳時 wsl --shutdown 再開 Docker，見 docs/desktop-app-design.md 第 10 節）');
+            } else {
+                L.push('  依時間判斷：.wslconfig 在虛擬機啟動之前就改好了，新設定應已生效（直接證據看下面「[.wslconfig 是否生效]」）');
+            }
         }
     } else {
         L.push('  沒有在執行（Docker Desktop 沒開，或 WSL 虛擬機已經停了）');
+    }
+
+    // .wslconfig 的 memory 生效了沒：Docker 看到的總記憶體（docker info 的 MemTotal）＝WSL 虛擬機的記憶體，
+    // 上限生效時不會超過 memory（核心會先保留一部分，所以略小一點）。
+    L.push('', '[.wslconfig 是否生效（docker info 的 MemTotal＝Docker 看到的 WSL 虛擬機記憶體）]');
+    const dm = report.dockerMem;
+    if (!dm || !dm.ok) {
+        L.push(`  讀不到（${(dm && dm.error) || '沒有執行'}）：無法用這個方法判斷（Docker Desktop 開著、引擎在跑時再量一次）`);
+    } else {
+        L.push(`  Docker 看到的記憶體：${gb(dm.bytes)}`);
+        const cfg = report.wslconfig.text === null ? {} : parseWslconfig(report.wslconfig.text);
+        const memRaw = cfg.wsl2 && cfg.wsl2.memory;
+        const limit = parseSizeBytes(memRaw);
+        if (!memRaw) {
+            const total = Number(ps.totalKB) * 1024;
+            L.push(`  判讀：.wslconfig 沒設 memory，WSL 的預設上限是總記憶體的一半${total > 0 ? `（約 ${gb(total / 2)}）` : ''}`);
+        } else if (limit === null) {
+            L.push(`  判讀：看不懂 .wslconfig 的 memory＝「${memRaw}」，無法比對（寫法例：memory=3GB）`);
+        } else if (dm.bytes <= limit) {
+            L.push(`  判讀：不超過 .wslconfig 的 memory＝${memRaw}（${gb(limit)}）→ 上限已生效（略小於上限是正常的，核心會先保留一部分）`);
+        } else {
+            L.push(`  判讀：比 .wslconfig 的 memory＝${memRaw}（${gb(limit)}）大 → 上限還沒生效（要在沒有重錄、沒有上傳時 wsl --shutdown 再開 Docker，見 docs/desktop-app-design.md 第 10 節）`);
+        }
     }
 
     const docker = pick(/^(docker desktop|com\.docker\.)/i);
@@ -318,12 +372,19 @@ async function collect({ sys, scene, config = {}, env = {} }) {
         break;
     }
     if (dockerCli) {
+        // Docker 看到的總記憶體（只讀）：.wslconfig 的 memory 生效了沒的直接證據
+        const mi = await sys.exec(dockerCli, [...DOCKER_MEM_ARGS], { timeoutMs: 45_000 });
+        const memText = String(mi.stdout || '').trim();
+        report.dockerMem = mi.code === 0 && /^\d+$/.test(memText)
+            ? { ok: true, bytes: Number(memText) }
+            : { ok: false, error: mi.errorCode === 'ENOENT' ? '找不到 docker 指令' : (mi.code === 0 ? `輸出不是數字：${memText.slice(0, 80)}` : (w.tailLines(mi.stderr || mi.stdout, 1) || `結束碼 ${mi.code}`)) };
         const r = await sys.exec(dockerCli, ['stats', '--no-stream', '--format', '{{.Name}}  記憶體 {{.MemUsage}}（{{.MemPerc}}）  CPU {{.CPUPerc}}'], { timeoutMs: 45_000 });
         report.dockerStats = r.code === 0
             ? { ok: true, lines: String(r.stdout).split(/\r?\n/).map(s => s.trim()).filter(Boolean) }
             : { ok: false, error: r.errorCode === 'ENOENT' ? '找不到 docker 指令' : (w.tailLines(r.stderr || r.stdout, 1) || `結束碼 ${r.code}`) };
     } else {
         report.dockerStats = { ok: false, error: '找不到 docker 指令' };
+        report.dockerMem = { ok: false, error: '找不到 docker 指令' };
     }
 
     // Ollama 已載入的模型（GET /api/ps，只讀）
@@ -375,6 +436,6 @@ if (require.main === module) {
 }
 
 module.exports = {
-    SCENES, PROCESS_NAMES, PS_MEMORY_SCRIPT, SAC_REG_STATES,
-    parseArgs, parseWslconfig, cleanWslOutput, describeSac, formatReport, collect, main
+    SCENES, PROCESS_NAMES, PS_MEMORY_SCRIPT, SAC_REG_STATES, DOCKER_MEM_ARGS,
+    parseArgs, parseWslconfig, parseSizeBytes, cleanWslOutput, describeSac, formatReport, collect, main
 };

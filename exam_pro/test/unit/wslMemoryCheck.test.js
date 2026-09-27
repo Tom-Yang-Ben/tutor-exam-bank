@@ -82,6 +82,8 @@ function fakeSys(o = {}) {
                 if (o.noDocker) return { code: null, stdout: '', stderr: '', errorCode: 'ENOENT' };
                 if (args[0] === '--version') return { code: 0, stdout: 'Docker version 28.0.1', stderr: '', errorCode: null };
                 if (o.dockerDown) return { code: 1, stdout: '', stderr: 'error during connect: this error may indicate that the docker daemon is not running', errorCode: null };
+                // docker info --format {{.MemTotal}}：WSL 虛擬機的總記憶體（位元組）；預設 2.86 GB（memory=3GB 生效時略小於 3 GB）
+                if (args[0] === 'info') return { code: 0, stdout: `${o.memTotal === undefined ? 3070230528 : o.memTotal}\n`, stderr: '', errorCode: null };
                 return { code: 0, stdout: 'exam_pg  記憶體 85.3MiB / 2.9GiB（2.87%）  CPU 0.01%\nexam_pg_test  記憶體 40.1MiB / 2.9GiB（1.35%）  CPU 0.00%\n', stderr: '', errorCode: null };
             }
             return { code: null, stdout: '', stderr: '', errorCode: 'ENOENT' };
@@ -152,16 +154,20 @@ describe('只讀取', () => {
         }
     });
 
-    test('collect：執行的指令全部在白名單裡（兩段 PowerShell、wsl --version、wsl -l -v、docker --version、docker stats --no-stream、GET /api/ps）', async () => {
+    test('collect：執行的指令全部在白名單裡（兩段 PowerShell、wsl --version、wsl -l -v、docker --version、docker info --format {{.MemTotal}}、docker stats --no-stream、GET /api/ps）', async () => {
         const { sys, calls, appended } = fakeSys();
         await chk.collect({ sys, scene: 'idle' });
         const execs = calls.filter(c => c.kind === 'exec');
         for (const c of execs) {
             const ok = (/powershell/i.test(c.file))
                 || (c.file === 'wsl.exe' && (JSON.stringify(c.args) === '["--version"]' || JSON.stringify(c.args) === '["-l","-v"]'))
-                || (c.file === 'docker' && (JSON.stringify(c.args) === '["--version"]' || (c.args[0] === 'stats' && c.args[1] === '--no-stream')));
+                || (c.file === 'docker' && (JSON.stringify(c.args) === '["--version"]' || (c.args[0] === 'stats' && c.args[1] === '--no-stream')
+                    || JSON.stringify(c.args) === '["info","--format","{{.MemTotal}}"]'));
             assert.ok(ok, `不在白名單：${c.file} ${c.args.join(' ')}`);
         }
+        // docker info 只取 MemTotal 這一個欄位（只讀；.wslconfig 生效了沒的直接證據）
+        assert.deepEqual(execs.filter(c => c.file === 'docker' && c.args[0] === 'info').map(c => c.args), [['info', '--format', '{{.MemTotal}}']]);
+        assert.deepEqual([...chk.DOCKER_MEM_ARGS], ['info', '--format', '{{.MemTotal}}']);
         const scripts = execs.filter(c => /powershell/i.test(c.file)).map(c => Buffer.from(c.args[c.args.indexOf('-EncodedCommand') + 1], 'base64').toString('utf16le'));
         assert.deepEqual(scripts.sort(), [chk.PS_MEMORY_SCRIPT, w.PS_LIST_PROCESSES].sort());
         const reqs = calls.filter(c => c.kind === 'request');
@@ -186,6 +192,9 @@ describe('判讀與 log', () => {
         assert.match(text, /vmmemWSL（PID 5555）工作集 2\.50 GB/);
         assert.match(text, /虛擬機啟動時間：2026-09-27T08:00:00/);
         assert.doesNotMatch(text, /新設定還沒生效/, '.wslconfig 在虛擬機啟動之前改的：已生效');
+        assert.match(text, /依時間判斷：\.wslconfig 在虛擬機啟動之前就改好了，新設定應已生效/);
+        assert.match(text, /\[\.wslconfig 是否生效（docker info 的 MemTotal/);
+        assert.match(text, /Docker 看到的記憶體：2\.86 GB\n {2}判讀：不超過 \.wslconfig 的 memory＝3GB（3\.00 GB）→ 上限已生效/);
         assert.match(text, /\[Docker Desktop\] 在執行/);
         assert.match(text, /exam_pg {2}記憶體 85\.3MiB/);
         assert.match(text, /\[Ollama\] 在執行/);
@@ -208,6 +217,43 @@ describe('判讀與 log', () => {
         assert.match(later, /沒有重錄、沒有上傳時 wsl --shutdown/);
         const noLimit = chk.formatReport(await chk.collect({ sys: fakeSys({ files: { [WSLCONFIG]: '[wsl2]\nprocessors=4\n' } }).sys, scene: 'idle' }));
         assert.match(noLimit, /memory = 沒設（預設＝總記憶體的一半）；\[experimental\] autoMemoryReclaim = 沒設/);
+        assert.match(noLimit, /判讀：\.wslconfig 沒設 memory，WSL 的預設上限是總記憶體的一半（約 8\.00 GB）/);
+    });
+
+    // 〔審查 dec/r7-decisions-host〕讀不到 vmmem 的啟動時間時，原本什麼都不印，Owner 會把「沒出現『還沒生效』」誤當成已生效
+    test('讀不到虛擬機啟動時間、或讀不到 .wslconfig 的修改時間 → 明寫無法用時間判斷，改看 Docker 記憶體', async () => {
+        const noStart = JSON.parse(psJson());
+        noStart.processes = noStart.processes.map(p => (p.Name === 'vmmemWSL' ? { ...p, StartTime: null } : p));
+        const t1 = chk.formatReport(await chk.collect({ sys: fakeSys({ ps: JSON.stringify(noStart) }).sys, scene: 'idle' }));
+        assert.match(t1, /讀不到虛擬機的啟動時間，無法用時間判斷 \.wslconfig 是否已生效（改看下面「\[\.wslconfig 是否生效\]」的 Docker 記憶體）/);
+        assert.doesNotMatch(t1, /虛擬機啟動時間：/);
+        assert.doesNotMatch(t1, /依時間判斷/);
+        assert.match(t1, /上限已生效/, 'Docker 記憶體仍然可以判斷');
+        const t2 = chk.formatReport(await chk.collect({ sys: fakeSys({ ps: psJson({ wslconfigWritten: null }) }).sys, scene: 'idle' }));
+        assert.match(t2, /讀不到 \.wslconfig 的修改時間，無法用時間判斷/);
+        assert.doesNotMatch(t2, /依時間判斷|新設定還沒生效/);
+        // .wslconfig 不存在時不談「生效」（用的就是預設值）
+        const t3 = chk.formatReport(await chk.collect({ sys: fakeSys({ files: {}, ps: JSON.stringify(noStart) }).sys, scene: 'idle' }));
+        assert.doesNotMatch(t3, /無法用時間判斷/);
+    });
+
+    test('Docker 看到的記憶體（docker info 的 MemTotal）與 .wslconfig 的 memory 比對：超過 → 還沒生效；看不懂、讀不到 → 照實寫', async () => {
+        const over = chk.formatReport(await chk.collect({ sys: fakeSys({ memTotal: 8 * 1024 ** 3 }).sys, scene: 'idle' }));
+        assert.match(over, /Docker 看到的記憶體：8\.00 GB\n {2}判讀：比 \.wslconfig 的 memory＝3GB（3\.00 GB）大 → 上限還沒生效（要在沒有重錄、沒有上傳時 wsl --shutdown/);
+        const odd = chk.formatReport(await chk.collect({ sys: fakeSys({ files: { [WSLCONFIG]: '[wsl2]\nmemory=三GB\n' } }).sys, scene: 'idle' }));
+        assert.match(odd, /看不懂 \.wslconfig 的 memory＝「三GB」，無法比對/);
+        const down = chk.formatReport(await chk.collect({ sys: fakeSys({ dockerDown: true }).sys, scene: 'idle' }));
+        assert.match(down, /\[\.wslconfig 是否生效[^\n]*\]\n {2}讀不到（error during connect[^\n]*）：無法用這個方法判斷/);
+        const noDocker = chk.formatReport(await chk.collect({ sys: fakeSys({ noDocker: true }).sys, scene: 'idle' }));
+        assert.match(noDocker, /\[\.wslconfig 是否生效[^\n]*\]\n {2}讀不到（找不到 docker 指令）/);
+        const junk = chk.formatReport(await chk.collect({ sys: fakeSys({ memTotal: 'n/a' }).sys, scene: 'idle' }));
+        assert.match(junk, /讀不到（輸出不是數字：n\/a）/);
+    });
+
+    test('parseSizeBytes：.wslconfig 的大小寫法（1024 進位；沒寫單位＝位元組）', () => {
+        for (const v of ['3GB', '3 GB', '3gb', '3G', '3072MB', '3145728KB', '3221225472']) assert.equal(chk.parseSizeBytes(v), 3 * 1024 ** 3, v);
+        assert.equal(chk.parseSizeBytes('1.5GB'), 1.5 * 1024 ** 3);
+        for (const v of ['', null, undefined, 'abc', '3 GiB', '-1GB', '0']) assert.equal(chk.parseSizeBytes(v), null, String(v));
     });
 
     test('Smart App Control：開啟、評估模式；兩種來源都讀不到時寫讀不到', () => {

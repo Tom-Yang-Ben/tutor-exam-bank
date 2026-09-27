@@ -59,11 +59,13 @@ async function runStop({ sys, config, env, paths, probes, ui, log = () => { }, p
     const info = w.POPUP;
     const apiKey = String(env.API_KEY || '').trim();
 
-    // 〔Owner 第六輪 DA-11＝1〕HOST 只聽某個區網位址：本機連不到後端，啟動器也不會開這種後端（plan.js 的 host-unsupported）
+    // 〔Owner 第六輪 DA-11＝1〕HOST 只聽 localhost 連不到的位址（區網位址、127.0.0.1 以外的 127.x）：
+    // 啟動器不會開這種後端（plan.js 的 host-unsupported），關閉捷徑也不去連
     if (probes.listen && probes.listen.supported === false) {
-        log(`HOST=${probes.listen.host}：本機連不到後端，不送關閉要求`);
+        log(`HOST=${probes.listen.host}：桌面圖示不支援這個位址，不送關閉要求`);
         await ui.messageBox({
-            text: `exam_pro\\.env（或系統環境變數）的 HOST 是「${probes.listen.host}」，關閉捷徑從這台電腦連不到這個位址。\n` +
+            text: `exam_pro\\.env（或系統環境變數）的 HOST 是「${probes.listen.host}」，桌面圖示與關閉捷徑不支援這個設定` +
+                '（支援：不寫、127.0.0.1、localhost、::1、0.0.0.0、::）。\n' +
                 '桌面圖示不會開這種設定的後端；如果是在命令提示字元用 npm start 開的，請到那個視窗按 Ctrl+C。\n' +
                 '改 HOST 之前就由圖示開著的後端：先把 .env 的 HOST 改回來，再按一次「關閉出題系統」。\n' +
                 '要改回只給本機用：刪掉 .env 的 HOST 這一行（區網用 HOST=0.0.0.0，見 exam_pro\\README.md「區網存取」）。',

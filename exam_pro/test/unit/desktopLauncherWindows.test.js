@@ -233,6 +233,9 @@ describe('probes 的純函式：.env、埠、健康檢查的判讀', () => {
         assert.deepEqual(probes.listenFromEnv({ HOST: 'localhost' }), { host: 'localhost', scope: 'loopback', probeHost: 'localhost', supported: true });
         assert.deepEqual(probes.listenFromEnv({ HOST: '[::1]' }), { host: '::1', scope: 'loopback', probeHost: '::1', supported: true });
         assert.deepEqual(probes.listenFromEnv({ HOST: '192.168.1.10' }), { host: '192.168.1.10', scope: 'specific', probeHost: null, supported: false });
+        // 〔審查 dec/r7-decisions-host〕127.0.0.1 以外的 127.x：app 視窗的 http://localhost 連不到 → 不支援
+        assert.deepEqual(probes.listenFromEnv({ HOST: '127.0.0.2' }), { host: '127.0.0.2', scope: 'loopback', probeHost: null, supported: false });
+        assert.deepEqual(probes.listenFromEnv({ HOST: '::ffff:127.0.0.1' }), { host: '::ffff:127.0.0.1', scope: 'loopback', probeHost: '127.0.0.1', supported: true });
         // 系統環境蓋過 .env（effectiveEnv），與後端的 dotenv 相同
         assert.equal(probes.listenFromEnv(probes.effectiveEnv({ HOST: '0.0.0.0' }, { HOST: '127.0.0.1' })).host, '127.0.0.1');
     });

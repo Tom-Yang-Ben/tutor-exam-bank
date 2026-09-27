@@ -13,8 +13,10 @@
 // 跟其他設定一樣，系統環境變數優先於 .env（dotenv 預設不覆寫已經存在的變數）；後端啟動時印出實際聽的位址。
 //
 // 桌面啟動器（scripts/desktop/lib/probes.js）用同一支判斷「從本機要連哪個位址才問得到後端」：
-//   本機位址（127.0.0.1、localhost、::1）與萬用位址（0.0.0.0、::）→ 啟動器照常運作；
-//   只聽某個區網位址 → 本機的 localhost 連不到，app 視窗也開不起來，啟動器直接說明、不啟動（docs/desktop-launcher.md 6、7.3）。
+//   127.0.0.1、localhost、::1（與 ::ffff:127.0.0.1）、萬用位址（0.0.0.0、::）→ 啟動器照常運作；
+//   其他（只聽某個區網位址，或 127.0.0.1 以外的 127.x 位址）→ app 視窗的網址 http://localhost:<埠>/ 連不到後端
+//   （localhost 只對應 127.0.0.1 與 ::1），啟動器直接說明、不啟動（docs/desktop-launcher.md 6、7.3）。
+//   〔審查 dec/r7-decisions-host〕原本整段 127.0.0.0/8 都當成支援：HOST=127.0.0.2 時健康檢查連 127.0.0.2 判定成功，app 視窗卻打不開。
 // 純函式，不讀檔；除了 node:net 不依賴任何模組（啟動器在 node_modules 還沒裝時也會載入它）。
 // ─────────────────────────────────────────────────────────────
 'use strict';
@@ -26,6 +28,12 @@ const DEFAULT_HOST = '127.0.0.1';
 
 /** 「聽所有網路介面」的寫法 */
 const WILDCARD_HOSTS = Object.freeze(['0.0.0.0', '::']);
+
+/**
+ * 萬用位址以外，app 視窗的網址 http://localhost:<埠>/ 連得到的聽法（小寫比對）。
+ * localhost 只對應 127.0.0.1 與 ::1；只聽 127.0.0.2 這類位址時 localhost 連不到。
+ */
+const LOCALHOST_REACHABLE_HOSTS = Object.freeze(['127.0.0.1', 'localhost', '::1', '::ffff:127.0.0.1']);
 
 /**
  * 設定值 → server.listen 的 host。純函式。
@@ -61,16 +69,18 @@ function hostScope(host) {
  * 從這台電腦自己要連哪個位址才問得到後端（桌面啟動器的健康檢查、關閉通道用）。純函式。
  *   沒寫、127.0.0.1、0.0.0.0、:: → 127.0.0.1（聽 :: 時 Node 預設雙堆疊，IPv4 的本機位址也收得到）
  *   localhost → localhost（Node 的 listen 只綁 localhost 解析出的第一個位址，可能是 ::1，所以照名稱連）
- *   ::1 → ::1；其他 127.x.x.x → 照原值
- *   只聽某個區網位址（specific）→ null：本機的 localhost 連不到它（app 視窗的網址、ALLOWED_ORIGINS 的預設都是 localhost）
+ *   ::1 → ::1；::ffff:127.0.0.1 → 127.0.0.1
+ *   其他 → null：app 視窗的網址（http://localhost:<埠>/）與 ALLOWED_ORIGINS 的預設都是 localhost，連不到只聽這個位址的後端。
+ *     包括只聽某個區網位址（specific），以及 127.0.0.1 以外的 127.x 位址（hostScope 雖然是 loopback，
+ *     健康檢查連得到，但 app 視窗打不開——〔審查 dec/r7-decisions-host〕）。
  * @param {string} host  resolveListenHost 的結果
  * @returns {string|null}
  */
 function localProbeHost(host) {
     const scope = hostScope(host);
     if (scope === 'wildcard') return DEFAULT_HOST;
-    if (scope === 'specific') return null;
-    const h = String(host).trim().toLowerCase();
+    const h = String(host || '').trim().toLowerCase();
+    if (!LOCALHOST_REACHABLE_HOSTS.includes(h)) return null;
     return h === '::ffff:127.0.0.1' ? DEFAULT_HOST : h;
 }
 
@@ -84,7 +94,8 @@ function urlHost(host) {
 
 /**
  * 後端啟動成功時印的一行。純函式。
- * 本機與萬用位址都印 http://localhost:<埠>（瀏覽器照這個網址開；ALLOWED_ORIGINS 的預設也是它）。
+ * localhost 連得到的本機位址與萬用位址都印 http://localhost:<埠>（瀏覽器照這個網址開；ALLOWED_ORIGINS 的預設也是它）；
+ * 127.0.0.1 以外的 127.x 位址印那個位址的網址，並說明 localhost 連不到。
  * @param {string} host
  * @param {number|string} port
  * @returns {string}
@@ -93,6 +104,9 @@ function startupText(host, port) {
     const scope = hostScope(host);
     const head = '🚀 家教題庫後端系統已成功安全啟動：';
     if (scope === 'loopback') {
+        if (localProbeHost(host) === null) {
+            return `${head}http://${urlHost(host)}:${port}（只接受這台電腦的連線，但只聽 HOST=${host}；http://localhost:${port} 連不到）`;
+        }
         return `${head}http://localhost:${port}（只接受這台電腦的連線；HOST=${host}）`;
     }
     if (scope === 'wildcard') {
@@ -102,4 +116,4 @@ function startupText(host, port) {
     return `${head}http://${urlHost(host)}:${port}（只聽 HOST=${host}；這台電腦的 localhost 連不到）`;
 }
 
-module.exports = { DEFAULT_HOST, WILDCARD_HOSTS, resolveListenHost, hostScope, localProbeHost, urlHost, startupText };
+module.exports = { DEFAULT_HOST, WILDCARD_HOSTS, LOCALHOST_REACHABLE_HOSTS, resolveListenHost, hostScope, localProbeHost, urlHost, startupText };

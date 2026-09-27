@@ -63,15 +63,25 @@ describe('hostScope／localProbeHost（桌面啟動器從本機要連哪個位�
         for (const h of ['192.168.1.10', '10.0.0.5', 'fe80::1', 'mypc', '1127.0.0.1', '::ffff:10.0.0.1', '']) assert.equal(lh.hostScope(h), 'specific', h);
     });
 
-    test('localProbeHost：萬用 → 127.0.0.1；本機 → 原值（::ffff:127.0.0.1 → 127.0.0.1）；特定位址 → null', () => {
+    test('localProbeHost：萬用 → 127.0.0.1；localhost 連得到的本機位址 → 原值（::ffff:127.0.0.1 → 127.0.0.1）；特定位址 → null', () => {
         assert.equal(lh.localProbeHost('127.0.0.1'), '127.0.0.1');
         assert.equal(lh.localProbeHost('0.0.0.0'), '127.0.0.1');
         assert.equal(lh.localProbeHost('::'), '127.0.0.1');
         assert.equal(lh.localProbeHost('localhost'), 'localhost');
+        assert.equal(lh.localProbeHost('LocalHost'), 'localhost');
         assert.equal(lh.localProbeHost('::1'), '::1');
-        assert.equal(lh.localProbeHost('127.0.0.2'), '127.0.0.2');
         assert.equal(lh.localProbeHost('::ffff:127.0.0.1'), '127.0.0.1');
         assert.equal(lh.localProbeHost('192.168.1.10'), null);
+        assert.deepEqual([...lh.LOCALHOST_REACHABLE_HOSTS].sort(), ['127.0.0.1', '::1', '::ffff:127.0.0.1', 'localhost'].sort());
+    });
+
+    // 〔審查 dec/r7-decisions-host〕app 視窗的網址固定是 http://localhost:<埠>/，localhost 只對應 127.0.0.1 與 ::1：
+    // 只聽 127.0.0.2 這類位址時健康檢查連得到、視窗卻打不開，所以不算支援（原本回傳原值，啟動器說成功、視窗打不開）
+    test('localProbeHost：127.0.0.1 以外的 127.x（含 ::ffff:127.x）→ null（hostScope 仍是 loopback）', () => {
+        for (const h of ['127.0.0.2', '127.1.2.3', '127.255.255.254', '::ffff:127.0.0.5']) {
+            assert.equal(lh.hostScope(h), 'loopback', h);
+            assert.equal(lh.localProbeHost(h), null, h);
+        }
     });
 
     test('urlHost：IPv6 加方括號', () => {
@@ -94,6 +104,14 @@ describe('startupText（後端啟動成功時印的一行）', () => {
         assert.match(t, /ALLOWED_ORIGINS/);
         assert.match(t, /API_KEY 會注入首頁，不是存取控制/);
         assert.match(t, /區網存取/);
+    });
+
+    test('127.0.0.1 以外的 127.x：印那個位址的網址，並說 http://localhost 連不到（原本誤印 http://localhost）', () => {
+        const t = lh.startupText('127.0.0.2', 3000);
+        assert.match(t, /成功安全啟動：http:\/\/127\.0\.0\.2:3000（只接受這台電腦的連線，但只聽 HOST=127\.0\.0\.2；http:\/\/localhost:3000 連不到）$/);
+        assert.doesNotMatch(t, /啟動：http:\/\/localhost/);
+        assert.match(lh.startupText('::1', 3000), /啟動：http:\/\/localhost:3000（只接受這台電腦的連線；HOST=::1）/);
+        assert.match(lh.startupText('localhost', 3000), /啟動：http:\/\/localhost:3000（只接受這台電腦的連線；HOST=localhost）/);
     });
 
     test('特定位址：印那個位址的網址（IPv6 加方括號），並說 localhost 連不到', () => {

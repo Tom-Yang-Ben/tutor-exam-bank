@@ -31,9 +31,9 @@
 // 〔Owner 第六輪決策 2026-09-27〕
 //   - DL-4＝2：jobsWhileRecording 的預設改成 pause（lib/config.js）：錄製中開的後端以 JOB_RUNNER=off 啟動；
 //     設成 run 時警告改說「設定是 run、佇列裡的工作會開跑」。
-//   - DA-11＝1：後端改聽 HOST（預設 127.0.0.1，config/listenHost.js）。HOST 只聽某個區網位址時，
-//     本機的 localhost 連不到後端、app 視窗也開不起來 → 一開始就報 host-unsupported（facts.listen，launch.js 放進來），
-//     不去開一個自己連不到的後端。HOST 沒寫、本機位址、0.0.0.0／:: 都照常。
+//   - DA-11＝1：後端改聽 HOST（預設 127.0.0.1，config/listenHost.js）。HOST 只聽某個區網位址（或 127.0.0.1 以外的 127.x）時，
+//     app 視窗的 http://localhost:<埠>/ 連不到後端 → 一開始就報 host-unsupported（facts.listen，launch.js 放進來），
+//     不去開一個開不了畫面的後端。HOST 沒寫、127.0.0.1、localhost、::1、0.0.0.0／:: 都照常。
 // ─────────────────────────────────────────────────────────────
 
 /** Windows 保留連接埠範圍的查法（EACCES 時提示） */
@@ -57,7 +57,7 @@ const UNFINISHED_WORK_NOTE = '沒跑完的工作下次開啟時會自動接著�
  * @typedef {object} Facts
  * @property {string[]} [configWarnings]  data/launcher/config.json 讀不懂的地方（啟動前就放進來）
  * @property {{host:string, scope?:string, supported:boolean}} [listen]
- *           .env 的 HOST（probes.listenFromEnv）；只在 supported 是 false（只聽某個區網位址）時由 launch.js 放進來
+ *           .env 的 HOST（probes.listenFromEnv）；只在 supported 是 false（只聽某個區網位址或 127.0.0.1 以外的 127.x）時由 launch.js 放進來
  * @property {{state:'ours', dbOk:boolean, legacy?:boolean, version?:string}|{state:'other', detail?:string}|{state:'down'}} [health]
  * @property {{ok:boolean, via?:string, error?:string}} [statusWindow]
  * @property {{pid?:number|null, name?:string|null, text:string|null, pids?:number[], ownServer?:boolean, logFile?:string}} [portOwner]
@@ -102,7 +102,8 @@ const UNFINISHED_WORK_NOTE = '沒跑完的工作下次開啟時會自動接著�
  * @returns {{type:string, [k:string]:any}}
  */
 function nextAction(f, ctx) {
-    // 0. HOST 只聽某個區網位址：本機連不到後端（DA-11；config/listenHost.js）→ 開啟動畫面說明，不做任何檢查、不開後端
+    // 0. HOST 只聽 localhost 連不到的位址（區網位址、127.0.0.1 以外的 127.x；DA-11；config/listenHost.js）
+    //    → 開啟動畫面說明，不做任何檢查、不開後端
     if (f.listen && f.listen.supported === false) {
         if (!f.statusWindow) return { type: 'open-status-window' };
         return fail('host-unsupported', f, ctx);
@@ -287,9 +288,10 @@ function failureMessage(code, f = {}, ctx = {}, extra = {}) {
             const host = (f.listen && f.listen.host) || '（不明）';
             return {
                 title: '.env 的 HOST 設定讓啟動器連不到後端',
-                message: `exam_pro\\.env（或系統環境變數）的 HOST 是「${host}」：後端只聽這個位址，這台電腦的 localhost 連不到它，` +
-                    '啟動器確認不了後端有沒有起來，操作畫面（http://localhost:' + port + '/）也打不開。',
+                message: `exam_pro\\.env（或系統環境變數）的 HOST 是「${host}」：後端只聽這個位址，` +
+                    '操作畫面的網址（http://localhost:' + port + '/）連不到它（localhost 只對應 127.0.0.1 與 ::1），所以啟動器不開這種設定的後端。',
                 hint: [
+                    '桌面圖示支援的 HOST：不寫、127.0.0.1、localhost、::1、0.0.0.0、::。',
                     '只給這台電腦用：刪掉 .env 的 HOST 這一行（預設 127.0.0.1，只接受本機連線）。',
                     '要讓區網的平板、手機也連得到：改成 HOST=0.0.0.0，並照 exam_pro\\README.md「區網存取」一節設定防火牆與 ALLOWED_ORIGINS。',
                     retry

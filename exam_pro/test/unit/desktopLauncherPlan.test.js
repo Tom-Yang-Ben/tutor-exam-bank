@@ -52,6 +52,7 @@ describe('nextAction：開頭（健康檢查、啟動畫面、埠）', () => {
             assert.equal(a.code, 'host-unsupported');
             assert.match(a.message, /HOST 是「192\.168\.1\.10」/);
             assert.match(a.message, /http:\/\/localhost:3000\//);
+            assert.match(a.hint.join('\n'), /支援的 HOST：不寫、127\.0\.0\.1、localhost、::1、0\.0\.0\.0、::/);
             assert.match(a.hint.join('\n'), /刪掉 \.env 的 HOST/);
             assert.match(a.hint.join('\n'), /HOST=0\.0\.0\.0/);
         }

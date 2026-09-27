@@ -1,7 +1,7 @@
 # 桌面應用程式設計稿：B（Electron 桌面殼）＋ D2（原生 PostgreSQL、拿掉 Docker）
 
 > **狀態：設計稿，尚未實作；〔2026-09-27〕第 8 條的 14 題決策 Owner 已全部答覆（第六輪），依答案確定的段落改成「定案」語氣、原文脈絡保留。** 分支 `dec/desktop-app-design-fix`（接在 `dec/desktop-app-design` 的 `c3cd57f` 之後），基底 `local/integration-r6`（`0ba9bc6`）。只改文件，沒有產品程式。
-> **版本**：第一版草稿是 `325c52b`（作者中斷時留下）；`c3cd57f` 是逐節自我檢查、查證後的正式版（改了什麼見文末「自我檢查紀錄」）；本版依審查意見再修一次，逐條的查證結果與改法見文末「審查修正紀錄」。
+> **版本**：第一版草稿是 `325c52b`（作者中斷時留下）；`c3cd57f` 是逐節自我檢查、查證後的正式版（改了什麼見文末「自我檢查紀錄」）；本版依審查意見再修一次，逐條的查證結果與改法見文末「審查修正紀錄」。〔2026-09-27〕第六輪決策的登錄見文末「第六輪決策登錄紀錄」，其審查小修見「審查修正紀錄（`dec/r7-decisions-host-fix`）」。
 > **Owner 的決定（2026-09-27）**：先做 A（啟動器）；B 與 D2 同時開始規劃，先不實作。A 在另一條分支 `dec/desktop-launcher` 上實作，目前有一個**未審查、未合併**的進行中 commit `d730422`（第 6.1 節列出它已經有的模組）。B1 開工前要先和 A 對齊（第 6.1 節）。
 > **名詞**：
 > - **A**：啟動器。雙擊一個檔案，它會開 Docker Desktop、開資料庫、檢查 Ollama、開伺服器和瀏覽器。
@@ -685,7 +685,7 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 
 ## 8. 決策草稿（〔2026-09-27〕Owner 第六輪已全部答覆）
 
-每一題都可以單獨看懂。**還沒有任何一題的答案落實在程式裡。**〔2026-09-27〕Owner 第六輪已答全部 14 題：下表最後一欄是答案，各題開頭另加一段「〔Owner 2026-09-27 選 N〕定案」，原本的背景、選項與建議保留。落實在程式裡的只有 DA-11 的網頁版那一半（`dec/r7-decisions-host`）；其餘在 B1、B2、D2、B3 實作時照答案做。「何時」指的是最晚要答的時間點。第 3、6 條的工時是照每一題的「建議」估的；選項裡寫的「+Nh」是和最省事的選項相比多出來的工時，選了建議以外的選項時再照它調整總數。
+每一題都可以單獨看懂。~~**還沒有任何一題的答案落實在程式裡。**~~〔2026-09-27〕Owner 第六輪已答全部 14 題：下表最後一欄是答案，各題開頭另加一段「〔Owner 2026-09-27 選 N〕定案」，原本的背景、選項與建議保留。落實在程式裡的只有 DA-11 的網頁版那一半（`dec/r7-decisions-host`）；其餘在 B1、B2、D2、B3 實作時照答案做。「何時」指的是最晚要答的時間點。第 3、6 條的工時是照每一題的「建議」估的；選項裡寫的「+Nh」是和最省事的選項相比多出來的工時，選了建議以外的選項時再照它調整總數。
 
 | 編號 | 題目 | 什麼時候要答 | 建議 | Owner 2026-09-27 |
 |---|---|---|---|---|
@@ -829,7 +829,7 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 
 ### DA-9　要不要簽章
 
-> 〔Owner 2026-09-27 選 1〕**定案**：不簽章，只在 Owner 的電腦上 build 與安裝。**前提是 Smart App Control 關閉（或評估模式下沒有擋），尚待 Owner 確認**：第 10 節的 `wsl_memory_check.bat` 會讀出 SAC 的狀態（`Get-MpComputerStatus` 與登錄值）；讀出來是開著時回到本題（建議 4：關掉 SAC）。
+> 〔Owner 2026-09-27 選 1〕**定案**：不簽章，只在 Owner 的電腦上 build 與安裝。**前提是 Smart App Control 關閉，尚待 Owner 確認**：第 10 節的 `wsl_memory_check.bat` 會讀出 SAC 的狀態（`Get-MpComputerStatus` 與登錄值）；讀出來是開啟或評估模式時，先不要改，回到本題重新選（10.4 節；建議 4：關掉 SAC）。下面選項 1 與建議裡的「或評估模式下沒有擋」是答覆前的原文，以這段定案為準。
 
 - **背景**：
   - 從網路下載、帶有「網路標記」的程式，執行時 SmartScreen 會依信譽決定要不要警告；沒有信譽的檔案會跳警告（〔查證 S32、S34〕）。微軟的簽章選項說明把「不簽章」列為 SmartScreen 會強烈攔截、不建議公開散布（〔查證 S35〕）。
@@ -869,7 +869,7 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 
 ### DA-11　要不要保留區網存取（網頁版）
 
-> 〔Owner 2026-09-27 選 1〕**定案**：桌面版（B）只綁 `127.0.0.1`；網頁版改用 `HOST` 設定、預設 `127.0.0.1`。**網頁版這一半已實作**（分支 `dec/r7-decisions-host`）：`exam_pro/config/listenHost.js`＋`server.js` 的 `app.listen(PORT, HOST)`；A 的啟動器、關閉捷徑與 `/api/health` 的本機判斷用同一套規則（`HOST` 只聽某個區網位址時啟動器停下說明）；`.env.example`、`exam_pro/README.md`「區網存取」、`deployment_and_operations.md` §3.2、§4.1 寫明要區網存取時設 `HOST=0.0.0.0`，並處理防火牆（只允許私人網路）、`ALLOWED_ORIGINS` 與 `API_KEY`。要在課堂穩定用平板，仍照建議走 Tailscale 加 HTTPS。
+> 〔Owner 2026-09-27 選 1〕**定案**：桌面版（B）只綁 `127.0.0.1`；網頁版改用 `HOST` 設定、預設 `127.0.0.1`。**網頁版這一半已實作**（分支 `dec/r7-decisions-host`）：`exam_pro/config/listenHost.js`＋`server.js` 的 `app.listen(PORT, HOST)`；A 的啟動器、關閉捷徑與 `/api/health` 的本機判斷用同一套規則（`HOST` 只聽某個區網位址、或 `127.0.0.1` 以外的 `127.x` 時，app 視窗的 `http://localhost` 連不到，啟動器停下說明）；`.env.example`、`exam_pro/README.md`「區網存取」、`deployment_and_operations.md` §3.2、§4.1 寫明要區網存取時設 `HOST=0.0.0.0`，並處理防火牆（只允許私人網路）、`ALLOWED_ORIGINS` 與 `API_KEY`。要在課堂穩定用平板，仍照建議走 Tailscale 加 HTTPS。
 
 - **背景**：
   - `npm start` 目前綁在所有網路介面（`server.js`），同一個 Wi-Fi 裡的平板或手機**可能**打得開題庫（〔2026-09-27〕已改成預設只聽 `127.0.0.1`，見本題開頭的定案）。實際能不能連，還要看 Windows Defender 防火牆：`node.exe` 第一次監聽所有網路介面時，Windows 會跳出是否允許存取的對話框，當時的選擇決定了輸入規則〔要實測：「控制台 → Windows Defender 防火牆 → 允許應用程式通過」看 Node.js 那一列〕。
@@ -1035,7 +1035,7 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 ## 10. Owner 手動操作：WSL 記憶體上限（DA-14）與 Smart App Control（DA-9）
 
 > 〔2026-09-27，Owner 第六輪 DA-14＝1、DA-9＝1〕這一節給 Owner 照著做，**全部由 Owner 自己在自己的電腦上操作**；AI 不在任何電腦上執行這些步驟。
-> 檢查工具 `exam_pro\scripts\windows\wsl_memory_check.bat` **只讀取與記錄**：讀 `.wslconfig`、記憶體、Docker Desktop 與 Ollama 的狀態、Smart App Control，不改任何設定、不執行 `wsl --shutdown`、不開關任何程式，所以重錄或上傳進行中也可以跑。
+> 檢查工具 `exam_pro\scripts\windows\wsl_memory_check.bat` **只讀取與記錄**：讀 `.wslconfig`、記憶體、Docker Desktop（含 `docker info` 的總記憶體）與 Ollama 的狀態、Smart App Control，不改任何設定、不執行 `wsl --shutdown`、不開關任何程式，所以重錄或上傳進行中也可以跑。它要等 2026-09-27 這一輪重錄跑完、合併之後才會出現在 Owner 的電腦上；**重錄進行中不要為了拿它而更新 repo**（10.3 節）。
 
 ### 10.1 先記住：什麼時候**不可以** `wsl --shutdown`
 
@@ -1070,7 +1070,10 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 6. 開「命令提示字元」，輸入 `wsl --shutdown`，按 Enter（沒有任何輸出是正常的）。想確認的話再輸入 `wsl -l -v`，每一列都要是 `Stopped`。
 7. 等約 10 秒，從開始選單開 Docker Desktop，等鯨魚圖示變成正常（滑過去顯示 Engine running）。
 8. 點「出題系統」，確認系統照常開起來。
-9. **設定後再量一次**：`wsl_memory_check.bat` 按 `1`。log 的「判讀」要是 `memory = 3GB`、`autoMemoryReclaim = dropCache`，而且**不能**出現「新設定還沒生效」（出現就是第 5～7 步沒有做完，WSL 還是舊的那一個）。
+9. **設定後再量一次**：`wsl_memory_check.bat` 按 `1`。看 log 的三個地方：
+   - 「[.wslconfig]」的「判讀」要是 `memory = 3GB`、`autoMemoryReclaim = dropCache`（檔案寫對了）。
+   - **「[.wslconfig 是否生效]」是直接證據**：`Docker 看到的記憶體`（`docker info` 的 `MemTotal`，也就是 WSL 虛擬機的總記憶體）要**不超過 3 GB**，判讀寫「上限已生效」；略小於 3 GB 是正常的（核心會先保留一部分）〔要實測：實際會小多少〕。寫「上限還沒生效」就是第 5～7 步沒有做完，WSL 還是舊的那一個；寫「讀不到」就等 Docker Desktop 的鯨魚圖示顯示 Engine running 再量一次。
+   - 「[WSL 虛擬機]」一段只是輔助（比 `.wslconfig` 的修改時間與虛擬機的啟動時間）：出現「新設定還沒生效」同樣表示第 5～7 步沒做完；寫「讀不到虛擬機的啟動時間，無法用時間判斷」時**不代表已生效**（一般權限可能讀不到 vmmem 的啟動時間），以上一點的 Docker 記憶體為準。
 
 - **設太低的症狀**：Docker Desktop 起不來、資料庫容器啟動失敗、重錄或上傳時容器被系統結束。處理：把 `memory=3GB` 改成 `memory=4GB`，在 10.1 節允許的時候照第 5～8 步再做一次〔要實測〕。
 - **要恢復原狀**：刪掉這幾行（或整個 `.wslconfig`），照第 5～8 步再做一次。
@@ -1085,8 +1088,9 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 | 重錄 | `record_local.bat` 正在跑的時候。**只讀取，不會打斷重錄**；但重錄中不可以做 10.2 節的任何一步 | `3` |
 
 - 怎麼跑：雙擊 `exam_pro\scripts\windows\wsl_memory_check.bat`，按 `1`、`2` 或 `3`。大約 10～60 秒，畫面印出結果，同時附加到 `exam_pro\data\logs\wsl_check-日期.log`（同一天跑幾次都接在後面）。
-- log 記的東西：`.wslconfig` 的內容與判讀、vmmem／VmmemWSL 的記憶體、總計／可用／使用中、Docker 容器各自的記憶體、Ollama 載入了哪些模型、node 與 python 的合計、有沒有偵測到重錄、`wsl --version`、Smart App Control。
-- 建議的順序：設上限**前**閒置一次（10.2 節第 1 步）→ 設上限**後**閒置一次（第 9 步）→ 上傳一次 → 重錄一次。現在這一次重錄還在跑的話，也可以趁它在跑時按 `3` 量一次「設上限前的重錄」當對照（只讀取）；設上限要等它跑完。
+- log 記的東西：`.wslconfig` 的內容與判讀、vmmem／VmmemWSL 的記憶體、Docker 看到的總記憶體（`docker info` 的 `MemTotal`，和 `.wslconfig` 的 `memory` 比對）、總計／可用／使用中、Docker 容器各自的記憶體、Ollama 載入了哪些模型、node 與 python 的合計、有沒有偵測到重錄、`wsl --version`、Smart App Control。
+- 建議的順序：設上限**前**閒置一次（10.2 節第 1 步）→ 設上限**後**閒置一次（第 9 步）→ 上傳一次 → 重錄一次。
+- **重錄進行中不要更新 repo**（`git pull`、切分支都不要）：重錄的後段會重新載入工作樹裡的程式（e2e 會 `require` `app.js`），跑到一半換版本，錄出來的東西可能作廢。這個工具要等 2026-09-27 這一輪重錄跑完、合併之後才拿得到，這一輪量不到；想要「設上限**前**的重錄」當對照，就在**下一輪**重錄、還沒設上限時按 `3` 量一次（只讀取），設上限要等那一輪跑完。
 - 量完把 log 交給維護的人（或貼進對話）。D2（原生 PostgreSQL）值不值得花約 48～57 小時，就看這幾組數字（DA-14）。
 
 ### 10.4 Smart App Control（DA-9 的前提）
@@ -1109,6 +1113,11 @@ DA-9 選 1（不簽章、只在自己電腦 build）的前提是 **Smart App Con
 1. 點「出題系統」，app 視窗要照常開起來（網址仍是 `http://localhost:3000/`；Edge 會自己改試 `127.0.0.1`〔推論，這一步就是在驗證它〕）。打不開時把最新的 `exam_pro\data\logs\launcher-日期.log` 交給維護的人。
 2. `npm start` 的視窗會印「已成功安全啟動：http://localhost:3000（只接受這台電腦的連線；HOST=127.0.0.1）」。
 3. 平板、手機預設連不到。真的要用時才在 `.env` 設 `HOST=0.0.0.0`，照 `exam_pro\README.md`「區網存取」處理防火牆（只允許私人網路）、`ALLOWED_ORIGINS` 與 `API_KEY`。
+4. 〔要實測〕**同一個埠還有別的程式在聽**時，後端改綁 `127.0.0.1` 之後不一定報「埠被佔用」（`docs/desktop-launcher.md` 7.3 節最後一點）：
+   - Windows 的相容例外：別的程式已經聽 `0.0.0.0:3000` 時，`npm start` 照樣綁得上 `127.0.0.1:3000` 並印「已成功安全啟動」。這台電腦開 `localhost` 會到出題系統，區網連 3000 埠卻會到那個程式。
+   - 別的程式只聽 IPv6（`[::1]:3000`）時，兩邊不衝突；瀏覽器開 `localhost` 先試 `::1`，就會打開那個程式的畫面。
+   - 桌面圖示擋得住第一種（開後端之前先問 `127.0.0.1:3000`，有別的程式回應就報「埠被佔用」），擋不住第二種；直接 `npm start` 兩種都擋不住。
+   - 症狀：`npm start` 印成功，app 視窗或瀏覽器打開的卻不是出題系統。查法：命令提示字元執行 `netstat -ano | findstr ":3000"`，`LISTENING` 的列出現兩個以上的 PID，就是有別的程式也在聽 3000 埠；關掉那個程式，或在 `.env` 改 `PORT`，再把 log 交給維護的人。
 
 ---
 
@@ -1189,3 +1198,20 @@ Owner 2026-09-27 在第六輪決策單答了本文件的 DA-1～DA-14（與 `doc
 - 新增第 10 節：Owner 手動操作（`.wslconfig` 的 `memory=3GB`、`autoMemoryReclaim=dropCache`，`wsl --shutdown` 什麼時候不可以做，三種情況的 `wsl_memory_check.bat`，SAC 的判讀，DA-11 之後的驗收）。
 - 程式：只有 DA-11 的網頁版那一半（`exam_pro/config/listenHost.js`、`server.js`、啟動器的連線位址與 `host-unsupported`、`/api/health` 的本機判斷）與第 10 節的唯讀檢查工具（`scripts/windows/wsl_memory_check.bat` → `scripts/desktop/wsl_memory_check.js`）。B、D2 的其餘部分都還沒實作；工時不變（6.6 節）。
 - 還要 Owner 回答或確認的：DA-9 的前提（SAC 關閉，10.4 節）、DA-14 的量測結果（10.3 節）；B3 開工前再問 DA-6 的「B3 之後改不改 U2」、要改走退路時再問 DA-5、重新啟用 Gemini 時再問 DA-8 的 `safeStorage`（這三項是建議裡的後半，這次的答案沒有涵蓋）。
+
+---
+
+## 審查修正紀錄（2026-09-27，`dec/r7-decisions-host-fix`）
+
+審查的對象是 `94eda86`（`dec/r7-decisions-host`），結論是「通過，附小修建議」，共 8 條。每一條都先回到程式、文件或來源查證，再決定怎麼改：
+
+| # | 嚴重度 | 審查意見 | 查證結果 | 怎麼改 |
+|---|---|---|---|---|
+| 1 | 中低 | 10.3 節與 ownerSteps 叫 Owner「趁這一輪重錄在跑時先量」，和交付時程對不上 | 屬實。本分支要等這一輪重錄跑完、`dec/integration-r7` 合併之後才送到 Owner 電腦；重錄中更新 repo 會讓後段重新載入的程式換版本 | 10.3 節刪掉那一句，改寫成「重錄進行中不要更新 repo；設上限前的重錄對照組在下一輪量」；第 10 節開頭補一句同樣的提醒；ownerSteps 同步改 |
+| 2 | 低 | 讀不到 vmmem 的啟動時間時，檢查什麼都不印，10.2 第 9 步卻把「沒出現『還沒生效』」當成生效的證據 | 屬實（`formatReport` 只在 `started` 有值時才比較） | 讀不到啟動時間、或讀不到 `.wslconfig` 修改時間時明寫「無法用時間判斷」；時間比較改用 `Date.parse`，判斷得出「已生效」時也寫一行。新增唯讀的直接證據 `docker info --format {{.MemTotal}}`，和 `.wslconfig` 的 `memory` 比對（新段落「[.wslconfig 是否生效]」）；指令白名單測試加上這一條（參數逐字比對）。10.2 第 9 步改成以 Docker 記憶體為準 |
+| 3 | 低 | Winsock 的相容例外可能讓 `npm start` 不再報 `EADDRINUSE` | 屬實（文件與原始碼層級）：微軟〈Using SO_REUSEADDR and SO_EXCLUSIVEADDRUSE〉的表格，先以預設選項綁萬用位址、再以預設選項綁特定位址 → Success；libuv `src/win/tcp.c` 的註解寫明兩個選項都不設。另外找到一個相關缺口：別的程式只聽 `[::1]` 時，綁 `127.0.0.1` 在任何作業系統都不衝突 | 只記錄〔要實測〕：`docs/desktop-launcher.md` 7.3 節、本文件 10.5 節第 4 點（症狀與 `netstat` 查法）。**沒有加自動檢查**：Linux 的測試重現不了 Winsock 的行為，而啟動器開後端之前的健康檢查已經擋住第一種情況；要補強時再在後端起來後用 `netstat` 找同一埠的其他 PID |
+| 4 | 低 | DA-9 定案多加了「或評估模式下沒有擋」 | 屬實，而且和 10.4 節「開啟或評估模式 → 先不要改」衝突 | 定案只寫「SAC 關閉」，並寫明開啟或評估模式都回到 DA-9；選項 1 與建議裡的原文保留，註明以定案為準 |
+| 5 | 低 | 第 8 條開頭的「還沒有任何一題的答案落實在程式裡」沒劃掉 | 屬實 | 加刪除線 |
+| 6 | 低 | `HOST=127.0.0.2` 這類值被當成支援：健康檢查成功、app 視窗卻打不開 | 屬實（app 視窗的網址固定是 `http://localhost:<埠>/`，`localhost` 只對應 `127.0.0.1` 與 `::1`） | `config/listenHost.js` 的 `localProbeHost` 只把 `127.0.0.1`、`localhost`、`::1`、`::ffff:127.0.0.1` 與萬用位址當成支援，其他 `127.x` 回 `null`（啟動器與關閉捷徑報 `host-unsupported`）；啟動訊息對這類位址印實際的網址。`hostScope` 與 `/api/health` 的 127.0.0.0/8 本機判斷不變 |
+| 7 | 低 | 舊範本整份複製成 `config.json` 時，`"jobsWhileRecording": "run"` 會蓋過新預設 | 屬實（`lib/config.js` 只在沒寫時用預設） | `docs/desktop-launcher.md` 第 6 節加一句；ownerSteps 加一步請 Owner 確認 |
+| 8 | 資訊 | 實作說明寫 integration 635 個，實際是 631 個 | 屬實：本分支重跑，數字見 `dec/r7-decisions-host-fix` 的 commit 訊息 | 更正回報；程式不改 |
