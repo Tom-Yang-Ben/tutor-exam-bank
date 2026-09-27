@@ -12,6 +12,24 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+  # 〔提案 2026-09-27，分支 dec/r8-desktop-ci，待 Owner 同意〕桌面版（Electron 殼，docs/desktop-app-design.md R-7）。
+  # 頻率、PR 上限與分組照上面 /exam_pro。desktop/package.json 的直接相依只有 electron（鎖死 44.4.5）：
+  #   - 44.x 的修補版／小版本（Electron 的安全修正通常以修補版發到仍在支援的大版本）→ minor-and-patch 這一組的 PR；
+  #   - 大版本（45、46…）不在分組裡 → 每一版各開一個 PR；沒有 ignore，大版本不會被略過。
+  #     Electron 只支援最新三個大版本（約半年；44 支援到 2027-03-02），大版本的 PR 就是「該升級了」的提醒。
+  # electron 的 PR 在 CI 的 desktop job 會紅（desktop/test/package.test.js 鎖定版本號）：這是刻意的關卡，
+  # 不能直接按合併；升級步驟見 docs/desktop-app-design.md 6.2「留給之後」的決策說明。
+  - package-ecosystem: npm
+    directory: /desktop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Taipei
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /
     schedule:

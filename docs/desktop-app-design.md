@@ -645,8 +645,36 @@ B1 刻意**不搬任何資料**：記錄檔放 `exam_pro\data\logs\`（`desktop-
 
 **留給之後（要 Owner 同意或下一輪決定）**
 
-- **`desktop/` 不在 CI、也不在 dependabot 的範圍**（R-7）：Electron 44 的安全更新現在只能靠人工追。要改 `.github/workflows/ci.yml`（加一個跑 `desktop` 的 `npm test` 的 job，不需要 Electron 執行檔）與 `.github/dependabot.yml`（現在只有 `/exam_pro` 的 npm 與 GitHub Actions；再加一組 `package-ecosystem: npm`、`directory: /desktop`），需要 Owner 同意，建議和 B3 一起做或列進下一輪的待決事項。
+- **`desktop/` 不在 CI、也不在 dependabot 的範圍**（R-7）：Electron 44 的安全更新現在只能靠人工追。要改 `.github/workflows/ci.yml`（加一個跑 `desktop` 的 `npm test` 的 job，不需要 Electron 執行檔）與 `.github/dependabot.yml`（現在只有 `/exam_pro` 的 npm 與 GitHub Actions；再加一組 `package-ecosystem: npm`、`directory: /desktop`），需要 Owner 同意，建議和 B3 一起做或列進下一輪的待決事項。〔2026-09-27〕**已備妥分支 `dec/r8-desktop-ci`（從 `dec/integration-r8` 的 `9d27210` 開），待 Owner 同意**：這是提案分支，Owner 同意之前不併入任何整合分支。內容與給 Owner 的決策說明見下方「決策說明：desktop 納入 CI 與 dependabot」。
 - 兩條分支（本分支與 `dec/r7-decisions-host-fix`）都合併之後，檔頭第一行可以合成一句：「狀態：B 部分 B1 已實作（待驗收），B2／D2／B3 仍是設計稿；第 8 條的 14 題決策 Owner 已全部答覆（第六輪）……」，同時刪掉本分支加的那一行。
+
+**決策說明：desktop 納入 CI 與 dependabot**（〔提案 2026-09-27〕分支 `dec/r8-desktop-ci`，**待 Owner 同意**）
+
+- **要決定什麼**：要不要讓 GitHub 自動照顧桌面版（`desktop/`）：① 每次 push 到 main、每個 PR 自動跑桌面版的測試；② 每週一由 Dependabot 檢查 Electron 有沒有新版，有就開 PR 提醒。
+- **分支上已經做好的**（同意後直接併，不必再改）：
+  - `.github/workflows/ci.yml` 加第三個 job `desktop`（Node 24）：先在 `exam_pro` 執行 `npm ci`（desktop 的測試會直接載入 exam_pro 的程式：A 的 `plan.js`、`probes.js`、`launcherControl`（要 express）、jobRunner 的 `loadConfig`、`check_html_offline`），再在 `desktop` 執行 `npm ci --ignore-scripts`，確認 `node_modules/electron/dist` 不存在（沒有下載 Electron 執行檔），最後 `npm test`（`node --test`，120 則）。**不下載 Electron、不開視窗、不連資料庫、不需要 secrets**。Electron 44 的 npm 套件本來就沒有安裝腳本（執行檔第一次執行才下載），舊的 `ELECTRON_SKIP_BINARY_DOWNLOAD` 在 44 已經沒有程式讀它，所以改用 `--ignore-scripts`，之後不管升到哪一版都不會在安裝時下載。既有的 `unit`、`integration` 兩個 job 一字未改。
+  - `.github/dependabot.yml` 加 `/desktop`（npm）：和 `/exam_pro` 一樣每週一 09:00（台北時間）、最多 5 個 PR、修補版與小版本併成一個 PR。`desktop/package.json` 的直接相依只有 `electron`，所以實際上就是：**44.x 的修補版**（Electron 的安全修正通常以修補版發到仍在支援的大版本）開一個 PR；**大版本（45、46…）各開一個 PR**，沒有設略過，大版本一定看得到。
+- **代價**：
+  1. CI 每次多一個 job。本機照同樣的步驟模擬（Node 24.21.0、npm 快取是空的）：exam_pro 的 `npm ci` 9 秒、desktop 的 `npm ci` 1 秒、測試 4 秒；加上 GitHub 開機器、checkout、裝 Node，一次約 1 分鐘〔推論〕。repo 是私有的（5.1 節），會用到 GitHub Actions 每月的免費分鐘數〔要實測：方案與剩餘額度在 GitHub 的「Settings → Billing and plans」看〕。
+  2. **Dependabot 開的 Electron PR，CI 一定是紅的**：`desktop/test/package.test.js` 把版本鎖死在 44.4.5（在本機把版本改成 44.4.6 實測，就是這一則失敗）。這是刻意的關卡：換 Electron 要重跑冒煙測試與 Windows 上的驗收，不能直接按合併。本分支**沒有**放寬這則測試。處理方式見下面「收到 Electron 的 PR 時」。
+  3. 每 8 週左右會多一個大版本 PR（Electron 45 預定 2026-10-20，2.2 節），要花時間升級或關掉。
+  4. CI 綠只代表桌面版的規則（關閉、系統匣、權限、下載、啟動流程）沒壞，**不代表 Electron 在 Windows 上能跑**：真的 Electron 的冒煙測試要 xvfb 和測試庫，仍然只在本機與 Owner 驗收時跑。
+- **不做的風險**：Electron 只支援最新的三個大版本，約半年；44 支援到 2027-03-02（2.2 節、R-7）。沒有 Dependabot，修補版的安全修正和大版本都要靠人記得去查；過了支援期還用 44，桌面版內建的 Chromium 就不再有安全修正（單機、只載入自己的頁面，衝擊低，R-7）。沒有 CI 的 `desktop` job，只改 `exam_pro` 的 PR（例如 A 的 `plan.js` 或 `launcherControl`）可能把桌面版的測試弄壞，要等下次有人在本機跑 `desktop` 的 `npm test` 才會發現。
+- **選項**：
+  1. 兩個都做（併入本分支）。
+  2. 只做 CI（併入後刪掉 `dependabot.yml` 的 `/desktop` 那一段）：沒有升級提醒。
+  3. 只做 Dependabot（刪掉 `ci.yml` 的 `desktop` job）：有提醒，但 exam_pro 的改動弄壞桌面版時抓不到；Electron PR 也沒有紅燈擋著。
+  4. 都不做，維持人工追（原本的建議：和 B3 一起做）。
+  - 本分支**沒做**、可以之後再加的：`desktop` job 加 `npm audit --audit-level=high`（`electron` 是 devDependency，照 `unit` job 的 `--omit=dev` 會把它排除，所以不能加 `--omit=dev`；代價是 Electron 一有安全公告，**所有 PR** 都會紅到升級為止）；在 Windows 的 runner 再跑一次（比較接近 Owner 的電腦，但分鐘數用得比較兇〔推論〕）。
+- **建議**：**選 1**。代價小（一次約 1 分鐘、一週最多幾個 PR），補上 R-7 現在完全沒有的提醒；而且桌面版的測試本來就依賴 exam_pro 的程式，放進 CI 才抓得到兩個資料夾之間的破壞。不急：等 B1 在 Windows 上驗收完，隨下一次整合（r9）或之後再併都可以。
+- **收到 Electron 的 PR 時**（同意之後才會發生）：
+  1. **修補版（44.4.x）**：由維護的人在那條 PR 的分支上把 `desktop/test/package.test.js` 的版本號與 2.2 節的版本改成新版，本機跑 `desktop` 的 `npm test` 與 `npm run smoke`（真的 Electron）都過了才合併。Owner 更新 repo 之後，先從系統匣結束桌面版，再執行 `install_desktop_app.bat --reinstall`，開一次桌面版確認能進首頁、上傳一份最小的樣卷。
+  2. **大版本（45 起）**：同上，另外看 Electron 的重大變更說明（utilityProcess、下載、權限、系統匣、通知有沒有改），6.2 節的驗收步驟完整走一次。44 還在支援期內時可以先不升、把 PR 關掉；關掉之後 Dependabot 不會再為同一版開 PR，有更新的版本才會再開〔推論，依 Dependabot 的一般行為〕。
+- **Owner 同意時要做的**：
+  1. 回覆「同意，選 1」（或選 2～4）。
+  2. 併入並推上 GitHub 之後，到 repo 的「Settings → Code security」（有的介面叫「Security & analysis」）確認 **Dependency graph** 與 **Dependabot alerts** 是開的；想讓安全性修正也自動開 PR，就把 **Dependabot security updates** 打開〔要實測：雲端看不到 repo 的設定〕。
+  3. 推上去之後的第一次 CI，看 Actions 頁面的 `desktop` job 是綠的（約 1 分鐘）。
+  4. 第一個 Dependabot 的 Electron PR 大約在 44 出下一個修補版、或 45 發布（預定 2026-10-20）之後的第一個週一出現〔推論〕。
 
 **雲端驗不到、要在 Windows 上確認的**：系統匣圖示與氣球通知（和 AUMID 的互動，上方「關閉行為」最後一點）、「另存新檔」對話框的預填（前端在 `a.click()` 之後立刻 `revokeObjectURL`，要確認對話框開著的期間 Blob 仍下載得完）、捷徑的建立與圖示、AUMID 的工作列分組、Electron 在 cmd 視窗印的中文、由 app 代開 Docker Desktop、`sharp`／`@node-rs/jieba` 的 Windows 版與 `mupdf` 在 utilityProcess 裡能不能載入（R-6）、OCR 的 python 會不會變孤兒（R-9）、Defender／Smart App Control 會不會擋未簽章的 `electron.exe`（R-5；DA-9 的前提是 SAC 關閉，尚待 Owner 確認）、登出與關機、真的麥克風。
 
@@ -760,7 +788,7 @@ Owner 自己的時間另外算：DA-14 的上限與量測約 0.5 小時；D2 的
 | R-4 | 非 ASCII 路徑 | 中、高 | PostgreSQL 的二進位、資料夾和密碼檔都放在純英數的路徑（〔查證 S27、S28〕） | initdb 成功 |
 | R-5 | Defender、防毒軟體或 Smart App Control 擋下程式：沒簽章的 Electron exe、由 app spawn 的 `postgres.exe` 和 `python.exe`、自己編的 `vector.dll` | Defender 誤判：中、中。**SAC 開著時：高、高**。SAC 不看網路標記，無法預測安全性的 exe 沒有受信任的簽章就擋（〔查證 S45〕）；已有 Electron 專案回報本機 build 的未簽章 exe 被擋（〔查證 S45b〕）。U1 的 `electron.exe` 與自編的 `vector.dll` 會不會被擋〔未查證〕 | ~~DA-9：先看 SAC 的狀態再選。~~〔DA-9 選 1，定案〕不簽章、只在 Owner 電腦 build；前提 SAC 關閉（Owner 用第 10 節的檢查確認，開著就回到 DA-9 選 4）。必要時把 `%LOCALAPPDATA%\TutorExamBank\pgdata16` 加入 Defender 的排除清單，減少即時掃描拖慢資料庫，要不要排除由 Owner 決定 | B1 開工前看 SAC 狀態；B1、D2 的冒煙測試；B3 驗收第 8 點 |
 | R-6 | Electron 的 Node 和原生模組：`sharp`、`@node-rs/jieba` 是 Node-API 模組，不必重新編譯，但要解開放在 asar 外（〔查證 S9〕）；`mupdf`（ESM 加 WASM）在 asar 裡能不能載入不確定；平台專用的二進位最簡單是在 Windows 上 `npm ci` 取得（2.2 節） | 中、中 | 2.2、2.9 節；B1 先在不包 asar 的開發模式確認三者都能動，B3 再確認打包後也能動 | B1、B3 的冒煙測試：拆題會用到 mupdf 和 sharp，查題會用到 jieba |
-| R-7 | Electron 的支援期短：只支援最新三個大版本，約半年（〔查證 S1、S3〕） | 高、低：單機、只載入自己的頁面 | 每半年升一次大版本；升級也走 5.3 節的流程 | — |
+| R-7 | Electron 的支援期短：只支援最新三個大版本，約半年（〔查證 S1、S3〕） | 高、低：單機、只載入自己的頁面 | 每半年升一次大版本；升級也走 5.3 節的流程。〔提案 2026-09-27〕Dependabot 對 `/desktop` 開 PR 提醒、CI 跑 `desktop` 的測試：分支 `dec/r8-desktop-ci`，待 Owner 同意（6.2 節「決策說明：desktop 納入 CI 與 dependabot」） | — |
 | R-8 | 記憶體：D2 的主要效益，但省多少不確定 | 中、正面 | D2 之後 WSL2 虛擬機不開。但比較的基準應該是「D1 加上 WSL 記憶體上限」（DA-14），不是預設的上限：WSL2 預設最多吃實體記憶體的一半，也就是 8 GB，可以用 `.wslconfig` 的 `memory=` 壓低，也可以開 `autoMemoryReclaim` 歸還快取（〔查證 S29〕；Docker 在 WSL 2 下的記憶體上限也是改 `.wslconfig`，見 S30）。Docker 的 Resource Saver 在 WSL 2 上只暫停引擎、不減記憶體，Docker 的文件改建議開 `autoMemoryReclaim`（〔查證 S30b〕）。社群回報 Docker Desktop 閒置時約 3 GB、vmmem 約 2.5 GB（〔查證 S31〕，2023 年、非官方數字，沒有設上限）。Electron 本身的主行程、視窗和 GPU 行程約一兩百 MB（〔未查證〕），大約是一個 Chrome 分頁的量級。對 `local-mode.md` 10.14 (e) 的記憶體帳（Owner 第五輪 C-e：先量再決定，10.17）應該是淨省，省多少要量 | 先照 DA-14 設上限並量測（〔選 1，定案〕第 10 節）；做 D2 的話，搬家前後各在工作管理員記一次「使用中」的記憶體〔要實測〕 |
 | R-9 | 關閉時留下孤兒行程：Python 或 PostgreSQL | 低、中 | python：venv 的 `Scripts\python.exe` 是轉導器（〔查證 S44b〕），後端的直接子行程是轉導器，真正的直譯器是孫行程，不在 libuv 的 job 裡（〔查證 S41〕的 `SILENT_BREAKAWAY_OK`）。它會跟著結束，靠的是轉導器自己建的 kill-on-close job（〔查證 S44〕）。所以「不會變孤兒」是〔推論〕，而且依賴 Python 啟動器的實作（2.3 節）。postgres 則刻意讓它在 app 當掉時繼續跑，下次開 app 沿用（2.5 節）。啟動時如果發現上次沒有正常結束（`postmaster.pid` 還在，但行程不在），交給 `pg_ctl` 處理 | B1 驗收第 5 點（OCR 執行中結束也要測）；D2 驗收第 4 點 |
 | R-10 | app 關著的時候沒有備份 | 中、中 | DA-4（〔選 1，定案〕）：資料只有在 app 開著時才會變動，所以改成「每天第一次開啟時」和「結束前、有寫入時」備份 | D2 驗收 |
