@@ -9,6 +9,7 @@
 //            → 工作歸零 → 10 秒後「處理完了」→ 自動結束
 //   wait   ：假裝有 1 件在途 → 系統匣「結束」→ 對話框選「等處理完再結束」→ 後端處理完自己結束 → app 結束
 //   abandon：假裝有 1 件在途 → 系統匣「結束」→ 對話框選「現在放棄」→ 馬上結束
+//            〔dec/r8-b1-abandon〕記下主行程送給後端的是「放棄」（host.abandon 的 waitMs／killAfterMs），驗後端自己結束（結束碼 0）
 //   crash  ：把後端子行程殺掉 → 自動重開一次 → 再殺一次 → 停下來顯示原因 → 關視窗結束
 // 「假裝在途工作」只改主行程看到的數字（包一層 host.status），後端本身照常；對話框用假的 showMessageBox 代替 Owner 按鈕。
 // 這支不是產品的一部分：B3 打包時不帶 test/。
@@ -189,6 +190,13 @@ function install({ app, events, getWindow, getHost, log }) {
             await sleep(1000);
             fakeStatus();
             fakeInFlight = 1;
+            // 〔dec/r8-b1-abandon〕主行程的「現在放棄」要走 host.abandon（送 { shutdown, abandon:true }），不是直接強制結束
+            const host = getHost();
+            const realAbandon = host.abandon;
+            host.abandon = async o => {
+                rec('abandon-called', { waitMs: o && o.waitMs, killAfterMs: o && o.killAfterMs });
+                return realAbandon(o);
+            };
             dialog.showMessageBox = async (...args) => {
                 const o = args.length > 1 ? args[1] : args[0];
                 rec('dialog', { title: o.title, message: o.message, detail: o.detail, buttons: o.buttons });

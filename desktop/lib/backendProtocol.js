@@ -7,7 +7,9 @@
 //   主 → 子  { type:'status', id }
 //   子 → 主  { type:'status', id, in_flight, shutting_down, jobs_paused }       launcherControl 的同一份狀態
 //   主 → 子  { type:'shutdown', grace_ms }                                        開始優雅關閉（冪等；時限以第一次為準）
-//   子 → 主  { type:'shutdown-ack', grace_ms, in_flight, already }
+//   主 → 子  { type:'shutdown', grace_ms:0, abandon:true }                        〔dec/r8-b1-abandon〕現在放棄：中止在途節點、
+//            只放掉自己的租約後結束（jobRunner 的 shutdown({ abandon })）；已經在「等處理完」的關閉中也照樣改成放棄
+//   子 → 主  { type:'shutdown-ack', grace_ms, in_flight, already }                 （放棄時多 abandon:true）
 // 子行程這一側（attachBackendAgent）在 backend-entry.js 裡用；主行程那一側在 lib/backendHost.js。
 // ─────────────────────────────────────────────────────────────
 'use strict';
@@ -47,7 +49,7 @@ function clampGrace(raw, { defaultMs, maxMs }) {
  * 子行程：聽主行程的訊息，回報狀態、開始關閉。
  * @param {object} o
  * @param {{on:Function, postMessage:Function}} o.parentPort  process.parentPort（測試換成假的）
- * @param {{status:()=>{in_flight:number, shutting_down:boolean}, close:(o:{graceMs:number})=>Promise<any>, runner:object|null}} o.handle
+ * @param {{status:()=>{in_flight:number, shutting_down:boolean}, close:(o:{graceMs:number, abandon?:boolean})=>Promise<any>, runner:object|null}} o.handle
  *        startServer() 的回傳值
  * @param {number} o.defaultGraceMs
  * @param {number} o.maxGraceMs
@@ -64,11 +66,14 @@ function attachBackendAgent({ parentPort, handle, defaultGraceMs, maxGraceMs, lo
             return;
         }
         if (msg.type === TYPES.SHUTDOWN) {
-            const graceMs = clampGrace(msg.grace_ms, { defaultMs: defaultGraceMs, maxMs: maxGraceMs });
+            // 〔dec/r8-b1-abandon〕abandon：不等，馬上放棄在途工作（已經在等處理完時，close 會讓那一輪提早改成放棄）
+            const abandon = msg.abandon === true;
+            const graceMs = abandon ? 0 : clampGrace(msg.grace_ms, { defaultMs: defaultGraceMs, maxMs: maxGraceMs });
             const s = handle.status();
-            parentPort.postMessage({ type: TYPES.SHUTDOWN_ACK, grace_ms: graceMs, in_flight: s.in_flight, already: s.shutting_down });
-            if (!s.shutting_down) log(`[desktop] 主行程要求關閉：最多等在途工作 ${Math.round(graceMs / 1000)} 秒（目前 ${s.in_flight} 件）`);
-            Promise.resolve(handle.close({ graceMs })).catch(err => log(`[desktop] 關閉時發生錯誤：${err && err.message}`));
+            parentPort.postMessage({ type: TYPES.SHUTDOWN_ACK, grace_ms: graceMs, in_flight: s.in_flight, already: s.shutting_down, ...(abandon ? { abandon: true } : {}) });
+            if (abandon) log(`[desktop] 主行程要求現在放棄：中止 ${s.in_flight} 件在途工作（不寫結果、不動重試次數），放掉自己的租約後結束`);
+            else if (!s.shutting_down) log(`[desktop] 主行程要求關閉：最多等在途工作 ${Math.round(graceMs / 1000)} 秒（目前 ${s.in_flight} 件）`);
+            Promise.resolve(handle.close(abandon ? { graceMs, abandon: true } : { graceMs })).catch(err => log(`[desktop] 關閉時發生錯誤：${err && err.message}`));
         }
     });
 }

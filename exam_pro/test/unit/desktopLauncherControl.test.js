@@ -122,6 +122,96 @@ describe('生命週期（shutdown）', () => {
     });
 });
 
+// 〔dec/r8-b1-abandon〕runner 有 shutdown（真的 jobRunner）時：時限到了或要求放棄 → 先放棄在途工作（中止節點、只放掉自己的租約），
+// 都收尾了就照常關連線池（下次開機立刻重新認領）；收不了尾的才退回「不關連線池、直接結束、等租約到期」。
+// 上面那幾則用的假 runner 沒有 shutdown，走的就是退回的那條路（行為與原本相同）。
+function abandonRig({ inFlight = 1, finishAfterMs = Infinity, leftAfterAbandon = 0 } = {}) {
+    let now = 0;
+    const events = [];
+    const calls = [];
+    const runner = {
+        _left: inFlight,
+        stop() { events.push('runner.stop'); },
+        async shutdown(o) {
+            calls.push({ ...o, at: now });
+            events.push('runner.shutdown');
+            if (o && o.abandon) this._left = leftAfterAbandon;
+            return { left: this._left, abandoned: inFlight - leftAfterAbandon, released: inFlight - leftAfterAbandon, kept: 0 };
+        },
+        get inFlight() { return now >= finishAfterMs ? 0 : this._left; }
+    };
+    const server = { close(cb) { events.push('server.close'); if (cb) cb(); }, closeAllConnections() { events.push('server.closeAllConnections'); } };
+    const lifecycle = lc.createLifecycle({
+        exit: code => events.push(`exit(${code})`),
+        logger: { info: () => { }, warn: m => events.push(`warn:${m}`), error: m => events.push(`error:${m}`) },
+        closePool: async () => { events.push('pool.end'); },
+        sleep: async ms => { now += ms; },
+        now: () => now, pollMs: 500, settleMs: 300, pid: 4321
+    });
+    lifecycle.attach({ server, runner });
+    return { lifecycle, events, calls, get now() { return now; } };
+}
+
+describe('〔dec/r8-b1-abandon〕生命週期：放棄在途工作', () => {
+    test('ABANDON_WAIT_MS 是 10 秒', () => {
+        assert.equal(lc.ABANDON_WAIT_MS, 10_000);
+    });
+
+    test('shutdown({ abandon: true })：不等 graceMs，馬上 runner.shutdown({ abandon, waitMs })；都收尾了就照常關連線池、exit(0)', async () => {
+        const r = abandonRig({ inFlight: 2 });
+        const out = await r.lifecycle.shutdown({ graceMs: 120_000, abandon: true });
+        assert.equal(r.now, 0, '不等在途工作');
+        assert.deepEqual(r.calls, [{ abandon: true, waitMs: 10_000, at: 0 }]);
+        assert.deepEqual(r.events.filter(e => !e.startsWith('warn:')),
+            ['runner.stop', 'server.close', 'runner.shutdown', 'server.closeAllConnections', 'pool.end', 'exit(0)']);
+        assert.equal(out.left, 0);
+        assert.deepEqual(out.abandoned, { left: 0, abandoned: 2, released: 2, kept: 0 });
+        const warn = r.events.find(e => e.startsWith('warn:'));
+        assert.match(warn, /放棄在途工作：2 件被中止（不寫結果、不動重試次數），其中 2 件已放掉租約、下次開機立刻重新接手/);
+        assert.equal(r.lifecycle.abandoning, true);
+    });
+
+    test('時限到了還有在途工作（A 的「否＝最多等 2 分鐘」、桌面版的時限）：先放棄再關，下次開機不必等租約', async () => {
+        const r = abandonRig({ inFlight: 1 });
+        const out = await r.lifecycle.shutdown({ graceMs: 5_000 });
+        assert.ok(r.now >= 5_000 && r.now < 6_000, '先照時限等');
+        assert.equal(r.calls.length, 1);
+        assert.equal(r.calls[0].abandon, true);
+        assert.deepEqual(r.events.slice(-2), ['pool.end', 'exit(0)']);
+        assert.equal(out.left, 0);
+    });
+
+    test('等處理完的途中改成放棄：同一個 promise、提早跳出等待、接著放棄', async () => {
+        const r = abandonRig({ inFlight: 1 });
+        const waiting = r.lifecycle.shutdown({ graceMs: 6 * 3600 * 1000 });
+        await Promise.resolve();
+        const again = r.lifecycle.shutdown({ abandon: true });
+        assert.equal(again, waiting);
+        await waiting;
+        assert.ok(r.now < 2_000, `沒有等到 6 小時（${r.now}）`);
+        assert.equal(r.calls.length, 1);
+        assert.deepEqual(r.events.slice(-2), ['pool.end', 'exit(0)']);
+    });
+
+    test('放棄後還有工作單位沒收尾：退回原本的做法（不關連線池、直接結束、等租約到期）', async () => {
+        const r = abandonRig({ inFlight: 2, leftAfterAbandon: 1 });
+        const out = await r.lifecycle.shutdown({ abandon: true });
+        assert.equal(out.left, 1);
+        assert.ok(!r.events.includes('pool.end'), '還有工作在用連線池');
+        assert.equal(r.events[r.events.length - 1], 'exit(0)');
+        const warns = r.events.filter(e => e.startsWith('warn:'));
+        assert.match(warns[0], /還有 1 件在 10 秒內沒有收尾/);
+        assert.match(warns[1], /直接關閉；租約到期後下次開機會重新認領/);
+    });
+
+    test('沒有在途工作時要求放棄：不呼叫 runner.shutdown，照常關', async () => {
+        const r = abandonRig({ inFlight: 0 });
+        await r.lifecycle.shutdown({ abandon: true });
+        assert.deepEqual(r.calls, []);
+        assert.deepEqual(r.events, ['runner.stop', 'server.close', 'server.closeAllConnections', 'pool.end', 'exit(0)']);
+    });
+});
+
 describe('路由 /api/launcher', () => {
     function appWith(lifecycle) {
         const app = express();

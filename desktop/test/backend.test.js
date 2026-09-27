@@ -57,6 +57,21 @@ describe('子行程這一側（attachBackendAgent）', () => {
         assert.deepEqual(w.closes[2], { graceMs: 120000 });
     });
 
+    test('〔dec/r8-b1-abandon〕現在放棄：ack 帶 abandon、close({ graceMs:0, abandon:true })；已經在等處理完也照樣送（改成放棄）', async () => {
+        const w = world({ inFlight: 2 });
+        w.port.emit('message', { data: { type: 'shutdown', grace_ms: 21600000 } });
+        await tick();
+        assert.deepEqual(w.closes, [{ graceMs: 21600000 }], '先是等處理完');
+        w.port.emit('message', { data: { type: 'shutdown', grace_ms: 999, abandon: true } });
+        await tick();
+        assert.deepEqual(w.sent[1], { type: 'shutdown-ack', grace_ms: 0, in_flight: 2, already: true, abandon: true });
+        assert.deepEqual(w.closes[1], { graceMs: 0, abandon: true }, '已經在關閉中也要呼叫 close（讓正在等的那一輪改成放棄）');
+        // abandon 只認 true：其他值照一般關閉
+        w.port.emit('message', { data: { type: 'shutdown', grace_ms: 5, abandon: 'yes' } });
+        await tick();
+        assert.deepEqual(w.closes[2], { graceMs: 5 });
+    });
+
     test('認不得的訊息不理', () => {
         const w = world();
         for (const m of [null, 'x', { data: 'x' }, { type: 'nope' }, { data: { type: 'nope' } }]) w.port.emit('message', m);
@@ -211,7 +226,22 @@ describe('主行程這一側（createBackendHost）', () => {
         assert.deepEqual(f.child.posted, []);
     });
 
-    test('現在放棄：送 shutdown 0；已經在「等處理完」就直接強制結束', async () => {
+    // 〔dec/r8-b1-abandon〕行為變更：原本送 shutdown 0（後端直接結束、租約等到期），已經在「等處理完」就直接強制結束；
+    // 現在一律送「現在放棄」（後端中止在途節點、放掉自己的租約後結束），等處理完的途中也一樣，後端沒結束才強制結束
+    test('現在放棄：送 { shutdown, grace_ms:0, abandon:true }，後端自己結束就不強制結束', async () => {
+        const g = fakeFork();
+        const h2 = newHost(g);
+        await h2.start({ env: {} });
+        g.child.emit('message', { type: 'ready', port: 1, url: 'u' });
+        const r = await h2.abandon();
+        assert.deepEqual(g.child.posted, [{ type: 'shutdown', grace_ms: 0, abandon: true }]);
+        assert.equal(g.child.killed, 0);
+        assert.equal(r.code, 0);
+        assert.equal(r.expected, true);
+        assert.equal(h2.abandoning, true);
+    });
+
+    test('現在放棄：已經在「等處理完」也送放棄（不再直接強制結束）；後端收到後結束，兩邊都回來', async () => {
         const f = fakeFork({ exitOnShutdown: false });
         const host = newHost(f);
         await host.start({ env: {} });
@@ -219,18 +249,32 @@ describe('主行程這一側（createBackendHost）', () => {
         const waiting = host.shutdown({ graceMs: 6 * 3600 * 1000, killAfterMs: 5000 });
         await tick(5);
         assert.equal(host.shuttingDown, true);
-        await host.abandon();
+        const abandoning = host.abandon({ waitMs: 10000, killAfterMs: 5000 });
+        await tick(5);
+        assert.deepEqual(f.child.posted, [{ type: 'shutdown', grace_ms: 6 * 3600 * 1000 }, { type: 'shutdown', grace_ms: 0, abandon: true }]);
+        assert.equal(f.child.killed, 0, '不是直接強制結束');
+        f.child.emit('exit', 0);   // 後端放掉租約、關好連線池後結束
+        await abandoning;
         await waiting;
-        assert.deepEqual(f.child.posted, [{ type: 'shutdown', grace_ms: 6 * 3600 * 1000 }]);
+        assert.equal(f.child.killed, 0);
+        // 重複按「現在放棄」只送一次
+        assert.equal(f.child.posted.filter(m => m.abandon).length, 1);
+    });
+
+    test('現在放棄：後端在 waitMs＋killAfterMs 內沒結束（收不到訊息）才強制結束；還沒聽到埠就直接強制結束', async () => {
+        const f = fakeFork({ exitOnShutdown: false });
+        const host = newHost(f);
+        await host.start({ env: {} });
+        f.child.emit('message', { type: 'ready', port: 1, url: 'u' });
+        await host.abandon({ waitMs: 10, killAfterMs: 10 });
         assert.equal(f.child.killed, 1);
 
         const g = fakeFork();
         const h2 = newHost(g);
         await h2.start({ env: {} });
-        g.child.emit('message', { type: 'ready', port: 1, url: 'u' });
         await h2.abandon();
-        assert.deepEqual(g.child.posted, [{ type: 'shutdown', grace_ms: 0 }]);
-        assert.equal(g.child.killed, 0);
+        assert.equal(g.child.killed, 1);
+        assert.deepEqual(g.child.posted, []);
     });
 
     test('不是桌面版要它結束的（當掉、被殺）：exit 通知 expected:false；之後可以再開一個', async () => {
