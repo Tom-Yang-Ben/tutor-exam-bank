@@ -214,7 +214,7 @@ describe('lint：化學題', () => {
         const outcome = await lint.run(ctx, { question_text: '$\\ce{H2O$ 的莫耳質量', answer_text: '$18$' });
         assert.equal(outcome.kind, 'pass');
         assert.equal(calls[0].agent, 'lint_chem');
-        assert.equal(calls[0].template, 'lint_chem.v1');
+        assert.equal(calls[0].template, 'lint_chem.v2');
         assert.equal(calls[0].system, lint.SYSTEM_CHEM);
         assert.ok(calls[0].parts[0].text.includes('\\ce{'));
     });
@@ -226,7 +226,7 @@ describe('lint：化學題', () => {
         });
         await lint.run(ctx, { question_text: '$\\frac{1}{2$', answer_text: '' });
         assert.equal(calls[0].agent, 'lint');
-        assert.equal(calls[0].template, 'lint.v2');
+        assert.equal(calls[0].template, 'lint.v3');
         assert.equal(calls[0].system, lint.SYSTEM);
         assert.equal(calls[0].schema, buildSchema('lint'));
     });

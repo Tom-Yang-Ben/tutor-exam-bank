@@ -153,7 +153,7 @@ describe('送出的請求與 agent 本身組的一模一樣', () => {
     test('lint、classify、kc_tag 的 agent 名稱與兩個數字', async () => {
         const pick = (a) => bench.inputFor(a, bench.pickQuestion(a, questions).question);
         const l = await bench.captureRequest('lint', pick('lint'), 'ollama:qwen3:8b');
-        assert.deepEqual([l.agent, l.template, l.maxOutputTokens, l.thinkingBudget], ['lint', 'lint.v2', 8192, 1024]);
+        assert.deepEqual([l.agent, l.template, l.maxOutputTokens, l.thinkingBudget], ['lint', 'lint.v3', 8192, 1024]);
         const c = await bench.captureRequest('classify', pick('classify'), 'ollama:qwen3:8b');
         assert.deepEqual([c.agent, c.maxOutputTokens, c.thinkingBudget], ['classify', undefined, undefined]);
         assert.deepEqual(c.cacheKeyParts.fewShotIds, [], '不接資料庫：few-shot 只用設定檔的例句（與錄 cassette 時相同）');

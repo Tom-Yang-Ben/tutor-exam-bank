@@ -86,6 +86,8 @@ function questionTypeText() {
  * 用 String.raw：這裡的反斜線就是模型看到的反斜線，不必再在原始碼裡多跳脫一層。
  * 改這段文字＝下面兩份規範的文字改變＝所有用到它們的模板（清單見 docs/local-mode.md「第五輪 A 模板與 schema」一節）的雜湊都變，
  * 照專案慣例要把那些模板的版號 +1，對應的 cassette 要重錄。
+ * 〔Owner 2026-09-27 O-5 選 2，dec/r6-lint-v3〕agents/lint.js 第三層（lint.v3／lint_chem.v2）也直接呼叫本函式，
+ * 改這段文字時那兩個模板也要一起升版。
  * @param {string} positives 正例（JSON 原文，含引號，以頓號分隔）
  * @returns {string}
  */

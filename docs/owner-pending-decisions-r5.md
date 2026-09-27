@@ -34,7 +34,7 @@
 | O-2 | kNN 投票門檻 `KNN_VOTE_SIM` 要不要也重新校準 | 與 V5-2 一起 | 2 一起分析 〔Owner 2026-09-27 選 1〕已落實於 `dec/r6-defaults`（維持 0.90） |
 | O-3 | ADR-017（本機模式）要不要改寫成 OCR 為主並定案 | 重錄與實際上傳之後 | 2 有數字再定案 |
 | O-4 | 要不要抽查 Claude 對 55 支變式的「跑題」初判（V5-2 的證據） | V5-2 定案之前（反斜線修好、variant 重錄後重標時） | 2 重標後抽查 |
-| O-5 | 公式重寫（lint）的模板要不要也加 L-2「JSON 字串裡的反斜線寫兩個」 | 重錄 variant 之前（下游 lint 本來就要跟著重錄） | 2 加，升 lint.v3／lint_chem.v2 |
+| O-5 | 公式重寫（lint）的模板要不要也加 L-2「JSON 字串裡的反斜線寫兩個」 | 重錄 variant 之前（下游 lint 本來就要跟著重錄） | 2 加，升 lint.v3／lint_chem.v2 〔Owner 2026-09-27 選 2〕已落實於 `dec/r6-lint-v3` |
 
 ---
 
@@ -388,6 +388,8 @@
 - 出處：`local-mode.md` 10.13 第 1 點第 3 項、第 5 點；`local-embed-thresholds-report.md` 4.2。
 
 ### O-5　公式重寫（lint）的模板要不要也加 L-2「JSON 字串裡的反斜線寫兩個」
+
+> 〔Owner 2026-09-27 選 2〕已落實於 `dec/r6-lint-v3`（從 `local/integration-r6` `6222475` 開）：`agents/lint.js` 的「要求」段落最後加一條，直接呼叫 `promptParts.jsonBackslashRule()`（與 `LATEX_RULES` (5)／`CHEM_LATEX_RULES` (6) 逐字相同），`lint.v2` → `lint.v3`、`lint_chem.v1` → `lint_chem.v2`；lint 的 cassette 在 variant 與 pipeline 重錄時一起錄，不另外跑（[`local-mode.md`](local-mode.md) 10.16 第 2 點加註、10.21 第 1a 步）；登錄於 [`HANDOFF.md`](HANDOFF.md) §0.00c。
 
 - **背景**：第五輪 L-2〔Owner 2026-09-27 選 1〕要求「`LATEX_RULES` 或等效共用段落」加一條「JSON 字串裡的反斜線要寫成兩個」，已落實於 `dec/r6-templates`，涵蓋共用 `LATEX_RULES`／`CHEM_LATEX_RULES` 的 8 個模板（拆題與變式）。公式重寫（`agents/lint.js` 第三層，模板 `lint.v2`、`lint_chem.v1`）的工作就是請模型把 LaTeX 重寫後照 JSON 輸出，它有自己的一段公式規則，意思相近，但不共用 `LATEX_RULES`，所以這次沒有加。它算不算「等效共用段落」，需要 Owner 裁定。（審查 `dec/r6-templates` 時提出；`dec/r6-templates-fix` 新增本題。）
 - **問題**：lint 的模板要不要也加同一條規則？

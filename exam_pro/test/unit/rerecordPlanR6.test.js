@@ -3,7 +3,7 @@
 //（〔整合 2026-09-27 dec/integration-r6〕）
 //
 // 10.21 叫 Owner 在自己的電腦上依序跑：
-//   ① record_local.bat classify,nlq  ② （條件）O-5 選 2 時 lint.v3 先進來  ③ record_local.bat variant
+//   ① record_local.bat classify,nlq  ② 確認已含 lint.v3（〔Owner 2026-09-27 O-5 選 2〕已落實，dec/r6-lint-v3；不另錄）  ③ record_local.bat variant
 //   ④ record_local.bat pipeline,e2e  ⑤ 重錄後的 perf:local、embed:thresholds、O-4 抽查、cassettes:prune（只列）
 //   另有 C-e 的量測（ollama ps、server.log、local:bench-text --agent verify）。
 // 這裡釘住：record_local.bat／rerecord_all.js 真的照這個順序、這些 LLM_MODE／EMBED_MODE 錄；要錄的模板版號就是文件寫的；
@@ -106,12 +106,23 @@ describe('10.21 要錄的模板版號', () => {
         assert.match(src('agents/extract.js'), /const TEMPLATE_OCR = 'extract_ocr\.v2';/);
     });
 
-    test('lint 仍是 lint.v2（O-5 待決）；升 lint.v3 時 10.21 的條件步驟要改成必做', () => {
-        const lint = src('agents/lint.js').match(/const TEMPLATE = '([^']+)'/)[1];
-        assert.ok(['lint.v2', 'lint.v3'].includes(lint), lint);
+    test('〔Owner 2026-09-27 O-5 選 2〕lint 是 lint.v3、lint_chem.v2；10.21 的 1a 寫成已落實（隨第 2、3 步一起錄、不另外跑），第 0 步不再要求答 O-5', () => {
+        const lint = require('../../agents/lint');
+        assert.equal(lint.TEMPLATE, 'lint.v3');
+        assert.equal(lint.TEMPLATE_CHEM, 'lint_chem.v2');
+        assert.match(src('agents/lint.js'), /const TEMPLATE = 'lint\.v3';/);   // 1a 叫 Owner 用 findstr 找的就是這一行
         const doc = fs.readFileSync(path.join(REPO, 'docs', 'local-mode.md'), 'utf8');
         const sec = doc.slice(doc.indexOf('### 10.21 '));
-        if (lint === 'lint.v2') assert.match(sec, /O-5/);
+        const a = sec.indexOf('#### 1a. ');
+        const b = sec.indexOf('#### 2. ');
+        assert.ok(a > 0 && b > a);
+        const s1a = sec.slice(a, b);
+        assert.match(s1a, /〔Owner 2026-09-27 O-5 選 2，已落實於 `dec\/r6-lint-v3`〕/);
+        assert.ok(s1a.includes(`findstr /C:"const TEMPLATE = 'lint.v3'" agents\\lint.js`));
+        assert.match(s1a, /第 2 步（變式的 lint）與第 3 步（樣卷的 lint）裡一起錄到，不必另外跑指令/);
+        assert.match(sec, /~~\*\*O-5 要先答\*\*~~〔Owner 2026-09-27 O-5 選 2/);
+        assert.match(sec, /\| 1a \| 確認已含 lint\.v3（O-5 選 2，已落實） \|/);
+        assert.match(sec.slice(sec.indexOf('#### 2. '), sec.indexOf('#### 3. ')), /lint（`lint\.v3`）/);
     });
 });
 

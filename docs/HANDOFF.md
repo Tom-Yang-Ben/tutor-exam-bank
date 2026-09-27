@@ -220,6 +220,7 @@
 | O-2 | 1：kNN 投票門檻 `KNN_VOTE_SIM` 維持 0.90 | D＝`dec/r6-defaults` |
 | O-3 | 2：ADR-017 現在改寫成 OCR 為主，等重錄與上傳真卷有數字後再定案 | E＝`dec/r6-docs-kc`：ADR-017 改寫（v1.1、狀態維持「提議中／待數據定案」、新增 §3.1 定案條件），原文以〔修訂 2026-09-27〕保留；`engineering_tracker.md` ADR 索引加註 |
 | O-4 | 2：variant 重錄、重標初判之後再抽查 10～15 支 | 只記錄（重錄後做） |
+| O-5 | 2：公式重寫（lint）第三層也加 L-2「JSON 字串裡的反斜線寫兩個」（與 `promptParts.jsonBackslashRule()` 同一段），`lint.v2` → `lint.v3`、`lint_chem.v1` → `lint_chem.v2` | `dec/r6-lint-v3`（2026-09-27 另答，從 `local/integration-r6` `6222475` 開，不在上面五條分支內）；lint 的 cassette 隨 variant、pipeline 重錄一起錄（`local-mode.md` 10.16 第 2 點加註、10.21 第 1a 步） |
 | V5-1 | 2：`VARIANT_RETRIEVE_SIM_MIN` 改 0.72 | D＝`dec/r6-defaults` |
 | V5-2 | 2：`VARIANT_OFFTOPIC_SIM_MIN` 改 0.87（暫定） | D＝`dec/r6-defaults` |
 | V5-3 | 3：`DEDUP_DUP_THRESHOLD` 改 0.99 | D＝`dec/r6-defaults` |

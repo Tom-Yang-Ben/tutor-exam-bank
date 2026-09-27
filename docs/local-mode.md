@@ -290,7 +290,7 @@ JOB_CONCURRENCY=2                    # 選填
   | `variant`（`variant.v1`） | 0／87 | **要重錄** | 這批最晚一支錄於 2026-09-24 22:05（UTC），早於 `522f81c`（章節白名單依冊別分組），鍵已對不上；本機 9/25 錄的 60 支有效 |
   | `extract`（`extract.v2`） | 0／1 | **要重錄**：pipeline 的 extract 一開始就 replay miss，e2e 用同一份樣卷、同一組呼叫 | 2026-09-15 錄的，之後模板或 schema 改過 |
   | `verify`（`verify.v1`） | 58／58 | 鍵有效，但實際讀不讀得到要看上游：題幹來自 extract（pipeline／e2e）或出變式（variant），上游重錄後題幹只要差一個字就是新鍵 | — |
-  | `lint`（`lint.v2`） | 1／1 | 同 verify | — |
+  | `lint`（`lint.v2`） | 1／1 | 同 verify | — 〔Owner 2026-09-27 O-5 選 2，`dec/r6-lint-v3`〕模板已升 `lint.v3`，這 1 支的鍵也失效（0／1），切回 Gemini 時跟著 pipeline／variant 重錄 |
   | 向量檔 `embeddings.gemini-embedding-001.768.json` | 62 題缺 5 題（id 51、53、54、55、62） | **要補向量**：retrieval 與 variant 在第一步就停，nlq 的 `recall10` 是 n/a；`npm run cassettes:rerecord` 的第一步（`eval/record_embeddings.js --only-missing`）只補缺的、只呼叫 embedding，費用很小 | 向量檔以 `embed_text` 的雜湊當鍵：#62 是 `49256a0` 新增的干擾題，#51、#53、#54、#55 在同一個 commit 改了章（章名在 `embed_text` 裡），檔裡沒有這 5 段新文字的 Gemini 向量 |
 
   所以切回 Gemini 後要用 Gemini 做的是：補 5 題向量，重錄 classify、nlq、variant、pipeline＋e2e，也就是 `npm run cassettes:rerecord` 的全部步驟。還能用的只有 verify、lint 那 59 支的鍵，但 `LLM_MODE=record` 每一次呼叫都會真的打模型、同鍵覆寫（`services/llm/index.js`），重錄 pipeline 時它們還是會被重新呼叫，**省不到錢**。要估費用，先把 `ci.yml` 那四行改成 Gemini，再跑 `npm run cassettes:rerecord -- --dry-run` 看盤點。這張表是 2026-09-27 的快照，之後再改模板或 schema 就會變；重算方法：在 `exam_pro/` 執行 `node -e "const a=require('./eval/lib/cassetteAudit');for(const e of a.auditKeys(a.inventory().entries))console.log(e.keyValid?'有效':'失效',e.agent,e.model,e.template)"`。
@@ -1127,6 +1127,7 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
   | `variant_chem` | `variant_chem.v1` → `variant_chem.v2` | 變式，化學（也含 V5-6） |
 
   沒有用到這段規範、這次**沒有改**的：`classify`、`classify_chem`、`lint`、`lint_chem`、`verify`、`verify_chem`、`nlq`、知識點標註、家教。其中 `lint` 的第三層是請模型重寫公式，它有自己的規則文字，沒有共用 `LATEX_RULES`；要不要也加這條，要 Owner 另外決定（加了就是 `lint.v3`／`lint_chem.v2` 並重錄）。已列為待決題 O-5（[`owner-pending-decisions-r5.md`](owner-pending-decisions-r5.md)）。
+  〔Owner 2026-09-27 O-5 選 2，已落實於 `dec/r6-lint-v3`（從 `local/integration-r6` `6222475` 開）〕`agents/lint.js` 第三層的「要求」段落最後加一條，文字直接呼叫同一個 `jsonBackslashRule()`（不另寫措辭）：數學／物理是第 5 條、正例同 `LATEX_RULES` (5)；化學是第 6 條、正例同 `CHEM_LATEX_RULES` (6)（`\ce`）。原本的 1～4／1～5 條與兩份 SYSTEM 一字未改。模板升版 `lint.v2` → `lint.v3`、`lint_chem.v1` → `lint_chem.v2`，cassette 的鍵跟著換（repo 內 `lint.v2` 5 支、`lint_chem.v1` 0 支對不上），在 10.21 第 2、3 步重錄 variant 與 pipeline 時一起錄，不另外跑。`test/unit/r6Templates.test.js` 的「O-5 選 2」一組釘住：版號與舊版號不再註冊、規則是 lint 自己段落的最後一條且與 `LATEX_RULES` (5)／`CHEM_LATEX_RULES` (6) 逐字相同、模型照做（JSON 原文一律兩個反斜線）時 `latexEscapeRepair` 不動且 lint 放行、原文不變。
 - **事後修復保留當第二道防線**（`services/llm/latexEscapeRepair.js`，`docs/llm.md` 第 10 節），程式沒改。模型照做時，JSON 原文是 `\\frac`，解析後就是正確的 `\frac`，修復必須是 no-op。`test/unit/r6Templates.test.js` 驗了三層：
   1. 規則裡的每個正例當 JSON 字串解析，得到單一反斜線的 LaTeX，`repairString` 一字不改，`applyToResult` 回傳原物件（沒有 `latexRepair` 鍵）。
   2. 假 Ollama 與假 Gemini 回一份「每個反斜線都寫兩個」的 JSON，內容含 b f n r t 開頭的指令、`\circ`、`\ce`、表格換列 `\\` 與真的換行。`services/llm.generateJson` 回的 data 等於原意，沒有 `latexRepair`。
@@ -1156,7 +1157,7 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 | `extract_vision` | `extract_vision.v1` → `extract_vision.v2` | 模板（L-2） | 只有交叉驗證模式用；repo 裡沒有。要切回交叉驗證時再錄 |
 | `extract` | `extract.v2` → `extract.v3` | 模板（L-2） | repo 裡 1 支（Gemini 樣卷）對不上；CI 現在走 OCR 為主，不讀它。切回 Gemini 時要重錄。`sourceCheckSample` 單元測試與 `calibrate_source_check` 讀的是那支檔案本身（依 `meta.template` 找），不受影響 |
 | `extract_chem`、`extract_vision_chem`、`extract_ocr_chem` | 各 +1（v2） | 模板（L-2） | repo 裡沒有；私有層若有，要重錄 |
-| `lint`、`verify`、`nlq`、知識點標註、家教 | 不變 | — | 鍵沒變；只有吃到新 variant 題幹的那幾支會 miss（上面 variant 那一列） |
+| `lint`、`verify`、`nlq`、知識點標註、家教 | 不變 | — | 鍵沒變；只有吃到新 variant 題幹的那幾支會 miss（上面 variant 那一列）〔Owner 2026-09-27 O-5 選 2，`dec/r6-lint-v3`〕`lint` 另升 `lint.v3`、`lint_chem` 升 `lint_chem.v2`（上面第 2 點的加註）：lint 的鍵全部換掉，隨 variant、pipeline 一起重錄 |
 
 建議順序：classify 與 nlq（10.15 的 `record_local.bat classify,nlq`）→ variant 整步（LLM＋向量）→ pipeline＋e2e（OCR 為主，錄 `extract_ocr.v2`）。L-2 與 V5-6 都落在 variant，同一次重錄就好，不必錄兩次（O-1、V5-6 的原建議）。
 
@@ -1180,7 +1181,7 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 審查意見 4 條（都是 minor），逐條驗證後處理如下：
 
 1. **LC-1 的 `rationale` 說明多了一句新要求**（「規則裡若有相鄰兩章的界線，寫出你依哪一條判斷」）——屬實。Owner 核准的是「先寫理由再選章」的欄位順序，沒有核准新的輸出要求，所以**刪掉這一句**，只留開頭的「先寫這一欄，再選章節：」，其餘回到 `a670783` 的原文。欄位順序、`chapter` 的「依上面的理由選出……」不變。schema 雜湊又換了一次，但 `classify.v2` 還沒錄過、repo 裡沒有 `classify_chem` cassette，不多造成重錄；`classify.v2` 不升版。
-2. **lint 第三層有一段意思相同的公式規則，沒有加 L-2 那條**——屬實（`agents/lint.js` 的 `lint.v2`、`lint_chem.v1` 各自寫規則，不共用 `LATEX_RULES`）。Owner 的原話是「`LATEX_RULES` 或等效共用段落」，lint 那段算不算「等效」要 Owner 裁定，這個分支不改。已在 `owner-pending-decisions-r5.md` 新增 **O-5**。repo 內 `lint.v2` cassette 5 支、`lint_chem.v1` 0 支。
+2. **lint 第三層有一段意思相同的公式規則，沒有加 L-2 那條**——屬實（`agents/lint.js` 的 `lint.v2`、`lint_chem.v1` 各自寫規則，不共用 `LATEX_RULES`）。Owner 的原話是「`LATEX_RULES` 或等效共用段落」，lint 那段算不算「等效」要 Owner 裁定，這個分支不改。已在 `owner-pending-decisions-r5.md` 新增 **O-5**。repo 內 `lint.v2` cassette 5 支、`lint_chem.v1` 0 支。〔Owner 2026-09-27 O-5 選 2〕已落實於 `dec/r6-lint-v3`（本節第 2 點的加註）。
 3. **`localModeSections` 的標題檢查放寬了**——屬實，但這一輪每組都要加暫編的 10.16 節，不放寬就過不了；10.12～10.15 的原檢查沒有降低。依審查建議**這個分支不改**，整合重編節號時改回逐一列出每個節號與標題。〔整合 2026-09-27 `dec/integration-r6`：已改回逐一列出 10.12～10.20 每一節的節號與標題。〕
 4. **`generateVariant.js` 註解版號過時；`calibrate_source_check.js` 綁死 `extract.v2`**——註解屬實，已改成 `variant_chem.v2`（只是註解，不進模板雜湊）。`calibrate_source_check.js`（與 `test/unit/sourceCheckSample.test.js`）依 `meta.template === 'extract.v2'` 找樣卷 cassette：repo 裡現在就是那一支，行為正確，依審查建議**現在不改程式**，只在工具裡加註「切回 Gemini、用 `extract.v3` 重錄並刪掉舊檔時，這裡與 `sourceCheckSample` 測試要一起改」。
 
@@ -1431,7 +1432,7 @@ C-f 的細節：
 ### 10.21 重錄計畫（2026-09-27，第五輪之後）
 
 > 〔整合 2026-09-27 `dec/integration-r6`〕第五輪五組（10.16～10.20）併進 `dec/integration-r6` 之後，要在 **Owner 的電腦**上重錄的回放檔全部整理在這裡，照順序做。分支本身沒有錄任何 cassette、沒有改 `eval/thresholds.json` 與 golden。
-> 為什麼要重錄：classify 的 schema 改了欄位順序（10.16 第 1 點；`classify.v2` 本來就還沒錄）、`nlq.v2` 還沒錄（10.15）、`variant.v2` 的 prompt 加了兄弟題幹與 L-2 規則（10.16 第 2、3 點，60 支全部對不上）、`extract_ocr.v2` 加了 L-2 規則（pipeline／e2e 本來就缺這一支）。
+> 為什麼要重錄：classify 的 schema 改了欄位順序（10.16 第 1 點；`classify.v2` 本來就還沒錄）、`nlq.v2` 還沒錄（10.15）、`variant.v2` 的 prompt 加了兄弟題幹與 L-2 規則（10.16 第 2、3 點，60 支全部對不上）、`extract_ocr.v2` 加了 L-2 規則（pipeline／e2e 本來就缺這一支）、〔Owner 2026-09-27 O-5 選 2，`dec/r6-lint-v3`〕`lint.v3`／`lint_chem.v2` 也加了同一條規則（10.16 第 2 點的加註；lint 的鍵全部換掉，隨第 2、3 步一起錄）。
 > 以下的指令都在 `exam_pro` 資料夾的命令提示字元（cmd）執行；`record_local.bat` 也可以在檔案總管雙擊（雙擊＝全部 suite 一次錄完，時間是下面四步相加）。
 
 #### 0. 開始之前（約 15 分）
@@ -1439,7 +1440,7 @@ C-f 的細節：
 1. 拉到這次交付的版本，確認 `git log -1` 是整合後的那一個 commit。`package.json` 沒改，不必 `npm install`。
 2. 正式庫套 migration 0020（本機被截斷的題進複核用的 `output_truncated`，10.17）：`npm run migrate`。只影響正式上傳；重錄用的測試庫由 `record_local.bat` 自己套。
 3. `.env` 若照舊範本明寫了 `VARIANT_RETRIEVE_SIM_MIN=0.80`、`VARIANT_OFFTOPIC_SIM_MIN=0.90`、`DEDUP_DUP_THRESHOLD=0.97`、`VARIANT_SIM_MIN` 這幾行，刪掉（10.19 第 2 點；不刪的話正式上傳用的是舊值，伺服器視窗啟動時會提醒）。**重錄不受影響**：錄製子行程一律把這幾個變數清成空白、照程式預設（本機 0.72／0.87／0.99），與 CI 回放相同。
-4. **O-5 要先答**（[`owner-pending-decisions-r5.md`](owner-pending-decisions-r5.md) O-5：lint 的模板要不要也加「JSON 字串裡的反斜線寫兩個」）。lint 沒有自己的 suite，它的回放檔是在第 2 步 variant 與第 3 步 pipeline 裡順帶錄的；錄製模式每次都整步重呼叫模型，**variant 錄完才改 lint 的話，第 2、3 步要整個再錄一次**（再花 8～12 小時）。
+4. ~~**O-5 要先答**~~〔Owner 2026-09-27 O-5 選 2，已落實於 `dec/r6-lint-v3`〕O-5 已答（[`owner-pending-decisions-r5.md`](owner-pending-decisions-r5.md) O-5：lint 的模板也加「JSON 字串裡的反斜線寫兩個」，`lint.v3`／`lint_chem.v2`），這一步不必再做；確認拉下來的版本含 `dec/r6-lint-v3` 即可（第 1a 步）。原因照舊：lint 沒有自己的 suite，它的回放檔是在第 2 步 variant 與第 3 步 pipeline 裡順帶錄的；錄製模式每次都整步重呼叫模型，**variant 錄完才改 lint 的話，第 2、3 步要整個再錄一次**（再花 8～12 小時）。
 5. 盤點（只回放、不連網、幾分鐘）：`npm run cassettes:rerecord -- --dry-run`。整合當天（CI 環境）的盤點：classify 92、nlq 8、variant 60、pipeline 1（`extract_ocr`）、e2e 1（同一支 `extract_ocr`）筆 replay miss，缺向量 0。
 6. **先看懂「成功」長什麼樣**（第 1～3 步都用這個標準）：錄完工具會以回放模式把錄的 suite 各跑一次，印一張「回放驗證」表（suite｜結束碼｜replay miss｜缺向量｜門檻）。**錄製成功＝這次錄的每一列 replay miss 與缺向量兩欄都是 0**（e2e 那一列看 pass／fail）。
    - 「門檻」欄是 ❌ 時，那一列的結束碼會是 1（eval 未達門檻就回 1，與 CI 相同），所以視窗最後印的是「[!] 錄製或回放驗證沒有全過」、`record_local.bat` 的結束碼是 1，**不會**印「[OK] 重錄與回放驗證都通過」。**只有門檻欄 ❌、replay miss 與缺向量都是 0 時，這是預期的，錄製已經成功，不要重跑**；工具也會多印一行「回放檔已經錄齊……不要重錄」。門檻不放寬、照實紅燈（10.7 第 7 點），把 log 交給維護的人。
@@ -1461,8 +1462,11 @@ rerecord 依序跑（模式由工具設定，不必自己設環境變數）：
 
 #### 1a. （條件步驟）O-5 選 2 時：先讓 lint.v3 進來，不另外錄
 
-- O-5 選 2（lint 升 `lint.v3`／`lint_chem.v2`）：等維護的人把 lint 的模板改好、併進來，**拉下來之後**再做第 2、3 步。`lint.v3` 的回放檔會在第 2 步（變式的 lint）與第 3 步（樣卷的 lint）裡一起錄到，不必另外跑指令；錄完用第 4 步的盤點確認 lint 沒有 replay miss。
-- O-5 選 1（不加）：跳過本步，lint 維持 `lint.v2`；第 2、3 步照樣會補錄吃到新題幹的那幾支 `lint.v2`。
+〔Owner 2026-09-27 O-5 選 2，已落實於 `dec/r6-lint-v3`〕條件已成立，本步改成：**確認拉下來的版本已含 `lint.v3`，不另外錄**。
+
+- 確認方式（幾秒，只讀檔）：在 `exam_pro` 資料夾執行 `findstr /C:"const TEMPLATE = 'lint.v3'" agents\lint.js`，有印出一行就是新版（化學版是 `lint_chem.v2`，同一個檔）。沒有印出，就是還沒拉到 `dec/r6-lint-v3`，先拉到含它的版本再做第 2、3 步。
+- `lint.v3`／`lint_chem.v2` 的回放檔會在第 2 步（變式的 lint）與第 3 步（樣卷的 lint）裡一起錄到，不必另外跑指令；錄完用第 4 步的盤點確認 lint 沒有 replay miss。repo 內 5 支 `lint.v2` 之後會出現在第 4 步第 6 點 `cassettes:prune` 的過期清單。
+- ~~O-5 選 1（不加）：跳過本步，lint 維持 `lint.v2`；第 2、3 步照樣會補錄吃到新題幹的那幾支 `lint.v2`。~~（Owner 選了 2，不適用）
 
 #### 2. variant 整步（variant.v2；LLM＋向量，連帶 classify／lint／verify；約 5～6 小時）
 
@@ -1471,7 +1475,7 @@ scripts\windows\record_local.bat variant
 ```
 
 - `embeddings`：`LLM_MODE=replay`、`EMBED_MODE=live`
-- `variant`：`LLM_MODE=record`、`EMBED_MODE=record`（30 個藍本 × 2 題＝60 次生成，每題再跑分類、lint、驗算；生成題的向量同一步錄。上次 `variant.v1` 花 17,292 秒≈4.8 小時；`variant.v2` 的 prompt 多了兄弟題幹、第 2 題多讀幾百字，估 5～6 小時）
+- `variant`：`LLM_MODE=record`、`EMBED_MODE=record`（30 個藍本 × 2 題＝60 次生成，每題再跑分類、lint（`lint.v3`）、驗算；生成題的向量同一步錄。上次 `variant.v1` 花 17,292 秒≈4.8 小時；`variant.v2` 的 prompt 多了兄弟題幹、第 2 題多讀幾百字，估 5～6 小時）
 
 **怎麼確認成功**：以回放驗證表為準（第 0 步第 6 點）：variant 那一列 replay miss 0、缺向量 0，`gate_pass_rate` 是數字（不是 n/a）。**這一步視窗一定印「[!] 錄製或回放驗證沒有全過」、結束碼 1，不會印 [OK]**：`retrieved_coverage` 0.5000 低於門檻 0.8367 是已知狀況（10.19，V5-1 之後），與重錄無關，門檻欄必是 ❌、那一列結束碼必是 1。replay miss 與缺向量都是 0 就是成功，**不要重跑**（重跑要再花 5～6 小時，錄出來也一樣）。
 
@@ -1481,7 +1485,7 @@ scripts\windows\record_local.bat variant
 scripts\windows\record_local.bat pipeline,e2e
 ```
 
-- `pipeline`：`LLM_MODE=record`、`EMBED_MODE=fixture`（樣卷 10 題、4 頁：PaddleOCR → `extract_ocr.v2` 整理成題目〔2 塊約 1～1.5 小時，10.12〕→ 每題分類、lint、驗算〔約 1.5～3.8 小時，10.14〕；工具自動把單次呼叫與節點逾時放寬到 3 小時、每 5 分印一次進度，10.11）
+- `pipeline`：`LLM_MODE=record`、`EMBED_MODE=fixture`（樣卷 10 題、4 頁：PaddleOCR → `extract_ocr.v2` 整理成題目〔2 塊約 1～1.5 小時，10.12〕→ 每題分類、lint（`lint.v3`）、驗算〔約 1.5～3.8 小時，10.14〕；工具自動把單次呼叫與節點逾時放寬到 3 小時、每 5 分印一次進度，10.11）
 - `e2e-similar`：`LLM_MODE=replay`、`EMBED_MODE=record`（e2e 入庫時的向量，`FEATURE_SIMILAR=true`；LLM 全部回放上一步錄好的，幾分鐘）
 
 `ci.yml` 寫的是 `LOCAL_EXTRACT_MODE: ocr`：只錄 `ocr` 與 `extract_ocr`，**不呼叫看圖模型**，錄前檢查也不要求 `qwen3-vl:8b`，但要 PaddleOCR 自我檢查通過。
@@ -1518,7 +1522,7 @@ scripts\windows\record_local.bat pipeline,e2e
    npm run cassettes:prune
    ```
 
-   清單會有舊模板或舊 schema 的 classify、`variant.v1`、`extract_ocr.v1`、看圖拆題與原本 Gemini 錄的檔。要不要刪由 Owner 決定（10.7 第 6 點：刪了就不能不花錢地切回 Gemini）；這一步不加 `--apply`。
+   清單會有舊模板或舊 schema 的 classify、`variant.v1`、`extract_ocr.v1`、`lint.v2`、看圖拆題與原本 Gemini 錄的檔。要不要刪由 Owner 決定（10.7 第 6 點：刪了就不能不花錢地切回 Gemini）；這一步不加 `--apply`。
 
 #### 5. C-e 量測（與重錄分開做，約 30 分；10.17 第 5 點）
 
@@ -1542,9 +1546,9 @@ scripts\windows\record_local.bat pipeline,e2e
 
 | 步驟 | 指令 | 預估 |
 |---|---|---|
-| 0 | `npm run migrate`、清 `.env`、答 O-5、`--dry-run` 盤點 | 約 15 分 |
+| 0 | `npm run migrate`、清 `.env`、~~答 O-5~~（已答：選 2）、`--dry-run` 盤點 | 約 15 分 |
 | 1 | `record_local.bat classify,nlq` | 1.5～2 小時 |
-| 1a | （O-5 選 2 時）拉 lint.v3 | 幾分鐘（不另錄） |
+| 1a | 確認已含 lint.v3（O-5 選 2，已落實） | 幾秒（不另錄） |
 | 2 | `record_local.bat variant` | 5～6 小時 |
 | 3 | `record_local.bat pipeline,e2e` | 2.5～5.5 小時 |
 | 4 | 盤點、commit、`perf:local`、`embed:thresholds`、O-4 抽查、`cassettes:prune`（只列） | 約 1 小時（O-4 另需 Claude 重標） |

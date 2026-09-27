@@ -264,9 +264,105 @@ describe('〔Owner 第五輪 L-2〕公式規範：JSON 字串裡的反斜線要�
         assert.deepEqual(
             [extract.TEMPLATE, extract.TEMPLATE_CHEM, extract.TEMPLATE_VISION, extract.TEMPLATE_VISION_CHEM, extract.TEMPLATE_OCR, extract.TEMPLATE_OCR_CHEM, variant.TEMPLATE, variant.TEMPLATE_CHEM],
             current, 'agent 實際送出的識別名就是新版號');
-        // classify／lint／verify／nlq 的模板不含公式規範（本次不動）
+        // classify／verify／nlq 的模板不含公式規範（本次不動；lint 由 O-5 選 2 另外升版，見下一個 describe）
         for (const name of ['classify.v2', 'classify_chem.v1']) {
             assert.ok(!getTemplate(name).includes(rule), name);
+        }
+    });
+});
+
+// ───────────────────────── O-5＝2：lint 第三層也要求反斜線寫兩個 ─────────────────────────
+
+describe('〔Owner 2026-09-27 O-5 選 2〕lint 第三層（lint.v3／lint_chem.v2）：JSON 字串裡的反斜線寫兩個', () => {
+    const lint = require('../../agents/lint');
+    const rule = '每一個反斜線都要寫成兩個';
+
+    test('版號：lint.v3、lint_chem.v2；舊版號不再註冊', () => {
+        assert.equal(lint.TEMPLATE, 'lint.v3');
+        assert.equal(lint.TEMPLATE_CHEM, 'lint_chem.v2');
+        assert.equal(getTemplate('lint.v2'), null, 'lint.v2 不該再被註冊（改了模板要升版）');
+        assert.equal(getTemplate('lint_chem.v1'), null, 'lint_chem.v1 不該再被註冊');
+        assert.ok(getTemplate('lint.v3').includes(rule));
+        assert.ok(getTemplate('lint_chem.v2').includes(rule));
+    });
+
+    test('規則是 lint 自己「要求」段落的最後一條，文字與 LATEX_RULES (5)／CHEM_LATEX_RULES (6) 逐字相同（直接共用 jsonBackslashRule）', () => {
+        const math = lint.PROMPT_TEMPLATE.split('\n');
+        const chem = lint.PROMPT_TEMPLATE_CHEM.split('\n');
+        const mathRule = promptParts.jsonBackslashRule(promptParts.JSON_BACKSLASH_POSITIVES);
+        const chemRule = promptParts.jsonBackslashRule(promptParts.JSON_BACKSLASH_POSITIVES_CHEM);
+        assert.equal(math[math.length - 1], `5. ${mathRule}`);
+        assert.equal(chem[chem.length - 1], `6. ${chemRule}`);
+        assert.ok(promptParts.LATEX_RULES.endsWith(`(5) ${mathRule}`));
+        assert.ok(promptParts.CHEM_LATEX_RULES.endsWith(`(6) ${chemRule}`));
+        // 原本各條留在原位、編號連續
+        assert.ok(math[math.length - 2].startsWith('4. 中文敘述、數字、單位、選項內容保持原樣'));
+        assert.ok(chem[chem.length - 2].startsWith('5. 中文敘述、數字、單位、選項內容保持原樣'));
+        assert.ok(math[math.length - 5].startsWith('1. 行內公式一律用 $…$ 包起來'));
+        assert.ok(chem[chem.length - 6].startsWith('1. 行內公式一律用 $…$ 包起來'));
+        // 規則只出現一次（不在 SYSTEM 重複）
+        assert.equal(lint.PROMPT_TEMPLATE.split(rule).length - 1, 1);
+        assert.equal(lint.PROMPT_TEMPLATE_CHEM.split(rule).length - 1, 1);
+        assert.ok(!lint.SYSTEM.includes(rule) && !lint.SYSTEM_CHEM.includes(rule));
+    });
+
+    test('lint 的正例當 JSON 解析後，事後修復是 no-op', () => {
+        for (const text of [lint.PROMPT_TEMPLATE, lint.PROMPT_TEMPLATE_CHEM]) {
+            const pos = positivesOf(text);
+            assert.ok(pos.length >= 3, pos.join(' '));
+            for (const raw of pos) {
+                const parsed = JSON.parse(raw);
+                assert.equal(repair.repairString(parsed).text, parsed, raw);
+            }
+        }
+    });
+
+    for (const [group, subject, broken, intended] of [
+        ['math_physics', '數學', { question_text: '已知 $\\frac{1}{2$，求 $\\theta$。', answer_text: '' },
+            { question_text: '已知 $\\frac{1}{2}\\times\\theta \\neq \\beta$，$\\rho=\\nu\\bar{x}$，$37^\\circ$，$\\tan\\theta\\to\\infty$。', answer_text: '$$\\begin{array}{|c|c|} \\hline a & b \\\\ \\hline \\end{array}$$', notes: '補右大括號' }],
+        ['chemistry', '化學', { question_text: '$\\ce{H2O$ 的莫耳質量', answer_text: '$18\\ \\mathrm{g/mol}$' },
+            { question_text: '$\\ce{H2O}$ 的莫耳質量，$\\ce{2H2 + O2 -> 2H2O}$，$\\ce{Fe^{3+}}$', answer_text: '$18\\ \\mathrm{g/mol}$，$\\frac{1}{2}$', notes: '補右大括號' }]
+    ]) {
+        test(`${group}：模型照做（JSON 原文一律兩個反斜線）時，latexEscapeRepair 不動、lint 放行且文字就是原意`, async () => {
+            const MODEL_JSON = JSON.stringify(intended);
+            assert.ok(!/(^|[^\\])\\[fbnrt]/.test(MODEL_JSON.replace(/\\\\/g, '')), '前提：沒有單一反斜線');
+            const res = repair.applyToResult({ data: JSON.parse(MODEL_JSON) });
+            assert.ok(!('latexRepair' in res), JSON.stringify(res.latexRepair));
+            assert.deepEqual(res.data, intended);
+
+            const calls = [];
+            const ctx = {
+                llm: { generateJson: async (opts) => { calls.push(opts); return { ...res, usage: {}, latencyMs: 1, raw: null }; } },
+                config: { models: { text: 'ollama:qwen3:8b' } },
+                jq: { payload: { extract: { subject } } }
+            };
+            const out = await lint.run(ctx, broken);
+            assert.equal(calls.length, 1);
+            assert.equal(calls[0].template, group === 'chemistry' ? 'lint_chem.v2' : 'lint.v3');
+            assert.ok(calls[0].parts[0].text.includes(rule), '送出去的 prompt 含這條規則');
+            assert.equal(out.kind, 'pass', JSON.stringify(out));
+            assert.equal(out.data.rewritten, true);
+            assert.equal(out.data.question_text, intended.question_text);
+        });
+    }
+
+    test('services/llm.generateJson（live、Ollama 假傳輸）：lint 的回應照做時沒有 latexRepair 鍵', async () => {
+        const backup = { LLM_MODE: process.env.LLM_MODE, OLLAMA_HOST: process.env.OLLAMA_HOST };
+        try {
+            process.env.LLM_MODE = 'live';
+            delete process.env.OLLAMA_HOST;
+            ollama._resetForTest(); throttle._resetForTest();
+            const intended = { question_text: '$\\frac{1}{2}\\theta$，$\\ce{H2O}$', answer_text: '$\\sqrt{2}$', notes: 'x' };
+            ollama._setTransportForTest(async () => ({
+                status: 200,
+                text: JSON.stringify({ model: 'qwen3:8b', done: true, done_reason: 'stop', message: { role: 'assistant', content: JSON.stringify(intended) }, prompt_eval_count: 1, eval_count: 1 })
+            }));
+            const res = await llm.generateJson({ model: 'ollama:qwen3:8b', parts: [{ text: 'q' }], schema: buildSchema('lint'), agent: 'lint', template: 'lint.v3' });
+            assert.deepEqual(res.data, intended);
+            assert.ok(!('latexRepair' in res));
+        } finally {
+            for (const [k, v] of Object.entries(backup)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+            ollama._resetForTest();
         }
     });
 });
