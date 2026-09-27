@@ -161,14 +161,27 @@ const VECTOR_GAP = fixtureVectorGap();
 // 〔r7 測試空轉清理〕「向量不齊時拒絕執行」原本只在 CI 那一份向量不齊時才跑（齊全時 skip「這一則不適用」）——
 // 向量一錄齊，這條「不拿假向量湊數字」的保證就沒有測試守著。改成一定有一份確實缺向量的真實資料可跑：
 // CI 那一份不齊時照舊用它（等重錄的那段期間）；齊全時改用 repo 內 Gemini 的舊向量檔（本機模式之後不再重錄，缺 5 題）。
-const LEGACY_GAP = fixtureVectorGap(RECORDED_EMBED_MODEL);
+// 〔r7 審查 2026-09-27〕Gemini 的舊檔是「不再維護的歷史產物」：日後整理 Gemini 產物把它刪掉時，loadEmbeddings 會照設計丟錯
+// （檔案不在），原本在載入模組時就爆、整支 evalVariant 一則都跑不到。改成只在需要時（CI 那一份齊全）才讀、讀不到就接住：
+// 這一則 skip 並說明原因，其他各組照常跑。CI 那一份整個不見仍在上面的 fixtureVectorGap() 丟錯（那不是「待重錄」，是檔案不見了）。
+const LEGACY_GAP = (() => {
+    if (!VECTOR_GAP.complete) return null;          // 用不到，不讀
+    try {
+        return fixtureVectorGap(RECORDED_EMBED_MODEL);
+    } catch (err) {
+        return { complete: true, missing: [], unavailable: String(err && err.message).split('\n')[0] };
+    }
+})();
 const REFUSAL_CASE = !VECTOR_GAP.complete ? { model: CI_EMBED_MODEL, gap: VECTOR_GAP }
     : !LEGACY_GAP.complete ? { model: RECORDED_EMBED_MODEL, gap: LEGACY_GAP }
         : null;
 
 describe('runVariantSuite：向量不齊時拒絕執行（〔章節重整 CH-B〕）', {
     skip: REFUSAL_CASE ? false
-        : 'repo 內兩份向量檔都齊全（Gemini 的舊檔也補齊了），找不到確實缺向量的真實資料；缺向量的拒絕仍由 eval/lib/embeddings.js 的 assertComplete 擋'
+        : LEGACY_GAP.unavailable
+            ? `CI 那一份向量齊全，而 repo 內 Gemini 的舊向量檔讀不到（${LEGACY_GAP.unavailable}），找不到確實缺向量的真實資料；` +
+              '缺向量的拒絕仍由 eval/lib/embeddings.js 的 assertComplete 擋'
+            : 'repo 內兩份向量檔都齊全（Gemini 的舊檔也補齊了），找不到確實缺向量的真實資料；缺向量的拒絕仍由 eval/lib/embeddings.js 的 assertComplete 擋'
 }, () => {
     test('以「查不到向量」拒絕，並列出缺的題號（不拿假向量湊 retrieved_coverage）', async () => {
         const { model, gap } = REFUSAL_CASE;

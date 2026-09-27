@@ -1482,18 +1482,18 @@ scripts\windows\record_local.bat variant
 
 **怎麼確認成功**：以回放驗證表為準（第 0 步第 6 點）：variant 那一列 replay miss 0、缺向量 0，`gate_pass_rate` 是數字（不是 n/a）。**這一步視窗一定印「[!] 錄製或回放驗證沒有全過」、結束碼 1，不會印 [OK]**：`retrieved_coverage` 0.5000 低於門檻 0.8367 是已知狀況（10.19，V5-1 之後），與重錄無關，門檻欄必是 ❌、那一列結束碼必是 1。replay miss 與缺向量都是 0 就是成功，**不要重跑**（重跑要再花 5～6 小時，錄出來也一樣）。
 
-#### 3. pipeline＋e2e（OCR 為主，`extract_ocr.v2`；約 2.5～5.5 小時）
+#### 3. pipeline＋e2e（OCR 為主，`extract_ocr.v2`；約 2～4.5 小時）
 
 ```bat
 scripts\windows\record_local.bat pipeline,e2e
 ```
 
-- `pipeline`：`LLM_MODE=record`、`EMBED_MODE=fixture`（樣卷 10 題、4 頁：PaddleOCR → `extract_ocr.v2` 整理成題目〔2 塊約 1～1.5 小時，10.12〕→ 每題分類、lint（`lint.v3`）、驗算〔約 1.5～3.8 小時，10.14〕；工具自動把單次呼叫與節點逾時放寬到 3 小時、每 5 分印一次進度，10.11）
+- `pipeline`：`LLM_MODE=record`、`EMBED_MODE=fixture`（樣卷 10 題、1 頁：PaddleOCR → `extract_ocr.v2` 整理成題目〔1 塊，不超過 10.12 第 5 點表中「一塊 2 頁」的約 30～45 分〕→ 每題分類、lint（`lint.v3`）、驗算〔約 1.5～3.8 小時，10.14〕；工具自動把單次呼叫與節點逾時放寬到 3 小時、每 5 分印一次進度，10.11）。〔修訂 2026-09-27 `dec/r7-test-hygiene-fix`〕原本寫「4 頁、2 塊約 1～1.5 小時」，那是 10.12 第 5 點「4 頁卷」的數字；`eval/fixtures/sample_exam.pdf` 只有 1 頁（答案卷的 `page_count` 也是 1），所以只有 1 塊。本步標題與第 6 點時間總表跟著改；實際花多久以這次錄製的 log 為準。
 - `e2e-similar`：`LLM_MODE=replay`、`EMBED_MODE=record`（e2e 入庫時的向量，`FEATURE_SIMILAR=true`；LLM 全部回放上一步錄好的，幾分鐘）
 
 `ci.yml` 寫的是 `LOCAL_EXTRACT_MODE: ocr`：只錄 `ocr` 與 `extract_ocr`，**不呼叫看圖模型**，錄前檢查也不要求 `qwen3-vl:8b`，但要 PaddleOCR 自我檢查通過。
 
-**怎麼確認成功**：以回放驗證表為準（第 0 步第 6 點）：pipeline 那一列 replay miss 0、缺向量 0；門檻欄的 `saved_rate` 寫「n/a（不比門檻：OCR 模式…）」、不算 ❌（OCR 模式設計如此，D-2，10.18 第 5 點），pipeline 的 log 另有「人工核准前的通過率」一行是數字；e2e 那一列是 `pass 12／fail 0`（OCR 模式下 e2e 驗的是「每題停在複核 → 核准一題入庫」，10.12 第 7 點）。`gate_pass_rate`、`answer_agree_rate` 照舊比門檻：其中一項 ❌ 時視窗會印 [!]、結束碼 1，同第 0 步第 6 點，**不要重跑**。
+**怎麼確認成功**：以回放驗證表為準（第 0 步第 6 點）：pipeline 那一列 replay miss 0、缺向量 0；門檻欄的 `saved_rate` 寫「n/a（不比門檻：OCR 模式…）」、不算 ❌（OCR 模式設計如此，D-2，10.18 第 5 點），pipeline 的 log 另有「人工核准前的通過率」一行是數字；e2e 那一列是 `pass 12／fail 0`（OCR 模式下 e2e 驗的是「每題停在複核 → 核准一題入庫」，10.12 第 7 點；同一列的 `skipped` 在併入 `dec/r7-test-hygiene-fix` 之前是 0、之後是 2——交叉驗證那兩項在 ocr 模式改成明列略過，正常）。`gate_pass_rate`、`answer_agree_rate` 照舊比門檻：其中一項 ❌ 時視窗會印 [!]、結束碼 1，同第 0 步第 6 點，**不要重跑**。
 
 #### 4. 全部錄完之後（只讀檔，不呼叫模型）
 
@@ -1553,11 +1553,11 @@ scripts\windows\record_local.bat pipeline,e2e
 | 1 | `record_local.bat classify,nlq` | 1.5～2 小時 |
 | 1a | 確認已含 lint.v3（O-5 選 2，已落實） | 幾秒（不另錄） |
 | 2 | `record_local.bat variant` | 5～6 小時 |
-| 3 | `record_local.bat pipeline,e2e` | 2.5～5.5 小時 |
+| 3 | `record_local.bat pipeline,e2e` | 2～4.5 小時 |
 | 4 | 盤點、commit、`perf:local`、`embed:thresholds`、O-4 抽查、`cassettes:prune`（只列） | 約 1 小時（O-4 另需 Claude 重標） |
 | 5 | C-e 量測 | 約 30 分 |
 
-合計約 10～15 小時的錄製，建議第 1 步白天做（順便確認流程），第 2、3 步各排一個晚上。工具在問 yes 之前印的「粗估」是保守上限（整合當天 `--dry-run --json` 的粗估：第 1 步 6.4～54.5、第 2 步 5.0～53.1、第 3 步 0.4～48.4 小時），以上表的實測推估為準；錄完用 `perf:local` 的 `RERECORD_TIME_SCALE` 校正。
+合計約 10～14 小時的錄製（〔修訂 2026-09-27 `dec/r7-test-hygiene-fix`〕第 3 步依樣卷實際的 1 頁重算，原寫 10～15 小時），建議第 1 步白天做（順便確認流程），第 2、3 步各排一個晚上。工具在問 yes 之前印的「粗估」是保守上限（整合當天 `--dry-run --json` 的粗估：第 1 步 6.4～54.5、第 2 步 5.0～53.1、第 3 步 0.4～48.4 小時），以上表的實測推估為準；錄完用 `perf:local` 的 `RERECORD_TIME_SCALE` 校正。
 
 ### 10.22 classify 重錄後的四條界線規則（2026-09-27，改答 LC-2）
 

@@ -1,7 +1,8 @@
 # PR 說明稿：`local/integration` → `main`（草稿，尚未開 PR）
 
-> **狀態**：說明稿（2026-09-27，分支 `dec/r7-test-hygiene`）。**還沒開 PR、還沒 push。**
-> **比較範圍**：`origin/main`（`d1834ac`，PR #38 合入階段 5）→ `dec/integration-r7`（`6757e25`）。Owner 的重錄結果併入 `dec/integration-r7`、本分支再併入之後，開 PR 前要把第 4 節的數字換成那一版實測的值。
+> **狀態**：說明稿（2026-09-27，分支 `dec/r7-test-hygiene`；審查修正 `dec/r7-test-hygiene-fix`）。**還沒開 PR、還沒 push。**
+> **比較範圍**：`origin/main`（`d1834ac`，PR #38 合入階段 5）→ `dec/integration-r7`（`6757e25`）。Owner 的重錄結果併入 `dec/integration-r7`、本分支再併入之後，開 PR 前要把第 1 節與第 4 節的數字換成那一版實測的值。
+> **PR 的來源分支 `local/integration` 目前還在 `889d18f`**，比 `dec/integration-r7` 少 68 個 commit（`889d18f` 是 `6757e25` 的祖先）；開 PR 前要先把最後那一版併進去（第 5 節第 4 步）。
 > **依據的 Owner 決定**：A8（只開一個 PR，`local/integration` → main）、A7（本機重錄後低於門檻時門檻數字不動、照實紅燈）、X1（**只限 eval 分數可以紅燈合併；unit、integration、e2e 必須綠；PR 說明列出未達項**）——[`docs/HANDOFF.md`](../HANDOFF.md) §0.00、§0.00a。
 > 本稿的事實來源：`git log`／`git diff --stat d1834ac 6757e25`、[`docs/HANDOFF.md`](../HANDOFF.md) §0.00～§0.4、[`docs/local-mode.md`](../local-mode.md) 各節、各 migration 檔頭；第 4 節的數字是 2026-09-27 在 `dec/integration-r7` 上照 `ci.yml` 的 env 實跑的結果。
 
@@ -15,14 +16,18 @@
 
 | 條件 | 現況（`6757e25`） | 等什麼 |
 |---|---|---|
-| e2e 12 項全綠（X1） | 9 過、**3 紅**：樣卷的 `extract_ocr` 回放檔（`extract_ocr/a5918283…`）不在 | [`local-mode.md`](../local-mode.md) 10.21 第 3 步 `record_local.bat pipeline,e2e` |
+| e2e 12 項全綠（X1；併入本分支後另有 2 項交叉驗證是固定的 SKIP，第 6 節） | 9 過、**3 紅**：樣卷的 `extract_ocr` 回放檔（`extract_ocr/a5918283…`）不在 | [`local-mode.md`](../local-mode.md) 10.21 第 3 步 `record_local.bat pipeline,e2e` |
 | unit、integration 全綠（X1） | 全綠（第 4 節） | 重錄檔併入後重跑一次確認；本分支的測試在 extract_ocr 錄好後會從 skip 轉成硬斷言（第 6 節） |
+| 錄好後若 unit／e2e 因本機模型的拆題品質變紅，先有 Owner 決定再處理 | 待決（**TH-1**，第 7 節）；錄完沒紅就不必答 | 第 3 步錄完、重跑 unit 與 e2e 之後；**不要臨時改斷言** |
 | eval 的 replay miss 與缺向量都是 0 | pipeline 1 筆、variant 60 筆 replay miss | 10.21 第 2 步（variant，Owner 電腦進行中）、第 3 步 |
 | 未達門檻的 eval 列在本稿第 4.2 節 | variant `retrieved_coverage` 已知未達；pipeline 的兩項要錄完才知道 | 重錄後回填 |
+| `local/integration` 是最後那一版 | 在 `889d18f`，少 68 個 commit | 第 5 節第 4 步 |
 
 ---
 
 ## 1. 範圍一覽
+
+> 以下是 `d1834ac..6757e25` 的數字。重錄結果與本分支併進去之後會變：**開 PR 前依 `local/integration` 推送前的最後 head 重算**（`git rev-list --count`、`git diff --shortstat`、`git diff --name-status` 各跑一次，對 `origin/main`）。
 
 - 185 個 commit（其中 44 個 merge），828 個檔案：**+96,549／−5,424 行**；新增 628、修改 191、刪除 9（刪除的 9 個都是舊版原型 `exam/`）。
 - 行數的大宗是回放檔：`exam_pro/eval/cassettes/` 新增 416 支（classify 275、variant 87、verify 25、nlq 24、lint 4、ocr 1），另新增本機向量檔 `eval/fixtures/embeddings.ollama-qwen3-embedding-0.6b.768.json`。
@@ -35,6 +40,12 @@
 - 數學 34 → 52 章、物理 32 → 34 章，對齊 108 課綱龍騰版目錄；化學章名不動。定案清單 `config/chapterPlan.js`，`config/chapters.js` 直接引用它。
 - 舊題搬章：`npm run chapters:migrate`（規則提議 → 老師確認 → `--apply`），處理紀錄寫進 migration 0014 的 `chapter_migration_log`。
 - eval 素材依新白名單改標（`eval/CHAPTER_RELABEL-2026-09.md`，含 CR-8 之二的物理改標、新增干擾題 #61、#62）；白名單依冊別分組（CR-8 之三）；分類模板升 `classify.v2`（CR-9 與第三輪 K2、K3 的分類界線）。
+- **本 PR 改過的 golden 與 fixture**（`git diff --stat d1834ac 6757e25 -- exam_pro/eval/golden`：4 個檔，+117／−123 行；commit `4d26c21`、`4f3b7bb`、`49256a0`）。內容都是章名改標與新增干擾題，逐題的新舊章名與理由見對照表 [`eval/CHAPTER_RELABEL-2026-09.md`](../../exam_pro/eval/CHAPTER_RELABEL-2026-09.md)（第 1 節總覽、第 2 節 CH-B、第 8 節 CR-8 之二）；**`eval/thresholds.json` 從 `d1834ac` 以來一個數字都沒動**。
+  - `exam_pro/eval/golden/classify.json`：改標，並新增 `cls-fx-061`、`cls-fx-062`（共 92 筆）
+  - `exam_pro/eval/golden/nlq.json`：改寫查詢、改期望章節、調整 `relevant`
+  - `exam_pro/eval/golden/variant.json`：藍本章名改成與 fixture 一致
+  - `exam_pro/eval/golden/pdf_sample/f1a15d77….json`（樣卷答案卷）：3 題的章名；樣卷 PDF 與 sha256 不變
+  - fixture（不是 golden，一併列出）：`exam_pro/eval/fixtures/questions.public.json` 在同三個 commit 改標，並新增 #61、#62（共 62 題）；`exam_pro/eval/fixtures/embeddings.gemini-embedding-001.768.json` 只多了 45 個向量（`04e9bd3` 的 Gemini 重錄），原有的向量沒變
 
 ### 2.2 本機模式（2026-09-25；ADR-017 提議中、[`local-mode.md`](../local-mode.md) 第 0～9 條與 10.1～10.10）
 
@@ -84,7 +95,7 @@
 
 ### 2.10 桌面啟動器 A（2026-09-27；[`desktop-launcher.md`](../desktop-launcher.md)）與 B＋D2 設計稿
 
-- `exam_pro/scripts/desktop/`、`scripts/windows/install_desktop_shortcut.bat`：點「出題系統」依序開 Docker Desktop、資料庫、檢查 Ollama、開伺服器與獨立視窗；「關閉出題系統」先讓背景工作收尾再停。
+- `exam_pro/scripts/desktop/`、`exam_pro/scripts/windows/install_desktop_shortcut.bat`：點「出題系統」依序開 Docker Desktop、資料庫、檢查 Ollama、開伺服器與獨立視窗；「關閉出題系統」先讓背景工作收尾再停。
 - 後端只改三處：`GET /api/health`（不需金鑰，本機以外每分鐘 60 次）、`/api/launcher` 關閉通道（環境裡有 `LAUNCHER_CONTROL_TOKEN` 才掛載）、聽不了連接埠時印出原因並以結束碼 1 結束。`npm start`／`npm run dev` 其餘行為不變。
 - `docs/desktop-app-design.md`（B Electron 桌面殼＋D2 原生 PostgreSQL）**只有設計稿、沒有程式**。Owner 2026-09-27 第六輪已答 DL-1～DL-5、DA-1～DA-14；其中 DL-4 選 2（錄製中暫停背景工作），`dec/integration-r7` 的預設仍是 `run`——第六輪的落實不在本 PR。
 
@@ -114,14 +125,14 @@
 
 量測環境：`dec/integration-r7`（`6757e25`），PostgreSQL 16＋pgvector（埠 5433、全新 UTF8 測試庫），env 照 `.github/workflows/ci.yml`（`LLM_MODE=replay`、`EMBED_MODE=fixture`、`MODEL_EXTRACT=ollama:qwen3-vl:8b`、`MODEL_VERIFY=ollama:qwen3:8b`、`LOCAL_EXTRACT_MODE=ocr`、`EMBED_MODEL=ollama:qwen3-embedding:0.6b`、`MODEL_NLQ=ollama:qwen3:8b`）。
 
-### 4.1 必須綠的三項
+### 4.1 必須綠的項目（X1：unit、integration、e2e；另列 `check:html`、migrate）
 
 | 步驟 | 結果 | 說明 |
 |---|---|---|
 | unit（`npm test`） | ✅ 4,046 則：4,044 過、0 失敗、2 略過 | 另有整組略過的 describe（等回放檔）；本分支之後的數字見第 6 節 |
 | `npm run check:html` | ✅ | |
 | `npm run migrate:test` | ✅ 到 0020 | |
-| integration | ✅ 629 則全過 | |
+| integration | ✅ 629 則全過 | 〔審查修正 2026-09-27〕審查時在另一個全新庫回報 631 則全過；`dec/r7-test-hygiene-fix` 在全新庫連跑兩次（中間跑過 e2e）都是 629，差 2 則的原因沒查到。兩次都沒有失敗；以 Owner 重跑那一版的數字為準 |
 | e2e | ❌ **12 項：9 過、3 紅** | 三項都是拆題停在 replay miss `extract_ocr/a5918283…`（樣卷的 `extract_ocr.v2` 回放檔還沒錄）。**依 X1 這一項必須綠，第 3 步錄完之前不能開 PR** |
 
 ### 4.2 eval（X1：只限這裡可以帶紅燈合併，列出未達項）
@@ -142,21 +153,46 @@
 
 1. 完成 [`local-mode.md`](../local-mode.md) 10.21 第 2 步（variant）與第 3 步（pipeline＋e2e）；成功與否以回放驗證表的 replay miss 與缺向量兩欄為準，只有門檻欄 ❌ 時不要重跑。
 2. 第 4 步：`npm run cassettes:rerecord -- --dry-run` 確認五個 eval 與 e2e 的 replay miss、缺向量都是 0；`git add eval/cassettes eval/fixtures/embeddings.ollama-qwen3-embedding-0.6b.768.json`、commit。
-3. 重錄結果併入 `dec/integration-r7` 之後，再併入本分支（`dec/r7-test-hygiene`），重跑 unit、`check:html`、integration、e2e 與五個 eval：unit、integration、e2e 必須全綠；把第 4 節換成那一版的數字與未達項。
-4. 由 Owner 的電腦把 `local/integration` 推上 GitHub（推送時機由 Owner 決定），以本稿開 PR 到 main，等 GitHub Actions 的 unit 與 integration 兩個 job 跑完。
+3. 重錄結果併入 `dec/integration-r7` 之後，再併入本分支（審查修正後是 `dec/r7-test-hygiene-fix`，已含 `dec/r7-test-hygiene`），重跑 unit、`check:html`、integration、e2e 與五個 eval：unit、integration、e2e 必須全綠；把第 1 節與第 4 節換成那一版的數字與未達項。unit 或 e2e 若因本機模型的拆題品質變紅，先答 TH-1（第 7 節）再處理。
+4. **把最後那一版併進 `local/integration`**〔審查修正 2026-09-27〕：`local/integration` 現在在 `889d18f`，比 `dec/integration-r7` 少 68 個 commit，沒有這一步推上去的會是舊版。`git checkout local/integration` → `git merge --ff-only <第 3 步重跑全綠的那一版>`（`889d18f` 是祖先，應該能快轉；不能快轉代表 `local/integration` 另有 commit，先停下來看是什麼）→ `git log --oneline origin/main..local/integration` 確認看得到重錄的 commit 與本分支的 commit、`git rev-parse local/integration` 等於第 3 步那一版，再照第 1 節的說明重算範圍數字。
+5. 由 Owner 的電腦把 `local/integration` 推上 GitHub（推送時機由 Owner 決定），以本稿開 PR 到 main，等 GitHub Actions 的 unit 與 integration 兩個 job 跑完。
 
 **合併之後（正式庫與日常使用）**
 
-5. 正式庫：`node migrate.js status` 看到哪一支；沒到 0020 就照第 3 節升級（先停服務、先備份）；清 `.env` 裡的舊門檻四行。
-6. 知識點：`npm run kc:load -- --dry-run` 看過再載入（三科；物理維持草稿，K-P）；之後 B12 的 20 題試標（`kc:backfill -- --limit 20`）。
-7. （要用時）桌面圖示：雙擊 `exam_pro\scripts\windows\install_desktop_shortcut.bat`；`FEATURE_RETRAIN=true` 後在瀏覽器實際走一遍錯題重練（這些畫面只以 miniDom 與一次性冒煙測過）。
-8. 10.21 第 4 步其餘各點：`perf:local`（三次重錄的 log）、`embed:thresholds` → Claude 重標初判 → O-4 抽查 10～15 支 → 定案 V5-2（現在的 0.87 是暫定）；`cassettes:prune` 只列、不 `--apply`。第 5 步 C-e 量測在電腦閒著時做。
-9. 仍待 Owner 的：DEC-013 核准欄明示簽核；A3（nlq-036 計分）、B18、B19、ADR-017 定案條件（§3.1）；第六輪（桌面版 DL／DA）的落實另開分支。
+6. 正式庫：`node migrate.js status` 看到哪一支；沒到 0020 就照第 3 節升級（先停服務、先備份）；清 `.env` 裡的舊門檻四行。
+7. 知識點：`npm run kc:load -- --dry-run` 看過再載入（三科；物理維持草稿，K-P）；之後 B12 的 20 題試標（`kc:backfill -- --limit 20`）。
+8. （要用時）桌面圖示：雙擊 `exam_pro\scripts\windows\install_desktop_shortcut.bat`；`FEATURE_RETRAIN=true` 後在瀏覽器實際走一遍錯題重練（這些畫面只以 miniDom 與一次性冒煙測過）。
+9. 10.21 第 4 步其餘各點：`perf:local`（三次重錄的 log）、`embed:thresholds` → Claude 重標初判 → O-4 抽查 10～15 支 → 定案 V5-2（現在的 0.87 是暫定）；`cassettes:prune` 只列、不 `--apply`。第 5 步 C-e 量測在電腦閒著時做。
+10. 仍待 Owner 的：DEC-013 核准欄明示簽核；A3（nlq-036 計分）、B18、B19、ADR-017 定案條件（§3.1）；TH-1（第 7 節，錄完沒紅就不必答）；第六輪（桌面版 DL／DA）的落實另開分支。
 
-## 6. 隨本 PR 一起送的測試整理（`dec/r7-test-hygiene`）
+## 6. 隨本 PR 一起送的測試整理（`dec/r7-test-hygiene`＋審查修正 `dec/r7-test-hygiene-fix`）
 
-只改測試與文件（`eval/CHAPTER_RELABEL-2026-09.md` 一處註記、本說明稿），沒有動產品程式、`eval/thresholds.json`、golden、既有回放檔、模板、schema 或 `cacheKeyParts`；斷言沒有放寬。
+只改測試與文件（`eval/CHAPTER_RELABEL-2026-09.md` 一處註記、`docs/local-mode.md` 10.21 第 3 步的頁數與時間、本說明稿），沒有動產品程式、`eval/lib`、`eval/thresholds.json`、golden、既有回放檔、模板、schema 或 `cacheKeyParts`；斷言沒有放寬。
 
 - 原本在本機模式下**永遠 skip 或空轉**的測試改成真的在測：`cassetteReplay`（classify 組改用 `MODEL_TEXT` 算鍵並回放 classify.v2；extract 組改驗 `extract_ocr`）、`evalPipeline` 兩則（只在「唯一的 miss 就是樣卷的 extract_ocr」時 skip，其他 replay miss 一律紅）、`evalVariant`／`evalStage3`（改讀 CI 的向量檔，runVariantSuite 一組不再永遠 skip；「沒有 cassette 時」改用空的暫存目錄真的驗）、移除等於沒做事的 `test/fixtures/planChapters.preload.js`、`answerGolden` 的裁決探針改成硬斷言，以及幾處「資料不在就 return」改成明確 skip 或斷言。
-- 本分支實跑（同第 4 節的環境）：unit 4,058 則，4,056 過、0 失敗；剩下的 skip 全部只等同一支回放檔——樣卷的 `extract_ocr.v2`（10.21 第 3 步），skip 訊息指名這一步：`cassetteReplay` 的 extract_ocr 組（整組）與 `evalPipeline` 的兩則。`check:html` 過、integration 629 全過。
-- **第 3 步錄好之後這三處會自動轉成硬斷言**：`cassetteReplay` 要求樣卷每一題都過 ajv、至少 8 題、兩科都有、每題標 `ocr_only`；`evalPipeline` 要求 10 題都走到終態、ocr 模式一題都不自動入庫。那時若出現下游（分類、lint、驗算）的 replay miss，這兩支會**紅燈而不是 skip**——代表 unit 環境（沒有資料庫）與錄製時算出的鍵不同，要先查清楚再合併。
+- 審查修正（`dec/r7-test-hygiene-fix`）：
+  - `cassetteReplay`：樣卷或答案卷壞掉時不再讓整支檔案在載入時爆掉——新增一則一定執行的「樣卷前提」（壞了就紅燈、丟出原錯誤），extract_ocr 兩組 skip 並指向它，classify 各組照常跑（實測：在樣卷尾端多寫一個位元組，只有「樣卷前提」紅、classify 三組照跑）。「classify 讀 `MODEL_TEXT` 的鍵」那一則移到不會 skip 的「classify 的回放鍵」組，並新增一則「回放檔在就命中、不在時 miss 的鍵等於預期鍵」（實測：暫時移走 #9 的 classify.v2 回放檔，classify 組 skip，這兩則照跑且通過）。
+  - `evalVariant`：Gemini 的舊向量檔只在 CI 那一份齊全時才讀、讀不到就接住，只讓「向量不齊時拒絕執行」那一則 skip 並說明（實測：暫時移走那一份，其他各組照跑）。那一份不見時 `recordEmbeddings.test.js` 本來就會紅，不會悄悄過。
+  - `evalPipeline` 與 e2e 的交叉驗證項目在 ocr 模式改成**明列 SKIP 並寫原因**（原本 `() => {}` 根本不註冊，報表看不到）：unit 多 1 則、e2e 多 2 則固定的 SKIP；e2e 的回放驗證表那一列因此是 `pass 12／fail 0／skipped 2`。
+  - e2e「沒有任何一筆 replay miss」與 integration `retrievalEval` 的訊息不再叫人「執行 eval:record（需要金鑰）」，改指 10.21 第 3 步的重錄（只改訊息，斷言不動）；`localModeSections.test.js` 的節號登記表跟著登記 e2e 那支檔多指到 10.21。
+- 本分支實跑（同第 4 節的環境，2026-09-27 審查修正後）：unit 4,061 則，4,058 過、0 失敗、3 則 SKIP（`evalPipeline` 等 extract_ocr 的兩則＋交叉驗證那一則）另有 `cassetteReplay` 的 extract_ocr 組整組 SKIP；等回放檔的只剩同一支——樣卷的 `extract_ocr.v2`（10.21 第 3 步），skip 訊息指名這一步。`check:html` 過、migrate 到 0020、integration 629 全過；e2e 14 項：9 過、3 紅（同第 4.1 節，`extract_ocr/a5918283…`）、2 項是上面說的交叉驗證 SKIP。
+- **第 3 步錄好之後這三處會自動轉成硬斷言**：`cassetteReplay` 要求樣卷每一題都過 ajv、至少 8 題、兩科都有、每題標 `ocr_only`；`evalPipeline` 要求 10 題都走到終態、ocr 模式一題都不自動入庫。那時若出現下游（分類、lint、驗算）的 replay miss，這兩支會**紅燈而不是 skip**——代表 unit 環境（沒有資料庫）與錄製時算出的鍵不同，要先查清楚再合併。其中幾條其實是在量本機模型的拆題品質，可能因此變紅：怎麼處理見第 7 節 TH-1。
+
+## 7. 待 Owner 決定：TH-1　錄好之後，單元測試與 e2e 因本機模型的拆題品質變紅時怎麼辦
+
+> 〔審查 2026-09-27，`dec/r7-test-hygiene` 的審查意見〕比照 D-1（測試契約變更要 Owner 同意）。**現在什麼都沒改**；錄完沒紅，這題就不必答。
+
+- **背景**：樣卷的 `extract_ocr.v2` 回放檔錄好之後，第 6 節那三處從 skip 轉成硬斷言，而且 X1 規定 unit、e2e 必須綠才能開 PR。其中幾條是 Gemini 時代訂的契約，量的其實是**模型拆題拆得好不好**，會直接套在本機 `qwen3:8b` 的輸出上（2026-09-27 審查時用手寫的假回放檔確認過：轉換確實會發生，而且下游缺檔時是紅燈、不是 skip）：
+  - `test/unit/cassetteReplay.test.js`（extract_ocr 組）：`rejected` 必須是空的（每一題都要過 ajv 與章節白名單——寫出白名單外的章名或少一個必填欄位，那一題就進 `rejected`）；至少 8 題（樣卷 10 題）；數學、物理兩科都要有；每題 `answer_text` 非空、題幹不殘留「[附圖描述」。
+  - `test/unit/evalPipeline.test.js`：「10 題全部走到終態」要求拆出來**剛好** 10 題；「〔ocr 模式〕同一份 PDF 跑第二次」要求至少一題走完全部閘門停在 `ocr_only`（每一題都被分類、lint、驗算或原卷比對擋下時就紅）。
+  - e2e 的 ①a／①b（D-1 已同意的契約）：至少一題停在 `ocr_only`、樣卷沒有 `transcription_mismatch`；①b 要有一題可以核准。
+  - **不在本題範圍**（是接線與形狀，紅了就是缺陷，照一般方式修）：replay miss、`idx` 連號、`chunk_no`／`page_range`、不帶 `figure_desc`、每題標 `ocr_only`／`extract_mode`、一題都不自動入庫、counts 相加等於總列數。
+- **問題**：錄完之後，如果紅的**只有**上面那幾條品質條件，要怎麼處理？
+- **選項**：
+  1. **維持斷言，當成拆題品質問題修到綠**：看是哪一條，改 `extract_ocr` 的模板或程式後處理（例如章名容錯）。改模板＝回放鍵變＝第 3 步要重錄（約 2～4.5 小時），修到綠才開 PR。契約不變；時程不確定，8B 模型可能修不動。
+  2. **品質條件改由 eval 量，單元測試與 e2e 只守接線與形狀**：上面「不在本題範圍」那些照舊硬斷言；紅掉的那幾條品質條件改成由 `eval:pipeline` 報告（依 X1 eval 可以紅燈合併，PR 列未達項）。每條要怎麼改，會先列出逐條清單給 Owner 看過再動。約半天；不必重錄。代價：單元測試不再抓「拆題品質退步」，要看 eval 報表；這是放寬測試，所以要 Owner 同意。
+  3. **維持斷言、讓它紅，另把 X1 改成這幾條可以紅燈合併**（比照 D-1 選項 3）：不花時間；unit／e2e 長期紅，真的壞掉時從紅燈看不出來。
+  4. **暫緩開 PR**，等換更強的模型或有 GPU 的電腦再錄：契約不變；PR 無限期延後。
+- **建議**：先錄、先看結果。真的只紅在品質條件時選 2：`cassetteReplay` 自己的註解就寫著「模型的抓題率是 eval 的事，不該讓模型少抓一題就把單元測試變紅」（卻又斷言至少 8 題），而且 ocr 模式每一題本來就停在人工複核，拆錯的題在複核頁攔得到；選 1 改模板要再錄一輪，也不保證修得動。
+- **何時**：10.21 第 3 步錄完、重跑 unit 與 e2e 之後；開 PR 之前一定要定。**在那之前不要改這幾條斷言。**
+- 出處：本稿第 6 節；`test/unit/cassetteReplay.test.js`、`test/unit/evalPipeline.test.js`、`test/e2e/pipeline.e2e.test.js`；D-1 見 [`owner-pending-decisions-r5.md`](../owner-pending-decisions-r5.md)。

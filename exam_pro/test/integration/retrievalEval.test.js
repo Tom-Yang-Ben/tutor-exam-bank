@@ -41,7 +41,8 @@ else if (!/_test(\?|$)/.test(URL)) throw new Error('TEST_DATABASE_URL 的資料�
 const fixture = loadFixture();
 const golden = loadGolden({ fixtureById: fixture.byId });
 const emb = loadEmbeddings({ questions: fixture.questions, optional: true });
-if (!emb.available) missing.push(`向量 fixture 未錄製（${require('path').basename(emb.file)}；D-V0，需開發者本人的金鑰）`);
+// 〔r7 測試空轉清理 審查 2026-09-27〕原因原本寫「D-V0，需開發者本人的金鑰」（Gemini 時代）；本機模式的向量檔由 Ollama 錄，CI 只讀檔
+if (!emb.available) missing.push(`向量 fixture 未錄製（${require('path').basename(emb.file)}；EMBED_MODEL 是 ollama: 時在 Ollama 開著的電腦上跑 npm run eval:record 或 npm run cassettes:rerecord 補錄，Gemini 要 GEMINI_API_KEY；CI 只讀這個檔）`);
 // 〔章節重整 CH-B〕向量檔在、但有題查不到：fixture 改標後 embed_text 第一行的章名變了，那幾題要等 Owner 重錄
 // （npm run cassettes:rerecord，docs/chapter-restructure.md 第 5 條）。與「未錄製」同一條線：skip 並指名缺哪幾題，
 // 不拿缺向量的題去灌 PG（它們會以 embedding NULL 入庫，三欄的數字與 Jaccard 都不再是同一件事）。

@@ -11,7 +11,12 @@
 //     鍵永遠對不上。改成與 runner 相同：ctx.config.models.text＝MODEL_TEXT，鍵也用它算。
 //     classify.v2 的本機回放檔已在基底（2026-09-27 錄，dec/r6-recorded-step1），這一組現在真的回放。
 // 回放檔在就一定要跑；不在就 skip，skip 訊息指名等哪一步重錄（docs/local-mode.md 10.21）。
-// 預期的鍵與 agent 實際送出的鍵是否一致，由「不需要回放檔」的那一組直接比對（skip 條件本身不會算錯而永遠 skip）。
+// 預期的鍵與 agent 實際送出的鍵是否一致，由「不需要回放檔」的兩組（extract_ocr、classify 各一）直接比對
+// （skip 條件本身不會算錯而永遠 skip）。
+// 〔r7 審查 2026-09-27〕①樣卷或答案卷壞掉（讀不到、sha256 不符）時，原本在載入模組就丟錯、整支檔案爆掉，
+// classify 兩組也跟著跑不到。改成接住：extract_ocr 兩組 skip 並指向「樣卷前提」那一則，那一則把原錯誤丟出來（紅燈，
+// 不是悄悄 skip）；classify 各組照常跑。②「classify 讀 MODEL_TEXT 的鍵」那一則不需要 classify 回放檔，
+// 從會整組 skip 的 classify 組移到「classify 的回放鍵」組（斷言一字未改），回放檔被 prune 掉時照樣守著模型路由。
 //
 // 模型與模式一律照 config/models.js 的預設（＝ci.yml 的 unit job：沒有 env），檔頭先清掉會改變鍵的環境變數。
 //
@@ -81,8 +86,24 @@ function classifyCassette(modelSpec = models.MODEL_TEXT) {
 }
 
 const CLASSIFY = classifyCassette();
-// 樣卷第 1 塊（第 1 頁；樣卷只有 1 頁）的 OCR 與 extract_ocr 回放檔
-const EXTRACT_OCR = sampleExtractOcrCassette({ chunkNo: 1, fromPage: 1, toPage: 1 });
+
+/**
+ * 樣卷第 1 塊（第 1 頁；樣卷只有 1 頁）的 OCR 與 extract_ocr 回放檔。
+ * sampleExtractOcrCassette 會讀樣卷、用 loadSheet 檢查答案卷的 sha256，壞了就丟錯；在這裡接住，
+ * 不讓整支檔案在載入時爆掉（classify 各組與樣卷無關）。接住的錯誤由「樣卷前提」那一則丟出來＝紅燈。
+ * 模型照 recordedData.js 同一條規則（MODEL_OCR_STRUCTURE 未設＝MODEL_VERIFY），給 replayCtx 用。
+ */
+const EXTRACT_OCR = (() => {
+    try {
+        return { ...sampleExtractOcrCassette({ chunkNo: 1, fromPage: 1, toPage: 1 }), error: null };
+    } catch (err) {
+        return {
+            ready: false, ocrReady: false, ocrKey: null, key: null, error: err,
+            model: String(process.env.MODEL_OCR_STRUCTURE || '').trim() || models.MODEL_VERIFY,
+            reason: `樣卷或答案卷讀不到（${String(err && err.message).split('\n')[0]}）——見本檔「樣卷前提」那一則的紅燈`
+        };
+    }
+})();
 
 /**
  * 真的走 services/llm（replay），只有 db 是 null。
@@ -130,6 +151,15 @@ function missOf(message) {
     const m = /LLM_MODE=replay 找不到 cassette（agent=([^ ]+) key=([0-9a-f]{64})）/.exec(String(message));
     return m ? { agent: m[1], key: m[2] } : null;
 }
+
+// 〔r7 審查〕extract_ocr 兩組的前提：一定執行（不 skip）。樣卷與答案卷沒問題時這一則過；
+// 壞了（讀不到、sha256 不符）時把 sampleExtractOcrCassette 丟的原錯誤丟出來——紅燈，而下面兩組只 skip 並指向這裡。
+describe('樣卷前提（extract_ocr 兩組共用；壞了是紅燈，不是 skip）', () => {
+    test('eval/fixtures/sample_exam.pdf 讀得到、答案卷的 sha256 與它相符，算得出 OCR 回放檔的鍵', () => {
+        if (EXTRACT_OCR.error) throw EXTRACT_OCR.error;
+        assert.match(String(EXTRACT_OCR.ocrKey), /^[0-9a-f]{64}$/);
+    });
+});
 
 describe('cassette 回放 — extract_ocr（LOCAL_EXTRACT_MODE=ocr、LLM_MODE=replay，不連外）', {
     skip: EXTRACT_OCR.ready ? false : EXTRACT_OCR.reason
@@ -238,6 +268,26 @@ describe('cassette 回放 — classify（LLM_MODE=replay，不連外）', {
         assert.deepEqual(outcome.data.few_shot_ids, []);   // 錄製時刻意不接 DB，回放才對得上
         assert.ok(outcome.data.rationale.length > 0);
         assert.ok(outcome.data.rationale.length <= 200);
+    });
+});
+
+// 〔r7 審查 2026-09-27〕這一組不讀 classify 的回放檔，所以不跟著上面那組 skip（比照「extract_ocr 的回放鍵」）：
+// 模型路由那一則只要「看圖模型的鍵沒有回放檔」；另一則在回放檔不在時拿 miss 訊息裡的鍵對預期鍵，
+// 上面那組才不會因為預期鍵算錯而永遠 skip。
+describe('classify 的回放鍵（不需要 classify 回放檔）', () => {
+    test('給 models.text（MODEL_TEXT）：回放檔在就命中；不在時 miss 的鍵就是上面那組 skip 訊息裡的預期鍵', async () => {
+        // 兩種狀態各有斷言（不是「不適用就 return」）：錄好之前守「預期鍵＝實際鍵」，錄好之後守「真的命中」
+        const fixture = JSON.parse(fs.readFileSync(FIXTURE, 'utf8'));
+        const q = fixture.questions.find(x => x.id === CLASSIFY_FIXTURE_ID);
+        const outcome = await classifyAgent.run(replayCtx(), {
+            subject: q.subject, chapter: null, chapter_confidence: 0, question_text: q.question_text
+        });
+        if (CLASSIFY.ready) {
+            assert.equal(outcome.kind, 'pass', JSON.stringify(outcome).slice(0, 300));
+        } else {
+            assert.equal(outcome.kind, 'error', JSON.stringify(outcome).slice(0, 300));
+            assert.deepEqual(missOf(outcome.message), { agent: 'classify', key: CLASSIFY.key }, outcome.message);
+        }
     });
 
     test('classify 讀的是文字模型（MODEL_TEXT）的鍵：不給 models.text 就退回看圖模型，那一支沒錄 → replay miss', async () => {

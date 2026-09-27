@@ -446,8 +446,17 @@ describe('pipelineDriver 端到端', () => {
         } catch (_) { localExtract = false; }
         return localExtract && require('../../config/localExtractMode').resolveLocalExtractMode() === 'ocr';
     })();
-    const testCross = OCR_MODE ? () => { } : test;
-    const testOcr = OCR_MODE ? test : () => { };
+    // 〔r7 測試空轉清理 審查 2026-09-27〕不是這個模式的那一則原本是 () => {}：根本不註冊，報表連 SKIP 都看不到。
+    // 改成明確 skip 並寫原因（斷言一個字都沒動）；CI（ocr）的報表因此固定多一行 SKIP，指名交叉驗證那一則。
+    const testCross = OCR_MODE
+        ? (name, fn) => test(name, {
+            skip: 'CI 與 npm test 預設都是 LOCAL_EXTRACT_MODE=ocr，不讀也不錄 extract_vision；這一則只在交叉驗證（cross）或 Gemini 拆題時跑。' +
+                'cross 模式由假模型的單元／整合測試涵蓋（docs/local-mode.md 10.12 第 7 點）'
+        }, fn)
+        : test;
+    const testOcr = OCR_MODE
+        ? test
+        : (name, fn) => test(name, { skip: '這一則只在 ocr 模式跑（CI 與 npm test 預設）；目前明寫了 LOCAL_EXTRACT_MODE=cross，或拆題模型是 Gemini' }, fn);
 
     testOcr('〔ocr 模式〕同一份 PDF 跑第二次：第一輪一題都不自動入庫；人工核准的題第二輪全部被 dedup0 攔下，其餘逐題不變', async (t) => {
         const dbHashes = new Map();
