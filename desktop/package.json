@@ -1,0 +1,19 @@
+{
+  "name": "tutor-exam-bank-desktop",
+  "productName": "TutorExamBank",
+  "version": "0.1.0",
+  "description": "出題系統的 Electron 桌面殼（B1：殼＋內嵌後端，資料庫仍用 Docker；docs/desktop-app-design.md）",
+  "main": "main.js",
+  "private": true,
+  "license": "UNLICENSED",
+  "author": "Ben Yang (楊本顥)",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test \"test/**/*.test.js\"",
+    "smoke": "node test/smoke/run.js"
+  },
+  "devDependencies": {
+    "electron": "44.4.5"
+  }
+}

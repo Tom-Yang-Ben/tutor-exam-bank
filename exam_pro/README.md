@@ -306,6 +306,8 @@ npm run dev    # 開發（nodemon 熱重載）
 
 Windows 也可以用桌面圖示：雙擊一次 `scripts\windows\install_desktop_shortcut.bat`，之後點「出題系統」就會依序開 Docker Desktop、資料庫容器、Ollama、背景的 `node server.js`，最後開出獨立的操作視窗；用完點「關閉出題系統」。說明、log 位置與設定見 [`docs/desktop-launcher.md`](../docs/desktop-launcher.md)。
 
+〔2026-09-27，待 Owner 驗收〕或用 Electron 桌面版（B1）：雙擊一次 `scripts\windows\install_desktop_app.bat`（第一次會下載 Electron），之後點「出題系統（桌面版）」就在同一個視窗裡依序檢查、開好整套系統（資料庫仍在 Docker；後端只聽 `127.0.0.1`）；有背景工作時關視窗會縮到系統匣，從系統匣選「結束」才會問要等處理完還是現在放棄。說明與驗收步驟見 [`docs/desktop-app-design.md`](../docs/desktop-app-design.md) 第 6.2 節。
+
 ### 6. 本機模式（預設；不連外、不花錢）〔2026-09-25〕
 
 所有 AI 步驟跑在這台電腦上：Ollama（`qwen3-vl:8b` 看頁面拆題；`qwen3:8b` 整理 OCR 結果、分類、公式 lint、驗算、出變式〔修訂 2026-09-26，LM-15〕；`qwen3-embedding:0.6b` 向量）＋ PaddleOCR。PDF 拆題由 OCR 與視覺模型交叉驗證，不一致的題一律停在人工複核。只用 CPU 時很慢（一份考卷數小時）、品質低於 Gemini、語音提問關閉；Gemini 保留，改 `.env` 五行即可切回。
@@ -557,6 +559,7 @@ fs.writeFileSync('.tmp_inline.js',b)" && node --check .tmp_inline.js && echo "JS
 | `scripts\windows\setup_local_ai.bat`〔2026-09-25〕 | 本機模式一鍵安裝：Ollama 檢查、下載三個模型、PaddleOCR 虛擬環境與模型、自我檢查（log 在 `data\local_ai\`）|
 | `scripts\windows\record_local.bat`〔2026-09-25〕 | 以本機模型重錄 CI 的回放檔：`db:up` → `migrate:test` → `cassettes:rerecord`（自動輸入 yes；log 在 `data\local_ai\`）|
 | `scripts\windows\install_desktop_shortcut.bat`〔2026-09-27〕 | 在桌面建立「出題系統」與「關閉出題系統」兩個圖示（`--remove` 移除）；圖示的用法與 log 位置見 [`docs/desktop-launcher.md`](../docs/desktop-launcher.md) |
+| `scripts\windows\install_desktop_app.bat`〔2026-09-27，待驗收〕 | Electron 桌面版（B1）：第一次在 repo 的 `desktop\` 安裝並下載 Electron，再在桌面建立「出題系統（桌面版）」圖示；`--reinstall`（`desktop\package-lock.json` 變了時；先從系統匣結束桌面版，否則 `electron.exe` 被鎖住）重裝、`--remove` 移除圖示。見 [`docs/desktop-app-design.md`](../docs/desktop-app-design.md) 第 6.2 節 |
 
 灌入示範題（題庫為空時）：
 
