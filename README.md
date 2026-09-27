@@ -483,6 +483,8 @@ npm run migrate           # 套用 migrations/
 npm start                 # http://localhost:3000
 ```
 
+Windows 也可以雙擊 `exam_pro\scripts\windows\install_desktop_shortcut.bat` 在桌面建立「出題系統」圖示，之後點一下就會依序開 Docker、資料庫、Ollama、後端，最後開出操作視窗；用完點「關閉出題系統」（[`docs/desktop-launcher.md`](./docs/desktop-launcher.md)）。
+
 完整安裝步驟、環境變數表、API 一覽與維運工具說明，請見 **[`exam_pro/README.md`](./exam_pro/README.md)**。
 
 ### 本機模式（預設）：不連外、不花錢〔2026-09-25〕

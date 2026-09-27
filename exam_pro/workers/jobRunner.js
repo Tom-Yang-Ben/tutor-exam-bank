@@ -17,6 +17,11 @@
 //
 // 崩潰／nodemon 重啟的重跑保證＝租約過期後該列會被重新認領；extract 重跑靠
 // job_questions 的 UNIQUE (job_id, idx) + ON CONFLICT DO NOTHING 保證不會重複建列。
+// 〔dec/desktop-launcher-fix2〕重跑的粒度看工作單位：B 一次只跑一個節點、跑完就寫回狀態，所以從中斷的那一格重跑那一個節點；
+// A（runExtractJob）與 C（變式生成，runGenerateJob）整份 job 是一個工作單位，重新認領時不看哪幾塊／哪幾題已經做完，
+// 從第 1 塊／第 1 題整份重跑——已建的列不會重複，但前面做完的塊／題會再呼叫一次模型（計費模型會再計一次費用），
+// 重做的結果在 idx 已存在時丟掉。
+// 被打斷的那一次呼叫沒有寫事件、也沒記用量（writeEvent／chargeJob 都在 invokeNode 回來之後）。
 //
 // 〔Owner 決策單 2026-09-26 第四輪 V3〕選 2「本機模式逾時只重試 1 次」：拆題模型是 ollama 時，
 // 拆題一塊（runExtractChunk）的錯誤類別是 timeout 的只重試 LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES（1）次、共跑 2 次；
