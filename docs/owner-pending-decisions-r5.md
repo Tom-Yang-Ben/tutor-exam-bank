@@ -10,7 +10,7 @@
 
 | 編號 | 題目 | 什麼時候要答 | 建議 |
 |---|---|---|---|
-| D-1 | e2e 在 OCR 模式改驗「全部停複核 → 人工核准一題入庫」 | 重錄 pipeline／e2e 之前；開 PR 到 main 之前一定要 | 1 同意 |
+| D-1 | e2e 在 OCR 模式改驗「全部停複核 → 人工核准一題入庫」（〔2026-09-27 `dec/r6-defaults-fix`〕含 `evalPipeline` 單元測試同類的一則，見內文） | 重錄 pipeline／e2e 之前；開 PR 到 main 之前一定要 | 1 同意 |
 | D-2 | OCR 模式下 pipeline eval 的 `saved_rate` 固定是 0 | 重錄 pipeline 之前最好 | 3 印 n/a＋替代指標 |
 | D-3 | `LOCAL_EXTRACT_MODE`：範本寫 ocr、程式預設 cross | 交付到 Owner 電腦之前 | 2 程式預設也改 ocr 〔Owner 2026-09-27 選 2〕已落實於 `dec/r6-defaults` |
 | D-4 | OCR 整理一塊放不下 `num_ctx` 時怎麼調 | 上傳幾份真卷之後 | 1 先不調 |
@@ -18,7 +18,7 @@
 | V5-2 | 變式跑題門檻 `VARIANT_OFFTOPIC_SIM_MIN` | 反斜線修好、variant 重錄之後 | 2 改 0.87（暫定） 〔Owner 2026-09-27 選 2〕已落實於 `dec/r6-defaults`（本機 0.87，暫定；重錄後依 O-4 抽查再定案） |
 | V5-3 | 重複題門檻 `DEDUP_DUP_THRESHOLD` | 現在 | 3 改 0.99 〔Owner 2026-09-27 選 3〕已落實於 `dec/r6-defaults`（本機 0.99） |
 | V5-4 | 「是變式」標記門檻 `DEDUP_VARIANT_THRESHOLD` | 現在 | 1 維持 0.90 〔Owner 2026-09-27 選 1〕已落實於 `dec/r6-defaults`（維持 0.90） |
-| V5-5 | 新門檻怎麼落實 | 與 V5-1～V5-3 一起 | 1 只改本機模式的預設 〔Owner 2026-09-27 選 1〕已落實於 `dec/r6-defaults`（`config/similarityThresholds.js`） |
+| V5-5 | 新門檻怎麼落實 | 與 V5-1～V5-3 一起 | 1 只改本機模式的預設 〔Owner 2026-09-27 選 1〕已落實於 `dec/r6-defaults`（`config/similarityThresholds.js`）；舊範本 `.env` 蓋掉新預設時的啟動提醒已落實於 `dec/r6-defaults-fix` |
 | V5-6 | 同一藍本的兄弟變式幾乎一樣 | 現在（選 2 要在 variant 重錄前做完） | 2 從生成端處理 |
 | C-a | 公式重寫（lint）要不要思考 | 重錄前 | 3 先量再決定 |
 | C-b | 知識點標註要不要思考 | 開自動標註或跑補標之前 | 3 先量（併進 B12 試標） |
@@ -49,6 +49,7 @@
 - **建議**：1。只有它在這台電腦上能變綠，而且守的是 OCR 模式真的會發生的事；交叉驗證的原合約完整保留。
 - **何時**：重錄 pipeline／e2e 之前；開 PR（`local/integration` → main）之前一定要定。
 - 出處：`local-mode.md` 10.12 第 7 點；`test/e2e/pipeline.e2e.test.js` 檔頭。
+- 〔2026-09-27 `dec/r6-defaults-fix`，Owner 第五輪 D-3＝2 帶出的同類變更，**一併請 Owner 裁決**〕程式預設改成 ocr 之後，單元測試 `test/unit/evalPipeline.test.js` 的「同一份 PDF 跑第二次」（`npm test` 沒寫 `LOCAL_EXTRACT_MODE`＝ocr）也撞到同一件事：原本要求「第一輪至少一題自動入庫」，ocr 模式結構上不可能綠（樣卷的 `extract_ocr` 錄好那一刻就紅）。已照本題選項 1 的同一個做法改：交叉驗證與 Gemini 仍跑原本那一則、一字不改；ocr 模式改驗「第一輪一題都不自動入庫、至少一題走完全部閘門停在 ocr_only → 模擬人工核准 → 第二輪核准過的題全部被重複題檢查攔下、其餘逐題不變」（`local-mode.md` 10.16 第 4 點）。選 1 就一併同意；選 2（固定交叉驗證）時這一則也改成明寫 cross；選 3 時這一則照舊斷言、錄好後紅燈。
 
 ### D-2　OCR 模式下 pipeline eval 的 `saved_rate` 固定是 0
 
@@ -64,7 +65,7 @@
 
 ### D-3　`LOCAL_EXTRACT_MODE`：範本寫 ocr、程式預設是 cross
 
-> 〔Owner 2026-09-27 選 2〕已落實於 `dec/r6-defaults`：程式預設改成 `ocr`（只在拆題模型是 ollama 時；Gemini 不受影響），要交叉驗證的明寫 `cross`；`.env.example`、文件、啟動訊息一致；只寫 `OCR_ENGINE=none`、沒寫這一行時啟動就報錯，訊息講明加 `LOCAL_EXTRACT_MODE=cross`（`local-mode.md` 10.16 第 1 點）。不必重錄。
+> 〔Owner 2026-09-27 選 2〕已落實於 `dec/r6-defaults`：程式預設改成 `ocr`（只在拆題模型是 ollama 時；Gemini 不受影響），要交叉驗證的明寫 `cross`；`.env.example`、文件、啟動訊息一致；只寫 `OCR_ENGINE=none`、沒寫這一行時啟動就報錯，訊息講明加 `LOCAL_EXTRACT_MODE=cross`（`local-mode.md` 10.16 第 1 點）。不必重錄。〔審查修正 `dec/r6-defaults-fix`〕預設改 ocr 連帶讓 `evalPipeline` 單元測試一則的契約要改，已照 D-1 選項 1 的做法改、列在 D-1 內文等 Owner 一併裁決（10.16 第 4 點）。
 
 - **背景**：`LOCAL_EXTRACT_MODE` 決定本機拆題看不看圖。`.env` 沒寫這一行時程式用 `cross`（看圖＋OCR 交叉驗證）；`.env.example` 範本寫的是 `ocr`。Owner 電腦上現有的 `.env` 是之前建的，**沒有這一行**：升級後若忘了照 10.12 第 2 點手動加，上傳的卷會走看圖（1 頁 54 分鐘、JSON 不合法），跑好幾小時才逾時失敗。CI 與重錄一律照 `ci.yml` 的 `ocr`，不受程式預設影響。
 - **問題**：範本與程式預設要不要一致？一致成哪一個？
@@ -153,7 +154,7 @@
 
 ### V5-5　核准的新門檻怎麼落實
 
-> 〔Owner 2026-09-27 選 1〕已落實於 `dec/r6-defaults`：集中在 `config/similarityThresholds.js`，`EMBED_MODEL` 是 `ollama:`（含沒寫）用新值、Gemini 用舊值，`.env` 明寫仍可覆寫；`.env.example` 這幾行改成註解。Owner 的 `.env` 若明寫了舊值（含 `VARIANT_SIM_MIN`），升級時要刪掉（`local-mode.md` 10.16 第 2 點）。
+> 〔Owner 2026-09-27 選 1〕已落實於 `dec/r6-defaults`：集中在 `config/similarityThresholds.js`，`EMBED_MODEL` 是 `ollama:`（含沒寫）用新值、Gemini 用舊值，`.env` 明寫仍可覆寫；`.env.example` 這幾行改成註解。Owner 的 `.env` 若明寫了舊值（含 `VARIANT_SIM_MIN`），升級時要刪掉（`local-mode.md` 10.16 第 2 點）。〔審查修正 `dec/r6-defaults-fix`〕本機向量＋`.env` 明寫了 Gemini 舊值（0.80／0.90／0.97）或舊名 `VARIANT_SIM_MIN` 生效時，伺服器啟動會多印一則提醒、點名要刪哪幾行（10.16 第 4 點）。
 
 - **背景**：V5-1～V5-3 的新值是依本機向量算的；Gemini 模式仍適合原本的值。
 - **問題**：新值只給本機模式，還是全部改？

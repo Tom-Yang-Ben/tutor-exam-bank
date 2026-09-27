@@ -195,4 +195,92 @@ describe('啟動訊息（jobRunner 啟動那一行）', () => {
         }
         assert.match(runner.startupExtractModeText('cross'), /^cross（/);
     });
+
+    // 〔審查 dec/r6-defaults 2026-09-27〕啟動訊息照 runner 實際的 config，不另讀一次 process.env
+    test('runner.start()：createRunner({config}) 覆寫的門檻照實印、標「（createRunner 設定）」；明寫 ocr 不說「程式預設」', () => {
+        const infos = [];
+        const warns = [];
+        const logger = { info: (o) => infos.push(o), warn: (o) => warns.push(o), error() { } };
+        const db = { query: async () => ({ rows: [], rowCount: 0 }), pool: { connect: async () => ({ query: async () => ({ rows: [], rowCount: 0 }), release() { } }) } };
+        const keys = ['EMBED_MODEL', 'DEDUP_DUP_THRESHOLD', 'VARIANT_RETRIEVE_SIM_MIN', 'VARIANT_OFFTOPIC_SIM_MIN', 'VARIANT_SIM_MIN'];
+        const saved = Object.fromEntries(keys.map(k => [k, process.env[k]]));
+        try {
+            for (const k of keys) delete process.env[k];
+            const r = runner.createRunner({ db, llm: {}, logger, config: { localExtract: true, localExtractMode: 'ocr', ocrEngine: 'paddle', pollMs: 60000, dedupDup: 0.5, knnVoteSim: 0.95 } });
+            assert.equal(r.config.dedupDup, 0.5);
+            r.start();
+            r.stop();
+            const line = infos.find(o => o.msg === 'jobRunner 啟動');
+            assert.match(line.thresholds, /DEDUP_DUP_THRESHOLD=0\.5（createRunner 設定）/);
+            assert.match(line.thresholds, /KNN_VOTE_SIM=0\.95（createRunner 設定）/);
+            assert.match(line.thresholds, /VARIANT_RETRIEVE_SIM_MIN=0\.72、/, '沒覆寫的照預設、不加標記');
+            assert.doesNotMatch(line.local_extract_mode, /程式預設，/, 'opts.config 明寫了 ocr，不該說是程式預設');
+            assert.match(line.local_extract_mode, /^ocr（.*與程式預設相同/);
+            assert.deepEqual(warns.filter(w => /舊範本/.test(w.msg || '')), [], '覆寫的不是 .env，不提醒舊範本');
+        } finally {
+            for (const k of keys) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
+        }
+    });
+});
+
+// 〔審查 dec/r6-defaults 2026-09-27〕Owner 照舊範本建的 .env 明寫了 Gemini 舊門檻 → 本機新預設不會生效，啟動時提醒
+describe('舊範本 .env 的提醒（legacyTemplateWarning）', () => {
+    const OLD_TEMPLATE = {
+        DEDUP_DUP_THRESHOLD: '0.97', DEDUP_VARIANT_THRESHOLD: '0.90',
+        VARIANT_RETRIEVE_SIM_MIN: '0.80', VARIANT_OFFTOPIC_SIM_MIN: '0.90', VARIANT_SIM_MIN: '0.80', KNN_VOTE_SIM: '0.90'
+    };
+
+    test('本機向量＋舊範本的值：點名三個會蓋掉新預設的變數，兩組預設相同的兩個不點名', () => {
+        const w = sim.legacyTemplateWarning(sim.resolveSimilarityThresholds(OLD_TEMPLATE));
+        assert.ok(w, '應該提醒');
+        for (const name of ['VARIANT_RETRIEVE_SIM_MIN=0.8', 'VARIANT_OFFTOPIC_SIM_MIN=0.9', 'DEDUP_DUP_THRESHOLD=0.97']) {
+            assert.ok(w.includes(name), `沒點名 ${name}：${w}`);
+        }
+        assert.ok(!w.includes('DEDUP_VARIANT_THRESHOLD'), '兩組預設都是 0.90，寫了不影響');
+        assert.ok(!w.includes('KNN_VOTE_SIM'), '兩組預設都是 0.90，寫了不影響');
+        assert.ok(!w.includes('VARIANT_SIM_MIN=0.8（舊名'), '兩個新名都明寫了，舊名沒有生效，不點名');
+        assert.match(w, /刪掉/);
+    });
+
+    test('只剩舊名 VARIANT_SIM_MIN 在生效也提醒', () => {
+        const w = sim.legacyTemplateWarning(sim.resolveSimilarityThresholds({ VARIANT_SIM_MIN: '0.80' }));
+        assert.match(w, /VARIANT_SIM_MIN=0\.8（舊名，蓋過 VARIANT_RETRIEVE_SIM_MIN、VARIANT_OFFTOPIC_SIM_MIN 的預設）/);
+    });
+
+    test('不提醒：沒寫、刻意寫了別的值、Gemini 向量', () => {
+        assert.equal(sim.legacyTemplateWarning(sim.resolveSimilarityThresholds({})), null);
+        assert.equal(sim.legacyTemplateWarning(sim.resolveSimilarityThresholds({ DEDUP_DUP_THRESHOLD: '0.98', VARIANT_OFFTOPIC_SIM_MIN: '0.88' })), null);
+        assert.equal(sim.legacyTemplateWarning(sim.resolveSimilarityThresholds({ ...OLD_TEMPLATE, EMBED_MODEL: 'gemini-embedding-001' })), null);
+        assert.equal(sim.legacyTemplateWarning(sim.resolveSimilarityThresholds({ ...OLD_TEMPLATE, EMBED_MODEL: 'gemini:gemini-embedding-001' })), null);
+    });
+
+    test('runner.start()：.env 是舊範本時 warn 一次，門檻本身照 .env（明寫優先的規則不變）', () => {
+        const infos = [];
+        const warns = [];
+        const logger = { info: (o) => infos.push(o), warn: (o) => warns.push(o), error() { } };
+        const db = { query: async () => ({ rows: [], rowCount: 0 }), pool: { connect: async () => ({ query: async () => ({ rows: [], rowCount: 0 }), release() { } }) } };
+        const keys = ['EMBED_MODEL', ...Object.keys(OLD_TEMPLATE)];
+        const saved = Object.fromEntries(keys.map(k => [k, process.env[k]]));
+        try {
+            delete process.env.EMBED_MODEL;
+            Object.assign(process.env, OLD_TEMPLATE);
+            const r = runner.createRunner({ db, llm: {}, logger, config: { localExtract: false, pollMs: 60000 } });
+            assert.equal(r.config.dedupDup, 0.97, '.env 明寫仍優先');
+            r.start();
+            r.stop();
+            const hits = warns.filter(w => /舊範本/.test(w.msg || ''));
+            assert.equal(hits.length, 1);
+            assert.match(hits[0].msg, /DEDUP_DUP_THRESHOLD=0\.97/);
+            assert.match(infos.find(o => o.msg === 'jobRunner 啟動').thresholds, /DEDUP_DUP_THRESHOLD=0\.97（\.env）/);
+
+            warns.length = 0;
+            process.env.EMBED_MODEL = 'gemini-embedding-001';
+            const g = runner.createRunner({ db, llm: {}, logger, config: { localExtract: false, pollMs: 60000 } });
+            g.start();
+            g.stop();
+            assert.deepEqual(warns.filter(w => /舊範本/.test(w.msg || '')), [], 'Gemini 向量用舊值是對的，不提醒');
+        } finally {
+            for (const k of keys) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
+        }
+    });
 });

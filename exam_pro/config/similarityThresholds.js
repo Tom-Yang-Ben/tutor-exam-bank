@@ -124,12 +124,41 @@ function resolveSimilarityThresholds(env = process.env) {
  * @returns {string}
  */
 function describeSimilarityThresholds(r) {
-    const parts = Object.entries(ENV_NAMES).map(([key, name]) =>
-        `${name}=${r[key]}${r.source[key] === 'env' ? '（.env）' : r.source[key] === 'legacy' ? '（舊名 VARIANT_SIM_MIN）' : ''}`);
+    const label = (src) => src === 'env' ? '（.env）'
+        : src === 'legacy' ? '（舊名 VARIANT_SIM_MIN）'
+            : src === 'config' ? '（createRunner 設定）' : '';
+    const parts = Object.entries(ENV_NAMES).map(([key, name]) => `${name}=${r[key]}${label(r.source[key])}`);
     return `${r.mode === 'local' ? '本機向量' : 'Gemini 向量'}的門檻：${parts.join('、')}`;
+}
+
+/**
+ * 〔審查 dec/r6-defaults 2026-09-27〕舊範本留下的明寫值：向量模型是本機（ollama:），.env 卻明寫了
+ * **剛好等於 Gemini 舊預設、又不等於本機新預設**的值（VARIANT_RETRIEVE_SIM_MIN=0.80、VARIANT_OFFTOPIC_SIM_MIN=0.90、
+ * DEDUP_DUP_THRESHOLD=0.97），或舊名 VARIANT_SIM_MIN 正在生效——這幾乎一定是照舊 .env.example 建的 .env，
+ * Owner 第五輪 V5-1～V5-3 的新預設在這台電腦上不會生效。「.env 明寫優先」的規則不變（不自動忽略），只提醒要刪哪幾行。
+ * DEDUP_VARIANT_THRESHOLD、KNN_VOTE_SIM 兩組預設相同（0.90），寫了也不影響，不提醒。
+ *
+ * @param {ReturnType<typeof resolveSimilarityThresholds>} r  實際生效的門檻（source 為 'env'／'legacy' 的才看）
+ * @returns {string|null} 一句提醒；沒有要提醒的回 null
+ */
+function legacyTemplateWarning(r) {
+    if (!r || r.mode !== 'local') return null;
+    const lines = [];
+    for (const [key, name] of Object.entries(ENV_NAMES)) {
+        const g = GEMINI_SIMILARITY_DEFAULTS[key];
+        if (g === LOCAL_SIMILARITY_DEFAULTS[key]) continue;
+        if (r.source[key] === 'env' && r[key] === g) lines.push(`${name}=${r[key]}`);
+    }
+    const legacyKeys = LEGACY_KEYS.filter(k => r.source[k] === 'legacy');
+    if (legacyKeys.length) lines.push(`VARIANT_SIM_MIN=${r[legacyKeys[0]]}（舊名，蓋過 ${legacyKeys.map(k => ENV_NAMES[k]).join('、')} 的預設）`);
+    if (!lines.length) return null;
+    return `向量模型是本機（${r.embedModel}），但 .env 明寫了 ${lines.join('、')}——這是舊範本（Gemini）的值，` +
+        '本機的新預設（VARIANT_RETRIEVE_SIM_MIN 0.72、VARIANT_OFFTOPIC_SIM_MIN 0.87、DEDUP_DUP_THRESHOLD 0.99）不會生效。' +
+        '若不是刻意要用這些值，把 .env 裡這幾行刪掉後重啟（docs/local-mode.md 10.16 第 2 點）。';
 }
 
 module.exports = {
     GEMINI_SIMILARITY_DEFAULTS, LOCAL_SIMILARITY_DEFAULTS, ENV_NAMES,
-    embedModelOf, isLocalEmbed, similarityDefaultsFor, resolveSimilarityThresholds, describeSimilarityThresholds
+    embedModelOf, isLocalEmbed, similarityDefaultsFor, resolveSimilarityThresholds, describeSimilarityThresholds,
+    legacyTemplateWarning
 };

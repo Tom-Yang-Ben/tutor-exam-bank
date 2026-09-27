@@ -1089,7 +1089,7 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 - **啟動訊息**：`jobRunner 啟動` 那一行（`npm start` 與 `node workers/jobRunner.js`）多兩個欄位：拆題模型是 ollama 時 `local_extract_mode`（例：「ocr（只用 PaddleOCR＋文字模型拆題，每題停在人工複核；程式預設，要交叉驗證就在 .env 明寫 LOCAL_EXTRACT_MODE=cross）」），以及 `thresholds`（第 2 點的五個門檻、哪幾個是 `.env` 明寫的）。
 - **矛盾設定多一種**：只寫 `OCR_ENGINE=none`、沒寫 `LOCAL_EXTRACT_MODE` 以前是「只看圖、不做 OCR」，現在等於 `ocr`＋`none`。仍然不猜（不自動退回看圖：在沒有獨立顯示卡的電腦上一頁幾十分鐘，會被當成當機），**啟動時就報錯**，訊息講明「.env 沒寫 LOCAL_EXTRACT_MODE，程式預設是 ocr……要只用看圖模型、不做 OCR，加一行 LOCAL_EXTRACT_MODE=cross」。重錄工具（`recordingPlan` 的 `configError`）同一條規則。
 - **受影響的測試**：原本靠「沒寫＝cross」測交叉驗證的單元測試（`extractLocal`、`visionMaxEdge`、`legacyAnalyzePdfFigures`、`extractLocalRunner`、`localMode`、`rerecordAll`、`localPerfReport`、`textModelLm15`）改成**明寫 `cross`**，斷言一個字都沒改；釘預設的測試（`localExtractMode.test.js`）改釘 `ocr`，另加：沒寫＋`OCR_ENGINE=none` 啟動就報錯、明寫 `cross` 照常建立、舊流程 `/analyze-pdf` 沒寫時只呼叫 `extract_ocr`、`perf:local` 沒寫與明寫 `ocr` 的報告逐字相同。
-- `test/unit/evalPipeline.test.js` 那兩則「replay 找不到 cassette 就 skip」的：單元測試的環境沒有 `LOCAL_EXTRACT_MODE`，以前走 `cross`、缺的是 `extract_vision`（在這台電腦上錄不出來，等於永遠 skip）；改了預設之後走 `ocr`、缺的是 `extract_ocr`，**與 CI 同一支回放檔**。所以仍是 skip（2 則），但樣卷的 `extract_ocr` 錄好之後就會自動轉成硬斷言；兩則在 `ocr` 模式下斷言的都成立（10 題都停在終態——`ocr_only` 的複核是終態；第二輪 dedup0 攔下的數量＝第一輪入庫數，`ocr` 模式是 0），不必改、也沒有弱化。
+- `test/unit/evalPipeline.test.js` 那兩則「replay 找不到 cassette 就 skip」的：單元測試的環境沒有 `LOCAL_EXTRACT_MODE`，以前走 `cross`、缺的是 `extract_vision`（在這台電腦上錄不出來，等於永遠 skip）；改了預設之後走 `ocr`、缺的是 `extract_ocr`，**與 CI 同一支回放檔**，樣卷的 `extract_ocr` 錄好之後就會自動轉成硬斷言。〔審查更正 `dec/r6-defaults-fix`〕原本這裡寫「兩則在 `ocr` 模式下斷言的都成立，不必改」，**是錯的**：「10 題全部走到終態」那一則成立（`ocr_only` 的複核是終態），但「同一份 PDF 跑第二次」那一則有 `assert.ok(s1.saved > 0)`，`ocr` 模式每題停在 `ocr_only`、`saved` 恆為 0，錄好之後一定紅（`dup === s1.saved` 也退化成 0＝0）。已照第 4 點改。
 
 #### 2. V5-1～V5-5、O-2：五個餘弦門檻依向量模型取預設（Owner 第五輪 V5-1、V5-2、V5-3、V5-4、V5-5、O-2 核准）
 
@@ -1114,3 +1114,15 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 - retrieval、classify、nlq：報表與基準逐字相同（classify、nlq 本來就因缺 `classify.v2`／`nlq.v2` 的回放檔紅燈，不算）。pipeline：與基準相同（仍缺 `extract_ocr/a47b37a0…`，本來就缺）。
 - variant：`retrieved_coverage` 0.2333 → **0.5000**（V5-1；門檻 0.8367 不動，仍未達）；replay miss 2 → **6**：多出的 4 筆都是 `verify`，來自 var-004、var-015、var-017——跑題門檻 0.87 之後，這幾題原本停在 `off_topic` 的變式現在過了跑題、往下走到驗算，而驗算這一步從來沒錄過（模板沒改，是「新走到的呼叫」）。這 4 筆是**本分支新造成、要重錄**的；照 V5-2 的先後順序，併進反斜線修好後那一次 variant 重錄即可（`record_local.bat variant`），不必另外錄。另外 29 筆「向量檔查無此文本」與 2 筆 `variant` miss 與基準相同。
 - e2e 不受影響：`ci.yml` 明寫 `ocr`，預設改了也是同一條路。
+
+#### 4. 審查修正（2026-09-27，`dec/r6-defaults-fix`）
+
+- **`evalPipeline.test.js`「同一份 PDF 跑第二次」加 `ocr` 分支（測試契約變更，比照 D-1 列給 Owner：`owner-pending-decisions-r5.md` D-1 內文）**。比照 e2e 的 ①a／①b（`test/e2e/pipeline.e2e.test.js` 檔頭）：
+  - 交叉驗證（明寫 `LOCAL_EXTRACT_MODE=cross`）與 Gemini 拆題：跑原本那一則，**一個字都沒改**（含 `s1.saved > 0`）。
+  - `ocr` 模式（`npm test` 沒寫＝預設）：改跑另一則——第一輪 `saved`＝0、每題 `extract_mode` 都是 `ocr`、沒有 `extract_disagree`、**至少一題**走完全部閘門（六個閘門的 payload 都在）停在 `ocr_only`；模擬老師在複核頁核准這些題（把它們的 `text_hash` 放進 `dbHashes`，與 driver 對「已入庫」的同一條規則），第二輪**核准過的每一題**都被 dedup0 攔成 `duplicate`（`hit.scope＝db`）、沒核准的題（例如驗算不一致）逐題與第一輪相同、`saved` 仍是 0。
+  - 模式用與 driver 相同的設定來源判斷（`MODEL_EXTRACT` 是 ollama＋`resolveLocalExtractMode()`），不看結果；`ocr` 那一則逐題斷言 `extract_mode === 'ocr'`，判斷與實際路徑不一致時直接紅。
+  - 驗證：兩則目前仍因缺 `extract_ocr/a47b37a0…` skip（與基準相同）。另外用「把 LLM agent 換成確定性假件」的 preload 讓它們跑成硬斷言：`ocr`（沒寫）與明寫 `cross` 兩種模式、有無一題驗算不一致，四種組合全綠；同一個 preload 下，`510f4ea` 原本那一則在 `ocr` 模式確實紅在「第一輪至少要有入庫的題」——審查的判斷屬實。假件只在驗證時用，沒有進 repo。
+- **舊範本 `.env` 的啟動提醒**（`config/similarityThresholds.js` 的 `legacyTemplateWarning`）：向量模型是本機（`ollama:`，含沒寫），`.env` 卻明寫了**剛好等於 Gemini 舊預設、又不等於本機新預設**的值（`VARIANT_RETRIEVE_SIM_MIN=0.80`、`VARIANT_OFFTOPIC_SIM_MIN=0.90`、`DEDUP_DUP_THRESHOLD=0.97`），或舊名 `VARIANT_SIM_MIN` 正在生效時，`jobRunner 啟動` 之後多印一則 warn，點名這幾行、說明「刪掉後重啟才會用本機新預設」。「`.env` 明寫優先」的規則不變（不自動忽略）；`DEDUP_VARIANT_THRESHOLD`、`KNN_VOTE_SIM` 兩組預設都是 0.90，寫了也不影響，不點名；Gemini 向量不提醒。**交付 Owner 電腦時的檢查清單**：看伺服器視窗有沒有這則提醒，有就照它刪。
+- **啟動訊息照 runner 實際的 config**：`thresholds` 改由 `effectiveSimilarityThresholds(config)` 組（`workers/jobRunner.js`）——`createRunner({config})` 覆寫的門檻照實印、標「（createRunner 設定）」；`local_extract_mode` 的「程式預設／明寫」也照 `createRunner` 當下的判斷（`opts.config` 給了或 `.env` 明寫都算明寫；明寫 `ocr` 不再說「程式預設」）。正式啟動（`npm start`、`node workers/jobRunner.js`）不帶這幾個 `opts.config` 鍵，印的與原本相同。
+- 測試：`similarityThresholds.test.js` 加 5 則（`createRunner` 覆寫照實印、舊範本點名三個變數、只剩舊名也提醒、三種不提醒、`runner.start()` warn 一次且門檻仍照 `.env`）。
+- 沒有改模板、schema、prompt、`eval/thresholds.json`、golden、cassette；回放檔鍵都沒變，不必升版或重錄（`dec/r6-defaults` 已知要重錄的 4 筆 `verify` 照舊，見第 3 點）。
