@@ -45,13 +45,17 @@ const LAUNCHER_DOC = 'docs/desktop-launcher.md';
 
 /**
  * 後端被中途結束後，沒跑完的背景工作會怎樣（給 Owner 的一句話；關閉捷徑 lib/stopper.js 也用這一句）。
- * 〔dec/desktop-launcher-fix2〕更正：只有單題的節點（job_questions）是從中斷那一格接著跑；拆題（runExtractJob）與
- * 變式生成（runGenerateJob）是整份 job 一個工作單位，重新認領時不看哪幾塊／哪幾題已經做完，從第 1 塊／第 1 題整份重跑
- * （workers/jobRunner.js；docs/desktop-launcher.md 第 4 節、7.3、DL-1）。「1 小時以上」是本機 OCR 為主拆一份 4 頁卷的估計
- * （docs/local-mode.md 10.12 第 5 點）。
+ * 〔dec/desktop-launcher-fix2〕更正：只有單題的節點（job_questions）是從中斷那一格接著跑。
+ * 〔Owner 第六輪 DA-13＝2，dec/r7-checkpoints〕拆題（runExtractJob）與變式生成（runGenerateJob）改成逐塊／逐題的檢查點：
+ * 重新認領時跳過已經拆完的塊、已經建好的題（workers/jobRunner.js 的 planResumeChunks、readVariantDoneIdx；
+ * docs/desktop-launcher.md 第 4 節、7.3、DL-1）。原本是從第 1 塊／第 1 題整份重跑。
+ * 〔dec/r7-checkpoints-fix，依審查〕變式不是「只重做中斷的那一題」：job_questions 沒有的 idx 都會再生成，
+ * 包括中斷點之前沒過閘門而沒建成的題，所以照實寫「只補還沒建成的題」。
+ * 「30～45 分鐘」是本機 OCR 為主拆一塊（2 頁）的估計（docs/local-mode.md 10.12 第 5 點）。
  */
 const UNFINISHED_WORK_NOTE = '沒跑完的工作下次開啟時會自動接著做：單題的檢查從中斷那一步接著做；' +
-    '整份卷的拆題、變式生成會從頭再跑一次（本機拆一份卷可能要 1 小時以上）';
+    '整份卷的拆題從中斷的那一塊重拆，已經拆完的塊不會重拆（本機拆一塊約 30～45 分鐘）；' +
+    '變式生成只補還沒建成的題，已經建好的題不會重做（中斷的那一題與之前沒通過檢查的題會再生成一次）';
 
 /**
  * @typedef {object} Facts

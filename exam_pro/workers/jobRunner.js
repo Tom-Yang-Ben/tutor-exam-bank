@@ -17,10 +17,15 @@
 //
 // 崩潰／nodemon 重啟的重跑保證＝租約過期後該列會被重新認領；extract 重跑靠
 // job_questions 的 UNIQUE (job_id, idx) + ON CONFLICT DO NOTHING 保證不會重複建列。
-// 〔dec/desktop-launcher-fix2〕重跑的粒度看工作單位：B 一次只跑一個節點、跑完就寫回狀態，所以從中斷的那一格重跑那一個節點；
-// A（runExtractJob）與 C（變式生成，runGenerateJob）整份 job 是一個工作單位，重新認領時不看哪幾塊／哪幾題已經做完，
-// 從第 1 塊／第 1 題整份重跑——已建的列不會重複，但前面做完的塊／題會再呼叫一次模型（計費模型會再計一次費用），
-// 重做的結果在 idx 已存在時丟掉。
+// 〔dec/desktop-launcher-fix2〕重跑的粒度看工作單位：B 一次只跑一個節點、跑完就寫回狀態，所以從中斷的那一格重跑那一個節點。
+// 〔Owner 第六輪 DA-13＝2，dec/r7-checkpoints〕A（runExtractJob）與 C（變式生成，runGenerateJob）改成逐塊／逐題的檢查點：
+// 重新認領（租約到期、當機、關機、按「重試」）時，A 跳過已經拆完的塊（這份 job 的 extract 事件裡 pass／skipped 的那幾塊，
+// planResumeChunks），A 從被中斷的那一塊接著拆；C 跳過 job_questions 已經有那個 idx 的題，只生成還沒建成的 idx
+// （被中斷的那一題與之後的，以及中斷點之前沒過閘門、預算用盡而沒建成的題）。
+// 拆完一塊時「建題目列」與「寫那一塊的 extract 事件（檢查點）」在同一個交易，所以被中斷的那一塊一列題目都不會留下，
+// 重拆時不會和上一輪的半套結果混在一起；C 建好一題時的「建列＋寫 generate pass 事件」也在同一個交易（dec/r7-checkpoints-fix）。
+// 檢查點不是從第 1 頁起連續的一串（正常流程到不了）時不自動重拆，job 直接 failed（planResumeChunks 的 inconsistent）。
+// 原本（整份從第 1 塊／第 1 題重跑）的行為到 dec/desktop-launcher-fix2 為止。
 // 被打斷的那一次呼叫沒有寫事件、也沒記用量（writeEvent／chargeJob 都在 invokeNode 回來之後）。
 //
 // 〔Owner 決策單 2026-09-26 第四輪 V3〕選 2「本機模式逾時只重試 1 次」：拆題模型是 ollama 時，
@@ -413,6 +418,133 @@ function planChunks(pageCount, chunkPages) {
     return chunks;
 }
 
+/** 頁碼範圍的比對鍵（toPage 為 null＝頁數不明、整份一塊） */
+function pageRangeKey(fromPage, toPage) {
+    return `${fromPage}-${toPage === null || toPage === undefined ? '' : toPage}`;
+}
+
+/**
+ * 一列 extract 檢查點（job_events.detail 的 chunk／page_range／created）整理成 {no, fromPage, toPage, created}；
+ * 形狀不對的回 null（不當成檢查點——寧可重拆，也不要把沒拆完的塊當成拆完）。
+ */
+function normalizeCheckpoint(c) {
+    const no = Number(c?.chunk);
+    const range = c?.page_range;
+    if (!Number.isInteger(no) || no <= 0 || !Array.isArray(range) || range.length !== 2) return null;
+    const fromPage = Number(range[0]);
+    const toPage = range[1] === null ? null : Number(range[1]);
+    if (!Number.isInteger(fromPage) || fromPage <= 0) return null;
+    if (toPage !== null && (!Number.isInteger(toPage) || toPage < fromPage)) return null;
+    const created = Number(c?.created);
+    return { no, fromPage, toPage, created: Number.isInteger(created) && created >= 0 ? created : 0 };
+}
+
+/**
+ * 〔Owner 第六輪 DA-13＝2，dec/r7-checkpoints〕拆題的逐塊檢查點：重新認領時哪幾塊已經拆完、哪幾塊要跑。
+ *
+ * 檢查點＝這份 job 的 extract 事件裡 outcome 是 pass／skipped 的那幾列（`detail.chunk`、`detail.page_range`、
+ * `detail.created`；依 id 遞增傳進來），不另開欄位、不需要 migration。runExtractChunk 把「建這一塊的題目列」與
+ * 「寫這一列事件」放在同一個交易，所以有檢查點的塊題目一定都建好了，沒有檢查點的塊一列題目都沒有。
+ *
+ * 四種情形（mode）：
+ *   - 'fresh'：沒有檢查點，照 planChunks 從第 1 塊跑。
+ *   - 'resume'：檢查點的（塊號, 頁碼範圍）全都對得上這次的 planChunks（切法沒變，最常見）→ 跳過頁碼範圍相同的塊，
+ *     其餘照原本的塊號跑。塊號不變，題號（塊號 × 1000 ＋ 塊內位置，agents/extract.js）就和一次跑完完全一樣。
+ *   - 'replanned'：對不上＝切法變了（本機 2 頁／Gemini 20 頁之間換了模式、改了 JOB_PDF_CHUNK_PAGES）。設計稿第 36 項說
+ *     比對頁碼範圍、不比塊號；但直接照新切法從第 1 塊重拆，新的第 1 塊題號也是 1001 起，會和舊第 1 塊的列撞號
+ *     （ON CONFLICT 丟掉新結果、多出來的又建成新列＝重複列）。所以改成：舊檢查點從第 1 頁起**連續**涵蓋到第 P 頁的
+ *     那幾塊算拆完；第 P+1 頁起用這次的頁數切，塊號接在舊檢查點最大的塊號之後。題號不撞，塊的先後順序也不變
+ *     （承上題找「前一塊」照舊成立，utils/followUp.js）。
+ *   - 'inconsistent'：檢查點對不上這次的切法，又不是從第 1 頁起連續、塊號遞增的一串（中間有洞、或有不在那一串上的
+ *     檢查點；塊依序跑、page_count 建立後不變，所以正常流程到不了，只有舊資料或人工改過才會）→ **不排任何塊**
+ *     （todo 為空），呼叫端直接 failJob（jobs.error 寫「拆題檢查點對不上」），不自動重拆、按重試也一樣。
+ *     〔dec/r7-checkpoints-fix，依審查〕原本退回「只跳過頁碼範圍相同的塊、其餘照這次的塊號跑」，會撞號也會重拆：
+ *       · 40 頁、每塊 20 頁、只有「第 2 塊＝第 3～4 頁」的檢查點 → 排出第 1 塊（1～20 頁）與第 2 塊（21～40 頁）：新第 2 塊的
+ *         題號 2001 起，和舊第 2 塊已建好的列同號（ON CONFLICT 悄悄丟掉）；第 3～4 頁又拆一次，建成內容重複的列。
+ *       · 6 頁、「第 1 塊＝1～2 頁」＋「第 3 塊＝5～6 頁」→ 排出第 4 塊（3～6 頁）：第 5～6 頁重拆，4001 起和既有的 3001 內容重複。
+ *     審查的另一個做法（塊號一律接在最大塊號之後、跳過檢查點涵蓋的頁）也不行：第一例會把第 1～2 頁編成第 3 塊，
+ *     排在第 2 塊（第 3～4 頁）之後，塊號和頁碼順序對不上，承上題找「前一塊」（utils/followUp.js）會找錯。
+ *     「題號不撞、不重拆、塊號照頁碼順序」三者沒辦法同時做到，所以停下來請人處理。
+ *
+ * 同一個頁碼範圍有多列檢查點（舊版整份重拆留下的）只算一次，created 取最大的那一列；同一個頁碼範圍卻記成不同的塊號
+ * 也算 inconsistent（〔dec/r7-checkpoints-fix〕）。
+ *
+ * @param {number|null} pageCount jobs.page_count
+ * @param {number} chunkPages 這次的每塊頁數（config.pdfChunkPages）
+ * @param {Array<{chunk:any, page_range:any, created:any}>} checkpoints
+ * @returns {{todo:Array<{no:number, fromPage:number, toPage:number|null}>,
+ *            done:Array<{no:number, fromPage:number, toPage:number|null, created:number}>,
+ *            doneCreated:number, mode:'fresh'|'resume'|'replanned'|'inconsistent'}}
+ */
+function planResumeChunks(pageCount, chunkPages, checkpoints) {
+    const planned = planChunks(pageCount, chunkPages);
+    const inconsistent = { todo: [], done: [], doneCreated: 0, mode: 'inconsistent' };
+    const list = [];
+    const byKey = new Map();
+    let sameRangeTwoNos = false;
+    for (const raw of Array.isArray(checkpoints) ? checkpoints : []) {
+        const c = normalizeCheckpoint(raw);
+        if (!c) continue;
+        const key = pageRangeKey(c.fromPage, c.toPage);
+        const prev = byKey.get(key);
+        if (!prev) { byKey.set(key, c); list.push(c); continue; }
+        // 〔dec/r7-checkpoints-fix〕同一個頁碼範圍記成兩個塊號：兩組題號（塊號 × 1000 起）都可能已經建了列，
+        // 只認其中一個的話，另一個塊號之後可能又被排給別的頁而撞號。正常流程到不了，當成 inconsistent。
+        if (c.no !== prev.no) sameRangeTwoNos = true;
+        if (c.created > prev.created) prev.created = c.created;
+    }
+    const sumCreated = (arr) => arr.reduce((s, c) => s + c.created, 0);
+    if (list.length === 0) return { todo: planned, done: [], doneCreated: 0, mode: 'fresh' };
+    if (sameRangeTwoNos) return inconsistent;
+
+    const plannedByKey = new Map(planned.map(p => [pageRangeKey(p.fromPage, p.toPage), p]));
+    const sameCut = list.every(c => {
+        const p = plannedByKey.get(pageRangeKey(c.fromPage, c.toPage));
+        return p !== undefined && p.no === c.no;
+    });
+    if (sameCut) {
+        // 每個檢查點都正好是這次切法的某一塊（頁碼範圍與塊號都相同）：跳過它們，其餘照原本的塊號跑，題號不會撞
+        const todo = [];
+        const done = [];
+        for (const p of planned) {
+            const c = byKey.get(pageRangeKey(p.fromPage, p.toPage));
+            if (c) done.push({ ...p, created: c.created }); else todo.push(p);
+        }
+        return { todo, done, doneCreated: sumCreated(done), mode: 'resume' };
+    }
+
+    const total = Number.parseInt(pageCount, 10);
+    if (Number.isFinite(total) && total > 0) {
+        const chain = [];
+        let next = 1;
+        for (; ;) {
+            const c = list.find(x => x.fromPage === next);
+            if (!c) break;
+            chain.push(c);
+            if (c.toPage === null || c.toPage >= total) { next = total + 1; break; }
+            next = c.toPage + 1;
+        }
+        // 〔dec/r7-checkpoints-fix，依審查〕每個檢查點都要在這一串上：不在串上的檢查點（例如同一個起頁有兩種頁數、
+        // 或串斷掉之後還有）涵蓋的頁會落進下面重新切的塊，已建好的題會再建一次（重複列），所以也當成 inconsistent。
+        // 串上的塊號也要照頁碼順序遞增，否則題號的先後和頁碼對不上（承上題找前一塊會找錯）。
+        const ordered = chain.every((c, i) => i === 0 || c.no > chain[i - 1].no);
+        if (chain.length > 0 && chain.length === list.length && ordered) {
+            const maxNo = Math.max(...list.map(c => c.no));
+            const rest = next > total ? [] : planChunks(total - next + 1, chunkPages).map((p, i) => ({
+                no: maxNo + i + 1, fromPage: p.fromPage + next - 1, toPage: p.toPage + next - 1
+            }));
+            const done = chain.map(c => ({ no: c.no, fromPage: c.fromPage, toPage: c.toPage, created: c.created }));
+            return { todo: rest, done, doneCreated: sumCreated(done), mode: 'replanned' };
+        }
+    }
+    return inconsistent;
+}
+
+/** 〔dec/r7-checkpoints-fix〕planResumeChunks 回 inconsistent 時 jobs.error 的那句話（不自動重拆、請人處理）。 */
+const EXTRACT_CHECKPOINT_INCONSISTENT_MSG =
+    '拆題檢查點對不上：已拆完的塊不是從第 1 頁起連續的一串（正常流程不會發生）。為了不讓題號衝突或建出重複的題，' +
+    '沒有自動接著拆，按重試也會停在這裡。處理方式見 engineering_docs/06_ops/runbook-job-stuck.md 的「拆題檢查點對不上」。';
+
 /**
  * 供應商錯誤的退避毫秒數（第 2.3 條：睡眠由 runner 做，狀態機只計數）。
  * @param {number} attempt 這是第幾次退避（0 起算）
@@ -748,8 +880,9 @@ function createRunner(opts = {}) {
     }
 
     // ── job_events / 成本結算 ────────────────────────────────
-    async function writeEvent(row) {
-        await db.query(
+    /** @param {{query:Function}} [executor] 預設 db；〔DA-13〕拆題的檢查點、變式的 pass 事件傳交易的 client（與建題目列同一個交易） */
+    async function writeEvent(row, executor = db) {
+        await executor.query(
             `INSERT INTO job_events
                 (job_id, jq_id, node, attempt, model, token_in, token_out, token_thinking, token_cached,
                  cost_usd, cost_estimated, latency_ms, outcome, error_class, detail)
@@ -1305,32 +1438,101 @@ function createRunner(opts = {}) {
             if (rows.length === 0) return;
             const job = rows[0];
 
-            if (!job.pdf_path || !fs.existsSync(resolveJobPath(job.pdf_path))) {
+            // 〔DA-13〕逐塊檢查點：已經拆完的塊（extract 事件 pass／skipped）跳過，只跑沒拆完的（planResumeChunks）
+            const checkpoints = await readExtractCheckpoints(jobId);
+            const plan = planResumeChunks(job.page_count, config.pdfChunkPages, checkpoints);
+            if (plan.mode === 'inconsistent') {
+                // 〔dec/r7-checkpoints-fix〕不自動重拆（題號會撞、會建出重複列，理由見 planResumeChunks），留給人處理
+                logger.warn({
+                    job_id: jobId, node: 'extract', mode: plan.mode, msg: '拆題檢查點對不上，不自動接著拆',
+                    checkpoints: checkpoints.map(c => ({ chunk: c.chunk, page_range: c.page_range })), page_count: job.page_count
+                });
+                await failJob(jobId, EXTRACT_CHECKPOINT_INCONSISTENT_MSG);
+                return;
+            }
+
+            // 〔dec/r7-checkpoints-fix〕PDF 的檢查移到算完檢查點之後：每一塊都已經拆完（上一輪在「刪 PDF」與
+            // 「轉 processing」之間被殺）時已經用不到 PDF，直接轉 processing。原本先檢查 PDF，這種 job 會 failed，
+            // 按重試也一樣 failed（PDF 已刪），但題目列與檢查點其實都在。還有塊要拆時照舊要有 PDF。
+            const pdfFile = job.pdf_path ? resolveJobPath(job.pdf_path) : null;
+            const pdfExists = pdfFile !== null && fs.existsSync(pdfFile);
+            if (!pdfExists && plan.todo.length > 0) {
                 await failJob(jobId, 'PDF 原檔不存在，無法拆題。');
                 return;
             }
 
-            const chunks = planChunks(job.page_count, config.pdfChunkPages);
-            let created = 0;
+            if (plan.done.length > 0) {
+                const skipped = plan.done.map(c => c.no).join('、');
+                const msg = plan.mode === 'resume'
+                    ? `從檢查點接著拆：第 ${skipped} 塊已經拆完，不再呼叫模型`
+                    : `從檢查點接著拆：每塊頁數和上一輪不同，第 ${skipped} 塊（到第 ${plan.done[plan.done.length - 1].toPage ?? '最後'} 頁）已經拆完，其餘接著用這次的頁數切、塊號接在後面`;
+                logger.info({
+                    job_id: jobId, node: 'extract', msg, mode: plan.mode,
+                    done_chunks: plan.done.length, todo_chunks: plan.todo.length
+                });
+            }
+            let created = plan.doneCreated;
 
-            for (const chunk of chunks) {
+            for (const chunk of plan.todo) {
                 const r = await runExtractChunk(job, chunk);
                 if (!r.ok) { await failJob(jobId, r.error); return; }
                 created += r.created;
             }
 
             // 全部 chunk 都拆完才刪檔並清空 pdf_path（第 1.3 條的生命週期）
-            try { fs.unlinkSync(resolveJobPath(job.pdf_path)); } catch (err) {
-                logger.warn({ msg: '刪除 PDF 失敗', job_id: jobId, error: err.message });
+            if (pdfExists) {
+                try { fs.unlinkSync(pdfFile); } catch (err) {
+                    logger.warn({ msg: '刪除 PDF 失敗', job_id: jobId, error: err.message });
+                }
+            } else {
+                logger.warn({
+                    job_id: jobId, node: 'extract',
+                    msg: 'PDF 已經不在，但每一塊都已經拆完（上一輪在刪檔之後、轉 processing 之前被中斷）：直接轉 processing'
+                });
             }
             await db.query(
                 `UPDATE jobs SET pdf_path = NULL, state = 'processing', locked_until = NULL, updated_at = now()
                   WHERE id = $1`, [jobId]);
-            logger.info({ job_id: jobId, node: 'extract', outcome: 'pass', questions: created, chunks: chunks.length });
+            logger.info({
+                job_id: jobId, node: 'extract', outcome: 'pass', questions: created, chunks: plan.done.length + plan.todo.length,
+                ...(plan.done.length > 0 ? { resumed_chunks: plan.done.length } : {})
+            });
 
-            if (created === 0) await maybeFinishJob(jobId);
+            // 〔DA-13〕原本只在 created === 0 時檢查。接著拆的時候，前幾塊的題目常在這一塊拆完之前就已經走到終態
+            // （tick 先認領單題、再認領拆題），那時 runJobQuestion 的 maybeFinishJob 因為 job 還在 extracting 而不動；
+            // 這一塊又沒建出題目的話，job 會一直停在 processing。maybeFinishJob 只在全部題目都到終態時才收尾，一律呼叫無害。
+            await maybeFinishJob(jobId);
         } finally {
             stopRenew();
+        }
+    }
+
+    /**
+     * 〔DA-13〕這份 job 的拆題檢查點：extract 事件裡 pass／skipped 的那幾列（依 id），交給 planResumeChunks。
+     * 事件表只追加，所以舊版整份重拆留下的重複列也會在這裡（planResumeChunks 會合併同一個頁碼範圍）。
+     */
+    async function readExtractCheckpoints(jobId) {
+        const { rows } = await db.query(
+            `SELECT detail->'chunk' AS chunk, detail->'page_range' AS page_range, detail->'created' AS created
+               FROM job_events
+              WHERE job_id = $1 AND node = 'extract' AND jq_id IS NULL AND outcome IN ('pass', 'skipped')
+              ORDER BY id`, [jobId]);
+        return Array.isArray(rows) ? rows : [];
+    }
+
+    /** 〔DA-13〕同一個交易跑 fn(client)：拆完一塊（變式建好一題）時，建題目列與寫那一列事件要一起成功或一起不算。 */
+    async function inTransaction(fn) {
+        const client = await db.pool.connect();
+        try {
+            await client.query('BEGIN');
+            const result = await fn(client);
+            await client.query('COMMIT');
+            return result;
+        } catch (err) {
+            await client.query('ROLLBACK').catch(() => { });
+            throw err;
+        } finally {
+            client.release();
         }
     }
 
@@ -1369,17 +1571,16 @@ function createRunner(opts = {}) {
             await chargeJob(job.id, meter, cost);
 
             const attempt = failRetries + errorRetries + 1;
-            let created = 0;
-            if (outcome.kind === 'pass' || outcome.kind === 'skipped') {
+            const chunkDone = outcome.kind === 'pass' || outcome.kind === 'skipped';
+            if (chunkDone) {
                 // 裁圖要在 insertJobQuestions 之前：figure_img 才會跟著進 payload.extract。
                 // 也必須在這裡（extract 階段）做——全部 chunk 拆完 PDF 就刪檔了（第 1.3 條）。
                 if (outcome.kind === 'pass') await attachFigureImages(job, outcome.data);
                 // 原卷文字層片段（docs/source-check.md）：同一個理由必須在這裡抽——PDF 之後就刪了
                 if (outcome.kind === 'pass') await attachSourceText(job, chunk, outcome.data);
-                created = await insertJobQuestions(job.id, chunk, outcome.data || {});
             }
 
-            await writeEvent({
+            const eventOf = (created) => ({
                 job_id: job.id, node: 'extract', attempt,
                 model: meter.calls > 0 ? meter.model : null,
                 token_in: meter.calls > 0 ? meter.tokenIn : null,
@@ -1400,6 +1601,20 @@ function createRunner(opts = {}) {
                     ...(outcome.data?.cross_check_summary ? { cross_check: outcome.data.cross_check_summary } : {})
                 }
             });
+            // 〔DA-13〕pass／skipped 的這一列事件就是這一塊的檢查點（readExtractCheckpoints）。有題目要建時，
+            // 建題目列與寫這一列在同一個交易：中途被殺（當機、關機、放棄）時兩者都不算，重新認領後這一塊整塊重拆，
+            // 不會留下半塊的題目列、也不會和重拆的結果混成重複列。沒有題目要建時只有一句 INSERT，本身就是原子的。
+            let created = 0;
+            const toInsert = chunkDone && Array.isArray(outcome.data?.questions) && outcome.data.questions.length > 0;
+            if (toInsert) {
+                created = await inTransaction(async (client) => {
+                    const n = await insertJobQuestions(job.id, chunk, outcome.data, client);
+                    await writeEvent(eventOf(n), client);
+                    return n;
+                });
+            } else {
+                await writeEvent(eventOf(0));
+            }
             logger.info({
                 job_id: job.id, jq_id: null, node: 'extract', attempt, outcome: outcome.kind,
                 latency_ms: latencyMs, chunk: chunk.no, created
@@ -1473,8 +1688,9 @@ function createRunner(opts = {}) {
     /**
      * 把 extract 的結果建成 job_questions。
      * ON CONFLICT DO NOTHING：崩潰後重跑同一個 chunk 不會建出重複的列（UNIQUE (job_id, idx)）。
+     * 〔DA-13〕executor＝runExtractChunk 的交易 client（與這一塊的檢查點事件同一個交易）。
      */
-    async function insertJobQuestions(jobId, chunk, data) {
+    async function insertJobQuestions(jobId, chunk, data, executor = db) {
         const list = Array.isArray(data.questions) ? data.questions : [];
         // FR-019：該塊模型回傳的元素總數（含被 schema 驗證丟掉的）。承上題找前題時用它判斷
         // 「上一塊的塊尾有沒有題被丟」，避免跨塊靜默綁錯。比照 figure_img 由 runner 追加，
@@ -1492,7 +1708,7 @@ function createRunner(opts = {}) {
                     chunk_elements: chunkElements
                 }
             };
-            const { rowCount } = await db.query(
+            const { rowCount } = await executor.query(
                 `INSERT INTO job_questions (job_id, idx, state, payload)
                  VALUES ($1, $2, 'extracted', $3::jsonb)
                  ON CONFLICT (job_id, idx) DO NOTHING`,
@@ -1541,10 +1757,26 @@ function createRunner(opts = {}) {
             // prompt 據此要求換情境與數字（agents/generateVariant.js variant.v2）。兄弟的題幹一律從 job_questions 讀回
             // （payload.extract.question_text）：租約過期、整份 job 被重新認領時，前一輪已建好的列也算兄弟，
             // 而 ON CONFLICT 沒建成的那一題，兄弟就是 DB 裡既有的那一列，不是這一輪被丟掉的生成結果。
+            // 〔Owner 第六輪 DA-13＝2，dec/r7-checkpoints〕逐題檢查點：job_questions 已經有的 idx 就是做完的題，重新認領時
+            // 跳過、不再呼叫模型，只生成缺的（原本從第 1 題重來，已存在的結果撞 UNIQUE 丟掉）。已做完的題照樣算進 created，
+            // 所以「全部做完才被中斷」的 job 重新認領後不會被當成一題都沒建成而 failed。兄弟題幹照舊逐題從 DB 讀，
+            // 順序（idx 由小到大）與一次跑完相同。
+            // 〔dec/r7-checkpoints-fix〕「只生成缺的」＝job_questions 裡沒有的 idx 都會再生成（設計稿第 36 項）：
+            // 不只被中斷的那一題，中斷點之前沒建成的題（沒過閘門、預算用盡而略過）也會再跑一次
+            // （沒過閘門的會再呼叫模型；預算用盡的在呼叫前就再檢查一次預算）。文件與關閉時的提示照這個說法寫。
+            const doneIdx = await readVariantDoneIdx(jobId);
             let created = 0;
+            let resumed = 0;
             for (let i = 1; i <= requested.count; i++) {
+                if (doneIdx.has(i)) { created += 1; resumed += 1; continue; }
                 const siblings = await readVariantSiblings(jobId, i);
                 created += await runGenerateOne(job, source, neighbors, requested, i, siblings);
+            }
+            if (resumed > 0) {
+                logger.info({
+                    job_id: jobId, node: 'generate', msg: `從檢查點接著生成：${resumed} 題已經建好，不再呼叫模型`,
+                    resumed, requested: requested.count
+                });
             }
 
             if (created === 0) {
@@ -1556,10 +1788,26 @@ function createRunner(opts = {}) {
             await db.query(
                 `UPDATE jobs SET state = 'processing', locked_until = NULL, updated_at = now() WHERE id = $1`,
                 [jobId]);
-            logger.info({ job_id: jobId, node: 'generate', outcome: 'pass', questions: created, requested: requested.count });
+            logger.info({
+                job_id: jobId, node: 'generate', outcome: 'pass', questions: created, requested: requested.count,
+                ...(resumed > 0 ? { resumed } : {})
+            });
+            // 〔DA-13〕接著生成時，前一輪建好的題可能已經走到終態（tick 先認領單題、再認領 job），這一輪又一題都沒建成
+            // （全部沒過閘門）的話，沒有單題會再觸發收尾（runJobQuestion 的 maybeFinishJob 在 job 還是 extracting 時不動）。
+            // 與拆題同一個理由一律檢查一次：全部題目都到終態才會收尾，否則什麼都不改。
+            await maybeFinishJob(jobId);
         } finally {
             stopRenew();
         }
+    }
+
+    /**
+     * 〔DA-13〕變式 job 已經建好的 idx（逐題檢查點）。
+     * @returns {Promise<Set<number>>}
+     */
+    async function readVariantDoneIdx(jobId) {
+        const { rows } = await db.query('SELECT idx FROM job_questions WHERE job_id = $1', [jobId]);
+        return new Set((Array.isArray(rows) ? rows : []).map(r => Number(r.idx)));
     }
 
     /**
@@ -1625,12 +1873,7 @@ function createRunner(opts = {}) {
             });
             await chargeJob(job.id, meter, cost);
 
-            let jqId = null;
-            if (outcome.kind === 'pass') {
-                jqId = await insertVariantQuestion(job, source, requested, idx, outcome, attempt);
-            }
-
-            await writeEvent({
+            const eventOf = (jqId) => ({
                 job_id: job.id, jq_id: null, node: 'generate', attempt,
                 model: meter.calls > 0 ? meter.model : null,
                 token_in: meter.calls > 0 ? meter.tokenIn : null,
@@ -1653,6 +1896,21 @@ function createRunner(opts = {}) {
                     ...(schemaFallbackOf(meter, outcome) ? { schema_fallback: true } : {})
                 }
             });
+            // 〔dec/r7-checkpoints-fix，依審查〕比照拆題：建這一題的列與寫這一次的 generate 事件在同一個交易。
+            // 原本兩句各自提交，程序剛好在兩句之間被殺時，列在、事件不在：重新認領時 readVariantDoneIdx 看到列就跳過，
+            // 這一題的 pass 事件（text_gate、sim、jq_id、usage_metadata）與 cost_usd 就永遠補不回來，
+            // 而每日預算止血（dailySpentUsd）讀的正是 job_events。現在兩者一起成功或一起不算（沒提交＝這一題重做）。
+            // 沒過（fail／error／skipped）時沒有列要建，只有一句 INSERT 事件，本身就是原子的。
+            let jqId = null;
+            if (outcome.kind === 'pass') {
+                jqId = await inTransaction(async (client) => {
+                    const id = await insertVariantQuestion(job, source, requested, idx, outcome, attempt, client);
+                    await writeEvent(eventOf(id), client);
+                    return id;
+                });
+            } else {
+                await writeEvent(eventOf(null));
+            }
             logger.info({
                 job_id: job.id, jq_id: jqId, node: 'generate', attempt, outcome: outcome.kind,
                 latency_ms: latencyMs, idx
@@ -1683,10 +1941,12 @@ function createRunner(opts = {}) {
      * 與階段 3 新增的 `variant`（第 4.5 條，只由 generate 節點寫，其餘節點不碰）。
      *
      * ON CONFLICT DO NOTHING：租約過期後整份 job 被重新認領時，同一個 idx 不會建出重複的列。
+     * 〔DA-13〕重新認領時已經建好的 idx 本來就會被跳過（readVariantDoneIdx），這裡留著當第二道防線。
+     * 〔dec/r7-checkpoints-fix〕executor＝runGenerateOne 的交易 client（與這一題的 generate pass 事件同一個交易）。
      *
      * @returns {Promise<number|null>} 新列的 id；撞 UNIQUE 沒建成時回 null
      */
-    async function insertVariantQuestion(job, source, requested, idx, outcome, attempt) {
+    async function insertVariantQuestion(job, source, requested, idx, outcome, attempt, executor = db) {
         const data = outcome.data || {};
         const gate = outcome.gate || {};
         const payload = {
@@ -1700,7 +1960,7 @@ function createRunner(opts = {}) {
                 attempt
             }
         };
-        const { rows } = await db.query(
+        const { rows } = await executor.query(
             `INSERT INTO job_questions (job_id, idx, state, payload)
              VALUES ($1, $2, 'extracted', $3::jsonb)
              ON CONFLICT (job_id, idx) DO NOTHING
@@ -1858,6 +2118,7 @@ module.exports = {
     createRunner, startInlineRunner,
     // 純函式，供單元測試與 report_jobs 共用
     loadConfig, loadStage3Config, loadSourceCheckConfig, planChunks, backoffMs, attemptNo, buildSaveFields, chapterSrcFor, normalizeErrorClass, makeLogger, resolveJobPath,
+    planResumeChunks,   // 〔DA-13〕
     buildSolutionFields,   // 〔stage5 WS-A〕save 與 scripts/backfill_solutions.js 共用
     readFeatures, schemaFallbackOf,
     runKcTagHook,   // 〔stage5 WS-C〕
