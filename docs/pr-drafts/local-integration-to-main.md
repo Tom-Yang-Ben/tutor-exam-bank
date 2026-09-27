@@ -1,10 +1,10 @@
 # PR 說明稿：`local/integration` → `main`（草稿，尚未開 PR）
 
-> **狀態**：說明稿（2026-09-27，分支 `dec/r7-test-hygiene`；審查修正 `dec/r7-test-hygiene-fix`）。**還沒開 PR、還沒 push。**
-> **比較範圍**：`origin/main`（`d1834ac`，PR #38 合入階段 5）→ `dec/integration-r7`（`6757e25`）。Owner 的重錄結果併入 `dec/integration-r7`、本分支再併入之後，開 PR 前要把第 1 節與第 4 節的數字換成那一版實測的值。
-> **PR 的來源分支 `local/integration` 目前還在 `889d18f`**，比 `dec/integration-r7` 少 68 個 commit（`889d18f` 是 `6757e25` 的祖先）；開 PR 前要先把最後那一版併進去（第 5 節第 4 步）。
+> **狀態**：說明稿（2026-09-27，分支 `dec/r7-test-hygiene`；審查修正 `dec/r7-test-hygiene-fix`；〔2026-09-27〕和第六輪的落實一起併入 **`dec/integration-r8`**，本稿的數字已改成 r8 實跑的值）。**還沒開 PR、還沒 push。**
+> **比較範圍**：`origin/main`（`d1834ac`，PR #38 合入階段 5）→ `dec/integration-r8`（四支 merge 的 head `77d5f12`；原本是 `dec/integration-r7` 的 `6757e25`）。r8 已含本分支（`dec/r7-test-hygiene-fix`）與第六輪的落實（`dec/r7-decisions-host-fix`、`dec/r7-checkpoints-fix`、`dec/r7-electron-b1-fix`）。Owner 的重錄結果併入之後，開 PR 前要把第 1 節與第 4 節的數字換成那一版實測的值。
+> **PR 的來源分支 `local/integration` 目前還在 `889d18f`**，比 `dec/integration-r8` 少 82 個 commit（`889d18f` 是它的祖先；r7 時是 68 個）；開 PR 前要先把最後那一版併進去（第 5 節第 4 步）。
 > **依據的 Owner 決定**：A8（只開一個 PR，`local/integration` → main）、A7（本機重錄後低於門檻時門檻數字不動、照實紅燈）、X1（**只限 eval 分數可以紅燈合併；unit、integration、e2e 必須綠；PR 說明列出未達項**）——[`docs/HANDOFF.md`](../HANDOFF.md) §0.00、§0.00a。
-> 本稿的事實來源：`git log`／`git diff --stat d1834ac 6757e25`、[`docs/HANDOFF.md`](../HANDOFF.md) §0.00～§0.4、[`docs/local-mode.md`](../local-mode.md) 各節、各 migration 檔頭；第 4 節的數字是 2026-09-27 在 `dec/integration-r7` 上照 `ci.yml` 的 env 實跑的結果。
+> 本稿的事實來源：`git log`／`git diff --stat d1834ac 6757e25`、[`docs/HANDOFF.md`](../HANDOFF.md) §0.00～§0.4、[`docs/local-mode.md`](../local-mode.md) 各節、各 migration 檔頭；第 4 節的數字是 2026-09-27 在 `dec/integration-r8`（`77d5f12`）上照 `ci.yml` 的 env 實跑的結果（r7 的數字留在各格註記）。
 
 ---
 
@@ -14,24 +14,24 @@
 
 ## 0. 開 PR 之前一定要成立的事（目前**還沒**成立）
 
-| 條件 | 現況（`6757e25`） | 等什麼 |
+| 條件 | 現況（r8 `77d5f12`） | 等什麼 |
 |---|---|---|
-| e2e 12 項全綠（X1；併入本分支後另有 2 項交叉驗證是固定的 SKIP，第 6 節） | 9 過、**3 紅**：樣卷的 `extract_ocr` 回放檔（`extract_ocr/a5918283…`）不在 | [`local-mode.md`](../local-mode.md) 10.21 第 3 步 `record_local.bat pipeline,e2e` |
+| e2e 12 項全綠（X1；另有 2 項交叉驗證是固定的 SKIP，第 6 節） | 14 項：9 過、**3 紅**、2 SKIP：樣卷的 `extract_ocr` 回放檔（`extract_ocr/a5918283…`）不在 | [`local-mode.md`](../local-mode.md) 10.21 第 3 步 `record_local.bat pipeline,e2e` |
 | unit、integration 全綠（X1） | 全綠（第 4 節） | 重錄檔併入後重跑一次確認；本分支的測試在 extract_ocr 錄好後會從 skip 轉成硬斷言（第 6 節） |
 | 錄好後若 unit／e2e 因本機模型的拆題品質變紅，先有 Owner 決定再處理 | 待決（**TH-1**，第 7 節）；錄完沒紅就不必答 | 第 3 步錄完、重跑 unit 與 e2e 之後；**不要臨時改斷言** |
 | eval 的 replay miss 與缺向量都是 0 | pipeline 1 筆、variant 60 筆 replay miss | 10.21 第 2 步（variant，Owner 電腦進行中）、第 3 步 |
 | 未達門檻的 eval 列在本稿第 4.2 節 | variant `retrieved_coverage` 已知未達；pipeline 的兩項要錄完才知道 | 重錄後回填 |
-| `local/integration` 是最後那一版 | 在 `889d18f`，少 68 個 commit | 第 5 節第 4 步 |
+| `local/integration` 是最後那一版 | 在 `889d18f`，比 r8 少 82 個 commit | 第 5 節第 4 步 |
 
 ---
 
 ## 1. 範圍一覽
 
-> 以下是 `d1834ac..6757e25` 的數字。重錄結果與本分支併進去之後會變：**開 PR 前依 `local/integration` 推送前的最後 head 重算**（`git rev-list --count`、`git diff --shortstat`、`git diff --name-status` 各跑一次，對 `origin/main`）。
+> 以下是 `d1834ac..77d5f12`（`dec/integration-r8` 四支 merge 的 head）的數字；r7（`6757e25`）時是 185 個 commit、828 個檔案、+96,549／−5,424 行。重錄結果併進去之後會變：**開 PR 前依 `local/integration` 推送前的最後 head 重算**（`git rev-list --count`、`git diff --shortstat`、`git diff --name-status` 各跑一次，對 `origin/main`）。
 
-- 185 個 commit（其中 44 個 merge），828 個檔案：**+96,549／−5,424 行**；新增 628、修改 191、刪除 9（刪除的 9 個都是舊版原型 `exam/`）。
+- 199 個 commit（其中 48 個 merge），870 個檔案：**+105,512／−5,561 行**；新增 668、修改 193、刪除 9（刪除的 9 個都是舊版原型 `exam/`）。
 - 行數的大宗是回放檔：`exam_pro/eval/cassettes/` 新增 416 支（classify 275、variant 87、verify 25、nlq 24、lint 4、ocr 1），另新增本機向量檔 `eval/fixtures/embeddings.ollama-qwen3-embedding-0.6b.768.json`。
-- 程式與文件的新檔集中在：`exam_pro/services/{llm,ocr}/`、`exam_pro/ocr_service/`、`exam_pro/services/retrain*.js`、`exam_pro/scripts/desktop/`、`exam_pro/eval/{lib,tools}/`、`exam_pro/migrations/0014～0020`、`docs/`（`local-mode.md`、`chapter-restructure.md`、`retrain-and-review.md`、`desktop-launcher.md`、`desktop-app-design.md` 等）、ADR-016～019。
+- 程式與文件的新檔集中在：`exam_pro/services/{llm,ocr}/`、`exam_pro/ocr_service/`、`exam_pro/services/retrain*.js`、`exam_pro/scripts/desktop/`、`desktop/`（Electron 桌面版 B1）、`exam_pro/eval/{lib,tools}/`、`exam_pro/migrations/0014～0020`、`docs/`（`local-mode.md`、`chapter-restructure.md`、`retrain-and-review.md`、`desktop-launcher.md`、`desktop-app-design.md` 等）、ADR-016～019。
 
 ## 2. 改動分類摘要
 
@@ -93,11 +93,14 @@
 
 - B7：確認出卷時伺服器端檢查承上題整組（半組回 400＋`incomplete_groups`）；B10：承上題湊不滿改成直接報錯（`FOLLOW_UP_SHORTFALL_POLICY`，預設 `error`）；B20：舊題補附圖工具 `npm run figures:backfill`（預設只列出、逐題確認後才 `--apply`）；B21：舊流程 `/analyze-pdf` 補裁圖。
 
-### 2.10 桌面啟動器 A（2026-09-27；[`desktop-launcher.md`](../desktop-launcher.md)）與 B＋D2 設計稿
+### 2.10 桌面啟動器 A（2026-09-27；[`desktop-launcher.md`](../desktop-launcher.md)）、第六輪決策的落實與桌面版 B1
 
 - `exam_pro/scripts/desktop/`、`exam_pro/scripts/windows/install_desktop_shortcut.bat`：點「出題系統」依序開 Docker Desktop、資料庫、檢查 Ollama、開伺服器與獨立視窗；「關閉出題系統」先讓背景工作收尾再停。
 - 後端只改三處：`GET /api/health`（不需金鑰，本機以外每分鐘 60 次）、`/api/launcher` 關閉通道（環境裡有 `LAUNCHER_CONTROL_TOKEN` 才掛載）、聽不了連接埠時印出原因並以結束碼 1 結束。`npm start`／`npm run dev` 其餘行為不變。
-- `docs/desktop-app-design.md`（B Electron 桌面殼＋D2 原生 PostgreSQL）**只有設計稿、沒有程式**。Owner 2026-09-27 第六輪已答 DL-1～DL-5、DA-1～DA-14；其中 DL-4 選 2（錄製中暫停背景工作），`dec/integration-r7` 的預設仍是 `run`——第六輪的落實不在本 PR。
+- 〔2026-09-27 改寫，r8〕Owner 第六輪已答 DL-1～DL-5、DA-1～DA-14（[`HANDOFF.md`](../HANDOFF.md) §0.00d），r8 帶進這幾項落實：
+  - DL-4＝2：啟動器 `jobsWhileRecording` 預設改 `pause`（錄製中開的後端暫停背景工作）；DA-11＝1：後端改聽 `.env` 的 `HOST`，**預設 `127.0.0.1`**（原本聽全部介面；要給區網用要明寫 `HOST=0.0.0.0`）；DA-14／DA-9 的唯讀檢查工具 `wsl_memory_check.bat`（`dec/r7-decisions-host-fix`）。
+  - DA-13＝2：整份卷的拆題與變式生成加逐塊／逐題的檢查點（沿用 `job_events`，**沒有新 migration**）；中斷或「失敗後重試」只重做被中斷的那一塊，變式只補還沒建成的題；檢查點對不上時 job 直接 `failed` 並說明（`dec/r7-checkpoints-fix`，[`desktop-launcher.md`](../desktop-launcher.md) 7.3）。
+  - B1：`desktop/`（Electron 44 殼，`utilityProcess.fork` 開 `exam_pro/startServer.js`，只綁 `127.0.0.1`、資料庫仍用 Docker）、`exam_pro/scripts/windows/install_desktop_app.bat`；`npm start` 照舊（`server.js` 只加 `HOST`）。Windows 上的行為**待 Owner 驗收**（[`desktop-app-design.md`](../desktop-app-design.md) 6.2）。B2、D2、B3 仍只有設計稿。
 
 ### 2.11 其他
 
@@ -123,17 +126,18 @@
 
 ## 4. CI 現況（依 X1）
 
-量測環境：`dec/integration-r7`（`6757e25`），PostgreSQL 16＋pgvector（埠 5433、全新 UTF8 測試庫），env 照 `.github/workflows/ci.yml`（`LLM_MODE=replay`、`EMBED_MODE=fixture`、`MODEL_EXTRACT=ollama:qwen3-vl:8b`、`MODEL_VERIFY=ollama:qwen3:8b`、`LOCAL_EXTRACT_MODE=ocr`、`EMBED_MODEL=ollama:qwen3-embedding:0.6b`、`MODEL_NLQ=ollama:qwen3:8b`）。
+量測環境：`dec/integration-r8`（`77d5f12`；r7 `6757e25` 的數字留在說明欄），PostgreSQL 16＋pgvector（埠 5433、全新 UTF8 測試庫），env 照 `.github/workflows/ci.yml`（`LLM_MODE=replay`、`EMBED_MODE=fixture`、`MODEL_EXTRACT=ollama:qwen3-vl:8b`、`MODEL_VERIFY=ollama:qwen3:8b`、`LOCAL_EXTRACT_MODE=ocr`、`EMBED_MODEL=ollama:qwen3-embedding:0.6b`、`MODEL_NLQ=ollama:qwen3:8b`）。
 
 ### 4.1 必須綠的項目（X1：unit、integration、e2e；另列 `check:html`、migrate）
 
 | 步驟 | 結果 | 說明 |
 |---|---|---|
-| unit（`npm test`） | ✅ 4,046 則：4,044 過、0 失敗、2 略過 | 另有整組略過的 describe（等回放檔）；本分支之後的數字見第 6 節 |
+| unit（`npm test`） | ✅ 4,149 則：4,146 過、0 失敗、3 略過 | 另有整組略過的 describe（等回放檔，第 6 節）；r7 時 4,046 則：4,044 過、2 略過 |
 | `npm run check:html` | ✅ | |
+| `desktop`：`npm test`、`npm run smoke` | ✅ 120 則全過；冒煙 54/54（xvfb 上真的 Electron 44.4.5） | 不在 GitHub Actions 裡（`ci.yml` 只跑 `exam_pro`）；Windows 專屬項目見 `desktop-app-design.md` 6.2 |
 | `npm run migrate:test` | ✅ 到 0020 | |
-| integration | ✅ 629 則全過 | 〔審查修正 2026-09-27〕審查時在另一個全新庫回報 631 則全過；`dec/r7-test-hygiene-fix` 在全新庫連跑兩次（中間跑過 e2e）都是 629，差 2 則的原因沒查到。兩次都沒有失敗；以 Owner 重跑那一版的數字為準 |
-| e2e | ❌ **12 項：9 過、3 紅** | 三項都是拆題停在 replay miss `extract_ocr/a5918283…`（樣卷的 `extract_ocr.v2` 回放檔還沒錄）。**依 X1 這一項必須綠，第 3 步錄完之前不能開 PR** |
+| integration | ✅ 641 則全過 | r8 多的 12 則來自 `listenHost`（DA-11）與檢查點（DA-13）。r7 時 629 則；〔審查修正 2026-09-27〕審查時在另一個全新庫回報 631 則全過；`dec/r7-test-hygiene-fix` 在全新庫連跑兩次（中間跑過 e2e）都是 629，差 2 則的原因沒查到。兩次都沒有失敗；以 Owner 重跑那一版的數字為準 |
+| e2e | ❌ **14 項：9 過、3 紅、2 SKIP** | 2 項 SKIP 是 ocr 模式固定的交叉驗證（第 6 節）。三項紅都是拆題停在 replay miss `extract_ocr/a5918283…`（樣卷的 `extract_ocr.v2` 回放檔還沒錄）。**依 X1 這一項必須綠，第 3 步錄完之前不能開 PR** |
 
 ### 4.2 eval（X1：只限這裡可以帶紅燈合併，列出未達項）
 
@@ -153,17 +157,17 @@
 
 1. 完成 [`local-mode.md`](../local-mode.md) 10.21 第 2 步（variant）與第 3 步（pipeline＋e2e）；成功與否以回放驗證表的 replay miss 與缺向量兩欄為準，只有門檻欄 ❌ 時不要重跑。
 2. 第 4 步：`npm run cassettes:rerecord -- --dry-run` 確認五個 eval 與 e2e 的 replay miss、缺向量都是 0；`git add eval/cassettes eval/fixtures/embeddings.ollama-qwen3-embedding-0.6b.768.json`、commit。
-3. 重錄結果併入 `dec/integration-r7` 之後，再併入本分支（審查修正後是 `dec/r7-test-hygiene-fix`，已含 `dec/r7-test-hygiene`），重跑 unit、`check:html`、integration、e2e 與五個 eval：unit、integration、e2e 必須全綠；把第 1 節與第 4 節換成那一版的數字與未達項。unit 或 e2e 若因本機模型的拆題品質變紅，先答 TH-1（第 7 節）再處理。
-4. **把最後那一版併進 `local/integration`**〔審查修正 2026-09-27〕：`local/integration` 現在在 `889d18f`，比 `dec/integration-r7` 少 68 個 commit，沒有這一步推上去的會是舊版。`git checkout local/integration` → `git merge --ff-only <第 3 步重跑全綠的那一版>`（`889d18f` 是祖先，應該能快轉；不能快轉代表 `local/integration` 另有 commit，先停下來看是什麼）→ `git log --oneline origin/main..local/integration` 確認看得到重錄的 commit 與本分支的 commit、`git rev-parse local/integration` 等於第 3 步那一版，再照第 1 節的說明重算範圍數字。
+3. 重錄結果併入 `dec/integration-r8`（已含本分支與第六輪的落實；Owner 電腦上用 `step4_after_record.bat` 做）之後，重跑 unit、`check:html`、integration、e2e 與五個 eval：unit、integration、e2e 必須全綠；把第 1 節與第 4 節換成那一版的數字與未達項。unit 或 e2e 若因本機模型的拆題品質變紅，先答 TH-1（第 7 節）再處理。
+4. **把最後那一版併進 `local/integration`**〔審查修正 2026-09-27〕：`local/integration` 現在在 `889d18f`，比 `dec/integration-r8` 少 82 個 commit，沒有這一步推上去的會是舊版。`git checkout local/integration` → `git merge --ff-only <第 3 步重跑全綠的那一版>`（`889d18f` 是祖先，應該能快轉；不能快轉代表 `local/integration` 另有 commit，先停下來看是什麼）→ `git log --oneline origin/main..local/integration` 確認看得到重錄的 commit 與本分支的 commit、`git rev-parse local/integration` 等於第 3 步那一版，再照第 1 節的說明重算範圍數字。
 5. 由 Owner 的電腦把 `local/integration` 推上 GitHub（推送時機由 Owner 決定），以本稿開 PR 到 main，等 GitHub Actions 的 unit 與 integration 兩個 job 跑完。
 
 **合併之後（正式庫與日常使用）**
 
 6. 正式庫：`node migrate.js status` 看到哪一支；沒到 0020 就照第 3 節升級（先停服務、先備份）；清 `.env` 裡的舊門檻四行。
 7. 知識點：`npm run kc:load -- --dry-run` 看過再載入（三科；物理維持草稿，K-P）；之後 B12 的 20 題試標（`kc:backfill -- --limit 20`）。
-8. （要用時）桌面圖示：雙擊 `exam_pro\scripts\windows\install_desktop_shortcut.bat`；`FEATURE_RETRAIN=true` 後在瀏覽器實際走一遍錯題重練（這些畫面只以 miniDom 與一次性冒煙測過）。
+8. （要用時）桌面圖示：雙擊 `exam_pro\scripts\windows\install_desktop_shortcut.bat`（啟動器 A）；桌面版 B1 另用 `install_desktop_app.bat`，照 `desktop-app-design.md` 6.2 驗收；`.env` 原本靠「聽全部介面」給區網用的話要加 `HOST=0.0.0.0`（DA-11）；`FEATURE_RETRAIN=true` 後在瀏覽器實際走一遍錯題重練（這些畫面只以 miniDom 與一次性冒煙測過）。
 9. 10.21 第 4 步其餘各點：`perf:local`（三次重錄的 log）、`embed:thresholds` → Claude 重標初判 → O-4 抽查 10～15 支 → 定案 V5-2（現在的 0.87 是暫定）；`cassettes:prune` 只列、不 `--apply`。第 5 步 C-e 量測在電腦閒著時做。
-10. 仍待 Owner 的：DEC-013 核准欄明示簽核；A3（nlq-036 計分）、B18、B19、ADR-017 定案條件（§3.1）；TH-1（第 7 節，錄完沒紅就不必答）；第六輪（桌面版 DL／DA）的落實另開分支。
+10. 仍待 Owner 的：DEC-013 核准欄明示簽核；A3（nlq-036 計分）、B18、B19、ADR-017 定案條件（§3.1）；TH-1（第 7 節，錄完沒紅就不必答）；第六輪已落實的是 DL-4、DA-11、DA-13 與 B1（第 2.10 節），B2、D2、B3 照設計稿另排；DA-9 的前提（Smart App Control 關閉）與 DA-14 的 `.wslconfig` 由 Owner 確認。
 
 ## 6. 隨本 PR 一起送的測試整理（`dec/r7-test-hygiene`＋審查修正 `dec/r7-test-hygiene-fix`）
 

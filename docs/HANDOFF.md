@@ -235,7 +235,7 @@
 ### 0.00d 第六輪決策（2026-09-27，桌面版）〔第六輪決策 2026-09-27，桌面版〕
 
 > 來源：Owner（Ben）2026-09-27 在第六輪決策單的答覆：桌面啟動器 A 的待確認事項（[`desktop-launcher.md`](desktop-launcher.md) 第 8 節 DL-1～DL-5）與桌面版 B＋D2 設計稿的決策草稿（[`desktop-app-design.md`](desktop-app-design.md) 第 8 條 DA-1～DA-14）。兩份文件都已逐題就地加註〔Owner 2026-09-27 選 N〕，設計稿依答案確定的段落改成「定案」語氣、原文保留。
-> 落實在分支 **`dec/r7-decisions-host`**（從 `dec/integration-r7` `6757e25` 開，**還沒合入**）。程式只改兩處：DL-4（啟動器預設）與 DA-11 的網頁版那一半（後端 `HOST`）；另加 DA-14／DA-9 給 Owner 用的唯讀檢查工具。其餘題目是「維持現狀」或要等 B、D2 實作時照答案做。沒有改任何 cassette 鍵（模板、schema、prompt、`cacheKeyParts`）、golden 或 `eval/thresholds.json`。AI 不代填任何「核准」欄。
+> 落實在分支 **`dec/r7-decisions-host`**（從 `dec/integration-r7` `6757e25` 開；審查修正 `dec/r7-decisions-host-fix`〔2026-09-27 已和 `dec/r7-checkpoints-fix`（DA-13）、`dec/r7-test-hygiene-fix`、`dec/r7-electron-b1-fix`（B1）一起併入 **`dec/integration-r8`**〕）。程式只改兩處：DL-4（啟動器預設）與 DA-11 的網頁版那一半（後端 `HOST`）；另加 DA-14／DA-9 給 Owner 用的唯讀檢查工具。其餘題目是「維持現狀」或要等 B、D2 實作時照答案做。沒有改任何 cassette 鍵（模板、schema、prompt、`cacheKeyParts`）、golden 或 `eval/thresholds.json`。AI 不代填任何「核准」欄。
 
 | 題號 | Owner 選項 | 落實 |
 |---|---|---|
