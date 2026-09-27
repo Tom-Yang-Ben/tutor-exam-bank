@@ -47,7 +47,9 @@ const REASON_LABEL = {
     // 〔本機模式 L2〕0015：本機拆題（PaddleOCR 與視覺模型）兩版不一致或只有一版（docs/local-mode.md 第 4 條）
     extract_disagree: '拆題交叉驗證不一致',
     // 〔OCR 為主 2026-09-26〕0019：LOCAL_EXTRACT_MODE=ocr 只用 OCR 拆題，沒有第二版可以比對，每題都要人工確認（docs/local-mode.md 10.12）
-    ocr_only: '只用 OCR 拆題'
+    ocr_only: '只用 OCR 拆題',
+    // 〔Owner 第五輪 C-f〕0020：本機模型的回應寫到輸出上限被截斷，不重試直接進複核（docs/local-mode.md 10.16）
+    output_truncated: '本機模型回應被截斷'
 };
 
 const REASON_TONE = {
@@ -61,7 +63,8 @@ const REASON_TONE = {
     provider_error: 'slate',
     awaiting_approval: 'indigo',
     extract_disagree: 'amber',
-    ocr_only: 'amber'
+    ocr_only: 'amber',
+    output_truncated: 'slate'
 };
 
 const TONE_CLASS = {
@@ -364,6 +367,10 @@ export function reasonSentence(reason, payload) {
                 (auto ? '附圖是依 OCR 的版面位置自動配的，請確認裁到的是這一題的圖。' : '') +
                 figureHintNote(p);
         }
+        case 'output_truncated':
+            // 〔Owner 第五輪 C-f〕workers/jobRunner.js：本機模式被截斷（Ollama done_reason=length）不重試
+            return '本機模型的回應寫到輸出上限被截斷（驗算上限 3072 token），依設定不重試、直接交給老師。' +
+                '多半是需要長推理的難題：請自己核對題目與答案；要讓模型再算一次，可在 .env 調高 OLLAMA_MAX_OUTPUT_VERIFY 後重跑這一題。';
         default:
             return `複核原因：${reason}`;
     }

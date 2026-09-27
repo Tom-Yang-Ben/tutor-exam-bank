@@ -166,11 +166,30 @@ describe('resolveCallParams：agent → .env 的本機調整 → 這次的參數
     const verifyReq = { agent: 'verify', thinkingBudget: 1024, maxOutputTokens: 8192 };
     const args = (o = {}) => ({ ...bench.parseArgs(['--agent', 'verify']), ...o });
 
-    test('什麼都沒改＝正式上傳現在的樣子', () => {
+    test('什麼都沒改＝正式上傳現在的樣子（〔Owner 第五輪 C-c〕驗算上限是本機預設 3072、照舊思考）', () => {
         assert.deepEqual(bench.resolveCallParams(verifyReq, args(), {}), {
-            thinkingBudget: 1024, think: true, thinkWhy: '開（agent 預設）', maxOutputTokens: 8192, maxWhy: 'agent 預設',
+            thinkingBudget: 1024, think: true, thinkWhy: '開（agent 預設）',
+            maxOutputTokens: 3072, maxWhy: '本機預設（Owner 第五輪 C-c；OLLAMA_MAX_OUTPUT_VERIFY 可覆寫）',
             numCtx: 16384, ctxWhy: '預設', numThread: undefined
         });
+        // 取消預設（OLLAMA_MAX_OUTPUT_VERIFY=8192）＝加預設之前的樣子
+        const orig = bench.resolveCallParams(verifyReq, args(), { OLLAMA_MAX_OUTPUT_VERIFY: '8192' });
+        assert.deepEqual([orig.maxOutputTokens, orig.maxWhy], [8192, 'agent 預設']);
+    });
+
+    test('〔Owner 第五輪 C-b〕kc_tag：本機預設不思考（標出來源）；OLLAMA_NO_THINK=none 恢復思考；--think 照樣蓋過', () => {
+        const kc = { agent: 'kc_tag', thinkingBudget: 512, maxOutputTokens: 4096 };
+        const kargs = (o = {}) => ({ ...bench.parseArgs(['--agent', 'kc_tag']), ...o });
+        const d = bench.resolveCallParams(kc, kargs(), {});
+        assert.deepEqual([d.think, d.thinkWhy, d.maxOutputTokens], [false, '關（本機預設，Owner 第五輪 C-b；OLLAMA_NO_THINK 可覆寫）', 4096]);
+        const on = bench.resolveCallParams(kc, kargs(), { OLLAMA_NO_THINK: 'none' });
+        assert.deepEqual([on.think, on.thinkWhy], [true, '開（agent 預設）']);
+        assert.deepEqual(bench.resolveCallParams(kc, kargs({ think: true }), {}).thinkWhy, '開（--think）');
+    });
+
+    test('〔Owner 第五輪 C-e〕量測要用的參數都支援：--agent verify、--max-output、--no-think、--num-ctx', () => {
+        const a = bench.parseArgs(['--agent', 'verify', '--max-output', '3072', '--no-think', '--num-ctx', '8192']);
+        assert.deepEqual([a.agent, a.maxOutput, a.think, a.numCtx], ['verify', 3072, false, 8192]);
     });
 
     test('.env 的 OLLAMA_NO_THINK／OLLAMA_MAX_OUTPUT_VERIFY／OLLAMA_NUM_CTX_VERIFY 照套；這次的參數再蓋上去', () => {
@@ -203,10 +222,11 @@ describe('main', () => {
         const verify = require('../../agents/verify');
         assert.equal(g.model, 'qwen3:8b', '裸 ID');
         assert.equal(g.system, verify.SYSTEM);
-        assert.deepEqual([g.thinkingBudget, g.maxOutputTokens, g.numCtx, g.numThread, g.progressMs, g.timeoutMs], [1024, 8192, 8192, 4, 0, 60 * 60_000]);
+        // 〔Owner 第五輪 C-c〕驗算的輸出上限是本機預設 3072
+        assert.deepEqual([g.thinkingBudget, g.maxOutputTokens, g.numCtx, g.numThread, g.progressMs, g.timeoutMs], [1024, 3072, 8192, 4, 0, 60 * 60_000]);
         const out = seen.out;
         assert.match(out, /══ 文字模型量測（npm run local:bench-text）/);
-        assert.match(out, /思考：開（agent 預設）；num_ctx：8,192（--num-ctx）；輸出上限：8,192（agent 預設）；執行緒：4（--num-thread）/);
+        assert.match(out, /思考：開（agent 預設）；num_ctx：8,192（--num-ctx）；輸出上限：3,072（本機預設（Owner 第五輪 C-c；OLLAMA_MAX_OUTPUT_VERIFY 可覆寫））；執行緒：4（--num-thread）/);
         assert.match(out, /\| 讀 prompt \| 1 分 \| 320 \| 5\.33 token\/秒 \|/);
         assert.match(out, /\| 輸出（含思考） \| 4 分 \| 480 \| 2\.00 token\/秒 \|/);
         assert.match(out, /\| 　其中思考（估） \|/);

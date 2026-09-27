@@ -30,9 +30,11 @@ function sectionRefs(text) {
 describe('docs/local-mode.md 10.12～10.15（整合 r5、final5 改號）', () => {
     const doc = read('docs/local-mode.md');
 
-    test('四個標題依併入順序各出現一次：10.12 OCR 為主、10.13 餘弦門檻、10.14 拆題以外的時間、10.15 classify／nlq 重錄前修正', () => {
+    test('四個標題依併入順序各出現一次：10.12 OCR 為主、10.13 餘弦門檻、10.14 拆題以外的時間、10.15 classify／nlq 重錄前修正（〔第五輪 B〕之後接 10.16）', () => {
         const heads = [...doc.matchAll(/^### (10\.1[2-9]) (.*)$/gm)].map(m => [m[1], m[2]]);
-        assert.deepEqual(heads.map(h => h[0]), ['10.12', '10.13', '10.14', '10.15'], JSON.stringify(heads));
+        // 〔dec/r6-local-tuning〕第五輪 B 本機呼叫調整先寫 10.16（整合時再重編）
+        assert.deepEqual(heads.map(h => h[0]), ['10.12', '10.13', '10.14', '10.15', '10.16'], JSON.stringify(heads));
+        assert.match(heads[4][1], /第五輪 B 本機呼叫調整（2026-09-27）/);
         assert.match(heads[0][1], /只用 OCR 拆題/);
         assert.match(heads[1][1], /三個餘弦門檻/);
         assert.match(heads[2][1], /拆題以外的時間/);
@@ -60,6 +62,7 @@ describe('docs/local-mode.md 10.12～10.15（整合 r5、final5 改號）', () =
         ['exam_pro/eval/tools/embed_threshold_labels.json', ['10.13']],
         ['docs/local-embed-thresholds-report.md', ['10.13']],
         ['exam_pro/services/llm/localTuning.js', ['10.14']],
+        ['exam_pro/migrations/0020_output_truncated_review.sql', ['10.16']],   // 〔第五輪 B〕
         ['exam_pro/eval/tools/local_bench_text.js', ['10.14']],
         ['exam_pro/test/unit/localTuning.test.js', ['10.14']],
         ['exam_pro/test/unit/localBenchText.test.js', ['10.14']],
@@ -84,7 +87,8 @@ describe('docs/local-mode.md 10.12～10.15（整合 r5、final5 改號）', () =
         assert.match(rj, /本機模式要不要關掉這次重跑（docs\/local-mode\.md 第 10\.14 條）/);
         const env = read('exam_pro/.env.example');
         assert.match(env, /本機拆題的方式（〔OCR 為主 2026-09-26〕docs\/local-mode\.md 10\.12；/);
-        assert.match(env, /加速選項 a／b／c／d，預設都不改；待 Owner 決定，docs\/local-mode\.md 第 10\.14 條/);
+        // 〔Owner 第五輪 C-b、C-c〕加速選項已有本機預設：說明行改寫，仍指到 10.14（第五輪的決定另指 10.16）
+        assert.match(env, /（加速選項，docs\/local-mode\.md 第 10\.14 條；Owner 第五輪決定見 10\.16）/);
         assert.deepEqual(sectionRefs(read('exam_pro/eval/tools/local_perf_report.js')), ['10.10', '10.11', '10.14']);
         assert.match(read('docs/variants.md'), /\[`local-mode\.md` 10\.13\]\(local-mode\.md\)/);
     });

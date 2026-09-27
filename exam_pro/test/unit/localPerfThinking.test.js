@@ -453,10 +453,15 @@ describe('estimatePaper：一份卷的估計與選項 a／b／c', () => {
     test('〔審查修正〕currentStats：照 .env 的 OLLAMA_NO_THINK 挑思考版或不思考版；挑的沒有就用另一版並加註', () => {
         const think = new Map([['verify', { agent: 'verify', tag: 'T' }], ['lint', { agent: 'lint', tag: 'T' }], ['classify', { agent: 'classify', tag: 'T' }]]);
         const noThink = new Map([['verify', { agent: 'verify', tag: 'N' }], ['kc_tag', { agent: 'kc_tag', tag: 'N' }]]);
-        const a = perf.currentStats(think, noThink, {});
+        // 〔Owner 第五輪 C-b〕OLLAMA_NO_THINK=none：取消本機預設（kc_tag 照舊思考），與加預設之前的「沒寫」相同
+        const a = perf.currentStats(think, noThink, { OLLAMA_NO_THINK: 'none' });
         assert.deepEqual([a.stats.get('verify').tag, a.stats.get('lint').tag, a.stats.get('kc_tag').tag], ['T', 'T', 'N']);
         assert.deepEqual([a.info.get('verify').noThink, a.info.get('kc_tag').noThink], [false, true]);
         assert.match(a.info.get('kc_tag').note, /只有不思考版/);
+        // 〔Owner 第五輪 C-b〕什麼都沒寫：kc_tag 本機預設不思考 → 挑不思考版、註明是本機預設
+        const d = perf.currentStats(think, noThink, {});
+        assert.deepEqual([d.stats.get('kc_tag').tag, d.info.get('kc_tag').noThink, d.stats.get('verify').tag], ['N', true, 'T']);
+        assert.match(d.info.get('kc_tag').note, /本機預設不思考（Owner 第五輪 C-b）：用不思考版的回放檔/);
         const b = perf.currentStats(think, noThink, { OLLAMA_NO_THINK: 'verify,lint,classify' });
         assert.deepEqual([b.stats.get('verify').tag, b.stats.get('lint').tag, b.stats.get('classify').tag], ['N', 'T', 'T']);
         assert.deepEqual([b.info.get('verify').noThink, b.info.get('lint').noThink, b.info.get('classify').noThink], [true, false, false]);

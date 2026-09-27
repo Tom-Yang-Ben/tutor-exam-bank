@@ -27,11 +27,17 @@
 // （crossCheckStopReason）；拆題模型是 ollama、LOCAL_EXTRACT_MODE=ocr、OCR_ENGINE=none 是矛盾設定，createRunner 直接丟錯。
 // 〔審查 2026-09-26〕ocr 模式的資料庫還沒套 0019（review_reason 不接受 ocr_only）時，tick 不認領任何工作、印一次
 // 「先 npm run migrate」（ocrOnlySchemaProblem），不會每題每輪撞 CHECK、無限重試。
+//
+// 〔Owner 第五輪 C-f 核准，dec/r6-local-tuning〕本機模式被截斷的回應不重試：題目節點（classify／lint／verify）回
+// error 且 outcome.finishReason='MAX_TOKENS'（Ollama 的 done_reason=length），而這一次呼叫的模型是 ollama 時，
+// transition 的 limits 帶 retryTruncated:false → 直接 needs_review('output_truncated')（migration 0020）。
+// Gemini 模式照舊重試 maxErrorRetries（3）次。資料庫還沒套 0020 時退回原本的複核原因（schema_invalid），
+// 並印一次「先 npm run migrate」——不會撞 CHECK、也不會卡住佇列（outputTruncatedAccepted）。
 // ─────────────────────────────────────────────────────────────
 const fs = require('fs');
 const path = require('path');
 
-const { transition, NODE_FOR_STATE, DEFAULT_LIMITS, TERMINAL_STATES, FREE_NODES: SM_FREE_NODES } = require('../pipeline/stateMachine');
+const { transition, NODE_FOR_STATE, DEFAULT_LIMITS, TERMINAL_STATES, FREE_NODES: SM_FREE_NODES, REVIEW_REASON_FOR_ERROR } = require('../pipeline/stateMachine');
 
 /** exam_pro/ 的絕對路徑：jobs.pdf_path 存的是相對路徑，一律對這裡 resolve，不看 process.cwd()。 */
 const APP_DIR = path.resolve(__dirname, '..');
@@ -260,6 +266,48 @@ async function ocrOnlySchemaProblem(db) {
             AND pg_table_is_visible(t.oid)`);
     if (!Array.isArray(rows) || rows.length === 0) return null;
     return rows.some(r => String((r && r.def) || '').includes("'ocr_only'")) ? null : OCR_ONLY_SCHEMA_MESSAGE;
+}
+
+/** 〔Owner 第五輪 C-f〕資料庫還沒套 0020 時印一次的訊息 */
+const OUTPUT_TRUNCATED_SCHEMA_MESSAGE =
+    '本機模型的回應被截斷（寫到輸出上限），照 Owner 第五輪 C-f 不重試、直接進人工複核；但資料庫還沒套 ' +
+    'migrations/0020_output_truncated_review.sql（複核原因 output_truncated），這次先以原本的原因（schema_invalid）進複核。' +
+    '請在 exam_pro 執行 npm run migrate（不必重啟）。';
+
+/**
+ * 〔Owner 第五輪 C-f〕job_questions.review_reason 的 CHECK 接不接受 'output_truncated'（migration 0020）。
+ * 與 ocrOnlySchemaProblem 同一個查法（查約束本身）；約束不存在＝不會被擋＝接受。
+ * @param {{query:Function}} db
+ * @returns {Promise<boolean>}
+ */
+async function outputTruncatedAccepted(db) {
+    const { rows } = await db.query(
+        `SELECT pg_get_constraintdef(c.oid) AS def
+           FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid
+          WHERE t.relname = 'job_questions' AND c.conname = 'job_questions_review_reason_check'
+            AND pg_table_is_visible(t.oid)`);
+    if (!Array.isArray(rows) || rows.length === 0) return true;
+    return rows.some(r => String((r && r.def) || '').includes("'output_truncated'"));
+}
+
+/**
+ * 〔Owner 第五輪 C-f〕這一次呼叫的模型是不是本機（ollama）。spec 沒給＝services/llm 的預設（MODEL_EXTRACT）。
+ * @param {string|null|undefined} spec 'ollama:qwen3:8b'、'gemini:…' 或裸 ID（裸 ID＝Gemini）
+ * @returns {boolean}
+ */
+function isLocalModelSpec(spec) {
+    const models = require('../config/models');
+    try { return models.parseModel(String(spec || models.MODEL_EXTRACT)).vendor === 'ollama'; } catch (_) { return false; }
+}
+
+/**
+ * 〔Owner 第五輪 C-f〕這個 outcome 是不是「本機模型的回應被截斷」：error、finishReason='MAX_TOKENS'、呼叫的模型是 ollama。
+ * @param {object} outcome
+ * @param {string|null|undefined} modelSpec  這個節點最後一次呼叫的模型（meter.lastModel）
+ * @returns {boolean}
+ */
+function isLocalTruncation(outcome, modelSpec) {
+    return Boolean(outcome && outcome.kind === 'error' && outcome.finishReason === 'MAX_TOKENS' && isLocalModelSpec(modelSpec));
 }
 
 /**
@@ -563,6 +611,9 @@ function createRunner(opts = {}) {
     // 〔審查 2026-09-26〕ocr 模式的前置條件（migration 0019）：通過一次就不再查；沒通過時只印一次錯
     let ocrSchemaPending = config.localExtract === true && config.localExtractMode === 'ocr';
     let ocrSchemaWarned = false;
+    // 〔Owner 第五輪 C-f〕0020（output_truncated）：接受過一次就不再查；沒套時只印一次
+    let truncatedSchemaOk = false;
+    let truncatedSchemaWarned = false;
 
     // ── agent 載入 ────────────────────────────────────────────
     function loadAgent(node) {
@@ -585,6 +636,8 @@ function createRunner(opts = {}) {
     function meteredLlm(meter) {
         return {
             async generateJson(args = {}) {
+                // 〔Owner 第五輪 C-f〕失敗時也要知道叫的是哪一支模型（本機被截斷的不重試）；meter.model 只在成功後才寫，不動它
+                meter.lastModel = args.model || null;
                 const res = await llm.generateJson(args);
                 const u = res?.usage || {};
                 meter.model = args.model || meter.model;
@@ -611,7 +664,8 @@ function createRunner(opts = {}) {
     function newMeter() {
         return {
             model: null, tokenIn: 0, tokenOut: 0, tokenThinking: 0, tokenCached: 0,
-            calls: 0, usageMetadata: [], schemaFallback: false
+            calls: 0, usageMetadata: [], schemaFallback: false,
+            lastModel: null   // 〔Owner 第五輪 C-f〕
         };
     }
 
@@ -1081,7 +1135,27 @@ function createRunner(opts = {}) {
                 await chargeJob(jq.job_id, meter, cost);
             }
 
-            const next = transition({ state: jq.state, retries: jq.retries, outcome, limits });
+            // 〔Owner 第五輪 C-f〕本機模型的回應被截斷：不重試、直接進複核（Gemini 照舊重試）
+            const localTruncation = isLocalTruncation(outcome, meter.lastModel);
+            let next = transition({
+                state: jq.state, retries: jq.retries, outcome,
+                limits: localTruncation ? { ...limits, retryTruncated: false } : limits
+            });
+            if (next.review_reason === 'output_truncated') {
+                let accepted = truncatedSchemaOk;
+                if (!accepted) {
+                    try { accepted = await outputTruncatedAccepted(db); } catch (_) { accepted = false; }
+                    truncatedSchemaOk = accepted;
+                }
+                if (!accepted) {
+                    // 還沒套 0020：退回原本會用的原因，不撞 CHECK（撞了會放掉租約、下一輪又認領同一列）
+                    next = { ...next, review_reason: REVIEW_REASON_FOR_ERROR(outcome.errorClass) };
+                    if (!truncatedSchemaWarned) {
+                        logger.error({ msg: OUTPUT_TRUNCATED_SCHEMA_MESSAGE, node, job_id: jq.job_id, jq_id: jq.id });
+                        truncatedSchemaWarned = true;
+                    }
+                }
+            }
             const stayed = next.state === jq.state;
             const payload = mergePayload(jq.payload, node, outcome, stayed);
 
@@ -1099,6 +1173,8 @@ function createRunner(opts = {}) {
                 detail: {
                     ...(outcome.kind === 'fail' ? { reason: outcome.reason, feedback: outcome.feedback } : {}),
                     ...(outcome.kind === 'error' ? { message: outcome.message } : {}),
+                    // 〔Owner 第五輪 C-f〕被截斷的 error 記下 finish_reason（有才記；其餘事件的 detail 與之前相同）
+                    ...(outcome.kind === 'error' && outcome.finishReason ? { finish_reason: outcome.finishReason } : {}),
                     ...(meter.usageMetadata.length > 0 ? { usage_metadata: meter.usageMetadata } : {}),
                     ...(schemaFallbackOf(meter, outcome) ? { schema_fallback: true } : {}),
                     // 階段 3 第 5.2 條：classify 是哪一層決定的（'gate'／'llm'／'knn'）要進事件，
@@ -1694,6 +1770,7 @@ module.exports = {
     loadLocalModeConfig, renewIntervalFor, crossCheckStopReason,
     loadLocalExtractModeConfig,   // 〔OCR 為主 2026-09-26〕
     ocrOnlySchemaProblem, OCR_ONLY_SCHEMA_MESSAGE,   // 〔審查 2026-09-26〕
+    outputTruncatedAccepted, OUTPUT_TRUNCATED_SCHEMA_MESSAGE, isLocalModelSpec, isLocalTruncation,   // 〔Owner 第五輪 C-f〕
     LOCAL_NODE_TIMEOUT_MS, LOCAL_PDF_CHUNK_PAGES, LOCAL_CONCURRENCY, RENEW_MIN_INTERVAL_MS,
     LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES,   // 〔第四輪 V3〕
     ADVANCEABLE_STATES, FREE_NODES, AGENT_MODULE_FOR_NODE, ERROR_CLASSES, SOURCE_CHECK_MODES,
