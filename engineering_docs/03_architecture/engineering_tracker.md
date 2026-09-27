@@ -113,7 +113,7 @@
 | ADR-014-remedial-paper-wilson-quota〔修訂 2026-09-24〕 | 小樣本不等於精熟（Wilson 下界）；補救卷與組卷共用同一段選題程式，不另寫會漂移的排除邏輯；草稿不寫庫 |
 | ADR-015-grading-detail-and-solution-provenance〔修訂 2026-09-24〕 | 錯因以 attempts 加欄＋伺服器端白名單記錄；詳解分來源標示可信度，以 verify 摘要零成本回填（原 WS-A 自取 014，整合改號，裁決 S5-1） |
 | ADR-016-chapter-whitelist-restructure〔修訂 2026-09-25〕 | 數學／物理白名單整份換成對齊 108 龍騰目錄的 52＋34 章（`config/chapterPlan.js`）；刻意讓數學／物理 cassette 失效、由 Owner 一次重錄；舊題以規則提議＋老師確認遷移（`npm run chapters:migrate`，不呼叫 LLM；新表 `chapter_migration_log`＝migration 0014，契約未預列，主控已核准＝`docs/chapter-restructure.md` CR-3） |
-| ADR-017-local-first-inference〔修訂 2026-09-25 本機模式〕 | 狀態：提議。Owner 要求全部步驟與功能純地端、不連外、零費用：預設改成 Ollama（`qwen3-vl:8b`／`qwen3:8b`／`qwen3-embedding:0.6b`）＋PaddleOCR，拆題以 OCR 與視覺模型交叉驗證、不一致一律人工複核；仍只有 `services/llm` 一個轉接點，Gemini 路徑逐位元不變、改 `.env` 即可切回；CI 照舊 replay＋fixture，只換模型名、由 Owner 以本機模型重錄（`docs/local-mode.md`） |
+| ADR-017-local-first-inference〔修訂 2026-09-25 本機模式〕 | 狀態：提議。Owner 要求全部步驟與功能純地端、不連外、零費用：預設改成 Ollama（`qwen3-vl:8b`／`qwen3:8b`／`qwen3-embedding:0.6b`）＋PaddleOCR，拆題以 OCR 與視覺模型交叉驗證、不一致一律人工複核；仍只有 `services/llm` 一個轉接點，Gemini 路徑逐位元不變、改 `.env` 即可切回；CI 照舊 replay＋fixture，只換模型名、由 Owner 以本機模型重錄（`docs/local-mode.md`）。〔修訂 2026-09-27 Owner 第五輪 O-3 選 2〕內容改寫為 OCR 為主（本機拆題＝PaddleOCR＋文字模型整理，看圖模型只在 `cross` 模式），狀態維持「提議中／待數據定案」，定案條件見 ADR-017 §3.1 |
 | ADR-018-assignment-attempt-split-compat-view〔整合 2026-09-26〕 | 狀態：已接受（v1.0）。DEC-003 例外條款選 a：`attempts` 拆成派題 `assignments`（new／retrain）＋作答 `attempt_records`，`attempts` 名字留給唯讀相容檢視（每生每題第一次＝拆表前語意）；新題每生每題一次仍由資料庫硬擋（部分唯一索引）；沒有重練資料時既有讀法、數字與回應逐字不變 |
 | ADR-019-leitner-fixed-steps-pure-schedule〔整合 2026-09-26〕 | 狀態：已接受（v1.1：補「已派出」的範圍與重新加入的同日邊界、測試說明如實化；決策不變）。家教一週一兩次、資料少：固定關卡（1／7／14 天、連對 3 次練到會、錯滿 3 次卡關）比 SM-2／FSRS 好懂、不需校準；排程是作答歷史的純函式，`retrain_items` 只是快取，改判／刪卷／合併後重算結果與從頭批改相同 |
 

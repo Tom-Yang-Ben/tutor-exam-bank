@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// localModeSections.test.js — docs/local-mode.md 10.12～10.15 的編號與交互參照（〔整合 2026-09-26 dec/integration-r5〕；
+// localModeSections.test.js — docs/local-mode.md 10.12～10.20 的編號與交互參照（〔整合 2026-09-26 dec/integration-r5〕；
 // 〔整合 2026-09-27 dec/integration-final5〕加 10.15）
 //
 // dec/local-ocr-first-fix、dec/local-embed-thresholds-fix、dec/local-thinking-speed-fix 三條分支各自新增了「10.12」。
@@ -9,6 +9,9 @@
 // 依併入順序改號為 10.15；它的程式註解、eval 訊息、測試一併改號。
 // 這裡釘住：① 三個標題真的是這個順序、各出現一次；② 各功能的原始碼／文件指到的是自己那一節（改號沒有漏、也沒有改錯邊）；
 // ③ 執行時印給 Owner 看的兩句（localTuning 的啟動訊息、report:jobs 的重跑說明）指到 10.14。
+// 〔整合 2026-09-27 dec/integration-r6〕第五輪五組（A 模板、B 本機調整、C 閘門、D 預設值、E 文件知識點）各自暫編「10.16」，
+// 依併入順序改號為 10.16～10.20；標題清單改回逐一列出每一節的節號與完整標題（不再允許暫編的寬鬆寫法），
+// 各組自己的檔指到自己那一節也一併釘住。
 // 只讀檔，不連 DB、不呼叫模型。
 // ─────────────────────────────────────────────────────────────
 const { test, describe } = require('node:test');
@@ -28,25 +31,27 @@ function sectionRefs(text) {
     return [...out].sort();
 }
 
-describe('docs/local-mode.md 10.12～10.15（整合 r5、final5 改號）', () => {
+describe('docs/local-mode.md 10.12～10.20（整合 r5、final5、r6 改號）', () => {
     const doc = read('docs/local-mode.md');
 
     // 〔整合 2026-09-27 dec/integration-r6〕第五輪五組各自暫編的「10.16」依併入順序改號，這裡逐一釘住節號與標題（不再允許暫編）
+    // 每一節的完整標題（逐字，不用部分比對）
     const EXPECTED = [
-        ['10.12', /只用 OCR 拆題/],
-        ['10.13', /三個餘弦門檻/],
-        ['10.14', /拆題以外的時間/],
-        ['10.15', /classify／nlq 重錄前修正/],
-        ['10.16', /^第五輪 A 模板與 schema（2026-09-27）$/],
-        ['10.17', /^第五輪 B 本機呼叫調整（2026-09-27）$/],
-        ['10.18', /^第五輪 C 閘門與計分（2026-09-27）$/],
-        ['10.19', /^第五輪 D 預設值與門檻（2026-09-27，`dec\/r6-defaults`；Owner 第五輪 D-3、V5-1～V5-5、O-2 核准）$/]
+        ["10.12", "只用 OCR 拆題（`LOCAL_EXTRACT_MODE=ocr`；2026-09-26 Owner 選「OCR 為主」，`dec/local-ocr-first`）"],
+        ["10.13", "三個餘弦門檻依本機向量重新校準（V5；2026-09-26，`dec/local-embed-thresholds`）——**待 Owner 核准，未改任何門檻**"],
+        ["10.14", "拆題以外的時間花在哪裡、加速選項（2026-09-26，`dec/local-thinking-speed`；**待 Owner 決定，預設未改**）"],
+        ["10.15", "classify／nlq 重錄前修正（2026-09-26，`dec/local-classify-nlq-prep`；原編 10.12，整合時改號）"],
+        ["10.16", "第五輪 A 模板與 schema（2026-09-27）"],
+        ["10.17", "第五輪 B 本機呼叫調整（2026-09-27）"],
+        ["10.18", "第五輪 C 閘門與計分（2026-09-27）"],
+        ["10.19", "第五輪 D 預設值與門檻（2026-09-27，`dec/r6-defaults`；Owner 第五輪 D-3、V5-1～V5-5、O-2 核准）"],
+        ["10.20", "第五輪 E 文件與知識點（2026-09-27）"]
     ];
 
     test(`第 10 章 10.12 之後的標題依併入順序各出現一次：${EXPECTED.map(e => e[0]).join('、')}`, () => {
         const heads = [...doc.matchAll(/^### (10\.(?:1[2-9]|[2-9][0-9])) (.*)$/gm)].map(m => [m[1], m[2]]);
         assert.deepEqual(heads.map(h => h[0]), EXPECTED.map(e => e[0]), JSON.stringify(heads));
-        EXPECTED.forEach(([, re], i) => assert.match(heads[i][1], re));
+        assert.deepEqual(heads, EXPECTED, '節號與標題逐字相符');
         assert.match(heads[0][1], /只用 OCR 拆題/);
         assert.match(heads[1][1], /三個餘弦門檻/);
         assert.match(heads[2][1], /拆題以外的時間/);
@@ -85,7 +90,16 @@ describe('docs/local-mode.md 10.12～10.15（整合 r5、final5 改號）', () =
         ['exam_pro/eval/lib/suiteClassify.js', ['10.15']],
         ['exam_pro/eval/tools/local_v1_counterfactual.js', ['10.15']],
         ['exam_pro/eval/fixtures/local_raw_2026-09-25.json', ['10.15']],
-        ['exam_pro/test/unit/localV1Regression.test.js', ['10.15']]
+        ['exam_pro/test/unit/localV1Regression.test.js', ['10.15']],
+        // 〔整合 2026-09-27 dec/integration-r6〕第五輪各組暫編的 10.16 改號後，各組自己的檔指到自己那一節
+        ['exam_pro/controllers/reviewController.js', ['10.12', '10.17']],   // B：output_truncated
+        ['exam_pro/public/js/review.js', ['10.12', '10.17']],               // B
+        ['docs/formulas.md', ['10.18']],                                    // C：control_char
+        ['docs/llm.md', ['10.18']],                                         // C：L-1／L-3
+        ['exam_pro/test/unit/latexEscapeRepair.test.js', ['10.18']],        // C
+        ['.github/workflows/ci.yml', ['10.12', '10.18', '10.19']],          // C 的 D-2、D 的 D-3
+        ['exam_pro/test/unit/similarityThresholds.test.js', ['10.19']],     // D
+        ['docs/variants.md', ['10.13', '10.19']]                            // D
     ];
     for (const [file, want] of OWN) {
         test(`${file} 只指到 ${want.join('、')}`, () => {

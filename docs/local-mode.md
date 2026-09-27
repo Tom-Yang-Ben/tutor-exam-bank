@@ -1053,6 +1053,8 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 
 建議選 1：字面規則在這兩組的誤判風險高於它能救的題數；送人工要動狀態機與複核頁，又救不了 eval。先重錄，看模板規則在這兩類有沒有效，再決定。
 
+> 〔Owner 2026-09-27 選 1〕不加；只記錄、不改程式（登錄於 [`HANDOFF.md`](HANDOFF.md) §0.00c，`dec/r6-docs-kc`）。
+
 **LC-3　程式界線規則要不要也套在「零成本閘門」**
 
 背景：分類分兩層。拆題模型給的章節在白名單內、而且信心 ≥ 0.8 時直接採用（零成本閘門，不呼叫分類模型）；否則才由分類模型判斷（第二層）。本分支的程式界線規則（指數／對數分冊、平面／空間、靜電學／電場與電位、一維相對速度、自由落體數值題）只套在第二層。本機的拆題模型（qwen3-vl:8b）一樣可能把 log₂ 的題標成第一冊，而且信心通常很高，會直接從閘門通過。問題：要不要把同一套規則也套在閘門上？
@@ -1178,7 +1180,7 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 
 1. **LC-1 的 `rationale` 說明多了一句新要求**（「規則裡若有相鄰兩章的界線，寫出你依哪一條判斷」）——屬實。Owner 核准的是「先寫理由再選章」的欄位順序，沒有核准新的輸出要求，所以**刪掉這一句**，只留開頭的「先寫這一欄，再選章節：」，其餘回到 `a670783` 的原文。欄位順序、`chapter` 的「依上面的理由選出……」不變。schema 雜湊又換了一次，但 `classify.v2` 還沒錄過、repo 裡沒有 `classify_chem` cassette，不多造成重錄；`classify.v2` 不升版。
 2. **lint 第三層有一段意思相同的公式規則，沒有加 L-2 那條**——屬實（`agents/lint.js` 的 `lint.v2`、`lint_chem.v1` 各自寫規則，不共用 `LATEX_RULES`）。Owner 的原話是「`LATEX_RULES` 或等效共用段落」，lint 那段算不算「等效」要 Owner 裁定，這個分支不改。已在 `owner-pending-decisions-r5.md` 新增 **O-5**。repo 內 `lint.v2` cassette 5 支、`lint_chem.v1` 0 支。
-3. **`localModeSections` 的標題檢查放寬了**——屬實，但這一輪每組都要加暫編的 10.16 節，不放寬就過不了；10.12～10.15 的原檢查沒有降低。依審查建議**這個分支不改**，整合重編節號時改回逐一列出每個節號與標題。
+3. **`localModeSections` 的標題檢查放寬了**——屬實，但這一輪每組都要加暫編的 10.16 節，不放寬就過不了；10.12～10.15 的原檢查沒有降低。依審查建議**這個分支不改**，整合重編節號時改回逐一列出每個節號與標題。〔整合 2026-09-27 `dec/integration-r6`：已改回逐一列出 10.12～10.20 每一節的節號與標題。〕
 4. **`generateVariant.js` 註解版號過時；`calibrate_source_check.js` 綁死 `extract.v2`**——註解屬實，已改成 `variant_chem.v2`（只是註解，不進模板雜湊）。`calibrate_source_check.js`（與 `test/unit/sourceCheckSample.test.js`）依 `meta.template === 'extract.v2'` 找樣卷 cassette：repo 裡現在就是那一支，行為正確，依審查建議**現在不改程式**，只在工具裡加註「切回 Gemini、用 `extract.v3` 重錄並刪掉舊檔時，這裡與 `sourceCheckSample` 測試要一起改」。
 
 驗證：unit、`check:html`、integration（5433 全新 UTF8 測試庫，用完已刪）都重跑通過。
@@ -1378,3 +1380,49 @@ C-f 的細節：
 - **啟動訊息照 runner 實際的 config**：`thresholds` 改由 `effectiveSimilarityThresholds(config)` 組（`workers/jobRunner.js`）——`createRunner({config})` 覆寫的門檻照實印、標「（createRunner 設定）」；`local_extract_mode` 的「程式預設／明寫」也照 `createRunner` 當下的判斷（`opts.config` 給了或 `.env` 明寫都算明寫；明寫 `ocr` 不再說「程式預設」）。正式啟動（`npm start`、`node workers/jobRunner.js`）不帶這幾個 `opts.config` 鍵，印的與原本相同。
 - 測試：`similarityThresholds.test.js` 加 5 則（`createRunner` 覆寫照實印、舊範本點名三個變數、只剩舊名也提醒、三種不提醒、`runner.start()` warn 一次且門檻仍照 `.env`）。
 - 沒有改模板、schema、prompt、`eval/thresholds.json`、golden、cassette；回放檔鍵都沒變，不必升版或重錄（`dec/r6-defaults` 已知要重錄的 4 筆 `verify` 照舊，見第 3 點）。
+
+### 10.20 第五輪 E 文件與知識點（2026-09-27）
+
+> 分支 `dec/r6-docs-kc`（起點 `local/integration-r5`＝`a670783`）。節號原暫編 10.16，〔整合 2026-09-27 dec/integration-r6〕依併入順序改號為 10.20。落實 Owner 第五輪 K-P 核准（選 3）與 O-3 核准（選 2），並登錄第五輪全部答案；**只改文件與知識點載入的測試，程式、模板、schema、prompt、`eval/thresholds.json`、golden、cassette 都沒有動**。
+
+#### 1. K-P：物理知識點維持草稿，但允許載入（Owner 第五輪 K-P 核准）
+
+- 查了 `scripts/load_kc.js`（參數只有 `--file`／`--dry-run`／`--force`／`--test`，預設讀 `config/kc/` 全部 `*.json`）、`services/kcService.loadSeeds`（計畫只有 insert／update／unchanged／protected／edited，沒有「草稿不載入」）、`utils/kcSeed.js`（`status` 只要是 `draft` 或 `approved` 就通過）：**程式本來就沒有擋草稿，也沒有擋物理**。擋的只是 `HANDOFF.md` A10、B15 與 §0.2 第 7 項「物理先不跑 `kc:load`」這條操作規則。所以程式不改（其他科的行為自然也不變），只把規則解除、並加測試釘住「不擋」：
+  - `test/unit/kcPhysicsDraftLoad.test.js`（4 案）：repo 的 `config/kc/物理.json` 198 條全部 `draft`、單科驗證零 error（指向數學的先備只算 warning）；三科一起驗證零 error、數學已審定數仍是 4；草稿列的載入計畫照常 insert／unchanged／update；`kc:load` 預設讀到物理、`--file` 指定物理照讀、參數沒有科目或狀態過濾。
+  - `test/integration/kcLoadPhysicsDraft.pg.test.js`（2 案）：以子行程跑真的 `scripts/load_kc.js --test` 與真的種子檔——數學已在庫裡時 `--file` 只載入物理：exit 0、198 列全部 `draft`、數學的列不變；空庫只載物理會被擋，原因是物理有 6 條先備指向數學、解析不到（既有的先備規則，訊息不提草稿，測試也釘住）；三科一起載入：物理仍 198 列 `draft`，數學、化學的列數與已審定數照種子檔，物理 → 數學的跨科先備照種子檔寫入，重跑一次全部「內容相同」。
+- 以後若有人加了「只載入已審定」或「跳過物理」之類的過濾，這兩個檔會紅。
+- Owner 要做的：`local/integration` 併入後照 `HANDOFF.md` §0.2 第 7 項，先 `npm run kc:load -- --dry-run` 看數字，再 `npm run kc:load`（不加 `--file`＝三科一起載入，跨科先備一次解析）。**只載物理（`--file config/kc/物理.json`）要在數學已經載入之後**，否則會因上面那 6 條跨科先備整批拒絕、資料庫不動。物理 198 條進資料庫都是草稿，「知識點」分頁照常可以逐條改、逐條審定；載入不會覆寫老師改過的草稿（要 `--force` 才會）。
+
+#### 2. O-3：ADR-017 改寫為 OCR 為主（Owner 第五輪 O-3 核准，選 2）
+
+- `engineering_docs/03_architecture/adr/ADR-017-local-first-inference.md` 升 v1.1：本機拆題＝PaddleOCR＋文字模型整理（`extract_ocr`），看圖模型只在 `cross` 模式；新增「選項四：OCR 為主」與 **§3.1 定案條件**。**狀態維持「提議中／待數據定案」**。原文全部保留，改寫處就地加〔修訂 2026-09-27〕。
+- 定案條件（摘要，全文在 ADR §3.1）：① 以本機模型、`ocr` 模式重錄 classify／nlq／variant／pipeline＋e2e，五個 eval 的分數與門檻對照；② 實際上傳幾份真卷（建議至少 3 份，份數由 Owner 定）後的每卷拆題時間（`perf:local`）、OCR 版面配圖統計（`report:jobs`）、複核時要改的題數比例與每題時間。數字齊了由 Owner 決定接受、回到 `cross`，或另開 ADR。
+- `engineering_tracker.md` §3 的 ADR 索引就地加註。
+
+#### 3. 第五輪全部答案的登錄
+
+- `HANDOFF.md` 新增 **§0.00c 第五輪決策（2026-09-27）**：30 題逐題寫 Owner 選項與落實分支（A＝`dec/r6-templates`、B＝`dec/r6-local-tuning`、C＝`dec/r6-gates`、D＝`dec/r6-defaults`、E＝本分支；「只記錄」的 C-a、C-d、C-e、C-g、C-h、C-i、D-1、D-4、LC-2、O-4 不改程式）。
+- `owner-pending-decisions-r5.md`：O-3 與只記錄的九題就地加「〔Owner 2026-09-27 選 N〕」；本表沒列的 K-P 在檔頭加註。其他四組負責的題由各自分支加註。本節 10.15 第 6 點 LC-2 下加同樣的註記。
+- `kc-review-物理.md` 最後一節「仍待決」一行加註 K-P 的結果。
+
+#### 4. 同批的文件清理（cleanup 審查留下的）
+
+- `README.md`：連到 tag `v1-mysql` 的原型說明（開頭的專案說明、「exam → exam_pro 重構到底改了什麼」一節最後的註記）後補一句「tag 內的授權宣告以主線 `LICENSE` 為準」，註明只是釐清、不改變任何授權。**請 Owner 留意**：tag `v1-mysql`（2026-08-21）裡的 `LICENSE` 是 Apache-2.0，README「授權與著作權」一節也寫「2026-08-24 之前的歷史版本曾以 Apache-2.0 釋出，該授權僅及於該等歷史版本」；這句是照指示加的釐清，已經發出去的 Apache-2.0 授權一般無法事後收回，對外措辭若要更精確，建議再看一次。〔審查修正 2026-09-27〕已改成「主線現行版本以主線 `LICENSE` 為準；tag 內的歷史版本見授權與著作權一節」（見第 6 點），不再和該節衝突。
+- `requirements_tracker.md` 第 32、63 行、`ux_research_and_journey.md` 第 25 行提到 `exam/` 的地方加〔修訂 2026-09-27〕「已自主線移除，見 tag `v1-mysql`」。
+
+#### 5. 測試與 eval
+
+- `test/unit/localModeSections.test.js`：標題清單多一節 10.20（本節），其餘斷言不變。
+- 實測（5433 上新建的 UTF8 測試庫，用完刪除）：unit 3,615（3,613 過、2 略過；比 `a670783` 多 4 案）、`check:html`、migrate（到 0019）、integration 617 全過（多 2 案）。
+- 本分支沒有改任何模板、schema、prompt 或 agent 程式，**沒有 cassette 的鍵會變、不需要重錄**。五個 eval 在 replay 下與 `local/integration-r5`（`a670783`）同一環境逐項比對，輸出除了延遲毫秒數以外完全相同：retrieval 過；classify 92、nlq 8、pipeline 1、variant 2 筆 replay miss 都是原本就缺的 cassette，沒有一筆是本分支造成的。
+
+#### 6. 審查修正（分支 `dec/r6-docs-kc-fix`，從 `dec/r6-docs-kc` `563c6ed` 開）
+
+審查（approve、4 條 minor）逐條先驗證再改：
+
+1. **README 授權句和「授權與著作權」一節衝突——屬實，已改。** tag `v1-mysql` 的 commit 日期是 2026-08-21，裡面的 `LICENSE` 是 Apache-2.0、README 也寫程式碼採 Apache-2.0；主線 README「授權與著作權」一節說「2026-08-24 之前的歷史版本曾以 Apache-2.0 釋出，該授權僅及於該等歷史版本」。原句「tag 內的授權宣告以主線 `LICENSE` 為準」會被讀成推翻這一點。兩處（開頭的專案說明、「exam → exam_pro 重構到底改了什麼」一節的註記）改成「主線現行版本以主線 `LICENSE` 為準；tag 內的歷史版本見授權與著作權一節」：只指向 README 既有的 Owner 措辭，不新增任何法律主張、不改 `LICENSE`／`NOTICE`。**要不要再改措辭仍由 Owner 決定**。
+2. **ADR-017 選項三把 `cross` 寫成「程式預設」——屬實，已改。** 改成「`LOCAL_EXTRACT_MODE=cross`（`cross` 模式）的做法（程式預設值由 D-3 處理，見 §3.1）」，和 §3.1「本 ADR 不重複規定數值」一致；`dec/r6-defaults`（D-3＝2）併入後不會過時。
+3. **HANDOFF §0.2 第 7 項的註記範圍比 K-P 大——屬實，已改。** 改成只解除「物理先不跑」，數學與化學照第 7 項原有條件「併入 `local/integration` 之前不跑」。已核對：`dec/r2-math-kc3` 與 `dec/integration-all` 都是 `local/integration`（`889d18f`）的祖先，所以原條件已成立；這寫成〔現況 2026-09-27〕，不是本輪的新決定。§0.00 A9 列與 §0.00「知識點審定單」一點也加同樣的現況註記，三處一致。
+4. **那一次無法重現的 integration 失敗——無法確認和本分支有關，照建議加防護。** `test/integration/kcLoadPhysicsDraft.pg.test.js` 的 `spawnSync` 加 `timeout: 120000`（`killSignal: SIGKILL`），失敗訊息改帶 `status`、`signal`、spawn 錯誤與子行程輸出；斷言本身一條都沒改、沒放寬。
+
+- 沒有改任何程式、模板、schema、prompt、`eval/thresholds.json`、golden 或 cassette，**不需要重錄**。

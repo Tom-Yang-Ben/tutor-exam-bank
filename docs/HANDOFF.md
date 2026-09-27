@@ -12,6 +12,7 @@
 > 〔OCR 為主 2026-09-26〕Owner 選「這台電腦的拆題改成 OCR 為主」：§0.00b 最後一段（分支 `dec/local-ocr-first`、`local-mode.md` 10.12）。
 > 〔整合 r5 2026-09-26〕`dec/integration-r5`＝`local/integration`（889d18f）依序併入 `dec/local-ocr-first-fix`、`dec/local-embed-thresholds-fix`、`dec/local-thinking-speed-fix`：狀態在 §0.4 第 8 項；三條分支帶來的待 Owner 決定事項整理成一份總表 [`owner-pending-decisions-r5.md`](owner-pending-decisions-r5.md)（§0.4 第 7 項最後一條）。`local-mode.md` 的三個「10.12」依併入順序改號為 10.12（OCR 為主）、10.13（向量門檻）、10.14（拆題以外的時間）。
 > 〔整合 final5 2026-09-27〕`dec/integration-final5`＝`dec/integration-r5-fix`（ed93665）依序併入 `dec/local-classify-nlq-prep-fix`、`dec/latex-escape-repair-fix`、`dec/phys-spoken-reviewed`、`dec/cleanup-exam-legacy`：狀態在 §0.4 第 9 項。`local-mode.md` 第四個「10.12」（classify／nlq 重錄前修正）改號為 **10.15**。
+> 〔第五輪決策 2026-09-27〕Owner 2026-09-27 在第五輪決策單（30 題：D、V5、C、O、LC、L、K-P）的答覆登錄在 **§0.00c**（每題的選項與落實分支）；§0.00 的 A10、B15 與 §0.2 第 7 項「物理先不跑 `kc:load`」已就地加註解除（K-P）。
 
 ---
 
@@ -33,8 +34,8 @@
 | A6 | 白名單外內容（數學邏輯、空間向量加減、物理熱學）放進既有章當知識點 | 方向已定；細節第二輪待答。〔修訂 2026-09-26 決策單第二、三輪〕第二輪已答（§0.00a：M4 邏輯兩條進「集合與計數原理」、M5 空間向量坐標運算進「空間概念與座標系」、P1 熱學兩條進「理想氣體與氣體動力論」），實作分支未合入。〔整合 2026-09-26〕實作分支（`dec/r2-math-kc*`、`dec/r2-phys-*`）已合入 ~~`dec/integration-r23`~~ `dec/integration-all`（待併 `local/integration`） | 不新增章名，白名單與 cassette 不動；放哪一章、寫哪幾條在知識點審定單 |
 | A7 | 本機重錄後低於門檻：門檻數字不動，讓它紅燈，之後改善（不依本機模型重建基準） | 已定；PR 能否帶紅燈合併→第二輪 X1 待答。〔修訂 2026-09-26 決策單第二、三輪〕X1 已答：只限 eval 分數可以紅燈合併，unit、integration、e2e 必須綠，PR 說明列出未達項（§0.00a） | `eval/thresholds.json` 不動；`local-mode.md` LM-14、第 6 條第 3 點、10.5、10.7 |
 | A8 | 合併路徑：開一個 PR，`local/integration` → main（已含章節重整全部 commit） | 已定（PR 尚未開） | 取代 §0.0「先合 `stage5/integration`、再開 `stage5/chapters` 的 PR」；`stage5/integration` 已由 PR #38 合入 main（origin/main `d1834ac`） |
-| A9 | 數學知識點歸屬「我要調整」。Owner 備註原文：「期望值放在古典機率，隨機變數是選修數甲的機率與統計，數學歸納法是數列與級數，推移矩陣是矩陣，複數是選修數甲，勘根定理是選修數甲的微積分，反方陣也是矩陣」 | 多數與草案一致；勘根定理與「期望值」的意思第二輪待確認。〔修訂 2026-09-26 決策單第二、三輪〕第二輪已答：M1「古典機率」「期望值」兩章維持分開；M3 勘根定理搬到選修「函數的極限」（§0.00a） | **先不跑 `kc:load`**；`config/kc/數學.json` 等第二輪答完再改（`kc-review-數學.md` 第 2 節） |
-| A10 | 物理會改知識點代碼的項目：先不載入知識點，改由第二輪審定單直接出題（把這些項目直接列成題目請 Owner 作答） | 第二輪待答。〔修訂 2026-09-26 決策單第二、三輪〕第二輪已答（P1～P20，§0.00a），實作分支未合入。〔整合 2026-09-26〕實作分支（`dec/r2-phys-*`）已合入 ~~`dec/integration-r23`~~ `dec/integration-all`（待併 `local/integration`） | 物理同樣先不跑 `kc:load` |
+| A9 | 數學知識點歸屬「我要調整」。Owner 備註原文：「期望值放在古典機率，隨機變數是選修數甲的機率與統計，數學歸納法是數列與級數，推移矩陣是矩陣，複數是選修數甲，勘根定理是選修數甲的微積分，反方陣也是矩陣」 | 多數與草案一致；勘根定理與「期望值」的意思第二輪待確認。〔修訂 2026-09-26 決策單第二、三輪〕第二輪已答：M1「古典機率」「期望值」兩章維持分開；M3 勘根定理搬到選修「函數的極限」（§0.00a） | **先不跑 `kc:load`**；`config/kc/數學.json` 等第二輪答完再改（`kc-review-數學.md` 第 2 節）。〔現況 2026-09-27〕第二輪已答、數學種子檔（`dec/r2-math-kc*`）已隨 `dec/integration-all` 併入 `local/integration`（`889d18f`），§0.2 第 7 項「併入之前不跑」的條件已成立；Owner 第五輪 K-P 只就物理決定，數學沒有新決定 |
+| A10 | 物理會改知識點代碼的項目：先不載入知識點，改由第二輪審定單直接出題（把這些項目直接列成題目請 Owner 作答） | 第二輪待答。〔修訂 2026-09-26 決策單第二、三輪〕第二輪已答（P1～P20，§0.00a），實作分支未合入。〔整合 2026-09-26〕實作分支（`dec/r2-phys-*`）已合入 ~~`dec/integration-r23`~~ `dec/integration-all`（待併 `local/integration`） | ~~物理同樣先不跑 `kc:load`~~〔Owner 2026-09-27 第五輪 K-P 選 3〕解除：物理知識點維持草稿，但允許 `kc:load` 載入（§0.00c，`dec/r6-docs-kc`） |
 | A11 | 化學章節表照目前草案定稿（依龍騰） | 已定 | `config/chemistryChapters.js` 章名不動（只改註解）；`chemistry.md`、`interfaces-stage5.md` 第 3.3 條改為定稿；DEC-019 業務驗收「三科章節表經 Owner 定稿」的化學部分滿足 |
 | B1 | 拆題後對照原卷檢查（DEC-013）維持 enforce（擋下） | 行為已定；DEC-013 核准欄仍待 Owner 明示簽核 | `SOURCE_CHECK_MODE` 維持 enforce；`requirements_tracker.md` 只在備註與決策沿革記錄 |
 | B2 | ADR-014、ADR-015 接受；ADR-017 等本機實測後再定 | 已定 | ADR-014、ADR-015 狀態改為已接受；ADR-017 維持提議並註明原因 |
@@ -50,7 +51,7 @@
 | B12 | 知識點自動標註：先試 20 題看品質 | 已定；要等知識點載入之後 | §0.2 第 15 項（`kc:backfill -- --limit 20`） |
 | B13 | 化學 eval 只當參考 | 已定 | 錄製後的分數只供參考，不設門檻、不當 CI 硬閘門（§0.2 第 16 項） |
 | B14 | 化學教學取捨：Owner 要逐項看 | 第二輪待答。〔修訂 2026-09-26 決策單第二、三輪〕第二輪已答（C1～C16，§0.00a），實作分支未合入。〔整合 2026-09-26〕實作分支（`dec/r2-chem-kc*`）已合入 ~~`dec/integration-r23`~~ `dec/integration-all`（待併 `local/integration`） | `kc-review-化學.md` |
-| B15 | 三科知識點逐章審定：找時間一次審完 | 第二輪待答。〔修訂 2026-09-26 決策單第二、三輪〕知識點審定單已答（§0.00a）；逐條 `approved` 仍只有數學 4 條，物理口語版依 P20 全面重寫後待 Ben 逐章核對。〔整合 2026-09-26〕三科種子檔的實作分支已合入 ~~`dec/integration-r23`~~ `dec/integration-all`（待併 `local/integration`）；逐條審定數不變。〔口語版核對 2026-09-26〕物理 198 條口語版 Owner 已大略看過、全部 OK，日後需要再改（`kc-review-物理.md` 第 9 節）；要不要標 `approved` 列入第五輪決策單 | 取代 §0.2 第 11 項「本週教哪章就審哪章」 |
+| B15 | 三科知識點逐章審定：找時間一次審完 | 第二輪待答。〔修訂 2026-09-26 決策單第二、三輪〕知識點審定單已答（§0.00a）；逐條 `approved` 仍只有數學 4 條，物理口語版依 P20 全面重寫後待 Ben 逐章核對。〔整合 2026-09-26〕三科種子檔的實作分支已合入 ~~`dec/integration-r23`~~ `dec/integration-all`（待併 `local/integration`）；逐條審定數不變。〔口語版核對 2026-09-26〕物理 198 條口語版 Owner 已大略看過、全部 OK，日後需要再改（`kc-review-物理.md` 第 9 節）；要不要標 `approved` 列入第五輪決策單。〔Owner 2026-09-27 第五輪 K-P 選 3〕198 條維持 `draft`（不標 `approved`），但允許 `kc:load` 載入；「物理先不跑 `kc:load`」解除（§0.00c，`dec/r6-docs-kc`） | 取代 §0.2 第 11 項「本週教哪章就審哪章」 |
 | B16 | 未收錄的主題：之後需要再補 | 已定（暫不補） | — |
 | B17 | 化學別名優先：維持 | 已定 | 「碰撞學說」「原子結構」仍要打完整章名（§0.3） |
 | B18 | 本機拆題的限制：上傳幾份卷後再看 | 待決（實測後）。〔整合 2026-09-26〕Owner 重錄 pipeline 時看圖拆題在 30 分逾時；逾時清單、量測指令與四個加速選項已由 `dec/local-vision-timeout` 補上（已合入 `dec/integration-all`），選哪一個待 Owner 決定（§0.4 第 7 項）。〔修訂 2026-09-26 決策單第四輪 V1～V4〕逾時的處理已定：Owner 的 `.env` 直接放寬（V1）、沒有獨立顯示卡（V2）、本機拆題逾時只重試 1 次（V3）、`/analyze-pdf` 本機預設每塊 2 頁（V4），見 §0.00b；「上傳幾份卷後再看」的其餘限制仍待決 | `local-mode.md` LM-12 |
@@ -64,7 +65,7 @@
 
 > 〔修訂 2026-09-26 決策單第二、三輪〕以下「知識點審定單」與 X1、X2 已由 Owner 2026-09-26 答覆，結果見 §0.00a；最後一點（A3、B18、B19、ADR-017）仍待實測或重錄。
 
-- **知識點審定單**：A6 白名單外內容要放哪一章、寫成哪幾條；A9 勘根定理的歸屬（Owner 寫「選修數甲的微積分」，草案在 `多項式函數的圖形.06`）與「期望值放在古典機率」的意思；A10 物理會改代碼的項目（審定單直接列成題目）；B14 化學教學取捨逐項看；B15 三科知識點逐章審定。這些答完之前不跑 `kc:load`，B12 的 20 題試標也等載入之後。
+- **知識點審定單**：A6 白名單外內容要放哪一章、寫成哪幾條；A9 勘根定理的歸屬（Owner 寫「選修數甲的微積分」，草案在 `多項式函數的圖形.06`）與「期望值放在古典機率」的意思；A10 物理會改代碼的項目（審定單直接列成題目）；B14 化學教學取捨逐項看；B15 三科知識點逐章審定。這些答完之前不跑 `kc:load`，B12 的 20 題試標也等載入之後。〔Owner 2026-09-27 第五輪 K-P 選 3〕三科審定單都已答；物理知識點維持草稿、允許載入，`kc:load` 不再因物理而擋（§0.00c）；數學、化學照 §0.2 第 7 項原有條件（已併入 `local/integration`，條件已成立）。
 - **X1**：本機重錄後 eval 紅燈時，A8 的 PR 能不能帶著紅燈合併。
 - **X2**：舊題補附圖（B20）要做哪幾份卷。
 - 另外等實測或重錄才定的（不在審定單上）：A3 nlq-036 計分、B18 本機拆題限制、B19 本機家教、ADR-017。
@@ -187,6 +188,47 @@
 
 **〔OCR 為主 2026-09-26〕2026-09-26 Owner 選 OCR 為主**（第四輪之後、Owner 實測 `qwen3-vl:8b` 看 1 頁樣卷 54 分鐘、JSON 還不合法）：這台電腦的拆題不看圖，只用 PaddleOCR＋`qwen3:8b` 整理；每題都停在人工複核、附圖抓不到的用 `figures:backfill` 補。落實在分支 `dec/local-ocr-first`（起點 `local/integration`）：新設定 `LOCAL_EXTRACT_MODE`（`cross` 預設不變／`ocr`；`config/localExtractMode.js`，與 `OCR_ENGINE=none` 同時設啟動就報錯）、`agents/extract.js` 的 `runLocalOcrOnly`、複核原因 `ocr_only`（`migrations/0019_ocr_only_review.sql`、`reviewController`、複核頁「只用 OCR 拆題，請核對題目與公式」）、依 PaddleOCR 版面配附圖（`ocr_pdf.py` 回報 `figures`、`agents/extractOcrFigures.js`）、`ci.yml` 與 `eval/.env.replay` 改 `LOCAL_EXTRACT_MODE: ocr`（重錄 pipeline／e2e 不再跑看圖）、`npm run perf:local` 3.4 段。Owner 要做的：更新程式後先 `npm run migrate`（到 0019），`.env` 加 `LOCAL_EXTRACT_MODE=ocr`，重啟。說明與預估時間在 [`local-mode.md`](local-mode.md) 10.12。〔審查 2026-09-26，分支 `dec/local-ocr-first-fix`〕e2e 的「部分入庫」兩項在 `ocr` 模式下設計上不會綠，照 10.12 第 7 點選項 ① 改成「全部停在複核 → 經複核 API 核准一題入庫」（`cross` 模式的原本兩項一字不改；**測試契約變更，待 Owner 裁決**）；`eval:pipeline` 的 `saved_rate` 在 `ocr` 模式固定是 0，怎麼解讀待 Owner 決定；附圖配對補了反例（上一題定位不到或被漏拆時圖不再配給下一題、截斷時整塊不配、「第 n 題」）；沒套 0019 就開 `ocr` 模式時佇列暫停、只報一次錯；`report:jobs` 多「OCR 版面配圖」一節。
 
+### 0.00c 第五輪決策（2026-09-27）〔第五輪決策 2026-09-27〕
+
+> 來源：Owner（Ben）2026-09-27 在第五輪決策單（題目與選項見 [`owner-pending-decisions-r5.md`](owner-pending-decisions-r5.md) 的 D、V5、C、O 系列，與 [`local-mode.md`](local-mode.md) 10.15 第 6 點的 LC 系列；L-1～L-3、K-P 只在決策單上）的答覆。
+> 落實分成五條分支，都從 `local/integration-r5`（`a670783`）開、各自獨立、**都還沒合入**：A＝`dec/r6-templates`、B＝`dec/r6-local-tuning`、C＝`dec/r6-gates`、D＝`dec/r6-defaults`、E＝`dec/r6-docs-kc`（本表與 K-P、O-3）。「只記錄」的題不改程式，只登錄在本表與總表的就地註記。AI 不代填任何「核准」欄；產品門檻預設與計分規則的改動只限 Owner 在本輪明確選的那幾題（V5-1～V5-3、LC-4、D-2），`eval/thresholds.json` 的門檻數字不動。
+
+| 題號 | Owner 選項 | 落實 |
+|---|---|---|
+| C-a | 1：公式重寫（lint）維持思考 | 只記錄（程式不變） |
+| C-b | 2：知識點標註關掉思考 | B＝`dec/r6-local-tuning` |
+| C-c | 2：驗算只降輸出上限到 3072（思考不動） | B＝`dec/r6-local-tuning` |
+| C-d | 1：`num_ctx` 維持 16384 | 只記錄 |
+| C-e | 2：Ollama 與其他程式的記憶體先量再決定 | 只記錄（先量） |
+| C-f | 2：本機被截斷的回應不重試，直接進複核 | B＝`dec/r6-local-tuning` |
+| C-g | 1：驗算不一致時維持原地重跑一次 | 只記錄 |
+| C-h | 1：思考模式維持溫度 0 | 只記錄 |
+| C-i | 1：分類維持一題接一題 | 只記錄 |
+| D-1 | 1：同意現況（e2e 在 OCR 模式驗「全部停在複核 → 人工核准一題入庫」） | 只記錄（現況即 `local-mode.md` 10.12 第 7 點的 ①a／①b） |
+| D-2 | 3：OCR 模式下 pipeline eval 的 `saved_rate` 印 n/a＋替代指標 | C＝`dec/r6-gates` |
+| D-3 | 2：`LOCAL_EXTRACT_MODE` 程式預設也改 `ocr` | D＝`dec/r6-defaults` |
+| D-4 | 1：OCR 整理放不下 `num_ctx` 時先不調 | 只記錄 |
+| K-P | 3：物理 198 個知識點維持草稿（`draft`），但允許 `kc:load` 載入 | E＝`dec/r6-docs-kc`：`scripts/load_kc.js`、`services/kcService.loadSeeds`、`utils/kcSeed.js` 本來就沒有擋草稿或擋物理，程式不改；加測試釘住（`test/unit/kcPhysicsDraftLoad.test.js`、`test/integration/kcLoadPhysicsDraft.pg.test.js`）；§0.00 A10、B15 與 §0.2 第 7 項的「物理先不跑 `kc:load`」加註解除 |
+| L-1 | 1：加 | C＝`dec/r6-gates` |
+| L-2 | 1：改，並一起重錄 | A＝`dec/r6-templates` |
+| L-3 | 1：支援 | C＝`dec/r6-gates` |
+| LC-1 | 2：分類輸出改成「理由先」（理由 → 章節 → 信心） | A＝`dec/r6-templates` |
+| LC-2 | 1：圓周運動、三角平方關係不加程式規則（交給模板與模型） | 只記錄 |
+| LC-3 | 2：程式界線規則也套在零成本閘門 | C＝`dec/r6-gates` |
+| LC-4 | 3：`llm` 路徑、期望多章的句子放寬計分（回的章都在期望內、至少一章） | C＝`dec/r6-gates`（**放寬計分**，門檻數字不動） |
+| O-2 | 1：kNN 投票門檻 `KNN_VOTE_SIM` 維持 0.90 | D＝`dec/r6-defaults` |
+| O-3 | 2：ADR-017 現在改寫成 OCR 為主，等重錄與上傳真卷有數字後再定案 | E＝`dec/r6-docs-kc`：ADR-017 改寫（v1.1、狀態維持「提議中／待數據定案」、新增 §3.1 定案條件），原文以〔修訂 2026-09-27〕保留；`engineering_tracker.md` ADR 索引加註 |
+| O-4 | 2：variant 重錄、重標初判之後再抽查 10～15 支 | 只記錄（重錄後做） |
+| V5-1 | 2：`VARIANT_RETRIEVE_SIM_MIN` 改 0.72 | D＝`dec/r6-defaults` |
+| V5-2 | 2：`VARIANT_OFFTOPIC_SIM_MIN` 改 0.87（暫定） | D＝`dec/r6-defaults` |
+| V5-3 | 3：`DEDUP_DUP_THRESHOLD` 改 0.99 | D＝`dec/r6-defaults` |
+| V5-4 | 1：`DEDUP_VARIANT_THRESHOLD` 維持 0.90 | D＝`dec/r6-defaults` |
+| V5-5 | 1：新門檻只改本機模式的預設 | D＝`dec/r6-defaults` |
+| V5-6 | 2：從生成端讓同一藍本的兄弟變式彼此不同 | A＝`dec/r6-templates` |
+
+- 各分支實際改了什麼、要不要重錄，以各分支在 `local-mode.md` 末尾新增的「第五輪 <組名>（2026-09-27）」一節為準（整合時重編節號）；本表只登錄答案與分支。
+- 同批另做的文件清理（cleanup 審查留下的，不是決策單題目）：README 連到 tag `v1-mysql` 的原型說明後補一句授權指路（〔審查修正 2026-09-27，`dec/r6-docs-kc-fix`〕原句「tag 內的授權宣告以主線 LICENSE 為準」和 README「授權與著作權」一節「2026-08-24 之前的歷史版本曾以 Apache-2.0 釋出」字面衝突，改為「主線現行版本以主線 `LICENSE` 為準；tag 內的歷史版本見授權與著作權一節」；只是指路、不改授權，措辭仍請 Owner 看過）；`requirements_tracker.md`、`ux_research_and_journey.md` 提到 `exam/` 的三處加〔修訂 2026-09-27〕「已自主線移除，見 tag `v1-mysql`」。都在 `dec/r6-docs-kc`。
+
 ### 0.0 章節重整（2026-09-25）〔修訂 2026-09-25 章節重整〕
 
 - **範圍**：數學 34→52 章、物理 32→34 章（刪「流體的壓力與浮力」「宇宙學簡介」，新增 4 章），對齊 108 課綱龍騰版目錄；化學章名不動（依龍騰版核對，知識點不需搬移）。契約 [`chapter-restructure.md`](chapter-restructure.md)（裁決 CR-1～CR-6 在第 8 條）、ADR-016。
@@ -239,7 +281,7 @@
 
 **C. 上線（不呼叫 LLM、不花錢；§3.4）**
 
-7. 備份 → `npm run migrate`（到 0013；〔修訂 2026-09-25 章節重整〕併入章節重整後到 0014）→ 〔修訂 2026-09-25 章節重整〕`npm run chapters:migrate`（產生提議檔 → 老師確認 → `--apply`，步驟見 [`chapter-restructure.md`](chapter-restructure.md) 第 6.1 節）→ `npm run embed:backfill`（搬過章的題重算向量，費用很小）→ **`npm run search:reindex`（必跑，緊接 migrate）** → `npm run kc:load`（先 `--dry-run`；可跳過）→ `npm run solution:backfill`（先 `--dry-run`、再 `--limit 20`、抽讀）→ 啟動。〔修訂 2026-09-26 決策單 A9／A10〕這一輪**跳過 `kc:load`**：數學歸屬要調整、物理會改代碼的項目改由第二輪審定單處理，答完、種子檔改好之後再載入。〔修訂 2026-09-26 決策單第二、三輪〕第二輪已答；三科種子檔改在 §0.00a 列的分支，合入 `local/integration` 之前仍不跑 `kc:load`。〔整合 2026-09-26〕這些分支已合入 ~~`dec/integration-r23`~~ `dec/integration-all`（待併 `local/integration`）；規則不變，併入 `local/integration` 之前仍不跑。〔修訂 2026-09-26 錯題重練第二階段〕併入錯題重練（`migrations/0016`～`0018`）之後，這一步的「備份 → `npm run migrate`」改成：**先停服務** → 更新程式 → `npm run db:backup` → `node scripts/snapshot_attempt_views.js --out=before.json` → `npm run migrate`（到 0018）→ `node scripts/snapshot_attempt_views.js --out=after.json` → `node scripts/snapshot_attempt_views.js --compare before.json after.json`，回 0（完全相同）才往下做；有差異就先別用，把輸出與兩個檔案留給開發者。**`FEATURE_RETRAIN` 關閉也一定要套**：新程式的批改、刪卷、刪學生、合併學生都會讀寫 `retrain_items`，沒套會 500。細節見 [`retrain-and-review.md`](retrain-and-review.md) 第 5.6.6 節。〔整合 2026-09-26〕錯題重練已合入 `dec/integration-all`；同一套升級步驟也寫進 `engineering_docs/06_ops/deployment_and_operations.md` §3.6。〔整合 2026-09-26〕Owner 的正式庫 2026-09-25 已走到 0015（章名遷移、換向量、`search:reindex` 都做完了），接下來只要照 §3.6 做 0016～0018（§0.4 第 6 項①），已做過的不要重做；本項的完整鏈留給還沒升到 0015 的庫，還沒做的 `kc:load`、`solution:backfill` 照本項的規則。
+7. 備份 → `npm run migrate`（到 0013；〔修訂 2026-09-25 章節重整〕併入章節重整後到 0014）→ 〔修訂 2026-09-25 章節重整〕`npm run chapters:migrate`（產生提議檔 → 老師確認 → `--apply`，步驟見 [`chapter-restructure.md`](chapter-restructure.md) 第 6.1 節）→ `npm run embed:backfill`（搬過章的題重算向量，費用很小）→ **`npm run search:reindex`（必跑，緊接 migrate）** → `npm run kc:load`（先 `--dry-run`；可跳過）→ `npm run solution:backfill`（先 `--dry-run`、再 `--limit 20`、抽讀）→ 啟動。〔修訂 2026-09-26 決策單 A9／A10〕這一輪**跳過 `kc:load`**：數學歸屬要調整、物理會改代碼的項目改由第二輪審定單處理，答完、種子檔改好之後再載入。〔修訂 2026-09-26 決策單第二、三輪〕第二輪已答；三科種子檔改在 §0.00a 列的分支，合入 `local/integration` 之前仍不跑 `kc:load`。〔整合 2026-09-26〕這些分支已合入 ~~`dec/integration-r23`~~ `dec/integration-all`（待併 `local/integration`）；規則不變，併入 `local/integration` 之前仍不跑。〔修訂 2026-09-26 錯題重練第二階段〕併入錯題重練（`migrations/0016`～`0018`）之後，這一步的「備份 → `npm run migrate`」改成：**先停服務** → 更新程式 → `npm run db:backup` → `node scripts/snapshot_attempt_views.js --out=before.json` → `npm run migrate`（到 0018）→ `node scripts/snapshot_attempt_views.js --out=after.json` → `node scripts/snapshot_attempt_views.js --compare before.json after.json`，回 0（完全相同）才往下做；有差異就先別用，把輸出與兩個檔案留給開發者。**`FEATURE_RETRAIN` 關閉也一定要套**：新程式的批改、刪卷、刪學生、合併學生都會讀寫 `retrain_items`，沒套會 500。細節見 [`retrain-and-review.md`](retrain-and-review.md) 第 5.6.6 節。〔整合 2026-09-26〕錯題重練已合入 `dec/integration-all`；同一套升級步驟也寫進 `engineering_docs/06_ops/deployment_and_operations.md` §3.6。〔整合 2026-09-26〕Owner 的正式庫 2026-09-25 已走到 0015（章名遷移、換向量、`search:reindex` 都做完了），接下來只要照 §3.6 做 0016～0018（§0.4 第 6 項①），已做過的不要重做；本項的完整鏈留給還沒升到 0015 的庫，還沒做的 `kc:load`、`solution:backfill` 照本項的規則。〔Owner 2026-09-27 第五輪 K-P 選 3〕只解除「物理先不跑 `kc:load`」：物理 198 條維持 `draft`、允許載入，仍先 `--dry-run`（§0.00c）。數學與化學不在 K-P 範圍內，照本項原有的條件「併入 `local/integration` 之前不跑」；〔現況 2026-09-27〕這個條件已成立（`dec/integration-all` 含 `dec/r2-math-kc*`、`dec/r2-chem-kc*`，已併入 `local/integration` `889d18f`），不是本輪的新決定。
 8. 瀏覽器實際走一遍核心延伸：批改卡（錯因、部分給分、對錯切換清分數）、錯因分布、學生檔案、題目詳解欄、Word 三種版本（詳解版的「AI 驗算摘要」加註）、小量化學卷上傳；貼一次 `$\href{javascript:alert(1)}{x}$` 確認不產生連結、`$\ce{2H2 + O2 -> 2H2O}$` 照常排版。
 9. 用 Microsoft Word 開一份含化學式與反應箭頭條件的卷，確認排版。
 
