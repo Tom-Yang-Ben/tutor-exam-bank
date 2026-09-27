@@ -217,6 +217,46 @@ describe('LC-2 規則 1：三角函數的疊合 → 直角三角形的邊角關�
         }
     });
 
+    // 〔審查修正 dec/r6-classify-rules-fix〕審查的自撰反例：原本這幾題都會從「疊合」被改成「直角三角形」（模型答對也被改錯）
+    test('審查反例：二次式含 sinθcosθ 交叉項（求範圍、極值、化簡）、大寫字母的倍角 → 不換', () => {
+        for (const text of [
+            '求 $\\sin^2\\theta+\\sin\\theta\\cos\\theta+2\\cos^2\\theta$ 的範圍。',
+            '$0^\\circ\\le\\theta\\le180^\\circ$，求 $\\sin^2\\theta+4\\sin\\theta\\cos\\theta+\\cos^2\\theta$ 的極值。',
+            '若 0°≤θ≤90°，則 $3\\sin^2\\theta+2\\sqrt3\\sin\\theta\\cos\\theta+\\cos^2\\theta$ 可能的值有哪些範圍？',
+            '化簡 $\\sin^2 x+\\sqrt{3}\\sin x\\cos x+2\\cos^2 x$。',
+            '化簡 $3\\cos^2 x-2\\cos x\\sin x+\\sin^2 x$。',                              // cos 在前的乘積
+            'sin²θ + sinθcosθ + 2cos²θ 化簡後為何？',                                      // Unicode 上標、純文字的乘積
+            '已知 $\\sin^2 A+\\cos^2 A=1$ 且 $\\sin A=\\frac{3}{5}$，求 $\\sin 2A$。',       // 倍角：大寫字母
+            '已知 $\\sin^2 B+\\cos^2 B=1$，求 $\\cos(2B)$。'
+        ]) {
+            assert.equal(pr.squareRelationEvidence(text), null, text);
+            assert.equal(pr.boundaryTarget(FROM, text), null, text);
+        }
+    });
+
+    test('審查修正的三項排除各自生效：只有乘積、只有「範圍／極值／可能值」、只有大寫字母的倍角', () => {
+        // 只有乘積（沒有範圍、極值的字眼）
+        assert.equal(pr.squareRelationEvidence('化簡 $\\sin^2 x+\\sqrt{3}\\sin x\\cos x+2\\cos^2 x$。'), null);
+        // 只有範圍／極值／可能值（沒有乘積）
+        assert.equal(pr.squareRelationEvidence('求 $2\\sin^2\\theta+3\\cos^2\\theta$ 的範圍。'), null);
+        assert.equal(pr.squareRelationEvidence('求 $\\sin^2\\theta-2\\cos^2\\theta$ 的極值。'), null);
+        assert.equal(pr.squareRelationEvidence('$\\sin^2\\theta+2\\cos^2\\theta$ 的可能值為何？'), null);
+        // 只有大寫字母的倍角
+        assert.equal(pr.squareRelationEvidence('已知 $\\sin^2 A+\\cos^2 A=1$，求 $\\sin 2A$。'), null);
+    });
+
+    test('收窄之後仍換：分開的兩個式子不是乘積（中間有 $、中文字、等號）；倍角的字母後面還接字母的不算', () => {
+        const cases = [
+            ['$\\theta$ 為銳角，由 $\\sin^2\\theta+\\cos^2\\theta=1$ 及 $\\sin\\theta$ 求 $\\cos\\theta$。', '\\sin^2＋\\cos^2'],
+            ['已知 $\\sin A=\\frac{3}{5}$，$A$ 為銳角，由 $\\sin^2 A+\\cos^2 A=1$ 求 $\\cos A$。', '\\sin^2＋\\cos^2'],
+            ['sin²25° + cos²25° 之值為何？', 'sin^{2}＋cos^{2}']
+        ];
+        for (const [text, evidence] of cases) {
+            assert.equal(pr.squareRelationEvidence(text), evidence, text);
+            assert.equal(pr.boundaryTarget(FROM, text).to, TO, text);
+        }
+    });
+
     test('只管「疊合 → 直角三角形」這一對：模型選別章不動', () => {
         const text = '求 $\\sin^2 25^\\circ + \\cos^2 25^\\circ$ 的值。';
         assert.equal(pr.boundaryTarget(TO, text), null, '已經是直角三角形');
@@ -319,6 +359,29 @@ describe('LC-2 規則 3：牛頓運動定律 → 摩擦力與向心力（題幹�
         }
     });
 
+    // 〔審查修正 dec/r6-classify-rules-fix〕\frac 的分子或分母有字母就不算摩擦係數（約化質量）
+    test('審查反例：約化質量 \\mu=\\frac{m_1m_2}{m_1+m_2} 不算摩擦係數；數字的 \\frac、\\sqrt 照樣算', () => {
+        for (const text of [
+            '兩物體 $m_1$、$m_2$ 以輕繩相連，定義 $\\mu=\\frac{m_1m_2}{m_1+m_2}$，求加速度。',
+            '定義約化質量 $\\mu=\\frac{m_1m_2}{m_1+m_2}$，以輕繩相連，求加速度。',
+            '約化質量 μ = 0.5 kg，受 2 N 的力，求加速度。',
+            '令 $\\mu=\\sqrt{m_1m_2}$，求加速度。'
+        ]) {
+            assert.equal(pr.frictionCoefficientEvidence(text), null, text);
+            assert.equal(pr.boundaryTarget(FROM, text), null, text);
+        }
+        const cases = [
+            ['物體與桌面間 $\\mu_s=\\frac{1}{2}$，以 6 N 拉 2 kg 物體，求加速度。', '\\mu_s=\\frac{1}{2}'],
+            ['斜面與木塊間 $\\mu = \\frac{\\sqrt{3}}{3}$，求木塊的加速度。', '\\mu = \\frac{\\sqrt{3}}{3}'],
+            ['$\\mu=\\frac12$ 的水平面上推 4 kg 的箱子，求加速度。', '\\mu=\\frac12'],
+            ['$\\mu_k=\\sqrt{3}$ 的斜面，求加速度。', '\\mu_k=\\sqrt{3}']
+        ];
+        for (const [text, evidence] of cases) {
+            assert.equal(pr.frictionCoefficientEvidence(text), evidence, text);
+            assert.equal(pr.boundaryTarget(FROM, text).to, TO, text);
+        }
+    });
+
     test('只管「牛頓運動定律 → 摩擦力與向心力」這一對', () => {
         const text = '木箱與地面的動摩擦係數為 0.3，求加速度。';
         assert.equal(pr.boundaryTarget(TO, text), null, '已經是摩擦力與向心力（不接著套規則 4）');
@@ -364,6 +427,38 @@ describe('LC-2 規則 4：摩擦力與向心力 → 平面運動（等速圓周�
             assert.equal(pr.circularKinematicsEvidence(text), null, text);
             assert.equal(pr.boundaryTarget(FROM, text), null, text);
         }
+    });
+
+    // 〔審查修正 dec/r6-classify-rules-fix〕審查的自撰反例：只「問」運動學量、但要做受力分析才解得出來。原本都會被改成「平面運動」
+    test('審查反例：只寫 μ 的轉盤、彎道、旋轉圓筒，沒寫繩的圓錐擺 → 不換', () => {
+        for (const text of [
+            '硬幣放在轉盤上隨轉盤作等速圓周運動，硬幣與轉盤間 μ = 0.4，距轉軸 0.1 m，求不滑動的最大角速度。',
+            '汽車在半徑 50 m 的水平彎道上作等速圓周運動，輪胎與路面間 $\\mu_s=0.5$，求不打滑的最大速率。',
+            '圓筒狀旋轉遊樂設施繞鉛直軸作等速圓周運動，人貼在內壁不會掉落，若 μ = 0.5、半徑 5 m，求最小轉速。',
+            '圓錐擺：擺錘在水平面上作等速圓周運動，擺長 1 m，與鉛直線夾 60°，求週期。'
+        ]) {
+            assert.equal(pr.circularKinematicsEvidence(text), null, text);
+            assert.equal(pr.boundaryTarget(FROM, text), null, text);
+        }
+    });
+
+    test('審查修正加的線索各自生效：μ、\\mu、擺、滑動、打滑、滑落、掉落、不會掉', () => {
+        for (const text of [
+            '物體隨轉盤作等速圓周運動，μ = 0.4、半徑 0.1 m，求最大角速度。',
+            '物體隨轉盤作等速圓周運動，$\\mu_s = 0.4$、半徑 0.1 m，求最大角速度。',
+            '擺錘在水平面上作等速圓周運動，擺長 1 m，求週期。',
+            '硬幣隨轉盤作等速圓周運動，距轉軸 0.1 m，求硬幣不滑動的最大角速度。',
+            '汽車在水平彎道上作等速圓周運動，半徑 40 m，求不打滑的最大速率。',
+            '物體在旋轉的圓盤上作等速圓周運動，恰好不滑落時的角速度為何？',
+            '旋轉圓筒作等速圓周運動，貼壁的人恰好不掉落，求最小轉速。',
+            '旋轉圓筒作等速圓周運動，貼壁的人不會掉下來，求最小轉速。'
+        ]) {
+            assert.equal(pr.circularKinematicsEvidence(text), null, text);
+        }
+        // 收窄後 fx-046 那一型（選項只問速率、速度、加速度方向與合力是否為零）照樣換
+        const fx046Like = '關於等速圓周運動，下列敘述何者正確？（複選）\n(A) 速率不變　(B) 速度不變　(C) 加速度指向圓心　(D) 合力為零';
+        assert.equal(pr.circularKinematicsEvidence(fx046Like), '等速圓周運動＋速率');
+        assert.equal(pr.boundaryTarget(FROM, fx046Like).to, TO);
     });
 
     test('只管「摩擦力與向心力 → 平面運動」這一對（換過去之後不再接著套 K2 的 relative_1d）', () => {

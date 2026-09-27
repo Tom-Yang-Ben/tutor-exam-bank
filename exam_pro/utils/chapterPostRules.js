@@ -34,6 +34,9 @@
 //   原則照舊：每條只管一對章、證據不明確（兩種線索都有、有別章的線索）就不換。這四條是**看著 2026-09-27 的錯題**
 //   （cls-fx-025、026、027、041、046）寫的，同一批題上的改善會高估對新題的效果；必修運動學／直線運動的一般情形
 //   （cls-fx-051 那一組）仍然不寫。
+// 〔審查修正 dec/r6-classify-rules-fix〕審查用自撰反例找到規則 1、4 的誤觸（課本常見的疊合二次式、只寫 μ 的轉盤／彎道、
+//   沒寫繩的圓錐擺）與規則 3 的約化質量 \mu=\frac{m_1m_2}{…}；三處都往「不換」的方向收窄（docs/local-mode.md 10.22 第 7 點），
+//   golden 上改對的 5 題不受影響。
 
 const { CHAPTERS, isValidChapter } = require('../config/chapters');
 const { KEYWORD_RULES, findNonCommonLogBase, findVariableExponent } = require('../config/chapterMigrationRules');
@@ -322,14 +325,28 @@ function trigAngles(text) {
 const COMPOUND_ANGLE_CUE = /疊合|和角|差角|倍角|半角|和差|積化|化積/;
 /** 角度裡有 ±（\sin(x+\phi)、\cos(60°+45°)、\sin(180°-30°)）：開頭的負號（\sin(-30°)）不算 */
 const COMPOUND_ARGUMENT_RE = new RegExp(String.raw`${TRIG_FN}${TRIG_POWER}\s*(?:\\left\s*)?\(\s*[^()]*?[0-9A-Za-z}°\u0370-\u03FF]\s*[+-]\s*[^()]*\)`);
-/** 倍角：\sin 2\theta、\cos(2x)、\sin 3α */
-const MULTIPLE_ANGLE_RE = new RegExp(String.raw`${TRIG_FN}${TRIG_POWER}\s*(?:\\left\s*)?\(?\s*\d+\s*(?:\\(?:theta|alpha|beta|gamma|phi|varphi)(?![A-Za-z])|[xtθαβγφ](?![A-Za-z]))`);
+/**
+ * 倍角：\sin 2\theta、\cos(2x)、\sin 3α、\sin 2A。
+ * 〔審查修正 dec/r6-classify-rules-fix〕變數原本只認 x、t、θ、α、β、γ、φ，「求 \sin 2A」這種大寫字母的倍角漏掉；
+ * 改成任一個單一英文字母或希臘字母（後面不能再接字母，「\sin 2 rad」的 rad 不算）。只讓規則 1 更少觸發。
+ */
+const MULTIPLE_ANGLE_RE = new RegExp(String.raw`${TRIG_FN}${TRIG_POWER}\s*(?:\\left\s*)?\(?\s*\d+\s*(?:\\(?:theta|alpha|beta|gamma|phi|varphi)(?![A-Za-z])|[A-Za-zͰ-Ͽ](?![A-Za-z]))`);
 /** 一次的 sin 與 cos 相加減（a sinθ＋b cosθ 的疊合形式，或 (sinθ＋cosθ)² 這種要另外判斷的題） */
 const LINEAR_COMBINATION_RE = new RegExp(String.raw`(?<![A-Za-z])\\?(sin|cos)(?![A-Za-z])(?!\s*\^)[^=，。,;；？?]{0,25}?[+-][^=，。,;；？?]{0,15}?\\?(?!\1)(?:sin|cos)(?![A-Za-z])(?!\s*\^)`);
+/**
+ * 〔審查修正 dec/r6-classify-rules-fix〕sin 與 cos 的一次乘積（\sin\theta\cos\theta、sin x cos x、\cos x\sin x）：
+ * 「a sin²θ＋b sinθcosθ＋c cos²θ 求範圍／極值／化簡」要用倍角化成 A＋B sin(2θ＋φ)，是第三冊疊合的典型題，
+ * 題幹同時有 sin²、cos² 也不是只用平方關係。兩個函數都不帶次方，中間不能夾加減號、等號、標點、$ 或中文字
+ * （那是兩個分開的式子，例如「由 \sin\theta 求 \cos\theta」，不是乘積）。只讓規則 1 更少觸發。
+ */
+const SIN_COS_PRODUCT_RE = new RegExp(String.raw`(?<![A-Za-z])\\?(sin|cos)(?![A-Za-z])(?!\s*\^)[^+\-=，。,;；？?$　-鿿]{0,20}?\\?(?!\1)(?:sin|cos)(?![A-Za-z])(?!\s*\^)`);
 /** 弧度：108 課綱的弧度在第三冊「三角函數的圖形」，出現弧度時「直角三角形／廣義角」這一對不一定是答案 */
 const RADIAN_CUE = /\\pi(?![A-Za-z])|π|弧度|(?<![A-Za-z])rad(?![A-Za-z])/;
-/** 第三冊的函數題材：最大最小值（疊合的典型用途）、週期、振幅、圖形 */
-const TRIG_FUNCTION_CUE = /最大值|最小值|極大|極小|值域|週期|周期|振幅|圖形|圖像/;
+/**
+ * 第三冊的函數題材：最大最小值、範圍、極值（疊合的典型用途）、週期、振幅、圖形。
+ * 〔審查修正 dec/r6-classify-rules-fix〕加「範圍、極值、可能值」：「求 …sin²θ＋…cos²θ 的範圍／極值」是疊合題。
+ */
+const TRIG_FUNCTION_CUE = /最大值|最小值|極大|極小|極值|值域|範圍|可能值|可能的值|週期|周期|振幅|圖形|圖像/;
 /** 廣義角的題材（CHAPTER_RELABEL 第 0 節：廣義角與同界角、以坐標定義的三角比、參考角與象限正負號、極坐標） */
 const GENERAL_ANGLE_CUE = /廣義角|象限|終邊|同界|標準位置|參考角|單位圓|極坐標|極座標/;
 /** 解三角形的題材：鈍角三角形的角可以大於 90°，那是「正弦與餘弦定理」「三角測量」，不一定是廣義角 */
@@ -351,12 +368,15 @@ function squaredTrig(s, fn) {
  * K3＋Owner 2026-09-27 規則 1：題幹的三角運算只有平方關係（sin²θ＋cos²θ＝1、1＋tan²θ＝sec²θ 這類），
  * 沒有和角、差角、倍角、疊合（a sinθ＋b cosθ）、第三冊的函數題材、弧度，也沒有廣義角的線索（角度 >90° 或 <0°、象限、終邊…）。
  * 平方關係對廣義角也成立（第二冊「廣義角與極坐標」也教），有廣義角線索時不判斷。
+ * 〔審查修正 dec/r6-classify-rules-fix〕sinθcosθ 的一次乘積（SIN_COS_PRODUCT_RE）、範圍／極值（TRIG_FUNCTION_CUE）、
+ * 大寫字母的倍角（MULTIPLE_ANGLE_RE）也不判斷：「求 sin²θ＋sinθcosθ＋2cos²θ 的範圍」是疊合題，原本會被改錯。
  * @param {string} text
  * @returns {string|null} 命中的原文
  */
 function squareRelationEvidence(text) {
     const s = normalizeTrigText(text);
     if (COMPOUND_ANGLE_CUE.test(s) || COMPOUND_ARGUMENT_RE.test(s) || MULTIPLE_ANGLE_RE.test(s) || LINEAR_COMBINATION_RE.test(s)) return null;
+    if (SIN_COS_PRODUCT_RE.test(s)) return null;   // 〔審查修正 dec/r6-classify-rules-fix〕sinθcosθ 交叉項：倍角／疊合
     if (RADIAN_CUE.test(s) || TRIG_FUNCTION_CUE.test(s) || GENERAL_ANGLE_CUE.test(s) || /正弦定理|餘弦定理/.test(s)) return null;
     if (trigAngles(s).some(a => a.deg > 90 || a.deg < 0)) return null;
     const word = s.match(/平方關係/);
@@ -396,13 +416,25 @@ const FRICTION_WORD_RE = /[動靜]?摩擦係數|動摩擦|靜摩擦/g;
 const FRICTION_NEGATION_BEFORE = /(?:不計|忽略|無|沒有|不考慮|不含)[^，。；,;？?]{0,2}$/;
 const FRICTION_NEGATION_AFTER = /^[^，。；,;？?]{0,4}?(?:不計|可忽略|忽略不計|為零|=\s*0(?![.\d])|為\s*0(?![.\d]))/;
 /**
+ * 〔審查修正 dec/r6-classify-rules-fix〕μ 後面的「數」：小數、整數、數字的 \sqrt、分子分母都是數字的 \frac
+ * （\frac{1}{2}、\frac12、\frac{\sqrt{3}}{3}）。原本只要是 \frac 或 \sqrt 就算，
+ * 「定義 \mu=\frac{m_1m_2}{m_1+m_2}（約化質量）」會被當成摩擦係數；分子或分母有字母就不算。
+ */
+const MU_PLAIN_NUMBER = String.raw`\d+(?:\.\d+)?|\.\d+`;
+const MU_SQRT_NUMBER = String.raw`\\sqrt\s*(?:\{\s*\d+(?:\.\d+)?\s*\}|\d)`;
+const MU_FRAC_ARG = String.raw`(?:\{\s*(?:${MU_PLAIN_NUMBER}|${MU_SQRT_NUMBER})\s*\}|\d)`;
+const MU_FRAC_NUMBER = String.raw`\\[dt]?frac\s*${MU_FRAC_ARG}\s*${MU_FRAC_ARG}`;
+/**
  * 符號 μ 當摩擦係數：後面是關係符號再接一個數（μ＝0.2、\mu_k = 0.1、μs 為 0.4、\mu = \frac{1}{2}）。
  * μm、μC、μs（微秒）後面沒有關係符號；「μ 為線密度」後面不是數；\mu_0（磁導率）的下標不是 k／s。
  * micro 符號 µ（U+00B5）經 NFKC 變成 μ。第 1 組是那個數（＝0 表示沒有摩擦，不算）。
  */
-const MU_RELATION_RE = /(?:\\mu|μ)(?![A-Za-z])\s*(?:_\s*\{?\s*(?:\\(?:text|mathrm)\s*\{\s*)?[ksKS靜動]\s*\}?\s*\}?)?\s*(?:=|為|是|<|>|≤|≥|≈|\\(?:le|ge|leq|geq|approx)(?![A-Za-z]))\s*\$?\s*(\d+(?:\.\d+)?|\.\d+|\\[dt]?frac(?![A-Za-z])|\\sqrt(?![A-Za-z]))/;
-/** μ 的其他意思：磁導率（μ₀）、電學的微（μC、μA）、弦的線密度；題幹有這些題材時，只有符號 μ 不算證據 */
-const MU_OTHER_CONTEXT = /磁|電荷|電場|電流|電位|電壓|電容|電阻|導線|線圈|線密度|弦|波|\\mu\s*_\s*\{?\s*0|μ\s*_?\s*\{?\s*0/;
+const MU_RELATION_RE = new RegExp(String.raw`(?:\\mu|μ)(?![A-Za-z])\s*(?:_\s*\{?\s*(?:\\(?:text|mathrm)\s*\{\s*)?[ksKS靜動]\s*\}?\s*\}?)?\s*(?:=|為|是|<|>|≤|≥|≈|\\(?:le|ge|leq|geq|approx)(?![A-Za-z]))\s*\$?\s*(${MU_FRAC_NUMBER}|${MU_SQRT_NUMBER}|${MU_PLAIN_NUMBER})`);
+/**
+ * μ 的其他意思：磁導率（μ₀）、電學的微（μC、μA）、弦的線密度、約化質量；題幹有這些題材時，只有符號 μ 不算證據。
+ * 〔審查修正 dec/r6-classify-rules-fix〕加「約化質量」（「約化質量 μ＝0.5 kg」後面是數，靠這一條排除）。
+ */
+const MU_OTHER_CONTEXT = /磁|電荷|電場|電流|電位|電壓|電容|電阻|導線|線圈|線密度|弦|波|約化質量|\\mu\s*_\s*\{?\s*0|μ\s*_?\s*\{?\s*0/;
 /**
  * 功與能量、動量的題材（功與動能、位能與能量守恆、動量與衝量…另一組章）：題幹有這些題材時，
  * 「牛頓運動定律／摩擦力與向心力」「摩擦力與向心力／平面運動」這兩對不一定是答案，不判斷。
@@ -439,8 +471,12 @@ const CIRCULAR_KINEMATIC_RE = /向心加速度|角速度|加速度|速率|速度
  * 受力計算的線索：向心力、張力、摩擦、各種力的名稱、質量（F＝ma 要用）、力的單位 N、「求…力」「力的大小／方向為何」。
  * 選項裡「合力為零」這種要判斷對錯的敘述不算受力計算（CHAPTER_RELABEL 第 8.1 節 #46 的 Owner 裁決理由：
  * 「四個選項只問速率、速度、加速度方向與合力是否為零，是運動學」）；「求合力」「合力的大小／方向為何」算。
+ * 〔審查修正 dec/r6-classify-rules-fix〕加五類線索，都是「只問運動學量、但要做受力分析才解得出來」的寫法：
+ *   摩擦係數的符號 μ、\mu（沒寫「摩擦」二字的轉盤、彎道、旋轉圓筒題；規則 3 也把 μ 當摩擦的證據，兩條一致）；
+ *   擺（圓錐擺、擺錘、擺長：沒寫「繩」也要拆張力）；滑動、打滑、滑落（不滑動的最大角速度、不打滑的最大速率）；
+ *   掉落、不會掉（旋轉圓筒貼壁）。只讓規則 4 更少觸發。
  */
-const CIRCULAR_FORCE_RE = /向心力|張力|摩擦|拉力|推力|正向力|法向力|支撐力|離心力|引力|重力|重量|質量|公斤|kg|牛頓|施力|受力|作用力|力矩|繩|細線|彈簧|壓力|\\mathrm\s*\{\s*N\s*\}|(?<![A-Za-z\\])N(?![A-Za-z])|多大的力|求[^。，,；;？?]{0,8}力|力[^。，,；;？?]{0,4}(?:大小|量值|多少|為何|多大|方向)/;
+const CIRCULAR_FORCE_RE = /向心力|張力|摩擦|拉力|推力|正向力|法向力|支撐力|離心力|引力|重力|重量|質量|公斤|kg|牛頓|施力|受力|作用力|力矩|繩|細線|彈簧|壓力|\\mathrm\s*\{\s*N\s*\}|(?<![A-Za-z\\])N(?![A-Za-z])|多大的力|求[^。，,；;？?]{0,8}力|力[^。，,；;？?]{0,4}(?:大小|量值|多少|為何|多大|方向)|μ|\\mu(?![A-Za-z])|擺|滑動|打滑|滑落|掉落|不會掉/;
 /**
  * 等速圓周運動只是工具、題目屬別章的題材：簡諧運動（圓周運動的投影）、帶電粒子在磁場中、行星與衛星（重力場）、
  * 轉動與角動量。題幹有這些題材時不判斷。

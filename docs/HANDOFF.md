@@ -214,7 +214,7 @@
 | L-2 | 1：改，並一起重錄 | A＝`dec/r6-templates` |
 | L-3 | 1：支援 | C＝`dec/r6-gates` |
 | LC-1 | 2：分類輸出改成「理由先」（理由 → 章節 → 信心） | A＝`dec/r6-templates` |
-| LC-2 | 1：圓周運動、三角平方關係不加程式規則（交給模板與模型）〔Owner 2026-09-27 改答：加四條規則〕classify.v2 本機重錄（86/92、macro-F1 0.8477 未達門檻）後改答：在 `utils/chapterPostRules.js` 加平方關係、廣義角、摩擦係數、等速圓周運動的運動學四條界線規則（程式後處理，不改模板與 schema、不必重錄） | ~~只記錄~~ `dec/r6-classify-rules`（從 `dec/r6-recorded-step1` `7536493` 開，不在上面五條分支內；[`local-mode.md`](local-mode.md) 10.22：replay 91/92、macro-F1 0.9744，仍錯 cls-fx-051） |
+| LC-2 | 1：圓周運動、三角平方關係不加程式規則（交給模板與模型）〔Owner 2026-09-27 改答：加四條規則〕classify.v2 本機重錄（86/92、macro-F1 0.8477 未達門檻）後改答：在 `utils/chapterPostRules.js` 加平方關係、廣義角、摩擦係數、等速圓周運動的運動學四條界線規則（程式後處理，不改模板與 schema、不必重錄） | ~~只記錄~~ `dec/r6-classify-rules`（從 `dec/r6-recorded-step1` `7536493` 開，不在上面五條分支內；[`local-mode.md`](local-mode.md) 10.22：replay 91/92、macro-F1 0.9744，仍錯 cls-fx-051）〔審查修正 `dec/r6-classify-rules-fix`〕規則 1、3、4 往「不換」的方向收窄、誤觸檢查補掃拆題回放檔與 pdf_sample golden（10.22 第 7 點），分數不變 |
 | LC-3 | 2：程式界線規則也套在零成本閘門 | C＝`dec/r6-gates` |
 | LC-4 | 3：`llm` 路徑、期望多章的句子放寬計分（回的章都在期望內、至少一章） | C＝`dec/r6-gates`（**放寬計分**，門檻數字不動） |
 | O-2 | 1：kNN 投票門檻 `KNN_VOTE_SIM` 維持 0.90 | D＝`dec/r6-defaults` |
