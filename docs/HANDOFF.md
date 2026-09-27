@@ -265,7 +265,7 @@
 2. 跑 `wsl_memory_check.bat` 看 Smart App Control 是不是關閉（DA-9 的前提，10.4）；開啟或評估模式就先回報，不要自己改。
 3. 沒有重錄、沒有上傳時照 10.2 設 `.wslconfig` 上限（生效與否看 log 的「[.wslconfig 是否生效]」），並在閒置／上傳／重錄三種情況各跑一次檢查（10.3；「設上限前的重錄」要在下一輪重錄時量），把 log 交給維護的人，再決定 D2 做不做（DA-14）。
 4. 之後才會問的：B3 開工前 DA-6「B3 之後改不改 U2」；要改走退路時 DA-5；重新啟用 Gemini 時 DA-8 的 `safeStorage`。
-5. 〔提案 2026-09-27〕**desktop 納入 CI 與 dependabot**（`desktop-app-design.md` 6.2 節「留給之後」第一點、R-7）：**已備妥分支 `dec/r8-desktop-ci`（從 `dec/integration-r8` `9d27210` 開），待 Owner 同意**。`ci.yml` 加第三個 job `desktop`（Node 24：裝 exam_pro 與 desktop 的相依套件、不下載 Electron 執行檔、跑 `desktop` 的 `npm test`；既有兩個 job 不動），`dependabot.yml` 加 `/desktop`（照 `/exam_pro` 的每週一與分組；Electron 大版本各開一個 PR）。做什麼、代價（其中一項：Dependabot 的 Electron PR 會被 `desktop/test/package.test.js` 的版本鎖擋成紅燈，要照步驟升級，不能直接合併）、不做的風險、選項與建議（建議：兩個都做）都在 6.2 節「決策說明：desktop 納入 CI 與 dependabot」。**這是提案分支：Owner 同意之前，整合時不要併入**。
+5. 〔待 Owner 決定，2026-09-27〕**desktop 納入 CI 與 dependabot**（`desktop-app-design.md` R-7）：提案分支 `dec/r8-desktop-ci-fix`（`dec/r8-desktop-ci` 加審查修正；基底 `dec/integration-r8` `9d27210`）已備妥，**Owner 同意之前不併入任何整合分支**（只有這一行可以先進整合分支）。要決定的是：① CI 加 `desktop` job（每次 push 與 PR 跑桌面版的 `npm test`，不下載 Electron）；② Dependabot 加 `/desktop`（Electron 有新版就開 PR；PR 會被版本鎖弄成紅燈，要照步驟升級才合併；紅燈能不能真的擋住合併要看分支保護〔要實測〕）；③ `/desktop` 要不要照 `/exam_pro` 分組（照慣例分組可能壓掉大版本的 PR〔推論〕）。建議：選 1（兩個都做），分組選 B（不分組）。代價、不做的風險、選項與要實測的事，寫在提案分支的 `docs/desktop-app-design.md` 6.2 節「決策說明：desktop 納入 CI 與 dependabot」（`git show dec/r8-desktop-ci-fix:docs/desktop-app-design.md`）。Owner 回覆的格式：「同意，選 1，分組選 B」。
 
 ### 0.0 章節重整（2026-09-25）〔修訂 2026-09-25 章節重整〕
 

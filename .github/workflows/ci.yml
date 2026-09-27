@@ -2,7 +2,7 @@ name: CI
 
 # 系統本體與測試都在 exam_pro 底下（舊版原型 exam/ 已於 2026-09-27 從主線移除，
 # 原始碼保留在 tag v1-mysql），
-# 因此所有 run 步驟都設定 working-directory: exam_pro。
+# 因此 unit、integration 兩個 job 的 run 步驟都設定 working-directory: exam_pro。
 #
 # 兩個 job（規劃 §5.3.4）：
 #   unit         矩陣 22/24，**不連資料庫、不呼叫 Gemini、不需要任何 secrets**。
@@ -13,9 +13,10 @@ name: CI
 #                跑 migrations、整合測試與五個 eval suite；同樣不需要 secrets——
 #                embedding 走 fixture（EMBED_MODE=fixture）、LLM 走 replay。
 #
-# 〔提案 2026-09-27，分支 dec/r8-desktop-ci，待 Owner 同意〕另加第三個 job：
+# 〔提案 2026-09-27，待 Owner 同意〕另加第三個 job：
 #   desktop      Node 24，只跑 desktop/（Electron 桌面殼）的純函式測試（node --test）。
 #                不下載 Electron 執行檔、不開視窗、不連資料庫、不需要 secrets；說明在該 job 上方。
+#                run 步驟預設在 desktop/，只有安裝 exam_pro 相依套件那一步在 exam_pro/。
 #
 # 本機模式（docs/local-mode.md，2026-09-25）：模型預設改成本機 Ollama，cassette 與 embedding fixture
 # 由 Owner 在自己的電腦上以本機模型錄（npm run cassettes:rerecord，照本檔下方的模型）。
@@ -187,17 +188,21 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
-  # ── desktop（〔提案 2026-09-27〕分支 dec/r8-desktop-ci，待 Owner 同意；docs/desktop-app-design.md 6.2「留給之後」、R-7）──
+  # ── desktop（〔提案 2026-09-27〕待 Owner 同意；docs/desktop-app-design.md 6.2「決策說明：desktop 納入 CI 與 dependabot」、R-7）──
   # 跑 desktop/ 的 npm test（node --test）：關閉／系統匣的規則、權限與導覽、下載、環境變數、
   # A 的文字換成桌面版說法、主行程↔後端的訊息（假的 utilityProcess）、啟動流程（真的 A 的 plan＋假的 I/O）。
-  # 這些測試**不需要 Electron**（desktop/test/package.test.js 釘住「只有 main.js 與冒煙測試 require electron」）。
+  # 這些測試**不需要 Electron**。desktop/test/package.test.js 只靜態檢查 lib/ 與 backend-entry.js 不 require electron；
+  # 測試檔本身、以及測試載入的 exam_pro 模組沒有這道檢查，所以下面在測試前後各確認一次。
   #
   # 不下載 Electron 執行檔（壓縮後一百多 MB）：
   #   - Electron 44 起 npm 套件沒有 postinstall，執行檔改成第一次執行 electron 時才下載，所以 npm ci 本來就不下載
   #     （desktop/package-lock.json 的 electron 沒有 hasInstallScript；2026-09-27 實測 npm ci 後沒有 dist/）。
   #   - 舊版用的 ELECTRON_SKIP_BINARY_DOWNLOAD 在 44 已經沒有任何程式讀它，所以不靠它；
   #     改用 npm ci --ignore-scripts：不管 Dependabot 之後升到哪一版，安裝時都不會執行任何腳本。
-  #   - 下一步再確認 node_modules/electron/dist 真的不存在，這件事在 workflow 上看得見。
+  #   - 安裝後、測試後各確認一次 node_modules/electron 底下沒有 dist 與 path.txt：
+  #     44 的 node_modules/electron/index.js 在 require('electron') 時，找不到 path.txt 或 dist 就會自己執行
+  #     install.js 下載。以後哪一則測試不小心 require('electron')，CI 會下載成功、測試照樣綠，
+  #     只有測試後這一步會紅，退步才看得見。
   #   - 真的 Electron 的冒煙測試（npm run smoke：xvfb＋測試庫）**不在 CI**，仍在本機與 Owner 驗收時跑。
   #
   # 也要裝 exam_pro 的相依套件：desktop 的測試直接載入 exam_pro 的程式（A 的 plan.js／probes.js、
@@ -228,8 +233,11 @@ jobs:
       - name: 安裝 desktop 的相依套件（不執行安裝腳本＝不下載 Electron 執行檔）
         run: npm ci --ignore-scripts
 
-      - name: 確認沒有下載 Electron 執行檔
+      - name: 確認安裝時沒有下載 Electron 執行檔
         run: test ! -e node_modules/electron/dist && test ! -e node_modules/electron/path.txt
 
       - name: desktop 的單元測試（node --test，不需要 Electron）
         run: npm test
+
+      - name: 確認測試時也沒有下載 Electron 執行檔（require('electron') 會自動下載）
+        run: test ! -e node_modules/electron/dist && test ! -e node_modules/electron/path.txt

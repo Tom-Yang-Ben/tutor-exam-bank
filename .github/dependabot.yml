@@ -12,13 +12,15 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
-  # 〔提案 2026-09-27，分支 dec/r8-desktop-ci，待 Owner 同意〕桌面版（Electron 殼，docs/desktop-app-design.md R-7）。
-  # 頻率、PR 上限與分組照上面 /exam_pro。desktop/package.json 的直接相依只有 electron（鎖死 44.4.5）：
-  #   - 44.x 的修補版／小版本（Electron 的安全修正通常以修補版發到仍在支援的大版本）→ minor-and-patch 這一組的 PR；
-  #   - 大版本（45、46…）不在分組裡 → 每一版各開一個 PR；沒有 ignore，大版本不會被略過。
-  #     Electron 只支援最新三個大版本（約半年；44 支援到 2027-03-02），大版本的 PR 就是「該升級了」的提醒。
-  # electron 的 PR 在 CI 的 desktop job 會紅（desktop/test/package.test.js 鎖定版本號）：這是刻意的關卡，
-  # 不能直接按合併；升級步驟見 docs/desktop-app-design.md 6.2「留給之後」的決策說明。
+  # 〔提案 2026-09-27，待 Owner 同意〕桌面版（Electron 殼，docs/desktop-app-design.md R-7）。
+  # 頻率、PR 上限與分組照上面 /exam_pro。desktop/package.json 的直接相依只有 electron（鎖死 44.4.5）。
+  # GitHub 文件的說法：修補版／小版本 → minor-and-patch 這一組的 PR；大版本（45、46…）→ 各開一個 PR；沒有 ignore。
+  # 兩個例外〔推論，依 dependabot-core 原始碼與 issue #14202，要實測〕：
+  #   - 這一組還有開著的 PR 時，組內所有套件（這裡就是 electron）都被當成已處理，大版本的 PR 可能開不出來；
+  #   - 最新版已經是新的大版本時，electron 不進這一組，只會有大版本的 PR，不會再有 44.x 修補版的 PR。
+  #   對策與「/desktop 不分組」的選項見 docs/desktop-app-design.md 6.2「決策說明」。
+  # electron 的 PR 在 CI 的 desktop job 會紅（desktop/test/package.test.js 鎖定版本號）：這是刻意的提醒，
+  # 要照步驟升級才合併。紅燈能不能真的擋住合併，要看 main 有沒有把 desktop 設成必要檢查（同一段決策說明）。
   - package-ecosystem: npm
     directory: /desktop
     schedule:
