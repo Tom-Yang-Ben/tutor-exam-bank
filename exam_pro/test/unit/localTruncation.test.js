@@ -210,11 +210,12 @@ describe('runner（假 db）：本機被截斷不重試（C-f）', () => {
         assert.deepEqual(sleeps, [], '沒有退避睡眠（不重試）');
     });
 
-    test('Gemini：照舊重試（verify:error＋1、退避一次），事件一樣記 finish_reason', async () => {
+    test('Gemini：照舊重試（verify:error＋1、退避一次），事件 detail 不多 finish_reason（Gemini 路徑與之前相同）', async () => {
         const { upd, sleeps, detail } = await runOnce({ model: 'gemini:gemini-3.1-pro-preview' });
         assert.deepEqual([upd.params[1], JSON.parse(upd.params[2]), upd.params[3]], ['source_checked', { 'verify:error': 1 }, null]);
         assert.equal(sleeps.length, 1);
-        assert.equal(detail.finish_reason, 'MAX_TOKENS');
+        assert.equal('finish_reason' in detail, false, 'Gemini 的 error 事件不記 finish_reason');
+        assert.deepEqual(Object.keys(detail).sort(), ['message', 'review_reason'], 'Gemini 的 error 事件 detail 只有原本的鍵');
     });
 
     test('本機但沒被截斷（finishReason STOP）：照舊重試；事件 detail 的 finish_reason 照實記', async () => {
@@ -258,8 +259,12 @@ describe('複核頁（public/js/review.js）：output_truncated 的標籤與說�
         assert.match(SOURCE, /output_truncated: 'slate'/);
         const { reasonSentence } = await import('data:text/javascript;charset=utf-8,' + encodeURIComponent(SOURCE));
         const s = reasonSentence('output_truncated', { extract: { question_text: '題幹' } });
-        assert.match(s, /^本機模型的回應寫到輸出上限被截斷/);
+        assert.match(s, /^本機模型寫到這一步的輸出上限被截斷/);
         assert.match(s, /不重試/);
         assert.match(s, /OLLAMA_MAX_OUTPUT_VERIFY/);
+        // classify、lint 被截斷也進這個原因：說明句不能把「驗算上限 3072」當成這一步的上限，也要給這兩步的調整方向
+        assert.doesNotMatch(s, /（驗算上限 3072 token）/);
+        assert.match(s, /OLLAMA_NUM_CTX_CLASSIFY/);
+        assert.match(s, /_LINT/);
     });
 });

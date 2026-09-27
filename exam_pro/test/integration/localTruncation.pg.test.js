@@ -6,7 +6,7 @@
 //      亂寫的值仍拒絕、再套一次約束定義與資料都不變；runner 的前置查詢（outputTruncatedAccepted）在兩種庫上各回 false／true。
 //   2. runner＋真的 verify agent＋真的狀態機：驗算模型是 ollama、回應被截斷（finishReason='MAX_TOKENS'）→
 //      一次就 needs_review('output_truncated')、retries 不動、job_events 記 schema_invalid＋detail.finish_reason；
-//      驗算模型是 Gemini → 照舊留在 source_checked、verify:error＝1（會重試）。
+//      驗算模型是 Gemini → 照舊留在 source_checked、verify:error＝1（會重試），事件 detail 不記 finish_reason。
 // 需要 TEST_DATABASE_URL（庫名以 _test 結尾）；沒設時整檔跳過。
 // ─────────────────────────────────────────────────────────────
 const { test, describe, before, after } = require('node:test');
@@ -174,7 +174,7 @@ function runSuite() {
         test('Gemini：照舊留在 source_checked、verify:error＝1（之後會重試），不是 output_truncated', async () => {
             const { jq, events } = await runWith('gemini:gemini-3.1-pro-preview');
             assert.deepEqual([jq.state, jq.review_reason, jq.retries], ['source_checked', null, { 'verify:error': 1 }]);
-            assert.equal(events[0].detail.finish_reason, 'MAX_TOKENS');
+            assert.equal('finish_reason' in events[0].detail, false, 'Gemini 路徑的事件不多 finish_reason');
         });
     });
 }

@@ -272,7 +272,8 @@ async function ocrOnlySchemaProblem(db) {
 const OUTPUT_TRUNCATED_SCHEMA_MESSAGE =
     '本機模型的回應被截斷（寫到輸出上限），照 Owner 第五輪 C-f 不重試、直接進人工複核；但資料庫還沒套 ' +
     'migrations/0020_output_truncated_review.sql（複核原因 output_truncated），這次先以原本的原因（schema_invalid）進複核。' +
-    '請在 exam_pro 執行 npm run migrate（不必重啟）。';
+    '請在 exam_pro 執行 npm run migrate（不必重啟）。注意：這段期間以 schema_invalid 進複核的本機題其實是被截斷、一次都沒重試，' +
+    '複核頁「重試已用盡、重跑通常就會過」的說明對它們不成立（重跑多半還是會截斷），請當成被截斷的題處理。';
 
 /**
  * 〔Owner 第五輪 C-f〕job_questions.review_reason 的 CHECK 接不接受 'output_truncated'（migration 0020）。
@@ -1173,8 +1174,10 @@ function createRunner(opts = {}) {
                 detail: {
                     ...(outcome.kind === 'fail' ? { reason: outcome.reason, feedback: outcome.feedback } : {}),
                     ...(outcome.kind === 'error' ? { message: outcome.message } : {}),
-                    // 〔Owner 第五輪 C-f〕被截斷的 error 記下 finish_reason（有才記；其餘事件的 detail 與之前相同）
-                    ...(outcome.kind === 'error' && outcome.finishReason ? { finish_reason: outcome.finishReason } : {}),
+                    // 〔Owner 第五輪 C-f〕本機模型（ollama）的 error 記下 finish_reason（有才記）。只限本機：
+                    // Gemini 的 schema_invalid 也帶 finishReason（services/llm/gemini.js），但 Gemini 路徑的事件照舊不多這一欄。
+                    ...(outcome.kind === 'error' && outcome.finishReason && isLocalModelSpec(meter.lastModel)
+                        ? { finish_reason: outcome.finishReason } : {}),
                     ...(meter.usageMetadata.length > 0 ? { usage_metadata: meter.usageMetadata } : {}),
                     ...(schemaFallbackOf(meter, outcome) ? { schema_fallback: true } : {}),
                     // 階段 3 第 5.2 條：classify 是哪一層決定的（'gate'／'llm'／'knn'）要進事件，

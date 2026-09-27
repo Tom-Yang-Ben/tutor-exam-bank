@@ -243,7 +243,7 @@
 
 ### C-f　被截斷的回應要不要重試
 
-> 〔Owner 2026-09-27 選 2〕已落實於 `dec/r6-local-tuning`：本機被截斷（`done_reason=length`）的 classify／lint／verify 不重試、直接 `needs_review('output_truncated')`（migration 0020）；Gemini 照舊 3 次；local-mode.md 10.16
+> 〔Owner 2026-09-27 選 2〕已落實於 `dec/r6-local-tuning`：本機被截斷（`done_reason=length`）的 classify／lint／verify 不重試、直接 `needs_review('output_truncated')`（migration 0020）；Gemini 照舊 3 次；local-mode.md 10.16；審查修正（複核頁說明不綁驗算、Gemini 事件不多 finish_reason、變式／拆題分塊不在範圍內寫明）已落實於 `dec/r6-local-tuning-fix`，見 10.16 第 6 點
 
 - **背景**：本機模型寫到輸出上限時回應被截斷、JSON 不完整，驗算與 lint 會當成錯誤重試 3 次；溫度 0 下同一題重跑，多半又寫到上限，白等 3 次。
 - **問題**：本機模式被截斷的回應要不要改成不重試、直接進人工複核？
