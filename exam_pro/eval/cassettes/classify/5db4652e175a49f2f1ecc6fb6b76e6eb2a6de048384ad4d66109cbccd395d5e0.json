@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T06:43:04.062Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4406,
+        "sha256": "70c958d4b86d4eb05796445a9d262fe5d2427f0a0c9477342d2d4e19800b4053"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "$\\log_{3} 27 + \\log_{3} 9$ 之值為何？\n(A) $3$　(B) $4$　(C) $5$　(D) $6$",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及對數的運算，使用對數律計算兩個對數的和，屬於指數與對數的運算範疇。",
+      "chapter": "指數與對數",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3954,
+      "tokenOut": 63,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 61966,
+        "loadMs": 36,
+        "promptEvalMs": 21775,
+        "evalMs": 40116
+      }
+    },
+    "latencyMs": 61982
+  }
+}

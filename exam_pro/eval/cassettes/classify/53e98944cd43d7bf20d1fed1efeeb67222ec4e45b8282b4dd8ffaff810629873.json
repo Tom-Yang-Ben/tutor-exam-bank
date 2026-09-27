@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:31:46.648Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2911,
+        "sha256": "c351a70995442da4b5a67f838c3b5802303542ebd8fbb7e8996b5340181bb617"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "物體由靜止出發，以 $3$ m/s$^2$ 的等加速度直線前進，求 $4$ 秒後的位移。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及等加速度直線運動的位移計算，需使用直線運動的公式。",
+      "chapter": "直線運動",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 2796,
+      "tokenOut": 50,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 56357,
+        "loadMs": 1125,
+        "promptEvalMs": 18212,
+        "evalMs": 36934
+      }
+    },
+    "latencyMs": 56874
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:03:33.176Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4430,
+        "sha256": "b0b16ea93c114327e6d916dd900b029151a405fedb0ceaa5524f9d9a493bd65a"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "兩個非零空間向量 $\\vecc{a}$ 與 $\\vecc{b}$ 的內積為 $0$，代表兩者的關係為何？\n(A) 互相垂直　(B) 互相平行　(C) 長度相等　(D) 方向相同",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及空間向量內積為零，代表兩向量垂直，屬於空間向量內積的觀念。",
+      "chapter": "空間向量內積",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3970,
+      "tokenOut": 57,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 48967,
+        "loadMs": 9,
+        "promptEvalMs": 12426,
+        "evalMs": 36498
+      }
+    },
+    "latencyMs": 48971
+  }
+}

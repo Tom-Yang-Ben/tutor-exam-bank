@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:06:46.005Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4364,
+        "sha256": "94ab1c1186f4c4e767ec6b6315d3cee8ac26d9e2e612b23ec35ba41637fd22ee"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "$\\sin 150^\\circ$ 之值為何？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目要求計算 $\theta = 150^\text{o}$ 的正弦值，涉及特殊角的三角函數值計算，屬於直角三角形的邊角關係範疇。",
+      "chapter": "直角三角形的邊角關係",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3923,
+      "tokenOut": 76,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 70773,
+        "loadMs": 13,
+        "promptEvalMs": 12161,
+        "evalMs": 58564
+      }
+    },
+    "latencyMs": 70777
+  }
+}

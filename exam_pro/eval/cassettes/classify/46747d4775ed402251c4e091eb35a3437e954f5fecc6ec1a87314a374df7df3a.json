@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T06:58:55.583Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4409,
+        "sha256": "d94affda5db88d5153ecd1d7a2881acb687287084ec19d2924a3b74d14849df2"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "設空間向量 $\\vec{a} = (1, 1, 0)$、$\\vec{b} = (0, 1, 1)$，求兩向量的夾角 $\\theta$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目要求計算空間向量的夾角，需使用向量內積公式計算餘弦值，屬於空間向量內積的應用。",
+      "chapter": "空間向量內積",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3956,
+      "tokenOut": 63,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 61417,
+        "loadMs": 10,
+        "promptEvalMs": 19764,
+        "evalMs": 41606
+      }
+    },
+    "latencyMs": 61423
+  }
+}

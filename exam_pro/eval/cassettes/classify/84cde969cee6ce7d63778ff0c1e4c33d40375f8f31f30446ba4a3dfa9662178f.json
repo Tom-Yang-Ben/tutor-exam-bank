@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T06:45:34.515Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4387,
+        "sha256": "b8c49fcd1a005e51dec292d9666b68dc1ae74c1bbfbebe9b83008b2716c086af"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "已知 $\\log_{10} 2 = 0.3010$，求 $2^{50}$ 是幾位數的整數。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目需計算 $2^{50}$ 的位數，涉及對數運算與科學記號，屬於指數與對數的應用。",
+      "chapter": "指數與對數",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3943,
+      "tokenOut": 63,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 58956,
+        "loadMs": 10,
+        "promptEvalMs": 18411,
+        "evalMs": 40503
+      }
+    },
+    "latencyMs": 58961
+  }
+}

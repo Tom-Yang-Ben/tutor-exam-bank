@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:11:09.175Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4415,
+        "sha256": "2af278f849bbe86119ef578743f4f968408260d96bc3c9375c503a587cd88cb4"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "若 $\\theta$ 落在第二象限，則 $\\tan \\theta$ 的正負為何？\n(A) 恆為正　(B) 恆為負　(C) 恆為零　(D) 無法判斷",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及三角函數在不同象限的符號，需判斷 $\tan \theta$ 的正負，屬於廣義角與極坐標的內容。",
+      "chapter": "廣義角與極坐標",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3964,
+      "tokenOut": 69,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 58482,
+        "loadMs": 10,
+        "promptEvalMs": 12581,
+        "evalMs": 45848
+      }
+    },
+    "latencyMs": 58493
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:59:14.051Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4411,
+        "sha256": "3787e2aa098f6f75f0664d04aede7dab0b7a9b48921eb499636f11e9ac7edf81"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "兩平面向量的「純量積」定義為對應分量乘積之和。設 $\\vec{a} = (3, 4)$、$\\vec{b} = (1, 2)$，求其純量積。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及向量的純量積計算，即對應分量乘積之和，屬於向量內積的計算。",
+      "chapter": "向量內積",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3963,
+      "tokenOut": 58,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 55887,
+        "loadMs": 23,
+        "promptEvalMs": 13206,
+        "evalMs": 38045
+      }
+    },
+    "latencyMs": 55891
+  }
+}

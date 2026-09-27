@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T06:57:54.153Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4418,
+        "sha256": "67027d073330076b4387eaa9dd4c33bd0a6b8f3393f1aa8fab07775de2892d64"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "設空間向量 $\\vec{a} = (2, 1, 4)$、$\\vec{b} = (3, 2, 0)$，求 $\\vec{a} \\cdot \\vec{b}$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目要求計算空間向量的點積，屬於空間向量內積的計算。",
+      "chapter": "空間向量內積",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3958,
+      "tokenOut": 50,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 53640,
+        "loadMs": 162,
+        "promptEvalMs": 21494,
+        "evalMs": 31936
+      }
+    },
+    "latencyMs": 53657
+  }
+}

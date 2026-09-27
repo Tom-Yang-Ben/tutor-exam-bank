@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T06:48:28.484Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4482,
+        "sha256": "b58cef37469fed5a56d5eed7ccf21fdba4cb60133d9b03f930e7eafc670990c1"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "已知 $\\log_{10} 2 = 0.3010$，利用 $\\log_{10} 5 = \\log_{10} \\frac{10}{2$ 求 $\\log_{10} 5$ 之近似值。\n(A) $0.6990$　(B) $0.3010$　(C) $0.1505$　(D) $1.6990$",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目使用對數的性質與換底公式計算 $\frac{10}{2}$ 的對數，屬於指數與對數的運算。",
+      "chapter": "指數與對數",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 4013,
+      "tokenOut": 65,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 58157,
+        "loadMs": 15,
+        "promptEvalMs": 16344,
+        "evalMs": 41765
+      }
+    },
+    "latencyMs": 58162
+  }
+}

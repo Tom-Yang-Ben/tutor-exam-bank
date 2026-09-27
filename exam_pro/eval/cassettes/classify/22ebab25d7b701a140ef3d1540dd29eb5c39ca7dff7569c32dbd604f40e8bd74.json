@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:44:43.004Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4412,
+        "sha256": "049566a28f72b53e13125e0a18c864e3d933e23bdc24551f7f1abe10dabfd941"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "試計算 $\\log_{2} 8$ 與 $\\log_{2} 4$ 兩數之和。\n(A) $5$　(B) $6$　(C) $7$　(D) $12$",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及對數的計算與加法，屬於指數與對數的運算範疇。",
+      "chapter": "指數與對數",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3959,
+      "tokenOut": 54,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 46583,
+        "loadMs": 8,
+        "promptEvalMs": 9443,
+        "evalMs": 36693
+      }
+    },
+    "latencyMs": 46591
+  }
+}

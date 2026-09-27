@@ -1,0 +1,50 @@
+{
+  "meta": {
+    "agent": "nlq",
+    "model": "qwen3:8b",
+    "template": "nlq.v2",
+    "recorded_at": "2026-09-27T08:18:39.043Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2721,
+        "sha256": "5a8657f0cbdbb23dd04acdf6387bb52f085dee648ecff1c2b84184bb0c1d1eb9"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "nlq.v2",
+      "query": "斜面上物體受力平衡的題目"
+    }
+  },
+  "response": {
+    "data": {
+      "keywords": [
+        "斜面",
+        "物體",
+        "受力",
+        "平衡"
+      ],
+      "chapters": [
+        "摩擦力與向心力"
+      ],
+      "question_types": [],
+      "semantic_text": "斜面上物體受力平衡的題目"
+    },
+    "usage": {
+      "tokenIn": 2866,
+      "tokenOut": 43,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 356883,
+        "loadMs": 7,
+        "promptEvalMs": 333287,
+        "evalMs": 23271
+      }
+    },
+    "latencyMs": 356909
+  }
+}

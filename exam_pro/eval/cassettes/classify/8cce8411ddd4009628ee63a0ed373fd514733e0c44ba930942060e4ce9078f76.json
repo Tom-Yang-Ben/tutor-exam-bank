@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:35:28.065Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2930,
+        "sha256": "b92d820487c6b73b2b4b6e1f1d73725e8fec0b5b89cd0a17e77cb3278b197238"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "甲車以 $20$ m/s 向東行駛、乙車以 $15$ m/s 向西行駛，依 $\\relvel{v}$ 求甲車相對於乙車的速度。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及相對速度的計算，需使用相對運動的概念來求解甲車相對於乙車的速度。",
+      "chapter": "直線運動",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 2808,
+      "tokenOut": 54,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 53530,
+        "loadMs": 20,
+        "promptEvalMs": 20136,
+        "evalMs": 33298
+      }
+    },
+    "latencyMs": 53541
+  }
+}

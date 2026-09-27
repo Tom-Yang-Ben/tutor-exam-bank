@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "agent": "nlq",
+    "model": "qwen3:8b",
+    "template": "nlq.v2",
+    "recorded_at": "2026-09-27T08:19:10.402Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2723,
+        "sha256": "ab9bd868bdb2c1048c8528853e13ab98b6285c6bf2a6124e105106fac3e721d7"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "nlq.v2",
+      "query": "電梯裡體重計的讀數會變成多少"
+    }
+  },
+  "response": {
+    "data": {
+      "keywords": [
+        "電梯",
+        "體重計",
+        "讀數"
+      ],
+      "chapters": [
+        "牛頓運動定律"
+      ],
+      "question_types": [],
+      "semantic_text": "電梯裡體重計的讀數會變成多少"
+    },
+    "usage": {
+      "tokenIn": 2868,
+      "tokenOut": 42,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 31313,
+        "loadMs": 14,
+        "promptEvalMs": 8448,
+        "evalMs": 22792
+      }
+    },
+    "latencyMs": 31325
+  }
+}

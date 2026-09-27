@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T08:00:04.811Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4406,
+        "sha256": "bb2b5c1cf381260242e5995c3b89cfb89db68cdf2aa600ec522a57213174928b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "試求平面向量 $\\vec{a} = (6, 8)$ 與 $\\vec{b} = (1, 2)$ 的點積（dot product）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目要求計算平面向量的點積，屬於向量內積的計算。",
+      "chapter": "向量內積",
+      "confidence": 1
+    },
+    "usage": {
+      "tokenIn": 3947,
+      "tokenOut": 45,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 50748,
+        "loadMs": 14,
+        "promptEvalMs": 21408,
+        "evalMs": 29215
+      }
+    },
+    "latencyMs": 50755
+  }
+}
