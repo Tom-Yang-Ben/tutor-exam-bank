@@ -1,0 +1,19 @@
+{
+  "_說明": "桌面啟動器的設定範本（docs/desktop-launcher.md 第 6 節）。要改才複製成 exam_pro/data/launcher/config.json，只留要改的那幾行即可；沒有這個檔＝全部用下面的預設值。以底線開頭的鍵是註解。",
+  "dockerDesktopPath": "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe",
+  "dockerCliPath": "",
+  "dockerReadyTimeoutSec": 240,
+  "composeTimeoutSec": 900,
+  "dbReadyTimeoutSec": 60,
+  "ollamaAppPath": "",
+  "ollamaReadyTimeoutSec": 60,
+  "serverReadyTimeoutSec": 120,
+  "browser": "auto",
+  "browserPath": "",
+  "browserProfileDir": "",
+  "browserArgs": [],
+  "stopDocker": "no",
+  "stopOllama": false,
+  "stopGraceSec": 120,
+  "askBeforeStopWithJobs": true
+}

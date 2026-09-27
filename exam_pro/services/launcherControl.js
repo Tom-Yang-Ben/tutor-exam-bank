@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// services/launcherControl.js — 桌面啟動器的「優雅關閉」通道（docs/desktop-launcher.md 第 4 節）
+// services/launcherControl.js — 桌面啟動器的「優雅關閉」通道（docs/desktop-launcher.md 第 7.3 節）
 //
 // 為什麼要一條 HTTP 通道：Windows 沒有 SIGTERM。啟動器以背景方式（沒有主控台視窗）開的 node server.js
 // 收不到 Ctrl+C，別的程式要它「停止認領新工作、等在途工作收尾再結束」只能跟它講話。
@@ -17,9 +17,10 @@
 //   1. runner.stop()：不再認領新工作（workers/jobRunner.js 的 stop 只清 interval，不打斷在途工作）；
 //   2. server.close()：不再接新連線；
 //   3. 每 pollMs 看一次 runner.inFlight，歸零（再等 settleMs 確認沒有剛認領到的）或到 grace_ms 為止；
-//   4. 關連線池、exit(0)。
-// 時限到了還有在途工作就直接結束：那一列的租約（JOB_LEASE_MS，預設 3 分）到期後，下次開機會被重新認領、
+//   4. 在途歸零：關連線池、exit(0)。
+// 時限到了還有在途工作就**不關連線池**、直接結束：那一列的租約（JOB_LEASE_MS，預設 3 分）到期後，下次開機會被重新認領、
 // 從那一格重跑——與當機、nodemon 重啟同一條既有的保證（jobRunner.js 檔頭），已記進 job_events 的用量不會遺失。
+// 要等多久由關閉捷徑決定（scripts/desktop/stop.js：有在途工作時先問 Owner；待決事項 DL-1）。
 // ─────────────────────────────────────────────────────────────
 const crypto = require('crypto');
 const express = require('express');
@@ -130,10 +131,16 @@ function createLifecycle(opts = {}) {
             await sleep(Math.max(1, Math.min(pollMs, graceMs - (now() - started))));
         }
         const left = inFlight();
-        if (left > 0) {
-            logger.warn(`[launcher] 還有 ${left} 件工作沒在時限內結束，直接關閉；租約到期後下次開機會重新認領那一格（已記錄的用量不會遺失）。`);
-        }
         try { if (server && typeof server.closeAllConnections === 'function') server.closeAllConnections(); } catch (_) { /* 忽略 */ }
+        if (left > 0) {
+            // 〔續作 2026-09-27〕時限到了還有在途工作：**不關連線池**，直接結束——與當機同一條路。
+            // 先關池的話，在途工作接下來的查詢會失敗、走進 jobRunner 的錯誤處理路徑；那條路在「池已關閉」下的行為
+            // 沒有被驗證過（可能印一串錯誤，也可能在等關池的最後幾秒寫進半套狀態）。直接結束則那一列停在原狀態，
+            // 租約到期後下次開機重新認領、從那一格重跑——這是 jobRunner.js 檔頭已有、已測過的保證。
+            logger.warn(`[launcher] 還有 ${left} 件工作沒在時限內結束，直接關閉；租約到期後下次開機會重新認領那一格（已記錄的用量不會遺失）。`);
+            exit(0);
+            return { left };
+        }
         try {
             let timer;
             await Promise.race([

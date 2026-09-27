@@ -98,6 +98,8 @@ app.use((err, req, res, next) => {
 | CORS | 僅允許 `ALLOWED_ORIGINS` 白名單（預設 `http://localhost:3000`）；無 `origin` 的請求（curl、同站 fetch）放行 | `exam_pro/app.js` |
 | 限流 | 記憶體型固定時間窗，以 IP 為 key，每個限流器**獨立計數桶**（不共用 Map）；回應帶 `X-RateLimit-Limit`／`X-RateLimit-Remaining`，超限回 429＋`Retry-After`；單機實作，多實例部署須改 Redis 型方案 | `exam_pro/middleware/rateLimit.js`（NFR-002） |
 | 靜態資產 | 只公開 `public/`，後端原始碼、schema、備份 JSON 不落入靜態路徑 | `exam_pro/app.js` |
+| 健康檢查〔修訂 2026-09-27 桌面啟動器〕 | `GET /api/health` **掛在 `apiKeyAuth` 之前**（啟動器要在不知道金鑰是否被改過的情況下認出埠上是不是本系統）；只回服務名稱、版本、資料庫連不連得上、migration 檔名，不回錯誤原文；其他 `/api` 照舊要金鑰 | `exam_pro/controllers/healthController.js`、`docs/desktop-launcher.md` §7.3 |
+| 啟動器關閉通道〔修訂 2026-09-27 桌面啟動器〕 | `/api/launcher/*` 只在環境有 `LAUNCHER_CONTROL_TOKEN`（由桌面啟動器開的後端）時掛載，位於 `apiKeyAuth` 之後，另需 `x-launcher-token`（定時安全比較，錯誤 403）；`npm start`／CI 不掛 | `exam_pro/services/launcherControl.js` |
 
 各端點限流配置（皆為 60 秒窗）：
 
@@ -140,6 +142,8 @@ app.use((err, req, res, next) => {
 | `POST /api/download-word` | FR-009、FR-018、FR-025、FR-027 | 〔修訂 2026-09-24〕body 多 `edition`：`standard`（預設，行為不變）／`student`（不附答案）／`solution`（答案後接詳解）；其他值（含空字串）400；`\ce{…}` 化學式轉原生 OMML、`\mathrm` 正體。Word 匯出（LaTeX→OOXML，docx 原生 Math 物件）；`question_img` 為 `/figures/<檔名>` 的題嵌入本機裁圖，讀不到時該題放「（附圖遺失）」、整份仍回 200（`docs/figures.md`）〔修訂 2026-09-16〕 |
 | `POST /api/jobs`（15 MB、超限 413；限流 10/min，與 `/analyze-pdf` 共用同一桶；檔案內容缺 `%PDF-` 檔頭回 400〔修訂 2026-09-15c〕） | FR-001、FR-026 | 建立拆題 job（恆掛載；FEATURE_PIPELINE 僅控制前端上傳入口）；〔修訂 2026-09-24〕multipart 多 `subject_group`（`math_physics` 預設、空字串亦同／`chemistry`；其他值 400 `subject_group 只能是 math_physics 或 chemistry。`），冪等鍵改為 `(pdf_sha256, subject_group)`——換卷別重傳建新 job；回應形狀不變 |
 | `GET /api/jobs/:id`、`GET /api/jobs/:id/questions`、`POST /api/jobs/:id/retry` | FR-001 | job 狀態／逐題清單／斷點續跑（恆掛載）；〔修訂 2026-09-24〕`GET /api/jobs/:id` 回應最後多 `subject_group`（FR-026） |
+| `GET /api/health`〔修訂 2026-09-27 桌面啟動器〕 | — | 健康檢查（恆掛載、**不需金鑰**）：200 `{service:'tutor-exam-bank', status:'ok', version, db:{ok:true}, migrations:{applied, latest, pending[], unknown[]}}`；資料庫連不上或 2 秒內沒回應 503 `{…, status:'degraded', db:{ok:false}, migrations:null}`；`Cache-Control: no-store`（`docs/desktop-launcher.md` §7.3） |
+| `GET /api/launcher/status`、`POST /api/launcher/shutdown`〔修訂 2026-09-27 桌面啟動器〕 | — | 只在由桌面啟動器開的後端掛載（環境有 `LAUNCHER_CONTROL_TOKEN`）；需 `x-launcher-token`（＋設了 `API_KEY` 時的 `x-api-key`）。status 回 `{pid, in_flight, shutting_down}`；shutdown 回 202 `{pid, in_flight, grace_ms, already}` 後停止認領、等在途工作（`grace_ms` 0～6 小時，預設 2 分）再結束 |
 | `GET /api/review`、`GET /api/review/:jqId`、`POST /api/review/:jqId/approve`、`POST /api/review/:jqId/reject` | FR-006 | 人工複核佇列四支（恆掛載）；〔修訂 2026-09-15f〕FR-020 的「題幹與原卷不符」沿用同四支，approve 不重跑原卷比對、只在事件記 `source_recheck`／`stem_edited`（`docs/interfaces-stage2.md` 第 6.6 條） |
 
 ### 5.2 旗標區

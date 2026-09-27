@@ -21,6 +21,7 @@ const DEFAULT_TIMEOUT_MS = 2000;
 
 /**
  * promise 在 ms 內沒結束就以逾時失敗。原本的 promise 之後才失敗也不會變成 unhandled rejection。
+ * 計時器**不 unref**：結果一出來就 clearTimeout，不會多留；unref 的話，事件迴圈裡沒有別的事時逾時永遠不會觸發。
  * @template T
  * @param {Promise<T>} promise
  * @param {number} ms
@@ -34,7 +35,6 @@ function withTimeout(promise, ms) {
         guarded,
         new Promise((_, reject) => {
             timer = setTimeout(() => reject(new Error('health check timeout')), ms);
-            if (typeof timer.unref === 'function') timer.unref();
         })
     ]).finally(() => clearTimeout(timer));
 }

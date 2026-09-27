@@ -13,3 +13,8 @@ exam_pro/eval/fixtures/*.pdf binary
 
 # 〔本機模式整合〕Windows 一鍵腳本以 CRLF 原樣進版控、原樣 checkout（cmd 的 goto／標籤在 LF 下會出錯），不受 core.autocrlf 影響
 exam_pro/scripts/windows/*.bat -text
+
+# 〔桌面啟動器 2026-09-27〕Windows 的捷徑腳本同樣以 CRLF 原樣進版控；run_hidden.vbs 刻意只用 ASCII（wscript 以 ANSI 讀 .vbs）。
+# 圖示是二進位檔（關掉換行轉換與 diff）。
+exam_pro/scripts/desktop/*.vbs -text
+exam_pro/scripts/desktop/assets/*.ico binary
