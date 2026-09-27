@@ -1042,6 +1042,8 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 
 建議選 1：字面規則在這兩組的誤判風險高於它能救的題數；送人工要動狀態機與複核頁，又救不了 eval。先重錄，看模板規則在這兩類有沒有效，再決定。
 
+> 〔Owner 2026-09-27 選 1〕不加；只記錄、不改程式（登錄於 [`HANDOFF.md`](HANDOFF.md) §0.00c，`dec/r6-docs-kc`）。
+
 **LC-3　程式界線規則要不要也套在「零成本閘門」**
 
 背景：分類分兩層。拆題模型給的章節在白名單內、而且信心 ≥ 0.8 時直接採用（零成本閘門，不呼叫分類模型）；否則才由分類模型判斷（第二層）。本分支的程式界線規則（指數／對數分冊、平面／空間、靜電學／電場與電位、一維相對速度、自由落體數值題）只套在第二層。本機的拆題模型（qwen3-vl:8b）一樣可能把 log₂ 的題標成第一冊，而且信心通常很高，會直接從閘門通過。問題：要不要把同一套規則也套在閘門上？
@@ -1073,3 +1075,38 @@ recall10 錯的 2 句（036、042）都是章節篩錯、把相關題排除（`d
 - `npm run eval:classify`：看 accuracy／macro-F1，以及「程式後處理改了 N 題的章」那一行——N 很大表示模型仍常挑到相鄰章，分數主要是程式補的；逐題的規則在報表的逐題表。
 - `npm run eval:nlq`：llm 欄的逐句 `adjustments`（哪幾句被證據檢查、平面／空間、界線規則動過）。
 - 兩個 suite 若只差一題未達，先看是不是 LC-2、LC-4 那幾題，再回來決定 LC-1～LC-4。
+
+### 10.16 第五輪 E 文件與知識點（2026-09-27）
+
+> 分支 `dec/r6-docs-kc`（起點 `local/integration-r5`＝`a670783`）。節號先寫 10.16，整合時依併入順序重編。落實 Owner 第五輪 K-P 核准（選 3）與 O-3 核准（選 2），並登錄第五輪全部答案；**只改文件與知識點載入的測試，程式、模板、schema、prompt、`eval/thresholds.json`、golden、cassette 都沒有動**。
+
+#### 1. K-P：物理知識點維持草稿，但允許載入（Owner 第五輪 K-P 核准）
+
+- 查了 `scripts/load_kc.js`（參數只有 `--file`／`--dry-run`／`--force`／`--test`，預設讀 `config/kc/` 全部 `*.json`）、`services/kcService.loadSeeds`（計畫只有 insert／update／unchanged／protected／edited，沒有「草稿不載入」）、`utils/kcSeed.js`（`status` 只要是 `draft` 或 `approved` 就通過）：**程式本來就沒有擋草稿，也沒有擋物理**。擋的只是 `HANDOFF.md` A10、B15 與 §0.2 第 7 項「物理先不跑 `kc:load`」這條操作規則。所以程式不改（其他科的行為自然也不變），只把規則解除、並加測試釘住「不擋」：
+  - `test/unit/kcPhysicsDraftLoad.test.js`（4 案）：repo 的 `config/kc/物理.json` 198 條全部 `draft`、單科驗證零 error（指向數學的先備只算 warning）；三科一起驗證零 error、數學已審定數仍是 4；草稿列的載入計畫照常 insert／unchanged／update；`kc:load` 預設讀到物理、`--file` 指定物理照讀、參數沒有科目或狀態過濾。
+  - `test/integration/kcLoadPhysicsDraft.pg.test.js`（2 案）：以子行程跑真的 `scripts/load_kc.js --test` 與真的種子檔——數學已在庫裡時 `--file` 只載入物理：exit 0、198 列全部 `draft`、數學的列不變；空庫只載物理會被擋，原因是物理有 6 條先備指向數學、解析不到（既有的先備規則，訊息不提草稿，測試也釘住）；三科一起載入：物理仍 198 列 `draft`，數學、化學的列數與已審定數照種子檔，物理 → 數學的跨科先備照種子檔寫入，重跑一次全部「內容相同」。
+- 以後若有人加了「只載入已審定」或「跳過物理」之類的過濾，這兩個檔會紅。
+- Owner 要做的：`local/integration` 併入後照 `HANDOFF.md` §0.2 第 7 項，先 `npm run kc:load -- --dry-run` 看數字，再 `npm run kc:load`（不加 `--file`＝三科一起載入，跨科先備一次解析）。**只載物理（`--file config/kc/物理.json`）要在數學已經載入之後**，否則會因上面那 6 條跨科先備整批拒絕、資料庫不動。物理 198 條進資料庫都是草稿，「知識點」分頁照常可以逐條改、逐條審定；載入不會覆寫老師改過的草稿（要 `--force` 才會）。
+
+#### 2. O-3：ADR-017 改寫為 OCR 為主（Owner 第五輪 O-3 核准，選 2）
+
+- `engineering_docs/03_architecture/adr/ADR-017-local-first-inference.md` 升 v1.1：本機拆題＝PaddleOCR＋文字模型整理（`extract_ocr`），看圖模型只在 `cross` 模式；新增「選項四：OCR 為主」與 **§3.1 定案條件**。**狀態維持「提議中／待數據定案」**。原文全部保留，改寫處就地加〔修訂 2026-09-27〕。
+- 定案條件（摘要，全文在 ADR §3.1）：① 以本機模型、`ocr` 模式重錄 classify／nlq／variant／pipeline＋e2e，五個 eval 的分數與門檻對照；② 實際上傳幾份真卷（建議至少 3 份，份數由 Owner 定）後的每卷拆題時間（`perf:local`）、OCR 版面配圖統計（`report:jobs`）、複核時要改的題數比例與每題時間。數字齊了由 Owner 決定接受、回到 `cross`，或另開 ADR。
+- `engineering_tracker.md` §3 的 ADR 索引就地加註。
+
+#### 3. 第五輪全部答案的登錄
+
+- `HANDOFF.md` 新增 **§0.00c 第五輪決策（2026-09-27）**：30 題逐題寫 Owner 選項與落實分支（A＝`dec/r6-templates`、B＝`dec/r6-local-tuning`、C＝`dec/r6-gates`、D＝`dec/r6-defaults`、E＝本分支；「只記錄」的 C-a、C-d、C-e、C-g、C-h、C-i、D-1、D-4、LC-2、O-4 不改程式）。
+- `owner-pending-decisions-r5.md`：O-3 與只記錄的九題就地加「〔Owner 2026-09-27 選 N〕」；本表沒列的 K-P 在檔頭加註。其他四組負責的題由各自分支加註。本節 10.15 第 6 點 LC-2 下加同樣的註記。
+- `kc-review-物理.md` 最後一節「仍待決」一行加註 K-P 的結果。
+
+#### 4. 同批的文件清理（cleanup 審查留下的）
+
+- `README.md`：連到 tag `v1-mysql` 的原型說明（開頭的專案說明、「exam → exam_pro 重構到底改了什麼」一節最後的註記）後補一句「tag 內的授權宣告以主線 `LICENSE` 為準」，註明只是釐清、不改變任何授權。**請 Owner 留意**：tag `v1-mysql`（2026-08-21）裡的 `LICENSE` 是 Apache-2.0，README「授權與著作權」一節也寫「2026-08-24 之前的歷史版本曾以 Apache-2.0 釋出，該授權僅及於該等歷史版本」；這句是照指示加的釐清，已經發出去的 Apache-2.0 授權一般無法事後收回，對外措辭若要更精確，建議再看一次。
+- `requirements_tracker.md` 第 32、63 行、`ux_research_and_journey.md` 第 25 行提到 `exam/` 的地方加〔修訂 2026-09-27〕「已自主線移除，見 tag `v1-mysql`」。
+
+#### 5. 測試與 eval
+
+- `test/unit/localModeSections.test.js`：標題清單多一節 10.16（本節），其餘斷言不變。
+- 實測（5433 上新建的 UTF8 測試庫，用完刪除）：unit 3,615（3,613 過、2 略過；比 `a670783` 多 4 案）、`check:html`、migrate（到 0019）、integration 617 全過（多 2 案）。
+- 本分支沒有改任何模板、schema、prompt 或 agent 程式，**沒有 cassette 的鍵會變、不需要重錄**。五個 eval 在 replay 下與 `local/integration-r5`（`a670783`）同一環境逐項比對，輸出除了延遲毫秒數以外完全相同：retrieval 過；classify 92、nlq 8、pipeline 1、variant 2 筆 replay miss 都是原本就缺的 cassette，沒有一筆是本分支造成的。

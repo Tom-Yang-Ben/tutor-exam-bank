@@ -32,11 +32,13 @@ describe('docs/local-mode.md 10.12～10.15（整合 r5、final5 改號）', () =
 
     test('四個標題依併入順序各出現一次：10.12 OCR 為主、10.13 餘弦門檻、10.14 拆題以外的時間、10.15 classify／nlq 重錄前修正', () => {
         const heads = [...doc.matchAll(/^### (10\.1[2-9]) (.*)$/gm)].map(m => [m[1], m[2]]);
-        assert.deepEqual(heads.map(h => h[0]), ['10.12', '10.13', '10.14', '10.15'], JSON.stringify(heads));
+        assert.deepEqual(heads.map(h => h[0]), ['10.12', '10.13', '10.14', '10.15', '10.16'], JSON.stringify(heads));
         assert.match(heads[0][1], /只用 OCR 拆題/);
         assert.match(heads[1][1], /三個餘弦門檻/);
         assert.match(heads[2][1], /拆題以外的時間/);
         assert.match(heads[3][1], /classify／nlq 重錄前修正/);
+        // 〔第五輪 2026-09-27 dec/r6-docs-kc〕10.16＝第五輪 E 文件與知識點（整合時依併入順序重編）
+        assert.match(heads[4][1], /第五輪 E 文件與知識點（2026-09-27）/);
         const i12 = doc.indexOf('### 10.12 '), i13 = doc.indexOf('### 10.13 '), i14 = doc.indexOf('### 10.14 '), i15 = doc.indexOf('### 10.15 ');
         assert.ok(i12 < i13 && i13 < i14 && i14 < i15, '依編號排列');
         assert.equal(/^<{7}|^={7}$|^>{7}/m.test(doc), false, '沒有殘留的衝突標記');
