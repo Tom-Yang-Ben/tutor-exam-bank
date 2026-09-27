@@ -64,6 +64,47 @@ describe('spawnDetached', () => {
     });
 });
 
+// 〔審查 dec/desktop-launcher 第 1 件〕Linux 會忽略 windowsHide，所以直接看傳給 child_process 的選項
+describe('hide → windowsHide（傳給 child_process 的選項）', () => {
+    /** 記下選項、立刻回成功的假 child_process */
+    function fakeCp() {
+        const seen = [];
+        const { EventEmitter } = require('node:events');
+        return {
+            seen,
+            execFile(file, args, opts, cb) {
+                seen.push({ kind: 'execFile', file, opts });
+                setImmediate(() => cb(null, Buffer.from(''), Buffer.from('')));
+                return { stdin: { end() { } } };
+            },
+            spawn(file, args, opts) {
+                seen.push({ kind: 'spawn', file, opts });
+                const child = new EventEmitter();
+                child.pid = 4321;
+                child.unref = () => { };
+                setImmediate(() => child.emit('spawn'));
+                return child;
+            }
+        };
+    }
+
+    test('預設隱藏（主控台程式）；hide:false 才不隱藏（GUI 程式）；spawnDetached 一律 detached', async () => {
+        const cp = fakeCp();
+        const s = createSystem({ cp });
+        await s.exec('netstat', ['-ano']);
+        await s.exec('powershell.exe', ['-NoProfile'], { hide: false });
+        await s.spawnDetached('node.exe', ['server.js']);
+        await s.spawnDetached('msedge.exe', ['--app=x'], { hide: false });
+        assert.deepEqual(cp.seen.map(x => [x.kind, x.file, x.opts.windowsHide]), [
+            ['execFile', 'netstat', true],
+            ['execFile', 'powershell.exe', false],
+            ['spawn', 'node.exe', true],
+            ['spawn', 'msedge.exe', false]
+        ]);
+        assert.ok(cp.seen.filter(x => x.kind === 'spawn').every(x => x.opts.detached === true));
+    });
+});
+
 describe('request', () => {
     let server;
     let base;
@@ -115,6 +156,16 @@ describe('其他', () => {
         const r = await sys.pgQuery('postgres://x:y@127.0.0.1:1/z_test', 'SELECT 1', { timeoutMs: 3000 });
         assert.equal(r.ok, false);
         assert.ok(r.error);
+    });
+
+    test('killPid：結束背景程式（結束後 childStatus 看得到）；不合法的 PID 回 false', async () => {
+        const r = await sys.spawnDetached(NODE, ['-e', 'setTimeout(() => {}, 60000)']);
+        assert.equal(r.ok, true);
+        assert.equal(sys.killPid(r.pid), true);
+        for (let i = 0; i < 100 && !(sys.childStatus(r.pid) || {}).exited; i++) await new Promise(res => setTimeout(res, 50));
+        assert.equal(sys.childStatus(r.pid).exited, true);
+        assert.equal(sys.killPid(0), false);
+        assert.equal(sys.killPid(-5), false);
     });
 
     test('pidAlive、createExclusive、readText／writeText／remove', () => {

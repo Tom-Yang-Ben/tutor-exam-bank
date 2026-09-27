@@ -12,12 +12,41 @@
 //      錯誤訊息或路徑——連線錯誤的原文（可能含帳號）一律不回傳，只回 ok:false。
 //   3. 首頁 serveIndex 本來就不經 apiKeyAuth（它把 API_KEY 注入頁面），這支不會讓「沒金鑰能拿到的東西」變多。
 // 只有 GET；不寫資料庫；資料庫查詢最多等 timeoutMs（預設 2 秒），連不上時不會把請求卡住。
+//
+// 〔審查 dec/desktop-launcher 第 5 件〕限流：這支不經金鑰、每次都查一次資料庫，後端又綁在所有網路介面（DA-11），
+// 所以**本機以外**的來源套一個寬鬆的既有限流器（每來源每分鐘 HEALTH_RATE_LIMIT_PER_MIN 次，middleware/rateLimit.js）。
+// 本機（127.0.0.1／::1）不限：啟動器與關閉捷徑一律從本機問（等後端時每秒一次），不能被自己的限流擋掉。
+// 是不是本機看 socket 的對端位址（不是 req.ip，那個在設了 trust proxy 時可以用標頭偽造）。
 // ─────────────────────────────────────────────────────────────
 const { listMigrationFiles, compareMigrations, readAppliedVersions } = require('../utils/migrationStatus');
+const createRateLimiter = require('../middleware/rateLimit');
 
 /** 健康檢查回應裡的服務名稱：啟動器靠它認出「這是自己的系統」 */
 const SERVICE_NAME = 'tutor-exam-bank';
 const DEFAULT_TIMEOUT_MS = 2000;
+/** 本機以外的來源，每分鐘最多幾次 */
+const HEALTH_RATE_LIMIT_PER_MIN = 60;
+
+/**
+ * 請求是不是從本機來的（看 socket 的對端位址）。純函式。
+ * @param {{socket?:{remoteAddress?:string}}} req
+ */
+function isLoopbackRequest(req) {
+    const a = String((req && req.socket && req.socket.remoteAddress) || '');
+    return a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1';
+}
+
+/**
+ * 健康檢查的限流：本機放行，其他來源用既有的 createRateLimiter。
+ * @param {{max?:number, windowMs?:number}} [o]
+ */
+function createHealthRateLimit({ max = HEALTH_RATE_LIMIT_PER_MIN, windowMs = 60 * 1000 } = {}) {
+    const limiter = createRateLimiter({ windowMs, max, message: '健康檢查請求過於頻繁，請稍候再試。' });
+    return function healthRateLimit(req, res, next) {
+        if (isLoopbackRequest(req)) return next();
+        return limiter(req, res, next);
+    };
+}
 
 /**
  * promise 在 ms 內沒結束就以逾時失敗。原本的 promise 之後才失敗也不會變成 unhandled rejection。
@@ -102,4 +131,7 @@ function health(req, res, next) {
     return defaultHandler(req, res, next);
 }
 
-module.exports = { health, createHealthHandler, buildHealth, withTimeout, SERVICE_NAME, DEFAULT_TIMEOUT_MS };
+module.exports = {
+    health, createHealthHandler, buildHealth, withTimeout, isLoopbackRequest, createHealthRateLimit,
+    SERVICE_NAME, DEFAULT_TIMEOUT_MS, HEALTH_RATE_LIMIT_PER_MIN
+};

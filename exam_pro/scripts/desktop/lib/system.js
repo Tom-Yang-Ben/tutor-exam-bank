@@ -5,11 +5,19 @@
 // 單元測試換成假的（test/unit/desktopLauncherRun.test.js），雲端 Linux 上就能把 Windows 的整個流程跑一遍。
 //
 // 所有方法都不丟錯（除了程式錯誤）：失敗以回傳值表示，呼叫端照值決定下一步。
+//
+// 〔審查 dec/desktop-launcher 第 1 件〕exec／spawnDetached 的 hide（預設 true）對應 Node 的 windowsHide。
+// windowsHide 在 libuv 是 UV_PROCESS_WINDOWS_HIDE：除了不開主控台，還會把 STARTUPINFO.wShowWindow 設成 SW_HIDE，
+// 而 GUI 程式第一次顯示視窗時照 STARTUPINFO 決定（`start /min chrome` 開成最小化就是這個機制）。
+// 所以**會出現視窗的程式一律傳 hide:false**：Edge／Chrome、rundll32（預設瀏覽器）、Docker Desktop.exe、ollama app.exe、
+// 顯示訊息框的 PowerShell。主控台程式（node server.js、ollama serve、netstat、tasklist、docker CLI、不顯示視窗的 PowerShell）
+// 維持 true。呼叫點與 hide 值由 test/unit/desktopLauncherRun.test.js 逐一斷言；傳給 child_process 的選項由
+// test/unit/desktopLauncherSystem.test.js 斷言（Linux 會忽略 windowsHide，只能在這一層驗）。
 // ─────────────────────────────────────────────────────────────
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
-const { execFile, spawn } = require('child_process');
+const childProcess = require('child_process');
 
 /**
  * @typedef {object} ExecResult
@@ -31,18 +39,26 @@ const { execFile, spawn } = require('child_process');
  * @param {object} [o]
  * @param {string} [o.platform]
  * @param {NodeJS.ProcessEnv} [o.env]  系統環境（啟動器自己的 process.env；**不含** .env）
+ * @param {{execFile:Function, spawn:Function}} [o.cp]  child_process（測試注入，斷言傳下去的選項）
  */
-function createSystem({ platform = process.platform, env = process.env } = {}) {
+function createSystem({ platform = process.platform, env = process.env, cp = childProcess } = {}) {
     /** @type {Map<number, {exited:boolean, code:number|null}>} */
     const children = new Map();
 
-    /** @returns {Promise<ExecResult>} */
-    function exec(file, args = [], { cwd, timeoutMs = 30_000, env: childEnv } = {}) {
+    /**
+     * 執行一個程式並等它結束。
+     * @param {string} file
+     * @param {string[]} [args]
+     * @param {{cwd?:string, timeoutMs?:number, env?:object, hide?:boolean}} [o]
+     *        hide：預設 true（不開主控台、視窗隱藏）；**會顯示視窗的程式要傳 false**（檔頭）
+     * @returns {Promise<ExecResult>}
+     */
+    function exec(file, args = [], { cwd, timeoutMs = 30_000, env: childEnv, hide = true } = {}) {
         return new Promise(resolve => {
             let child;
             try {
-                child = execFile(file, args, {
-                    cwd, env: childEnv || env, timeout: timeoutMs, windowsHide: true,
+                child = cp.execFile(file, args, {
+                    cwd, env: childEnv || env, timeout: timeoutMs, windowsHide: hide !== false,
                     encoding: 'buffer', maxBuffer: 32 * 1024 * 1024
                 }, (err, stdout, stderr) => {
                     const out = { stdout: Buffer.from(stdout || '').toString('utf8'), stderr: Buffer.from(stderr || '').toString('utf8') };
@@ -59,13 +75,15 @@ function createSystem({ platform = process.platform, env = process.env } = {}) {
     }
 
     /**
-     * 開一個與啟動器脫鉤的背景程式（啟動器結束後它繼續跑；Windows 上不開主控台視窗）。
+     * 開一個與啟動器脫鉤的背景程式（啟動器結束後它繼續跑；DETACHED_PROCESS，主控台程式不會開主控台視窗）。
      * @param {string} file
      * @param {string[]} args
-     * @param {{cwd?:string, env?:object, logFile?:string}} [o]
+     * @param {{cwd?:string, env?:object, logFile?:string, hide?:boolean}} [o]
+     *        hide：預設 true；**GUI 程式（瀏覽器、Docker Desktop、Ollama 系統匣程式）要傳 false**，否則第一個視窗會是隱藏的（檔頭）。
+     *        GUI 程式本來就不開主控台，DETACHED_PROCESS 也不會多開一個，所以 false 不會冒出黑色視窗。
      * @returns {Promise<{ok:boolean, pid?:number, error?:string, errorCode?:string}>}
      */
-    function spawnDetached(file, args = [], { cwd, env: childEnv, logFile } = {}) {
+    function spawnDetached(file, args = [], { cwd, env: childEnv, logFile, hide = true } = {}) {
         return new Promise(resolve => {
             let out = 'ignore';
             if (logFile) {
@@ -88,7 +106,7 @@ function createSystem({ platform = process.platform, env = process.env } = {}) {
             };
             let child;
             try {
-                child = spawn(file, args, { cwd, env: childEnv || env, detached: true, windowsHide: true, stdio: ['ignore', out, out] });
+                child = cp.spawn(file, args, { cwd, env: childEnv || env, detached: true, windowsHide: hide !== false, stdio: ['ignore', out, out] });
             } catch (err) {
                 done({ ok: false, error: err.message, errorCode: err.code || 'EUNKNOWN' });
                 return;
@@ -184,6 +202,20 @@ function createSystem({ platform = process.platform, env = process.env } = {}) {
         }
     }
 
+    /**
+     * 結束一個程序（Windows 上是 TerminateProcess）。回傳是否送出成功（程序已經不在也回 false）。
+     * @param {number} pid
+     */
+    function killPid(pid) {
+        if (!Number.isInteger(pid) || pid <= 0) return false;
+        try {
+            process.kill(pid, 'SIGTERM');
+            return true;
+        } catch (_) {
+            return false;
+        }
+    }
+
     /** 程序還在不在（Windows 也能用 signal 0 查） */
     function pidAlive(pid) {
         if (!Number.isInteger(pid) || pid <= 0) return false;
@@ -233,6 +265,7 @@ function createSystem({ platform = process.platform, env = process.env } = {}) {
         request,
         pgQuery,
         pidAlive,
+        killPid,
         pid: process.pid
     };
 }

@@ -127,4 +127,50 @@ describe('app.js（npm start 的情況：沒有 LAUNCHER_CONTROL_TOKEN）', () =
         const res = await request(app).post('/api/health').set('x-api-key', 'unit-key');
         assert.equal(res.status, 404);
     });
+
+    test('本機來的請求不被健康檢查的限流擋（啟動器等後端時每秒問一次）', async () => {
+        for (let i = 0; i < hc.HEALTH_RATE_LIMIT_PER_MIN + 5; i++) {
+            const res = await request(app).get('/api/health');
+            assert.notEqual(res.status, 429, `第 ${i + 1} 次`);
+        }
+    });
+});
+
+// 〔審查 dec/desktop-launcher 第 5 件〕/api/health 不經金鑰、每次查資料庫，後端又綁在所有網路介面（DA-11）
+describe('健康檢查的限流（本機以外）', () => {
+    const fakeRes = () => {
+        const r = { statusCode: 200, headers: {}, body: null };
+        r.set = (k, v) => { r.headers[k.toLowerCase()] = v; return r; };
+        r.status = c => { r.statusCode = c; return r; };
+        r.json = b => { r.body = b; return r; };
+        return r;
+    };
+    const hit = (mw, remoteAddress) => {
+        const res = fakeRes();
+        let passed = false;
+        mw({ ip: remoteAddress, socket: { remoteAddress } }, res, () => { passed = true; });
+        return { passed, res };
+    };
+
+    test('isLoopbackRequest：看 socket 的對端位址（127.0.0.1、::1、::ffff:127.0.0.1），不看可偽造的 req.ip', () => {
+        for (const a of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) assert.equal(hc.isLoopbackRequest({ socket: { remoteAddress: a } }), true, a);
+        for (const a of ['192.168.1.20', '::ffff:192.168.1.20', '', undefined]) assert.equal(hc.isLoopbackRequest({ socket: { remoteAddress: a } }), false, String(a));
+        assert.equal(hc.isLoopbackRequest({ ip: '127.0.0.1', socket: { remoteAddress: '192.168.1.20' } }), false);
+        assert.equal(hc.isLoopbackRequest({}), false);
+    });
+
+    test('同一網段的來源：超過上限回 429＋Retry-After；本機永遠放行；各來源分開計數', () => {
+        const mw = hc.createHealthRateLimit({ max: 3, windowMs: 60_000 });
+        for (let i = 0; i < 3; i++) assert.equal(hit(mw, '192.168.1.20').passed, true);
+        const blocked = hit(mw, '192.168.1.20');
+        assert.equal(blocked.passed, false);
+        assert.equal(blocked.res.statusCode, 429);
+        assert.ok(Number(blocked.res.headers['retry-after']) > 0);
+        assert.equal(hit(mw, '192.168.1.21').passed, true, '別的來源不受影響');
+        for (let i = 0; i < 10; i++) assert.equal(hit(mw, '127.0.0.1').passed, true);
+    });
+
+    test('預設上限寬鬆（每分鐘 60 次）', () => {
+        assert.equal(hc.HEALTH_RATE_LIMIT_PER_MIN, 60);
+    });
 });

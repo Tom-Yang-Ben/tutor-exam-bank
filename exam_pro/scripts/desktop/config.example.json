@@ -15,5 +15,6 @@
   "stopDocker": "no",
   "stopOllama": false,
   "stopGraceSec": 120,
-  "askBeforeStopWithJobs": true
+  "askBeforeStopWithJobs": true,
+  "jobsWhileRecording": "run"
 }

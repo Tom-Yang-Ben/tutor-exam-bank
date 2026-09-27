@@ -73,6 +73,8 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 
 〔修訂 2026-09-27 桌面啟動器〕Windows 上也可以點桌面的「出題系統」圖示：第 1、3 步由啟動器代做（需要時先開 Docker Desktop），第 2 步**不代做**——有沒套的 migration 只在啟動畫面提醒，升級仍照本節與 §3.6 手動做；關閉用「關閉出題系統」圖示（背景工作先收尾）。見 [`docs/desktop-launcher.md`](../../docs/desktop-launcher.md)。
 
+〔修訂 2026-09-27 桌面啟動器審查〕第 3 步的 `npm start` 聽不了連接埠時（`EADDRINUSE`＝被別的程式佔用；`EACCES`＝沒有權限，Windows 上多半是埠落在 Hyper-V／WSL／Docker 保留的範圍，用 `netsh interface ipv4 show excludedportrange protocol=tcp` 查），會印出錯誤碼與處理方式並以結束碼 1 結束。原本會照印「已成功安全啟動」、不聽任何埠卻繼續跑背景拆題（Express 5 把 listen 錯誤交給 callback）；待 Owner 確認（`docs/desktop-launcher.md` 第 8 節 DL-5）。
+
 輔助指令：`node migrate.js status`（逐支套用狀態）、`npm run migrate:test`（測試庫）、`npm run db:down`（停止；加 `-v` 才刪 `pgdata`）、`node seed_questions.js --apply`（空庫灌 30 題示範題）。
 
 ### 3.2 環境變數（`.env`，由 `.env.example` 複製）

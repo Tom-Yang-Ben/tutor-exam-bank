@@ -28,9 +28,10 @@ describe('config', () => {
     test('合法的覆寫照用；字串前後空白與大小寫', () => {
         const { config, warnings } = cfg.resolveConfig({
             dockerDesktopPath: ' D:\\Docker\\Docker Desktop.exe ', dockerReadyTimeoutSec: 600, browser: 'Chrome',
-            stopDocker: 'Containers', stopOllama: true, browserArgs: [' --start-maximized ', ''], _註解: '略過'
+            stopDocker: 'Containers', stopOllama: true, browserArgs: [' --start-maximized ', ''], _註解: '略過', jobsWhileRecording: ' Pause '
         });
         assert.deepEqual(warnings, []);
+        assert.equal(config.jobsWhileRecording, 'pause');
         assert.equal(config.dockerDesktopPath, 'D:\\Docker\\Docker Desktop.exe');
         assert.equal(config.dockerReadyTimeoutSec, 600);
         assert.equal(config.browser, 'chrome');
@@ -42,8 +43,9 @@ describe('config', () => {
     test('錯的那一項用預設值並警告，其他照用', () => {
         const { config, warnings } = cfg.resolveConfig({
             dockerReadyTimeoutSec: 5, serverReadyTimeoutSec: '120', browser: 'firefox', stopDocker: 'yes', stopOllama: 'true',
-            browserArgs: '--x', nope: 1, ollamaReadyTimeoutSec: 90
+            browserArgs: '--x', nope: 1, ollamaReadyTimeoutSec: 90, jobsWhileRecording: 'stop'
         });
+        assert.equal(config.jobsWhileRecording, 'run');
         assert.equal(config.dockerReadyTimeoutSec, cfg.DEFAULTS.dockerReadyTimeoutSec);
         assert.equal(config.serverReadyTimeoutSec, cfg.DEFAULTS.serverReadyTimeoutSec);
         assert.equal(config.browser, 'auto');
@@ -51,7 +53,8 @@ describe('config', () => {
         assert.equal(config.stopOllama, false);
         assert.deepEqual(config.browserArgs, []);
         assert.equal(config.ollamaReadyTimeoutSec, 90);
-        assert.equal(warnings.length, 7);
+        assert.equal(warnings.length, 8);
+        assert.ok(warnings.some(x => x.includes('jobsWhileRecording 只接受 run／pause')));
         assert.ok(warnings.some(x => x.includes('nope')));
     });
 

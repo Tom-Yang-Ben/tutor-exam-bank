@@ -72,7 +72,8 @@ function createActions({ sys, config, env, paths, ctx, ui, probes, log = () => {
             }
         }),
 
-        'detect-recording': async () => ({ recording: await probes.detectRecording() }),
+        // pauseJobs：設定 jobsWhileRecording 是 pause 時，錄製中開的後端以 JOB_RUNNER=off 啟動（spawn-server；DL-4）
+        'detect-recording': async () => ({ recording: { ...await probes.detectRecording(), pauseJobs: config.jobsWhileRecording === 'pause' } }),
 
         'probe-db': async () => ({ db: await probeDb() }),
 
@@ -81,7 +82,8 @@ function createActions({ sys, config, env, paths, ctx, ui, probes, log = () => {
         'launch-docker': async () => {
             const p = config.dockerDesktopPath;
             if (!sys.exists(p)) return { dockerLaunch: { ok: false, reason: 'not-found', path: p } };
-            const r = await sys.spawnDetached(p, [], { cwd: path.win32.dirname(p) });
+            // GUI 程式：hide:false，否則 Docker Desktop 的主視窗與它跳出的同意條款／WSL 更新視窗會被藏起來（lib/system.js 檔頭）
+            const r = await sys.spawnDetached(p, [], { cwd: path.win32.dirname(p), hide: false });
             return { dockerLaunch: r.ok ? { ok: true, path: p } : { ok: false, reason: 'spawn-failed', path: p, error: r.error } };
         },
 
@@ -138,7 +140,9 @@ function createActions({ sys, config, env, paths, ctx, ui, probes, log = () => {
                 const r = await sys.spawnDetached(c.file, c.args, {
                     // ollama serve 依 OLLAMA_HOST 決定聽哪裡：與 .env 的一致（系統匣程式讀使用者環境變數，不改）
                     env: serve ? { ...sys.env, OLLAMA_HOST: hostPort } : undefined,
-                    logFile: serve ? path.join(paths.logsDir, `ollama-${w.dateStamp(new Date(sys.now()))}.log`) : undefined
+                    logFile: serve ? path.join(paths.logsDir, `ollama-${w.dateStamp(new Date(sys.now()))}.log`) : undefined,
+                    // 系統匣程式是 GUI（第一次執行會跳歡迎視窗）：hide:false；ollama serve 是主控台程式：維持隱藏
+                    hide: serve
                 });
                 if (r.ok) return { ollamaLaunch: { ok: true, method: c.method, path: c.file } };
                 if (r.errorCode === 'ENOENT') continue;
@@ -176,24 +180,28 @@ function createActions({ sys, config, env, paths, ctx, ui, probes, log = () => {
             return { migrations: { ok: true, pending: cmp.pending, unknown: cmp.unknown, latest: cmp.latestApplied, appliedCount: applied.length } };
         },
 
-        'spawn-server': async () => {
+        'spawn-server': async (facts = {}) => {
             const logFile = path.join(paths.logsDir, `server-${w.dateStamp(new Date(sys.now()))}.log`);
-            sys.appendText(logFile, `\n===== ${w.timeStamp(new Date(sys.now()))} 桌面啟動器啟動後端（node server.js）=====\n`);
+            // 錄製中而且設定要暫停：後端不起 inline runner（佇列裡的工作等下次正常開啟才跑）
+            const jobsPaused = Boolean(facts.recording && facts.recording.active === true && facts.recording.pauseJobs);
+            sys.appendText(logFile, `\n===== ${w.timeStamp(new Date(sys.now()))} 桌面啟動器啟動後端（node server.js）${jobsPaused ? '；錄製中，暫停背景工作（JOB_RUNNER=off）' : ''}=====\n`);
             const logOffset = sys.fileSize(logFile);
             // 一次性的權杖：只有這個後端認得，關閉捷徑從 server.json 讀（services/launcherControl.js）
             const token = crypto.randomBytes(32).toString('hex');
             const r = await sys.spawnDetached(ctx.nodePath, [paths.serverJs], {
                 cwd: paths.appDir,
-                // 與 npm start 相同：系統環境原樣帶過去（不帶啟動器讀到的 .env，後端自己讀），只多一個權杖
-                env: { ...sys.env, LAUNCHER_CONTROL_TOKEN: token },
+                // 與 npm start 相同：系統環境原樣帶過去（不帶啟動器讀到的 .env，後端自己讀），只多一個權杖（暫停時再多 JOB_RUNNER=off）
+                env: { ...sys.env, LAUNCHER_CONTROL_TOKEN: token, ...(jobsPaused ? { JOB_RUNNER: 'off' } : {}) },
                 logFile
+                // hide 維持預設 true：主控台程式，DETACHED_PROCESS＋隱藏，不留黑色視窗
             });
             if (!r.ok) return { server: { spawned: false, error: r.error, logFile } };
             sys.writeText(paths.serverInfo, `${JSON.stringify({
-                pid: r.pid, port: ctx.port, token, logFile, startedAt: new Date(sys.now()).toISOString()
+                pid: r.pid, port: ctx.port, token, logFile, startedAt: new Date(sys.now()).toISOString(),
+                ...(jobsPaused ? { jobsPaused: true } : {})
             }, null, 2)}\n`);
-            log(`後端 PID ${r.pid}，log：${logFile}`);
-            return { server: { spawned: true, pid: r.pid, logFile, logOffset } };
+            log(`後端 PID ${r.pid}，log：${logFile}${jobsPaused ? '（錄製中，背景工作暫停）' : ''}`);
+            return { server: { spawned: true, pid: r.pid, logFile, logOffset, ...(jobsPaused ? { jobsPaused: true } : {}) } };
         },
 
         'wait-server': async (facts) => {
@@ -205,14 +213,40 @@ function createActions({ sys, config, env, paths, ctx, ui, probes, log = () => {
                 const st = sys.childStatus(pid);
                 if (st && st.exited) {
                     const logTail = tail();
-                    return { serverWait: { ready: false, reason: 'exited', exitCode: st.code, logTail, addrInUse: w.isAddrInUse(logTail) } };
+                    const listenError = w.listenErrorCode(logTail);
+                    return { serverWait: { ready: false, reason: 'exited', exitCode: st.code, logTail, addrInUse: listenError === 'EADDRINUSE', listenError } };
                 }
                 const h = await probes.probeHealth({ timeoutMs: 2000, retryOnTimeout: false });
                 if (h.state === 'ours') return { serverWait: { ready: true, dbOk: h.dbOk } };
-                if (sys.now() - started >= limitMs) return { serverWait: { ready: false, reason: 'timeout', logTail: tail() } };
+                if (sys.now() - started >= limitMs) {
+                    // 逾時時自己開的後端還在不在：還在而埠被別的程式聽著 → plan 會先結束它（stop-server）
+                    const child = sys.childStatus(pid);
+                    return { serverWait: { ready: false, reason: 'timeout', logTail: tail(), childAlive: Boolean(child && !child.exited) } };
+                }
                 ui.note(`等後端就緒…已等 ${elapsedSec(started)} 秒（載入模組約需十幾秒）`);
                 await sys.sleep(POLL.serverMs);
             }
+        },
+
+        // 自己開的後端聽不了埠（逾時還活著、埠被別的程式聽著）：結束它，不留孤兒。
+        // Windows 用 taskkill /T（連它開的 OCR 等子程序一起）；其他平台 SIGTERM。
+        'stop-server': async (facts) => {
+            const pid = facts.server.pid;
+            const gone = () => {
+                const st = sys.childStatus(pid);
+                return Boolean(st && st.exited) || !sys.pidAlive(pid);
+            };
+            if (sys.platform === 'win32') await sys.exec('taskkill', ['/PID', String(pid), '/T', '/F'], { timeoutMs: 30_000 });
+            else sys.killPid(pid);
+            const started = sys.now();
+            while (!gone() && sys.now() - started < 10_000) await sys.sleep(500);
+            const stopped = gone();
+            if (stopped) {
+                const info = probes.readServerInfo(paths.serverInfo);
+                if (info && info.pid === pid) sys.remove(paths.serverInfo);
+            }
+            log(stopped ? `已結束聽不了埠的後端（PID ${pid}）` : `結束不了聽不了埠的後端（PID ${pid}）`);
+            return { serverStop: { pid, stopped } };
         }
     };
 }

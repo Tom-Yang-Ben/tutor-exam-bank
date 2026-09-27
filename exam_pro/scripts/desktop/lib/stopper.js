@@ -66,6 +66,18 @@ async function runStop({ sys, config, env, paths, probes, ui, log = () => { }, p
         return { result: 'not-running' };
     }
     if (health.state === 'other') {
+        // 健康檢查逾時也會歸為 other：聽著這個埠的若正是 server.json 記的後端，它只是忙，不是「別的程式」（審查 dec/desktop-launcher 第 5 件）
+        const owner = await probes.describePort();
+        log(`埠的佔用者：${JSON.stringify(owner)}`);
+        if (owner.ownServer) {
+            await ui.messageBox({
+                text: `出題系統的後端（PID ${owner.pid}）正在執行，但沒有回應（${health.detail || '健康檢查沒有回應'}），通常是電腦正忙。\n` +
+                    '請等一兩分鐘再按一次「關閉出題系統」。\n' +
+                    `一直沒有回應的話，到工作管理員 → 詳細資料，結束 PID ${owner.pid} 的 node.exe（沒跑完的那一步下次開啟時會自動重跑）。`,
+                icon: info.ICON_WARNING
+            });
+            return { result: 'busy' };
+        }
         await ui.messageBox({ text: `${health.detail || '這個埠上的程式不是出題系統'}。\n關閉捷徑只會關出題系統，這個程式請自己關閉。`, icon: info.ICON_WARNING });
         return { result: 'other' };
     }

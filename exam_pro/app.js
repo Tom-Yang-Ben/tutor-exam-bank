@@ -183,10 +183,15 @@ app.use('/figures', express.static(FIGURES_DIR));
 //     .env 的 API_KEY 可能在伺服器啟動後被改過，帶金鑰去問會被 401 擋住而分不出是誰在聽。
 //     回應只有服務名稱、版本、資料庫連不連得上與 migration 檔名，不含任何題目、學生、設定或錯誤原文
 //     （controllers/healthController.js 檔頭）；首頁 serveIndex 本來就不經 apiKeyAuth，沒金鑰能拿到的東西沒有變多。
-app.get('/api/health', require('./controllers/healthController').health);
+//     本機以外的來源另有寬鬆的限流（每分鐘 60 次；本機的啟動器不限），同一網段的電腦不能無限次查資料庫。
+{
+    const healthController = require('./controllers/healthController');
+    app.get('/api/health', healthController.createHealthRateLimit(), healthController.health);
+}
 
 // 3b. 桌面啟動器的關閉通道（services/launcherControl.js）：只有環境裡有 LAUNCHER_CONTROL_TOKEN
-//     （由桌面啟動器開的後端）才掛；npm start、npm run dev、CI 都沒有這個變數，行為不變（請求落到 404）。
+//     （由桌面啟動器開的後端）才掛；npm start、npm run dev、CI 都沒有這個變數，行為不變：
+//     請求落到下面既有的 /api 路由（設了 API_KEY 又沒帶金鑰先回 401，否則 404）。
 //     照慣例在 apiKeyAuth 之後，另外還要 x-launcher-token。
 const launcherRouter = require('./services/launcherControl').routerFromEnv();
 if (launcherRouter) app.use('/api/launcher', apiKeyAuth, launcherRouter);

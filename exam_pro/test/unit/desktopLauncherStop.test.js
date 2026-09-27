@@ -59,6 +59,23 @@ describe('關閉：先認清楚 3000 埠上是誰', () => {
         assert.equal(r.posts.length, 0);
     });
 
+    // 〔審查 dec/desktop-launcher 第 5 件〕
+    test('健康檢查逾時、而聽著埠的是 server.json 記的後端 → 說「後端正忙」（不說不是出題系統），請 Owner 稍後再按', async () => {
+        const r = await stop({
+            health: 'busy',
+            netstat: '  TCP    0.0.0.0:3000           0.0.0.0:0              LISTENING       7100\r\n',
+            tasklist: '"node.exe","7100","Console","1","300,000 K"'
+        });
+        assert.equal(r.out.result, 'busy');
+        assert.match(r.world.popups[0].text, /PID 7100/);
+        assert.match(r.world.popups[0].text, /稍後|等一兩分鐘/);
+        assert.doesNotMatch(r.world.popups[0].text, /不是出題系統/);
+        assert.equal(r.posts.length, 0);
+        // 聽著埠的是別的 PID → 照舊說不是出題系統
+        const other = await stop({ health: 'busy', netstat: '  TCP    0.0.0.0:3000   0.0.0.0:0   LISTENING   55\r\n', tasklist: '"java.exe","55","Console","1","1 K"' });
+        assert.equal(other.out.result, 'other');
+    });
+
     test('後端不是啟動器開的（沒有 server.json）→ 請 Owner 到那個視窗按 Ctrl+C，不強制結束', async () => {
         const r = await stop({ health: 'ours', db: true }, { serverInfo: null });
         assert.equal(r.out.result, 'not-launcher');

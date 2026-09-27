@@ -6,6 +6,12 @@
 //   finish／fail        告訴啟動頁結果，確認它收到了；啟動頁沒開成（或已被關掉）就改開 app 視窗／跳系統訊息框
 //   messageBox          WScript.Shell.Popup（PowerShell -EncodedCommand；Windows 以外只寫 log）
 // I/O 全部經注入的 sys。
+//
+// 〔審查 dec/desktop-launcher 第 1 件〕這裡開的都是「要讓 Owner 看到的視窗」，所以一律 hide:false（lib/system.js 檔頭）：
+//   - Edge／Chrome（spawnDetached）與 rundll32（預設瀏覽器，它把自己的顯示狀態原樣交給 ShellExecute）；
+//   - 訊息框的 PowerShell：訊息框是 PowerShell 這個程序的第一個視窗，同樣照 STARTUPINFO 決定顯示狀態。
+//     hide:false 也不會多一個黑色視窗：exec 不是 detached，PowerShell 沿用啟動器自己的主控台
+//     （捷徑經 run_hidden.vbs 開的 node，主控台本來就是隱藏的；在命令提示字元執行時就是那個視窗）。
 // ─────────────────────────────────────────────────────────────
 const w = require('./windows');
 const { startStatusServer } = require('./statusServer');
@@ -75,8 +81,8 @@ function createUi({ sys, config, statusHtml, log = () => { }, logs = {}, startSe
         for (const kind of w.browserOrder(config.browser)) {
             if (kind === 'default') {
                 const r = sys.platform === 'win32'
-                    ? await sys.exec('rundll32.exe', ['url.dll,FileProtocolHandler', url], { timeoutMs: 20_000 })
-                    : await sys.exec(sys.platform === 'darwin' ? 'open' : 'xdg-open', [url], { timeoutMs: 20_000 });
+                    ? await sys.exec('rundll32.exe', ['url.dll,FileProtocolHandler', url], { timeoutMs: 20_000, hide: false })
+                    : await sys.exec(sys.platform === 'darwin' ? 'open' : 'xdg-open', [url], { timeoutMs: 20_000, hide: false });
                 if (r.code === 0) return { ok: true, via: 'default' };
                 errors.push(`預設瀏覽器：${r.errorCode || `結束碼 ${r.code}`}`);
                 continue;
@@ -85,7 +91,7 @@ function createUi({ sys, config, statusHtml, log = () => { }, logs = {}, startSe
             const exe = [...custom, ...w.browserCandidates(kind, sys.env)].find(p => sys.exists(p));
             if (!exe) continue;
             const args = w.appWindowArgs({ url, profileDir: w.browserProfileDir(kind, config, sys.env), extra: config.browserArgs });
-            const r = await sys.spawnDetached(exe, args, {});
+            const r = await sys.spawnDetached(exe, args, { hide: false });
             if (r.ok) return { ok: true, via: kind, path: exe };
             errors.push(`${kind}：${r.error}`);
         }
@@ -124,7 +130,8 @@ function createUi({ sys, config, statusHtml, log = () => { }, logs = {}, startSe
         log(`[訊息框] ${title}：${text.replace(/\n+/g, ' ／ ')}`);
         if (sys.platform !== 'win32') return null;
         const r = await sys.exec('powershell.exe', w.powershellArgs(w.popupScript({ text, title, buttons, icon, seconds })), {
-            timeoutMs: seconds > 0 ? (seconds + 60) * 1000 : 24 * 3600 * 1000
+            timeoutMs: seconds > 0 ? (seconds + 60) * 1000 : 24 * 3600 * 1000,
+            hide: false   // 訊息框要看得到（檔頭）
         });
         return w.parsePopupResult(r.stdout);
     }

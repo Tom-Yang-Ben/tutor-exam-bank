@@ -7,9 +7,22 @@
 //     都依 opts 的設定與目前時間回應；
 //   - 每一次 exec／spawn／request 都記在 world.calls，測試可以斷言「有沒有碰 Docker」「開了幾個視窗」。
 // 不連網、不開任何程序、不寫任何檔案。
+//
+// 〔審查 dec/desktop-launcher〕假後端的「聽不了埠」改照 Express 5 的真實行為（原本模擬的是 Express 4 的
+// 「Unhandled 'error' event」當掉，給了錯誤的信心）：
+//   exit-addrinuse／exit-eacces：修正後的 server.js——印 utils/listenFailure.js 的說明、以結束碼 1 結束；
+//   listen-swallowed           ：修正前的 server.js——照印「成功啟動」、不結束、不聽任何埠（健康檢查一直 ECONNREFUSED）。
+// 另外記下每次 exec／spawn 的選項（hide），並模擬 taskkill /PID 與 killPid。
 // ─────────────────────────────────────────────────────────────
 const path = require('path');
 const { listMigrationFiles } = require('../../../utils/migrationStatus');
+const { listenFailureText } = require('../../../utils/listenFailure');
+
+/** 修正後的 server.js 聽不了埠時寫進 log 的內容（與真的一樣由 listenFailureText 產生） */
+function listenLog(code, port = 3000) {
+    const msg = code === 'EACCES' ? `listen EACCES: permission denied 0.0.0.0:${port}` : `listen EADDRINUSE: address already in use :::${port}`;
+    return `${listenFailureText(Object.assign(new Error(msg), { code }), port)}\n`;
+}
 
 const NODE = 'C:\\node\\node.exe';
 const DOCKER_DESKTOP = 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe';
@@ -54,7 +67,7 @@ function createWorld(o = {}) {
             LOCALAPPDATA: LOCAL, ProgramFiles: 'C:\\Program Files', 'ProgramFiles(x86)': 'C:\\Program Files (x86)',
             SystemRoot: 'C:\\Windows', USERPROFILE: 'C:\\Users\\ben', ...(o.sysEnv || {})
         },
-        // 已經在跑的後端：'down' | 'ours' | 'other' | 'legacy'
+        // 已經在跑的後端：'down' | 'ours' | 'other' | 'legacy' | 'busy'（有程式在聽、健康檢查一直逾時）
         health: o.health || 'down',
         db: o.db ?? false,
         dockerCliOnPath: o.dockerCliOnPath ?? true,
@@ -71,13 +84,13 @@ function createWorld(o = {}) {
         psFails: o.psFails ?? false,
         netstat: o.netstat || '',
         tasklist: o.tasklist || '',
-        // 啟動器開的後端：'ok' | 'exit-addrinuse' | 'exit-crash' | 'hang' | 'spawn-fail'
+        // 啟動器開的後端：'ok' | 'exit-addrinuse' | 'exit-eacces' | 'exit-crash' | 'hang' | 'listen-swallowed' | 'spawn-fail'
         server: o.server || 'ok',
         serverReadyInMs: o.serverReadyInMs ?? 8_000,
         launcherStatus: o.launcherStatus || null,     // stop 測試：(req) => HttpResult
         pidExitAfterMs: o.pidExitAfterMs ?? 2_000,    // stop 測試：送出 shutdown 之後幾毫秒行程結束（Infinity＝不結束）
         calls, popups, windows, files, existing, alive,
-        dockerStartedAt: null, ollamaStartedAt: null, serverSpawnedAt: null, serverLog: null, shutdownAt: null,
+        dockerStartedAt: null, ollamaStartedAt: null, serverSpawnedAt: null, serverLog: null, shutdownAt: null, serverKilledAt: null,
         get now() { return now; }
     };
 
@@ -85,10 +98,17 @@ function createWorld(o = {}) {
     const ollamaReady = () => w.ollamaUp || (w.ollamaStartedAt !== null && now - w.ollamaStartedAt >= w.ollamaStartsInMs);
     function serverState() {
         if (w.serverSpawnedAt === null) return null;
+        if (w.serverKilledAt !== null) return 'killed';
         const t = now - w.serverSpawnedAt;
-        if (w.server === 'exit-addrinuse' || w.server === 'exit-crash') return t >= 1500 ? 'exited' : 'starting';
-        if (w.server === 'hang') return 'starting';
+        if (w.server === 'exit-addrinuse' || w.server === 'exit-eacces' || w.server === 'exit-crash') return t >= 1500 ? 'exited' : 'starting';
+        if (w.server === 'hang' || w.server === 'listen-swallowed') return 'starting';
         return t >= w.serverReadyInMs ? 'ready' : 'starting';
+    }
+    function killServer(pid) {
+        if (pid !== SERVER_PID || w.serverSpawnedAt === null || !alive.has(SERVER_PID)) return false;
+        w.serverKilledAt = now;
+        alive.delete(SERVER_PID);
+        return true;
     }
     const ok = (stdout = '') => ({ code: 0, stdout, stderr: '', errorCode: null });
     const enoent = () => ({ code: null, stdout: '', stderr: '', errorCode: 'ENOENT' });
@@ -144,7 +164,11 @@ function createWorld(o = {}) {
             if (base === 'tasklist') return ok(w.tasklist);
             if (base === 'rundll32.exe') { windows.push({ via: 'default', url: args[1] }); return ok(); }
             if (base === 'xdg-open' || base === 'open') { windows.push({ via: 'default', url: args[0] }); return ok(); }
-            if (base === 'taskkill') return ok();
+            if (base === 'taskkill') {
+                const i = args.indexOf('/PID');
+                if (i !== -1) return killServer(Number(args[i + 1])) ? ok() : { code: 128, stdout: '', stderr: 'ERROR: not found', errorCode: null };
+                return ok();
+            }
             if (base === 'ps') return ok(w.processes.map(p => `${p.ProcessId} ${p.Name} ${p.CommandLine}`).join('\n'));
             return enoent();
         },
@@ -169,6 +193,10 @@ function createWorld(o = {}) {
                 w.serverLog = opts.logFile;
                 w.serverEnv = opts.env;
                 alive.add(SERVER_PID);
+                if (w.server === 'listen-swallowed') {
+                    // 修正前：Express 5 把 listen 錯誤交給 callback，callback 不看 err，照印成功
+                    files.set(opts.logFile, `${files.get(opts.logFile) || ''}🚀 家教題庫後端系統已成功安全啟動：http://localhost:3000\n`);
+                }
                 return { ok: true, pid: SERVER_PID };
             }
             return { ok: false, error: `spawn ${file} ENOENT`, errorCode: 'ENOENT' };
@@ -176,12 +204,13 @@ function createWorld(o = {}) {
 
         childStatus(pid) {
             if (pid !== SERVER_PID || w.serverSpawnedAt === null) return null;
+            if (serverState() === 'killed') return { exited: true, code: null };
             if (serverState() !== 'exited') return { exited: false, code: null };
             if (!w._logged) {
                 w._logged = true;
-                const text = w.server === 'exit-addrinuse'
-                    ? 'node:events:497\n      throw er; // Unhandled \'error\' event\nError: listen EADDRINUSE: address already in use :::3000\n'
-                    : 'Error: 缺少 DATABASE_URL。請在 exam_pro/.env 設定\n';
+                const text = w.server === 'exit-addrinuse' ? listenLog('EADDRINUSE')
+                    : w.server === 'exit-eacces' ? listenLog('EACCES')
+                        : 'Error: 缺少 DATABASE_URL。請在 exam_pro/.env 設定\n';
                 files.set(w.serverLog, (files.get(w.serverLog) || '') + text);
                 alive.delete(SERVER_PID);
             }
@@ -203,8 +232,9 @@ function createWorld(o = {}) {
             }
             const st = serverState();
             if (st === 'ready') return healthBody();
-            if (st === 'starting' || st === 'exited') return refused();
+            if (st === 'starting' || st === 'exited' || st === 'killed') return refused();
             if (w.health === 'down') return refused();
+            if (w.health === 'busy') return { status: null, json: null, text: '', errorCode: 'ETIMEDOUT' };
             if (w.health === 'ours') {
                 if (w.shutdownAt !== null && now - w.shutdownAt >= w.pidExitAfterMs) return refused();
                 return healthBody();
@@ -229,10 +259,15 @@ function createWorld(o = {}) {
         pidAlive(pid) {
             if (pid === SERVER_PID && w.health === 'ours' && w.shutdownAt !== null) return now - w.shutdownAt < w.pidExitAfterMs;
             return alive.has(pid);
+        },
+
+        killPid(pid) {
+            calls.push({ kind: 'kill', pid });
+            return killServer(pid);
         }
     };
     w.sys = sys;
     return w;
 }
 
-module.exports = { createWorld, decodePs, popupText, START, TODAY, NODE, DOCKER_DESKTOP, EDGE, CHROME, OLLAMA_APP, LOCAL, SERVER_PID };
+module.exports = { createWorld, decodePs, popupText, listenLog, START, TODAY, NODE, DOCKER_DESKTOP, EDGE, CHROME, OLLAMA_APP, LOCAL, SERVER_PID };

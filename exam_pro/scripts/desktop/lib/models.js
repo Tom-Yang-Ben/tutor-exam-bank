@@ -6,7 +6,7 @@
 //     workers/jobRunner.js（MODEL_VARIANT 沒設＝MODEL_VERIFY）、services/nlqService.js（MODEL_NLQ 預設 ollama:qwen3:8b）、
 //     services/assistantService.js（MODEL_ASSISTANT 沒設＝MODEL_TEXT）、MODEL_TUTOR（沒設＝MODEL_VERIFY）。
 //     config/models.js 的 getter 直接讀 process.env，啟動器不能把 .env 灌進自己的 process.env（後端要拿到與 npm start
-//     一模一樣的環境），所以這裡對「一個 env 物件」重算同一條鏈；test/unit/desktopLauncherModels.test.js 拿各種 env
+//     一模一樣的環境），所以這裡對「一個 env 物件」重算同一條鏈；test/unit/desktopLauncherConfig.test.js（models 那一組）拿各種 env
 //     逐一和 config/models.js 的 getter 比對，兩邊一改不一致就紅。
 //   - OLLAMA_HOST：services/llm/ollama.js 的 resolveHost（同一支）。
 //   - OCR：services/ocr 的 resolveOcrConfig（同一支）；拆題模型是 ollama 且 OCR_ENGINE=paddle 時才需要。

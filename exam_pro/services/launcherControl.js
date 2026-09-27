@@ -6,7 +6,8 @@
 //
 // 只有由啟動器開的後端才有這條路：啟動器產生一次性的隨機權杖，放在子行程環境變數 LAUNCHER_CONTROL_TOKEN，
 // 同一份寫進 exam_pro/data/launcher/server.json 給關閉捷徑讀。環境裡沒有這個變數（npm start、npm run dev、
-// CI、測試）時 isEnabled() 為 false，app.js 不掛任何路由——既有行為逐位元不變（請求落到 404）。
+// CI、測試）時 isEnabled() 為 false，app.js 不掛任何路由——既有行為逐位元不變：請求落到既有的 /api 路由
+// （設了 API_KEY 又沒帶金鑰先回 401，否則 404）。
 //
 //   GET  /api/launcher/status     → 200 { pid, in_flight, shutting_down }
 //   POST /api/launcher/shutdown   → 202 { pid, in_flight, grace_ms, already }，回應送出後才開始關

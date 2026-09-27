@@ -194,6 +194,57 @@ describe('nextAction：migration、後端、完成', () => {
         assert.equal(plan.stepOfFailure('port-in-use', {}), 'check');
     });
 
+    // 〔審查 dec/desktop-launcher 第 2 件〕
+    test('後端因為 EACCES 結束：查不到誰在聽 → 埠被 Windows 保留（提示 netsh）；查得到 → 同「被佔用」', () => {
+        const f = { ...healthyUntilServer(), server: { spawned: true, pid: 1, logFile: 'S.log' }, serverWait: { ready: false, reason: 'exited', addrInUse: false, listenError: 'EACCES', logTail: 'listen EACCES' } };
+        assert.equal(next(f).type, 'describe-port');
+        const reserved = next({ ...f, portOwner: { pid: null, name: null, text: null, pids: [] } });
+        assert.equal(reserved.code, 'port-reserved');
+        assert.match(reserved.hint.join('\n'), /netsh interface ipv4 show excludedportrange protocol=tcp/);
+        assert.match(reserved.hint.join('\n'), /PORT/);
+        assert.match(reserved.hint.join('\n'), /S\.log/);
+        assert.equal(reserved.detail, 'listen EACCES');
+        assert.equal(plan.stepOfFailure('port-reserved', f), 'server');
+        const held = next({ ...f, portOwner: { pid: 9, name: 'svc.exe', text: 'svc.exe（PID 9）', pids: [9] } });
+        assert.equal(held.code, 'port-in-use');
+    });
+
+    test('後端逾時時還活著、而埠被別的程式聽著 → 先結束自己開的後端，再報埠被佔用（不留孤兒）', () => {
+        const f = { ...healthyUntilServer(), server: { spawned: true, pid: 7100 }, serverWait: { ready: false, reason: 'timeout', childAlive: true } };
+        assert.equal(next(f).type, 'describe-port');
+        const other = { ...f, portOwner: { pid: 77, name: 'python.exe', text: 'python.exe（PID 77）', pids: [77] } };
+        assert.equal(next(other).type, 'stop-server');
+        const stopped = next({ ...other, serverStop: { pid: 7100, stopped: true } });
+        assert.equal(stopped.code, 'port-in-use');
+        assert.match(stopped.hint[0], /PID 7100.*已經由啟動器結束/);
+        const notStopped = next({ ...other, serverStop: { pid: 7100, stopped: false } });
+        assert.match(notStopped.hint[0], /工作管理員.*PID 7100/);
+    });
+
+    test('後端逾時但埠上聽著的是它自己、或沒人在聽（只是慢）→ 不結束它，報逾時', () => {
+        const f = { ...healthyUntilServer(), server: { spawned: true, pid: 7100 }, serverWait: { ready: false, reason: 'timeout', childAlive: true } };
+        assert.equal(next({ ...f, portOwner: { pid: 7100, name: 'node.exe', text: 'node.exe（PID 7100）', pids: [7100], ownServer: true } }).code, 'server-timeout');
+        assert.equal(next({ ...f, portOwner: { pid: null, name: null, text: null, pids: [] } }).code, 'server-timeout');
+        // 自己開的後端已經不在（childAlive:false）→ 不查埠、直接報逾時
+        assert.equal(next({ ...f, serverWait: { ready: false, reason: 'timeout', childAlive: false } }).code, 'server-timeout');
+        assert.equal(plan.portHeldByOther({ server: { pid: 1 }, portOwner: { pid: 2 } }), true);
+        assert.equal(plan.portHeldByOther({ server: { pid: 1 }, portOwner: { pid: 2, pids: [2, 1] } }), false);
+    });
+
+    // 〔審查 dec/desktop-launcher 第 5 件〕
+    test('健康檢查逾時、而聽著這個埠的是 server.json 記的後端 → 報「後端沒有回應」，不說被其他程式佔用', () => {
+        const f = { health: { state: 'other', detail: '3000 埠有程式在聽，但沒有正常回應（ETIMEDOUT）' }, statusWindow: { ok: true } };
+        const a = next({ ...f, portOwner: { pid: 7100, name: 'node.exe', text: 'node.exe（PID 7100）', pids: [7100], ownServer: true, logFile: 'C:\\app\\data\\logs\\server-2026-09-26.log' } });
+        assert.equal(a.code, 'server-busy');
+        assert.doesNotMatch(`${a.title}${a.message}`, /其他程式/);
+        assert.match(a.message, /PID 7100/);
+        assert.match(a.hint.join('\n'), /關閉出題系統/);
+        assert.match(a.hint.join('\n'), /server-2026-09-26\.log/, '指向那個後端實際寫的 log（跨夜的後端還在寫前一天的檔）');
+        assert.equal(a.detail, f.health.detail);
+        assert.equal(plan.stepOfFailure('server-busy', f), 'check');
+        assert.equal(next({ ...f, portOwner: { pid: 7100, name: 'node.exe', text: 'node.exe（PID 7100）', pids: [7100], ownServer: false } }).code, 'port-in-use');
+    });
+
     test('已在跑但資料庫斷線：把資料庫開起來之後就完成，不另起後端', () => {
         const f = healthyUntilServer({ health: { state: 'ours', dbOk: false }, setup: undefined, db: { reachable: false }, docker: { ready: true }, compose: { ok: true }, dbAfterCompose: { reachable: true } });
         assert.deepEqual(next(f), { type: 'finish', url: ctx.appUrl, reason: 'db-restored' });
@@ -219,7 +270,7 @@ describe('nextAction：migration、後端、完成', () => {
 });
 
 describe('failureMessage：每一種失敗都說得出「下一步做什麼」', () => {
-    const codes = ['port-in-use', 'env-missing', 'modules-missing', 'db-url-missing', 'recording-db-down', 'docker-not-found',
+    const codes = ['port-in-use', 'port-reserved', 'server-busy', 'env-missing', 'modules-missing', 'db-url-missing', 'recording-db-down', 'docker-not-found',
         'docker-launch-failed', 'docker-timeout', 'compose-failed', 'db-unreachable', 'server-spawn-failed', 'server-exited',
         'server-timeout', 'internal', 'something-new'];
     test('標題、原因、至少一條處置；不出現 undefined／null', () => {
@@ -291,6 +342,19 @@ describe('collectWarnings', () => {
         assert.deepEqual(codes(healthyUntilServer({ setup: { envFile: true, nodeModules: true, databaseUrl: true, draining: { pid: 88, untilMs: 1 } } })), ['previous-draining']);
         assert.deepEqual(codes({ configWarnings: ['browser 只接受 …'] }), ['config']);
         assert.deepEqual(codes(healthyUntilServer({ serverWait: { ready: true, dbOk: false } })), ['server-db-degraded']);
+    });
+
+    // 〔審查 dec/desktop-launcher 第 4 件〕
+    test('錄製中的警告寫明「佇列裡已有的工作也會開跑」；設了 jobsWhileRecording:pause 時改說暫停與怎麼恢復', () => {
+        const run = plan.collectWarnings(healthyUntilServer({ recording: { active: true, matches: ['x'], pauseJobs: false } }));
+        assert.match(run[0].text, /佇列裡已有的背景工作/);
+        assert.match(run[0].text, /自己開跑/);
+        assert.match(run[0].text, /DL-4/);
+        const pause = plan.collectWarnings(healthyUntilServer({ recording: { active: true, matches: ['x'], pauseJobs: true } }));
+        assert.equal(pause[0].code, 'recording');
+        assert.match(pause[0].text, /暫停背景工作/);
+        assert.match(pause[0].text, /關閉出題系統.*出題系統/);
+        assert.doesNotMatch(pause[0].text, /\*\*/, '啟動頁不解析 Markdown');
     });
 });
 

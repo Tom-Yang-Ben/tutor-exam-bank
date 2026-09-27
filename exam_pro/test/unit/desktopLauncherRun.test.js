@@ -8,7 +8,7 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { createWorld, TODAY, NODE, DOCKER_DESKTOP, EDGE, CHROME, OLLAMA_APP, LOCAL, SERVER_PID } = require('./lib/desktopWorld');
+const { createWorld, decodePs, TODAY, NODE, DOCKER_DESKTOP, EDGE, CHROME, OLLAMA_APP, LOCAL, SERVER_PID } = require('./lib/desktopWorld');
 const { resolveConfig } = require('../../scripts/desktop/lib/config');
 const { createProbes, appPaths, portFromEnv } = require('../../scripts/desktop/lib/probes');
 const { createActions, drainingFrom } = require('../../scripts/desktop/lib/actions');
@@ -261,6 +261,25 @@ describe('錄製進行中（record_local.bat／cassettes:rerecord）', () => {
         assert.equal(r.result.facts.recording.active, false);
     });
 
+    // 〔審查 dec/desktop-launcher 第 4 件；DL-4〕
+    test('預設（jobsWhileRecording:run）：後端照常跑背景工作，警告寫明佇列裡的工作也會開跑', async () => {
+        const r = await launch({ processes: recording, dockerEngine: true, db: true });
+        assert.equal(r.world.serverEnv.JOB_RUNNER, undefined);
+        assert.match(r.result.warnings[0].text, /佇列裡已有的背景工作/);
+    });
+
+    test('jobsWhileRecording:pause → 後端以 JOB_RUNNER=off 啟動，警告說明錄完後怎麼恢復；沒在錄製時不受影響', async () => {
+        const r = await launch({ processes: recording, dockerEngine: true, db: true }, { config: { jobsWhileRecording: 'pause' } });
+        assert.equal(r.result.action.type, 'finish');
+        assert.equal(r.world.serverEnv.JOB_RUNNER, 'off');
+        assert.equal(r.result.facts.server.jobsPaused, true);
+        assert.equal(JSON.parse(r.world.files.get(r.paths.serverInfo)).jobsPaused, true);
+        assert.match(r.result.warnings[0].text, /暫停背景工作/);
+        const normal = await launch({ dockerEngine: true, db: true }, { config: { jobsWhileRecording: 'pause' } });
+        assert.equal(normal.world.serverEnv.JOB_RUNNER, undefined);
+        assert.equal(normal.result.facts.server.jobsPaused, undefined);
+    });
+
     test('讀不到程序清單 → 不當成錄製中（照常開 Docker），但警告無法確認', async () => {
         const r = await launch({ psFails: true });
         assert.equal(r.result.facts.recording.active, null);
@@ -304,6 +323,56 @@ describe('埠與後端的失敗', () => {
         const r = await launch({ db: true, dockerEngine: true, server: 'hang' }, { config: { serverReadyTimeoutSec: 30 } });
         assert.equal(r.result.action.code, 'server-timeout');
         assert.match(r.result.action.message, /30 秒/);
+    });
+
+    // 〔審查 dec/desktop-launcher 第 2 件〕以下三個用 Express 5 的真實行為（desktopWorld 檔頭）
+    test('後端因 EACCES 結束、查不到誰在聽 → 報埠被 Windows 保留（提示 netsh），不說被佔用', async () => {
+        const r = await launch({ db: true, dockerEngine: true, server: 'exit-eacces' });
+        assert.equal(r.result.action.code, 'port-reserved');
+        assert.equal(r.result.facts.serverWait.listenError, 'EACCES');
+        assert.match(r.result.action.hint.join('\n'), /excludedportrange/);
+        assert.match(r.result.action.detail, /listen EACCES/);
+        assert.equal(r.finalState.steps.find(s => s.id === 'server').state, 'error');
+    });
+
+    test('修正前的 server.js（listen 錯誤被吞、不結束、不聽埠）：逾時時查到埠被別的程式聽著 → 結束自己開的後端，再報埠被佔用', async () => {
+        const r = await launch({
+            db: true, dockerEngine: true, server: 'listen-swallowed',
+            netstat: '  TCP    0.0.0.0:3000           0.0.0.0:0              LISTENING       77\r\n',
+            tasklist: '"python.exe","77","Console","1","9 K"'
+        }, { config: { serverReadyTimeoutSec: 30 } });
+        assert.equal(r.result.action.code, 'port-in-use');
+        assert.deepEqual(r.steps.slice(-3), ['wait-server', 'describe-port', 'stop-server']);
+        const kill = r.world.calls.find(c => c.kind === 'exec' && c.file === 'taskkill');
+        assert.deepEqual(kill.args, ['/PID', String(SERVER_PID), '/T', '/F']);
+        assert.equal(r.world.sys.pidAlive(SERVER_PID), false, '不留下孤兒後端');
+        assert.equal(r.world.files.has(r.paths.serverInfo), false, 'server.json 一併清掉（關閉捷徑不會去找它）');
+        assert.deepEqual(r.result.facts.serverStop, { pid: SERVER_PID, stopped: true });
+        assert.match(r.result.action.message, /python\.exe（PID 77）/);
+        assert.match(r.result.action.hint[0], /已經由啟動器結束/);
+    });
+
+    test('後端逾時、埠上沒人在聽（只是慢）→ 不結束它，照舊報逾時', async () => {
+        const r = await launch({ db: true, dockerEngine: true, server: 'hang' }, { config: { serverReadyTimeoutSec: 30 } });
+        assert.equal(r.result.action.code, 'server-timeout');
+        assert.equal(r.result.facts.serverWait.childAlive, true);
+        assert.ok(!r.world.calls.some(c => (c.kind === 'exec' && c.file === 'taskkill') || c.kind === 'kill'));
+        assert.equal(r.world.sys.pidAlive(SERVER_PID), true);
+    });
+
+    // 〔審查 dec/desktop-launcher 第 5 件〕
+    test('健康檢查一直逾時、聽著埠的是 server.json 記的後端 → 報「後端沒有回應」（不說被其他程式佔用、不起第二個後端）', async () => {
+        const logFile = P('data', 'logs', 'server-2026-09-26.log');
+        const r = await launch({
+            health: 'busy', alive: [SERVER_PID],
+            netstat: '  TCP    0.0.0.0:3000           0.0.0.0:0              LISTENING       7100\r\n',
+            tasklist: '"node.exe","7100","Console","1","300,000 K"',
+            files: { [P('data', 'launcher', 'server.json')]: JSON.stringify({ pid: SERVER_PID, port: 3000, token: 't', logFile }) }
+        });
+        assert.equal(r.result.action.code, 'server-busy');
+        assert.match(r.result.action.hint.join('\n'), /server-2026-09-26\.log/);
+        assert.deepEqual(serverSpawns(r.world), []);
+        assert.deepEqual(dockerCalls(r.world), []);
     });
 
     test('開不起 node → server-spawn-failed', async () => {
@@ -454,6 +523,54 @@ describe('畫面：啟動頁沒回應時的退路、單一執行個體、內部�
         const s = summarize({ server: { spawned: true, token: 'abc123secret', pid: 1 } });
         assert.doesNotMatch(s, /abc123secret/);
         assert.match(s, /"pid":1/);
+    });
+});
+
+// 〔審查 dec/desktop-launcher 第 1 件〕windowsHide 會把 GUI 程式的第一個視窗藏起來（lib/system.js 檔頭）。
+// Linux 會忽略 windowsHide，所以只能在這裡逐一斷言每個呼叫點傳的 hide（system.js 怎麼轉成 windowsHide 見 desktopLauncherSystem.test.js）。
+describe('視窗看得到：GUI 程式 hide:false、主控台程式維持隱藏', () => {
+    const hidden = c => c.opts.hide !== false;
+    const ps = (world, needle) => world.calls.filter(c => c.kind === 'exec' && c.file === 'powershell.exe' && decodePs(c.args).includes(needle));
+
+    test('冷開機：Edge（啟動頁）、Docker Desktop、Ollama 系統匣程式都是 hide:false；node server.js、docker CLI、PowerShell 程序清單維持隱藏', async () => {
+        const r = await launch({});
+        const spawns = r.world.calls.filter(c => c.kind === 'spawn');
+        const byFile = f => spawns.filter(c => c.file === f);
+        assert.equal(byFile(EDGE).length, 1);
+        assert.equal(byFile(EDGE)[0].opts.hide, false, 'Edge 的 app 視窗');
+        assert.equal(byFile(DOCKER_DESKTOP)[0].opts.hide, false, 'Docker Desktop（含它跳出的同意條款／WSL 更新視窗）');
+        assert.equal(byFile(OLLAMA_APP)[0].opts.hide, false, 'Ollama 系統匣程式');
+        assert.equal(hidden(byFile(NODE)[0]), true, 'node server.js 是主控台程式，維持隱藏');
+        for (const c of r.world.calls.filter(x => x.kind === 'exec' && /docker/i.test(x.file))) assert.equal(hidden(c), true, `${c.file} ${c.args.join(' ')}`);
+        for (const c of ps(r.world, 'Get-CimInstance')) assert.equal(hidden(c), true, '列程序的 PowerShell 不顯示視窗');
+    });
+
+    test('已在跑：直接開的 app 視窗是 hide:false；Chrome 同樣；預設瀏覽器（rundll32）也是', async () => {
+        const edge = await launch({ health: 'ours', db: true });
+        assert.equal(edge.world.calls.find(c => c.kind === 'spawn' && c.file === EDGE).opts.hide, false);
+        const chrome = await launch({ health: 'ours', db: true, exists: [CHROME] });
+        assert.equal(chrome.world.calls.find(c => c.kind === 'spawn' && c.file === CHROME).opts.hide, false);
+        const dflt = await launch({ health: 'ours', db: true, exists: [] });
+        const rundll = dflt.world.calls.find(c => c.kind === 'exec' && c.file === 'rundll32.exe');
+        assert.equal(rundll.opts.hide, false, 'rundll32 把自己的顯示狀態交給 ShellExecute');
+    });
+
+    test('訊息框的 PowerShell 是 hide:false（訊息框是它的第一個視窗）', async () => {
+        const r = await launch({}, { envFile: false, pageWorks: false });
+        const popups = ps(r.world, '.Popup(');
+        assert.equal(popups.length, 1);
+        assert.equal(popups[0].opts.hide, false);
+    });
+
+    test('找不到系統匣程式、改用 ollama serve（主控台程式）→ 維持隱藏；結束孤兒後端的 taskkill、查埠的 netstat／tasklist 也是', async () => {
+        const r = await launch({ db: true, dockerEngine: true, exists: [DOCKER_DESKTOP, EDGE], ollamaOnPath: true });
+        const serve = r.world.calls.find(c => c.kind === 'spawn' && c.file === 'ollama');
+        assert.equal(serve.opts.hide, true);
+        const orphan = await launch({
+            db: true, dockerEngine: true, server: 'listen-swallowed',
+            netstat: '  TCP    0.0.0.0:3000           0.0.0.0:0              LISTENING       77\r\n', tasklist: '"x.exe","77","Console","1","9 K"'
+        }, { config: { serverReadyTimeoutSec: 10 } });
+        for (const c of orphan.world.calls.filter(x => x.kind === 'exec' && /^(taskkill|netstat|tasklist)$/.test(x.file))) assert.equal(hidden(c), true, c.file);
     });
 });
 

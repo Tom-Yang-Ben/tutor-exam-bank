@@ -49,11 +49,18 @@ const DEFAULTS = Object.freeze({
     /** 關閉時最多等在途的背景工作幾秒（Owner 沒被問、或選「不等」時用這個） */
     stopGraceSec: 120,
     /** 關閉時若有背景工作正在跑，先跳視窗問要不要等它跑完 */
-    askBeforeStopWithJobs: true
+    askBeforeStopWithJobs: true,
+    /**
+     * 偵測到本機重錄正在執行時，這次開的後端要不要跑背景工作（DL-4，docs/desktop-launcher.md 第 8 節）：
+     *   run  （預設，與 npm start 相同）：照跑；佇列裡已有的工作會開跑，和錄製搶 CPU 與記憶體
+     *   pause：以 JOB_RUNNER=off 啟動後端；上傳的考卷先排隊，錄完後關閉再開啟才開始
+     */
+    jobsWhileRecording: 'run'
 });
 
 const BROWSERS = ['auto', 'edge', 'chrome', 'default'];
 const STOP_DOCKER = ['no', 'containers', 'desktop'];
+const JOBS_WHILE_RECORDING = ['run', 'pause'];
 
 /** 數字鍵的合法範圍（秒） */
 const RANGES = Object.freeze({
@@ -101,6 +108,10 @@ function resolveConfig(raw) {
             const v = typeof value === 'string' ? value.trim().toLowerCase() : value;
             if (!STOP_DOCKER.includes(v)) { warnings.push(`stopDocker 只接受 ${STOP_DOCKER.join('／')}（收到 ${JSON.stringify(value)}）`); continue; }
             config[key] = v;
+        } else if (key === 'jobsWhileRecording') {
+            const v = typeof value === 'string' ? value.trim().toLowerCase() : value;
+            if (!JOBS_WHILE_RECORDING.includes(v)) { warnings.push(`jobsWhileRecording 只接受 ${JOBS_WHILE_RECORDING.join('／')}（收到 ${JSON.stringify(value)}）`); continue; }
+            config[key] = v;
         } else if (typeof dflt === 'boolean') {
             if (typeof value !== 'boolean') { warnings.push(`${key} 要是 true 或 false（收到 ${JSON.stringify(value)}）`); continue; }
             config[key] = value;
@@ -142,4 +153,4 @@ function readConfigFile(file, fsImpl = fs) {
     return { ...resolveConfig(raw), found: true };
 }
 
-module.exports = { DEFAULTS, RANGES, BROWSERS, STOP_DOCKER, resolveConfig, readConfigFile };
+module.exports = { DEFAULTS, RANGES, BROWSERS, STOP_DOCKER, JOBS_WHILE_RECORDING, resolveConfig, readConfigFile };

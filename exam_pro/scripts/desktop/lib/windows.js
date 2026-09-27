@@ -357,7 +357,23 @@ function timeStamp(d = new Date()) {
 
 /** 後端的 log 裡看得出「埠被佔用」 */
 function isAddrInUse(text) {
-    return /EADDRINUSE/.test(String(text || ''));
+    return listenErrorCode(text) === 'EADDRINUSE';
+}
+
+/**
+ * 後端的 log 裡看得出「聽不了連接埠」的原因。純函式。
+ *   EADDRINUSE：被別的程式佔用；
+ *   EACCES    ：沒有權限（Windows 上多半是埠落在 Hyper-V／WSL／Docker 保留的範圍；或別的程式以獨佔方式佔用）。
+ * 只認 Node 的 listen 錯誤訊息（「listen EACCES: permission denied 0.0.0.0:3000」），
+ * log 裡其他地方的 EACCES（例如某個檔案沒有權限）不算。server.js 聽不了埠時一定會印這一句（utils/listenFailure.js）。
+ * @param {string} text
+ * @returns {'EADDRINUSE'|'EACCES'|null}
+ */
+function listenErrorCode(text) {
+    const s = String(text || '');
+    if (/EADDRINUSE/.test(s)) return 'EADDRINUSE';
+    if (/listen EACCES/.test(s)) return 'EACCES';
+    return null;
 }
 
 /**
@@ -376,5 +392,5 @@ module.exports = {
     RECORDING_PATTERNS, RECORDING_PROCESS_NAMES, findRecordingProcesses,
     psQuote, encodePowerShell, powershellArgs, PS_UTF8, PS_LIST_PROCESSES,
     POPUP, POPUP_RESULT, popupScript, parsePopupResult, shortcutScript,
-    dateStamp, timeStamp, isAddrInUse, tailLines
+    dateStamp, timeStamp, isAddrInUse, listenErrorCode, tailLines
 };

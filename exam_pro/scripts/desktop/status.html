@@ -3,7 +3,7 @@
   scripts/desktop/status.html — 桌面啟動器的啟動畫面（docs/desktop-launcher.md 第 7.2 節）
   由 lib/statusServer.js 在 127.0.0.1 的隨機埠供應；每 0.7 秒讀一次 /state。
   完成且沒有注意事項 → 同一個視窗直接轉到系統首頁；有注意事項 → 列出來，按「進入出題系統」才轉；失敗 → 顯示原因與處置。
-  不引用任何外部資源（本機模式「執行期零外連」；test/unit/desktopLauncherStatusPage.test.js 用 check_html_offline 的規則檢查）。
+  不引用任何外部資源（本機模式「執行期零外連」；test/unit/desktopLauncherScripts.test.js 用 check_html_offline 的規則檢查）。
 -->
 <html lang="zh-Hant">
 <head>

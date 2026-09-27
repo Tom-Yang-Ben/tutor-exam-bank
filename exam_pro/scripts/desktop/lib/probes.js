@@ -91,7 +91,7 @@ function looksLikeLegacyIndex(html) {
  * @param {ReturnType<import('./system').createSystem>} deps.sys
  * @param {object} deps.config   lib/config.js 的設定
  * @param {Record<string,string>} deps.env  effectiveEnv()
- * @param {{appDir:string}} deps.paths
+ * @param {{appDir:string, serverInfo?:string}} deps.paths
  * @param {number} deps.port
  */
 function createProbes({ sys, config, env, paths, port }) {
@@ -111,16 +111,31 @@ function createProbes({ sys, config, env, paths, port }) {
         return { state: 'other', detail: `${port} 埠上的程式回 HTTP ${h.status}，不是出題系統` };
     }
 
-    /** @returns {Promise<{pid:number|null, name:string|null, text:string|null}>} */
+    /**
+     * 誰在聽這個埠（只在 Windows 查：netstat -ano＋tasklist）。
+     *   pids     ：所有在聽的 PID（啟動器用來判斷「自己開的後端有沒有聽到」）
+     *   ownServer：聽著的正是 data/launcher/server.json 記的後端（上次由圖示開的）＝不是「別的程式」
+     *              （健康檢查逾時時會被歸為 other；審查 dec/desktop-launcher 第 5 件）；logFile＝那個後端的 log
+     * @returns {Promise<{pid:number|null, name:string|null, text:string|null, pids:number[], ownServer:boolean, logFile?:string}>}
+     */
     async function describePort() {
-        if (sys.platform !== 'win32') return { pid: null, name: null, text: null };
+        const none = { pid: null, name: null, text: null, pids: [], ownServer: false };
+        if (sys.platform !== 'win32') return none;
         const ns = await sys.exec('netstat', ['-ano'], { timeoutMs: 20_000 });
         const pids = ns.code === 0 ? w.parseNetstatListeners(ns.stdout, port) : [];
-        if (!pids.length) return { pid: null, name: null, text: null };
-        const pid = pids[0];
+        if (!pids.length) return none;
+        const info = paths.serverInfo ? readServerInfo(paths.serverInfo) : null;
+        const ownPid = info && Number.isInteger(info.pid) && pids.includes(info.pid) ? info.pid : null;
+        const pid = ownPid || pids[0];
         const tl = await sys.exec('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], { timeoutMs: 20_000 });
         const name = tl.code === 0 ? w.parseTasklistName(tl.stdout, pid) : null;
-        return { pid, name, text: name ? `${name}（PID ${pid}）` : `PID ${pid}` };
+        // PID 可能被重複使用：名稱查得到時要是 node 才算
+        const ownServer = ownPid !== null && (name === null || /^node(\.exe)?$/i.test(name));
+        return {
+            pid, name, text: name ? `${name}（PID ${pid}）` : `PID ${pid}`, pids, ownServer,
+            // 那個後端實際寫的 log（以它啟動那天命名；跨夜執行的後端還在寫前一天的檔）
+            ...(ownServer && info.logFile ? { logFile: String(info.logFile) } : {})
+        };
     }
 
     /** @returns {Promise<{active:boolean|null, matches?:string[], error?:string}>} */

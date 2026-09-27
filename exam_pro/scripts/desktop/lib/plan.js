@@ -20,7 +20,17 @@
 // 〔續作 2026-09-27〕WIP 的修正：埠的佔用者改放在 facts.portOwner（原本 nextAction 看 facts、訊息讀 ctx，兩邊對不上）；
 // describe-port 補進步驟對照；錄製偵測失敗（active:null）改成警告；補 DATABASE_URL 缺漏、Ollama 在別台電腦、
 // 空資料庫、上一個後端還在收尾、設定檔有誤、啟動器內部錯誤等情況。
+//
+// 〔審查 dec/desktop-launcher，2026-09-27〕
+//   - 後端聽不了埠：log 裡的 listen 錯誤分成 EADDRINUSE（被佔用）與 EACCES（沒有權限；多半是 Windows 保留的埠段 → port-reserved）。
+//   - 自己開的後端逾時時還活著、而埠正被別的程式聽著 → 它聽不了埠（舊版 server.js 會把 listen 錯誤吞掉）：
+//     先結束它（stop-server），再報埠被佔用，不留下沒有網頁、卻繼續跑背景拆題的孤兒。
+//   - 健康檢查逾時、而聽著這個埠的正是上次由圖示開的後端（server.json 的 PID）→ server-busy（不再說「被其他程式佔用」）。
+//   - 錄製中：依設定 jobsWhileRecording 決定後端要不要暫停背景工作；警告寫明佇列裡已有的工作也會開跑。
 // ─────────────────────────────────────────────────────────────
+
+/** Windows 保留連接埠範圍的查法（EACCES 時提示） */
+const EXCLUDED_PORTS_CMD = 'netsh interface ipv4 show excludedportrange protocol=tcp';
 
 /** 升級流程的出處（提示 migration 沒套時引用） */
 const UPGRADE_DOC = 'engineering_docs/06_ops/deployment_and_operations.md §3.3、§3.6';
@@ -31,9 +41,12 @@ const LAUNCHER_DOC = 'docs/desktop-launcher.md';
  * @property {string[]} [configWarnings]  data/launcher/config.json 讀不懂的地方（啟動前就放進來）
  * @property {{state:'ours', dbOk:boolean, legacy?:boolean, version?:string}|{state:'other', detail?:string}|{state:'down'}} [health]
  * @property {{ok:boolean, via?:string, error?:string}} [statusWindow]
- * @property {{pid?:number|null, name?:string|null, text:string|null}} [portOwner]  埠被佔用時是誰（text 例：node.exe（PID 1234））
+ * @property {{pid?:number|null, name?:string|null, text:string|null, pids?:number[], ownServer?:boolean, logFile?:string}} [portOwner]
+ *           埠被佔用時是誰（text 例：node.exe（PID 1234））；pids＝所有在聽這個埠的 PID；ownServer＝聽著的正是 server.json 記的後端
+ *           （logFile＝那個後端的 log）
  * @property {{envFile:boolean, nodeModules:boolean, databaseUrl:boolean, draining?:{pid:number, untilMs:number}|null}} [setup]
- * @property {{active:boolean|null, matches?:string[], error?:string}} [recording]
+ * @property {{active:boolean|null, matches?:string[], error?:string, pauseJobs?:boolean}} [recording]
+ *           pauseJobs：設定 jobsWhileRecording 是 pause（錄製中開的後端暫停背景工作）
  * @property {{reachable:boolean, error?:string}} [db]
  * @property {{ready:boolean, cliFound?:boolean, error?:string}} [docker]
  * @property {{ok:boolean, reason?:'not-found'|'spawn-failed', path?:string, error?:string}} [dockerLaunch]
@@ -45,8 +58,10 @@ const LAUNCHER_DOC = 'docs/desktop-launcher.md';
  * @property {{ok:boolean, method?:'app'|'serve', reason?:'not-found'|'spawn-failed'|'remote-host', path?:string, error?:string}} [ollamaLaunch]
  * @property {{ready:boolean, missing?:string[], waitedMs?:number}} [ollamaWait]
  * @property {{ok:boolean, pending?:string[], unknown?:string[], latest?:string|null, appliedCount?:number, error?:string}} [migrations]
- * @property {{spawned:boolean, pid?:number, logFile?:string, error?:string}} [server]
- * @property {{ready:boolean, reason?:'timeout'|'exited', exitCode?:number|null, logTail?:string, addrInUse?:boolean, dbOk?:boolean}} [serverWait]
+ * @property {{spawned:boolean, pid?:number, logFile?:string, error?:string, jobsPaused?:boolean}} [server]
+ * @property {{ready:boolean, reason?:'timeout'|'exited', exitCode?:number|null, logTail?:string, addrInUse?:boolean,
+ *            listenError?:'EADDRINUSE'|'EACCES'|null, childAlive?:boolean, dbOk?:boolean}} [serverWait]
+ * @property {{pid:number, stopped:boolean}} [serverStop]  啟動器結束了自己開、卻聽不了埠的後端
  */
 
 /**
@@ -76,7 +91,8 @@ function nextAction(f, ctx) {
     if (!f.statusWindow) return { type: 'open-status-window' };
     if (f.health.state === 'other') {
         if (!f.portOwner) return { type: 'describe-port' };
-        return fail('port-in-use', f, ctx);
+        // 聽著這個埠的是上次由圖示開的後端，只是健康檢查沒有回應（例如忙到逾時）：不是「別的程式」
+        return fail(f.portOwner.ownServer ? 'server-busy' : 'port-in-use', f, ctx);
     }
 
     // 3. 基本檢查（後端已經在跑時不必：它顯然有 .env 與 node_modules）
@@ -128,15 +144,37 @@ function nextAction(f, ctx) {
     if (!f.server.spawned) return fail('server-spawn-failed', f, ctx);
     if (!f.serverWait) return { type: 'wait-server' };
     if (!f.serverWait.ready) {
-        if (f.serverWait.reason === 'exited' && f.serverWait.addrInUse) {
+        const sw = f.serverWait;
+        const listenError = sw.listenError || (sw.addrInUse ? 'EADDRINUSE' : null);
+        if (sw.reason === 'exited' && listenError) {
             if (!f.portOwner) return { type: 'describe-port' };
-            return fail('port-in-use', f, ctx);
+            // EACCES 而查不到誰在聽 → 埠被 Windows 保留；查得到 → 別的程式以獨佔方式佔用，同「被佔用」
+            return fail(listenError === 'EACCES' && !f.portOwner.pid ? 'port-reserved' : 'port-in-use', f, ctx);
         }
-        return fail(f.serverWait.reason === 'exited' ? 'server-exited' : 'server-timeout', f, ctx);
+        // 自己開的後端逾時時還活著、而這個埠正被別的程式聽著 → 它不可能聽得到這個埠。
+        // 結束它再報錯：留著它只會多一個沒有網頁、卻繼續跑背景拆題的程序（Owner 每照提示再點一次就多一個）。
+        if (sw.reason === 'timeout' && sw.childAlive) {
+            if (!f.portOwner) return { type: 'describe-port' };
+            if (portHeldByOther(f)) {
+                if (!f.serverStop) return { type: 'stop-server' };
+                return fail('port-in-use', f, ctx);
+            }
+        }
+        return fail(sw.reason === 'exited' ? 'server-exited' : 'server-timeout', f, ctx);
     }
 
     // 9. 完成
     return { type: 'finish', url: ctx.appUrl, reason: 'started' };
+}
+
+/**
+ * 這個埠有程式在聽、但不是這一輪開的後端。純函式。
+ * @param {Facts} f
+ */
+function portHeldByOther(f) {
+    const o = f.portOwner || {};
+    const pids = Array.isArray(o.pids) ? o.pids : (o.pid ? [o.pid] : []);
+    return pids.length > 0 && !(f.server && pids.includes(f.server.pid));
 }
 
 /** 終止型的 action（執行完就不再問 nextAction） */
@@ -175,14 +213,46 @@ function failureMessage(code, f = {}, ctx = {}, extra = {}) {
         case 'port-in-use': {
             const who = f.portOwner && f.portOwner.text ? `：${f.portOwner.text}` : '';
             const detail = f.health && f.health.state === 'other' && f.health.detail ? f.health.detail : undefined;
+            const stop = f.serverStop;
+            const stopNote = !stop ? []
+                : stop.stopped
+                    ? [`啟動器剛開的後端（PID ${stop.pid}）用不到這個埠，已經由啟動器結束，不會留在背景。`]
+                    : [`啟動器剛開的後端（PID ${stop.pid}）用不到這個埠，但沒能結束它：請到工作管理員 → 詳細資料，結束 PID ${stop.pid} 的 node.exe。`];
             return {
                 title: `連接埠 ${port} 被其他程式佔用`,
                 message: `出題系統要用 ${port} 埠，但它已經被另一個程式佔用${who}。`,
                 hint: [
+                    ...stopNote,
                     f.portOwner && /^node(\.exe)?$/i.test(String(f.portOwner.name || ''))
                         ? '佔用的是 Node.js：可能是另一個還開著的 npm start／npm run dev 視窗，或別的 Node 專案。關掉那個視窗再點一次圖示。'
                         : '關掉那個程式（工作管理員 → 詳細資料，依 PID 找），再點一次圖示。',
                     `若那個程式一定要用 ${port} 埠：在 exam_pro\\.env 把 PORT 改成別的數字，ALLOWED_ORIGINS 也要改成同一個埠。`
+                ],
+                ...(detail ? { detail } : {})
+            };
+        }
+        case 'port-reserved':
+            return {
+                title: `連接埠 ${port} 無法使用`,
+                message: `後端沒有權限使用 ${port} 埠（EACCES），而且查不到有別的程式在用它。Windows 上最常見的原因是這個埠落在系統保留的範圍裡（Hyper-V、WSL、Docker Desktop 會保留一段埠）。`,
+                hint: [
+                    `在命令提示字元執行 ${EXCLUDED_PORTS_CMD}，看 ${port} 在不在列出的範圍內。`,
+                    `在的話：在 exam_pro\\.env 把 PORT 改成範圍外的數字（例如 3300），ALLOWED_ORIGINS 也要改成同一個埠；或重新開機後再試（保留的範圍可能在重開機後改變）。`,
+                    `打開 log：${serverLog}`
+                ],
+                ...(f.serverWait && f.serverWait.logTail ? { detail: f.serverWait.logTail } : {})
+            };
+        case 'server-busy': {
+            const pid = f.portOwner && f.portOwner.pid;
+            const detail = f.health && f.health.detail ? f.health.detail : undefined;
+            const ownLog = (f.portOwner && f.portOwner.logFile) || serverLog;
+            return {
+                title: '出題系統的後端沒有回應',
+                message: `${port} 埠上是之前由桌面圖示開的出題系統後端${pid ? `（PID ${pid}）` : ''}，但它沒有回應健康檢查。通常是電腦正忙（例如本機 AI 正在拆題）。`,
+                hint: [
+                    '等一兩分鐘再點一次圖示：它一回應就會直接開畫面。',
+                    `一直沒有回應：先點「關閉出題系統」；還是不行，到工作管理員 → 詳細資料，結束${pid ? ` PID ${pid} 的` : ''} node.exe（沒跑完的那一步下次開啟時會自動重跑），再點一次圖示。`,
+                    `打開 log：${ownLog}`
                 ],
                 ...(detail ? { detail } : {})
             };
@@ -305,7 +375,15 @@ function collectWarnings(f) {
         out.push({ code: 'config', text: `啟動器設定檔 exam_pro\\data\\launcher\\config.json：${w}（這一項改用預設值）` });
     }
     if (f.recording && f.recording.active === true && f.db && f.db.reachable) {
-        out.push({ code: 'recording', text: '偵測到本機重錄正在執行：啟動器沒有動 Docker 與資料庫。背景拆題會和錄製搶 CPU，建議錄完再上傳考卷。' });
+        out.push({
+            code: 'recording',
+            text: f.recording.pauseJobs
+                ? '偵測到本機重錄正在執行：啟動器沒有動 Docker 與資料庫，而且這次開的後端暫停背景工作（設定 jobsWhileRecording 是 pause）：' +
+                    '上傳的考卷會先排隊，佇列裡原有的工作也不會開跑。錄完後點「關閉出題系統」、再點「出題系統」，排隊的工作就會開始。'
+                : '偵測到本機重錄正在執行：啟動器沒有動 Docker 與資料庫。後端一起來，佇列裡已有的背景工作（之前上傳、還沒拆完的考卷）就會自己開跑，' +
+                    '和錄製搶 CPU 與記憶體，可能讓錄製逾時；新的考卷也建議錄完再上傳。' +
+                    `要在錄製期間暫停背景工作，見 ${LAUNCHER_DOC} 第 8 節 DL-4。`
+        });
     }
     if (f.recording && f.recording.active === null) {
         out.push({ code: 'recording-unknown', text: `無法確認是否有本機重錄正在執行（${f.recording.error || '讀不到程序清單'}）。若正在錄製，請留意不要在錄製期間關閉 Docker。` });
@@ -384,7 +462,7 @@ const STEP_OF_ACTION = {
     'compose-up': 'database', 'wait-db': 'database',
     'resolve-ollama-need': 'ai', 'probe-ollama': 'ai', 'launch-ollama': 'ai', 'wait-ollama': 'ai',
     'check-migrations': 'migrations',
-    'spawn-server': 'server', 'wait-server': 'server',
+    'spawn-server': 'server', 'wait-server': 'server', 'stop-server': 'server',
     'finish': 'window', 'open-app': 'window'
 };
 
@@ -407,7 +485,8 @@ const RUNNING_TEXT = {
     'wait-ollama': '等 Ollama 就緒…',
     'check-migrations': '檢查資料庫版本（只讀）…',
     'spawn-server': '啟動後端…',
-    'wait-server': '等後端就緒（載入模組約需十幾秒）…'
+    'wait-server': '等後端就緒（載入模組約需十幾秒）…',
+    'stop-server': '結束這次開的後端（它用不到連接埠）…'
 };
 
 /**
@@ -485,7 +564,8 @@ function describeSteps(f, action) {
 function stepOfFailure(code, f = {}) {
     switch (code) {
         case 'port-in-use': return f.serverWait ? 'server' : 'check';
-        case 'env-missing': case 'modules-missing': case 'db-url-missing': return 'check';
+        case 'port-reserved': return 'server';
+        case 'server-busy': case 'env-missing': case 'modules-missing': case 'db-url-missing': return 'check';
         case 'recording-db-down': case 'docker-not-found': case 'docker-launch-failed':
         case 'docker-timeout': case 'compose-failed': case 'db-unreachable': return 'database';
         case 'server-spawn-failed': case 'server-exited': case 'server-timeout': return 'server';
@@ -494,6 +574,6 @@ function stepOfFailure(code, f = {}) {
 }
 
 module.exports = {
-    nextAction, isTerminal, fail, failureMessage, collectWarnings, describeSteps, stepOfFailure,
-    STEP_DEFS, STEP_OF_ACTION, RUNNING_TEXT, TERMINAL, AI_WARNING_CODES, MIGRATION_WARNING_CODES, UPGRADE_DOC, LAUNCHER_DOC
+    nextAction, isTerminal, fail, failureMessage, collectWarnings, describeSteps, stepOfFailure, portHeldByOther,
+    STEP_DEFS, STEP_OF_ACTION, RUNNING_TEXT, TERMINAL, AI_WARNING_CODES, MIGRATION_WARNING_CODES, UPGRADE_DOC, LAUNCHER_DOC, EXCLUDED_PORTS_CMD
 };
