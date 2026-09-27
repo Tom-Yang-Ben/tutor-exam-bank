@@ -162,8 +162,10 @@ function checksFor(r) {
     }
 
     if (r.name === 'busy') {
+        const qse = get('query-session-end');
+        check('主行程收到 query-session-end（假裝關機被取消，之後沒有 session-end）', qse && qse.handled === true, qse);
         const wc = get('window-close');
-        check('有 2 件在途工作時關視窗：縮到系統匣（hide／busy）', wc && wc.action === 'hide' && wc.reason === 'busy' && wc.inFlight === 2, wc);
+        check('有 2 件在途工作時關視窗（就算剛才問過要不要關機）：縮到系統匣（hide／busy），不是直接放棄', wc && wc.action === 'hide' && wc.reason === 'busy' && wc.inFlight === 2, wc);
         check('跳通知「出題系統仍在背景處理」', get('notify', n => n.title === '出題系統仍在背景處理'), all('notify'));
         const ac = get('after-close');
         check('視窗藏起來了（沒有被關掉）', ac && ac.visible === false && ac.destroyed === false, ac);

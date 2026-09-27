@@ -14,12 +14,16 @@
 //   系統匣的「結束」：
 //     - 沒有工作 → 直接結束；有工作或問不到 → 對話框：「等處理完再結束／現在放棄／取消」，文字寫明重跑範圍。
 //     - 等處理完：不再認領新工作，等在途的做完（最多 6 小時，與 A 的「是」相同），留在系統匣可以改成「現在放棄」。
+//       「在途」是 jobRunner 的工作單位：拆題、變式生成是整份 job 一件；單題一次只跑一個節點，所以只做完正在跑的那一步，
+//       後面的步驟（和剛拆出來、剛生成的題目）要等下次開啟、runner 重新認領才接著做（runner.stop() 之後不再認領）。
 //     - 現在放棄：後端馬上結束、**不關連線池、不寫結果**——與當機、A 的「時限到了直接結束」同一條既有的路：
 //       不記成失敗、不動重試次數，租約（JOB_LEASE_MS，預設 3 分）到期後下次開啟重新認領。
 //       重跑範圍照現行 workers/jobRunner.js（沿用 A 的 UNFINISHED_WORK_NOTE 那一句，A 或 DA-13 更新時這裡跟著變）。
 //       設計稿 2.3 節的 shutdown({abandon}) 快速放租約（jobRunner 要改）不在 B1 這一版。
 //   後端異常結束（不是我們叫它結束的）：10 分鐘內第一次 → 自動重開（畫面回到啟動畫面）；再一次 → 停下來顯示原因。
 //     視窗已經關掉（在系統匣等處理完）時不重開，直接結束並通知。
+//   Windows 登出、關機：只有 session-end（確定要結束）才算「正在登出或關機」；query-session-end 只是問問看，
+//     可能被取消，而取消時不會再有任何事件（sessionEndingAfter）。
 // ─────────────────────────────────────────────────────────────
 'use strict';
 
@@ -87,6 +91,23 @@ function decideWindowClose({ phase, quitting = false, sessionEnding = false, sta
 }
 
 /**
+ * Windows 登出、關機的事件 → 「正在登出或關機」的旗標（decideWindowClose 的 sessionEnding）。純函式。
+ *   - query-session-end（WM_QUERYENDSESSION）只是「問問看」：別的程式可以擋下，使用者也可以在「這些應用程式正在阻止關機」
+ *     的畫面按「取消」。取消時 Electron 不會再發任何事件，所以旗標要是在這裡設成 true，就再也回不來：之後有工作時按 X，
+ *     會被當成關機而直接放棄在途工作，不縮到系統匣、不通知、不問（違反 DA-2＝3）。這個事件因此只寫記錄檔，不改旗標。
+ *   - session-end（WM_ENDSESSION，確定要結束）才設成 true；主行程接著直接結束後端（不擋、不問，與當機同一條路）。
+ * 真的登出或關機時，Windows 送給視窗的是 WM_QUERYENDSESSION／WM_ENDSESSION，不是 WM_CLOSE，
+ * 所以 close 事件不會因為關機而來〔推論〕；就算來了，session-end 之後主行程已經放行關視窗。
+ * @param {boolean} sessionEnding  目前的旗標
+ * @param {'query-session-end'|'session-end'} event
+ * @returns {boolean}
+ */
+function sessionEndingAfter(sessionEnding, event) {
+    if (event === 'session-end') return true;
+    return Boolean(sessionEnding);
+}
+
+/**
  * 縮到系統匣之後，每問一次後端就算一次「處理完了沒」。純函式。
  * 在途歸零要持續 settleMs 才算數；問不到（null）或又有工作就重新計時。
  * @param {{zeroSince:number|null, now:number, status:BackendStatus|null, settleMs?:number}} o
@@ -122,7 +143,9 @@ function quitDialog({ inFlight, leaseMs }) {
         message: `${head}（上傳考卷的拆題、檢查、變式生成等）。要怎麼結束？`,
         detail: [
             `「等處理完再結束」：不再開始新的工作，等手上${known ? `這 ${inFlight} 件` : '的工作'}做完就自動結束（最多 ${fmtDuration(WAIT_ALL_MS)}）。` +
-                '拆題是整份卷算一件：正在拆的卷會拆到完（本機拆一份卷可能要 1 小時以上）；還在排隊的工作留到下次開啟再做。' +
+                '拆題是整份卷算一件：正在拆的卷會拆到完（本機拆一份卷可能要 1 小時以上）。' +
+                '單題的檢查只做完正在跑的那一步，後面的步驟（例如 lint、驗算、入庫）下次開啟再接著做；' +
+                '剛拆出來或剛生成的題目也是下次開啟才開始檢查；還在排隊的工作留到下次開啟再做。' +
                 '等的時候出題系統留在右下角的系統匣，隨時可以從那裡改選「現在放棄」。',
             '',
             '「現在放棄」：馬上結束。放棄的工作不會記成失敗，也不會用掉重試次數。' +
@@ -265,7 +288,7 @@ module.exports = {
     QUIT_GRACE_MS, KILL_AFTER_MS, WAIT_ALL_MS, STATUS_POLL_MS, STATUS_TIMEOUT_MS, DONE_SETTLE_MS, DONE_QUIT_DELAY_MS,
     CRASH_WINDOW_MS, MAX_AUTO_RESTARTS,
     fmtDuration, leaseText,
-    decideWindowClose, nextDoneState, decideTrayQuit, quitDialog, decideSecondInstance, decideBackendExit,
+    decideWindowClose, sessionEndingAfter, nextDoneState, decideTrayQuit, quitDialog, decideSecondInstance, decideBackendExit,
     statusLine, trayMenuModel, trayTooltip,
     hideNotice, doneNotice, drainingNotice, drainedNotice, quittingNotice, crashRestartNotice, crashQuitNotice,
     UNFINISHED_WORK_NOTE: plan.UNFINISHED_WORK_NOTE

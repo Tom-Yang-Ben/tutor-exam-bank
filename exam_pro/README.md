@@ -556,7 +556,7 @@ fs.writeFileSync('.tmp_inline.js',b)" && node --check .tmp_inline.js && echo "JS
 | `scripts\windows\setup_local_ai.bat`〔2026-09-25〕 | 本機模式一鍵安裝：Ollama 檢查、下載三個模型、PaddleOCR 虛擬環境與模型、自我檢查（log 在 `data\local_ai\`）|
 | `scripts\windows\record_local.bat`〔2026-09-25〕 | 以本機模型重錄 CI 的回放檔：`db:up` → `migrate:test` → `cassettes:rerecord`（自動輸入 yes；log 在 `data\local_ai\`）|
 | `scripts\windows\install_desktop_shortcut.bat`〔2026-09-27〕 | 在桌面建立「出題系統」與「關閉出題系統」兩個圖示（`--remove` 移除）；圖示的用法與 log 位置見 [`docs/desktop-launcher.md`](../docs/desktop-launcher.md) |
-| `scripts\windows\install_desktop_app.bat`〔2026-09-27，待驗收〕 | Electron 桌面版（B1）：第一次在 repo 的 `desktop\` 安裝並下載 Electron，再在桌面建立「出題系統（桌面版）」圖示；`--reinstall`（`desktop\package-lock.json` 變了時）重裝、`--remove` 移除圖示。見 [`docs/desktop-app-design.md`](../docs/desktop-app-design.md) 第 6.2 節 |
+| `scripts\windows\install_desktop_app.bat`〔2026-09-27，待驗收〕 | Electron 桌面版（B1）：第一次在 repo 的 `desktop\` 安裝並下載 Electron，再在桌面建立「出題系統（桌面版）」圖示；`--reinstall`（`desktop\package-lock.json` 變了時；先從系統匣結束桌面版，否則 `electron.exe` 被鎖住）重裝、`--remove` 移除圖示。見 [`docs/desktop-app-design.md`](../docs/desktop-app-design.md) 第 6.2 節 |
 
 灌入示範題（題庫為空時）：
 

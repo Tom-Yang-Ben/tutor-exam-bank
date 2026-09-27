@@ -118,10 +118,15 @@ function startApp() {
     let ui = null;
     let host = null;
 
-    if (process.env.TUTOR_DESKTOP_SMOKE) {
-        // 冒煙測試（desktop/test/smoke）：看事件、代替 Owner 點系統匣選單。平常不會載入
-        require('./test/smoke/hook').install({ app, events, getWindow: () => win, getHost: () => host, log });
-        events.on('smoke:tray', id => onTrayItem(id));
+    if (process.env.TUTOR_DESKTOP_SMOKE && !app.isPackaged) {
+        // 冒煙測試（desktop/test/smoke）：看事件、代替 Owner 點系統匣選單。平常不會載入。
+        // 只在從 repo 執行時才掛（B3 的安裝版不帶 test/，app.isPackaged 為 true）；載入失敗只寫記錄檔，不擋啟動
+        try {
+            require('./test/smoke/hook').install({ app, events, getWindow: () => win, getHost: () => host, log });
+            events.on('smoke:tray', id => onTrayItem(id));
+        } catch (err) {
+            log(`冒煙測試的掛勾載入失敗（照平常啟動）：${(err && err.message) || err}`);
+        }
     }
 
     process.on('uncaughtException', err => {
@@ -274,10 +279,17 @@ function startApp() {
 
         win.on('close', onWindowClose);
         win.on('closed', () => { win = null; });
-        // Windows 登出、關機：不擋、不問；後端直接結束（與當機同一條路：不寫結果、不動重試次數）
-        win.on('query-session-end', () => { sessionEnding = true; log('Windows 要登出或關機'); });
+        // Windows 登出、關機：不擋、不問；後端直接結束（與當機同一條路：不寫結果、不動重試次數）。
+        // query-session-end 只是問問看（可能被別的程式擋下或被使用者取消，取消時不會再有事件），只記下來、不改變關視窗的行為；
+        // 確定要結束的 session-end 才算數（規則在 lib/decisions.js 的 sessionEndingAfter）。
+        win.on('query-session-end', () => {
+            sessionEnding = D.sessionEndingAfter(sessionEnding, 'query-session-end');
+            log('Windows 詢問要不要登出或關機（還可能被取消；在收到 session-end 之前，關視窗照平常處理）');
+            events.emit('query-session-end');
+        });
         win.on('session-end', () => {
-            sessionEnding = true; quitting = true; allowClose = true;
+            sessionEnding = D.sessionEndingAfter(sessionEnding, 'session-end');
+            quitting = true; allowClose = true;
             log('Windows 登出或關機：直接結束後端');
             if (host) host.kill();
         });
@@ -365,7 +377,8 @@ function startApp() {
             log(`關視窗：${JSON.stringify(d)}（在途工作 ${status ? status.inFlight : '不明'}）`);
             events.emit('window-close', d);
             if (d.action === 'close') {
-                // 已經在結束中（quitApp 會自己收尾），或 Windows 正在登出／關機（不等、不問，與當機同一條路）
+                // 已經在結束中（quitApp 會自己收尾）。Windows 確定要登出／關機（session-end）時 allowClose 已經放行、
+                // 不會走到這裡；sessionEnding 那一半只是保險（不等、不問，與當機同一條路）
                 await quitApp(sessionEnding ? 'abandon' : 'graceful');
             } else if (d.action === 'hide') {
                 closeRequested = true;
@@ -582,7 +595,9 @@ function startApp() {
         events.emit('notify', { title, body });
         try {
             if (process.platform === 'win32' && tray) {
-                // 系統匣氣球（Windows 10/11 會顯示成通知）：不需要開始功能表捷徑或 AppUserModelID 就能跳
+                // 系統匣氣球（Windows 10/11 會轉成通知）。〔推論，要實測〕不需要開始功能表捷徑就跳得出來：
+                // 上面 setAppUserModelId 設的 AUMID 只登錄在桌面捷徑上，它和氣球轉通知怎麼互動沒有查證。
+                // 驗收第 4 步看不到通知時的退路見 docs/desktop-app-design.md 6.2「關閉行為」最後一點
                 tray.displayBalloon({ title, content: body, iconType: 'info' });
             } else if (Notification.isSupported()) {
                 new Notification({ title, body }).show();

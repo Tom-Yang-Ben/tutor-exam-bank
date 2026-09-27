@@ -5,7 +5,8 @@
 // run.js 讀檔判斷。情境（TUTOR_DESKTOP_SMOKE_SCENARIO）：
 //   basic  ：首頁 → 同源 POST 過 CORS、utilityProcess 裡載得起 sharp／jieba／mupdf（native-probe.js）、權限、Blob 下載、
 //            導覽與開新視窗的防護 → 等外面開第二個實例 → 關視窗（沒有工作 → 結束）
-//   busy   ：假裝後端有 2 件在途工作 → 關視窗（縮到系統匣）→ 工作歸零 → 10 秒後「處理完了」→ 自動結束
+//   busy   ：假裝後端有 2 件在途工作 → 假裝一次被取消的關機（只有 query-session-end）→ 關視窗（仍縮到系統匣）
+//            → 工作歸零 → 10 秒後「處理完了」→ 自動結束
 //   wait   ：假裝有 1 件在途 → 系統匣「結束」→ 對話框選「等處理完再結束」→ 後端處理完自己結束 → app 結束
 //   abandon：假裝有 1 件在途 → 系統匣「結束」→ 對話框選「現在放棄」→ 馬上結束
 //   crash  ：把後端子行程殺掉 → 自動重開一次 → 再殺一次 → 停下來顯示原因 → 關視窗結束
@@ -158,6 +159,11 @@ function install({ app, events, getWindow, getHost, log }) {
             fakeStatus();
             fakeInFlight = 2;
             const win = getWindow();
+            // 先假裝一次「關機被取消」：Windows 問了要不要登出或關機（query-session-end），之後被取消（不會再有 session-end）。
+            // 回來按 X 還是要照 DA-2＝3 縮到系統匣，不能當成關機直接放棄
+            const seen = waitFor('query-session-end', 2000);
+            win.emit('query-session-end', { preventDefault() { }, reasons: ['shutdown'] });
+            rec('query-session-end', { handled: Boolean(await seen) });
             win.close();   // 有工作 → 縮到系統匣
             await sleep(4000);
             rec('after-close', { visible: win.isVisible(), destroyed: win.isDestroyed() });

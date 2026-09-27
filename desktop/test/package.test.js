@@ -54,6 +54,20 @@ describe('程式的分工', () => {
         assert.match(main, /setSpellCheckerDictionaryDownloadURL\(security\.SPELLCHECK_DICTIONARY_URL\)/);
     });
 
+    test('冒煙測試的掛勾只在從 repo 執行時載入（安裝版不帶 test/），載入失敗不擋啟動', () => {
+        const main = fs.readFileSync(path.join(DESKTOP, 'main.js'), 'utf8');
+        assert.match(main, /if \(process\.env\.TUTOR_DESKTOP_SMOKE && !app\.isPackaged\) \{/);
+        assert.match(main, /try \{\s*require\('\.\/test\/smoke\/hook'\)/);
+        assert.equal((main.match(/require\('\.\/test\//g) || []).length, 1, '產品主程式只有這一處碰 test/');
+    });
+
+    test('Windows 登出或關機：旗標只照 lib/decisions.js 的 sessionEndingAfter 改（query-session-end 不直接設 true）', () => {
+        const main = fs.readFileSync(path.join(DESKTOP, 'main.js'), 'utf8');
+        assert.match(main, /sessionEnding = D\.sessionEndingAfter\(sessionEnding, 'query-session-end'\)/);
+        assert.match(main, /sessionEnding = D\.sessionEndingAfter\(sessionEnding, 'session-end'\)/);
+        assert.doesNotMatch(main, /sessionEnding = true/);
+    });
+
     test('後端只綁 127.0.0.1（DA-11＝1）', () => {
         assert.match(fs.readFileSync(path.join(DESKTOP, 'backend-entry.js'), 'utf8'), /const HOST = '127\.0\.0\.1';/);
     });
@@ -101,6 +115,15 @@ describe('exam_pro/scripts/windows/install_desktop_app.bat', () => {
         const main = fs.readFileSync(path.join(DESKTOP, 'main.js'), 'utf8');
         assert.match(main, /--install-shortcut/);
         assert.match(main, /--remove-shortcut/);
+    });
+
+    test('安裝失敗的訊息：先提桌面版還開著（--reinstall 時 electron.exe 被鎖住，npm ci 會 EBUSY），再提網路', () => {
+        const at = lines.indexOf(':npm_failed');
+        assert.ok(at > 0);
+        const msg = lines.slice(at, lines.indexOf('goto :end_fail', at)).join('\n');
+        assert.match(msg, /EBUSY/);
+        assert.match(msg, /系統匣[^\n]*選「結束」/);
+        assert.match(msg, /github\.com/);
     });
 
     test('echo 裡沒有會被 cmd 當成轉向或管線的字元', () => {

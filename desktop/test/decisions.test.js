@@ -33,6 +33,22 @@ describe('關視窗（右上角 X）', () => {
         assert.deepEqual(D.decideWindowClose({ phase: 'running', quitting: true, status: busy(3) }), { action: 'close' });
         assert.deepEqual(D.decideWindowClose({ phase: 'running', sessionEnding: true, status: busy(3) }), { action: 'close' });
     });
+
+    test('Windows 登出或關機：只有 session-end 才算；query-session-end 之後被取消，回來按 X 照常縮到系統匣（不直接放棄）', () => {
+        // 關機被別的程式擋下、使用者按了「取消」：只收到 query-session-end，之後不會再有任何事件
+        let s = D.sessionEndingAfter(false, 'query-session-end');
+        assert.equal(s, false);
+        assert.deepEqual(D.decideWindowClose({ phase: 'running', sessionEnding: s, status: busy(2) }), { action: 'hide', reason: 'busy', inFlight: 2 });
+        assert.deepEqual(D.decideWindowClose({ phase: 'running', sessionEnding: s, status: null }), { action: 'hide', reason: 'unknown' });
+        // 再問一次也一樣（連續兩次關機都被取消）
+        s = D.sessionEndingAfter(s, 'query-session-end');
+        assert.equal(s, false);
+        // 確定要結束（WM_ENDSESSION）：之後不擋、不問
+        s = D.sessionEndingAfter(s, 'session-end');
+        assert.equal(s, true);
+        assert.deepEqual(D.decideWindowClose({ phase: 'running', sessionEnding: s, status: busy(2) }), { action: 'close' });
+        assert.equal(D.sessionEndingAfter(true, 'query-session-end'), true, 'session-end 之後不會被改回來');
+    });
 });
 
 describe('縮到系統匣後：處理完了沒', () => {
@@ -90,6 +106,17 @@ describe('系統匣的「結束」', () => {
         assert.match(d.detail, /拆題是整份卷算一件：正在拆的卷會拆到完/);
         assert.match(d.detail, /最多 6 小時/);
         assert.match(d.detail, /還在排隊的工作留到下次開啟再做/);
+    });
+
+    test('「等處理完」講清楚單題只做完正在跑的那一步（runner.stop() 之後不再認領下一步）', () => {
+        const wait = D.quitDialog({ inFlight: 2, leaseMs: 180000 }).detail.split('\n\n')[0];
+        assert.match(wait, /^「等處理完再結束」/);
+        assert.match(wait, /單題的檢查只做完正在跑的那一步，後面的步驟（例如 lint、驗算、入庫）下次開啟再接著做/);
+        assert.match(wait, /剛拆出來或剛生成的題目也是下次開啟才開始檢查/);
+        // 對照 jobRunner：單題一次只跑一個節點（runJobQuestion），stop() 只清掉認領的計時器
+        const src = require('node:fs').readFileSync(path.join(APP_DIR, 'workers', 'jobRunner.js'), 'utf8');
+        assert.match(src, /function stop\(\) \{\s*if \(timer\) \{ clearInterval\(timer\); timer = null; \}\s*\}/,
+            'jobRunner 的 stop() 改了（例如加了 abandon 或讓單題跑完全部步驟）：「等處理完」的說法要跟著改');
     });
 
     test('租約照 .env 的 JOB_LEASE_MS；在途數不明時換一種說法', () => {

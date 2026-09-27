@@ -9,7 +9,8 @@ REM  雙擊即可。第一次會在 repo 的 desktop 資料夾執行 npm ci 並�
 REM  從 repo 啟動（DA-6＝1，U1）：圖示的目標是 desktop\node_modules\electron\dist\electron.exe，參數是 desktop 資料夾。
 REM  桌面啟動器 A 的「出題系統」「關閉出題系統」兩個圖示不受影響（install_desktop_shortcut.bat 照舊）。
 REM
-REM  更新程式（git pull）後 desktop\package-lock.json 有變時，加 --reinstall 重裝 Electron：
+REM  更新程式（git pull）後 desktop\package-lock.json 有變時，加 --reinstall 重裝 Electron
+REM  （桌面版要先從系統匣結束，否則 electron.exe 被鎖住、npm ci 會失敗）：
 REM      install_desktop_app.bat --reinstall
 REM  移除圖示：install_desktop_app.bat --remove
 REM ================================================================
@@ -81,7 +82,9 @@ goto :end_fail
 
 :npm_failed
 popd
-echo [X] 安裝 Electron 失敗，原因見上方訊息（常見是網路連不上 github.com）。網路恢復後再雙擊一次本檔。
+echo [X] 安裝 Electron 失敗，原因見上方訊息。常見的有兩種：
+echo     1. 桌面版還開著：electron.exe 被鎖住，訊息裡會有 EBUSY 或 EPERM。先從右下角系統匣的出題系統圖示選「結束」，再執行一次。
+echo     2. 網路連不上 github.com：網路恢復後再執行一次。
 goto :end_fail
 
 :no_electron
