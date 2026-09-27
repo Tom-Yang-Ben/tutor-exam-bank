@@ -1,17 +1,21 @@
 require('dotenv').config();
 const app = require('./app');
 const { listenFailureText, exitAfterFlush } = require('./utils/listenFailure');
+const { resolveListenHost, startupText } = require('./config/listenHost');
 
 const PORT = process.env.PORT || 3000;
+// 〔Owner 第六輪 DA-11＝1，2026-09-27〕只聽 HOST 指定的位址；沒寫時是 127.0.0.1（只接受這台電腦的連線）。
+// 要讓平板、手機從區網連進來才設 HOST=0.0.0.0（exam_pro/README.md「區網存取」；config/listenHost.js）。
+const HOST = resolveListenHost(process.env);
 
 // Express 5 的 app.listen 把 listen 的錯誤（EADDRINUSE、EACCES…）交給這個 callback，不會丟出來。
 // 不檢查的話，後端會照印「成功啟動」、不聽任何埠，卻繼續跑背景拆題（審查 dec/desktop-launcher 第 2 件；utils/listenFailure.js）。
-const server = app.listen(PORT, err => {
+const server = app.listen(PORT, HOST, err => {
     if (err) {
-        exitAfterFlush(listenFailureText(err, PORT), 1);
+        exitAfterFlush(listenFailureText(err, PORT, HOST), 1);
         return;
     }
-    console.log(`🚀 家教題庫後端系統已成功安全啟動：http://localhost:${PORT}`);
+    console.log(startupText(HOST, PORT));
 });
 
 // 階段 2：管線 worker（docs/interfaces-stage2.md 第 7.2 條）

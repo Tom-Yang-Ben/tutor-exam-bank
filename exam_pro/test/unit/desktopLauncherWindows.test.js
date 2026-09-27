@@ -78,6 +78,18 @@ describe('解析輸出', () => {
         assert.deepEqual(w.parseNetstatListeners('', 3000), []);
     });
 
+    // 〔Owner 第六輪 DA-11＝1〕後端預設只聽 127.0.0.1：netstat 的本機位址是 127.0.0.1:3000（不是 0.0.0.0:3000）
+    test('netstat -ano：後端只聽 127.0.0.1（或 [::1]）時一樣認得出來；同一埠上別的程式聽 0.0.0.0 也列出', () => {
+        const text = [
+            '  TCP    127.0.0.1:3000         0.0.0.0:0              LISTENING       7100',
+            '  TCP    127.0.0.1:3000         127.0.0.1:52100        ESTABLISHED     7100',
+            '  TCP    [::1]:3000             [::]:0                 LISTENING       7200',
+            '  TCP    127.0.0.1:13000        0.0.0.0:0              LISTENING       55'
+        ].join('\r\n');
+        assert.deepEqual(w.parseNetstatListeners(text, 3000), [7100, 7200]);
+        assert.deepEqual(w.parseNetstatListeners(`  TCP    0.0.0.0:3000   0.0.0.0:0   LISTENING   4321\r\n${text}`, 3000), [4321, 7100, 7200]);
+    });
+
     test('tasklist /FO CSV', () => {
         assert.equal(w.parseTasklistName('"node.exe","4321","Console","1","80,512 K"\r\n', 4321), 'node.exe');
         assert.equal(w.parseTasklistName('資訊: 沒有執行中的工作符合指定的準則。', 4321), null);
@@ -210,6 +222,30 @@ describe('probes 的純函式：.env、埠、健康檢查的判讀', () => {
         assert.equal(probes.portFromEnv({ PORT: '3100' }), 3100);
         assert.equal(probes.portFromEnv({ PORT: 'abc' }), 3000);
         assert.equal(probes.portFromEnv({ PORT: '70000' }), 3000);
+    });
+
+    // 〔Owner 第六輪 DA-11＝1〕與 server.js 同一支 config/listenHost.js
+    test('listenFromEnv：HOST 沒寫＝127.0.0.1；本機與萬用位址都支援、從 127.0.0.1（或原本的本機位址）連；只聽區網位址不支援', () => {
+        assert.deepEqual(probes.listenFromEnv({}), { host: '127.0.0.1', scope: 'loopback', probeHost: '127.0.0.1', supported: true });
+        assert.deepEqual(probes.listenFromEnv({ HOST: '' }), { host: '127.0.0.1', scope: 'loopback', probeHost: '127.0.0.1', supported: true });
+        assert.deepEqual(probes.listenFromEnv({ HOST: '0.0.0.0' }), { host: '0.0.0.0', scope: 'wildcard', probeHost: '127.0.0.1', supported: true });
+        assert.deepEqual(probes.listenFromEnv({ HOST: '::' }), { host: '::', scope: 'wildcard', probeHost: '127.0.0.1', supported: true });
+        assert.deepEqual(probes.listenFromEnv({ HOST: 'localhost' }), { host: 'localhost', scope: 'loopback', probeHost: 'localhost', supported: true });
+        assert.deepEqual(probes.listenFromEnv({ HOST: '[::1]' }), { host: '::1', scope: 'loopback', probeHost: '::1', supported: true });
+        assert.deepEqual(probes.listenFromEnv({ HOST: '192.168.1.10' }), { host: '192.168.1.10', scope: 'specific', probeHost: null, supported: false });
+        // 系統環境蓋過 .env（effectiveEnv），與後端的 dotenv 相同
+        assert.equal(probes.listenFromEnv(probes.effectiveEnv({ HOST: '0.0.0.0' }, { HOST: '127.0.0.1' })).host, '127.0.0.1');
+    });
+
+    test('createProbes 的 base 跟著 HOST 走（健康檢查與關閉通道連這個位址）', () => {
+        const mk = env => probes.createProbes({ sys: { platform: 'linux' }, config: {}, env, paths: { appDir: '/app' }, port: 3100 });
+        assert.equal(mk({}).base, 'http://127.0.0.1:3100');
+        assert.equal(mk({ HOST: '0.0.0.0' }).base, 'http://127.0.0.1:3100');
+        assert.equal(mk({ HOST: 'localhost' }).base, 'http://localhost:3100');
+        assert.equal(mk({ HOST: '::1' }).base, 'http://[::1]:3100');
+        const lan = mk({ HOST: '192.168.1.10' });
+        assert.equal(lan.listen.supported, false);
+        assert.equal(lan.base, 'http://127.0.0.1:3100', '不支援時不留 undefined（啟動器與關閉捷徑一開始就停下，不會用到它）');
     });
 
     test('classifyHealth', () => {

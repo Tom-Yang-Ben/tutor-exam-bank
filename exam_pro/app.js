@@ -184,6 +184,7 @@ app.use('/figures', express.static(FIGURES_DIR));
 //     回應只有服務名稱、版本、資料庫連不連得上與 migration 檔名，不含任何題目、學生、設定或錯誤原文
 //     （controllers/healthController.js 檔頭）；首頁 serveIndex 本來就不經 apiKeyAuth，沒金鑰能拿到的東西沒有變多。
 //     本機以外的來源另有寬鬆的限流（每分鐘 60 次；本機的啟動器不限），同一網段的電腦不能無限次查資料庫。
+//     〔Owner 第六輪 DA-11＝1〕後端預設只聽 127.0.0.1（server.js、config/listenHost.js）；只有設了 HOST=0.0.0.0 才會有區網來源。
 {
     const healthController = require('./controllers/healthController');
     app.get('/api/health', healthController.createHealthRateLimit(), healthController.health);

@@ -23,7 +23,7 @@ async function main() {
     const { createUi } = require('./lib/ui');
     const { createProbes } = require('./lib/probes');
     const { createActions } = require('./lib/actions');
-    const { runLaunch, acquireLock } = require('./lib/launcher');
+    const { runLaunch, acquireLock, initialFacts } = require('./lib/launcher');
 
     log(`==== 桌面啟動器開始（exam_pro：${paths.appDir}；埠 ${port}）====`);
     if (b.configFound) log(`設定檔：${paths.configFile}`);
@@ -41,6 +41,8 @@ async function main() {
 
     try {
         const probes = createProbes({ sys, config, env, paths, port });
+        // 〔Owner 第六輪 DA-11＝1〕後端聽 .env 的 HOST（預設 127.0.0.1）；啟動器照它決定連哪個位址（config/listenHost.js）
+        log(`後端聽的位址：HOST=${probes.listen.host}（${probes.listen.scope}）；健康檢查連 ${probes.base}`);
         const ctx = {
             port, appUrl, nodePath: process.execPath,
             dockerDesktopPath: config.dockerDesktopPath,
@@ -59,7 +61,7 @@ async function main() {
             }
         };
         const actions = createActions({ sys, config, env, paths, ctx, ui: uiForActions, probes, log });
-        const { action } = await runLaunch({ actions, ui, ctx, log, facts: configWarnings.length ? { configWarnings } : {} });
+        const { action } = await runLaunch({ actions, ui, ctx, log, facts: initialFacts({ configWarnings, listen: probes.listen }) });
         log(`==== 桌面啟動器結束：${action.type}${action.code ? `（${action.code}）` : ''} ====`);
     } finally {
         lock.release();

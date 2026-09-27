@@ -13,10 +13,12 @@
 //   3. 首頁 serveIndex 本來就不經 apiKeyAuth（它把 API_KEY 注入頁面），這支不會讓「沒金鑰能拿到的東西」變多。
 // 只有 GET；不寫資料庫；資料庫查詢最多等 timeoutMs（預設 2 秒），連不上時不會把請求卡住。
 //
-// 〔審查 dec/desktop-launcher 第 5 件〕限流：這支不經金鑰、每次都查一次資料庫，後端又綁在所有網路介面（DA-11），
-// 所以**本機以外**的來源套一個寬鬆的既有限流器（每來源每分鐘 HEALTH_RATE_LIMIT_PER_MIN 次，middleware/rateLimit.js）。
-// 本機（127.0.0.1／::1）不限：啟動器與關閉捷徑一律從本機問（等後端時每秒一次），不能被自己的限流擋掉。
+// 〔審查 dec/desktop-launcher 第 5 件〕限流：這支不經金鑰、每次都查一次資料庫，所以**本機以外**的來源套一個寬鬆的
+// 既有限流器（每來源每分鐘 HEALTH_RATE_LIMIT_PER_MIN 次，middleware/rateLimit.js）。
+// 本機（127.x.x.x／::1）不限：啟動器與關閉捷徑一律從本機問（等後端時每秒一次），不能被自己的限流擋掉。
 // 是不是本機看 socket 的對端位址（不是 req.ip，那個在設了 trust proxy 時可以用標頭偽造）。
+// 〔Owner 第六輪 DA-11＝1，2026-09-27〕後端預設只聽 127.0.0.1（config/listenHost.js），這時所有請求都是本機、限流不會觸發；
+// Owner 設 HOST=0.0.0.0 開放區網時，區網來的請求才會被限流。規則不變，所以兩種設定都照同一套判斷。
 // ─────────────────────────────────────────────────────────────
 const { listMigrationFiles, compareMigrations, readAppliedVersions } = require('../utils/migrationStatus');
 const createRateLimiter = require('../middleware/rateLimit');
@@ -33,7 +35,8 @@ const HEALTH_RATE_LIMIT_PER_MIN = 60;
  */
 function isLoopbackRequest(req) {
     const a = String((req && req.socket && req.socket.remoteAddress) || '');
-    return a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1';
+    // 127.0.0.0/8 整段都是本機（IPv4 對應到 IPv6 的寫法是 ::ffff:127.x.x.x）
+    return a === '::1' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(a) || /^::ffff:127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/i.test(a);
 }
 
 /**

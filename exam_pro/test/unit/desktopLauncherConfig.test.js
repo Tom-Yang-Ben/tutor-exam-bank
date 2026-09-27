@@ -23,15 +23,21 @@ describe('config', () => {
         assert.equal(config.stopDocker, 'no');
         assert.equal(config.stopOllama, false);
         assert.equal(config.dockerDesktopPath, 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe');
+        // 〔Owner 第六輪 DL-4＝2，2026-09-27〕錄製中開的後端預設暫停背景工作
+        assert.equal(config.jobsWhileRecording, 'pause');
+        // DL-1＝1（每次問）、DL-3＝1（都不關）維持原本的預設
+        assert.equal(config.askBeforeStopWithJobs, true);
+        assert.equal(config.stopGraceSec, 120);
     });
 
     test('合法的覆寫照用；字串前後空白與大小寫', () => {
         const { config, warnings } = cfg.resolveConfig({
             dockerDesktopPath: ' D:\\Docker\\Docker Desktop.exe ', dockerReadyTimeoutSec: 600, browser: 'Chrome',
-            stopDocker: 'Containers', stopOllama: true, browserArgs: [' --start-maximized ', ''], _註解: '略過', jobsWhileRecording: ' Pause '
+            stopDocker: 'Containers', stopOllama: true, browserArgs: [' --start-maximized ', ''], _註解: '略過', jobsWhileRecording: ' Run '
         });
         assert.deepEqual(warnings, []);
-        assert.equal(config.jobsWhileRecording, 'pause');
+        assert.equal(config.jobsWhileRecording, 'run');
+        assert.equal(cfg.resolveConfig({ jobsWhileRecording: ' PAUSE ' }).config.jobsWhileRecording, 'pause');
         assert.equal(config.dockerDesktopPath, 'D:\\Docker\\Docker Desktop.exe');
         assert.equal(config.dockerReadyTimeoutSec, 600);
         assert.equal(config.browser, 'chrome');
@@ -45,7 +51,7 @@ describe('config', () => {
             dockerReadyTimeoutSec: 5, serverReadyTimeoutSec: '120', browser: 'firefox', stopDocker: 'yes', stopOllama: 'true',
             browserArgs: '--x', nope: 1, ollamaReadyTimeoutSec: 90, jobsWhileRecording: 'stop'
         });
-        assert.equal(config.jobsWhileRecording, 'run');
+        assert.equal(config.jobsWhileRecording, 'pause', '寫錯時退回預設（pause），不是 run');
         assert.equal(config.dockerReadyTimeoutSec, cfg.DEFAULTS.dockerReadyTimeoutSec);
         assert.equal(config.serverReadyTimeoutSec, cfg.DEFAULTS.serverReadyTimeoutSec);
         assert.equal(config.browser, 'auto');

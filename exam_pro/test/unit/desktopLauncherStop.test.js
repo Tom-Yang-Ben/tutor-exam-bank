@@ -53,6 +53,20 @@ describe('關閉：先認清楚 3000 埠上是誰', () => {
         assert.ok(!r.world.calls.some(c => c.kind === 'exec' && /docker|taskkill/.test(c.file)));
     });
 
+    // 〔Owner 第六輪 DA-11＝1〕後端改聽 HOST（預設 127.0.0.1）
+    test('HOST 只聽某個區網位址 → 不做健康檢查、不送關閉，訊息說明怎麼改；HOST=0.0.0.0 照常從 127.0.0.1 關', async () => {
+        const r = await stop({ health: 'ours', db: true, launcherStatus: launcher() }, { env: { HOST: '192.168.1.10' } });
+        assert.equal(r.out.result, 'host-unsupported');
+        assert.equal(r.world.calls.filter(c => c.kind === 'request').length, 0);
+        assert.equal(r.posts.length, 0);
+        assert.match(r.world.popups[0].text, /HOST 是「192\.168\.1\.10」/);
+        assert.match(r.world.popups[0].text, /Ctrl\+C/);
+        const wild = await stop({ health: 'ours', db: true, launcherStatus: launcher() }, { env: { HOST: '0.0.0.0' } });
+        assert.notEqual(wild.out.result, 'host-unsupported');
+        assert.ok(wild.world.calls.filter(c => c.kind === 'request').every(c => c.url.startsWith('http://127.0.0.1:3000/')));
+        assert.equal(wild.posts.length, 1);
+    });
+
     test('埠上是別的程式 → 不動它', async () => {
         const r = await stop({ health: 'other' });
         assert.equal(r.out.result, 'other');

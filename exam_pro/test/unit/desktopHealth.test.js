@@ -159,6 +159,16 @@ describe('健康檢查的限流（本機以外）', () => {
         assert.equal(hc.isLoopbackRequest({}), false);
     });
 
+    // 〔Owner 第六輪 DA-11＝1〕後端改聽 HOST（預設 127.0.0.1）：127.0.0.0/8 整段都算本機，其他照舊不算
+    test('isLoopbackRequest：127.0.0.0/8 整段（含 IPv4 對應 IPv6 的寫法）都是本機；看起來像但不是的不算', () => {
+        for (const a of ['127.0.0.2', '127.255.255.254', '::ffff:127.0.0.5', '::FFFF:127.0.0.1']) {
+            assert.equal(hc.isLoopbackRequest({ socket: { remoteAddress: a } }), true, a);
+        }
+        for (const a of ['1127.0.0.1', '127.0.0', '127.0.0.1.5', '::ffff:10.0.0.1', '0.0.0.0', '::', 'localhost']) {
+            assert.equal(hc.isLoopbackRequest({ socket: { remoteAddress: a } }), false, a);
+        }
+    });
+
     test('同一網段的來源：超過上限回 429＋Retry-After；本機永遠放行；各來源分開計數', () => {
         const mw = hc.createHealthRateLimit({ max: 3, windowMs: 60_000 });
         for (let i = 0; i < 3; i++) assert.equal(hit(mw, '192.168.1.20').passed, true);

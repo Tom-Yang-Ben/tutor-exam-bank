@@ -72,7 +72,7 @@ function createActions({ sys, config, env, paths, ctx, ui, probes, log = () => {
             }
         }),
 
-        // pauseJobs：設定 jobsWhileRecording 是 pause 時，錄製中開的後端以 JOB_RUNNER=off 啟動（spawn-server；DL-4）
+        // pauseJobs：設定 jobsWhileRecording 是 pause（預設；Owner 第六輪 DL-4＝2）時，錄製中開的後端以 JOB_RUNNER=off 啟動（spawn-server）
         'detect-recording': async () => ({ recording: { ...await probes.detectRecording(), pauseJobs: config.jobsWhileRecording === 'pause' } }),
 
         'probe-db': async () => ({ db: await probeDb() }),

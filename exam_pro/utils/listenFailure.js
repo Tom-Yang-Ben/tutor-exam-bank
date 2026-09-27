@@ -8,21 +8,30 @@
 //   - 桌面啟動器等不到健康檢查、報「後端太久沒有回應」，關閉捷徑也找不到它。
 // 現在 callback 收到錯誤就印出錯誤碼與處理方式，然後以結束碼 1 結束（npm start 也一樣受益）。
 //
-// log 裡一定有 Node 原本的錯誤訊息（例：listen EADDRINUSE: address already in use :::3000）：
+// log 裡一定有 Node 原本的錯誤訊息（例：listen EADDRINUSE: address already in use 127.0.0.1:3000）：
 // 桌面啟動器靠這幾個字認出「埠被佔用」與「埠被保留」（scripts/desktop/lib/windows.js 的 listenErrorCode）。
 // ─────────────────────────────────────────────────────────────
 
 /**
  * listen 失敗的說明文字。純函式。
+ * 〔Owner 第六輪 DA-11，2026-09-27〕後端改聽 HOST（預設 127.0.0.1，config/listenHost.js）：
+ * HOST 寫成這台電腦沒有的位址（EADDRNOTAVAIL）或查不到的名稱（ENOTFOUND、EAI_AGAIN）時，說明怎麼改。
  * @param {Error & {code?:string}} err
  * @param {number|string} port
+ * @param {string} [host]  server.js 實際傳給 listen 的位址（舊的呼叫端不傳）
  * @returns {string}
  */
-function listenFailureText(err, port) {
+function listenFailureText(err, port, host) {
     const code = (err && err.code) || 'UNKNOWN';
     const raw = String((err && err.message) || err);
-    const lines = [`✖ 後端無法啟動：聽不了連接埠 ${port}（${code}）。`, `  Node.js 的訊息：${raw}`];
-    if (code === 'EADDRINUSE') {
+    const where = host ? `（HOST=${host}）` : '';
+    const lines = [`✖ 後端無法啟動：聽不了連接埠 ${port}${where}（${code}）。`, `  Node.js 的訊息：${raw}`];
+    if (code === 'EADDRNOTAVAIL' || code === 'ENOTFOUND' || code === 'EAI_AGAIN') {
+        lines.push(
+            `  原因：exam_pro/.env（或系統環境變數）的 HOST 是「${host || '（不明）'}」，這台電腦沒有這個網路位址。`,
+            '  處理：刪掉 HOST 這一行（只給這台電腦用，預設 127.0.0.1）；要讓區網的平板連進來就寫 HOST=0.0.0.0（見 exam_pro/README.md「區網存取」）。'
+        );
+    } else if (code === 'EADDRINUSE') {
         lines.push(
             `  原因：${port} 埠已經被別的程式佔用。常見的是另一個還開著的 npm start／npm run dev 視窗，或是別的 Node 專案。`,
             `  處理：關掉那個程式再啟動（Windows 可用 netstat -ano | findstr ":${port}" 查 PID）；`,

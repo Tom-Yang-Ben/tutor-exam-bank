@@ -42,6 +42,29 @@ describe('nextAction：開頭（健康檢查、啟動畫面、埠）', () => {
         }
     });
 
+    // 〔Owner 第六輪 DA-11＝1，2026-09-27〕後端改聽 HOST（預設 127.0.0.1）
+    test('HOST 只聽某個區網位址（facts.listen.supported:false）→ 先開啟動畫面、再報 host-unsupported；不做健康檢查', () => {
+        const listen = { host: '192.168.1.10', scope: 'specific', supported: false };
+        assert.deepEqual(next({ listen }), { type: 'open-status-window' });
+        for (const statusWindow of [{ ok: true, via: 'edge' }, { ok: false, error: 'x' }]) {
+            const a = next({ listen, statusWindow });
+            assert.equal(a.type, 'fail');
+            assert.equal(a.code, 'host-unsupported');
+            assert.match(a.message, /HOST 是「192\.168\.1\.10」/);
+            assert.match(a.message, /http:\/\/localhost:3000\//);
+            assert.match(a.hint.join('\n'), /刪掉 \.env 的 HOST/);
+            assert.match(a.hint.join('\n'), /HOST=0\.0\.0\.0/);
+        }
+        assert.equal(plan.stepOfFailure('host-unsupported'), 'check');
+        // 支援的 HOST 不放進 facts（launcher.initialFacts），放了 supported:true 也不影響流程
+        assert.deepEqual(next({ listen: { host: '0.0.0.0', supported: true } }), { type: 'probe-health' });
+        const { initialFacts } = require('../../scripts/desktop/lib/launcher');
+        assert.deepEqual(initialFacts({ configWarnings: [], listen: { host: '127.0.0.1', scope: 'loopback', probeHost: '127.0.0.1', supported: true } }), {});
+        assert.deepEqual(initialFacts({ configWarnings: ['x'], listen: { host: '10.0.0.5', scope: 'specific', probeHost: null, supported: false } }),
+            { configWarnings: ['x'], listen: { host: '10.0.0.5', scope: 'specific', supported: false } });
+        assert.deepEqual(initialFacts(), {});
+    });
+
     test('啟動畫面開不成也照樣往下走（最後改用系統訊息框）', () => {
         assert.equal(next({ health: { state: 'down' }, statusWindow: { ok: false, error: 'x' } }).type, 'check-setup');
     });
@@ -355,9 +378,13 @@ describe('collectWarnings', () => {
         assert.match(run[0].text, /佇列裡已有的背景工作/);
         assert.match(run[0].text, /自己開跑/);
         assert.match(run[0].text, /DL-4/);
+        // 〔Owner 第六輪 DL-4＝2〕pause 是預設：run 是 Owner 自己改的，警告寫明怎麼改回
+        assert.match(run[0].text, /jobsWhileRecording 是 run/);
+        assert.match(run[0].text, /改回 pause（預設/);
         const pause = plan.collectWarnings(healthyUntilServer({ recording: { active: true, matches: ['x'], pauseJobs: true } }));
         assert.equal(pause[0].code, 'recording');
         assert.match(pause[0].text, /暫停背景工作/);
+        assert.match(pause[0].text, /pause，預設/);
         assert.match(pause[0].text, /關閉出題系統.*出題系統/);
         assert.doesNotMatch(pause[0].text, /\*\*/, '啟動頁不解析 Markdown');
     });
