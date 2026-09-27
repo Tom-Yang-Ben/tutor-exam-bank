@@ -200,9 +200,10 @@ describe('ciEnv：子行程一律照 CI 的設定', () => {
         assert.match(fallback.source, /預設值/);
     });
 
-    test('readCiModels：repo 的 ci.yml 與 config/models.js 的預設一致', {
-        skip: models.VENDORS.includes('ollama') ? false : 'config/models.js 還沒有 ollama 供應商（本機模式 L1 尚未合入）；合入後這一則自動恢復執行'
-    }, () => {
+    // 〔r7 測試空轉清理〕原本 skip 條件是「config/models.js 還沒有 ollama 供應商（本機模式 L1 尚未合入）」；L1 早已合入，
+    // 條件恆為假、這個分支是死的。改成直接斷言它成立（本機模式被拔掉時這一則要紅，不是悄悄 skip）。
+    test('readCiModels：repo 的 ci.yml 與 config/models.js 的預設一致', () => {
+        assert.ok(models.VENDORS.includes('ollama'), 'config/models.js 沒有 ollama 供應商（本機模式 L1）');
         const ci = sp.readCiModels();
         const saved = { e: process.env.MODEL_EXTRACT, v: process.env.MODEL_VERIFY };
         delete process.env.MODEL_EXTRACT; delete process.env.MODEL_VERIFY;

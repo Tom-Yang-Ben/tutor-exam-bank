@@ -105,9 +105,20 @@ function runSuite() {
         const c = makeRunner().config;
         return c.localExtract === true && c.localExtractMode === 'ocr';
     })();
-    /** 只在交叉驗證（或 Gemini）模式定義的項目＝原本那兩項，內容一個字都沒改；ocr 模式定義的是 ①a／①b（檔頭） */
-    const testCross = OCR_MODE ? () => { } : test;
-    const testOcr = OCR_MODE ? test : () => { };
+    /**
+     * 只在交叉驗證（或 Gemini）模式跑的項目＝原本那兩項，內容一個字都沒改；ocr 模式跑的是 ①a／①b（檔頭）。
+     * 〔r7 測試空轉清理 審查 2026-09-27〕不是這個模式的項目原本是 () => {}：根本不註冊，報表連 SKIP 都看不到。
+     * 改成明確 skip 並寫原因（斷言一個字都沒動）；CI（ocr）的 e2e 因此固定多兩行 SKIP（交叉驗證那兩項）。
+     */
+    const testCross = OCR_MODE
+        ? (name, fn) => test(name, {
+            skip: 'CI 是 LOCAL_EXTRACT_MODE=ocr，不讀也不錄 extract_vision；這一項只在交叉驗證（cross）或 Gemini 拆題時跑。' +
+                'cross 模式由假模型的單元／整合測試涵蓋（docs/local-mode.md 10.12 第 7 點）'
+        }, fn)
+        : test;
+    const testOcr = OCR_MODE
+        ? test
+        : (name, fn) => test(name, { skip: '這一項只在 LOCAL_EXTRACT_MODE=ocr（CI 的設定）跑；目前是交叉驗證（cross）或 Gemini 拆題' }, fn);
 
     /**
      * public/js/review.js 的 payloadToQuestion（複核頁核准時送出的欄位就是它算的）。
@@ -360,8 +371,11 @@ function runSuite() {
                    FROM job_events WHERE job_id = $1 AND outcome = 'error'
                   GROUP BY node, error_class`, [jobId]);
             const misses = rows.filter(r => r.error_class === 'replay_miss');
+            // 〔r7 測試空轉清理 審查 2026-09-27〕只改訊息、斷言不動：原本寫「npm run eval:record（需要金鑰）」（Gemini 時代；
+            // eval:record 其實只錄向量）。本機模式的回放檔由 Owner 的電腦重錄（docs/local-mode.md 10.21 第 3 步）。
             assert.deepEqual(misses, [],
-                'cassette 缺鍵：請在本機執行 npm run eval:record（需要金鑰），' +
+                'cassette 缺鍵：照 docs/local-mode.md 10.21 第 3 步在 Owner 的電腦重錄' +
+                '（scripts\\windows\\record_local.bat pipeline,e2e，或 npm run cassettes:rerecord -- --suites pipeline,e2e；本機模型不需要金鑰），' +
                 '或確認 prompt 模板／模型 ID／schema 是否改動（interfaces-stage2.md 第 5.2 條）');
         });
     });

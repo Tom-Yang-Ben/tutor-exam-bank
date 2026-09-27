@@ -324,11 +324,16 @@ describe('main', () => {
 });
 
 describe('推估的常數', () => {
-    test('TOKENS_PER_CHAR 與 repo 裡本機回放檔擬合的結果相差不到 0.05（npm run perf:local 第 1.4 段同一個方法）', () => {
+    test('TOKENS_PER_CHAR 與 repo 裡本機回放檔擬合的結果相差不到 0.05（npm run perf:local 第 1.4 段同一個方法）', (ctx) => {
         const inv = perf.readCassettes(perf.DEFAULT_CASSETTE_DIR);
         const local = perf.selectEntries(inv.entries).selected;
         const [t] = perf.estimateThinking(local);
-        if (!t) return;   // 本機 cassette 被清掉時不適用
+        // 〔r7 測試空轉清理〕原本 `if (!t) return;`：回放檔被清掉時這一則悄悄算通過。改成明確 skip 並說明缺什麼
+        if (!t) {
+            ctx.skip('repo 的 eval/cassettes/ 沒有足夠的本機回放檔可擬合（被 cassettes:prune 刪掉？）——' +
+                '以本機模型重錄（npm run cassettes:rerecord）後自動恢復執行');
+            return;
+        }
         assert.ok(Math.abs(t.coef.a - bench.TOKENS_PER_CHAR.cjk) < 0.05, `中文 ${t.coef.a}`);
         assert.ok(Math.abs(t.coef.b - bench.TOKENS_PER_CHAR.other) < 0.05, `其他 ${t.coef.b}`);
         assert.equal(Math.round(bench.estimateTokens('一二三abcd')), Math.round(3 * 0.88 + 4 * 0.5));

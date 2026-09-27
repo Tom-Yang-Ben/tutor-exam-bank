@@ -197,7 +197,9 @@ CR-8 之二把 #54、#55（coulomb 配對）改標到「靜電學」後同理，
 
 ### 7.1 CH-A 合入後、Owner 重錄前的預期紅燈（全部是 replay miss）
 
-2026-09-25 在 CH-B 分支以 `test/fixtures/planChapters.preload.js` 模擬 CH-A 合入後的 `config/chapters.js`，
+2026-09-25 在 CH-B 分支以 `test/fixtures/planChapters.preload.js` 模擬 CH-A 合入後的 `config/chapters.js`
+（〔2026-09-27 `dec/r7-test-hygiene`〕CH-A 合入後這支 preload 換上去的值與 `config/chapters.js` 逐字相同、等於沒做事，已移除；
+`test/unit/evalChapterRelabel.test.js` 改在本行程直接解析，並先斷言 `config/chapters.js` 的數學／物理就是定案清單），
 跑一遍完整 CI（unit、check:html、migrate、integration、e2e、五個 eval），結果如下（審查修正、新增 #61 之後重跑）。這份清單就是 Owner 重錄後應該恢復綠燈的範圍。
 
 | CI 步驟 | 失敗 | 原因 |

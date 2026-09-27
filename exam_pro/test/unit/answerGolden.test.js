@@ -3,7 +3,7 @@
 // eval/golden/answer.json 的 50 題展開成 250 個 answerCompare 呼叫。
 // 這一支把它們全部跑一遍，比對 expect。
 //
-// ── 兩段式，為什麼 ──
+// ── 兩段式，為什麼（階段 2 的設計；現在只剩硬斷言，見下方〔r7〕）──
 // 這份 golden 是**裁判**（S2-26 的原話：「裁判 = D 的 250 案例 golden；C 改實作、D 改少數期望」），
 // 實作要往它對齊，不是反過來。但實作是 WS-C 的，合入時間不由 WS-D 決定。
 //
@@ -15,10 +15,10 @@
 //   S2-26（比法細則）  ① number 要把 `\ \mathrm{m/s^2}` 這類單位整段去掉
 //                      ② expression 字串不等時要退回數值比（含去掉 \left\right）
 //
-//   兩者都到位 → 250 個案例全部硬斷言。
-//   還沒到位   → 印出目前的相符數與前幾筆差異並 skip，之後自動轉成硬斷言。
-//
-// skip 的訊息會印出實際數字，不是靜默跳過。
+//   〔r7 測試空轉清理 2026-09-27〕原本：兩者都到位 → 250 個案例全部硬斷言；還沒到位 → 印出相符數並 skip。
+//   WS-C 早已合入、兩條裁決都到位，「還沒到位就 skip」成了死分支，而且有害：之後有人把 S2-12／S2-26 改壞，
+//   探針會回「還沒到位」，250 個案例與互比兩則就**悄悄 skip**、不會紅。
+//   現在：探針本身是一則硬斷言（兩條裁決必須在），250 個案例與互比兩則一律硬斷言、不再有 skip。
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
@@ -71,19 +71,12 @@ function runAll() {
 }
 
 describe('answer golden 對 answerCompare 的行為（裁決 S2-12／S2-26）', () => {
-    test('250 個案例全部符合 expect', (t) => {
-        const { pass, fails } = runAll();
-        const missing = missingRuling();
+    test('S2-12／S2-26 兩條裁決都在（確定性探針；改壞了要在這裡紅，不是讓下面兩則 skip）', () => {
+        assert.equal(missingRuling(), null, `utils/answerCompare.js 的 ${missingRuling()} 不見了`);
+    });
 
-        if (missing) {
-            t.skip(
-                `utils/answerCompare.js 尚未實作 ${missing}。\n` +
-                `   golden 是裁判（S2-26 的原話），目前 ${pass}/${cases.length} 相符；` +
-                `WS-C 對齊之後本測試會自動轉成硬斷言。\n` +
-                `   前五筆不符：\n     - ${fails.slice(0, 5).join('\n     - ')}`
-            );
-            return;
-        }
+    test('250 個案例全部符合 expect', () => {
+        const { fails } = runAll();
 
         assert.equal(fails.length, 0,
             `${fails.length}/${cases.length} 個案例與 golden 不符：\n  - ${fails.slice(0, 25).join('\n  - ')}` +
@@ -92,10 +85,9 @@ describe('answer golden 對 answerCompare 的行為（裁決 S2-12／S2-26）', 
 
     // 下面幾條測的是 golden 本身有沒有踩到「等價寫法其實不等價」「錯答其實是對的」
     // 這類標註錯誤。後三條完全不依賴裁決進度；第一條要等 S2-26，理由寫在裡面。
-    test('每筆的 3 個等價寫法彼此互比都是 agree（golden 內部自洽）', (t) => {
+    test('每筆的 3 個等價寫法彼此互比都是 agree（golden 內部自洽）', () => {
         // ans-047 的 $\left(\frac{3}{1}\right)$ 與 $\frac{3}{1}$ 字串不等，
         // 要靠 S2-26 的「expression 退回數值比」才會 agree。
-        const missing = missingRuling();
         const problems = [];
         for (const e of golden.entries) {
             if (e.expect.equivalent !== 'agree') continue;   // 期望 uncertain 的筆不適用
@@ -112,10 +104,6 @@ describe('answer golden 對 answerCompare 的行為（裁決 S2-12／S2-26）', 
                     }
                 }
             }
-        }
-        if (missing && problems.length) {
-            t.skip(`等 ${missing} 合入；目前 ${problems.length} 組互比不成立：\n     - ${problems.join('\n     - ')}`);
-            return;
         }
         assert.equal(problems.length, 0, problems.join('\n  '));
     });
