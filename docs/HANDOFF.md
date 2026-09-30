@@ -15,6 +15,7 @@
 > 〔第五輪決策 2026-09-27〕Owner 2026-09-27 在第五輪決策單（30 題：D、V5、C、O、LC、L、K-P）的答覆登錄在 **§0.00c**（每題的選項與落實分支）；§0.00 的 A10、B15 與 §0.2 第 7 項「物理先不跑 `kc:load`」已就地加註解除（K-P）。
 > 〔整合 r6 2026-09-27〕`dec/integration-r6`＝`local/integration-r5`（a670783）依序併入第五輪五組 `dec/r6-templates-fix`、`dec/r6-local-tuning-fix`、`dec/r6-gates-fix`、`dec/r6-defaults-fix`、`dec/r6-docs-kc-fix`：狀態在 §0.4 第 10 項。`local-mode.md` 五個暫編的「10.16」改號為 10.16～10.20，新增 **10.21 重錄計畫**（交付 Owner 電腦重錄的步驟）。
 > 〔第六輪決策 2026-09-27，桌面版〕Owner 2026-09-27 在第六輪決策單（19 題：啟動器 DL-1～DL-5、桌面版設計稿 DA-1～DA-14）的答覆登錄在 **§0.00d**；程式只改兩處（DL-4 啟動器預設、DA-11 網頁版 `HOST`），分支 `dec/r7-decisions-host`（從 `dec/integration-r7` `6757e25` 開）；審查小修在 `dec/r7-decisions-host-fix`（`desktop-app-design.md` 文末「審查修正紀錄（`dec/r7-decisions-host-fix`）」）。
+> 〔第七輪決策 2026-10-01〕Owner 2026-10-01 的第七輪決策（R7-1～R7-5：變式生成的本機輸出上限與截斷處理、補錄、desktop 納入 CI 與 Dependabot、`/desktop` 分組、B2 何時送）一覽在 **§0.00e**，每題寫落實在哪；§0.00d「Owner 接下來要做的」第 5 點已就地改成已同意、已併入。
 
 ---
 
@@ -265,7 +266,19 @@
 2. 跑 `wsl_memory_check.bat` 看 Smart App Control 是不是關閉（DA-9 的前提，10.4）；開啟或評估模式就先回報，不要自己改。
 3. 沒有重錄、沒有上傳時照 10.2 設 `.wslconfig` 上限（生效與否看 log 的「[.wslconfig 是否生效]」），並在閒置／上傳／重錄三種情況各跑一次檢查（10.3；「設上限前的重錄」要在下一輪重錄時量），把 log 交給維護的人，再決定 D2 做不做（DA-14）。
 4. 之後才會問的：B3 開工前 DA-6「B3 之後改不改 U2」；要改走退路時 DA-5；重新啟用 Gemini 時 DA-8 的 `safeStorage`。
-5. 〔待 Owner 決定，2026-09-27〕**desktop 納入 CI 與 dependabot**（`desktop-app-design.md` R-7）：提案分支 `dec/r8-desktop-ci-fix`（`dec/r8-desktop-ci` 加審查修正；基底 `dec/integration-r8` `9d27210`）已備妥，**Owner 同意之前不併入任何整合分支**（只有這一行可以先進整合分支）。要決定的是：① CI 加 `desktop` job（每次 push 與 PR 跑桌面版的 `npm test`，不下載 Electron）；② Dependabot 加 `/desktop`（Electron 有新版就開 PR；PR 會被版本鎖弄成紅燈，要照步驟升級才合併；紅燈能不能真的擋住合併要看分支保護〔要實測〕）；③ `/desktop` 要不要照 `/exam_pro` 分組（照慣例分組可能壓掉大版本的 PR〔推論〕）。建議：選 1（兩個都做），分組選 B（不分組）。代價、不做的風險、選項與要實測的事，寫在提案分支的 `docs/desktop-app-design.md` 6.2 節「決策說明：desktop 納入 CI 與 dependabot」（`git show dec/r8-desktop-ci-fix:docs/desktop-app-design.md`）。Owner 回覆的格式：「同意，選 1，分組選 B」。
+5. ~~〔待 Owner 決定，2026-09-27〕~~〔Owner 2026-10-01 同意：選 1、分組選 B（第七輪 R7-3、R7-4，§0.00e）；**已同意、已併入** `dec/r10-desktop-ci`（從 `dec/integration-r10` `f1a791c` 開、合併 `dec/r8-desktop-ci-fix`；`/desktop` 不分組）。Owner 推上 GitHub 之後還要做的（確認 Dependabot 設定、第一次 CI 的 `desktop` job、分支保護〔要實測〕、45 發布後的第一個 Dependabot PR〔要實測〕）見 `desktop-app-design.md` 6.2「決策說明」的「Owner 同意時要做的」第 2～5 點。以下是當時的原文〕**desktop 納入 CI 與 dependabot**（`desktop-app-design.md` R-7）：提案分支 `dec/r8-desktop-ci-fix`（`dec/r8-desktop-ci` 加審查修正；基底 `dec/integration-r8` `9d27210`）已備妥，**Owner 同意之前不併入任何整合分支**（只有這一行可以先進整合分支）。要決定的是：① CI 加 `desktop` job（每次 push 與 PR 跑桌面版的 `npm test`，不下載 Electron）；② Dependabot 加 `/desktop`（Electron 有新版就開 PR；PR 會被版本鎖弄成紅燈，要照步驟升級才合併；紅燈能不能真的擋住合併要看分支保護〔要實測〕）；③ `/desktop` 要不要照 `/exam_pro` 分組（照慣例分組可能壓掉大版本的 PR〔推論〕）。建議：選 1（兩個都做），分組選 B（不分組）。代價、不做的風險、選項與要實測的事，寫在提案分支的 `docs/desktop-app-design.md` 6.2 節「決策說明：desktop 納入 CI 與 dependabot」（`git show dec/r8-desktop-ci-fix:docs/desktop-app-design.md`）。Owner 回覆的格式：「同意，選 1，分組選 B」。
+
+### 0.00e 第七輪決策（2026-10-01）〔第七輪決策 2026-10-01〕
+
+> 來源：Owner（Ben）2026-10-01 的第七輪決策（R7-1～R7-5）。本表只登錄答案與落實位置；各分支實際改了什麼，以該分支的文件為準。沒有改任何 cassette 鍵（模板、schema、prompt、`cacheKeyParts`、`cassetteKey`）、golden、既有回放檔或 `eval/thresholds.json`。**AI 不代填任何「核准」欄**（`requirements_tracker.md` 等處的核准欄仍待 Owner 明示簽核）。
+
+| 題號 | Owner 選項 | 落實 |
+|---|---|---|
+| R7-1 | 4：變式生成（`variant`）的本機輸出上限改成程式預設 1024（比照第五輪 C-c 驗算的做法）；再比照 C-f，本機被截斷的變式不重試、直接放棄那一題並記事件 | 分支 `dec/r10-variant-cap`（從 `dec/integration-r10` `f1a791c` 開；本分支不含，程式與測試以該分支為準） |
+| R7-2 | 2：Owner 電腦的 `.env` 先加 `OLLAMA_MAX_OUTPUT_VARIANT=1024`，用 `record_local.bat variant --only-missing` 補錄 var-008#1 與 var-015#1 那 2 筆（[`local-mode.md`](local-mode.md) 10.23） | Owner 電腦：`.env` 已加 `OLLAMA_MAX_OUTPUT_VARIANT=1024`（2026-10-01 由 Claude 經裝置橋接寫入，原檔備份在 `exam_pro/data/rerecord/env.bak-1001`）；補錄**進行中**，錄完的回放檔還沒入庫。repo 不改 |
+| R7-3 | 1：desktop 納入 CI 與 Dependabot（兩個都做） | 本分支 `dec/r10-desktop-ci`（從 `dec/integration-r10` `f1a791c` 開、合併提案分支 `dec/r8-desktop-ci-fix` `c2ca0ff`）：`ci.yml` 加 `desktop` job（Node 24，`npm ci --ignore-scripts`、不下載 Electron、測試前後各確認一次）、`dependabot.yml` 加 `/desktop`；`desktop-app-design.md` 6.2「決策說明：desktop 納入 CI 與 dependabot」的「併入時要一起改的」8 條已照做。Owner 推上 GitHub 之後要做的見該段「Owner 同意時要做的」第 2～5 點 |
+| R7-4 | B：`/desktop` 的 Dependabot 不分組（每個版本各開一個 PR） | 本分支：`dependabot.yml` 的 `/desktop` 拿掉 `groups`（`minor-and-patch`），註解照實改寫；`/exam_pro` 的分組不動 |
+| R7-5 | 1：B2 等 Owner 驗收 A（啟動器）與 B1（桌面版）之後才送 | `dec/r8-b2-paths-fix`（`3a57d62`）**先不併入任何整合分支**；Owner 驗收完 A 與 B1（`desktop-launcher.md`、`desktop-app-design.md` 6.2 的驗收步驟）再送 |
 
 ### 0.0 章節重整（2026-09-25）〔修訂 2026-09-25 章節重整〕
 
