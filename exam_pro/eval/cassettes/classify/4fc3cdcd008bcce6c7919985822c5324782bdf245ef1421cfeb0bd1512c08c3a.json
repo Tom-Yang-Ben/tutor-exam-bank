@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T06:55:58.481Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4426,
+        "sha256": "725ec35161225c908352781153b17f36728ab92c5b4a0de2ad240f92e5407e8d"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "試證：對任意平面向量 $\\vec{a}$、$\\vec{b}$，恆有 $|\\vec{a} \\cdot \\vec{b}| \\leq |\\vec{a}||\\vec{b}|$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及向量內積的性質，並要求證明其絕對值不超過向量長度的乘積，屬於向量內積的性質與應用。",
+      "chapter": "向量內積",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3960,
+      "tokenOut": 67,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 61163,
+        "loadMs": 8,
+        "promptEvalMs": 11619,
+        "evalMs": 49499
+      }
+    },
+    "latencyMs": 61169
+  }
+}

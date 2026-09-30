@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T14:30:55.633Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2286,
+        "sha256": "ad9c5f61e6e930b155195ecf6137b58a0d611da4f677072195efb26fdd4a5aa8"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 21,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        13,
+        14,
+        19,
+        20,
+        23
+      ],
+      "total": 2,
+      "siblings": [
+        "5f282ab790d8f5dd"
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "空間向量內積",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 3,
+      "question_text": "某建築工地的起重機吊臂施加的力 $\tilde{a} = (2, -3, k)$ 與吊鉤的位移向量 $\tilde{b} = (4, 6, 1)$ 之間的功為零，求 $k$。",
+      "answer_text": "功為零表示力與位移向量垂直，即內積為 $0$：$2 \times 4 + (-3) \times 6 + k \times 1 = 0$，得 $k - 10 = 0$，$k = 10$。",
+      "figure_desc": "起重機吊臂施加的力向量與吊鉤位移向量，兩向量垂直，內積為零。"
+    },
+    "usage": {
+      "tokenIn": 2317,
+      "tokenOut": 218,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 175168,
+        "loadMs": 11,
+        "promptEvalMs": 69040,
+        "evalMs": 105125
+      }
+    },
+    "latencyMs": 175174
+  }
+}

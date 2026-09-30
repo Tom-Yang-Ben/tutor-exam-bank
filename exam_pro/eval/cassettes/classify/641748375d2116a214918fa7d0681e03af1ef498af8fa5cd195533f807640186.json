@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:47:52.396Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4420,
+        "sha256": "b1f42517f4fc876343d1e14a588f2d53da183e9c5aef1e7db96dd66fcba838d0"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "平面上有兩向量 $\\vec{u} = (3, 4)$ 與 $\\vec{v} = (1, 2)$，試求 $\\vec{u} \\cdot \\vec{v}$ 的值。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目要求計算兩向量的點積，屬於向量內積的計算。",
+      "chapter": "向量內積",
+      "confidence": 1
+    },
+    "usage": {
+      "tokenIn": 3959,
+      "tokenOut": 45,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 39115,
+        "loadMs": 9,
+        "promptEvalMs": 9145,
+        "evalMs": 29924
+      }
+    },
+    "latencyMs": 39121
+  }
+}

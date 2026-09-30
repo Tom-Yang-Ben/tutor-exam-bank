@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T19:45:46.112Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 80,
+        "sha256": "f0221df0c67ddb8efcd74fb94a8830a3118211ada159a95eeb2a73de43cf56e1"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "設平面向量 $\\vec{a} = (k, 2)$ 與 $\\vec{b} = (3, 6)$ 互相垂直，求 $k$。",
+      "questionType": "填空",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "-4",
+      "answer_form": "number",
+      "steps_summary": "根據向量垂直的條件，兩向量點積為零。計算得3k + 12 = 0，解得k = -4。"
+    },
+    "usage": {
+      "tokenIn": 299,
+      "tokenOut": 311,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 124177,
+        "loadMs": 9,
+        "promptEvalMs": 5675,
+        "evalMs": 117826
+      }
+    },
+    "latencyMs": 124193
+  }
+}

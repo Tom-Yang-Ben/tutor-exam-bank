@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T16:25:07.680Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 87,
+        "sha256": "992db0bc13677ef73775cd66ab17523d13bc8d65a43078d173d644728ba2f8a1"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "一輛質量為 $6$ kg 的自行車，受到總共 $24$ N 的合力作用，求其加速度的大小。假設自行車與地面間的摩擦力可忽略不計。",
+      "questionType": "計算",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "4",
+      "answer_form": "number",
+      "steps_summary": "根據牛頓第二定律 F=ma，已知合力 F=24 N、質量 m=6 kg，代入公式得 a=F/m=24/6=4 m/s²。因摩擦力忽略，故加速度大小為 4 m/s²。"
+    },
+    "usage": {
+      "tokenIn": 304,
+      "tokenOut": 311,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 124937,
+        "loadMs": 16,
+        "promptEvalMs": 8113,
+        "evalMs": 113924
+      }
+    },
+    "latencyMs": 124944
+  }
+}

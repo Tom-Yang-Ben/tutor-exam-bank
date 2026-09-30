@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T15:00:40.228Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2322,
+        "sha256": "c5e79a4b5a433ba7fe250ec85de3248c3ce87cdea2201d2055833714b333968c"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 23,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        11,
+        12,
+        19,
+        20,
+        21
+      ],
+      "total": 2,
+      "siblings": [
+        "c6f72b394e7366bb"
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "空間向量內積",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 3,
+      "question_text": "設空間向量 $\tilde{a} = (3, -2, 1)$，依 $\frac{1}{\norm{\tilde{a}}}$ 求它與 $z$ 軸正向夾角的餘弦值。",
+      "answer_text": "$\\norm{\\tilde{a}} = \\sqrt{3^2 + (-2)^2 + 1^2} = \\sqrt{9 + 4 + 1} = \\sqrt{14}$，與 $z$ 軸正向 $(0, 0, 1)$ 的內積為 $1$，故餘弦值為 $\\frac{1}{\\sqrt{14}}$。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2346,
+      "tokenOut": 206,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 188571,
+        "loadMs": 96,
+        "promptEvalMs": 79780,
+        "evalMs": 103250
+      }
+    },
+    "latencyMs": 188580
+  }
+}

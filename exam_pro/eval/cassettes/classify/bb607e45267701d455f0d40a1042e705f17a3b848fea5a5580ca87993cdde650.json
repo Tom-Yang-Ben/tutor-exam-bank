@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T08:02:10.476Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4405,
+        "sha256": "7e50e692832c711ddbaff4567b7f1db77783133c9ed87f9193c62fe5ce8215df"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "空間中兩向量 $\\vec{a} = (1, 2, k)$ 與 $\\vec{b} = (2, -1, 3)$ 正交，求 $k$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及空間中兩向量正交，需計算其點積為零，解出參數 $k$，屬於空間向量內積的應用。",
+      "chapter": "空間向量內積",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3954,
+      "tokenOut": 66,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 68609,
+        "loadMs": 11,
+        "promptEvalMs": 24364,
+        "evalMs": 44205
+      }
+    },
+    "latencyMs": 68614
+  }
+}

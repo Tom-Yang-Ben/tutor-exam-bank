@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T06:49:21.976Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4412,
+        "sha256": "5e5ca73786d83d617bdcc531bffdf5543dcc114eabe6d9bdbe19556c419947d8"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "設平面向量 $\\vec{a} = (3, 4)$、$\\vec{b} = (1, 2)$，求 $\\vec{a} \\cdot \\vec{b}$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目要求計算兩個平面向量的點積，屬於向量內積的計算。",
+      "chapter": "向量內積",
+      "confidence": 1
+    },
+    "usage": {
+      "tokenIn": 3952,
+      "tokenOut": 46,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 53478,
+        "loadMs": 14,
+        "promptEvalMs": 23379,
+        "evalMs": 30053
+      }
+    },
+    "latencyMs": 53483
+  }
+}

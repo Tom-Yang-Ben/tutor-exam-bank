@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T11:40:33.522Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2259,
+        "sha256": "93967473b33e2b38b1cee65768271c4595010d41c4ea7ef97d8623030e4c699f"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 13,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        11,
+        12,
+        14,
+        19,
+        21
+      ],
+      "total": 2,
+      "siblings": [
+        "7cb0485bb28b2f66"
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 3,
+      "question_text": "某物理實驗中，兩力向量 $\tilde{F}_1 = (k, -3)$ 與 $\tilde{F}_2 = (6, 2)$ 作用於同一物體上，若兩力向量互相垂直，求 $k$ 的值。",
+      "answer_text": "垂直即內積為 $0$：$k \times 6 + (-3) \times 2 = 0$，得 $6k = 6$，$k = 1$。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2292,
+      "tokenOut": 164,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 159888,
+        "loadMs": 11,
+        "promptEvalMs": 72428,
+        "evalMs": 87197
+      }
+    },
+    "latencyMs": 159899
+  }
+}

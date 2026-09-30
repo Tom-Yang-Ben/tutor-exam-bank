@@ -1,0 +1,56 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T18:41:13.264Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2000,
+        "sha256": "7f04800d70433ebda3d8954cf0e7339bedc60fb1716613f8ede397e8804d49e0"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 53,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        38,
+        39
+      ],
+      "total": 2,
+      "siblings": [
+        "495aab5a15fade12"
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "物體的運動（速度與加速度）",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 1,
+      "question_text": "機車行駛在平直道路上，其速度計顯示的數值代表的是下列哪一種物理量？ (A) 平均速度 (B) 平均速率 (、C) 瞬時速率 (D) 位移",
+      "answer_text": "(C)。速度計顯示的是該瞬間的速率大小，不含方向資訊，也不是整段行程的平均值。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2117,
+      "tokenOut": 143,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 156572,
+        "loadMs": 23,
+        "promptEvalMs": 72060,
+        "evalMs": 84263
+      }
+    },
+    "latencyMs": 156584
+  }
+}

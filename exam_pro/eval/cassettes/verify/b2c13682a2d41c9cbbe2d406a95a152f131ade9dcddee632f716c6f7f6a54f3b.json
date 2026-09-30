@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T10:24:18.055Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 74,
+        "sha256": "6c041f519e27e18fe3a0b9ca740335f671e8b8ee1296bd2a75a3f16c839326b3"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "已知 $\\text{log}_{10} 3 = 0.4771$，求 $3^{40}$ 是幾位數的整數。",
+      "questionType": "計算",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "20",
+      "answer_form": "number",
+      "steps_summary": "利用對數性質將3⁴⁰轉換為log₁₀(3⁴⁰)=40×0.4771=19.084。因10¹⁹ ≤ 3⁴⁰ < 10²⁰，故3⁴⁰為20位數。"
+    },
+    "usage": {
+      "tokenIn": 295,
+      "tokenOut": 730,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 359456,
+        "loadMs": 18,
+        "promptEvalMs": 35824,
+        "evalMs": 322201
+      }
+    },
+    "latencyMs": 359462
+  }
+}

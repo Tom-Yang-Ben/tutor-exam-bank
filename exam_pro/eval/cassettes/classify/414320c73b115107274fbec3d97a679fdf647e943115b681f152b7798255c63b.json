@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T06:44:35.548Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4362,
+        "sha256": "93d19fc66cb11d93948ebd5bd87bd89566621160cbb1fb3b72693370d90e5326"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "解方程式 $3^{x-1} = 81$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及指數方程式的解法，需使用指數律與對數方程式相關知識。",
+      "chapter": "指數與對數",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3924,
+      "tokenOut": 54,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 44283,
+        "loadMs": 10,
+        "promptEvalMs": 10535,
+        "evalMs": 33706
+      }
+    },
+    "latencyMs": 44294
+  }
+}

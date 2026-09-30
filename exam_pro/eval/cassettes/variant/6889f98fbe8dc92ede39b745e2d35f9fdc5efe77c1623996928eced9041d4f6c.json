@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T16:36:19.322Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2216,
+        "sha256": "c7da65e7d37799d819f28c15b4a109e608f972d48f1736721b24a29608a96b40"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 35,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        34,
+        40,
+        41,
+        42,
+        43
+      ],
+      "total": 2,
+      "siblings": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 3,
+      "question_text": "質量 $70$ kg 的人站在體重計上，電梯以 $4$ m/s$^2$ 的加速度向下減速，求體重計的讀數（取 $g = 10$ m/s$^2$）。",
+      "answer_text": "(C)。$N = m(g - a) = 70 \times (10 - 4) = 420$ N。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2241,
+      "tokenOut": 144,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 359615,
+        "loadMs": 3176,
+        "promptEvalMs": 230792,
+        "evalMs": 120059
+      }
+    },
+    "latencyMs": 359745
+  }
+}

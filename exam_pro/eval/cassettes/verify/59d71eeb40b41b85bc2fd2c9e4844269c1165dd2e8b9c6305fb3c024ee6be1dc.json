@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T14:27:59.836Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 91,
+        "sha256": "61cce6163dc8b73546e6a6baa107748a46469a864a16a3e0aed686d2f3f54f09"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "設空間向量 $\\tilde{a} = (k, 3, -2)$ 與 $\\tilde{b} = (4, 1, 5)$ 互相垂直，求 $k$。",
+      "questionType": "填空",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "7/4",
+      "answer_form": "number",
+      "steps_summary": "兩個向量垂直時點積為零，計算$\tilde{a} \bullet \tilde{b} = 4k + 3(1) + (-2)(5) = 4k -7 = 0$，解得$k = \frac{7}{4}$。"
+    },
+    "usage": {
+      "tokenIn": 307,
+      "tokenOut": 414,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 173687,
+        "loadMs": 40,
+        "promptEvalMs": 9162,
+        "evalMs": 162132
+      }
+    },
+    "latencyMs": 173714
+  }
+}

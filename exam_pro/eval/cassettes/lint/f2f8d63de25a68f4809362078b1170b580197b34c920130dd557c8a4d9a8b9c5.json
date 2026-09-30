@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "lint",
+    "model": "qwen3:8b",
+    "template": "lint.v3",
+    "recorded_at": "2026-09-27T15:13:26.407Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1070,
+        "sha256": "dbd21aaf7ef6ff7f5fb1a723511e7e9abffd099bb1f61719240a471a29cfc517"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "lint.v3",
+      "questionText": "設空間向量 $\\tilde{a} = (3, -2, 1)$，依 $\\frac{1}{\\norm{\\tilde{a}}}$ 求它與 $z$ 軸正向夾角的餘弦值。",
+      "answerText": "$\\norm{\\tilde{a}} = \\sqrt{3^2 + (-2)^2 + 1^2} = \\sqrt{9 + 4 + 1} = \\sqrt{14}$，與 $z$ 軸正向 $(0, 0, 1)$ 的內積為 $1$，故餘弦值為 $\\frac{1}{\\sqrt{14}}$。",
+      "issues": [
+        "unknown_command",
+        "unknown_command"
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "question_text": "設空間向量 $\\vec{a} = (3, -2, 1)$，依 $\\frac{1}{\\left\\| \\vec{a} \\right\\|}$ 求它與 $z$ 軸正向夾角的餘弦值。",
+      "answer_text": "$\\left\\| \\vec{a} \\right\\| = \\sqrt{3^2 + (-2)^2 + 1^2} = \\sqrt{9 + 4 + 1} = \\sqrt{14}$，與 $z$ 軸正向 $(0, 0, 1)$ 的內積為 $1$，故餘弦值為 $\\frac{1}{\\sqrt{14}}$。",
+      "notes": "將 \\norm 替換為 \\left\\| ... \\right\\|，將 \\tilde 替換為 \\vec，並修正公式格式以符合 Word 轉換需求。"
+    },
+    "usage": {
+      "tokenIn": 902,
+      "tokenOut": 1333,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 764615,
+        "loadMs": 12,
+        "promptEvalMs": 94219,
+        "evalMs": 669171
+      }
+    },
+    "latencyMs": 764625
+  }
+}

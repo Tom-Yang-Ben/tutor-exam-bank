@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:01:54.055Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4411,
+        "sha256": "3626463c77bb4c3a3a11fe74d42265455bc64d545a95ce74983a16edb2f371f6"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "設 $A(1, 2, 2)$，求位置向量 $\\vec{OA}$ 與 $\\vec{n} = (1, 0, 0)$ 的內積，並說明其幾何意義。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及向量內積的計算，並要求說明其幾何意義，屬於向量內積的應用。",
+      "chapter": "向量內積",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3958,
+      "tokenOut": 55,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 59959,
+        "loadMs": 9,
+        "promptEvalMs": 24787,
+        "evalMs": 35131
+      }
+    },
+    "latencyMs": 59964
+  }
+}

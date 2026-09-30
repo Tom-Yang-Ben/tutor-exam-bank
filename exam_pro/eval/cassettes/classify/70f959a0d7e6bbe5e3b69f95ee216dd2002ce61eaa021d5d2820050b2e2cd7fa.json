@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:51:01.679Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4404,
+        "sha256": "93af55d08ca72247af0bc3fc58cac83705d4c120d87409677f4660f1ac9e4121"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "在空間中，已知 $\\vec{a} = (1, 2, 3)$ 與 $\\vec{b} = (2, 0, 1)$，試求兩者的內積。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目要求計算空間中兩向量的內積，屬於空間向量內積的計算。",
+      "chapter": "空間向量內積",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3955,
+      "tokenOut": 52,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 59846,
+        "loadMs": 16,
+        "promptEvalMs": 25018,
+        "evalMs": 34782
+      }
+    },
+    "latencyMs": 59850
+  }
+}

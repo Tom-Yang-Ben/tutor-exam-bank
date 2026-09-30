@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T06:54:04.280Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4400,
+        "sha256": "bde9d3e87b6ff330278c4c182ba8d0f8db44c34656afe06c719bbf428a837983"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "設平面向量 $\\vec{a} = (4, k)$ 與 $\\vec{b} = (5, 10)$ 互相垂直，求 $k$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目中涉及平面向量互相垂直的條件，需利用向量內積為零的性質求解，關鍵在於向量內積的計算與應用。",
+      "chapter": "向量內積",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3948,
+      "tokenOut": 67,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 57513,
+        "loadMs": 7,
+        "promptEvalMs": 16182,
+        "evalMs": 41298
+      }
+    },
+    "latencyMs": 57517
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T10:42:44.482Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2274,
+        "sha256": "f29ea55a575e36930b2c79498c04804211921bc2ec91bcd3df296d55c1c3b32a"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 7,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        11,
+        12,
+        19,
+        20,
+        21
+      ],
+      "total": 2,
+      "siblings": [
+        "bc05cc29bd42472b"
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數函數與對數函數",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 3,
+      "question_text": "某種植物的生長速率與時間的關係為 $\\log_{5} 2 \\times \\log_{2} 125$，求其結果為何？",
+      "answer_text": "$3$。換底後 $\\frac{\\log 2}{\\log 5} \\times \\frac{\\log 125}{\\log 2} = \\frac{\\log 125}{\\log 5} = \\log_{5} 125 = 3$。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2290,
+      "tokenOut": 169,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 158968,
+        "loadMs": 13,
+        "promptEvalMs": 70118,
+        "evalMs": 88153
+      }
+    },
+    "latencyMs": 158996
+  }
+}

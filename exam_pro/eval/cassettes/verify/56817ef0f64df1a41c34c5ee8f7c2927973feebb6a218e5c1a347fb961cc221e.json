@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T11:37:53.410Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 104,
+        "sha256": "90759762dc74b8b9d346111dd248a23210c2dde1f9bc2922467a4801ad25ee18"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "某建築工地使用兩根鋼索 $\\vec{a} = (k, 4)$ 與 $\\vec{b} = (-2, 1)$ 來支撐一塊水平板，若兩根鋼索互相垂直，求 $k$ 的值。",
+      "questionType": "填空",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "2",
+      "answer_form": "number",
+      "steps_summary": "兩向量垂直時點積為零，計算得 -2k + 4 = 0，解得 k = 2。"
+    },
+    "usage": {
+      "tokenIn": 318,
+      "tokenOut": 298,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 136435,
+        "loadMs": 17,
+        "promptEvalMs": 8314,
+        "evalMs": 126245
+      }
+    },
+    "latencyMs": 136473
+  }
+}

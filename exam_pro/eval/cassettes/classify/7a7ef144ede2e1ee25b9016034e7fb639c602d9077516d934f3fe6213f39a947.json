@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:10:10.677Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4421,
+        "sha256": "4a3a434119aa5e88393f7010d7de510fd057debcec03e25f070148d9a625084b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "已知角 $\\theta$ 的終邊通過點 $P(-3, 4)$，試依定義 $\\sin \\theta = \\frac{y}{r$ 求 $\\sin \\theta$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目使用了角的終邊通過點 P(-3, 4) 並依定義求 sinθ，屬於廣義角與極坐標中關於三角函數的定義與計算。",
+      "chapter": "廣義角與極坐標",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3953,
+      "tokenOut": 77,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 78343,
+        "loadMs": 11,
+        "promptEvalMs": 25774,
+        "evalMs": 52517
+      }
+    },
+    "latencyMs": 78350
+  }
+}

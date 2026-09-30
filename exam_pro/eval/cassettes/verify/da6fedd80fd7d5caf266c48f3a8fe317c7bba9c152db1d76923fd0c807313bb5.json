@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T13:30:19.714Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 114,
+        "sha256": "504ef4a232637a40de4240766be0e3d724ed0380c104d8c17a56e431cfd7b11a"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "某物理實驗中，兩根電磁鐵產生的磁場可視為空間向量 $\\tilde{a} = (3, -2, 1)$ 與 $\\tilde{b} = (4, 1, -3)$，求這兩個磁場向量之間的內積。",
+      "questionType": "計算",
+      "sampleNo": 2
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "7",
+      "answer_form": "number",
+      "steps_summary": "計算向量內積需將對應分量相乘後相加。向量a=(3,-2,1)與向量b=(4,1,-3)的內積為3×4 + (-2)×1 + 1×(-3) = 12-2-3=7。"
+    },
+    "usage": {
+      "tokenIn": 326,
+      "tokenOut": 303,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 115792,
+        "loadMs": 8,
+        "promptEvalMs": 319,
+        "evalMs": 114807
+      }
+    },
+    "latencyMs": 115800
+  }
+}

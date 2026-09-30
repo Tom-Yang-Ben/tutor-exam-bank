@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T15:34:46.716Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2251,
+        "sha256": "ad82ef5921be433e10fe42af7ed6ae5011a25bafbba73896c510f2647eebe00f"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 27,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        10,
+        28,
+        29,
+        31,
+        61
+      ],
+      "total": 2,
+      "siblings": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 2,
+      "question_text": "某座摩天大樓的觀景台在 $300^\fdg$ 的方位角上觀察到一輛車，若該車與觀景台的距離為 $15$ 公里，則該車與觀景台的水平距離為何？",
+      "answer_text": "$\\frac{15\\sqrt{3}}{2}$ 公里。$300^\\fdg$ 在第四象限，參考角為 $60^\\fdg$，第四象限的餘弦為正，故 $\\cos 300^\\fdg = \\cos 60^\\fdg = \\frac{1}{2}$，因此水平距離為 $15 \\times \\frac{1}{2} = \\frac{15}{2}$ 公里，但需乘以 $\\sqrt{3}$ 得到實際水平距離為 $\\frac{15\\sqrt{3}}{2}$ 公里。",
+      "figure_desc": "觀景台與車輛之間形成一個三角形，觀景台位於原點，車輛位於第四象限，方位角為 $300^\\fdg$，距離為 $15$ 公里，水平距離為 $\\frac{15\\sqrt{3}}{2}$ 公里。"
+    },
+    "usage": {
+      "tokenIn": 2259,
+      "tokenOut": 338,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 236635,
+        "loadMs": 18,
+        "promptEvalMs": 62347,
+        "evalMs": 174104
+      }
+    },
+    "latencyMs": 236641
+  }
+}

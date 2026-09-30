@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:07:46.275Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4364,
+        "sha256": "2f9781469daee3c1e9c64bc599ee2d9823dc313d14dbb24b6082b4648abefdcd"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "$\\cos 120^\\circ$ 之值為何？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目要求計算 $\theta = 120^\text{\\circ}$ 的餘弦值，屬於廣義角的三角函數計算，需使用單位圓與三角函數的性質。",
+      "chapter": "廣義角與極坐標",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3923,
+      "tokenOut": 76,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 60258,
+        "loadMs": 10,
+        "promptEvalMs": 11213,
+        "evalMs": 49001
+      }
+    },
+    "latencyMs": 60264
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T16:22:55.995Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1983,
+        "sha256": "ddfd8e249aaa443b2b2e1f47a5028734db8edb37ba92fb11e6e5c2c8f779ee51"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 33,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        32,
+        44,
+        46,
+        47,
+        48
+      ],
+      "total": 2,
+      "siblings": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "一輛質量為 $6$ kg 的自行車，受到總共 $24$ N 的合力作用，求其加速度的大小。假設自行車與地面間的摩擦力可忽略不計。",
+      "answer_text": "(A)。$a = \frac{F}{m} = \frac{24}{6} = 4$ m/s$^2$，方向與合力同向。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2086,
+      "tokenOut": 140,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 226312,
+        "loadMs": 11,
+        "promptEvalMs": 160997,
+        "evalMs": 65068
+      }
+    },
+    "latencyMs": 226319
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:42:59.223Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4512,
+        "sha256": "330a3541016edf337891c9e95b761a01f7bc4c0790ca439fa81892e513912575"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "直角三角形 $ABC$ 中，$\\angle C = 90^\\circ$，$\\overline{AC} = 12$、$\\overline{BC} = 5$，則 $\\sin A$ 之值為何？\n(A) $\\frac{5}{13}$　(B) $\\frac{12}{13}$　(C) $\\frac{5}{12}$　(D) $\\frac{12}{5}$",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及直角三角形中角的三角函數值計算，需使用直角三角形的邊角關係求解 sin A。",
+      "chapter": "直角三角形的邊角關係",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 4006,
+      "tokenOut": 64,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 64953,
+        "loadMs": 9,
+        "promptEvalMs": 18042,
+        "evalMs": 42368
+      }
+    },
+    "latencyMs": 64958
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T17:38:53.446Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 92,
+        "sha256": "08eeeb665b940c93028b5bdee6c12be70a2b10e8eab34de6623f139c8132d8ab"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "一質量為 $6$ kg 的物體，以 $2$ m/s 的速率在水平面上做等速圓周運動，所用的輕繩長度為 $4$ m，求繩子所施加的張力大小。",
+      "questionType": "計算",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "6",
+      "answer_form": "number",
+      "steps_summary": "物體做等速圓周運動，繩子張力提供向心力。根據公式 T = mv²/r，代入 m=6kg、v=2m/s、r=4m，計算得 T = (6×2²)/4 = 24/4 = 6N。"
+    },
+    "usage": {
+      "tokenIn": 313,
+      "tokenOut": 383,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 165361,
+        "loadMs": 13,
+        "promptEvalMs": 7128,
+        "evalMs": 155979
+      }
+    },
+    "latencyMs": 165369
+  }
+}

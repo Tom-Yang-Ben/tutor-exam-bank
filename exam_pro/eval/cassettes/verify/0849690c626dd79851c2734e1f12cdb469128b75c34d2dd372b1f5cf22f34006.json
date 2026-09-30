@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T19:57:04.215Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 78,
+        "sha256": "6b35b7c83f4491efe685e328587cff5cd7fbfb87bc80b7c6c47d7a707d13f554"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "長 1 m 的輕繩繫住質量 2 kg 的小球，在光滑水平面上以 3 m/s 的速率作等速圓周運動，求繩的張力。",
+      "questionType": "計算",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "18 N",
+      "answer_form": "number",
+      "steps_summary": "小球做等速圓周運動，繩的張力提供向心力。利用公式 F = m*v²/r，代入 m=2kg、v=3m/s、r=1m，計算得 F = 2*(3²)/1 = 18 N。"
+    },
+    "usage": {
+      "tokenIn": 301,
+      "tokenOut": 334,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 125388,
+        "loadMs": 11,
+        "promptEvalMs": 5559,
+        "evalMs": 118205
+      }
+    },
+    "latencyMs": 125402
+  }
+}

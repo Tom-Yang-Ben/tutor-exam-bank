@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T10:55:01.736Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 98,
+        "sha256": "e3b88b31dd668546b16e9b70648f0af18250c169b552b67fc96e6716abdef3bf"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "設平面向量 $\\bar{a} = (2, 5)$、$\\bar{b} = (-3, 1)$，求 $\\bar{a} \\times \\bar{b}$ 的值。",
+      "questionType": "計算",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "17",
+      "answer_form": "number",
+      "steps_summary": "平面向量叉乘公式為 $a_x b_y - a_y b_x$。代入 $\\bar{a} = (2,5)$、$\\bar{b} = (-3,1)$ 得 $2\\times1 - 5\\times(-3) = 2 + 15 = 17$。"
+    },
+    "usage": {
+      "tokenIn": 304,
+      "tokenOut": 450,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 202801,
+        "loadMs": 27,
+        "promptEvalMs": 8181,
+        "evalMs": 191975
+      }
+    },
+    "latencyMs": 202837
+  }
+}

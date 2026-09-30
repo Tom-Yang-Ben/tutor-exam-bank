@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T06:54:57.305Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4433,
+        "sha256": "fa34c26d65517d3f5dcd42dbe87effcd0713b27a9a1411b601d73938761e4e9a"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "求 $\\vec{a} = (3, 4)$ 在 $\\vec{b} = (1, 0)$ 上的正射影長度 $\\frac{\\vec{a} \\cdot \\vec{b}}{|\\vec{b}|$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及向量內積的計算，並用以求正射影長度，關鍵在於向量內積的公式與其應用。",
+      "chapter": "向量內積",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3963,
+      "tokenOut": 62,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 53016,
+        "loadMs": 9,
+        "promptEvalMs": 11211,
+        "evalMs": 41765
+      }
+    },
+    "latencyMs": 53021
+  }
+}
