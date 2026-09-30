@@ -12,6 +12,24 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+  # 桌面版（Electron 殼，docs/desktop-app-design.md R-7）。〔Owner 2026-10-01 同意：選 1、分組選 B〕
+  # 頻率與 PR 上限照上面 /exam_pro；**不分組**（分組選 B）：每個有新版的套件各開一個 PR。
+  # desktop/package.json 的直接相依只有 electron（鎖死 44.4.5），分組只包一個套件沒有好處，
+  # 還會踩到「分組 PR 開著時，大版本的 PR 可能開不出來」（dependabot-core issue #14202〔推論，要實測〕）。
+  # 修補版、小版本、大版本（45、46…）都是 electron 的個別 PR；沒有 ignore。
+  # 45 發布之後，Dependabot 只會開 45 的 PR，不會再有 44.x 修補版的 PR（分不分組都一樣）；
+  # 想留在 44 又要收到 44.x 修補版時的做法見 docs/desktop-app-design.md 6.2「收到 Electron 的 PR 時」第 3 點。
+  # B3 把 electron-builder 加進 desktop/package.json 時再看要不要分組（可用 exclude-patterns 讓 electron 單獨走）。
+  # electron 的 PR 在 CI 的 desktop job 會紅（desktop/test/package.test.js 鎖定版本號）：這是刻意的提醒，
+  # 要照步驟升級才合併。紅燈能不能真的擋住合併，要看 main 有沒有把 desktop 設成必要檢查（同一段決策說明）。
+  - package-ecosystem: npm
+    directory: /desktop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Taipei
+    open-pull-requests-limit: 5
   - package-ecosystem: github-actions
     directory: /
     schedule:

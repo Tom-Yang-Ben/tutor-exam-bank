@@ -137,7 +137,7 @@
 |---|---|---|
 | unit（`npm test`） | ✅ 4,149 則：4,146 過、0 失敗、3 略過 | 另有整組略過的 describe（等回放檔，第 6 節）；r7 時 4,046 則：4,044 過、2 略過 |
 | `npm run check:html` | ✅ | |
-| `desktop`：`npm test`、`npm run smoke` | ✅ 120 則全過；冒煙 54/54（xvfb 上真的 Electron 44.4.5） | 不在 GitHub Actions 裡（`ci.yml` 只跑 `exam_pro`）；Windows 專屬項目見 `desktop-app-design.md` 6.2 |
+| `desktop`：`npm test`、`npm run smoke` | ✅ 120 則全過；冒煙 54/54（xvfb 上真的 Electron 44.4.5） | ~~不在 GitHub Actions 裡（`ci.yml` 只跑 `exam_pro`）~~〔Owner 2026-10-01 選 1，`dec/r10-desktop-ci`〕`npm test` 在 CI 的 `desktop` job 跑（Node 24，不下載 Electron）；`npm run smoke` 不在 CI。Windows 專屬項目見 `desktop-app-design.md` 6.2 |
 | `npm run migrate:test` | ✅ 到 0020 | |
 | integration | ✅ 641 則全過 | r8 多的 12 則來自 `listenHost`（DA-11）與檢查點（DA-13）。r7 時 629 則；〔審查修正 2026-09-27〕審查時在另一個全新庫回報 631 則全過；`dec/r7-test-hygiene-fix` 在全新庫連跑兩次（中間跑過 e2e）都是 629，差 2 則的原因沒查到。兩次都沒有失敗；以 Owner 重跑那一版的數字為準 |
 | e2e | ❌ **14 項：9 過、3 紅、2 SKIP** | 2 項 SKIP 是 ocr 模式固定的交叉驗證（第 6 節）。三項紅都是拆題停在 replay miss `extract_ocr/a5918283…`（樣卷的 `extract_ocr.v2` 回放檔還沒錄）。**依 X1 這一項必須綠，第 3 步錄完之前不能開 PR** |
@@ -164,7 +164,7 @@
 2. 第 4 步：`npm run cassettes:rerecord -- --dry-run` 確認五個 eval 與 e2e 的 replay miss、缺向量都是 0；`git add eval/cassettes eval/fixtures/embeddings.ollama-qwen3-embedding-0.6b.768.json`、commit。
 3. 重錄結果併入 `dec/integration-r8`（已含本分支與第六輪的落實；Owner 電腦上用 `step4_after_record.bat` 做）之後，重跑 unit、`check:html`、integration、e2e 與五個 eval：unit、integration、e2e 必須全綠；把第 1 節與第 4 節換成那一版的數字與未達項。unit 或 e2e 若因本機模型的拆題品質變紅，先答 TH-1（第 7 節）再處理。
 4. **把最後那一版併進 `local/integration`**〔審查修正 2026-09-27〕：`local/integration` 現在在 `889d18f`，比 `dec/integration-r8` 少 82 個 commit，沒有這一步推上去的會是舊版。`git checkout local/integration` → `git merge --ff-only <第 3 步重跑全綠的那一版>`（`889d18f` 是祖先，應該能快轉；不能快轉代表 `local/integration` 另有 commit，先停下來看是什麼）→ `git log --oneline origin/main..local/integration` 確認看得到重錄的 commit 與本分支的 commit、`git rev-parse local/integration` 等於第 3 步那一版，再照第 1 節的說明重算範圍數字。
-5. 由 Owner 的電腦把 `local/integration` 推上 GitHub（推送時機由 Owner 決定），以本稿開 PR 到 main，等 GitHub Actions 的 unit 與 integration 兩個 job 跑完。
+5. 由 Owner 的電腦把 `local/integration` 推上 GitHub（推送時機由 Owner 決定），以本稿開 PR 到 main，等 GitHub Actions 的 ~~unit 與 integration 兩個 job~~〔Owner 2026-10-01 選 1，`dec/r10-desktop-ci`〕unit、integration、desktop 三個 job 跑完。
 
 **合併之後（正式庫與日常使用）**
 
