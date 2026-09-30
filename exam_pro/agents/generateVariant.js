@@ -8,7 +8,9 @@
 //   outcome: {kind:'pass', data:{…與 payload.extract 同形…, variant_of_root, anchor_ids},
 //             gate:{ text_gate, sim }}
 //            {kind:'fail', reason:'text_gate'|'off_topic'|'schema_invalid'|'chapter_invalid', feedback}
-//            {kind:'error', errorClass:…}
+//            {kind:'error', errorClass:…, message, finishReason?}
+//            〔Owner 第七輪 R7-1＝4〕模型回應被截斷時 finishReason＝'MAX_TOKENS'（照 verify／lint／classify 的寫法），
+//            runner 據此在本機模式不重試、放棄這一題（C-f 納入變式）。
 //
 // 這個節點是「job 層」的（第 4.1 條）：它把 PDF job 的 `extract` 換掉，產出一列
 // `job_questions(state='extracted')`，之後**走完全相同的六個節點**
@@ -492,7 +494,10 @@ async function run(ctx, input = {}) {
         return {
             kind: 'error',
             errorClass: err.errorClass || 'provider_error',
-            message: err.message
+            message: err.message,
+            // 〔Owner 第七輪 R7-1＝4，C-f 納入變式〕供應商回報的 finishReason（'MAX_TOKENS'＝寫到輸出上限被截斷）帶給 runner：
+            // 本機模式被截斷的不重試、直接放棄這一題並記事件（workers/jobRunner.js 的 runGenerateOne）。沒有時不多這個鍵（與之前逐欄相同）
+            ...(err && err.finishReason ? { finishReason: String(err.finishReason) } : {})
         };
     }
 }
