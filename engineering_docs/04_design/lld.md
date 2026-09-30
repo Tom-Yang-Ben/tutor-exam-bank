@@ -83,14 +83,14 @@ flowchart TD
 | 機制 | 實作 | 參數（預設） |
 | :--- | :--- | :--- |
 | 認領 | 同一交易兩句：`SELECT id … WHERE state 可推進 AND (locked_until IS NULL OR locked_until < now()) ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED` → `UPDATE … SET locked_until = now() + lease`；兩個槽不會搶到同一列 | `JOB_CONCURRENCY=2` 槽 |
-| 租約 | 認領時設 `locked_until`；呼叫進行中每 30 秒續租；完成時清 NULL；崩潰後租約過期即可被重新認領（斷點續跑，NFR-005） | `JOB_LEASE_MS=180000`、續租 30s |
+| 租約 | 認領時設 `locked_until`；呼叫進行中每 30 秒續租；完成時清 NULL；崩潰後租約過期即可被重新認領（斷點續跑，NFR-005）。〔修訂 2026-09-27〕斷點的粒度：`job_questions` 從中斷的那一格重跑那一個節點。〔修訂 2026-09-27，`dec/r7-checkpoints`，DA-13＝2〕`jobs` 的拆題／變式生成有逐塊／逐題的檢查點：拆題每塊的「建題目列＋寫 `extract` 事件」在同一個交易，重新認領時跳過已有 pass／skipped 事件的塊（`planResumeChunks`：頁碼範圍與塊號都對得上才跳；每塊頁數變了時已拆完的前幾頁照跳、其餘頁塊號接在後面；〔`dec/r7-checkpoints-fix`〕檢查點不是從第 1 頁起連續、塊號遞增的一串時不排任何塊，job 直接 failed「拆題檢查點對不上」，不自動重拆）；變式跳過已有該 idx 的題、只補還沒建成的 idx（含中斷點之前沒過閘門的），建好一題時「建列＋寫 generate pass 事件」同一個交易。拆題只重做被中斷的那一塊 | `JOB_LEASE_MS=180000`、續租 30s |
 | 認領優先序 | 每 tick 先清在途 `job_questions`（使已產生成本的 job 優先完結）→ 再認領 `kind='pdf'` 的 jobs → 最後 `kind='variant'` | `JOB_POLL_MS=2000` |
 | 重試預算 | fail：extract／generate 整包重試 1 次（`EXTRACT_MAX_RETRIES=1`）；節點層見 §5.2。error：獨立計數器，退避 1s→2s→4s… 封頂 60s，睡眠由 runner 做、狀態機只計數 | `maxErrorRetries=3` |
 | 節點逾時 | `Promise.race` ＋ AbortController，逾時歸類 `error:timeout` | `JOB_NODE_TIMEOUT_MS=120000` |
 | RPM 節流 | 不在 runner：所有 `ctx.llm` 呼叫經 `exam_pro/services/llm/throttle.js` 的每供應商雙桶（RPM 滑動 60 秒視窗＋併發槽） | `<VENDOR>_RPM=60` |
 | 單 job 成本上限 | 呼叫前檢查 `budget_usd − cost_usd`，餘額不足即不發出呼叫；轉為 `needs_review('budget_exceeded')` | `JOB_COST_BUDGET_USD=0.5` |
 | 每日成本上限 | tick 起手查 `job_events` 當日 `SUM(cost_usd)`；超過即只認領零成本節點（dedup0／source_check〔修訂 2026-09-15f〕／dedup1／save）對應的狀態、不開新 job | `DAILY_COST_BUDGET_USD=5` |
-| 重跑冪等 | `job_questions` UNIQUE `(job_id, idx)` ＋ `ON CONFLICT DO NOTHING`：extract／generate 重跑不重複建列 | — |
+| 重跑冪等 | `job_questions` UNIQUE `(job_id, idx)` ＋ `ON CONFLICT DO NOTHING`：extract／generate 重跑不重複建列。〔修訂 2026-09-27，DA-13〕拆題被中斷的那一塊因為「建列＋檢查點」同一個交易，一列都不會留下，重拆時模型拆出不同題數也不會和上一輪混成重複列；ON CONFLICT 留作第二道防線 | — |
 | 承上題綁定（FR-019）〔修訂 2026-09-15e〕 | 非新節點、不經 `transition()`：job_question 寫成終態的 UPDATE 之後、`maybeFinishJob` 之前呼叫 `services/followUpLinker.js` 的 `linkJob(db, job_id, {src:'pipeline'})`，對整個 job 重算（子題先入庫時等前題到終態再補綁）；失敗只 warn、不影響狀態推進。變式政策停等分支不掛；`kind='variant'` 的 job 在 linkJob 內 no-op。approve／reject 在同交易以 SAVEPOINT 包住呼叫（`src:'review'`） | 前題解析遞迴深度 5、成環檢查深度 20 |
 | 卷別傳遞（FR-026）〔修訂 2026-09-24〕 | 認領 job 時把 `jobs.subject_group` 帶進 `ctx.job`；各 agent 由 `promptParts.resolveSubjectGroup(ctx, input)` 決定走數學／物理或化學路徑（見 §4.3） | 預設 `math_physics` |
 | save 節點寫詳解（FR-024）〔修訂 2026-09-24〕 | 入庫同交易內以 `buildSolutionFields(payload)` 決定 `solution_text`／`solution_src`：`payload.verify.compare === 'agree'` 且 `steps_summary` trim 後非空、≤4000 字 → `verify`；否則兩欄 NULL。回填腳本共用同一函式 | — |

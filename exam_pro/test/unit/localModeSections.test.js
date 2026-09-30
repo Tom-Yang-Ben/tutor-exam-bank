@@ -12,6 +12,8 @@
 // 〔整合 2026-09-27 dec/integration-r6〕第五輪五組（A 模板、B 本機調整、C 閘門、D 預設值、E 文件知識點）各自暫編「10.16」，
 // 依併入順序改號為 10.16～10.20；標題清單改回逐一列出每一節的節號與完整標題（不再允許暫編的寬鬆寫法），
 // 各組自己的檔指到自己那一節也一併釘住。
+// 〔Owner 2026-09-27 改答 LC-2，dec/r6-classify-rules〕末尾新增 10.22「classify 重錄後的四條界線規則」：標題清單多一節，
+// 改到的檔（classify.js、chapterPostRules.js、suiteClassify.js、localV1Regression）另指到 10.22，新檔只指 10.22。
 // 只讀檔，不連 DB、不呼叫模型。
 // ─────────────────────────────────────────────────────────────
 const { test, describe } = require('node:test');
@@ -46,7 +48,8 @@ describe('docs/local-mode.md 10.12～10.20（整合 r5、final5、r6 改號）',
         ["10.18", "第五輪 C 閘門與計分（2026-09-27）"],
         ["10.19", "第五輪 D 預設值與門檻（2026-09-27，`dec/r6-defaults`；Owner 第五輪 D-3、V5-1～V5-5、O-2 核准）"],
         ["10.20", "第五輪 E 文件與知識點（2026-09-27）"],
-        ["10.21", "重錄計畫（2026-09-27，第五輪之後）"]   // 整合 r6 新增的最後一節（test/unit/rerecordPlanR6.test.js）
+        ["10.21", "重錄計畫（2026-09-27，第五輪之後）"],   // 整合 r6 新增（test/unit/rerecordPlanR6.test.js）
+        ["10.22", "classify 重錄後的四條界線規則（2026-09-27，改答 LC-2）"]   // 〔Owner 2026-09-27 改答 LC-2〕dec/r6-classify-rules
     ];
 
     test(`第 10 章 10.12 之後的標題依併入順序各出現一次：${EXPECTED.map(e => e[0]).join('、')}`, () => {
@@ -74,7 +77,8 @@ describe('docs/local-mode.md 10.12～10.20（整合 r5、final5、r6 改號）',
         ['exam_pro/config/similarityThresholds.js', ['10.19']],
         ['exam_pro/agents/extractOcrFigures.js', ['10.12']],
         ['exam_pro/migrations/0019_ocr_only_review.sql', ['10.12']],
-        ['exam_pro/test/e2e/pipeline.e2e.test.js', ['10.12']],
+        // 〔r7 測試空轉清理 審查 2026-09-27〕replay miss 的斷言訊息原本叫人跑 eval:record（需要金鑰），改成指向 10.21 第 3 步的重錄
+        ['exam_pro/test/e2e/pipeline.e2e.test.js', ['10.12', '10.21']],
         ['exam_pro/eval/.env.replay', ['10.12']],
         ['exam_pro/eval/tools/embed_threshold_report.js', ['10.13']],
         ['exam_pro/eval/lib/embedThresholds.js', ['10.13']],
@@ -86,12 +90,15 @@ describe('docs/local-mode.md 10.12～10.20（整合 r5、final5、r6 改號）',
         ['exam_pro/test/unit/localTuning.test.js', ['10.14']],
         ['exam_pro/test/unit/localBenchText.test.js', ['10.14']],
         ['exam_pro/test/unit/localPerfThinking.test.js', ['10.14']],
-        ['exam_pro/agents/classify.js', ['10.15']],
-        ['exam_pro/utils/chapterPostRules.js', ['10.15']],
-        ['exam_pro/eval/lib/suiteClassify.js', ['10.15']],
+        // 〔Owner 2026-09-27 改答 LC-2〕classify.js、chapterPostRules.js、suiteClassify.js、localV1Regression 另指到 10.22（四條新規則）
+        ['exam_pro/agents/classify.js', ['10.15', '10.22']],
+        ['exam_pro/utils/chapterPostRules.js', ['10.15', '10.22']],
+        ['exam_pro/eval/lib/suiteClassify.js', ['10.15', '10.22']],
         ['exam_pro/eval/tools/local_v1_counterfactual.js', ['10.15']],
         ['exam_pro/eval/fixtures/local_raw_2026-09-25.json', ['10.15']],
-        ['exam_pro/test/unit/localV1Regression.test.js', ['10.15']],
+        ['exam_pro/test/unit/localV1Regression.test.js', ['10.15', '10.22']],
+        ['exam_pro/eval/tools/chapter_rules_scan.js', ['10.22']],
+        ['exam_pro/test/unit/classifyRulesLc2.test.js', ['10.22']],
         // 〔整合 2026-09-27 dec/integration-r6〕第五輪各組暫編的 10.16 改號後，各組自己的檔指到自己那一節
         ['exam_pro/controllers/reviewController.js', ['10.12', '10.17']],   // B：output_truncated
         ['exam_pro/public/js/review.js', ['10.12', '10.17']],               // B

@@ -8,16 +8,18 @@
 //   3. 各份 golden 抄下來的章名與 fixture 一致；nlq rules 路徑的 relevant 就是 expect 四欄篩出來的題。
 //   4. eval/CHAPTER_RELABEL-2026-09.md 的表格逐列與檔案內容相符，而且沒有漏列（含第 2.1 節新增的題、
 //      第 8 節 CR-8 之二的物理改標與 nlq 逐句）。
-//   5. nlq 改寫過的查詢句，在新白名單下的規則解析結果就是 golden 的期望值（子行程以 preload 模擬 CH-A 合入後）。
+//   5. nlq 改寫過的查詢句，在新白名單下的規則解析結果就是 golden 的期望值。
+//      〔r7 測試空轉清理〕原本在子行程以 test/fixtures/planChapters.preload.js 把 config/chapters.js 換成定案清單（模擬 CH-A 合入後）。
+//      CH-A 早已合入，preload 換上去的值與 config/chapters.js 原本的值逐字相同、等於沒做事，已移除：
+//      改成在本行程直接用 config/chapters.js 解析，並先斷言它的數學／物理就是定案清單（preload 當初要保證的前提）。
 // ─────────────────────────────────────────────────────────────
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
 
-const { PLAN_CHAPTERS, MIGRATION } = require('../../config/chapterPlan');
+const { PLAN_VOLUMES, PLAN_CHAPTERS, MIGRATION } = require('../../config/chapterPlan');
 const { chapterGate, plannedChapters } = require('../../eval/lib/chapterGate');
 const { loadFixture, validateQuestions } = require('../../eval/lib/fixtures');
 const { loadClassifyGolden } = require('../../eval/lib/golden2');
@@ -88,23 +90,15 @@ const CR8_RELABEL_HEADER = '| 檔案 | 題號 | 原章 | 改標後 | 理由 |';
 const CR8_NLQ_HEADER = '| 題號 | 查詢（改後） | 期望章（改後） | 舊 relevant | 新 relevant | 改了什麼 |';
 
 /**
- * 在子行程裡用規則解析查詢句（以 preload 模擬 CH-A 合入後的 config/chapters.js；合入後等於沒做事）。
+ * 用規則解析查詢句（utils/nlqHeuristics.js 的 parseQuery，別名表照正式路徑帶 config/chapterAliases.js）。
+ * 解析用的是 config/chapters.js 現行的白名單；它就是定案清單，由下面那組的第一則斷言守著。
  * @param {string[]} queries
  * @returns {Array<object>} parseQuery 的結果，順序與 queries 相同
  */
-function parseInChild(queries) {
-    const script = `
-        const { parseQuery } = require(${JSON.stringify(path.join(APP_DIR, 'utils', 'nlqHeuristics'))});
-        const { CHAPTER_ALIASES } = require(${JSON.stringify(path.join(APP_DIR, 'config', 'chapterAliases'))});
-        const queries = JSON.parse(process.argv[1]);
-        process.stdout.write(JSON.stringify(queries.map(q => parseQuery(q, { aliases: CHAPTER_ALIASES }))));
-    `;
-    const res = spawnSync(process.execPath, [
-        '--require', path.join(APP_DIR, 'test', 'fixtures', 'planChapters.preload.js'),
-        '-e', script, JSON.stringify(queries)
-    ], { cwd: APP_DIR, encoding: 'utf8' });
-    assert.equal(res.status, 0, res.stderr);
-    return JSON.parse(res.stdout);
+function parseQueries(queries) {
+    const { parseQuery } = require(path.join(APP_DIR, 'utils', 'nlqHeuristics'));
+    const { CHAPTER_ALIASES } = require(path.join(APP_DIR, 'config', 'chapterAliases'));
+    return queries.map(q => parseQuery(q, { aliases: CHAPTER_ALIASES }));
 }
 
 /** 表格的「檔案＋題號」→ 素材裡的那一筆 */
@@ -328,12 +322,24 @@ describe('eval/CHAPTER_RELABEL-2026-09.md 與檔案內容相符', () => {
     });
 });
 
-describe('nlq 改寫的查詢句在新白名單下的規則解析（子行程模擬 CH-A 合入後）', () => {
+describe('nlq 改寫的查詢句在新白名單下的規則解析', () => {
+    test('前提：解析用的 config/chapters.js，數學／物理就是定案清單（原本由 preload 換上去的那一份）', () => {
+        // 〔r7 測試空轉清理〕preload 移除後，「在新白名單下解析」靠這一則保證：與 planChapters.preload.js 當初換上去的
+        // VOLUMES、CHAPTERS、LEGACY_CHAPTERS 三樣逐一比對，任何一樣不同，下面兩則的解析結果就不是在新白名單下算的。
+        const chapters = require(path.join(APP_DIR, 'config', 'chapters'));
+        for (const subject of ['數學', '物理']) {
+            assert.deepEqual(chapters.VOLUMES[subject], PLAN_VOLUMES[subject], `${subject} 的 VOLUMES`);
+            assert.deepEqual(chapters.CHAPTERS[subject], PLAN_CHAPTERS[subject], `${subject} 的 CHAPTERS`);
+        }
+        assert.deepEqual([...chapters.LEGACY_CHAPTERS], chapters.LEGACY_SUBJECTS.flatMap(s => PLAN_CHAPTERS[s]));
+        assert.deepEqual([...chapters.LEGACY_SUBJECTS], ['數學', '物理']);
+    });
+
     test('章節、題型、難度、學生與 semantic_text 都等於 golden 的期望值', () => {
         const rewrites = readTable('| 題號 | 舊查詢 | 新查詢 | 舊章 | 新章 | 理由 |').map(r => r[0]);
         const entries = RAW.nlq.entries.filter(e => rewrites.includes(e.id));
         assert.equal(entries.length, rewrites.length);
-        const parsed = parseInChild(entries.map(e => e.query));
+        const parsed = parseQueries(entries.map(e => e.query));
         entries.forEach((e, i) => {
             const got = parsed[i];
             assert.equal(got.confident, true, `${e.id} 規則應該抓得到章節`);
@@ -352,7 +358,7 @@ describe('nlq 改寫的查詢句在新白名單下的規則解析（子行程模
         const ids = readTable(CR8_NLQ_HEADER).map(r => r[0]);
         const entries = RAW.nlq.entries.filter(e => ids.includes(e.id));
         assert.equal(entries.length, ids.length);
-        const parsed = parseInChild(entries.map(e => e.query));
+        const parsed = parseQueries(entries.map(e => e.query));
         entries.forEach((e, i) => {
             const got = parsed[i];
             if (e.expect_path === 'llm') {

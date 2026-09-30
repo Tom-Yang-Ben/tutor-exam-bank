@@ -14,6 +14,7 @@
 > 〔整合 final5 2026-09-27〕`dec/integration-final5`＝`dec/integration-r5-fix`（ed93665）依序併入 `dec/local-classify-nlq-prep-fix`、`dec/latex-escape-repair-fix`、`dec/phys-spoken-reviewed`、`dec/cleanup-exam-legacy`：狀態在 §0.4 第 9 項。`local-mode.md` 第四個「10.12」（classify／nlq 重錄前修正）改號為 **10.15**。
 > 〔第五輪決策 2026-09-27〕Owner 2026-09-27 在第五輪決策單（30 題：D、V5、C、O、LC、L、K-P）的答覆登錄在 **§0.00c**（每題的選項與落實分支）；§0.00 的 A10、B15 與 §0.2 第 7 項「物理先不跑 `kc:load`」已就地加註解除（K-P）。
 > 〔整合 r6 2026-09-27〕`dec/integration-r6`＝`local/integration-r5`（a670783）依序併入第五輪五組 `dec/r6-templates-fix`、`dec/r6-local-tuning-fix`、`dec/r6-gates-fix`、`dec/r6-defaults-fix`、`dec/r6-docs-kc-fix`：狀態在 §0.4 第 10 項。`local-mode.md` 五個暫編的「10.16」改號為 10.16～10.20，新增 **10.21 重錄計畫**（交付 Owner 電腦重錄的步驟）。
+> 〔第六輪決策 2026-09-27，桌面版〕Owner 2026-09-27 在第六輪決策單（19 題：啟動器 DL-1～DL-5、桌面版設計稿 DA-1～DA-14）的答覆登錄在 **§0.00d**；程式只改兩處（DL-4 啟動器預設、DA-11 網頁版 `HOST`），分支 `dec/r7-decisions-host`（從 `dec/integration-r7` `6757e25` 開）；審查小修在 `dec/r7-decisions-host-fix`（`desktop-app-design.md` 文末「審查修正紀錄（`dec/r7-decisions-host-fix`）」）。
 
 ---
 
@@ -214,7 +215,7 @@
 | L-2 | 1：改，並一起重錄 | A＝`dec/r6-templates` |
 | L-3 | 1：支援 | C＝`dec/r6-gates` |
 | LC-1 | 2：分類輸出改成「理由先」（理由 → 章節 → 信心） | A＝`dec/r6-templates` |
-| LC-2 | 1：圓周運動、三角平方關係不加程式規則（交給模板與模型） | 只記錄 |
+| LC-2 | 1：圓周運動、三角平方關係不加程式規則（交給模板與模型）〔Owner 2026-09-27 改答：加四條規則〕classify.v2 本機重錄（86/92、macro-F1 0.8477 未達門檻）後改答：在 `utils/chapterPostRules.js` 加平方關係、廣義角、摩擦係數、等速圓周運動的運動學四條界線規則（程式後處理，不改模板與 schema、不必重錄） | ~~只記錄~~ `dec/r6-classify-rules`（從 `dec/r6-recorded-step1` `7536493` 開，不在上面五條分支內；[`local-mode.md`](local-mode.md) 10.22：replay 91/92、macro-F1 0.9744，仍錯 cls-fx-051）〔審查修正 `dec/r6-classify-rules-fix`〕規則 1、3、4 往「不換」的方向收窄、誤觸檢查補掃拆題回放檔與 pdf_sample golden（10.22 第 7 點），分數不變 |
 | LC-3 | 2：程式界線規則也套在零成本閘門 | C＝`dec/r6-gates` |
 | LC-4 | 3：`llm` 路徑、期望多章的句子放寬計分（回的章都在期望內、至少一章） | C＝`dec/r6-gates`（**放寬計分**，門檻數字不動） |
 | O-2 | 1：kNN 投票門檻 `KNN_VOTE_SIM` 維持 0.90 | D＝`dec/r6-defaults` |
@@ -230,6 +231,41 @@
 
 - 各分支實際改了什麼、要不要重錄，以各分支在 `local-mode.md` 末尾新增的「第五輪 <組名>（2026-09-27）」一節為準（整合時重編節號）；本表只登錄答案與分支。
 - 同批另做的文件清理（cleanup 審查留下的，不是決策單題目）：README 連到 tag `v1-mysql` 的原型說明後補一句授權指路（〔審查修正 2026-09-27，`dec/r6-docs-kc-fix`〕原句「tag 內的授權宣告以主線 LICENSE 為準」和 README「授權與著作權」一節「2026-08-24 之前的歷史版本曾以 Apache-2.0 釋出」字面衝突，改為「主線現行版本以主線 `LICENSE` 為準；tag 內的歷史版本見授權與著作權一節」；只是指路、不改授權，措辭仍請 Owner 看過）；`requirements_tracker.md`、`ux_research_and_journey.md` 提到 `exam/` 的三處加〔修訂 2026-09-27〕「已自主線移除，見 tag `v1-mysql`」。都在 `dec/r6-docs-kc`。
+
+### 0.00d 第六輪決策（2026-09-27，桌面版）〔第六輪決策 2026-09-27，桌面版〕
+
+> 來源：Owner（Ben）2026-09-27 在第六輪決策單的答覆：桌面啟動器 A 的待確認事項（[`desktop-launcher.md`](desktop-launcher.md) 第 8 節 DL-1～DL-5）與桌面版 B＋D2 設計稿的決策草稿（[`desktop-app-design.md`](desktop-app-design.md) 第 8 條 DA-1～DA-14）。兩份文件都已逐題就地加註〔Owner 2026-09-27 選 N〕，設計稿依答案確定的段落改成「定案」語氣、原文保留。
+> 落實在分支 **`dec/r7-decisions-host`**（從 `dec/integration-r7` `6757e25` 開；審查修正 `dec/r7-decisions-host-fix`〔2026-09-27 已和 `dec/r7-checkpoints-fix`（DA-13）、`dec/r7-test-hygiene-fix`、`dec/r7-electron-b1-fix`（B1）一起併入 **`dec/integration-r8`**〕）。程式只改兩處：DL-4（啟動器預設）與 DA-11 的網頁版那一半（後端 `HOST`）；另加 DA-14／DA-9 給 Owner 用的唯讀檢查工具。其餘題目是「維持現狀」或要等 B、D2 實作時照答案做。沒有改任何 cassette 鍵（模板、schema、prompt、`cacheKeyParts`）、golden 或 `eval/thresholds.json`。AI 不代填任何「核准」欄。
+
+| 題號 | Owner 選項 | 落實 |
+|---|---|---|
+| DL-1 | 1：關閉時有背景工作 → 每次問（是＝等跑完、否＝最多等 2 分鐘、取消） | 只記錄（就是現行預設 `askBeforeStopWithJobs:true`、`stopGraceSec:120`） |
+| DL-2 | 1：只關系統視窗時後端不停，要停用「關閉出題系統」 | 只記錄（現況） |
+| DL-3 | 1：「關閉出題系統」不關 Docker Desktop 與 Ollama | 只記錄（現行預設 `stopDocker:"no"`、`stopOllama:false`） |
+| DL-4 | 2：錄製（重錄 cassette）進行中開系統時暫停背景工作 | **程式**：`scripts/desktop/lib/config.js` 的 `jobsWhileRecording` 預設 `run` → `pause`；`config.example.json`、`desktop-launcher.md` 第 6 節的表與 7.1、啟動畫面的注意事項（`lib/plan.js`：pause 寫明「預設」，run 寫明「設定是 run、怎麼改回 pause」）一起改；測試改為新預設（`desktopLauncherConfig`、`desktopLauncherRun`、`desktopLauncherPlan`）。Owner 不必寫 `config.json` |
+| DL-5 | 1：保留「後端聽不了連接埠就印原因並結束」 | 只記錄（現況；`deployment_and_operations.md` 的「待 Owner 確認」改成已答） |
+| DA-1 | 2：設定放 `%APPDATA%`，資料庫、附圖、日誌放 `%LOCALAPPDATA%`，備份放「文件\TutorExamBank\backups」 | 只記錄；B2 照做 |
+| DA-2 | 3：看狀況——有工作縮到系統匣並通知、沒工作直接結束；從系統匣結束時問等完或放棄，寫明重跑範圍 | 只記錄；B1 照做 |
+| DA-3 | 2：後端用 `utilityProcess.fork` | 只記錄；B1 照做 |
+| DA-4 | 1：原生庫由 app 管理；每天第一次開啟、結束前有寫入、migrate 前備份；停用 02:00 排程 | 只記錄；D2 照做 |
+| DA-5 | 2：手動觸發的 GitHub Actions 在 Windows runner 對 EDB PG16 編 pgvector，產出 zip 與 SHA-256 | 只記錄；D2 照做（`ci.yml` 不改） |
+| DA-6 | 1：維持 git＋bundle，從 repo 啟動 Electron（U1） | 只記錄。建議原本是「B3 起改 U2」，這次只選了 1：**B3 開工前再問一次** |
+| DA-7 | 2：Docker 保留安裝但不自動啟動（D1 備援），舊 volume 至少留 30 天 | 只記錄；D2 照做（前提：DA-14 量完仍決定做 D2） |
+| DA-8 | 1：金鑰照舊明文寫在 `.env`，搬到 `%APPDATA%\TutorExamBank\.env` | 只記錄；B2 照做 |
+| DA-9 | 1：不簽章，只在 Owner 電腦 build | 只記錄。**前提 Smart App Control 關閉，待 Owner 確認**：`wsl_memory_check.bat` 讀得出狀態（`desktop-app-design.md` 10.4） |
+| DA-10 | 2：B2 完成且演練通過後挑空檔搬家 | 只記錄 |
+| DA-11 | 1：桌面版只綁 127.0.0.1；網頁版改用 `HOST`、預設 127.0.0.1 | **程式（網頁版）**：新增 `config/listenHost.js`；`server.js` 改 `app.listen(PORT, HOST)`，啟動訊息寫明實際聽的位址；`utils/listenFailure.js` 對 `EADDRNOTAVAIL`／`ENOTFOUND` 說明怎麼改 `HOST`；桌面啟動器與關閉捷徑照 `HOST` 決定連哪個位址（`lib/probes.js` 的 `listenFromEnv`），`HOST` 只聽某個區網位址（或 `127.0.0.1` 以外的 `127.x`，`dec/r7-decisions-host-fix`）時停下說明（`host-unsupported`）；`/api/health` 的本機判斷擴大到 127.0.0.0/8（限流規則不變）。文件：`.env.example`（`# HOST=0.0.0.0` 註解＋三件事）、`exam_pro/README.md`「區網存取」、根目錄 README、`deployment_and_operations.md` §3.2、§4.1、`api_spec.md` 限流列。測試：`listenHost`（單元）、`desktopServerListen`（真的執行 `server.js`：沒寫 `HOST` 時區網連不到、`0.0.0.0` 連得到、寫錯位址結束碼 1、`.env` 讀得到）、`test/integration/listenHost.pg.test.js`（真的資料庫）。e2e、整合測試、CI、`record_local.bat` 都沒有依賴 `0.0.0.0` |
+| DA-12 | 2：原生庫用 ICU（`--locale-provider=icu`） | 只記錄；`--icu-locale` 的值在 D2 演練時比對後記錄 |
+| DA-13 | 2：拆題逐塊、變式逐題的檢查點都做 | 只記錄；B1（或更早）實作 |
+| DA-14 | 1：Owner 先設 `.wslconfig` 的 `memory=3GB`、`autoMemoryReclaim=dropCache` 並量測（Owner 自己做） | **工具（只讀取）**：`exam_pro/scripts/windows/wsl_memory_check.bat` → `scripts/desktop/wsl_memory_check.js`，讀 `.wslconfig`、vmmem／VmmemWSL、總記憶體與使用中、Docker Desktop（〔`dec/r7-decisions-host-fix`〕含 `docker info` 的 `MemTotal`，和 `.wslconfig` 的 `memory` 比對，是上限生效了沒的直接證據）與 Ollama、Smart App Control，寫到 `exam_pro/data/logs/wsl_check-日期.log`；Owner 的步驟（含 `wsl --shutdown` 在重錄或上傳進行中**不可以**做）在 `desktop-app-design.md` 第 10 節。測試：`wslMemoryCheck`（指令白名單、log 內容） |
+
+**Owner 接下來要做的（都不急，照自己的時間）**：
+
+1. 等這一輪重錄跑完、合併之後才更新（**重錄進行中不要更新 repo**）；更新後點「出題系統」確認 app 視窗照常開（後端改成只聽 127.0.0.1，`desktop-app-design.md` 10.5）。有 `exam_pro\data\launcher\config.json` 的話，確認裡面沒有 `"jobsWhileRecording": "run"`（有就刪掉那一行，`desktop-launcher.md` 第 6 節）。
+2. 跑 `wsl_memory_check.bat` 看 Smart App Control 是不是關閉（DA-9 的前提，10.4）；開啟或評估模式就先回報，不要自己改。
+3. 沒有重錄、沒有上傳時照 10.2 設 `.wslconfig` 上限（生效與否看 log 的「[.wslconfig 是否生效]」），並在閒置／上傳／重錄三種情況各跑一次檢查（10.3；「設上限前的重錄」要在下一輪重錄時量），把 log 交給維護的人，再決定 D2 做不做（DA-14）。
+4. 之後才會問的：B3 開工前 DA-6「B3 之後改不改 U2」；要改走退路時 DA-5；重新啟用 Gemini 時 DA-8 的 `safeStorage`。
+5. 〔待 Owner 決定，2026-09-27〕**desktop 納入 CI 與 dependabot**（`desktop-app-design.md` R-7）：提案分支 `dec/r8-desktop-ci-fix`（`dec/r8-desktop-ci` 加審查修正；基底 `dec/integration-r8` `9d27210`）已備妥，**Owner 同意之前不併入任何整合分支**（只有這一行可以先進整合分支）。要決定的是：① CI 加 `desktop` job（每次 push 與 PR 跑桌面版的 `npm test`，不下載 Electron）；② Dependabot 加 `/desktop`（Electron 有新版就開 PR；PR 會被版本鎖弄成紅燈，要照步驟升級才合併；紅燈能不能真的擋住合併要看分支保護〔要實測〕）；③ `/desktop` 要不要照 `/exam_pro` 分組（照慣例分組可能壓掉大版本的 PR〔推論〕）。建議：選 1（兩個都做），分組選 B（不分組）。代價、不做的風險、選項與要實測的事，寫在提案分支的 `docs/desktop-app-design.md` 6.2 節「決策說明：desktop 納入 CI 與 dependabot」（`git show dec/r8-desktop-ci-fix:docs/desktop-app-design.md`）。Owner 回覆的格式：「同意，選 1，分組選 B」。
 
 ### 0.0 章節重整（2026-09-25）〔修訂 2026-09-25 章節重整〕
 

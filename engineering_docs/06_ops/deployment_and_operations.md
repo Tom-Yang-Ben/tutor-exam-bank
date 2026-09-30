@@ -36,7 +36,7 @@
 
 | 元件 | 用途 | 技術選型與埠 |
 | :--- | :--- | :--- |
-| 應用伺服器 | Express 5 單行程（`exam_pro/server.js`） | Node.js 24；`http://localhost:3000` |
+| 應用伺服器 | Express 5 單行程（`exam_pro/server.js`） | Node.js 24；`http://localhost:3000`（〔修訂 2026-09-27 DA-11〕預設只聽 `127.0.0.1`，`HOST` 可改，§3.2） |
 | 開發用正式庫 | 題庫資料持久化 | `pgvector/pgvector:pg16` 容器 `exam_pg`，埠 **127.0.0.1:5442**（只綁本機〔修訂 2026-09-15c〕），named volume `pgdata` |
 | 整合測試庫 | 整合／e2e／eval 專用 | 同映像，容器 `exam_pg_test`，埠 **127.0.0.1:5433**〔修訂 2026-09-15c〕，tmpfs（停掉即清空） |
 | 本機推論（預設）〔修訂 2026-09-25 本機模式〕 | 拆題（視覺）、分類、lint、驗算、出變式、embedding | Ollama（`qwen3-vl:8b`／`qwen3:8b`／`qwen3-embedding:0.6b`），**127.0.0.1:11434**，只用 CPU；模型 ID 單一真相 `exam_pro/config/models.js` |
@@ -71,6 +71,10 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 | 2 | `npm run migrate` | 對 `DATABASE_URL` 套用 `migrations/0001`–`0009`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕、`0010`–`0012`〔修訂 2026-09-24〕、`0013`–`0018`〔整合 2026-09-26〕（含錯題重練的 0016～0018 第一次套用時照 §3.6 做前後快照比對）、`0019`〔OCR 為主 2026-09-26〕（複核原因加 `ocr_only`，只重建一條 CHECK；**要開 `LOCAL_EXTRACT_MODE=ocr` 之前一定要先套**，否則工作佇列暫停、不認領任何工作，伺服器視窗印一次「請在 exam_pro 執行 npm run migrate」，套完自己恢復〔審查 2026-09-26〕）；只前進不 down，重跑為 no-op（依檔名排序逐支判斷，編號缺口不影響套用） |
 | 3 | `npm start`（開發改 `npm run dev`） | 啟動後開 `http://localhost:3000` |
 
+〔修訂 2026-09-27 桌面啟動器〕Windows 上也可以點桌面的「出題系統」圖示：第 1、3 步由啟動器代做（需要時先開 Docker Desktop），第 2 步**不代做**——有沒套的 migration 只在啟動畫面提醒，升級仍照本節與 §3.6 手動做；關閉用「關閉出題系統」圖示（背景工作先收尾）。見 [`docs/desktop-launcher.md`](../../docs/desktop-launcher.md)。
+
+〔修訂 2026-09-27 桌面啟動器審查〕第 3 步的 `npm start` 聽不了連接埠時（`EADDRINUSE`＝被別的程式佔用；`EACCES`＝沒有權限，Windows 上多半是埠落在 Hyper-V／WSL／Docker 保留的範圍，用 `netsh interface ipv4 show excludedportrange protocol=tcp` 查），會印出錯誤碼與處理方式並以結束碼 1 結束。原本會照印「已成功安全啟動」、不聽任何埠卻繼續跑背景拆題（Express 5 把 listen 錯誤交給 callback）；~~待 Owner 確認~~〔Owner 2026-09-27 第六輪 DL-5 選 1〕保留（`docs/desktop-launcher.md` 第 8 節 DL-5）。〔修訂 2026-09-27 DA-11〕後端改聽 `HOST`（預設 `127.0.0.1`），啟動訊息多一段括號說明實際聽的位址。
+
 輔助指令：`node migrate.js status`（逐支套用狀態）、`npm run migrate:test`（測試庫）、`npm run db:down`（停止；加 `-v` 才刪 `pgdata`）、`node seed_questions.js --apply`（空庫灌 30 題示範題）。
 
 ### 3.2 環境變數（`.env`，由 `.env.example` 複製）
@@ -78,6 +82,7 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 | 變數 | 說明 | 預設 |
 | :--- | :--- | :--- |
 | `PORT` | 服務埠 | `3000` |
+| `HOST`〔修訂 2026-09-27 Owner 第六輪 DA-11＝1〕 | 後端聽的網路位址（`config/listenHost.js`）。不寫＝`127.0.0.1`，只接受本機連線；要讓區網的平板連進來才設 `0.0.0.0`，並做完 §4.1 第 4 點。寫成這台電腦沒有的位址時印 `EADDRNOTAVAIL` 與改法並結束 | `127.0.0.1` |
 | `GEMINI_API_KEY` | Gemini 金鑰（live／record 模式才實際使用）。〔修訂 2026-09-25 本機模式〕本機模式不需要；只有某個 `MODEL_*` 或 `EMBED_MODEL` 走 Gemini 時才要 | 空 |
 | `MODEL_EXTRACT`／`MODEL_VERIFY`〔修訂 2026-09-25 本機模式〕 | 拆題（視覺＋文字，分類與 lint 沿用）／驗算（純文字，出變式與 OCR 結果整理沿用）；`vendor:model-id`，只切第一個冒號 | `ollama:qwen3-vl:8b`／`ollama:qwen3:8b`（切回 Gemini：`gemini:gemini-3.5-flash`／`gemini:gemini-3.1-pro-preview`） |
 | `MODEL_OCR_STRUCTURE`〔修訂 2026-09-25 本機模式〕 | 把 PaddleOCR 的文字整理成拆題 JSON 的模型 | 未設沿用 `MODEL_VERIFY` |
@@ -208,6 +213,7 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 1. 設定 `ALLOWED_ORIGINS` 為實際來源、`NODE_ENV=production`（錯誤細節不外洩，NFR-001）。
 2. 理解 `API_KEY` 能力邊界：`app.js` 的 `serveIndex()` 會把金鑰注入首頁 HTML，任何能開啟 `/` 的人都取得金鑰——它只擋「未載入首頁就直接打 API」，不是存取控制。對外必須改為反向代理層驗證（Basic Auth／OAuth／IP 白名單）、真正的登入與 session/JWT，或金鑰不注入前端改由使用者手動輸入。
 3. 資料庫改用最小權限帳號（現行 compose 帳密 `exam/exam` 僅適用本機）。
+4. 〔修訂 2026-09-27 Owner 第六輪 DA-11＝1〕後端預設只聽 `127.0.0.1`（`HOST`，§3.2），區網連不到。要讓區網的裝置連進來才設 `HOST=0.0.0.0`，並且：Windows 防火牆只允許「私人網路」存取 Node.js（不勾「公用網路」）；`ALLOWED_ORIGINS` 加上區網網址（例 `http://192.168.1.23:3000`），否則區網送出的非 GET 請求被 CORS 擋下回 500；理解第 2 點——`API_KEY` 注入首頁，區網裡任何打得開首頁的人都拿得到。步驟與限制見 `exam_pro/README.md`「區網存取」。
 
 ## 5. 監控與告警
 

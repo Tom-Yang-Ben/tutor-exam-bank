@@ -245,6 +245,7 @@ cp .env.example .env
 | 變數 | 說明 | 預設 |
 |------|------|------|
 | `PORT` | 服務埠 | `3000` |
+| `HOST`〔2026-09-27〕 | 後端聽的網路位址（Owner 第六輪 DA-11＝1）。不寫＝只接受這台電腦的連線；要讓區網的平板、手機連進來才設 `0.0.0.0`，並照下方[區網存取](#區網存取)處理防火牆、`ALLOWED_ORIGINS` 與 `API_KEY` | `127.0.0.1` |
 | `GEMINI_API_KEY` | Google Gemini 金鑰；〔2026-09-25〕本機模式不需要，切回 Gemini 才填 | 空 |
 | `MODEL_EXTRACT` / `MODEL_VERIFY` / `MODEL_NLQ`〔2026-09-25〕 | 拆題／驗算／自然語言查題的模型（`vendor:model-id`）；〔修訂 2026-09-26〕`MODEL_NLQ` 未設時的程式預設已改成本機（LM-7） | `ollama:qwen3-vl:8b` / `ollama:qwen3:8b` / `ollama:qwen3:8b` |
 | `MODEL_TEXT`〔修訂 2026-09-26〕 | 分類、公式 lint、知識點標註、主控助教的模型（LM-15）；未設時拆題模型是 `ollama` 就＝`MODEL_VERIFY`，否則＝`MODEL_EXTRACT` | —（本機模式即 `ollama:qwen3:8b`） |
@@ -300,6 +301,12 @@ npm start      # 正式
 npm run dev    # 開發（nodemon 熱重載）
 ```
 啟動後開啟 <http://localhost:3000>。
+
+〔2026-09-27，Owner 第六輪 DA-11＝1〕後端預設只聽 `127.0.0.1`：只有這台電腦打得開，同一個 Wi-Fi 的其他裝置連不到（以前沒指定位址、綁在所有網路介面，連不連得到要看 Windows 防火牆當初的選擇）。要從平板連進來，見[區網存取](#區網存取)。
+
+Windows 也可以用桌面圖示：雙擊一次 `scripts\windows\install_desktop_shortcut.bat`，之後點「出題系統」就會依序開 Docker Desktop、資料庫容器、Ollama、背景的 `node server.js`，最後開出獨立的操作視窗；用完點「關閉出題系統」。說明、log 位置與設定見 [`docs/desktop-launcher.md`](../docs/desktop-launcher.md)。
+
+〔2026-09-27，待 Owner 驗收〕或用 Electron 桌面版（B1）：雙擊一次 `scripts\windows\install_desktop_app.bat`（第一次會下載 Electron），之後點「出題系統（桌面版）」就在同一個視窗裡依序檢查、開好整套系統（資料庫仍在 Docker；後端只聽 `127.0.0.1`）；有背景工作時關視窗會縮到系統匣，從系統匣選「結束」才會問要等處理完還是現在放棄。說明與驗收步驟見 [`docs/desktop-app-design.md`](../docs/desktop-app-design.md) 第 6.2 節。
 
 ### 6. 本機模式（預設；不連外、不花錢）〔2026-09-25〕
 
@@ -454,7 +461,7 @@ npm run eval:baseline                                                           
 |---|------|----------|
 | 6 | `npm test` | **全數通過（2026-09-16 現況：1,613 passed / 0 failed）**；不連網、不連庫、零 secrets。CI 亦會在 push 後自動跑（badge 見本頁最上方）。〔修訂 2026-09-24〕整合分支 stage5/integration：unit 2258、integration 481、e2e 11，五個 eval 全綠。〔整合 2026-09-26〕`dec/integration-all` 實測：unit 3,244（3,242 過、2 略過、0 失敗；舊值 1,613／2258）、integration 593（舊值 481）、e2e 12（舊值 11；3 項紅，缺本機 ocr cassette）；五個 eval 紅燈（本機 cassette／向量還沒重錄，`docs/local-mode.md` 第 8 條的預期）——前一句「五個 eval 全綠」是 stage5/integration 當時的狀態，不適用本版 |
 | 7 | 靜態檔完整性：確認 `public/index.html` 結尾為 `</script></body></html>`，且 `<div>`、`<script>` 開闔數相等 | 檔案未被截斷（詳見下方「截斷檔自檢」）|
-| 8 | `npm start` | 終端印出 `🚀 家教題庫後端系統已成功安全啟動：http://localhost:3000` |
+| 8 | `npm start` | 終端印出 `🚀 家教題庫後端系統已成功安全啟動：http://localhost:3000（只接受這台電腦的連線；HOST=127.0.0.1）`（〔2026-09-27〕DA-11 起多了括號裡的說明；`.env` 設了 `HOST=0.0.0.0` 時改成區網的提醒） |
 
 ### C. 人工驗收（F12 全程開著）
 
@@ -551,6 +558,8 @@ fs.writeFileSync('.tmp_inline.js',b)" && node --check .tmp_inline.js && echo "JS
 | `預覽公式修正.bat` / `套用公式修正.bat` | 公式自動修正（套用前備份為 `formulas_backup_*.json`）|
 | `scripts\windows\setup_local_ai.bat`〔2026-09-25〕 | 本機模式一鍵安裝：Ollama 檢查、下載三個模型、PaddleOCR 虛擬環境與模型、自我檢查（log 在 `data\local_ai\`）|
 | `scripts\windows\record_local.bat`〔2026-09-25〕 | 以本機模型重錄 CI 的回放檔：`db:up` → `migrate:test` → `cassettes:rerecord`（自動輸入 yes；log 在 `data\local_ai\`）|
+| `scripts\windows\install_desktop_shortcut.bat`〔2026-09-27〕 | 在桌面建立「出題系統」與「關閉出題系統」兩個圖示（`--remove` 移除）；圖示的用法與 log 位置見 [`docs/desktop-launcher.md`](../docs/desktop-launcher.md) |
+| `scripts\windows\install_desktop_app.bat`〔2026-09-27，待驗收〕 | Electron 桌面版（B1）：第一次在 repo 的 `desktop\` 安裝並下載 Electron，再在桌面建立「出題系統（桌面版）」圖示；`--reinstall`（`desktop\package-lock.json` 變了時；先從系統匣結束桌面版，否則 `electron.exe` 被鎖住）重裝、`--remove` 移除圖示。見 [`docs/desktop-app-design.md`](../docs/desktop-app-design.md) 第 6.2 節 |
 
 灌入示範題（題庫為空時）：
 
@@ -615,8 +624,25 @@ fixture 擴 120 題、A-T16 新舊管線前後對照、A-T17 異家（Anthropic�
 
 - **`.env` 內含真實金鑰，切勿進版控或分享**（已由 `.gitignore` 排除）。若金鑰曾外流，請至 Google AI Studio **重新產生**。
 - 對外部署時務必設定 `ALLOWED_ORIGINS`，並將 `NODE_ENV=production`。
+- 〔2026-09-27〕後端預設只聽 `127.0.0.1`（`HOST`）；改成 `0.0.0.0` 之前先讀下方[區網存取](#區網存取)。
 - 資料庫帳號建議改用最小權限帳號，勿用 root。
 - 匯入的題目著作權屬原著作權人，請確認已取得合法權源，詳見專案根目錄 [`NOTICE`](../NOTICE)。
+
+### 區網存取
+
+〔2026-09-27，Owner 第六輪 DA-11＝1〕後端聽的位址由 `.env` 的 `HOST` 決定，**不寫就是 `127.0.0.1`**：只有這台電腦的瀏覽器（和桌面啟動器開的視窗）連得到，同一個 Wi-Fi 的平板、手機連不到。這是建議的設定。
+
+要在課堂上用平板打開題庫時，才在 `exam_pro\.env` 加一行 `HOST=0.0.0.0`（所有網路介面），重新啟動後端，並一起做完下面三件事：
+
+1. **Windows 防火牆只允許「私人網路」**：第一次以 `HOST=0.0.0.0` 啟動時，Windows 會問要不要允許 Node.js 通過防火牆，只勾「私人網路」，不要勾「公用網路」（咖啡店、學校、車站的 Wi-Fi 都算公用）。之後到「控制台 → Windows Defender 防火牆 → 允許應用程式通過 Windows Defender 防火牆」看 Node.js 那一列確認；連線中的 Wi-Fi 要在「設定 → 網路和網際網路」設成「私人網路」。
+2. **`ALLOWED_ORIGINS` 加上平板打的網址**：例 `ALLOWED_ORIGINS=http://localhost:3000,http://192.168.1.23:3000`（`192.168.1.23` 換成這台電腦的區網 IP，命令提示字元執行 `ipconfig` 看「IPv4 位址」）。沒加的話，從平板送出的組卷、批改等操作會被 CORS 擋下（伺服器回 500）。
+3. **`API_KEY` 不是存取控制**：金鑰會注入首頁（見下一節），同一個網路裡任何打得開首頁的人都拿得到它，也就看得到題庫與學生資料。只在自己家或信得過的網路開；不用時把 `HOST` 那一行刪掉（或改回 `127.0.0.1`）再重新啟動。
+
+其他限制：區網位址不是 HTTPS，瀏覽器不開放麥克風（「按住說話」不能用）；要在課堂穩定使用，建議改走 Tailscale 取得 HTTPS（`docs/desktop-app-design.md` DA-11）。健康檢查 `/api/health` 對本機以外的來源有每分鐘 60 次的限流。
+
+- 系統環境變數的 `HOST` 優先於 `.env`（和其他設定一樣）；後端啟動時會印出實際聽的位址。
+- 桌面啟動器（「出題系統」圖示）支援 `HOST` 不寫、`127.0.0.1`、`localhost`、`::1`、`0.0.0.0`、`::`；只聽某一個區網位址（例 `HOST=192.168.1.23`）或 `127.0.0.1` 以外的 `127.x` 時，app 視窗的 `http://localhost` 連不到後端，啟動器會停下說明（`docs/desktop-launcher.md` 第 6 節）。
+- `HOST` 寫成這台電腦沒有的位址時，後端印出 `EADDRNOTAVAIL` 與改法並結束。
 
 ### ⚠️ `API_KEY` 的能力邊界（請務必理解）
 

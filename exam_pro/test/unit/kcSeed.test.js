@@ -61,10 +61,14 @@ describe('validateSeeds', () => {
         assert.ok(errors.some(e => e.startsWith('先備關係有環')));
     });
 
-    test('repo 內的 config/kc/*.json 全部通過（沒有種子檔時跳過）', () => {
+    // 〔r7 測試空轉清理〕原本「沒有種子檔時跳過」是 `if (!files.length) return;`——種子檔被搬走或刪掉時這一則悄悄算通過。
+    // 三科的種子檔早已進版控（npm run kc:load 讀的就是它們），改成斷言它們在。
+    test('repo 內的 config/kc/*.json 全部通過（數學、物理、化學三份種子檔都在）', () => {
         const dir = path.resolve(__dirname, '..', '..', 'config', 'kc');
         const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith('.json')) : [];
-        if (!files.length) return;
+        for (const name of ['數學.json', '物理.json', '化學.json']) {
+            assert.ok(files.includes(name), `config/kc/ 找不到 ${name}（現有：${files.join('、') || '無'}）`);
+        }
         const seeds = files.map(f => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
         const { errors } = validateSeeds(seeds);
         assert.deepEqual(errors, [], errors.slice(0, 10).join('\n'));

@@ -642,6 +642,12 @@ key = sha256( agent + '\n' + modelId + '\n' + promptTemplateHash + '\n' + schema
 - **replay miss 一律丟錯**，訊息逐字凍結為：
   `LLM_MODE=replay 找不到 cassette（agent=<agent> key=<key>）。請在本機執行 npm run eval:record -- --suite <suite>`
   不得靜默退回假資料。fork PR 由 CI（WS-D）判斷後降為 warning，**這個判斷不在 `services/llm` 裡**。`<suite>` 由 `services/llm` 保持字面不代換（它不知道 suite 名），後面可另接一行預期路徑；CI 比對訊息只比到 `--suite ` 為止（裁決 S2-14）。
+  〔2026-09-27，`dec/r8-b1-abandon`〕前綴 `LLM_MODE=replay 找不到 cassette（agent=<agent> key=<key>）。` 不變；之後「怎麼重錄」改成依模式寫（`services/llm/fake.js` 的 `replayMissMessage`；原本的 `npm run eval:record` 其實只錄向量，本機模式的重錄也要在 Owner 的電腦做，`docs/local-mode.md` 10.21）：
+  - 本機模式（vendor 是 `ollama`，或 OCR 的回放）：`…。本機模式：請在 Owner 的電腦（exam_pro 資料夾）執行 scripts\windows\record_local.bat <suite> 重錄（它跑的就是 npm run cassettes:rerecord -- --suites <suite>；步驟見 docs/local-mode.md 10.21）`
+  - Gemini 模式：`…。Gemini 模式：請在本機執行 npm run cassettes:rerecord -- --suites <suite> 重錄（ci.yml 的模型要是 Gemini；要 GEMINI_API_KEY，會產生費用）`
+    〔審查修正 `dec/r8-b1-abandon-fix`〕`eval/tools/rerecord_all.js` 一律照 `.github/workflows/ci.yml` 的模型錄（`.env` 的 `MODEL_*` 不帶進去），只有 ci.yml 的模型也是 Gemini 時照做才錄得到這一支，所以括號裡註明；本機那一句同理（照 ci.yml 的本機模型錄，目前 ci.yml 就是本機模型）。
+
+  兩種都有 `npm run cassettes:rerecord -- --suites `，這是現在的比對標記（`eval/lib/replayMiss.js` 的 `REPLAY_MISS_SUITE_MARKER`）；改之前的標記 `npm run eval:record -- --suite ` 照樣認得（舊的 log）。比對方式（前綴＋標記、不比中段與之後）不變。cassette 的鍵與回放行為都沒有改。
 - `meta.fixtureHash` 與現況不符時：印 warning「few-shot 內容已變，cassette 可能過期」，**仍然回放**（規劃 §5.3.3）。
 - `record` 模式：真的呼叫 → 寫檔 → 回傳。已存在同鍵檔案時**覆寫**並印一行 log。
 

@@ -424,7 +424,9 @@ describe('services/ocr — 子行程（spawn，不經 shell）', () => {
                 (err) => {
                     assert.ok(isReplayMiss(err), err.message);
                     assert.equal(parseReplayMiss(err).agent, 'ocr');
-                    assert.match(err.message, /^LLM_MODE=replay 找不到 cassette（agent=ocr key=[0-9a-f]{64}）。請在本機執行 npm run eval:record -- --suite <suite>/);
+                    // 〔dec/r8-b1-abandon〕OCR 一律是本機：指向 Owner 電腦上的 record_local.bat（原本寫的 npm run eval:record 只錄向量）
+                    assert.match(err.message, /^LLM_MODE=replay 找不到 cassette（agent=ocr key=[0-9a-f]{64}）。本機模式：請在 Owner 的電腦（exam_pro 資料夾）執行 scripts\\windows\\record_local\.bat <suite> 重錄（它跑的就是 npm run cassettes:rerecord -- --suites <suite>；步驟見 docs\/local-mode\.md 10\.21）\n（預期路徑：/);
+                    assert.doesNotMatch(err.message, /eval:record/);
                     return true;
                 });
             assert.equal(spawned, false);

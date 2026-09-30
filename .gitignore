@@ -60,5 +60,11 @@ exam_pro/backups/
 data/
 exam_pro/data/
 
+# ───────── 桌面版（desktop/，docs/desktop-app-design.md 第 3 條第 32 項）─────────
+# desktop/node_modules 已由上面的 node_modules/ 排除；B3 打包的輸出與 staging 目錄也不進版控
+desktop/dist/
+desktop/out/
+desktop/staging/
+
 # ───────── 模板生態系源頭資產（僅本機參考，owner 裁定不納入版控，2026-08-29）─────────
 VibeCoding_Workflow_Templates/

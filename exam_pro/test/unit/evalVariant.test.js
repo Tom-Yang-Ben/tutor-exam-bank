@@ -9,16 +9,40 @@ const { test, describe, before } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
+const os = require('node:os');
 
 const suite = require('../../eval/lib/suiteVariant');
 const { loadFixture } = require('../../eval/lib/fixtures');
-const { fixtureVectorGap, RECORDED_EMBED_MODEL } = require('./lib/recordedData');
+const { fixtureVectorGap, RECORDED_EMBED_MODEL, CI_EMBED_MODEL } = require('./lib/recordedData');
 
 // eval 的三個模式旗標：單元測試一律 fixture／replay（與 eval/.env.replay 一致）
 process.env.EMBED_MODE = process.env.EMBED_MODE || 'fixture';
 process.env.LLM_MODE = process.env.LLM_MODE || 'replay';
 // 〔本機模式 L4〕eval 的預設 embedding 模型改成本機之後，這支檔讀的仍是 repo 內錄好的那一份向量（recordedData.js）
-process.env.EMBED_MODEL = RECORDED_EMBED_MODEL;
+// 〔r7 測試空轉清理〕「錄好的那一份」原本是 Gemini 的舊向量檔：它缺 5 題、本機模式之後不再重錄，
+// 下面 runVariantSuite 一整組因此永遠 skip（skip 訊息叫 Owner 重錄，但重錄的是本機那一份）。
+// 改讀 CI 讀的那一份（ci.yml 的 EMBED_MODEL，與 npm run eval:variant 相同）；斷言一條沒改。
+process.env.EMBED_MODEL = CI_EMBED_MODEL;
+
+/**
+ * 暫時改幾個環境變數跑 fn，跑完（含丟錯）還原。
+ * @param {Record<string, string|undefined>} vars undefined＝刪掉
+ * @param {() => Promise<any>} fn
+ */
+async function withEnv(vars, fn) {
+    const saved = {};
+    for (const [k, v] of Object.entries(vars)) {
+        saved[k] = process.env[k];
+        if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+    try {
+        return await fn();
+    } finally {
+        for (const [k, v] of Object.entries(saved)) {
+            if (v === undefined) delete process.env[k]; else process.env[k] = v;
+        }
+    }
+}
 
 describe('eval/golden/variant.json 的硬閘門（第 8.4 條）', () => {
     const fixture = loadFixture();
@@ -83,7 +107,8 @@ describe('eval/golden/variant.json 的硬閘門（第 8.4 條）', () => {
 describe('retrieveInMemory（第 3.1 條的候選條件）', () => {
     const fixture = loadFixture();
     const { loadEmbeddings } = require('../../eval/lib/embeddings');
-    const emb = loadEmbeddings({ questions: fixture.questions, model: RECORDED_EMBED_MODEL });
+    // 〔r7 測試空轉清理〕讀 CI 讀的那一份向量（檔頭）；四則斷言與讀 Gemini 舊檔時逐字相同。
+    const emb = loadEmbeddings({ questions: fixture.questions, model: CI_EMBED_MODEL });
     // 〔章節重整 CH-B〕retrieveInMemory 的前提是「每個候選都有向量」（suite 先 assertComplete 才呼叫它）。
     // 改標後有幾題的向量要等 Owner 重錄；這四則驗的是候選條件與排序，所以只餵有向量的題。
     // 向量齊全時這個 filter 不會拿掉任何一題，斷言與原本逐字相同。
@@ -133,13 +158,40 @@ describe('retrieveInMemory（第 3.1 條的候選條件）', () => {
 // 另由「向量不齊時拒絕執行」那一則確認 suite 確實是以「查不到向量」停下來。錄好之後自動恢復執行。
 const VECTOR_GAP = fixtureVectorGap();
 
-describe('runVariantSuite：向量不齊時拒絕執行（〔章節重整 CH-B〕）', { skip: VECTOR_GAP.complete ? '向量齊全，這一則不適用' : false }, () => {
+// 〔r7 測試空轉清理〕「向量不齊時拒絕執行」原本只在 CI 那一份向量不齊時才跑（齊全時 skip「這一則不適用」）——
+// 向量一錄齊，這條「不拿假向量湊數字」的保證就沒有測試守著。改成一定有一份確實缺向量的真實資料可跑：
+// CI 那一份不齊時照舊用它（等重錄的那段期間）；齊全時改用 repo 內 Gemini 的舊向量檔（本機模式之後不再重錄，缺 5 題）。
+// 〔r7 審查 2026-09-27〕Gemini 的舊檔是「不再維護的歷史產物」：日後整理 Gemini 產物把它刪掉時，loadEmbeddings 會照設計丟錯
+// （檔案不在），原本在載入模組時就爆、整支 evalVariant 一則都跑不到。改成只在需要時（CI 那一份齊全）才讀、讀不到就接住：
+// 這一則 skip 並說明原因，其他各組照常跑。CI 那一份整個不見仍在上面的 fixtureVectorGap() 丟錯（那不是「待重錄」，是檔案不見了）。
+const LEGACY_GAP = (() => {
+    if (!VECTOR_GAP.complete) return null;          // 用不到，不讀
+    try {
+        return fixtureVectorGap(RECORDED_EMBED_MODEL);
+    } catch (err) {
+        return { complete: true, missing: [], unavailable: String(err && err.message).split('\n')[0] };
+    }
+})();
+const REFUSAL_CASE = !VECTOR_GAP.complete ? { model: CI_EMBED_MODEL, gap: VECTOR_GAP }
+    : !LEGACY_GAP.complete ? { model: RECORDED_EMBED_MODEL, gap: LEGACY_GAP }
+        : null;
+
+describe('runVariantSuite：向量不齊時拒絕執行（〔章節重整 CH-B〕）', {
+    skip: REFUSAL_CASE ? false
+        : LEGACY_GAP.unavailable
+            ? `CI 那一份向量齊全，而 repo 內 Gemini 的舊向量檔讀不到（${LEGACY_GAP.unavailable}），找不到確實缺向量的真實資料；` +
+              '缺向量的拒絕仍由 eval/lib/embeddings.js 的 assertComplete 擋'
+            : 'repo 內兩份向量檔都齊全（Gemini 的舊檔也補齊了），找不到確實缺向量的真實資料；缺向量的拒絕仍由 eval/lib/embeddings.js 的 assertComplete 擋'
+}, () => {
     test('以「查不到向量」拒絕，並列出缺的題號（不拿假向量湊 retrieved_coverage）', async () => {
-        await assert.rejects(() => suite.runVariantSuite({}), (err) => {
+        const { model, gap } = REFUSAL_CASE;
+        assert.ok(gap.missing.length > 0);
+        await withEnv({ EMBED_MODEL: model }, () => assert.rejects(() => suite.runVariantSuite({}), (err) => {
             assert.match(err.message, /查不到向量/);
-            for (const id of VECTOR_GAP.missing) assert.ok(err.message.includes(String(id)), `訊息沒有列出 id=${id}`);
+            assert.ok(err.message.includes(path.basename(gap.file)), `訊息沒有指出是哪一份向量檔：${err.message}`);
+            for (const id of gap.missing) assert.ok(err.message.includes(String(id)), `訊息沒有列出 id=${id}`);
             return true;
-        });
+        }));
     });
 });
 
@@ -160,16 +212,36 @@ describe('runVariantSuite', { skip: VECTOR_GAP.reason }, () => {
     });
 
     test('沒有 cassette 時 gate_pass_rate 是 null，而且說清楚為什麼', async () => {
-        const res = await suite.runVariantSuite({});
-        const dir = path.resolve(__dirname, '..', '..', 'eval', 'cassettes', 'variant');
-        const recorded = fs.existsSync(dir) && fs.readdirSync(dir).some(f => f.endsWith('.json'));
-        if (recorded) return;      // cassette 錄好之後這個案例就沒有意義了
+        // 〔r7 測試空轉清理〕原本讀 repo 的 eval/cassettes/variant/，那裡有錄好的檔之後就 `if (recorded) return` 一路空轉。
+        // 改成把 EVAL_CASSETTE_DIR 指到一個空的暫存目錄，造出「沒有任何 variant cassette」的情境真的驗；
+        // 再用 repo 的回放檔目錄跑一次，確認有錄好的檔時**不會**誤走這條 n/a（hasCassettes 真的看得到檔）。
+        const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'variant-no-cassette-'));
+        try {
+            const res = await withEnv({ EVAL_CASSETTE_DIR: empty, LLM_MODE: 'replay' }, () => suite.runVariantSuite({}));
 
-        assert.equal(res.measured.variant.gate_pass_rate, null);
-        assert.ok(res.warnings.some(w => w.includes('eval/cassettes/variant/')));
-        assert.ok(res.warnings.some(w => w.includes('EMBED_MODE=record')),
-            '警告要提醒「兩個 record 必須一起開」（裁決 S3-20）');
-        assert.deepEqual(res.failures, [], '沒錄 cassette 不是失敗，是還沒量');
+            assert.equal(res.measured.variant.gate_pass_rate, null);
+            assert.ok(res.warnings.some(w => w.includes('eval/cassettes/variant/')));
+            assert.ok(res.warnings.some(w => w.includes('EMBED_MODE=record')),
+                '警告要提醒「兩個 record 必須一起開」（裁決 S3-20）');
+            assert.deepEqual(res.failures, [], '沒錄 cassette 不是失敗，是還沒量');
+            // 沒有 cassette 就不生成：不呼叫任何節點、沒有閘門計數與成本，也不是 replay miss
+            assert.equal(res.generations, 0);
+            assert.equal(res.gateCounts, null);
+            assert.equal(res.costUsd, null);
+            assert.ok(!res.warnings.some(w => w.includes('replay miss')), res.warnings.join('；'));
+            // retrieved_coverage 不需要 cassette，照樣量得到；meta 記的是這一輪實際讀的目錄
+            assert.equal(typeof res.measured.variant.retrieved_coverage, 'number');
+            assert.equal(res.meta.cassetteDir, empty);
+        } finally {
+            fs.rmSync(empty, { recursive: true, force: true });
+        }
+
+        const repoDir = path.resolve(__dirname, '..', '..', 'eval', 'cassettes', 'variant');
+        assert.ok(fs.readdirSync(repoDir).some(f => f.endsWith('.json')), 'repo 的 eval/cassettes/variant/ 應該有錄好的回放檔');
+        const withRepo = await withEnv({ EVAL_CASSETTE_DIR: undefined, LLM_MODE: 'replay' }, () => suite.runVariantSuite({}));
+        assert.ok(!withRepo.warnings.some(w => w.includes('沒有任何 cassette')),
+            `repo 有回放檔卻走了「沒有 cassette」的 n/a：${withRepo.warnings.join('；')}`);
+        assert.equal(withRepo.generations, 60, '有回放檔時 30 藍本 × 2 題都要送去生成（命中與否是 replay miss 的事）');
     });
 
     test('golden 定案後不再出現 needs_human_confirm 的 warning（run.js 的 stub guard 同一條線）', async () => {

@@ -480,8 +480,12 @@ npm install
 cp .env.example .env      # 預設是本機模式，不需要金鑰（DATABASE_URL 預設值即可用）
 npm run db:up             # Docker 起 PostgreSQL 16 + pgvector（開發 5442 / 測試 5433）
 npm run migrate           # 套用 migrations/
-npm start                 # http://localhost:3000
+npm start                 # http://localhost:3000（預設只聽 127.0.0.1：只有這台電腦連得到）
 ```
+
+Windows 也可以雙擊 `exam_pro\scripts\windows\install_desktop_shortcut.bat` 在桌面建立「出題系統」圖示，之後點一下就會依序開 Docker、資料庫、Ollama、後端，最後開出操作視窗；用完點「關閉出題系統」（[`docs/desktop-launcher.md`](./docs/desktop-launcher.md)）。
+
+〔2026-09-27，待 Owner 驗收〕Electron 桌面版（B1）：雙擊 `exam_pro\scripts\windows\install_desktop_app.bat` 建立「出題系統（桌面版）」圖示，點一下就在同一個視窗裡開好整套系統（資料庫仍用 Docker，由它代開；有背景工作時關視窗會縮到系統匣繼續跑）。兩種圖示可以並存，說明與驗收步驟見 [`docs/desktop-app-design.md`](./docs/desktop-app-design.md) 第 6.2 節。
 
 完整安裝步驟、環境變數表、API 一覽與維運工具說明，請見 **[`exam_pro/README.md`](./exam_pro/README.md)**。
 
@@ -546,6 +550,7 @@ npm start
 ## 🔐 安全注意事項
 
 - 對外部署 `exam_pro` 時務必設定 `ALLOWED_ORIGINS` 並將 `NODE_ENV=production`。
+- 〔2026-09-27〕後端預設只聽 `127.0.0.1`；要讓區網的平板連進來才在 `.env` 設 `HOST=0.0.0.0`，並先處理防火牆（只允許私人網路）、`ALLOWED_ORIGINS` 與 `API_KEY`，見 [`exam_pro/README.md`](./exam_pro/README.md#區網存取)。
   ⚠️ `API_KEY` 會被注入前端頁面，**不等同存取控制**，詳見 [`exam_pro/README.md`](./exam_pro/README.md#-安全注意事項)。
 - 金鑰請妥善保管；若曾外流，請至 [Google AI Studio](https://aistudio.google.com/apikey) 重新產生。
 

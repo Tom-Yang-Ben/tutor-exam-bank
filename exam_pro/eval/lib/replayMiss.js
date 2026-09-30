@@ -11,18 +11,27 @@
 //   理由：`<suite>` 之後的內容是給人看的（實作還會另接一行預期路徑），
 //   拿整串去比會讓「多印一行有用的提示」變成一個破壞性改動。
 //   凍結的是前綴，不是整句。
+//
+// 〔dec/r8-b1-abandon，2026-09-27〕miss 訊息「怎麼重錄」那一段改成依模式寫（services/llm/fake.js 的 replayMissMessage）：
+//   原本的「請在本機執行 npm run eval:record -- --suite <suite>」其實只錄向量，本機模式的重錄也不在這裡做
+//   （record_local.bat／npm run cassettes:rerecord，docs/local-mode.md 10.21）。新訊息兩種模式都有
+//   `npm run cassettes:rerecord -- --suites `，這就是現在的標記；舊的標記照樣認得（改之前的 log、舊版程式丟的錯）。
+//   前綴沒變，比對方式（前綴＋標記、不比中段與之後）也沒變，只是標記多一種寫法。
 // ─────────────────────────────────────────────────────────────
 
 const { parseBool } = require('../../config/features');
 
-/** 第 5.2 條凍結訊息中，`--suite ` 之前的那一段（含它自己） */
+/** 第 5.2 條凍結訊息的前綴 */
 const REPLAY_MISS_PREFIX = 'LLM_MODE=replay 找不到 cassette';
-const REPLAY_MISS_SUITE_MARKER = 'npm run eval:record -- --suite ';
+/** 〔dec/r8-b1-abandon〕現在的標記（本機、Gemini 兩種說法都有；services/llm/fake.js 的 RERECORD_CMD） */
+const REPLAY_MISS_SUITE_MARKER = 'npm run cassettes:rerecord -- --suites ';
+/** 改訊息之前的標記：舊的 log 與舊版程式丟的錯照樣認得 */
+const REPLAY_MISS_LEGACY_SUITE_MARKER = 'npm run eval:record -- --suite ';
 
 /**
  * 這個錯誤是不是 replay miss？
  *
- * 只比對兩段固定字串：開頭的「找不到 cassette」與「-- --suite 」這個標記。
+ * 只比對兩段固定字串：開頭的「找不到 cassette」與重錄指令的標記（新舊兩種寫法之一）。
  * 兩者之間的 agent／key、之後的 suite 名與預期路徑一律不比（裁決 S2-14）。
  *
  * @param {Error|string} err
@@ -30,7 +39,8 @@ const REPLAY_MISS_SUITE_MARKER = 'npm run eval:record -- --suite ';
  */
 function isReplayMiss(err) {
     const msg = typeof err === 'string' ? err : (err && err.message) || '';
-    return msg.startsWith(REPLAY_MISS_PREFIX) && msg.includes(REPLAY_MISS_SUITE_MARKER);
+    return msg.startsWith(REPLAY_MISS_PREFIX)
+        && (msg.includes(REPLAY_MISS_SUITE_MARKER) || msg.includes(REPLAY_MISS_LEGACY_SUITE_MARKER));
 }
 
 /**
@@ -77,5 +87,5 @@ function partitionFailures(failures) {
 
 module.exports = {
     isReplayMiss, parseReplayMiss, shouldDowngradeMiss, partitionFailures,
-    REPLAY_MISS_PREFIX, REPLAY_MISS_SUITE_MARKER
+    REPLAY_MISS_PREFIX, REPLAY_MISS_SUITE_MARKER, REPLAY_MISS_LEGACY_SUITE_MARKER
 };
