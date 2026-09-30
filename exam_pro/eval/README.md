@@ -264,6 +264,7 @@ npm run check:html
 cd exam_pro
 npm run cassettes:rerecord -- --dry-run     # 只回放、不連網：每個 suite 缺多少 cassette、預估呼叫次數與費用（本機模型：預估時間）
 npm run cassettes:rerecord                  # 同一份盤點印完之後輸入 yes 才開始錄（CI 的模型是 Gemini 時會產生費用）
+npm run cassettes:rerecord -- --suites variant --only-missing   # 只補錄缺的：已有的照回放、不重打不覆寫（docs/local-mode.md 10.23）
 npm run cassettes:prune                     # 列出 CI 已經不會再讀到的 cassette（不刪）
 npm run cassettes:prune -- --apply          # 確認清單後刪除
 ```
@@ -287,8 +288,10 @@ npm run cassettes:prune -- --apply          # 確認清單後刪除
   CI 沒設的變數在子行程裡設成空字串（擋住 dotenv 從 `.env` 補值）；例外是讀取端用 `??` 取預設值的變數，
   空字串在那裡不等於「沒設」，改設成 CI 實際生效的值（`CI_EFFECTIVE_DEFAULTS`，目前只有 `JOB_COST_BUDGET_USD=0.5`；
   設成空字串的話 pipeline 的預算是 0，錄製時一次暫時性錯誤就直接 needs_review、不重試，cassette 會錄不齊）。
-- **`LLM_MODE=record` 會把一個 suite 的每一次呼叫都真的打一次**，連原本還讀得到的也一樣——repo 沒有「只補缺的」LLM 錄製模式。
-  所以 dry-run 的「錄製時 LLM 呼叫」是「命中＋缺」。下限是這一輪回放看得到的呼叫；
+- **`LLM_MODE=record` 會把一個 suite 的每一次呼叫都真的打一次**，連原本還讀得到的也一樣（完整重錄）。
+  〔dec/r9-record-tooling〕加 `--only-missing` 才是只補錄缺的（子行程多帶 `LLM_RECORD_ONLY_MISSING=1`、`EMBED_RECORD_ONLY_MISSING=1`：
+  已有的回放檔照回放、不重打不覆寫；被截斷或單次逾時的呼叫錄成「錯誤回放檔」；docs/local-mode.md 10.23）。
+  dry-run 表上的「錄製時 LLM 呼叫」照舊是完整重錄的「命中＋錯誤回放檔＋缺」，表下另印只補缺的說明與粗估。下限是這一輪回放看得到的呼叫；
   上限再加上沒被讀到、也不是某次 miss 舊版的 cassette（被 miss 擋住的下游多半在這裡）。
   費用依 `config/pricing.js`，token 數取同一呼叫的舊版 cassette；沒有舊版時，取同 agent 的平均。
 - **清除要在重錄之後**：`--apply` 在還有 replay miss、只跑了部分 suite、或某個 suite 沒有任何回放紀錄時

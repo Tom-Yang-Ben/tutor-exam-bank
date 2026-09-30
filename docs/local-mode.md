@@ -1699,3 +1699,115 @@ nlq：90 筆一句都沒有被換（golden 句沒有誤觸；nlq-036「斜面上
 - 誤觸檢查（`node eval/tools/chapter_rules_scan.js`）：誤觸 0、改錯 0、nlq 一句都沒被換；四條規則在原有語料上找得到證據的段數與換章的筆數都沒變（多出來的 1 段、1 筆是補掃的語料）；`--all` 誤觸 0。
 - 審查的全量掃描（662 個 JSON、17,181 段字串）：修正前後都是 192 處命中、逐組相同——這幾處收窄在 repo 現有的文字上一次都沒生效，只擋審查自撰的那類寫法（所以也量不到效果，靠單元測試的反例釘住）。
 - 測試：`npm test` 3,815 項（3,813 過、0 失敗、2 略過）；`check:html` 通過；`test:integration` 624 項全過（5433 另建的全新 UTF8 測試庫，C.UTF-8、template0，migrate 到 0020，用完刪掉；整合測試檔沒有改）。
+
+### 10.23 重錄工具補強：只補錄缺的、錯誤回放檔（2026-10-01，`dec/r9-record-tooling`）
+
+> 從 `dec/integration-r9`（`7dca34a`）開。2026-09-27～28 Owner 電腦重錄第 2、3 步（`e9d4aa6`）之後，variant 的回放還缺 2 筆（第 1 點）。原本的工具有兩個缺口：`LLM_MODE=record` 會把每一次呼叫都重新 live 呼叫並覆寫（補 2 筆也要把整個 variant 再跑約 9 小時）；被截斷、逾時這種「錯誤的結果」永遠錄不進回放檔，回放就永遠是 miss（eval 分數 n/a、CI 的「replay miss 為 0」永遠達不到）。本節加兩個功能補這兩個缺口。
+> **回放檔的鍵一個字都沒改**（`cassetteKey` 的算法、模板、schema、prompt、`cacheKeyParts`），既有回放檔在新程式下的回放結果與 `7dca34a` 逐字相同（五個 eval 的分數與 miss 鍵、e2e，第 7 點）；`eval/thresholds.json`、golden、既有回放檔都沒動。產品行為（agent、runner、狀態機）沒改。
+
+#### 1. variant 還缺的 2 筆（查證）
+
+| 筆 | 藍本 | 缺的回放檔 | 原因 |
+|---|---|---|---|
+| var-008#1 | #16（數學・向量內積・證明・難度 5） | `variant/66f37e00…`（變式生成） | 生成呼叫超過 `.env` 的 `OLLAMA_TIMEOUT_MS`（90 分）逾時。變式沒有設輸出上限（`agents/generateVariant.js` 不帶 `maxOutputTokens`，`services/llm/ollama.js` 的 `chatBody` 只有帶了才送 `num_predict`）、溫度 0，Ollama 預設不限長度；推測模型陷入重複迴圈〔推論〕。第 2 題（兄弟是空的，因為第 1 題沒生出來）已錄 |
+| var-015#1 | #29（「與 400° 同界的最小正角」；錄到的變式是「某飛機…$500^\theta$…」） | `verify/d5d8d07d…`（驗算第 1 次採樣） | 變式、分類、lint 的回放檔都在，回放走到驗算找不到。推測驗算寫到輸出上限（C-c 本機預設 3072）被截斷、解析 JSON 失敗〔推論〕 |
+
+兩筆共同的程式路徑〔已查證〕：`services/llm/index.js` 的 record 分支先呼叫 adapter、成功才寫回放檔；adapter 丟錯（逾時：`services/llm/ollama.js` 的 `transportError` 丟 `errorClass:'timeout'`；截斷：`generateJson` 解析 JSON 失敗丟 `schema_invalid` 並掛 `finishReason:'MAX_TOKENS'`，或思考用光額度時的「Ollama 回了空字串…」）就直接往上丟，**什麼都沒寫**。agent 接住錯（`agents/verify.js` 回 `{kind:'error', finishReason}`、`agents/generateVariant.js` 回 `{kind:'error', errorClass:'timeout'}`），錄製時 eval 照樣往下跑，回放時那一支不存在＝miss。
+
+var-015#1 是「被截斷」的依據（不是證明）：那一題的變式回放檔記 15:39 錄好（UTC，`meta.recorded_at`），第 2 題的變式 16:05 錄好（生成約 3 分），中間約 23 分給分類、lint、驗算；這批 66 支本機驗算回放檔最長的一支 2,174 token 花了 18 分，3072 token 約 20～25 分，時間相符；逾時要 90 分，排除逾時。但「模型寫出不合法的 JSON、卻沒被截斷」或環境錯誤也會留下同樣的缺口——這兩種本分支**不錄**（第 3 點），補錄時看 log 就分得出來（第 5 點第 2 步）。
+
+#### 2. 只補錄缺的（`--only-missing`）
+
+```bat
+scripts\windows\record_local.bat variant --only-missing
+```
+
+- 等於 `npm run cassettes:rerecord -- --suites variant --only-missing`。全部 suite 都只補缺的：`record_local.bat --only-missing`；分次錄照舊逗號分隔，`--only-missing` 寫在 suite 清單**後面**（`record_local.bat classify,nlq --only-missing`）。寫反了（`record_local.bat --only-missing variant`）時，`record_local.bat` 在動資料庫之前就停下來、印出正確寫法，什麼都不錄〔審查後補強〕。
+- 做法：錄製子行程照舊是 `LLM_MODE=record`，另外帶 `LLM_RECORD_ONLY_MISSING=1`、`EMBED_RECORD_ONLY_MISSING=1`（`services/llm/index.js`）：
+
+| | 完整重錄（沒加 `--only-missing`，與之前相同） | 只補錄缺的（`--only-missing`） |
+|---|---|---|
+| 回放檔已在的呼叫 | 重新呼叫模型、覆寫回放檔 | 走 replay 的同一條路（`services/llm/fake.js`，含 LaTeX 反斜線修復）回傳，**不呼叫、不覆寫** |
+| 錯誤回放檔已在的呼叫 | 重新呼叫、覆寫 | 照回放丟那個錯，不重打（要重錄某一支：先刪掉那一支再跑，或改用完整重錄） |
+| 回放檔不在的呼叫 | 呼叫並寫入 | 呼叫並寫入 |
+| 向量（`EMBED_MODE=record`） | 每一段都重算、併入向量檔 | 向量檔已有的照向量檔回傳，只把缺的送去算、併入（「有沒有」與 `eval/record_embeddings.js --only-missing` 同一個判斷：`sha256(文字)` 在不在向量檔裡） |
+| 花的時間 | 整個 suite（variant 約 9 小時） | 只有缺的那幾次，加上它們擋住、這一輪看不到的下游 |
+
+- 盤點（`--dry-run`）照舊只回放、不連網，表也照舊；表下面多一段「錄製方式」說明兩者的差別，`--only-missing` 時另印只補缺的粗估。問 yes 之前同樣印這一段。
+- 子行程的兩個開關一律由 `--only-missing` 決定（`eval/tools/rerecord_all.js` 的 `stepExtraEnv` 明寫 `1` 或空字串）：`.env` 或命令列設了 `LLM_RECORD_ONLY_MISSING` 也不會把完整重錄悄悄變成只補缺的。`eval/lib/suiteProcess.js` 在錄製時放行這兩個變數（`RECORD_PASS_THROUGH`）、回放時擋成空字串。
+- 不在範圍：本機 OCR（`services/ocr`）照舊重跑 PaddleOCR（錄 pipeline 時；結果確定、鍵不變，只有 `recorded_at` 會變）。
+
+#### 3. 錯誤回放檔
+
+錄製時（完整重錄與只補缺的都算）live 呼叫丟出下列錯誤，照樣寫一支回放檔記下錯誤，再把原本的錯丟出去（錯誤物件多帶 `errorCassette`、`cassetteKey`）。判斷在 `services/llm/cassette.js` 的 `errorCassetteKind`：
+
+| 錄 | 條件 | 例 |
+|---|---|---|
+| 被截斷（`truncated`） | 錯誤帶 `finishReason === 'MAX_TOKENS'`（Ollama 的 `done_reason=length`、Gemini 的 `MAX_TOKENS`；兩個 adapter 只在「模型回應了、JSON 解析失敗」時掛這個欄位） | 驗算寫到 3072 token 被截斷 |
+| 單次逾時（`timeout`） | `errorClass === 'timeout'`、`timedOut === true`、呼叫端的 signal **沒有**被中止、vendor 是 ollama（＝adapter 自己的單次逾時 `OLLAMA_TIMEOUT_MS` 到了）。`timedOut` 只由 `services/llm/ollama.js` 的 `transportError` 在「自己的計時器已中止」那一支掛上（`message`、`errorClass` 不變）；同樣是 `timeout` 但計時器沒到的那一支（`AbortError`／`TimeoutError`、兩個 signal 都沒中止）不錄〔審查後補強〕 | 變式生成超過 90 分 |
+
+| 不錄（環境錯誤或不在這一版的範圍） | 理由 |
+|---|---|
+| `provider_error`：Ollama 沒開、連線被切斷、HTTP 4xx／5xx、401／403、找不到模型、串流中斷；`rate_limited`；`unsupported_input`；沒有 `errorClass` 的錯 | 換個時間或修好環境再跑就會不同，不是模型的結果 |
+| 呼叫端 signal 中止的 `timeout`（節點逾時 `JOB_NODE_TIMEOUT_MS`、「現在放棄」、關機） | 流程的決定，不是這一次呼叫的結果 |
+| Gemini 的 `timeout` | SDK 的連線逾時或中止，屬網路狀況 |
+| `schema_invalid` 但沒被截斷（`finishReason` 是 `STOP`） | 模型寫壞了 JSON；不在這一版的範圍，照舊是 miss |
+
+- 存哪些欄位（`errorResponse`）：`response.error = { kind, name, message（前 2000 字）, errorClass, finishReason }`；被截斷的另存 adapter 掛在錯誤上的 `usage`（含 Ollama 的 `timing`）與 `latencyMs`；逾時的只存 `error.elapsedMs`、**不寫** `latencyMs`（`npm run perf:local` 讀 `latencyMs` 算速度，逾時的時間只代表上限）。`meta`、`request`（只存摘要，同 `summarizeParts`）與一般回放檔逐欄相同，鍵也同一條公式。不存任何新的試題內容。
+- 回放（`services/llm/fake.js`）：丟出與 live 相同形狀的錯——同一個 `message`、`name`（`SyntaxError` 照樣是 `SyntaxError`）、`errorClass`、`finishReason`，被截斷的帶 `usage`（四個 token 欄位）。訊息沒有 replay miss 的凍結前綴，`eval/lib/replayMiss.js` 不會當成 miss。所以 agent、狀態機與 eval 走到與錄製當時相同的結果：驗算被截斷 → `{kind:'error', errorClass, finishReason:'MAX_TOKENS'}` → runner 的 C-f `output_truncated`（第 6 點）；變式生成逾時 → `{kind:'error', errorClass:'timeout'}`。
+- `generateText` 被截斷本來就不丟錯（回 `finishReason`，照一般回放檔錄），只有逾時會錄成錯誤回放檔。
+- **程式分不出來的一種情況**：計時器到了，可能是模型陷入迴圈，也可能是環境——錄製期間電腦睡眠、Ollama 卡住沒斷線。後者一樣會錄成「單次逾時」，之後 `--only-missing` 也不會再重試它（它已經「在」了）。所以錄完要人工確認（第 5 點第 4 步）。
+- **完整重錄會蓋掉原本正常的回放檔**：沒加 `--only-missing` 時，某一支原本是正常回放檔、這一次被截斷或逾時，就照實覆寫成錯誤回放檔（以前這種情況什麼都不寫、舊檔留著）。這時除了「覆寫錯誤回放檔」那一行，另外印一行醒目的警告〔審查後補強〕：
+  `⚠️ [llm:record] 注意：原本是正常回放檔，這次單次逾時（或：被截斷），已覆寫成錯誤回放檔（agent=… key=…）→ <檔案路徑>。若錄製期間電腦睡眠、Ollama 卡住或被關掉，這不是模型的結果：用 git checkout -- <上面的檔> 還原舊檔…`
+  原本沒有檔、或原本就是錯誤回放檔時不印。
+
+#### 4. 盤點、報表與清除怎麼顯示
+
+- **盤點表**（`cassettes:rerecord` 與 `cassettes:prune` 共用）多一欄「錯誤回放檔」，「命中」只算正常的回放檔；依 agent 的那一行另列「錯誤回放檔 N」；有錯誤回放檔時另印一行逐支列出（agent／鍵的前 12 碼／被截斷或單次逾時／這一輪有沒有讀到）。探針（`eval/lib/cassetteProbe.js`）把它記成「有被讀到」＋`errorCassette`，`eval/lib/cassetteAudit.js` 的 `summarize` 另外算（`errorHits`、`errorKeys`、`errorCassettes`）。
+- **回放驗證表**（錄完自動跑的那一張）最後多一欄「錯誤回放檔」。它不是 miss：replay miss 與缺向量兩欄是 0 就是錄齊了。
+- **eval 報表**（`eval/reports/*.json` 與印出的 Markdown）：這一輪讀到（或錄製時寫下）錯誤回放檔才多一行「⚠️ 錯誤回放檔 N 支…」與 `error_cassettes` 欄；沒有時與之前逐欄相同。
+- **variant eval**（`eval/lib/suiteVariant.js`）：變式生成讀到錯誤回放檔，記成那一題**沒通過**（算進生成數、不算進通過數，`perEntry` 的 `stopped_at` 是 `generate`），印一行 warning，**不進 failures**——`run.js` 照常比門檻，不會紅在「呼叫失敗」，也不會因為 miss 讓分數變 n/a。閘門（分類／lint／驗算）讀到錯誤回放檔時，agent 照舊回 error、那一道記成沒過（原本就這樣），另外記下是哪一題。其他 error（例：連不上）照舊進 failures。nlq eval 同理：錯誤回放檔記成 warning，那一句照 `nlqService` 退回規則的結果計分。
+- **`cassettes:prune`**：被讀到的錯誤回放檔不在「沒被讀到」的清單、也不算「miss 以外的錯誤」（`--apply` 的保護條件照舊）；只有鍵失效或這一輪沒有任何 suite 讀到它時才會列出（標「錯誤回放檔」），與一般回放檔同一條規則。
+
+#### 5. Owner 下一步：只補錄 variant 缺的 2 筆〔要實測〕
+
+在 `exam_pro` 資料夾的命令提示字元（cmd）執行。Ollama 開著、Docker Desktop 在執行；電腦接電源、睡眠設「永不」。
+
+1. **拉到含本分支的版本**（`package.json` 沒改，不必 `npm install`），先盤點（只回放、不連網，幾分鐘）：
+
+   ```bat
+   npm run cassettes:rerecord -- --suites variant --only-missing --dry-run
+   ```
+
+   預期（雲端以 `7dca34a` 的回放檔實跑）：variant 那一列命中 101、錯誤回放檔 0、缺 cassette 2、缺向量 0；下面的「錄製方式」寫「只補錄缺的（--only-missing）——命中 101 次與錯誤回放檔 0 次照回放、不呼叫模型、不覆寫；只呼叫「缺 cassette」那 2 次」。表上的「錄製時 LLM 呼叫」「預估時間」（≥ 103 次、≥ 13 小時）是完整重錄的數字，不是這一次。
+2. **補錄**：
+
+   ```bat
+   scripts\windows\record_local.bat variant --only-missing
+   ```
+
+   - 預估：var-008#1 的生成可能再次跑滿 `OLLAMA_TIMEOUT_MS`（`.env` 的 90 分）→ 錄成「單次逾時」錯誤回放檔；若這次 90 分內寫完，會接著跑分類、lint、驗算（再約 20～40 分），而且 var-008#2 的鍵含兄弟題幹（`siblings`），第 1 題生出來之後第 2 題的鍵就變了、要重新生成並跑閘門（再約 30～60 分；舊的那一支之後會出現在 `cassettes:prune` 的清單）。var-015#1 的驗算約 20～30 分（3072 token）；驗算若回「比不出結果」會再採樣一次（再 20～30 分）。**其他 58 支生成與它們的閘門不重跑**（只照回放），向量只補缺的。合計約 2～2.5 小時，最壞約 3.5 小時。工具在問 yes 之前印的只補缺的粗估不含「跑滿逾時」那 90 分，以這裡為準。
+   - 雲端用假模型模擬過這一步（變式生成卡住到逾時、驗算被截斷，其他 58 支用 repo 裡的回放檔）：模型只被叫了 2 次，寫下的就是 `variant/66f37e00…`、`verify/d5d8d07d…` 兩支錯誤回放檔，其他回放檔與向量檔沒有任何改動；回放驗證 replay miss 0、錯誤回放檔 2、`gate_pass_rate` 0.4500（27/60，門檻 0.22）。Owner 實錄時兩筆若也都失敗，數字就是這個；有一筆通過會再高一些。
+   - log 要看的幾行（`exam_pro\data\local_ai\record_時間.log`）：大量的「`[llm:record] 只補缺的：已有回放檔，照回放、不呼叫模型`」是正常的；補到的那兩筆會各有一行「`[llm:record] 寫入 cassette`」（這次成功了）或「`[llm:record] 寫入錯誤回放檔（單次逾時）`」「`…（被截斷）`」（照實錄下）。若出現「`[llm:record] 呼叫失敗（…），不錄回放檔`」，那一筆仍然沒錄到（不是截斷或逾時，例如 JSON 寫壞了、連線中斷）：**不要重跑**，把 log 交給維護的人。
+3. **回放驗證**（工具錄完自己跑，印在最後）：variant 那一列 replay miss 0、缺向量 0 就是成功；「錯誤回放檔」欄是 0～2（兩筆各錄成什麼就是什麼）；`gate_pass_rate` 是數字（不是 n/a），與門檻 0.22 比；門檻欄的 `retrieved_coverage` 0.5000 < 0.8367 照舊 ❌、結束碼 1、視窗印 [!]——已知狀況（10.21 第 2 步），**不要重跑**。
+4. 把 `eval/cassettes` 與 `eval/fixtures/embeddings.ollama-qwen3-embedding-0.6b.768.json` 加進版控、commit、push（或交給維護的人）。這一步應該只多 2 支回放檔（`variant/66f37e00…`、`verify/d5d8d07d…`；var-015#1 若驗算回 uncertain 再多一支第 2 次採樣）；var-008#1 這次若生成成功，另會多它的分類、lint、驗算回放檔、var-008#2 的新生成與閘門回放檔，以及幾筆向量。**既有的回放檔不應該有任何改動**（只看到新增的檔；有既有檔被改就先停下來問）。
+   - 新增的錯誤回放檔如果是「單次逾時」（log 那一行寫「寫入錯誤回放檔（單次逾時）」），先確認錄製期間**電腦沒有睡眠、Ollama 沒有當掉或被關掉**（看工作管理員的 Ollama、Windows 事件或 log 裡前後幾行的時間是否連續）。有疑慮就**不要入庫**那一支：刪掉那一支（`del eval\cassettes\variant\66f37e00….json`，檔名照 log 上的路徑）再跑一次 `record_local.bat variant --only-missing` 補錄（只會重打那一次）。第 3 點寫了原因：程式分不出模型迴圈與環境問題。
+   - log 裡若有「`⚠️ [llm:record] 注意：原本是正常回放檔…已覆寫成錯誤回放檔`」（只有沒加 `--only-missing` 的完整重錄才會出現），照那一行用 `git checkout -- <檔>` 還原舊檔，或確認是模型本身的結果再入庫。
+5. 最後再盤點一次：`npm run cassettes:rerecord -- --suites variant --dry-run`：variant 那一列 replay miss 0、缺向量 0，「錯誤回放檔」欄照實。
+   - 〔既有狀況，與本次無關〕不加 `--suites`、全部 suite 一起盤點時，e2e 那一列可能出現 **2 筆 classify miss**（樣卷的等速圓周運動兩題）。原因：盤點工具依序跑 retrieval → … → e2e、共用同一個測試庫，retrieval／nlq 先把 fixture 題灌進測試庫，e2e 的分類因此多帶了題庫裡的 few-shot 例句（`fewShotIds` 不是空的），鍵就不同。`7dca34a` 本身就是這樣（雲端實跑確認：只跑 `pipeline,e2e` 或 `classify,e2e` 時 e2e 沒有 miss，先跑 retrieval 或 nlq 就有）；CI 的 e2e 排在 eval 之前，`npm run test:e2e` 12 過。**不要為了它重錄**。
+
+#### 6. runner 的 C-f 涵蓋哪些 agent（照實記錄；本分支沒改）
+
+- **涵蓋**：`workers/jobRunner.js` 的 `runJobQuestion`（每一題的節點）。節點回 `{kind:'error'}` 且 `finishReason === 'MAX_TOKENS'`、這個節點最後一次呼叫的模型是 ollama（`isLocalTruncation`）時，transition 帶 `retryTruncated:false` → 直接 `needs_review('output_truncated')`（`pipeline/stateMachine.js` 規則 6a）；Gemini 照舊重試。會帶 `finishReason` 的題目節點是分類（`agents/classify.js`）、lint（`agents/lint.js`，只有第三層 LLM 重寫會呼叫模型）、驗算（`agents/verify.js`）；`source_check`、`dedup` 不呼叫生成模型。
+- **不涵蓋**：
+  - 整卷拆題（`runExtractChunk`；`agents/extract.js` 的 error 不帶 `finishReason`）：錯誤照一般退避重試，本機模式的逾時只重試 1 次（第四輪 V3）。
+  - 變式生成（`runGenerateOne`；`agents/generateVariant.js` 的 error 不帶 `finishReason`）：逾時與截斷都照一般 error 退避重試 `maxErrorRetries`（3）次才放棄那一題——單次逾時 90 分時最壞約 6 小時。而且變式沒有設本機輸出上限（第 1 點），陷入迴圈時只能靠逾時截止。**要不要改是 Owner 的決定**（決策題草稿隨本分支的回報交出；本分支沒實作）。
+  - 知識點標註（`agents/tagKc.js`）：帶 `finishReason`，但不在狀態機裡，只記下。
+- **eval**：`eval/lib/pipelineDriver.js` 的狀態機用 `DEFAULT_LIMITS`、沒有帶 `retryTruncated`，截斷照一般 error 重試到上限再進複核；錄製與回放走同一條路，所以回放結果與錄製當時相同。e2e 跑真的 runner，C-f 照樣生效。variant eval 的處理見第 4 點（改的是 eval，不是 runner）。
+
+#### 7. 驗證（本分支，2026-10-01）
+
+- 新測試 `test/unit/recordTooling.test.js`（32 則；審查後補強另加 4 則，共 36 則：逾時只認計時器的 `timedOut`、錯誤回放檔蓋掉正常回放檔時的警告、`record_local.bat` 參數寫反時先擋下）：判斷準則（被截斷、單次逾時錄；連不上、401、呼叫端中止、JSON 壞了但沒被截斷不錄）；錯誤回放檔的寫入與回放（驗算被截斷的 outcome 回放與錄製當時逐欄相同、runner 判成本機截斷；變式生成逾時的 outcome 相同；`generateText` 的逾時）；只補缺的（已有 → 不呼叫、不覆寫、照 replay 回傳含 LaTeX 修復；錯誤回放檔也算已有；沒有 → 呼叫並寫入；`generateText`；向量只送缺的）；完整重錄照舊覆寫；variant eval 端到端照 Owner 的兩筆重現（錄製 → 回放 → 對照「改之前是 2 筆 miss」→ 刪掉那兩支用只補缺的補錄，只重打那 2 次、其他回放檔與向量檔一個位元都沒動）；探針、`summarize`、`formatSummary`、`cassettes:prune` 的保護條件與清單、粗估、eval 報表、`perf:local` 不把逾時算進速度；`cassettes:rerecord` 的參數、子行程環境、說明與回放驗證表；`record_local.bat`。
+- 既有測試只改一處：`test/unit/rerecordAll.test.js` 的 `parseArgs` 逐欄比對多一個 `onlyMissing:false`（仍是逐欄比對）；另依節號慣例登記 10.23（`localModeSections.test.js`、`rerecordPlanR6.test.js` 的「10.21 之後的節」）。
+- 既有回放檔的回放與 `7dca34a` 逐字相同：unit、`check:html`、integration、e2e 與五個 eval 以 `ci.yml` 的 env（5433 的全新 UTF8 測試庫）各跑一次比對，五個 eval 的分數、明細（牆鐘時間以外）與 miss 鍵逐字相同（variant 仍是那 2 筆 miss，pipeline 仍是 `gate_pass_rate` 0.80 < 0.97），e2e 同為 12 過、2 略過。
+- 第 5 點第 2 步在雲端以假的 Ollama（本機 HTTP 伺服器：變式生成不回、驗算回 `done_reason=length`）照 `cassettes:rerecord -- --suites variant --only-missing` 整條跑過一次（回放檔與向量檔用複本）：結果寫在第 5 點第 2 步。實際的模型、時間與 Windows 上的 `record_local.bat` 要 Owner 實測。

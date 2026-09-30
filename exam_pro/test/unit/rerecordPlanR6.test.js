@@ -134,10 +134,14 @@ describe('docs/local-mode.md 10.21 與工具一致', () => {
     const sec = start >= 0 ? doc.slice(start, next > start ? next : undefined) : '';
 
     // 〔Owner 2026-09-27 改答 LC-2〕原本釘「10.21 是最後一節」；末尾新增 10.22 之後，改成逐一釘住 10.21 之後的節（不允許其他節插進來）
-    test('10.21 之後只有 10.22 一節', () => {
+    // 〔dec/r9-record-tooling〕末尾再新增 10.23（重錄工具補強），照同一個慣例登記
+    test('10.21 之後依序只有 10.22、10.23 兩節', () => {
         assert.ok(start > 0);
         const after = [...doc.slice(start + 4).matchAll(/^### (.*)$/gm)].map(m => m[1]);
-        assert.deepEqual(after, ['10.22 classify 重錄後的四條界線規則（2026-09-27，改答 LC-2）']);
+        assert.deepEqual(after, [
+            '10.22 classify 重錄後的四條界線規則（2026-09-27，改答 LC-2）',
+            '10.23 重錄工具補強：只補錄缺的、錯誤回放檔（2026-10-01，`dec/r9-record-tooling`）'
+        ]);
     });
 
     test('三個錄製指令依序出現，每一步寫的 LLM_MODE／EMBED_MODE 與 rerecord_all 相同', () => {

@@ -459,6 +459,11 @@ const DEFAULT_SEC_PER_EMBED = 1;
 const LOCAL_EXTRACT_CHAIN = Object.freeze(['ocr', 'extract_vision', 'extract_ocr']);
 /** 〔OCR 為主 2026-09-26〕LOCAL_EXTRACT_MODE=ocr 時一塊只有兩步（不看圖） */
 const LOCAL_EXTRACT_CHAIN_OCR = Object.freeze(['ocr', 'extract_ocr']);
+/**
+ * 〔dec/r9-record-tooling〕一題的 LLM 閘門順序（變式生成之後同樣走分類 → lint → 驗算；workers/jobRunner.js、eval/lib/suiteVariant.js）。
+ * 只補缺的估上限時用：某一道 miss，後面幾道這一輪看不到。
+ */
+const GATE_CHAIN = Object.freeze(['variant', 'classify', 'lint', 'verify']);
 
 function positiveNumber(v) {
     const n = Number(v);
@@ -499,11 +504,18 @@ function secPerEmbed(env = process.env) {
  * 〔OCR 為主 2026-09-26〕mode='ocr'（ci.yml 的 LOCAL_EXTRACT_MODE）：拆題鏈只有 ocr → extract_ocr；
  * 沒被讀到的看圖回放檔（extract_vision*）不會再錄，不算進上限。
  *
+ * 〔dec/r9-record-tooling〕錯誤回放檔（byAgent 的 errorHits）：完整重錄時那一次也會重打，算進下限。
+ * onlyMissing＝只補錄缺的（npm run cassettes:rerecord -- --only-missing，docs/local-mode.md 10.23）：
+ *   下限＝只有「缺」的那幾次（命中與錯誤回放檔照回放、不呼叫）；向量只算缺的（nlq／variant 缺的已在 summary.embeddings，
+ *   e2e 的缺另加）；上限＝下限＋拆題鏈 miss 之後的步驟＋每一筆題目閘門的 miss 之後的閘門各一次（GATE_CHAIN：變式生成 miss
+ *   →分類、lint、驗算；分類 miss→lint、驗算…；這一輪看不到、多半也還沒有回放檔）。沒被讀到的舊回放檔不算：只補缺時它們不會被重錄。
+ *   逾時的那一次實際會花到單次逾時的上限（OLLAMA_TIMEOUT_MS），這裡不另外估。
+ *
  * @param {object} summary
- * @param {{env?:object, mode?:'cross'|'ocr'}} [opts]
+ * @param {{env?:object, mode?:'cross'|'ocr', onlyMissing?:boolean}} [opts]
  * @returns {{lowerSec:number, upperSec:number, embedSec:number, bySuite:Record<string,number>, calls:Record<string,number>}}
  */
-function estimateLocalTime(summary, { env = process.env, mode } = {}) {
+function estimateLocalTime(summary, { env = process.env, mode, onlyMissing = false } = {}) {
     const chain = extractChainFor(mode);
     const bySuite = {};
     const calls = {};
@@ -515,7 +527,7 @@ function estimateLocalTime(summary, { env = process.env, mode } = {}) {
         let sec = 0;
         if (name !== 'e2e') {
             for (const [agent, c] of Object.entries(s.byAgent || {})) {
-                const n = (c.hits || 0) + (c.misses || 0);
+                const n = onlyMissing ? (c.misses || 0) : (c.hits || 0) + (c.errorHits || 0) + (c.misses || 0);
                 calls[agent] = (calls[agent] || 0) + n;
                 sec += n * secPerCall(agent, env);
             }
@@ -523,20 +535,27 @@ function estimateLocalTime(summary, { env = process.env, mode } = {}) {
             for (const key of s.missKeys || []) {
                 const agent = key.split('/')[0];
                 const at = chain.indexOf(agent);
-                if (at === -1) continue;
-                for (const later of chain.slice(at + 1)) unseen += secPerCall(later, env);
+                if (at !== -1) {
+                    for (const later of chain.slice(at + 1)) unseen += secPerCall(later, env);
+                    continue;
+                }
+                // 〔dec/r9-record-tooling〕只補缺的：題目閘門 miss 之後的閘門（完整重錄的上限改用沒被讀到的舊回放檔，見下方）
+                const g = GATE_CHAIN.indexOf(agent.replace(/_chem$/, ''));
+                if (onlyMissing && g !== -1) for (const later of GATE_CHAIN.slice(g + 1)) unseen += secPerCall(later, env);
             }
             lower += sec;
         }
         if (['nlq', 'variant', 'e2e'].includes(name) && s.embed) {
-            const n = (s.embed.hits || 0) + (s.embed.misses || 0);
+            const n = onlyMissing
+                ? (name === 'e2e' ? (s.embed.misses || 0) : 0)   // nlq／variant 缺的已在 summary.embeddings.missing
+                : (s.embed.hits || 0) + (s.embed.misses || 0);
             embedTexts += n;
             sec += n * secPerEmbed(env);
         }
         bySuite[name] = sec;
     }
     let downstream = 0;
-    for (const u of summary.unhit || []) {
+    for (const u of onlyMissing ? [] : (summary.unhit || [])) {
         if (u.previousVersion) continue;
         if (mode === 'ocr' && /^extract_vision/.test(String(u.agent))) continue;   // 〔OCR 為主〕不會再錄
         downstream += secPerCall(u.agent, env);
@@ -576,6 +595,7 @@ module.exports = {
     RECORD_LONG_TIMEOUT_MS, RECORD_PROGRESS_MS, LONG_CALL_STEPS,
     OCR_SCRIPT, SEC_PER_CALL, DEFAULT_SEC_PER_CALL, DEFAULT_SEC_PER_EMBED, LOCAL_EXTRACT_CHAIN,
     LOCAL_EXTRACT_CHAIN_OCR, extractChainFor,   // 〔OCR 為主 2026-09-26〕
+    GATE_CHAIN,   // 〔dec/r9-record-tooling〕
     vendorOf, modelIdOf, embedModelFromEnv, effectiveModels, recordingPlan, isLocalRun, localRecordEnv, longCallRecordEnv,
     ollamaHost, hasModel, checkOllama, ollamaAdvice,
     ocrPython, parseSelftest, checkOcr, ocrAdvice,

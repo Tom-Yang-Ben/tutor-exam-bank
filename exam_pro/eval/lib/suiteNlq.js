@@ -411,6 +411,12 @@ async function runNlqSuite(args = {}) {
             // 比對凍結前綴的，裁決 S2-14），不加 `${e.id}：` 前綴。
             for (const err of captured) {
                 if (replayMiss.isReplayMiss(err.message)) { misses.push(err.message); missIds.add(e.id); }
+                else if (err && err.errorCassette) {
+                    // 〔dec/r9-record-tooling〕錯誤回放檔（錄製當時被截斷或單次逾時；docs/local-mode.md 10.23）：那是模型的結果，
+                    // nlqService 照它的規則退回規則解析，這一句照常計分；不是執行失敗，不進 failures
+                    warnings.push(`${e.id}：LLM 呼叫${err.errorCassette.kind === 'timeout' ? '單次逾時' : '被截斷'}` +
+                        `（錯誤回放檔 ${err.errorCassette.agent}/${String(err.errorCassette.key).slice(0, 12)}…），照錄製當時的結果計分。`);
+                }
                 else { failures.push(`${e.id}：generateJson 失敗——${err.message}`); }
             }
 

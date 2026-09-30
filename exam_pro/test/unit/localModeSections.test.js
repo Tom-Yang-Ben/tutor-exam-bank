@@ -14,6 +14,7 @@
 // 各組自己的檔指到自己那一節也一併釘住。
 // 〔Owner 2026-09-27 改答 LC-2，dec/r6-classify-rules〕末尾新增 10.22「classify 重錄後的四條界線規則」：標題清單多一節，
 // 改到的檔（classify.js、chapterPostRules.js、suiteClassify.js、localV1Regression）另指到 10.22，新檔只指 10.22。
+// 〔dec/r9-record-tooling〕末尾新增 10.23「重錄工具補強」：標題清單多一節；新測試與 services/llm/cassette.js 只指 10.23。
 // 只讀檔，不連 DB、不呼叫模型。
 // ─────────────────────────────────────────────────────────────
 const { test, describe } = require('node:test');
@@ -49,7 +50,8 @@ describe('docs/local-mode.md 10.12～10.20（整合 r5、final5、r6 改號）',
         ["10.19", "第五輪 D 預設值與門檻（2026-09-27，`dec/r6-defaults`；Owner 第五輪 D-3、V5-1～V5-5、O-2 核准）"],
         ["10.20", "第五輪 E 文件與知識點（2026-09-27）"],
         ["10.21", "重錄計畫（2026-09-27，第五輪之後）"],   // 整合 r6 新增（test/unit/rerecordPlanR6.test.js）
-        ["10.22", "classify 重錄後的四條界線規則（2026-09-27，改答 LC-2）"]   // 〔Owner 2026-09-27 改答 LC-2〕dec/r6-classify-rules
+        ["10.22", "classify 重錄後的四條界線規則（2026-09-27，改答 LC-2）"],   // 〔Owner 2026-09-27 改答 LC-2〕dec/r6-classify-rules
+        ["10.23", "重錄工具補強：只補錄缺的、錯誤回放檔（2026-10-01，`dec/r9-record-tooling`）"]   // 〔dec/r9-record-tooling〕末尾新增
     ];
 
     test(`第 10 章 10.12 之後的標題依併入順序各出現一次：${EXPECTED.map(e => e[0]).join('、')}`, () => {
@@ -99,6 +101,9 @@ describe('docs/local-mode.md 10.12～10.20（整合 r5、final5、r6 改號）',
         ['exam_pro/test/unit/localV1Regression.test.js', ['10.15', '10.22']],
         ['exam_pro/eval/tools/chapter_rules_scan.js', ['10.22']],
         ['exam_pro/test/unit/classifyRulesLc2.test.js', ['10.22']],
+        // 〔dec/r9-record-tooling〕只補錄缺的、錯誤回放檔
+        ['exam_pro/test/unit/recordTooling.test.js', ['10.23']],
+        ['exam_pro/services/llm/cassette.js', ['10.23']],
         // 〔整合 2026-09-27 dec/integration-r6〕第五輪各組暫編的 10.16 改號後，各組自己的檔指到自己那一節
         ['exam_pro/controllers/reviewController.js', ['10.12', '10.17']],   // B：output_truncated
         ['exam_pro/public/js/review.js', ['10.12', '10.17']],               // B

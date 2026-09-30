@@ -17,14 +17,17 @@
 //                       命中／缺／錄製時呼叫次數與費用估計（費用用 config/pricing.js）。
 //
 // 為什麼錄製呼叫次數要「命中＋缺」而不是只算缺：repo 既有的錄製機制是 LLM_MODE=record，
-// 它對一個 suite 的每一次呼叫都會真的打模型（services/llm/index.js），沒有「只補缺的」這種模式。
-// 本檔照實估，不另造一套只補缺的機制（第 3.2 條第 2 點）。
+// 它對一個 suite 的每一次呼叫都會真的打模型（services/llm/index.js）。本檔照實估（第 3.2 條第 2 點）。
+// 〔dec/r9-record-tooling〕後來 services/llm 多了「只補錄缺的」（LLM_RECORD_ONLY_MISSING=1；npm run cassettes:rerecord -- --only-missing，
+// docs/local-mode.md 10.23）：那種錄法只呼叫「缺」的那幾次（與它們擋住的下游），估時間見 eval/lib/localMode.js 的 estimateLocalTime。
+// 錯誤回放檔（response.error：錄製當時被截斷或單次逾時）：inventory 標 errorCassette；探針記成命中＋errorCassette，
+// summarize 另外算（errorHits、errorKeys、errorCassettes），**不算進「命中」**，也不會因為「沒被讀到」被當成孤兒。
 // ─────────────────────────────────────────────────────────────
 
 const fs = require('fs');
 const path = require('path');
 
-const { cassetteKey, cassetteDir } = require('../../services/llm/cassette');
+const { cassetteKey, cassetteDir, isErrorCassette } = require('../../services/llm/cassette');
 const { estimateCost } = require('../../config/pricing');
 
 const APP_DIR = path.resolve(__dirname, '..', '..');
@@ -109,6 +112,8 @@ function inventory(dir = cassetteDir()) {
                     usage: response.usage || null,
                     cacheKeyParts: (doc.request && doc.request.cacheKeyParts) ?? null
                 });
+                // 〔dec/r9-record-tooling〕錯誤回放檔才多這一欄（一般回放檔的 entry 與之前逐欄相同）
+                if (isErrorCassette(doc)) entry.errorCassette = response.error.kind || 'unknown';
             } catch (err) {
                 entry.error = `不是合法 JSON：${err.message.split('\n')[0]}`;
             }
@@ -299,13 +304,15 @@ function summarize({ events, entries, suites, runs = {}, extraEmbedGaps = [] }) 
     for (const suite of suites) {
         const evs = events.filter(ev => ev.suite === suite);
         const hits = new Map();     // agent/key → model
+        const errorHits = new Map();   // 〔dec/r9-record-tooling〕錯誤回放檔：agent/key → model（不算進 hits）
         const misses = new Map();   // agent/key → event
         const errors = [];
         const embedHit = new Set();
         const embedMiss = new Map();   // hash → chars
         for (const ev of evs) {
             if (ev.kind === 'llm') {
-                if (ev.hit && ev.key) hits.set(`${ev.agent}/${ev.key}`, ev.model);
+                if (ev.hit && ev.key && ev.errorCassette) errorHits.set(`${ev.agent}/${ev.key}`, ev.model);
+                else if (ev.hit && ev.key) hits.set(`${ev.agent}/${ev.key}`, ev.model);
                 else if (!ev.hit && ev.key) { if (!misses.has(`${ev.agent}/${ev.key}`)) misses.set(`${ev.agent}/${ev.key}`, ev); }
                 else if (ev.error) errors.push(`${ev.agent}：${ev.error}`);
             } else if (ev.kind === 'embed') {
@@ -314,17 +321,26 @@ function summarize({ events, entries, suites, runs = {}, extraEmbedGaps = [] }) 
             }
         }
         for (const k of hits.keys()) hitAll.add(k);
+        for (const k of errorHits.keys()) hitAll.add(k);   // 有被讀到：清除工具不可當成孤兒
 
         const byAgent = {};
         const bump = (agent, field) => {
             byAgent[agent] = byAgent[agent] || { hits: 0, misses: 0 };
-            byAgent[agent][field] += 1;
+            byAgent[agent][field] = (byAgent[agent][field] || 0) + 1;
         };
         let costUsd = 0;
         let costEstimated = true;
         for (const [k, model] of hits) {
             const agent = k.split('/')[0];
             bump(agent, 'hits');
+            const e = byKey.get(k);
+            const c = callCost(model || (e && e.model), e && e.usage);
+            costUsd += c.usd; costEstimated = costEstimated && c.estimated;
+        }
+        // 〔dec/r9-record-tooling〕完整重錄時錯誤回放檔那一次也會重打（被截斷的有用量可估；逾時的沒有）
+        for (const [k, model] of errorHits) {
+            const agent = k.split('/')[0];
+            bump(agent, 'errorHits');
             const e = byKey.get(k);
             const c = callCost(model || (e && e.model), e && e.usage);
             costUsd += c.usd; costEstimated = costEstimated && c.estimated;
@@ -350,8 +366,10 @@ function summarize({ events, entries, suites, runs = {}, extraEmbedGaps = [] }) 
         perSuite[suite] = {
             ran: started,
             exitCode,
-            llmCalls: hits.size + misses.size,
+            llmCalls: hits.size + errorHits.size + misses.size,
             hits: hits.size,
+            // 〔dec/r9-record-tooling〕錯誤回放檔（有被讀到、回放的是錄製當時的截斷／逾時）；不算進 hits
+            errorHits: errorHits.size,
             misses: misses.size,
             missesWithPreviousVersion: matched,
             byAgent,
@@ -359,7 +377,7 @@ function summarize({ events, entries, suites, runs = {}, extraEmbedGaps = [] }) 
             // miss 之後的下游節點這一輪看不到（replay 在 miss 那一步就停了），實際呼叫只會更多。
             // 缺向量也會擋：variant 在量測前先檢查 fixture 題的向量齊不齊，缺一題就停（不拿假向量湊數字）。
             blocked: misses.size > 0 || (embedMiss.size > 0 && !NO_LLM_SUITES.includes(suite) && !EMBED_TOLERANT_SUITES.includes(suite)
-                && hits.size === 0 && exitCode !== 0),
+                && hits.size + errorHits.size === 0 && exitCode !== 0),
             embed: {
                 hits: embedHit.size,
                 misses: embedMiss.size,
@@ -369,7 +387,8 @@ function summarize({ events, entries, suites, runs = {}, extraEmbedGaps = [] }) 
             estCostUsd: r6(costUsd),
             costEstimated,
             missKeys: [...misses.keys()].sort(),
-            hitKeys: [...hits.keys()].sort()
+            hitKeys: [...hits.keys()].sort(),
+            errorKeys: [...errorHits.keys()].sort()
         };
     }
 
@@ -377,8 +396,8 @@ function summarize({ events, entries, suites, runs = {}, extraEmbedGaps = [] }) 
     // e2e 自己不能錄（LLM_MODE 不是 replay 時它會拒絕執行）。列出 pipeline 碰不到的 e2e 鍵。
     let e2eOnly = [];
     if (perSuite.e2e && perSuite.pipeline) {
-        const pipelineKeys = new Set([...perSuite.pipeline.hitKeys, ...perSuite.pipeline.missKeys]);
-        e2eOnly = [...perSuite.e2e.hitKeys, ...perSuite.e2e.missKeys].filter(k => !pipelineKeys.has(k));
+        const pipelineKeys = new Set([...perSuite.pipeline.hitKeys, ...perSuite.pipeline.missKeys, ...perSuite.pipeline.errorKeys]);
+        e2eOnly = [...perSuite.e2e.hitKeys, ...perSuite.e2e.missKeys, ...perSuite.e2e.errorKeys].filter(k => !pipelineKeys.has(k));
     }
 
     // 沒被任何 suite 讀到的 cassette：扣掉「某次 miss 的舊版」，剩下的是「下游被擋」或「孤兒」。
@@ -399,6 +418,9 @@ function summarize({ events, entries, suites, runs = {}, extraEmbedGaps = [] }) 
     for (const g of extraEmbedGaps) embedMissing.set(g.hash, g.chars || 0);
     const embedChars = [...embedMissing.values()].reduce((a, b) => a + b, 0);
 
+    // 〔dec/r9-record-tooling〕錯誤回放檔：範圍內有幾支、這一輪被讀到幾支（被讀到＝不是孤兒）
+    const errorEntries = entries.filter(e => e.errorCassette);
+
     return {
         suites: perSuite,
         e2eOnly,
@@ -410,6 +432,11 @@ function summarize({ events, entries, suites, runs = {}, extraEmbedGaps = [] }) 
             previousVersions: previousVersions.size,
             downstreamOrOrphan: downstream.length
         },
+        errorCassettes: {
+            total: errorEntries.length,
+            hit: errorEntries.filter(e => hitAll.has(`${e.agent}/${e.key}`)).length,
+            items: errorEntries.map(e => ({ agent: e.agent, key: e.key, rel: e.rel, kind: e.errorCassette, hit: hitAll.has(`${e.agent}/${e.key}`) }))
+        },
         embeddings: { missing: embedMissing.size, chars: embedChars, estCostUsd: embedCost(embedChars) },
         estimate: {
             callsLower,
@@ -417,7 +444,10 @@ function summarize({ events, entries, suites, runs = {}, extraEmbedGaps = [] }) 
             costLowerUsd: r6(costLower),
             costUpperUsd: r6(costLower + downstreamCost)
         },
-        unhit: unhit.map(e => ({ agent: e.agent, key: e.key, rel: e.rel, keyValid: e.keyValid, previousVersion: previousVersions.has(`${e.agent}/${e.key}`) }))
+        unhit: unhit.map(e => ({
+            agent: e.agent, key: e.key, rel: e.rel, keyValid: e.keyValid, previousVersion: previousVersions.has(`${e.agent}/${e.key}`),
+            ...(e.errorCassette ? { errorCassette: e.errorCassette } : {})
+        }))
     };
 }
 
