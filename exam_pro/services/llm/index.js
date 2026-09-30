@@ -35,6 +35,8 @@
 // OLLAMA_NO_THINK（這些 agent 不思考）、OLLAMA_MAX_OUTPUT_<AGENT>（輸出上限只降不升）、OLLAMA_NUM_CTX_<AGENT>。
 // 都沒寫＝轉交給 adapter 的參數與之前逐位元相同；Gemini 路徑與 replay 一個字都不讀。
 // 三者都不在 cassette 的鍵裡；record 時有套用才在 request.ollamaOverrides 記下實際送出的值（沒套用就沒有這個欄位）。
+// 〔審查 dec/r10-variant-cap〕generateJson 呼叫 Ollama 失敗時，錯誤物件另帶 appliedNumPredict（這一次實際送出的 num_predict，
+// 沒送＝null；replay 與 Gemini 不帶），runner 記截斷事件的輸出上限用（markAppliedNumPredict）。
 // 〔審查修正〕模組載入時（live／record）印一行生效的本機調整，寫錯的名稱另外警告（localTuning.announceOverrides）。
 // 〔dec/latex-escape-repair〕generateJson 在「解析完模型的 JSON 之後、交給 agent 之前」多一步：
 // 把被 JSON 跳脫吃掉的 LaTeX 反斜線補回去（\frac 的 \f 被 JSON.parse 當成換頁字元，留下「換頁＋rac」），
@@ -67,6 +69,23 @@ function adapterOpts(vendor, id, opts) {
     const callOpts = { ...opts, model: id, thinkingBudget: tuned.thinkingBudget, maxOutputTokens: tuned.maxOutputTokens };
     if (tuned.numCtx) callOpts.numCtx = tuned.numCtx;
     return { callOpts, overrides: tuned.applied };
+}
+
+/**
+ * 〔審查 dec/r10-variant-cap〕generateJson 在 live／record 呼叫 Ollama 失敗時，把**這一次實際送出的** num_predict
+ * 掛在錯誤物件的 appliedNumPredict（沒送＝null；services/llm/ollama.js 的 chatBody 只在 maxOutputTokens 有值時才送）。
+ * runner 記「被截斷時的輸出上限」讀這個值（workers/jobRunner.js 的 runGenerateOne），不再依事件當下的 env 重算。
+ * replay（與「只補缺的」照回放的那條路）沒有送出任何請求，錯誤物件不帶這個鍵；Gemini 也不帶。
+ * 不寫進回放檔（services/llm/cassette.js 的 errorResponse 只取固定幾欄），cassette 的鍵與內容都不變。凍結的錯誤物件不標。
+ * @param {Error} err
+ * @param {{maxOutputTokens?:number}} callOpts  交給 adapter 的參數（adapterOpts 的 callOpts）
+ */
+function markAppliedNumPredict(err, callOpts) {
+    if (!err || typeof err !== 'object') return;
+    const n = Number(callOpts && callOpts.maxOutputTokens);
+    try {
+        err.appliedNumPredict = Number.isFinite(n) && n > 0 ? n : null;
+    } catch (_) { /* 凍結的錯誤物件：不標 */ }
 }
 
 // 啟動檢查（第 2 條 OLLAMA_HOST：只允許 localhost／127.0.0.1／::1，其他主機名啟動時警告）
@@ -380,6 +399,8 @@ async function generateJson(opts = {}) {
     try {
         res = await adapterFor(vendor).generateJson(callOpts);
     } catch (err) {
+        // 〔審查 dec/r10-variant-cap〕本機呼叫失敗時，錯誤物件帶上這一次實際送出的 num_predict（見 markAppliedNumPredict）
+        if (vendor === 'ollama') markAppliedNumPredict(err, callOpts);
         // 〔dec/r9-record-tooling〕被截斷／單次逾時錄成錯誤回放檔（環境錯誤不錄），原本的錯照樣丟出去
         if (mode === 'record') recordErrorCassette({ err, opts, id, vendor, overrides, schema: opts.schema, text: false, startedAt });
         throw err;

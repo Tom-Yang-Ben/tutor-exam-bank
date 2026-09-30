@@ -46,7 +46,7 @@
 //
 // 〔Owner 第七輪 R7-1＝4 核准，dec/r10-variant-cap〕C-f 納入變式生成（runGenerateOne）：agents/generateVariant.js 的 error
 // 帶 finishReason，本機截斷（isLocalTruncation，同一個判準）時不重試、直接放棄那一題，job_events 的 generate 事件記
-// finish_reason、truncated、max_output_tokens（localOutputCapOf）與說明；job 繼續下一題、不 failed（一題都沒建成時照舊
+// finish_reason、truncated、max_output_tokens（這一次實際送出的 num_predict，appliedNumPredictOf；replay 記 null）與說明；job 繼續下一題、不 failed（一題都沒建成時照舊
 // 是第 4.1 條那句）。其他 error（含 Gemini 的截斷、本機的逾時）照舊退避重試 maxErrorRetries 次（docs/local-mode.md 10.24）。
 //
 // 〔dec/r8-b1-abandon，設計稿 docs/desktop-app-design.md 2.3 節第 4 點、第 3 條第 2 項〕shutdown({ abandon: true })：
@@ -417,28 +417,22 @@ function isLocalTruncation(outcome, modelSpec) {
 }
 
 /**
- * 〔Owner 第七輪 R7-1〕這一次本機呼叫的輸出上限（Ollama 的 num_predict）：照 services/llm/localTuning.js 的
- * resolveOllamaOverrides 算（本機預設、OLLAMA_MAX_OUTPUT_<AGENT> 覆寫、只降不升），與 services/llm 在 live／record 時
- * 實際送出的值同一條公式。沒有上限（取消了預設、或 agent 不帶也沒有預設）時回 null。只給事件與 log 看，不影響流程。
- * @param {string|null|undefined} agent  meter.lastAgent（例 'variant'、'variant_chem'）
- * @param {number|null|undefined} maxOutputTokens  agent 自己要的上限（meter.lastMaxOutputTokens）
- * @param {object} [env]
+ * 〔Owner 第七輪 R7-1；審查 dec/r10-variant-cap〕這一次本機呼叫**實際送出的**輸出上限（Ollama 的 num_predict）：
+ * 讀 services/llm 掛在錯誤物件上的 appliedNumPredict（services/llm/index.js 的 markAppliedNumPredict），不依事件當下的 env 重算。
+ * 沒送 num_predict（取消了預設）、replay（沒有送出任何請求，錯誤物件不帶這個鍵）、或不是 services/llm 丟的錯時回 null。
+ * 只給事件與 log 看，不影響流程。純函式。
+ * @param {unknown} err  llm.generateJson 丟出的錯
  * @returns {number|null}
  */
-function localOutputCapOf(agent, maxOutputTokens, env = process.env) {
-    if (!agent) return null;
-    try {
-        const r = require('../services/llm/localTuning').resolveOllamaOverrides(
-            { agent, maxOutputTokens: maxOutputTokens ?? undefined }, env);
-        return Number(r.maxOutputTokens) > 0 ? Number(r.maxOutputTokens) : null;
-    } catch (_) {
-        return null;
-    }
+function appliedNumPredictOf(err) {
+    if (!err || typeof err !== 'object') return null;
+    const n = err.appliedNumPredict;
+    return typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : null;
 }
 
 /**
  * 〔Owner 第七輪 R7-1＝4〕變式生成本機截斷時寫進 job_events.detail 的說明（給人看；放棄這一題、不重試）。
- * @param {number|null} cap  localOutputCapOf 的結果
+ * @param {number|null} cap  這一次實際送出的輸出上限（appliedNumPredictOf；不知道時 null）
  * @returns {string}
  */
 function variantTruncationNote(cap) {
@@ -926,10 +920,16 @@ function createRunner(opts = {}) {
             async generateJson(args = {}) {
                 // 〔Owner 第五輪 C-f〕失敗時也要知道叫的是哪一支模型（本機被截斷的不重試）；meter.model 只在成功後才寫，不動它
                 meter.lastModel = args.model || null;
-                // 〔Owner 第七輪 R7-1〕變式被截斷時事件要記「輸出上限多少」：記下這一次的 agent 與它自己要的上限（localOutputCapOf 算）
-                meter.lastAgent = args.agent || null;
-                meter.lastMaxOutputTokens = args.maxOutputTokens ?? null;
-                const res = await llm.generateJson(args);
+                // 〔Owner 第七輪 R7-1；審查 dec/r10-variant-cap〕變式被截斷時事件要記「輸出上限多少」：
+                // 記下這一次呼叫實際送出的 num_predict（services/llm 掛在錯誤物件上；不依 env 重算），原本的錯照樣丟給 agent
+                meter.lastNumPredict = null;
+                let res;
+                try {
+                    res = await llm.generateJson(args);
+                } catch (err) {
+                    meter.lastNumPredict = appliedNumPredictOf(err);
+                    throw err;
+                }
                 const u = res?.usage || {};
                 meter.model = args.model || meter.model;
                 meter.tokenIn += u.tokenIn ?? 0;
@@ -957,7 +957,7 @@ function createRunner(opts = {}) {
             model: null, tokenIn: 0, tokenOut: 0, tokenThinking: 0, tokenCached: 0,
             calls: 0, usageMetadata: [], schemaFallback: false,
             lastModel: null,   // 〔Owner 第五輪 C-f〕
-            lastAgent: null, lastMaxOutputTokens: null   // 〔Owner 第七輪 R7-1〕
+            lastNumPredict: null   // 〔Owner 第七輪 R7-1；審查 dec/r10-variant-cap〕
         };
     }
 
@@ -2207,7 +2207,8 @@ function createRunner(opts = {}) {
             // 不重試（同一個 prompt、溫度 0，再跑一次多半一樣被截斷，每次又要等滿上限），直接放棄這一題、事件記下原因與上限，
             // job 繼續下一題、不 failed（除非一題都沒建成，照舊是第 4.1 條那句）。Gemini 與其他 error 照舊退避重試。
             const localTruncation = isLocalTruncation(outcome, meter.lastModel);
-            const truncationCap = localTruncation ? localOutputCapOf(meter.lastAgent, meter.lastMaxOutputTokens) : null;
+            // 〔審查 dec/r10-variant-cap〕上限是這一次實際送出的 num_predict；replay 沒有送出請求，記 null
+            const truncationCap = localTruncation ? meter.lastNumPredict : null;
 
             const eventOf = (jqId) => ({
                 job_id: job.id, jq_id: null, node: 'generate', attempt,
@@ -2558,7 +2559,7 @@ module.exports = {
     effectiveSimilarityThresholds,   // 〔審查 dec/r6-defaults〕
     ocrOnlySchemaProblem, OCR_ONLY_SCHEMA_MESSAGE,   // 〔審查 2026-09-26〕
     outputTruncatedAccepted, OUTPUT_TRUNCATED_SCHEMA_MESSAGE, isLocalModelSpec, isLocalTruncation,   // 〔Owner 第五輪 C-f〕
-    localOutputCapOf, variantTruncationNote,   // 〔Owner 第七輪 R7-1〕
+    appliedNumPredictOf, variantTruncationNote,   // 〔Owner 第七輪 R7-1；審查 dec/r10-variant-cap〕
     LOCAL_NODE_TIMEOUT_MS, LOCAL_PDF_CHUNK_PAGES, LOCAL_CONCURRENCY, RENEW_MIN_INTERVAL_MS,
     LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES,   // 〔第四輪 V3〕
     ADVANCEABLE_STATES, FREE_NODES, AGENT_MODULE_FOR_NODE, ERROR_CLASSES, SOURCE_CHECK_MODES,

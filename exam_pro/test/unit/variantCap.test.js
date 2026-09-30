@@ -11,7 +11,8 @@
 //      記 {numPredict:1024}、鍵與沒套用時相同；replay 不讀（repo 裡本機錄的 variant.v2 回放檔照樣回放）。
 //   3. agents/generateVariant.js：generateJson 丟的錯帶 finishReason 時放進 error outcome；沒帶時 outcome 與之前逐欄相同；
 //      真的 agent＋services/llm＋假的 Ollama（done_reason=length）→ {kind:'error', errorClass:'schema_invalid', finishReason:'MAX_TOKENS'}。
-//   4. workers/jobRunner.js：localOutputCapOf（事件記的輸出上限）與 variantTruncationNote；isLocalTruncation 認得變式的 outcome。
+//   4. workers/jobRunner.js：appliedNumPredictOf（事件記的輸出上限＝這一次實際送出的 num_predict，services/llm 掛在錯誤物件上；
+//      replay 與 Gemini 不帶＝null）與 variantTruncationNote；isLocalTruncation 認得變式的 outcome。
 //   runGenerateOne 的「截斷不重試、寫事件、繼續下一題」與「非截斷的 error 仍重試」在 test/integration/variantTruncation.pg.test.js。
 // 不連 Ollama、不連 Gemini、不連 DB。
 // ─────────────────────────────────────────────────────────────
@@ -313,15 +314,65 @@ describe('generateVariant：error outcome 帶 finishReason（C-f 納入變式）
 
 // ───────────────────────── 4. workers/jobRunner.js 的兩個小工具 ─────────────────────────
 
-describe('jobRunner：事件記的輸出上限與說明', () => {
-    test('localOutputCapOf：與 services/llm 同一條公式（預設 1024、覆寫、取消＝null）；沒有 agent＝null', () => {
-        assert.equal(jobRunner.localOutputCapOf('variant', null, {}), 1024);
-        assert.equal(jobRunner.localOutputCapOf('variant_chem', undefined, {}), 1024);
-        assert.equal(jobRunner.localOutputCapOf('variant', null, { OLLAMA_MAX_OUTPUT_VARIANT: '2048' }), 2048);
-        assert.equal(jobRunner.localOutputCapOf('variant', null, { OLLAMA_MAX_OUTPUT_VARIANT: '8192' }), null);
-        assert.equal(jobRunner.localOutputCapOf('verify', 8192, {}), 3072);
-        assert.equal(jobRunner.localOutputCapOf(null, null, {}), null);
-        assert.equal(jobRunner.localOutputCapOf('classify', null, {}), null);
+describe('jobRunner：事件記的輸出上限（實際送出的）與說明', () => {
+    test('〔審查 dec/r10-variant-cap〕appliedNumPredictOf：只讀錯誤物件上實際送出的 num_predict（正數才算），其餘一律 null', () => {
+        assert.equal(jobRunner.appliedNumPredictOf(Object.assign(new Error('x'), { appliedNumPredict: 1024 })), 1024);
+        assert.equal(jobRunner.appliedNumPredictOf(Object.assign(new Error('x'), { appliedNumPredict: 2048 })), 2048);
+        for (const v of [null, undefined, 0, -1, NaN, Infinity, '1024', true]) {
+            assert.equal(jobRunner.appliedNumPredictOf(Object.assign(new Error('x'), { appliedNumPredict: v })), null, String(v));
+        }
+        assert.equal(jobRunner.appliedNumPredictOf(new Error('沒有這個鍵（replay、Gemini、不是 services/llm 丟的錯）')), null);
+        assert.equal(jobRunner.appliedNumPredictOf(null), null);
+        assert.equal(jobRunner.appliedNumPredictOf('字串'), null);
+        assert.equal('localOutputCapOf' in jobRunner, false, '不再依事件當下的 env 重算');
+    });
+
+    test('〔審查 dec/r10-variant-cap〕services/llm：ollama 的呼叫失敗時錯誤帶實際送出的 num_predict（1024／2048／取消＝null）；replay 與 Gemini 不帶', async () => {
+        process.env.LLM_MODE = 'live';
+        const calls = fakeOllama({ doneReason: 'length' });
+        const caught = [];
+        for (const v of [undefined, '2048', '8192']) {
+            if (v === undefined) delete process.env.OLLAMA_MAX_OUTPUT_VARIANT; else process.env.OLLAMA_MAX_OUTPUT_VARIANT = v;
+            await assert.rejects(llm.generateJson({ ...VARIANT_CALL }), (err) => { caught.push(err); return true; });
+        }
+        assert.deepEqual(calls.map(c => c.options.num_predict), [1024, 2048, undefined]);
+        assert.deepEqual(caught.map(e => [e.finishReason, e.appliedNumPredict]), [['MAX_TOKENS', 1024], ['MAX_TOKENS', 2048], ['MAX_TOKENS', null]]);
+        assert.deepEqual(caught.map(e => jobRunner.appliedNumPredictOf(e)), [1024, 2048, null]);
+
+        // record 錄成錯誤回放檔 → replay 丟的錯不帶（沒有送出請求）；回放檔裡也沒有這個欄位
+        process.env.LLM_MODE = 'record';
+        delete process.env.OLLAMA_MAX_OUTPUT_VARIANT;
+        fakeOllama({ doneReason: 'length' });
+        const origLog = console.log;
+        console.log = () => { };
+        let recorded;
+        try {
+            await assert.rejects(llm.generateJson({ ...VARIANT_CALL }), (err) => { recorded = err; return true; });
+        } finally {
+            console.log = origLog;
+        }
+        assert.equal(recorded.appliedNumPredict, 1024);
+        assert.equal(JSON.stringify(cassette.readCassette('variant', recorded.cassetteKey)).includes('appliedNumPredict'), false, '不寫進回放檔');
+        process.env.LLM_MODE = 'replay';
+        process.env.OLLAMA_MAX_OUTPUT_VARIANT = '2048';
+        await assert.rejects(llm.generateJson({ ...VARIANT_CALL }), (err) => {
+            assert.equal(err.replayed, true);
+            assert.equal('appliedNumPredict' in err, false);
+            assert.equal(jobRunner.appliedNumPredictOf(err), null);
+            return true;
+        });
+
+        // Gemini 被截斷：不帶
+        process.env.LLM_MODE = 'live';
+        process.env.GEMINI_API_KEY = 'test-key';
+        gemini._setClientForTest({
+            models: { generateContent: async () => ({ text: '{"chapter":"向量內積","question_text":"在平面上', candidates: [{ finishReason: 'MAX_TOKENS' }], usageMetadata: {} }) }
+        });
+        await assert.rejects(llm.generateJson({ ...VARIANT_CALL, model: 'gemini:gemini-3.1-pro-preview' }), (err) => {
+            assert.equal(err.finishReason, 'MAX_TOKENS');
+            assert.equal('appliedNumPredict' in err, false);
+            return true;
+        });
     });
 
     test('variantTruncationNote：說明被截斷、上限多少、不重試放棄這一題', () => {

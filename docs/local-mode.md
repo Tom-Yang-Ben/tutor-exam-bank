@@ -1843,7 +1843,7 @@ scripts\windows\record_local.bat variant --only-missing
 - `agents/generateVariant.js`：`generateJson` 丟出的錯帶 `finishReason` 時放進 error outcome（`{kind:'error', errorClass, message, finishReason}`，照 verify／lint／classify 的寫法）；沒帶時 outcome 與之前逐欄相同。
 - `workers/jobRunner.js` 的 `runGenerateOne`：outcome 是本機截斷（`isLocalTruncation`：error、`finishReason === 'MAX_TOKENS'`、這一次呼叫的模型是 ollama——與題目節點同一個判準）時：
   1. **不重試、不退避**，這一題回 0（沒有建列）；
-  2. 這一次的 `generate` 事件（`job_events`，原本每一次嘗試就會寫一列）的 `detail` 多記：`finish_reason: 'MAX_TOKENS'`、`truncated: true`、`max_output_tokens`（這一次的輸出上限，`localOutputCapOf` 用與 `services/llm` 相同的公式從目前的設定算；取消預設時是 `null`）、`gave_up: true`、`note`（「本機模型的回應寫到輸出上限（1024 token）被截斷：不重試，放棄這一題…」）；`error_class` 照舊是 adapter 給的 `schema_invalid`（`job_events` 的 CHECK 只收十個值，沒有新增）；log 另印一行 warn；
+  2. 這一次的 `generate` 事件（`job_events`，原本每一次嘗試就會寫一列）的 `detail` 多記：`finish_reason: 'MAX_TOKENS'`、`truncated: true`、`max_output_tokens`（這一次**實際送給 Ollama 的** `num_predict`：`services/llm/index.js` 的 `generateJson` 呼叫 Ollama 失敗時把它掛在錯誤物件的 `appliedNumPredict`，runner 用 `appliedNumPredictOf` 讀回來，不依事件當下的 env 重算；取消預設、沒送 `num_predict` 時是 `null`；replay 沒有送出請求，也是 `null`。這個欄位不寫進回放檔）、`gave_up: true`、`note`（「本機模型的回應寫到輸出上限（1024 token）被截斷：不重試，放棄這一題…」）；`error_class` 照舊是 adapter 給的 `schema_invalid`（`job_events` 的 CHECK 只收十個值，沒有新增）；log 另印一行 warn；
   3. job **繼續下一題**：下一題的兄弟不含被放棄的這一題（沒有建列）；有任何一題建成就照常轉 `processing`；一題都沒建成時照舊 failed、`error` 是第 4.1 條那句（「變式生成全部未通過文字閘門或跑題檢查。」，與沒過閘門相同）。
 - 照舊退避重試 `maxErrorRetries`（3）次的：其他 error（本機逾時、連不上…）、**Gemini 的截斷**（與題目節點的 C-f 一致）。閘門沒過（`fail`）照舊重試 1 次。本機模型的 error 帶 `finishReason` 時，事件另記 `finish_reason`（與 `runJobQuestion` 相同，Gemini 不記）。
 - 逐題檢查點（DA-13）照舊：被放棄的那一題沒有建列，job 之後若被重新認領（租約到期、當機、按「重試」），它和其他沒建成的題一樣會再生成一次。
@@ -1857,13 +1857,30 @@ scripts\windows\record_local.bat variant --only-missing
 
 #### 5. Owner 電腦
 
-- `.env` 已先寫 `OLLAMA_MAX_OUTPUT_VARIANT=1024`（R7-2＝2），正在用 `record_local.bat variant --only-missing` 補錄 var-008#1 與 var-015#1 的驗算。**錄製不必停**：那一行在舊程式（`f1a791c`）與本分支送出的都是 1024，錄下的回放檔鍵相同、本分支照樣回放；var-008#1 若在 1024 被截斷，錄成「被截斷」錯誤回放檔，eval 記成那一題沒通過（兩邊的程式結果相同）。
+- `.env` 已先寫 `OLLAMA_MAX_OUTPUT_VARIANT=1024`（R7-2＝2），正在用 `record_local.bat variant --only-missing` 補錄 var-008#1 的生成與 var-015#1 的驗算（10.23 第 1 點）。**錄製不必停**：那一行在舊程式（`f1a791c`）與本分支送出的都是 1024，錄下的回放檔鍵相同、本分支照樣回放；var-008#1 若在 1024 被截斷，錄成「被截斷」錯誤回放檔，eval 記成那一題沒通過（兩邊的程式結果相同）。
 - 本分支併入、拉到 Owner 電腦之後，`.env` 的 `OLLAMA_MAX_OUTPUT_VARIANT=1024` **那一行可以刪**：值與程式預設相同，刪不刪送出的都一樣；差別只在啟動訊息把它列在「生效的」（有寫）還是「本機預設」（沒寫）。
-- 實際的變式生成（網頁或桌面版按「生成變式」）被截斷時，那一題不會出現在結果裡；`job_events` 的 `generate` 事件看得到 `truncated` 與上限（`npm run report:jobs` 的錯誤類別照舊算在 `schema_invalid`）。
+- 實際的變式生成（網頁或桌面版按「生成變式」）被截斷時，那一題不會出現在結果裡；`job_events` 的 `generate` 事件看得到 `truncated` 與那一次實際送出的上限（`npm run report:jobs` 的錯誤類別照舊算在 `schema_invalid`）。
 
 #### 6. 驗證（本分支，2026-10-01）
 
-- 新測試：`test/unit/variantCap.test.js`（15 則：本機預設 1024、ollama 套 Gemini 不套、`.env` 覆寫、寫 8192 取消、亂填＝沒寫、只寫 `_CHEM`、沒有預設的 agent 不受影響、`checkOverrides` 與 `textModelIsLocal`、services/llm 的 live／record／replay（record 記 `ollamaOverrides`、鍵不變；被截斷錄成錯誤回放檔、回放丟同形的錯；repo 裡的 `variant.v2` 回放檔怎麼寫都照樣回放）、generateVariant 帶 `finishReason`（真的 agent＋services/llm＋假的 Ollama 寫到 1024 被截斷）、`localOutputCapOf`、`variantTruncationNote`）；`test/integration/variantTruncation.pg.test.js`（6 則，5433 的測試庫：本機截斷只呼叫一次、不退避、不建列、事件逐欄比對、第 2 題照常建成沒有兄弟、job 轉 processing；`.env` 覆寫時事件記 2048、取消時記 null；只要 1 題又被截斷時 failed；逾時照舊退避、之後的截斷就放棄；本機逾時重試 `maxErrorRetries` 次；Gemini 的截斷照舊重試）。
+- 新測試：`test/unit/variantCap.test.js`（15 則，審查修正後 16 則：本機預設 1024、ollama 套 Gemini 不套、`.env` 覆寫、寫 8192 取消、亂填＝沒寫、只寫 `_CHEM`、沒有預設的 agent 不受影響、`checkOverrides` 與 `textModelIsLocal`、services/llm 的 live／record／replay（record 記 `ollamaOverrides`、鍵不變；被截斷錄成錯誤回放檔、回放丟同形的錯；repo 裡的 `variant.v2` 回放檔怎麼寫都照樣回放）、generateVariant 帶 `finishReason`（真的 agent＋services/llm＋假的 Ollama 寫到 1024 被截斷）、`localOutputCapOf`（審查修正後換成 `appliedNumPredictOf`，見下面第 7 點）、`variantTruncationNote`）；`test/integration/variantTruncation.pg.test.js`（6 則，審查修正後 7 則，5433 的測試庫：本機截斷只呼叫一次、不退避、不建列、事件逐欄比對、第 2 題照常建成沒有兄弟、job 轉 processing；`.env` 覆寫時事件記 2048、取消時記 null；只要 1 題又被截斷時 failed；逾時照舊退避、之後的截斷就放棄；本機逾時重試 `maxErrorRetries` 次；Gemini 的截斷照舊重試）。
 - 既有測試只改釘住舊預設清單的地方：`test/unit/localTuning.test.js` 的 `LOCAL_DEFAULTS`、`DEFAULT_LINES`（多一行 variant）、只剩某幾個預設時的 defaults，以及 `NO_DEFAULTS`（「取消全部本機預設」多寫 `OLLAMA_MAX_OUTPUT_VARIANT=8192`，連帶那一則的 active 多一項）；另依節號慣例登記 10.24（`localModeSections.test.js`、`rerecordPlanR6.test.js`）。
 - 本分支跑過（以 `ci.yml` 的 env，5433 另建的全新 UTF8 測試庫：C.UTF-8、template0，migrate 到 0020，用完刪掉）：`npm test` 4,224 項（4,223 過、0 失敗、1 略過）；`check:html` 通過；`test:integration` 652 項全過（`f1a791c` 646 項＋本分支新增 6 項）；`test:e2e` 12 過、2 略過（與 `f1a791c` 相同）；`desktop` 的 `npm test` 126 項全過。
 - 既有回放檔的回放與 `f1a791c` 逐字相同：兩邊各在自己的全新測試庫跑五個 eval 與 e2e 比對，輸出與 `eval/reports/*.json` 除了牆鐘時間（p50／p95 ms、總延遲）以外逐字相同（variant 仍是那 2 筆 replay miss、`retrieved_coverage` 0.5000；pipeline 仍是 `gate_pass_rate` 0.80 < 0.97）。
+
+#### 7. 審查修正（`dec/r10-variant-cap-fix`，2026-10-01）
+
+獨立審查的結論是「通過（可合併）」，只有低嚴重度與說明性的意見。逐條查證如下：
+
+1. **截斷事件的 `max_output_tokens` 不是讀回實際送出的值**（低，屬實，已修）：原本由 runner 的 `localOutputCapOf` 依「寫事件當下的 env」重算，所以 replay 時 `services/llm` 根本沒送 `num_predict`，事件照樣記 1024。現在改成讀實際送出的值：
+   - `services/llm/index.js` 的 `generateJson` 在 live／record 呼叫 Ollama 失敗時，把交給 adapter 的 `maxOutputTokens`（`services/llm/ollama.js` 據此送 `num_predict`）掛在錯誤物件的 `appliedNumPredict`（沒送＝`null`；`markAppliedNumPredict`）。Gemini 不帶；replay（含「只補缺的」照回放的那條路）沒有送出請求，也不帶。
+   - 這個欄位**不寫進回放檔**（`cassette.errorResponse` 只取固定幾欄），cassette 的鍵與內容都沒變。
+   - `workers/jobRunner.js` 的計量包裝在 `llm.generateJson` 丟錯時用 `appliedNumPredictOf(err)` 記下它（原本的錯照樣丟給 agent），`runGenerateOne` 的截斷事件記這個值；`localOutputCapOf` 刪掉（它的單元測試換成 `appliedNumPredictOf` 與 services/llm 的新測試）。
+   - 結果：live／record 與之前記的一樣（1024、覆寫時的值、取消時 `null`）；replay 的截斷事件改記 `null`，說明（`note`）不寫數字。
+2. **寫 8192 以上＝取消預設**（說明，屬實，不改）：這是把 C-c「寫原本的值＝取消」延伸到變式（本來沒有上限）的解讀，第 2 點的表格與 `.env.example` 已寫明。**給 Owner 的一句話：`OLLAMA_MAX_OUTPUT_VARIANT` 寫 8192 以上＝取消變式的本機預設（不送上限）。**
+3. **比任務字面多做的三處**（說明，屬實，不改）：本機模型的 error 帶任何 `finishReason` 都記 `finish_reason`（與 `runJobQuestion` 一致）、`textModelIsLocal` 多看 `MODEL_VARIANT`、`checkOverrides` 的 defaults 每個基本名稱一行並標核准輪次。三者都不影響回放檔的鍵或 eval。
+4. **被放棄的截斷題沒有建列、重新認領時會再生成一次**（說明，屬實，不改）：第 3 點最後一項已記載；每次仍只呼叫一次，不會無限重試。`variant_chem` 沒有實測（第 1 點已標〔未量測〕）。
+5. **第 5 點「補錄 var-008#1 與 var-015#1 的驗算」有歧義**（極低，屬實，已修）：var-008#1 缺的是變式生成、var-015#1 缺的才是驗算（10.23 第 1 點），改成「補錄 var-008#1 的生成與 var-015#1 的驗算」。
+
+- 測試：`test/unit/variantCap.test.js` 的 `localOutputCapOf` 那一則換成兩則（`appliedNumPredictOf` 的純函式；services/llm 在 live 送 1024／2048／不送時錯誤帶 1024／2048／`null`、record 錄的回放檔不含這個欄位、replay 與 Gemini 的截斷不帶）。`test/integration/variantTruncation.pg.test.js` 本機截斷改走**真的 services/llm**（live＋假的 Ollama 傳輸回 `done_reason=length`），斷言送出的 `num_predict` 與事件記的相同；另加一則 replay（先 record 成「被截斷」錯誤回放檔再回放）：照樣放棄、不重試，`max_output_tokens` 記 `null`。
+- 跑過（`ci.yml` 的 env、5433 另建全新 UTF8 C.UTF-8 template0 測試庫，用完刪掉）：`npm test` 4,225 項（4,224 過、1 略過）；`check:html` 通過；`test:integration` 653 項全過；`test:e2e` 12 過、2 略過；`desktop` 的 `npm test` 126 項全過。五個 eval 與 e2e 和 `f1a791c` 比對：報表 JSON 只差 `generated_at` 與 pipeline 的牆鐘時間（p50／p95 ms、總延遲），e2e 只差 `duration_ms` 與 pid，其餘逐字相同。
