@@ -24,6 +24,14 @@
 //   pg（`--engine pg`）—— 把 fixture 灌進測試庫，跑 services/variantService.js 的
 //       **那一段真的 SQL**。SQL 本身的正確性由 test/integration/variants.pg.test.js 保證，
 //       這裡只是讓「eval 與 prod 走同一段 SQL」這件事在需要時可驗證。
+//
+// 〔dec/r9-record-tooling〕錯誤回放檔（錄製當時被截斷或單次逾時；docs/local-mode.md 10.23）：
+//   - 變式生成那一次：agents/generateVariant.js 照舊接住錯、回 {kind:'error', errorClass, message}（不帶 finishReason）。
+//     這裡認得出那是錯誤回放檔（makeCtx 的 generateJson 看到錯誤帶 errorCassette），就把這一題記成**沒通過**
+//     （算進 generations、不算進 passed，perEntry 的 stopped_at 是 'generate'），寫一行 warning，**不進 failures**——
+//     run.js 因此照常比門檻，不會把它當成「呼叫失敗」讓整個 suite 紅在執行錯誤上，也不會當成 replay miss 讓分數變 n/a。
+//   - 閘門（分類／lint／驗算）那一次：agent 照舊回 {kind:'error'}，runGates 本來就把那一道記成沒過；這裡另外記下是哪一題。
+//   其他不是 replay miss、也不是錯誤回放檔的 error（例：連不上）照舊進 failures。
 // ─────────────────────────────────────────────────────────────
 
 const fs = require('fs');
@@ -365,6 +373,7 @@ async function runVariantSuite(args = {}) {
     let gateCounts = null;
     let costUsd = null;
     let generations = 0;
+    let recordedErrors = [];   // 〔dec/r9-record-tooling〕
 
     if (!agentExists) {
         warnings.push('agents/generateVariant.js 尚未合入：gate_pass_rate 與每題成本印 n/a。');
@@ -383,6 +392,7 @@ async function runVariantSuite(args = {}) {
         gateCounts = driver.counts;
         costUsd = driver.costUsd;
         generations = driver.generations;
+        recordedErrors = driver.recordedErrors || [];
         for (const row of perEntry) {
             const g = driver.byEntry.get(row.id);
             if (g) Object.assign(row, { generated: g.generated, gate_passed: g.passed, stopped_at: g.stoppedAt });
@@ -410,6 +420,8 @@ async function runVariantSuite(args = {}) {
         engine,
         failures,
         warnings,
+        // 〔dec/r9-record-tooling〕讀到錯誤回放檔的那幾次（沒有時不出現這個鍵）
+        ...(recordedErrors.length ? { recordedErrors } : {}),
         perEntry: golden.isPrivate ? [] : perEntry,
         meta: {
             agent: agentExists ? 'agents/generateVariant.js' : '（未合入）',
@@ -461,6 +473,7 @@ async function runGeneration({ golden, fixture, emb, offtopicSimMin, generateFn,
     let anyCost = false;
     const misses = [];
     const embedMisses = [];
+    const recordedErrors = [];   // 〔dec/r9-record-tooling〕讀到錯誤回放檔的那幾次（哪一題、哪一道、哪一支）
 
     // fixture 的題也算「庫裡已有的題」：dedup0 撞到它們就是重複
     for (const q of fixture.questions) {
@@ -498,7 +511,16 @@ async function runGeneration({ golden, fixture, emb, offtopicSimMin, generateFn,
 
             if (outcome.kind === 'error') {
                 if (replayMiss.isReplayMiss(outcome.message)) misses.push(outcome.message);
-                else failures.push(`${e.id}#${idx}：${outcome.message}`);
+                else if (ctx.__usage.errorCassettes.length) {
+                    // 〔dec/r9-record-tooling〕錯誤回放檔（錄製當時這一題的生成呼叫被截斷或單次逾時）：那是模型的結果，
+                    // 記成這一題沒通過（generations 已經加過、passed 不加），不是執行失敗——不進 failures，suite 照常算分數比門檻。
+                    // 錄製時（LLM_MODE=record）寫下錯誤回放檔的那一次也走這裡，錄製與回放的結果相同。
+                    const ec = ctx.__usage.errorCassettes[0];
+                    recordedErrors.push({ at: `${e.id}#${idx}`, node: 'generate', agent: ec.agent, key: ec.key, kind: ec.kind });
+                    warnings.push(`${e.id}#${idx}：變式生成的呼叫${ec.kind === 'timeout' ? '單次逾時' : '被截斷'}` +
+                        `（錯誤回放檔 ${ec.agent}/${String(ec.key).slice(0, 12)}…），記成這一題沒通過（不是 replay miss、不是執行失敗）。`);
+                    if (stoppedAt === null) stoppedAt = 'generate';
+                } else failures.push(`${e.id}#${idx}：${outcome.message}`);
                 continue;
             }
 
@@ -528,6 +550,13 @@ async function runGeneration({ golden, fixture, emb, offtopicSimMin, generateFn,
             else if (stoppedAt === null) stoppedAt = res.stoppedAt;
             misses.push(...res.misses);
             embedMisses.push(...res.embedMisses);
+            // 〔dec/r9-record-tooling〕閘門（分類／lint／驗算）讀到錯誤回放檔：agent 照規則回 error、那一道記成沒過（runGates 已處理），
+            // 這裡只記下是哪一題、哪一道，報表列出來
+            for (const ec of ctx.__usage.errorCassettes) {
+                recordedErrors.push({ at: `${e.id}#${idx}`, node: res.stoppedAt || null, agent: ec.agent, key: ec.key, kind: ec.kind });
+                warnings.push(`${e.id}#${idx}：${ec.agent} 的呼叫${ec.kind === 'timeout' ? '單次逾時' : '被截斷'}` +
+                    `（錯誤回放檔 ${ec.agent}/${String(ec.key).slice(0, 12)}…），${res.stoppedAt ? `停在 ${res.stoppedAt} 閘門` : '照 agent 的規則處理'}（不是 replay miss）。`);
+            }
 
             const usage = ctx.__usage;
             if (usage.calls > 0) {
@@ -562,7 +591,7 @@ async function runGeneration({ golden, fixture, emb, offtopicSimMin, generateFn,
         failures.push(...embedMisses);
     }
     if (misses.length || embedMisses.length) {
-        return { rate: null, counts, costUsd: null, generations, byEntry };
+        return { rate: null, counts, costUsd: null, generations, byEntry, recordedErrors };
     }
 
     return {
@@ -570,7 +599,8 @@ async function runGeneration({ golden, fixture, emb, offtopicSimMin, generateFn,
         counts,
         costUsd: anyCost ? metrics.round4(costUsd) : null,
         generations,
-        byEntry
+        byEntry,
+        recordedErrors
     };
 }
 
@@ -622,14 +652,25 @@ async function dedup1InMemory({ fields, source, fixture, emb, buildEmbedText, em
 
 /** eval 的 ctx：ctx.db 一律 null（裁決 S2-8，cassette 鍵才可重現） */
 function makeCtx({ llm, models, offtopicSimMin }) {
-    const usage = { calls: 0, costUsd: 0 };
+    // 〔dec/r9-record-tooling〕errorCassettes：這一題讀到（或錄製時寫下）的錯誤回放檔（services/llm 丟的錯帶 errorCassette）
+    const usage = { calls: 0, costUsd: 0, errorCassettes: [] };
     const sim = require('../../config/similarityThresholds').resolveSimilarityThresholds(process.env);
     const pricing = safeRequire(path.resolve(ROOT, 'config', 'pricing.js'));
     return {
         __usage: usage,
         llm: {
             async generateJson(opts) {
-                const res = await llm.generateJson(opts);
+                let res;
+                try {
+                    res = await llm.generateJson(opts);
+                } catch (err) {
+                    if (err && err.errorCassette) {
+                        usage.errorCassettes.push({
+                            ...err.errorCassette, errorClass: err.errorClass ?? null, finishReason: err.finishReason ?? null
+                        });
+                    }
+                    throw err;   // 行為不變：agent 照舊接住、回 {kind:'error'}
+                }
                 usage.calls += 1;
                 if (pricing && typeof pricing.estimateCost === 'function') {
                     const spec = String(opts.model || '');

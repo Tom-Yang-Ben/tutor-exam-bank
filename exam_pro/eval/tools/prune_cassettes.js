@@ -19,6 +19,10 @@
 //      那一個 suite 讀的 cassette 會被誤判成過期。
 //   3. 回放時出現 miss 以外的錯誤（例如 cassette 格式壞掉）。
 //   4. 只跑了部分 suite（--suites）：沒跑的 suite 讀的 cassette 會被誤判成過期。--suites 只能用來預覽。
+//
+// 〔dec/r9-record-tooling〕錯誤回放檔（錄製當時被截斷或單次逾時；docs/local-mode.md 10.23）：回放時 fake.js 照樣丟那個錯，
+// 探針把它記成「有被讀到」（cassetteProbe 的 errorCassette），所以**不會**出現在「沒被讀到」的清單、也不算第 3 條的「miss 以外的錯誤」。
+// 只有鍵已失效或這一輪沒有任何 suite 讀到它時才會列出（標「錯誤回放檔」），與一般回放檔同一條規則。
 // ─────────────────────────────────────────────────────────────
 
 const fs = require('fs');
@@ -153,6 +157,11 @@ async function main(argv = process.argv.slice(2)) {
 
     console.log('');
     console.log(formatSummary(res));
+    const ec = summary.errorCassettes;
+    if (ec && ec.total) {
+        // 〔dec/r9-record-tooling〕被讀到的錯誤回放檔不是孤兒，不在下面的清單裡
+        console.log(`\n錯誤回放檔 ${ec.total} 支，這一輪被讀到 ${ec.hit} 支（回放照樣丟錄製當時的截斷／逾時，不算過期、不會列進下面的清單）。`);
+    }
     console.log(`\n沒被任何 suite 讀到的 cassette：${list.length} 支`);
     const byAgent = {};
     for (const u of list) (byAgent[u.agent] = byAgent[u.agent] || []).push(u);
@@ -160,7 +169,7 @@ async function main(argv = process.argv.slice(2)) {
         console.log(`  ${agent}/（${rows.length} 支）`);
         for (const u of rows) {
             const why = u.keyValid === false ? '鍵已失效' : (u.previousVersion ? '某次 miss 的舊版' : '沒被讀到');
-            console.log(`    - ${u.rel}　${why}`);
+            console.log(`    - ${u.rel}　${why}${u.errorCassette ? '（錯誤回放檔）' : ''}`);
         }
     }
 

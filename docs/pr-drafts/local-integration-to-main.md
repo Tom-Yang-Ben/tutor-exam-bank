@@ -14,14 +14,16 @@
 
 ## 0. 開 PR 之前一定要成立的事（目前**還沒**成立）
 
-| 條件 | 現況（r8 `77d5f12`） | 等什麼 |
+> 〔2026-10-01 `dec/r9-record-tooling`，照實更新〕Owner 2026-09-27～28 在自己的電腦錄完 10.21 第 2、3 步，已入庫於 `dec/integration-r9`（`7dca34a`；錄製檔 `e9d4aa6`）。下表的「現況」是 `7dca34a` 照 `ci.yml` 的 env 實跑的結果（5433 的全新 UTF8 測試庫）；本分支（重錄工具補強，[`local-mode.md`](../local-mode.md) 10.23）的回放結果與它逐字相同。
+
+| 條件 | 現況（r9 `7dca34a`，2026-10-01 實跑） | 等什麼 |
 |---|---|---|
-| e2e 12 項全綠（X1；另有 2 項交叉驗證是固定的 SKIP，第 6 節） | 14 項：9 過、**3 紅**、2 SKIP：樣卷的 `extract_ocr` 回放檔（`extract_ocr/a5918283…`）不在 | [`local-mode.md`](../local-mode.md) 10.21 第 3 步 `record_local.bat pipeline,e2e` |
-| unit、integration 全綠（X1） | 全綠（第 4 節） | 重錄檔併入後重跑一次確認；本分支的測試在 extract_ocr 錄好後會從 skip 轉成硬斷言（第 6 節） |
-| 錄好後若 unit／e2e 因本機模型的拆題品質變紅，先有 Owner 決定再處理 | 待決（**TH-1**，第 7 節）；錄完沒紅就不必答 | 第 3 步錄完、重跑 unit 與 e2e 之後；**不要臨時改斷言** |
-| eval 的 replay miss 與缺向量都是 0 | pipeline 1 筆、variant 60 筆 replay miss | 10.21 第 2 步（variant，Owner 電腦進行中）、第 3 步 |
-| 未達門檻的 eval 列在本稿第 4.2 節 | variant `retrieved_coverage` 已知未達；pipeline 的兩項要錄完才知道 | 重錄後回填 |
-| `local/integration` 是最後那一版 | 在 `889d18f`，比 r8 少 82 個 commit | 第 5 節第 4 步 |
+| e2e 12 項全綠（X1；另有 2 項交叉驗證是固定的 SKIP，第 6 節） | ✅ 14 項：**12 過**、0 紅、2 SKIP（樣卷的 `extract_ocr.v2` 已錄，r8 的 3 紅已解） | — |
+| unit、integration 全綠（X1） | ✅ unit 4,169 則：4,168 過、0 失敗、1 略過（ocr 模式固定略過的交叉驗證那一則）；integration 646 則全過 | — |
+| 錄好後若 unit／e2e 因本機模型的拆題品質變紅，先有 Owner 決定再處理 | 錄完沒紅：**TH-1 不必答**（第 7 節；第 6 節那三處已轉成硬斷言並通過） | — |
+| eval 的 replay miss 與缺向量都是 0 | 缺向量 0；replay miss 只剩 **variant 2 筆**：var-008#1 的變式生成（`variant/66f37e00…`，錄製時超過 `OLLAMA_TIMEOUT_MS` 90 分逾時）、var-015#1 的驗算（`verify/d5d8d07d…`，推測寫到輸出上限 3072 被截斷）。兩筆都是「錄製時丟錯 → 寫回放檔之前就中止 → 沒有回放檔」（[`local-mode.md`](../local-mode.md) 10.23 第 1 點）。其他 suite 照 CI 的順序跑都是 0（`cassettes:rerecord --dry-run` 全部 suite 一起盤點時 e2e 會多 2 筆 classify miss，是盤點工具先跑 retrieval／nlq、測試庫殘留 fixture 題造成的，CI 不會；10.23 第 5 點第 5 步） | Owner 電腦 `scripts\windows\record_local.bat variant --only-missing`：只補那 2 筆、其他 58 支不重跑，合計約 2～2.5 小時，最壞約 3.5 小時；逾時或被截斷時照實錄成「錯誤回放檔」，回放記成那一題沒通過、不再是 miss（10.23 第 5 點〔要實測〕） |
+| 未達門檻的 eval 列在本稿第 4.2 節 | 已列：variant `retrieved_coverage` 0.5000 < 0.8367、pipeline `gate_pass_rate` 0.8000 < 0.97（都是實錄結果）；variant 的 `gate_pass_rate` 要等上一列補錄後才有數字 | 補錄後回填 variant 的 `gate_pass_rate` |
+| `local/integration` 是最後那一版 | 在 `889d18f`，比 r9 `7dca34a` 少 92 個 commit | 第 5 節第 4 步 |
 
 ---
 
@@ -127,6 +129,7 @@
 ## 4. CI 現況（依 X1）
 
 量測環境：`dec/integration-r8`（`77d5f12`；r7 `6757e25` 的數字留在說明欄），PostgreSQL 16＋pgvector（埠 5433、全新 UTF8 測試庫），env 照 `.github/workflows/ci.yml`（`LLM_MODE=replay`、`EMBED_MODE=fixture`、`MODEL_EXTRACT=ollama:qwen3-vl:8b`、`MODEL_VERIFY=ollama:qwen3:8b`、`LOCAL_EXTRACT_MODE=ocr`、`EMBED_MODEL=ollama:qwen3-embedding:0.6b`、`MODEL_NLQ=ollama:qwen3:8b`）。
+〔2026-10-01〕第 0 節與 4.2 已改成 `dec/integration-r9`（`7dca34a`）實跑的值；4.1 的表仍是 r8 的數字（r9：unit 4,169 則 4,168 過、1 略過，integration 646 則全過，e2e 14 項 12 過、2 SKIP；`check:html`、migrate 同樣通過；`desktop` 這一次沒有重跑），開 PR 前依最後一版重填。
 
 ### 4.1 必須綠的項目（X1：unit、integration、e2e；另列 `check:html`、migrate）
 
@@ -141,15 +144,17 @@
 
 ### 4.2 eval（X1：只限這裡可以帶紅燈合併，列出未達項）
 
+〔2026-10-01 `dec/r9-record-tooling`，照實更新〕量測環境改成 `dec/integration-r9`（`7dca34a`，已含 10.21 第 2、3 步的錄製檔 `e9d4aa6`），env 同上；本分支的回放結果與它逐字相同。
+
 | suite | 結果 | 量測值（門檻） | 原因與後續 |
 |---|---|---|---|
 | retrieval | ✅ | hybrid Recall@5 1.0000（0.97）、純向量 1.0000、LIKE 0.8750 | — |
 | classify | ✅ | accuracy 0.9891（0.87，91/92）、macro-F1 0.9744（0.8956） | 2026-09-27 本機重錄第 1 步＋LC-2 四條規則；仍錯 cls-fx-051 |
 | nlq | ✅ | rules：coverage 0.84、filters_exact 1、recall10 1；llm：filters_exact 1（放寬計分，LC-4）、recall10 1 | llm 欄的 rule_coverage 本來就是 n/a |
-| pipeline | ❌ | replay miss 1 筆（`extract_ocr`）；分數全部 n/a | 等 10.21 第 3 步。錄完後 `saved_rate` 在 ocr 模式印 n/a、不比門檻（D-2）；`gate_pass_rate`（0.97）、`answer_agree_rate`（0.87）照比，**錄完才知道會不會未達** |
-| variant | ❌ | replay miss 60 筆（`variant.v2`）；`retrieved_coverage` 0.5000（**0.8367，未達**）；`gate_pass_rate` n/a | 等 10.21 第 2 步（Owner 電腦進行中）。`retrieved_coverage` 0.5 是 V5-1 之後的已知狀況、與重錄無關，**重錄後仍會未達**（門檻不動，A7）；`gate_pass_rate`（0.22）錄完才知道 |
+| pipeline | ❌（門檻） | replay miss 0、缺向量 0；`gate_pass_rate`（classify 零成本閘門通過率）0.8000（**0.97，未達**）、`answer_agree_rate` 0.9000（0.87）；`saved_rate` n/a（ocr 模式不比門檻，D-2）；人工核准前的通過率 0.9000（9／10 題，只報告） | 10.21 第 3 步的**實錄結果**（`e9d4aa6`）。門檻不動、照實紅燈（A7），列為未達項；不是錄製失敗，不重錄 |
+| variant | ❌ | replay miss **2 筆**（var-008#1 的變式生成、var-015#1 的驗算）；`retrieved_coverage` 0.5000（**0.8367，未達**）；`gate_pass_rate` n/a（有 miss 就不報分數） | 那 2 筆是錄製時逾時（90 分）與（推測）被截斷，當時的工具沒有留下回放檔（[`local-mode.md`](../local-mode.md) 10.23 第 1 點）。補錄：Owner 電腦 `record_local.bat variant --only-missing`（10.23 第 5 點〔要實測〕），只補那 2 筆；逾時或被截斷時照實錄成錯誤回放檔，回放記成那一題沒通過。補錄後 `gate_pass_rate`（0.22）才有數字（雲端以假模型模擬兩筆都失敗時是 0.4500＝27/60；Owner 實錄為準）。`retrieved_coverage` 0.5 是 V5-1 之後的已知狀況、與重錄無關，**補錄後仍會未達**（門檻不動，A7） |
 
-**開 PR 時要列的未達項**（重錄後回填）：variant `retrieved_coverage` 0.5000 < 0.8367（確定）；pipeline 的 `gate_pass_rate`、`answer_agree_rate` 與 variant 的 `gate_pass_rate` 視重錄結果。
+**開 PR 時要列的未達項**：variant `retrieved_coverage` 0.5000 < 0.8367（確定）；pipeline `gate_pass_rate` 0.8000 < 0.97（實錄，確定；`answer_agree_rate` 0.9000 已達）；variant 的 `gate_pass_rate` 視補錄結果回填。
 
 ## 5. 合併前後 Owner 要做的事
 
