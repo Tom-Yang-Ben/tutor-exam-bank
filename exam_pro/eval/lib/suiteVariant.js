@@ -26,7 +26,9 @@
 //       這裡只是讓「eval 與 prod 走同一段 SQL」這件事在需要時可驗證。
 //
 // 〔dec/r9-record-tooling〕錯誤回放檔（錄製當時被截斷或單次逾時；docs/local-mode.md 10.23）：
-//   - 變式生成那一次：agents/generateVariant.js 照舊接住錯、回 {kind:'error', errorClass, message}（不帶 finishReason）。
+//   - 變式生成那一次：agents/generateVariant.js 照舊接住錯、回 {kind:'error', errorClass, message}
+//     （〔Owner 第七輪 R7-1〕被截斷的另帶 finishReason；這裡每一題本來就只生成一次、不重試，所以截斷與否結果相同，
+//     與 runner 的「本機截斷不重試、放棄那一題」一致——錄製與回放走同一條路）。
 //     這裡認得出那是錯誤回放檔（makeCtx 的 generateJson 看到錯誤帶 errorCassette），就把這一題記成**沒通過**
 //     （算進 generations、不算進 passed，perEntry 的 stopped_at 是 'generate'），寫一行 warning，**不進 failures**——
 //     run.js 因此照常比門檻，不會把它當成「呼叫失敗」讓整個 suite 紅在執行錯誤上，也不會當成 replay miss 讓分數變 n/a。

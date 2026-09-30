@@ -44,6 +44,11 @@
 // Gemini 模式照舊重試 maxErrorRetries（3）次。資料庫還沒套 0020 時退回原本的複核原因（schema_invalid），
 // 並印一次「先 npm run migrate」——不會撞 CHECK、也不會卡住佇列（outputTruncatedAccepted）。
 //
+// 〔Owner 第七輪 R7-1＝4 核准，dec/r10-variant-cap〕C-f 納入變式生成（runGenerateOne）：agents/generateVariant.js 的 error
+// 帶 finishReason，本機截斷（isLocalTruncation，同一個判準）時不重試、直接放棄那一題，job_events 的 generate 事件記
+// finish_reason、truncated、max_output_tokens（這一次實際送出的 num_predict，appliedNumPredictOf；replay 記 null）與說明；job 繼續下一題、不 failed（一題都沒建成時照舊
+// 是第 4.1 條那句）。其他 error（含 Gemini 的截斷、本機的逾時）照舊退避重試 maxErrorRetries 次（docs/local-mode.md 10.24）。
+//
 // 〔dec/r8-b1-abandon，設計稿 docs/desktop-app-design.md 2.3 節第 4 點、第 3 條第 2 項〕shutdown({ abandon: true })：
 // 桌面版從系統匣選「現在放棄」、或關閉的時限到了還有在途工作時用。先停止認領，再中止在途的節點（AbortController；
 // OCR 的 python 會被殺掉），被放棄的工作單位**不寫 outcome、不動 retries、不寫 job_events、迴圈不重試**（被中止的那一次呼叫不記用量），
@@ -409,6 +414,29 @@ function isLocalModelSpec(spec) {
  */
 function isLocalTruncation(outcome, modelSpec) {
     return Boolean(outcome && outcome.kind === 'error' && outcome.finishReason === 'MAX_TOKENS' && isLocalModelSpec(modelSpec));
+}
+
+/**
+ * 〔Owner 第七輪 R7-1；審查 dec/r10-variant-cap〕這一次本機呼叫**實際送出的**輸出上限（Ollama 的 num_predict）：
+ * 讀 services/llm 掛在錯誤物件上的 appliedNumPredict（services/llm/index.js 的 markAppliedNumPredict），不依事件當下的 env 重算。
+ * 沒送 num_predict（取消了預設）、replay（沒有送出任何請求，錯誤物件不帶這個鍵）、或不是 services/llm 丟的錯時回 null。
+ * 只給事件與 log 看，不影響流程。純函式。
+ * @param {unknown} err  llm.generateJson 丟出的錯
+ * @returns {number|null}
+ */
+function appliedNumPredictOf(err) {
+    if (!err || typeof err !== 'object') return null;
+    const n = err.appliedNumPredict;
+    return typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * 〔Owner 第七輪 R7-1＝4〕變式生成本機截斷時寫進 job_events.detail 的說明（給人看；放棄這一題、不重試）。
+ * @param {number|null} cap  這一次實際送出的輸出上限（appliedNumPredictOf；不知道時 null）
+ * @returns {string}
+ */
+function variantTruncationNote(cap) {
+    return `本機模型的回應寫到輸出上限${cap ? `（${cap} token）` : ''}被截斷：不重試，放棄這一題（Owner 第七輪 R7-1＝4；docs/local-mode.md 10.24）。`;
 }
 
 /**
@@ -892,7 +920,16 @@ function createRunner(opts = {}) {
             async generateJson(args = {}) {
                 // 〔Owner 第五輪 C-f〕失敗時也要知道叫的是哪一支模型（本機被截斷的不重試）；meter.model 只在成功後才寫，不動它
                 meter.lastModel = args.model || null;
-                const res = await llm.generateJson(args);
+                // 〔Owner 第七輪 R7-1；審查 dec/r10-variant-cap〕變式被截斷時事件要記「輸出上限多少」：
+                // 記下這一次呼叫實際送出的 num_predict（services/llm 掛在錯誤物件上；不依 env 重算），原本的錯照樣丟給 agent
+                meter.lastNumPredict = null;
+                let res;
+                try {
+                    res = await llm.generateJson(args);
+                } catch (err) {
+                    meter.lastNumPredict = appliedNumPredictOf(err);
+                    throw err;
+                }
                 const u = res?.usage || {};
                 meter.model = args.model || meter.model;
                 meter.tokenIn += u.tokenIn ?? 0;
@@ -919,7 +956,8 @@ function createRunner(opts = {}) {
         return {
             model: null, tokenIn: 0, tokenOut: 0, tokenThinking: 0, tokenCached: 0,
             calls: 0, usageMetadata: [], schemaFallback: false,
-            lastModel: null   // 〔Owner 第五輪 C-f〕
+            lastModel: null,   // 〔Owner 第五輪 C-f〕
+            lastNumPredict: null   // 〔Owner 第七輪 R7-1；審查 dec/r10-variant-cap〕
         };
     }
 
@@ -2165,6 +2203,12 @@ function createRunner(opts = {}) {
             }
             const { outcome, meter, cost, latencyMs } = res;
             await chargeJob(job.id, meter, cost);
+            // 〔Owner 第七輪 R7-1＝4，C-f 納入變式〕本機模型的回應被截斷（isLocalTruncation，與題目節點同一個判準）：
+            // 不重試（同一個 prompt、溫度 0，再跑一次多半一樣被截斷，每次又要等滿上限），直接放棄這一題、事件記下原因與上限，
+            // job 繼續下一題、不 failed（除非一題都沒建成，照舊是第 4.1 條那句）。Gemini 與其他 error 照舊退避重試。
+            const localTruncation = isLocalTruncation(outcome, meter.lastModel);
+            // 〔審查 dec/r10-variant-cap〕上限是這一次實際送出的 num_predict；replay 沒有送出請求，記 null
+            const truncationCap = localTruncation ? meter.lastNumPredict : null;
 
             const eventOf = (jqId) => ({
                 job_id: job.id, jq_id: null, node: 'generate', attempt,
@@ -2185,6 +2229,12 @@ function createRunner(opts = {}) {
                     ...(outcome.kind === 'fail'
                         ? { rejected: [{ idx, reason: outcome.reason, feedback: outcome.feedback }] } : {}),
                     ...(outcome.kind === 'error' ? { message: outcome.message } : {}),
+                    // 〔Owner 第七輪 R7-1＝4，C-f 納入變式〕本機模型（ollama）的 error 記下 finish_reason（有才記，同 runJobQuestion）；
+                    // 被截斷的另記 truncated、輸出上限（max_output_tokens）與說明（note），這一題放棄、不重試
+                    ...(outcome.kind === 'error' && outcome.finishReason && isLocalModelSpec(meter.lastModel)
+                        ? { finish_reason: outcome.finishReason } : {}),
+                    ...(localTruncation
+                        ? { truncated: true, max_output_tokens: truncationCap, gave_up: true, note: variantTruncationNote(truncationCap) } : {}),
                     ...(meter.usageMetadata.length > 0 ? { usage_metadata: meter.usageMetadata } : {}),
                     ...(schemaFallbackOf(meter, outcome) ? { schema_fallback: true } : {})
                 }
@@ -2216,6 +2266,13 @@ function createRunner(opts = {}) {
                 // 下一次重試把失敗理由餵回 prompt（第 4.2 條）
                 feedback = outcome.feedback || feedback;
                 if (failRetries < EXTRACT_MAX_RETRIES) { failRetries += 1; continue; }
+                return 0;
+            }
+            if (localTruncation) {
+                logger.warn({
+                    job_id: job.id, node: 'generate', idx, attempt, finish_reason: outcome.finishReason,
+                    max_output_tokens: truncationCap, msg: variantTruncationNote(truncationCap)
+                });
                 return 0;
             }
             if (errorRetries < DEFAULT_LIMITS.maxErrorRetries) {
@@ -2502,6 +2559,7 @@ module.exports = {
     effectiveSimilarityThresholds,   // 〔審查 dec/r6-defaults〕
     ocrOnlySchemaProblem, OCR_ONLY_SCHEMA_MESSAGE,   // 〔審查 2026-09-26〕
     outputTruncatedAccepted, OUTPUT_TRUNCATED_SCHEMA_MESSAGE, isLocalModelSpec, isLocalTruncation,   // 〔Owner 第五輪 C-f〕
+    appliedNumPredictOf, variantTruncationNote,   // 〔Owner 第七輪 R7-1；審查 dec/r10-variant-cap〕
     LOCAL_NODE_TIMEOUT_MS, LOCAL_PDF_CHUNK_PAGES, LOCAL_CONCURRENCY, RENEW_MIN_INTERVAL_MS,
     LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES,   // 〔第四輪 V3〕
     ADVANCEABLE_STATES, FREE_NODES, AGENT_MODULE_FOR_NODE, ERROR_CLASSES, SOURCE_CHECK_MODES,
