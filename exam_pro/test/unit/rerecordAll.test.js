@@ -39,9 +39,10 @@ after(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
 
 describe('parseArgs', () => {
     test('預設：全部 suite、正式錄製、含 e2e 的 dedup1 向量、錄完驗證', () => {
+        // 〔dec/r9-record-tooling〕多一個 onlyMissing（預設 false＝完整重錄，與之前相同）；仍是逐欄比對
         assert.deepEqual(rerecord.parseArgs([]), {
             dryRun: false, json: false, suites: ['retrieval', 'classify', 'pipeline', 'nlq', 'variant', 'e2e'],
-            withSimilar: true, verify: true, help: false
+            onlyMissing: false, withSimilar: true, verify: true, help: false
         });
     });
 

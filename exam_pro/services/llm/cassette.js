@@ -13,6 +13,11 @@
 //
 // 檔案：<EVAL_CASSETTE_DIR>/<agent>/<key>.json，預設 EVAL_CASSETTE_DIR=eval/cassettes。
 // request 只存**摘要**（字數 + sha256），不存 PDF base64、不存試題全文——NOTICE 第 4 條。
+//
+// 〔dec/r9-record-tooling〕錯誤回放檔（docs/local-mode.md 10.23）：錄製時 live 呼叫「被截斷」或「單次逾時」，
+// 照樣寫一支回放檔，response 只有 { error:{kind,name,message,errorClass,finishReason[,elapsedMs]}, usage?, latencyMs? }，
+// 回放（services/llm/fake.js）丟出與 live 相同形狀的錯。鍵、檔名、meta、request 與一般回放檔完全相同（同一條公式）；
+// 判斷準則見 errorCassetteKind。連不上、401 這類環境錯誤不錄。
 
 const fs = require('fs');
 const path = require('path');
@@ -134,7 +139,111 @@ function writeCassette({ agent, key, meta, request, response }) {
     return { file, overwritten };
 }
 
+// ───────────────────────── 錯誤回放檔（〔dec/r9-record-tooling〕docs/local-mode.md 10.23）─────────────────────────
+
+/** 會錄成錯誤回放檔的兩種錯誤 */
+const ERROR_CASSETTE_KINDS = Object.freeze(['truncated', 'timeout']);
+/** 錯誤訊息最多存幾個字（回放時丟出的訊息就是這一段；實際的訊息都遠短於此） */
+const ERROR_MESSAGE_MAX = 2000;
+
+/**
+ * 錄製時 live 呼叫丟出的錯誤，要不要錄成錯誤回放檔。純函式。
+ *
+ * 錄（模型本身的結果：同樣的輸入、同樣的設定再跑一次，多半還是一樣）：
+ *   'truncated'：錯誤帶 finishReason === 'MAX_TOKENS'——回應寫到輸出上限被截斷（Ollama 的 done_reason=length、
+ *                Gemini 的 MAX_TOKENS），adapter 因此解析不出 JSON（寫到一半、或思考把額度用光只剩空字串）。
+ *                兩個 adapter 只在「模型已經回應、JSON 解析失敗」時把 finishReason 掛在錯誤上（services/llm/ollama.js、gemini.js）。
+ *   'timeout'  ：errorClass === 'timeout'、呼叫端的 signal 沒有被中止、vendor 是 ollama——
+ *                也就是 adapter 自己的單次逾時（OLLAMA_TIMEOUT_MS 或呼叫端帶的 timeoutMs）到了，模型一直在生成、沒寫完。
+ * 不錄（環境錯誤，換個時間或修好環境再跑就會不同）：
+ *   - errorClass 'provider_error'（Ollama 沒開、連線被切斷、HTTP 4xx／5xx、401／403、找不到模型、串流中斷）、
+ *     'rate_limited'、'unsupported_input'、沒有 errorClass 的錯；
+ *   - 呼叫端 signal 中止的 timeout（節點逾時 JOB_NODE_TIMEOUT_MS、「現在放棄」、關機）——那是流程的決定，不是這一次呼叫的結果；
+ *   - Gemini 的 timeout（SDK 的連線逾時或中止，屬網路狀況）；
+ *   - schema_invalid 但 finishReason 不是 MAX_TOKENS（模型寫壞了 JSON 卻沒被截斷；不在這一版的範圍，照舊是 miss）。
+ * @param {Error|any} err
+ * @param {{signal?:AbortSignal|null, vendor?:string}} [opts] signal：呼叫端傳給 generateJson／generateText 的那一個
+ * @returns {'truncated'|'timeout'|null}
+ */
+function errorCassetteKind(err, { signal, vendor } = {}) {
+    if (!err || typeof err !== 'object') return null;
+    if (String(err.finishReason ?? '') === 'MAX_TOKENS') return 'truncated';
+    if (err.errorClass === 'timeout' && !(signal && signal.aborted) && vendor === 'ollama') return 'timeout';
+    return null;
+}
+
+/**
+ * 錯誤回放檔的 response。只存 agent／狀態機／eval 會讀的欄位，不存任何新的試題內容：
+ *   error.name／message（前 ERROR_MESSAGE_MAX 字）／errorClass／finishReason——agent 依 message 與 errorClass 分類、
+ *   runner 依 finishReason 決定 C-f 的 output_truncated；
+ *   truncated：usage（adapter 掛在錯誤上的用量，含 Ollama 的 timing）與 latencyMs——這一次呼叫真的跑完了，速度資料有效；
+ *   timeout  ：沒有 usage；花掉的時間記在 error.elapsedMs 而**不是** latencyMs（npm run perf:local 讀 latencyMs 算速度，
+ *              逾時的時間只代表上限，不是速度）。
+ * @param {Error|any} err
+ * @param {'truncated'|'timeout'} kind
+ * @param {{elapsedMs?:number}} [opts]
+ * @returns {object}
+ */
+function errorResponse(err, kind, { elapsedMs } = {}) {
+    if (!ERROR_CASSETTE_KINDS.includes(kind)) throw new Error(`cassette：錯誤回放檔的 kind 只能是 ${ERROR_CASSETTE_KINDS.join('／')}，收到「${kind}」`);
+    const error = {
+        kind,
+        name: String((err && err.name) || 'Error'),
+        message: String((err && err.message) ?? '').slice(0, ERROR_MESSAGE_MAX),
+        errorClass: err && err.errorClass !== undefined ? err.errorClass : null,
+        finishReason: err && err.finishReason !== undefined && err.finishReason !== null ? String(err.finishReason) : null
+    };
+    const ms = Number.isFinite(elapsedMs) ? Math.max(0, Math.round(elapsedMs)) : null;
+    if (kind === 'timeout') {
+        if (ms !== null) error.elapsedMs = ms;
+        return { error };
+    }
+    return { error, usage: (err && err.usage) || null, latencyMs: ms };
+}
+
+/**
+ * 這支回放檔是不是錯誤回放檔（response.error 是物件）。
+ * @param {object|null} doc readCassette() 的回傳
+ * @returns {boolean}
+ */
+function isErrorCassette(doc) {
+    const e = doc && doc.response && doc.response.error;
+    return Boolean(e && typeof e === 'object' && !Array.isArray(e));
+}
+
+/**
+ * 這個行程裡讀到（回放）或寫下（錄製）的錯誤回放檔，給 eval 報表列出來（eval/lib/report2.js）。
+ * 同一支（agent/key）只記一次。
+ */
+const errorCassetteLog = new Map();
+
+/**
+ * @param {{agent:string, key:string, kind:string, errorClass?:string|null, finishReason?:string|null, source:'replay'|'record'}} entry
+ */
+function noteErrorCassette(entry) {
+    const id = `${entry.agent}/${entry.key}`;
+    if (!errorCassetteLog.has(id)) {
+        errorCassetteLog.set(id, {
+            agent: String(entry.agent), key: String(entry.key), kind: entry.kind ?? null,
+            errorClass: entry.errorClass ?? null, finishReason: entry.finishReason ?? null, source: entry.source
+        });
+    }
+}
+
+/** @returns {Array<{agent:string, key:string, kind:string, errorClass:string|null, finishReason:string|null, source:string}>} 依 agent、key 排序 */
+function errorCassettesSeen() {
+    return [...errorCassetteLog.values()].sort((a, b) => (a.agent < b.agent ? -1 : a.agent > b.agent ? 1 : (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)));
+}
+
+/** 測試用：清掉這個行程的紀錄 */
+function _resetErrorCassettesForTest() {
+    errorCassetteLog.clear();
+}
+
 module.exports = {
     cassetteKey, cassettePath, cassetteDir, readCassette, writeCassette,
-    summarizeParts, fixtureHash, sha256Hex
+    summarizeParts, fixtureHash, sha256Hex,
+    // 〔dec/r9-record-tooling〕錯誤回放檔
+    ERROR_CASSETTE_KINDS, ERROR_MESSAGE_MAX, errorCassetteKind, errorResponse, isErrorCassette,
+    noteErrorCassette, errorCassettesSeen, _resetErrorCassettesForTest
 };

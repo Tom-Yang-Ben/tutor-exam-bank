@@ -20,6 +20,7 @@
 // （CI_OPTIONAL_KEYS）；沒寫的照舊設成空字串、交給程式預設。錄製時再放行本機推論的執行期變數
 // （OLLAMA_HOST 等連線與逾時、OCR_PYTHON、OCR_TIMEOUT_MS）——它們不進鍵，但沒有它們錄不起來。
 // OCR_ENGINE／OCR_DPI 會改變流程或 OCR cassette 的鍵，所以與 MODEL_* 一樣照 CI、不放行 .env 的值。
+// 〔dec/r9-record-tooling〕錄製時另放行「只補錄缺的」兩個開關（RECORD_MODE_KEYS；docs/local-mode.md 10.23），回放時擋成空字串。
 //
 // 子行程跑的是**既有入口**，不另寫 suite：
 //   eval：  node --env-file=eval/.env.replay eval/run.js --suite <s>     （= npm run eval -- --suite <s>）
@@ -60,6 +61,13 @@ const PASS_THROUGH = Object.freeze([
     'TEST_DATABASE_URL', 'EVAL_CASSETTE_DIR', 'EMBED_FIXTURE_DIR'
 ]);
 /**
+ * 〔dec/r9-record-tooling〕只補錄缺的兩個開關（services/llm/index.js；docs/local-mode.md 10.23）：不進鍵，只決定「回放檔已在的
+ * 那一次要不要重打」。錄製時放行（RECORD_PASS_THROUGH），回放時擋成空字串（replay 本來就不讀，擋掉只是讓子行程乾淨）。
+ * npm run cassettes:rerecord 另外依 --only-missing 明寫這兩個值（rerecord_all.js 的 stepExtraEnv），
+ * .env 裡寫了也不會把完整重錄悄悄變成只補缺的。
+ */
+const RECORD_MODE_KEYS = Object.freeze(['LLM_RECORD_ONLY_MISSING', 'EMBED_RECORD_ONLY_MISSING']);
+/**
  * 只在錄製時放行（〔本機模式 L4〕加上本機推論的連線、逾時與 OCR 的 Python；都不進 cassette 的鍵）。
  * 〔看圖拆題逾時〕加上 OLLAMA_PROGRESS_MS（串流進度的間隔）與 VISION_MAX_EDGE_PX（送給視覺模型前縮圖；
  * 圖片不在任何鍵裡——Owner 平常開了縮圖，錄製時也照同一個設定錄，cassette 才代表實際用的輸入）。
@@ -68,7 +76,8 @@ const RECORD_PASS_THROUGH = Object.freeze([
     'GEMINI_API_KEY', 'GEMINI_RPM', 'EMBED_RPM', 'EMBED_BATCH',
     'OLLAMA_HOST', 'OLLAMA_CONCURRENCY', 'OLLAMA_RPM', 'OLLAMA_TIMEOUT_MS', 'OLLAMA_NUM_CTX', 'OLLAMA_KEEP_ALIVE',
     'OLLAMA_PROGRESS_MS', 'VISION_MAX_EDGE_PX',
-    'OCR_PYTHON', 'OCR_TIMEOUT_MS'
+    'OCR_PYTHON', 'OCR_TIMEOUT_MS',
+    ...RECORD_MODE_KEYS   // 〔dec/r9-record-tooling〕
 ]);
 /**
  * 〔本機模式 L4〕一律照 CI（空字串或 ci.yml 的值）的本機模式變數：回放時用不到、錄製時只放行上面那幾個。
@@ -174,7 +183,7 @@ function ciEnv(opts = {}) {
     for (const k of ['JIEBA_DICT_BIG', 'EMBED_MODEL', 'EMBED_DIM', 'EVAL_FORK_PR', 'GEMINI_API_KEY', 'DATABASE_URL',
         'CLASSIFY_MIN_CONF', 'KNN_VOTE_SIM', 'VARIANT_SIM_MIN', 'VARIANT_RETRIEVE_SIM_MIN', 'VARIANT_OFFTOPIC_SIM_MIN',
         'DEDUP_DUP_THRESHOLD', 'DEDUP_VARIANT_THRESHOLD', 'JOB_PDF_CHUNK_PAGES', 'GEMINI_INLINE_MAX_BYTES',
-        ...LOCAL_SHIELD, ...Object.keys(CI_EFFECTIVE_DEFAULTS)]) {
+        ...LOCAL_SHIELD, ...RECORD_MODE_KEYS, ...Object.keys(CI_EFFECTIVE_DEFAULTS)]) {
         shield.add(k);
     }
     for (const k of shield) {
@@ -273,7 +282,7 @@ async function probeSuites({ suites, probeDir, echo = false, extraEnv = {}, onSt
 }
 
 module.exports = {
-    EVAL_SUITES, ALL_SUITES, PASS_THROUGH, RECORD_PASS_THROUGH, FALLBACK_CI_MODELS, CI_OPTIONAL_KEYS, LOCAL_SHIELD,
+    EVAL_SUITES, ALL_SUITES, PASS_THROUGH, RECORD_PASS_THROUGH, RECORD_MODE_KEYS, FALLBACK_CI_MODELS, CI_OPTIONAL_KEYS, LOCAL_SHIELD,
     CI_EFFECTIVE_DEFAULTS, APP_DIR, PROBE_PATH, LOCAL_TUNING_PATTERN,
     readCiModels, dotenvKeys, ciEnv, suiteArgs, runNode, probeSuites
 };

@@ -13,8 +13,15 @@
 //      fork PR 要把 miss 降成 warning 是 **CI（WS-D）** 的判斷，不在這一層。
 //   2. meta.fixtureHash 與現況不符時印 warning，**仍然回放**（規劃 §5.3.3）：
 //      few-shot 的鍵只納入 id 清單，題幹改寫不會改鍵，這個欄位是唯一的提醒管道。
+//   3. 〔dec/r9-record-tooling〕錯誤回放檔（response.error；docs/local-mode.md 10.23）：錄製當時的呼叫被截斷或單次逾時，
+//      回放就丟出**與 live 相同形狀**的錯（同一個 message、name、errorClass、finishReason；被截斷的另帶 usage），
+//      agent、狀態機與 eval 因此走到與錄製當時相同的結果（例：驗算被截斷 → runner 的 C-f output_truncated）。
+//      這不是 miss：訊息沒有凍結前綴，eval/lib/replayMiss.js 不會把它當成 miss。錯誤物件另外帶
+//      errorCassette:{agent,key,kind}、cassetteKey、replayed:true，給探針與 eval 報表辨認（agent 不讀這幾個欄位）。
 
-const { cassetteKey, readCassette, cassettePath, fixtureHash } = require('./cassette');
+const {
+    cassetteKey, readCassette, cassettePath, fixtureHash, isErrorCassette, noteErrorCassette
+} = require('./cassette');
 
 /** 同一支 cassette 的 fixtureHash 警告只印一次 */
 const warnedStale = new Set();
@@ -54,6 +61,41 @@ function replayMissMessage({ agent, key, vendor, model, path }) {
     return `${REPLAY_MISS_PREFIX}（agent=${agent} key=${key}）。${how}` + (path ? `\n（預期路徑：${path}）` : '');
 }
 
+/** 錯誤回放檔的 name → 建構子（name 不在表上的用 Error，再把 name 設回去，例：'AbortError'） */
+const ERROR_CTORS = Object.freeze({ Error, SyntaxError, TypeError, RangeError });
+
+/**
+ * 〔dec/r9-record-tooling〕錯誤回放檔 → 與錄製當時 live 丟出的錯同形狀的 Error。純函式。
+ * @param {{agent:string, key:string, response:{error:object, usage?:object}}} o
+ * @returns {Error}
+ */
+function errorFromCassette({ agent, key, response }) {
+    const e = response.error || {};
+    const name = typeof e.name === 'string' && e.name ? e.name : 'Error';
+    const Ctor = Object.prototype.hasOwnProperty.call(ERROR_CTORS, name) ? ERROR_CTORS[name] : Error;
+    const err = new Ctor(String(e.message ?? ''));
+    if (err.name !== name) err.name = name;
+    if (e.errorClass !== undefined && e.errorClass !== null) err.errorClass = e.errorClass;
+    if (e.finishReason !== undefined && e.finishReason !== null) err.finishReason = String(e.finishReason);
+    // 被截斷的呼叫有用量（adapter 掛在 err.usage，有自己預算閘門的呼叫端會記帳）；回放與一般回放一樣只給四個 token 欄位
+    const u = response.usage;
+    if (u && typeof u === 'object') {
+        err.usage = { tokenIn: u.tokenIn ?? 0, tokenOut: u.tokenOut ?? 0, tokenThinking: u.tokenThinking ?? 0, tokenCached: u.tokenCached ?? 0 };
+    }
+    err.errorCassette = { agent, key, kind: e.kind ?? null };
+    err.cassetteKey = key;
+    err.replayed = true;
+    return err;
+}
+
+/** 讀到錯誤回放檔就記下來（eval 報表列出）並丟出錄製當時的錯；一般回放檔什麼都不做 */
+function throwIfErrorCassette(cassette, { agent, key }) {
+    if (!isErrorCassette(cassette)) return;
+    const e = cassette.response.error;
+    noteErrorCassette({ agent, key, kind: e.kind ?? null, errorClass: e.errorClass ?? null, finishReason: e.finishReason ?? null, source: 'replay' });
+    throw errorFromCassette({ agent, key, response: cassette.response });
+}
+
 /**
  * 回放一次 generateJson。
  * @param {{model:string, parts?:Array<object>, schema?:object, agent:string,
@@ -69,6 +111,8 @@ function generateJson({ model, schema, agent, cacheKeyParts, template, vendor })
     if (!cassette) {
         throw new Error(replayMissMessage({ agent, key, vendor, model, path: cassettePath(agent, key) }));
     }
+    // 〔dec/r9-record-tooling〕錄製當時被截斷或單次逾時：照樣丟那個錯（檔頭第 3 點）
+    throwIfErrorCassette(cassette, { agent, key });
 
     const response = cassette.response || {};
     if (response.data === undefined) {
@@ -118,6 +162,8 @@ function generateText({ model, agent, cacheKeyParts, template, vendor }) {
     if (!cassette) {
         throw new Error(replayMissMessage({ agent, key, vendor, model, path: cassettePath(agent, key) }));
     }
+    // 〔dec/r9-record-tooling〕錄製當時單次逾時（generateText 被截斷不會丟錯，照一般回放檔回 finishReason）
+    throwIfErrorCassette(cassette, { agent, key });
 
     const response = cassette.response || {};
     if (typeof response.text !== 'string') {
@@ -154,4 +200,7 @@ function _resetForTest() {
     warnedStale.clear();
 }
 
-module.exports = { generateJson, generateText, replayMissMessage, isLocalReplay, REPLAY_MISS_PREFIX, RERECORD_CMD, _resetForTest };
+module.exports = {
+    generateJson, generateText, replayMissMessage, isLocalReplay, REPLAY_MISS_PREFIX, RERECORD_CMD, _resetForTest,
+    errorFromCassette   // 〔dec/r9-record-tooling〕
+};

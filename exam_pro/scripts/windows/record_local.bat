@@ -11,6 +11,10 @@ REM    2. npm run migrate:test   測試庫套 migration（測試庫是 tmpfs，�
 REM    3. npm run cassettes:rerecord，自動輸入 yes
 REM       錄前會先檢查 Ollama 與三個模型、PaddleOCR 自我檢查、測試庫的 migration，任一項沒過就停、一次都不錄。
 REM  只錄部分 suite：在命令列執行  record_local.bat classify,nlq  （會變成 --suites classify,nlq）。
+REM  只補錄缺的：suite 後面加 --only-missing，例  record_local.bat variant --only-missing
+REM    （回放檔已在的呼叫照回放、不呼叫模型、不覆寫，只錄缺的；向量也只補缺的。docs\local-mode.md 10.23）
+REM    全部 suite 都只補缺的：record_local.bat --only-missing（--only-missing 要寫在 suite 清單後面或單獨寫）。
+REM    沒加 --only-missing＝完整重錄：每一次呼叫都重新呼叫模型並覆寫。
 REM  完整輸出寫在 exam_pro\data\local_ai\record_時間.log。
 REM
 REM  本機模型不花錢、不連外，但 CPU 上很慢：整套可能要一整天。請接上電源，並把睡眠設成「永不」。
@@ -60,6 +64,8 @@ if errorlevel 1 goto :migrate_failed
 REM ── 3. 重錄（自動輸入 yes）──
 set "SUITES="
 if not "%~1"=="" set "SUITES=-- --suites %*"
+REM 〔dec/r9-record-tooling〕第一個參數就是 --only-missing（沒寫 suite）：全部 suite 只補缺的
+if /i "%~1"=="--only-missing" set "SUITES=-- %*"
 call :log [3/3] 重錄 cassette 與向量（npm run cassettes:rerecord %SUITES%；自動輸入 yes）
 echo yes| %TEE% npm run cassettes:rerecord %SUITES%
 set "RC=%ERRORLEVEL%"
@@ -70,6 +76,8 @@ call :log [!] 錄製或回放驗證沒有全過（結束碼 %RC%）。
 echo     先看 log 最後的「回放驗證」表：
 echo       - 錄前檢查沒過（Ollama、模型、OCR、測試庫）：照畫面上的處置做完，再雙擊本檔；
 echo       - 表上 replay miss 或缺向量不是 0：某些呼叫沒錄到，重跑本檔即可（只會多花時間，不花錢）；
+echo         只想補那幾筆就在 suite 後面加 --only-missing（例：record_local.bat variant --only-missing），已錄好的不會重跑；
+echo       - 表上「錯誤回放檔」不是 0：那幾次錄製時被截斷或單次逾時，已照實錄下、回放時記成失敗，不是沒錄到；
 echo       - 只有「門檻」欄紅燈、replay miss 與缺向量都是 0：錄製已經成功，不要重跑；門檻不會自動放寬，
 echo         把 log 交給維護的人，由 Owner 另行裁決（docs\local-mode.md 第 6 條第 3 點、10.21 第 0 步第 6 點）。
 echo.

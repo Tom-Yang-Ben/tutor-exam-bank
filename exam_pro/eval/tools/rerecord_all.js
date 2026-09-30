@@ -42,6 +42,15 @@
 //   CI_OPTIONAL_KEYS），pipeline／e2e 只錄 ocr 與 extract_ocr、不呼叫看圖模型；錄前檢查不要求 qwen3-vl（recordingPlan）；
 //   時間粗估的拆題鏈少一步（estimateLocalTime 的 mode）；與 OCR_ENGINE: none 同時寫是矛盾設定，錄前檢查停下。
 // Windows 上可以直接雙擊 exam_pro\scripts\windows\record_local.bat（db:up → migrate:test → 本指令，自動輸入 yes、寫 log）。
+//
+// 〔dec/r9-record-tooling〕--only-missing（docs/local-mode.md 10.23）：只補錄缺的。
+//   沒加（完整重錄，與之前相同）：錄製子行程是 LLM_MODE=record——每一次呼叫都重新呼叫模型並覆寫回放檔，
+//     整個 variant 在 Owner 的電腦要跑約 9 小時；
+//   加了：子行程多帶 LLM_RECORD_ONLY_MISSING=1、EMBED_RECORD_ONLY_MISSING=1（services/llm/index.js）——回放檔已在的呼叫
+//     （含錯誤回放檔）照回放、不呼叫模型、不覆寫，只有缺的才呼叫並寫入；向量也只補向量檔裡缺的。
+//   兩種方式都會把「被截斷」「單次逾時」錄成錯誤回放檔（services/llm/cassette.js 的 errorCassetteKind）。
+//   盤點（--dry-run）照舊只回放、不連網，表也照舊；多印一段說明兩者的差別與只補缺的粗估時間。
+//   OCR（services/ocr）不在只補缺的範圍：錄 pipeline 時照舊重跑 PaddleOCR（結果確定、鍵不變，只有 recorded_at 會變）。
 // ─────────────────────────────────────────────────────────────
 
 const fs = require('fs');
@@ -60,19 +69,22 @@ const USAGE = `用法：npm run cassettes:rerecord -- [選項]
   --dry-run          只回放、不連網：列出每個 suite 缺多少 cassette、預估呼叫次數與費用（本機模型：預估時間）
   --json             與 --dry-run 一起用：輸出機器可讀的 JSON（給測試與自動化）
   --suites <a,b>     只看／只錄這幾個 suite（預設全部：${ALL_SUITES.join(',')}）
+  --only-missing     只補錄缺的：回放檔已在（含錯誤回放檔）的呼叫照回放、不呼叫模型、不覆寫，只錄缺的；向量也只補缺的
+                     （沒加＝完整重錄：每一次呼叫都重新呼叫模型並覆寫。docs/local-mode.md 10.23）
   --no-similar       略過第 6 步（e2e 的 dedup1 向量；CI 用不到）
   --skip-verify      錄完不跑第 7 步的回放驗證
   -h, --help         顯示這段說明
 
 正式執行前會印出盤點結果並做錄前檢查（本機模型：Ollama 與 OCR；Gemini：金鑰），
-要求輸入 yes 才開始呼叫模型。`;
+要求輸入 yes 才開始呼叫模型。
+兩種錄法都會把「被截斷」「單次逾時」的呼叫錄成錯誤回放檔（回放時照樣丟那個錯、記成失敗）；連不上、401 之類不錄。`;
 
 /**
  * @param {string[]} argv
- * @returns {{dryRun:boolean, json:boolean, suites:string[], withSimilar:boolean, verify:boolean, help:boolean}}
+ * @returns {{dryRun:boolean, json:boolean, suites:string[], onlyMissing:boolean, withSimilar:boolean, verify:boolean, help:boolean}}
  */
 function parseArgs(argv) {
-    const args = { dryRun: false, json: false, suites: ALL_SUITES.slice(), withSimilar: true, verify: true, help: false };
+    const args = { dryRun: false, json: false, suites: ALL_SUITES.slice(), onlyMissing: false, withSimilar: true, verify: true, help: false };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         switch (a) {
@@ -87,6 +99,7 @@ function parseArgs(argv) {
                 args.suites = ALL_SUITES.filter(s => list.includes(s));   // 依 CI 的順序
                 break;
             }
+            case '--only-missing': args.onlyMissing = true; break;   // 〔dec/r9-record-tooling〕
             case '--no-similar': args.withSimilar = false; break;
             case '--skip-verify': args.verify = false; break;
             case '-h': case '--help': args.help = true; break;
@@ -126,14 +139,55 @@ function recordSteps({ suites = ALL_SUITES, withSimilar = true } = {}) {
  * @param {{name:string, extra?:Record<string,string>}} step recordSteps() 的一步
  * @param {ReturnType<typeof local.recordingPlan>} plan
  * @param {NodeJS.ProcessEnv|Record<string,string>} [env] 讀 RERECORD_*、OLLAMA_TIMEOUT_MS、OLLAMA_PROGRESS_MS（預設 process.env，已載入 .env）
+ * @param {{onlyMissing?:boolean}} [opts] 〔dec/r9-record-tooling〕有給 onlyMissing（main 一律給）時，子行程的
+ *        LLM_RECORD_ONLY_MISSING／EMBED_RECORD_ONLY_MISSING 由它決定（'1' 或 ''），不看 .env——沒加 --only-missing 就一定是完整重錄
  * @returns {Record<string,string>}
  */
-function stepExtraEnv(step, plan, env = process.env) {
+function stepExtraEnv(step, plan, env = process.env, opts = {}) {
+    const mode = typeof opts.onlyMissing === 'boolean'
+        ? { LLM_RECORD_ONLY_MISSING: opts.onlyMissing ? '1' : '', EMBED_RECORD_ONLY_MISSING: opts.onlyMissing ? '1' : '' }
+        : {};
     return {
         ...local.localRecordEnv(plan),
         ...(local.LONG_CALL_STEPS.includes(step.name) ? local.longCallRecordEnv(plan, env) : {}),
+        ...mode,
         ...(step.extra || {})
     };
+}
+
+/**
+ * 〔dec/r9-record-tooling〕盤點表之後印的「錄製方式」說明：完整重錄與只補缺的差在哪裡、只補缺的粗估。純函式。
+ * @param {object} summary analyze() 的 summary
+ * @param {{onlyMissing:boolean, plan:ReturnType<typeof local.recordingPlan>, env?:object}} opts
+ * @returns {string[]}
+ */
+function recordModeLines(summary, { onlyMissing, plan, env = process.env }) {
+    const suites = Object.entries(summary.suites || {}).filter(([n]) => n !== 'e2e').map(([, s]) => s);
+    const sum = (f) => suites.reduce((a, s) => a + (s[f] || 0), 0);
+    const hits = sum('hits');
+    const errorHits = sum('errorHits');
+    const misses = sum('misses');
+    const ec = summary.errorCassettes || { total: 0, hit: 0 };
+    const lines = [];
+    if (!onlyMissing) {
+        lines.push(`錄製方式：完整重錄（沒加 --only-missing）——上表的每一次呼叫（命中 ${hits}、錯誤回放檔 ${errorHits}、缺 ${misses}）都重新呼叫模型並覆寫回放檔。` +
+            '只想補缺的那幾筆請加 --only-missing（Windows：record_local.bat <suite> --only-missing；docs/local-mode.md 10.23）。');
+    } else {
+        lines.push(`錄製方式：只補錄缺的（--only-missing）——命中 ${hits} 次與錯誤回放檔 ${errorHits} 次照回放、不呼叫模型、不覆寫；` +
+            `只呼叫「缺 cassette」那 ${misses} 次，加上它們擋住、這一輪看不到的下游（例：變式生成缺了，錄到之後還有分類、lint、驗算）。向量也只補向量檔裡缺的。` +
+            '上表的「錄製時 LLM 呼叫」與時間／費用是完整重錄的數字。');
+        if (plan && plan.local) {
+            const t = local.estimateLocalTime(summary, { env, mode: plan.extractMode, onlyMissing: true });
+            lines.push(`  只補缺的粗估：約 ${local.formatDuration(t.lowerSec)}～${local.formatDuration(t.upperSec)}` +
+                '（每次秒數同上；呼叫逾時的那一次會跑滿單次逾時 OLLAMA_TIMEOUT_MS，不在這個粗估裡）。');
+        }
+    }
+    if (ec.total) {
+        lines.push(`錯誤回放檔：範圍內 ${ec.total} 支、這一輪被讀到 ${ec.hit} 支。${onlyMissing
+            ? '只補缺的不會重錄它們；要重錄某一支，先刪掉那一支再跑，或改用完整重錄。'
+            : '完整重錄會重新呼叫並覆寫它們。'}`);
+    }
+    return lines;
 }
 
 /**
@@ -198,9 +252,11 @@ function e2eCounts(tail) {
  * @returns {{lines:string[], ok:boolean, missTotal:number, thresholdFailures:string[]}}
  */
 function verifyReport(res) {
-    const lines = ['| suite | 結束碼 | replay miss | 缺向量 | 門檻 |', '|---|---:|---:|---:|---|'];
+    // 〔dec/r9-record-tooling〕最後一欄：錯誤回放檔（錄製當時被截斷或單次逾時；不是 miss，照樣記成失敗）
+    const lines = ['| suite | 結束碼 | replay miss | 缺向量 | 門檻 | 錯誤回放檔 |', '|---|---:|---:|---:|---|---:|'];
     let ok = true;
     let missTotal = 0;
+    let errorCassetteTotal = 0;
     const thresholdFailures = [];
     for (const [name, s] of Object.entries(res.summary.suites)) {
         const run = res.runs[name] || {};
@@ -227,9 +283,10 @@ function verifyReport(res) {
             }
         }
         if (run.exitCode !== 0) ok = false;
-        lines.push(`| ${name} | ${run.exitCode ?? '—'} | ${s.misses} | ${s.embed.misses} | ${verdict} |`);
+        errorCassetteTotal += s.errorHits || 0;
+        lines.push(`| ${name} | ${run.exitCode ?? '—'} | ${s.misses} | ${s.embed.misses} | ${verdict} | ${s.errorHits || 0} |`);
     }
-    return { lines, ok: ok && missTotal === 0, missTotal, thresholdFailures };
+    return { lines, ok: ok && missTotal === 0, missTotal, errorCassetteTotal, thresholdFailures };
 }
 
 /** 印一段標題 */
@@ -366,18 +423,26 @@ async function main(argv = process.argv.slice(2), io = {}) {
     }
     const before = await deps.analyze({ suites: args.suites, models, onStart: args.json ? undefined : (s) => console.log(`  · ${s} …`) });
     const time = plan.local ? local.estimateLocalTime(before.summary, { mode: plan.extractMode }) : null;
+    // 〔dec/r9-record-tooling〕只補缺的粗估（完整重錄的 time 照舊）
+    const timeMissing = plan.local && args.onlyMissing
+        ? local.estimateLocalTime(before.summary, { mode: plan.extractMode, onlyMissing: true }) : null;
 
     if (args.dryRun) {
         if (args.json) {
             const localInfo = plan.local ? {
                 ollamaModels: plan.ollama, needGeminiKey: plan.needGeminiKey, needOcr: plan.needOcr,
                 extractMode: plan.extractMode,   // 〔OCR 為主〕
-                estimateSec: { lower: Math.round(time.lowerSec), upper: Math.round(time.upperSec) }
+                estimateSec: { lower: Math.round(time.lowerSec), upper: Math.round(time.upperSec) },
+                ...(timeMissing ? { estimateSecOnlyMissing: { lower: Math.round(timeMissing.lowerSec), upper: Math.round(timeMissing.upperSec) } } : {})
             } : null;
-            console.log(JSON.stringify({ models, notes, local: localInfo, steps: recordSteps(args).map(s => s.name), summary: before.summary }, null, 2));
+            console.log(JSON.stringify({
+                models, notes, onlyMissing: args.onlyMissing, local: localInfo, steps: recordSteps(args).map(s => s.name), summary: before.summary
+            }, null, 2));
         } else {
             console.log('');
             console.log(formatSummary(before));
+            console.log('');
+            for (const line of recordModeLines(before.summary, { onlyMissing: args.onlyMissing, plan })) console.log(line);
             console.log(`\n正式錄製會依序執行：${recordSteps(args).map(s => s.label).join(' → ')}，再以回放驗證。`);
             if (plan.local) {
                 console.log(`錄前會檢查：Ollama 與模型（${plan.ollama.join('、')}）${plan.needOcr ? '、PaddleOCR（ocr_pdf.py --selftest）' : ''}、測試庫的 migration。`);
@@ -389,13 +454,17 @@ async function main(argv = process.argv.slice(2), io = {}) {
 
     console.log('');
     console.log(formatSummary(before));
+    console.log('');
+    for (const line of recordModeLines(before.summary, { onlyMissing: args.onlyMissing, plan })) console.log(line);
 
     if (!(await preflight(plan, deps))) return 1;
 
     const steps = recordSteps(args);
-    const what = !plan.local ? '會呼叫 Gemini、會產生費用'
-        : `本機模型，不連外、不花錢；粗估 ${local.formatDuration(time.lowerSec)}～${local.formatDuration(time.upperSec)}，期間不要讓電腦睡眠` +
-          (plan.needGeminiKey ? `。⚠️ ${plan.gemini.map(u => u.key).join('、')} 仍走 Gemini，那一部分會產生費用` : '');
+    const est = timeMissing || time;
+    const what = (!plan.local ? '會呼叫 Gemini、會產生費用'
+        : `本機模型，不連外、不花錢；粗估 ${local.formatDuration(est.lowerSec)}～${local.formatDuration(est.upperSec)}，期間不要讓電腦睡眠` +
+          (plan.needGeminiKey ? `。⚠️ ${plan.gemini.map(u => u.key).join('、')} 仍走 Gemini，那一部分會產生費用` : '')) +
+        (args.onlyMissing ? '；只補錄缺的（--only-missing）' : '');
     console.log(`\n接下來會依序執行（${what}）：\n${steps.map((s, i) => `  ${i + 1}. ${s.label}`).join('\n')}`);
     const longNote = longCallNote(steps, plan);
     if (longNote) console.log(`  （${longNote}）`);
@@ -408,7 +477,7 @@ async function main(argv = process.argv.slice(2), io = {}) {
     const results = [];
     for (const [i, step] of steps.entries()) {
         banner(`${i + 1}/${steps.length} ${step.label}`);
-        const env = ciEnv({ llmMode: step.llmMode, embedMode: step.embedMode, models, extra: stepExtraEnv(step, plan) });
+        const env = ciEnv({ llmMode: step.llmMode, embedMode: step.embedMode, models, extra: stepExtraEnv(step, plan, process.env, { onlyMissing: args.onlyMissing }) });
         const r = await deps.runNode({ args: step.args, env, echo: true });
         results.push({ step: step.name, exitCode: r.exitCode, ms: r.ms });
         console.log(`  → 結束碼 ${r.exitCode}，${Math.round(r.ms / 1000)} 秒` +
@@ -424,6 +493,11 @@ async function main(argv = process.argv.slice(2), io = {}) {
     const after = await deps.analyze({ suites: args.suites, models, onStart: (s) => console.log(`  · ${s} …`) });
     const v = verifyReport(after);
     console.log(v.lines.join('\n'));
+    if (v.errorCassetteTotal) {
+        // 〔dec/r9-record-tooling〕錯誤回放檔不是 miss：回放照樣丟錄製當時的錯，eval 記成那一題沒通過
+        console.log(`\n「錯誤回放檔」欄：${v.errorCassetteTotal} 次回放讀到的是錄製當時被截斷或單次逾時的呼叫——那不是 replay miss，` +
+            'eval 把那一題記成失敗（不計入通過）；要不要改設定重錄見 docs/local-mode.md 10.23。');
+    }
     if (v.thresholdFailures.length) {
         console.log(`\n門檻未達（不會自動放寬；請另開裁決，docs/chapter-restructure.md 第 5 條第 4 點` +
             `${plan.local ? '；換成本機模型後低於門檻由 Owner 另行裁決，docs/local-mode.md 第 6 條第 3 點' : ''}）：\n  - ${v.thresholdFailures.join('\n  - ')}`);
@@ -451,4 +525,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { main, parseArgs, recordSteps, stepExtraEnv, longCallNote, isYes, e2eCounts, verifyReport, preflight, USAGE };
+module.exports = { main, parseArgs, recordSteps, stepExtraEnv, recordModeLines, longCallNote, isYes, e2eCounts, verifyReport, preflight, USAGE };

@@ -13,6 +13,8 @@
 //   services/ocr/index.js     ocrPdf（〔本機模式 L4〕本機 OCR 的 cassette；檔案不存在就不包）
 // 被包住的函式**行為一個字都沒變**（回傳值、丟的錯、訊息都原樣），只是多寫一行紀錄。
 // 不另造回放機制：miss 仍是 fake.js 的凍結訊息，判斷仍走 eval/lib/replayMiss.js。
+// 〔dec/r9-record-tooling〕錯誤回放檔（fake.js 丟出帶 errorCassette 的錯）記成 { hit:true, errorCassette:<kind> }：
+// 檔案有被讀到，但回放的是錄製當時的截斷／逾時——盤點把它與正常命中分開算（cassetteAudit.summarize 的 errorHits）。
 //
 // 只有設了 EVAL_PROBE_DIR 才會包；一般 require（工具讀紀錄）不會動任何東西。
 // 每個行程寫自己的 <EVAL_PROBE_DIR>/<pid>.jsonl：node --test 會為每個測試檔另開子行程
@@ -82,7 +84,11 @@ function wrapFake(fake) {
             try {
                 res = original.call(this, opts);
             } catch (err) {
-                if (isReplayMiss(err)) {
+                if (err && err.errorCassette && err.errorCassette.key) {
+                    // 〔dec/r9-record-tooling〕錯誤回放檔：這支檔**有被讀到**（不是 miss、也不是 miss 以外的錯誤），
+                    // 只是回放出來的是錄製當時的截斷／逾時。記成命中並標 errorCassette，盤點另外列、清除工具不會當成孤兒
+                    record({ ...base, key: err.errorCassette.key, hit: true, errorCassette: err.errorCassette.kind || 'unknown' });
+                } else if (isReplayMiss(err)) {
                     const { key } = parseReplayMiss(err);
                     // cacheKeyParts 只為了讓工具找出「同一呼叫的舊版 cassette」估費用；只寫暫存目錄
                     record({ ...base, key, hit: false, cacheKeyParts: opts.cacheKeyParts ?? {} });

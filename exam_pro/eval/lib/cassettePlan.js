@@ -133,8 +133,9 @@ function formatSummary(res, opts = {}) {
     lines.push(`CI 的設定：MODEL_EXTRACT=${models.MODEL_EXTRACT}、MODEL_VERIFY=${models.MODEL_VERIFY}${optional}（取自 ${models.source}）；LLM_MODE=replay、EMBED_MODE=fixture`);
     lines.push(`cassette 目錄：${audit.displayPath(inventory.dir)}`);
     lines.push('');
-    lines.push(`| suite | 有跑 | 命中 | 缺 cassette | 缺向量 | 錄製時 LLM 呼叫（估） | ${isLocal ? '預估時間（本機，粗估）' : '估計費用'} | 備註 |`);
-    lines.push('|---|---|---:|---:|---:|---:|---:|---|');
+    // 〔dec/r9-record-tooling〕「命中」只算正常的回放檔；錯誤回放檔（錄製當時被截斷或單次逾時，回放照樣丟那個錯）另一欄
+    lines.push(`| suite | 有跑 | 命中 | 錯誤回放檔 | 缺 cassette | 缺向量 | 錄製時 LLM 呼叫（估） | ${isLocal ? '預估時間（本機，粗估）' : '估計費用'} | 備註 |`);
+    lines.push('|---|---|---:|---:|---:|---:|---:|---:|---|');
     for (const [name, s] of Object.entries(summary.suites)) {
         const notes = [];
         if (s.blocked && s.misses) notes.push('miss 之後的下游節點這一輪看不到，實際呼叫會更多');
@@ -149,19 +150,25 @@ function formatSummary(res, opts = {}) {
         const costOrTime = isLocal
             ? ((isE2e && !time.bySuite[name]) ? '—' : `${s.blocked ? '≥ ' : ''}${local.formatDuration(time.bySuite[name] || 0)}`)
             : (isE2e ? '—' : usd(s.estCostUsd));
-        lines.push(`| ${name} | ${s.ran ? '是' : '否'} | ${s.hits} | ${s.misses} | ${s.embed.misses} | ${calls} | ${costOrTime} | ${notes.join('；')} |`);
+        lines.push(`| ${name} | ${s.ran ? '是' : '否'} | ${s.hits} | ${s.errorHits || 0} | ${s.misses} | ${s.embed.misses} | ${calls} | ${costOrTime} | ${notes.join('；')} |`);
     }
     const byAgent = {};
     for (const s of Object.values(summary.suites)) {
         for (const [agent, c] of Object.entries(s.byAgent)) {
-            byAgent[agent] = byAgent[agent] || { hits: 0, misses: 0 };
-            byAgent[agent].hits += c.hits; byAgent[agent].misses += c.misses;
+            byAgent[agent] = byAgent[agent] || { hits: 0, misses: 0, errorHits: 0 };
+            byAgent[agent].hits += c.hits || 0; byAgent[agent].misses += c.misses || 0; byAgent[agent].errorHits += c.errorHits || 0;
         }
     }
     if (Object.keys(byAgent).length) {
         lines.push('');
         lines.push('依 agent（跨 suite 加總，同一支 cassette 被兩個 suite 讀到會算兩次）：' +
-            Object.entries(byAgent).map(([a, c]) => `${a} 命中 ${c.hits}／缺 ${c.misses}`).join('、'));
+            Object.entries(byAgent).map(([a, c]) => `${a} 命中 ${c.hits}／缺 ${c.misses}${c.errorHits ? `／錯誤回放檔 ${c.errorHits}` : ''}`).join('、'));
+    }
+    // 〔dec/r9-record-tooling〕錯誤回放檔逐支列出（不能看起來像正常命中）
+    const ec = summary.errorCassettes;
+    if (ec && ec.total) {
+        lines.push(`錯誤回放檔（錄製當時被截斷或單次逾時；回放照樣丟那個錯、記成失敗，不是正常命中）：範圍內 ${ec.total} 支，這一輪被讀到 ${ec.hit} 支` +
+            `——${ec.items.map(i => `${i.agent}/${i.key.slice(0, 12)}…（${i.kind === 'timeout' ? '單次逾時' : i.kind === 'truncated' ? '被截斷' : i.kind}${i.hit ? '' : '，這一輪沒讀到'}）`).join('、')}`);
     }
     if (summary.e2eOnly.length) {
         lines.push(`⚠️ e2e 有 ${summary.e2eOnly.length} 支 cassette 不在 pipeline 的呼叫裡：重錄時 pipeline 那一步錄不到，需要另外處理。`);
