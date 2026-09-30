@@ -21,6 +21,10 @@ REM  本機模型不花錢、不連外，但 CPU 上很慢：整套可能要一�
 REM  還沒裝本機 AI 的話，先雙擊同一個資料夾的 setup_local_ai.bat。
 REM ================================================================
 
+REM 〔審查 dec/r9-record-tooling〕--only-missing 寫在 suite 前面（例 record_local.bat --only-missing variant）時，
+REM   rerecord_all.js 會把 suite 當成未知的參數。在動資料庫之前先擋下來、印出正確寫法（什麼都不錄）。
+if /i "%~1"=="--only-missing" if not "%~2"=="" goto :bad_order
+
 cd /d "%~dp0..\.."
 set "APP=%CD%"
 set "LOGDIR=%APP%\data\local_ai"
@@ -108,6 +112,15 @@ REM ================================================================
 echo(%*
 >>"%LOG%" echo(%*
 exit /b 0
+
+:bad_order
+echo [X] --only-missing 要寫在 suite 清單後面（或單獨寫＝全部 suite 只補缺的）。
+echo     正確寫法：record_local.bat variant --only-missing
+echo               record_local.bat classify,nlq --only-missing
+echo               record_local.bat --only-missing
+echo     這一次沒有動到資料庫，也沒有錄任何東西；改好參數再執行一次即可（docs\local-mode.md 10.23 第 2 點）。
+pause
+exit /b 1
 
 :no_node
 call :log [X] 找不到 Node.js（node／npm 指令）。

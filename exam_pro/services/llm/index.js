@@ -167,6 +167,14 @@ function recordErrorCassette({ err, opts, id, vendor, overrides, schema, text, s
     } catch (_) {
         return;   // agent 沒給：record 本來就要 agent，原本的錯照樣往上丟
     }
+    // 〔審查 dec/r9-record-tooling〕完整重錄時，原本正常的回放檔這一次被截斷或逾時就會被錯誤回放檔蓋掉：先記下原本是什麼，寫完印醒目警告
+    let before = null;
+    try {
+        before = cassette.readCassette(opts.agent, key);
+    } catch (_) {
+        before = null;   // 原本的檔壞了（不是合法 JSON）：照舊覆寫，不另外警告
+    }
+    const replacedNormal = Boolean(before) && !cassette.isErrorCassette(before);
     let written;
     try {
         written = cassette.writeCassette({
@@ -202,7 +210,20 @@ function recordErrorCassette({ err, opts, id, vendor, overrides, schema, text, s
         err.errorCassette = { agent: opts.agent, key, kind };
         err.cassetteKey = key;
     } catch (_) { /* 凍結的錯誤物件：不標也不影響回放檔 */ }
-    console.log(`[llm:record] ${overwritten ? '覆寫' : '寫入'}錯誤回放檔（${kind === 'timeout' ? '單次逾時' : '被截斷'}）→ ${file}`);
+    const what = kind === 'timeout' ? '單次逾時' : '被截斷';
+    console.log(`[llm:record] ${overwritten ? '覆寫' : '寫入'}錯誤回放檔（${what}）→ ${file}`);
+    if (replacedNormal) console.warn(replacedNormalWarning({ agent: opts.agent, key, what, file }));
+}
+
+/**
+ * 〔審查 dec/r9-record-tooling〕錯誤回放檔蓋掉「正常回放檔」時的警告（一行，醒目）。
+ * 以前這種情況（錄製失敗）會保留舊檔；現在照實錄下這一次的結果，所以要讓 Owner 看得到、決定要不要還原。
+ * @param {{agent:string, key:string, what:string, file:string}} o
+ * @returns {string}
+ */
+function replacedNormalWarning({ agent, key, what, file }) {
+    return `⚠️ [llm:record] 注意：原本是正常回放檔，這次${what}，已覆寫成錯誤回放檔（agent=${agent} key=${key.slice(0, 12)}…）→ ${file}。` +
+        '若錄製期間電腦睡眠、Ollama 卡住或被關掉，這不是模型的結果：用 git checkout -- <上面的檔> 還原舊檔（docs/local-mode.md 10.23 第 5 點第 4 步）';
 }
 
 /** L2 正規化。cosine 距離與內積因此等價，pgvector 的 <=> 也才穩定 */
@@ -477,5 +498,6 @@ async function generateText(opts = {}) {
 
 module.exports = {
     embed, generateJson, generateText, l2Normalize, embedMode, llmMode, capabilitiesOf,
-    llmRecordOnlyMissing, embedRecordOnlyMissing   // 〔dec/r9-record-tooling〕
+    llmRecordOnlyMissing, embedRecordOnlyMissing,   // 〔dec/r9-record-tooling〕
+    replacedNormalWarning                            // 〔審查 dec/r9-record-tooling〕
 };

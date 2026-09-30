@@ -153,8 +153,12 @@ const ERROR_MESSAGE_MAX = 2000;
  *   'truncated'：錯誤帶 finishReason === 'MAX_TOKENS'——回應寫到輸出上限被截斷（Ollama 的 done_reason=length、
  *                Gemini 的 MAX_TOKENS），adapter 因此解析不出 JSON（寫到一半、或思考把額度用光只剩空字串）。
  *                兩個 adapter 只在「模型已經回應、JSON 解析失敗」時把 finishReason 掛在錯誤上（services/llm/ollama.js、gemini.js）。
- *   'timeout'  ：errorClass === 'timeout'、呼叫端的 signal 沒有被中止、vendor 是 ollama——
+ *   'timeout'  ：errorClass === 'timeout'、timedOut === true、呼叫端的 signal 沒有被中止、vendor 是 ollama——
  *                也就是 adapter 自己的單次逾時（OLLAMA_TIMEOUT_MS 或呼叫端帶的 timeoutMs）到了，模型一直在生成、沒寫完。
+ *                〔審查 dec/r9-record-tooling〕timedOut 由 services/llm/ollama.js 的 transportError 只在「自己的計時器已中止」
+ *                那一支掛上；同樣是 'timeout' 但計時器沒到的（AbortError／TimeoutError、兩個 signal 都沒中止）不錄。
+ *                注意：計時器到了也可能是環境造成的（錄製期間電腦睡眠、Ollama 卡住沒斷線），程式分不出來，
+ *                所以錄完要照 docs/local-mode.md 10.23 第 5 點第 4 步人工確認。
  * 不錄（環境錯誤，換個時間或修好環境再跑就會不同）：
  *   - errorClass 'provider_error'（Ollama 沒開、連線被切斷、HTTP 4xx／5xx、401／403、找不到模型、串流中斷）、
  *     'rate_limited'、'unsupported_input'、沒有 errorClass 的錯；
@@ -168,7 +172,7 @@ const ERROR_MESSAGE_MAX = 2000;
 function errorCassetteKind(err, { signal, vendor } = {}) {
     if (!err || typeof err !== 'object') return null;
     if (String(err.finishReason ?? '') === 'MAX_TOKENS') return 'truncated';
-    if (err.errorClass === 'timeout' && !(signal && signal.aborted) && vendor === 'ollama') return 'timeout';
+    if (err.errorClass === 'timeout' && err.timedOut === true && !(signal && signal.aborted) && vendor === 'ollama') return 'timeout';
     return null;
 }
 

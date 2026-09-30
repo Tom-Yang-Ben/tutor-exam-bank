@@ -14,7 +14,7 @@
 //   2. meta.fixtureHash 與現況不符時印 warning，**仍然回放**（規劃 §5.3.3）：
 //      few-shot 的鍵只納入 id 清單，題幹改寫不會改鍵，這個欄位是唯一的提醒管道。
 //   3. 〔dec/r9-record-tooling〕錯誤回放檔（response.error；docs/local-mode.md 10.23）：錄製當時的呼叫被截斷或單次逾時，
-//      回放就丟出**與 live 相同形狀**的錯（同一個 message、name、errorClass、finishReason；被截斷的另帶 usage），
+//      回放就丟出**與 live 相同形狀**的錯（同一個 message、name、errorClass、finishReason；被截斷的另帶 usage、逾時的另帶 timedOut:true），
 //      agent、狀態機與 eval 因此走到與錄製當時相同的結果（例：驗算被截斷 → runner 的 C-f output_truncated）。
 //      這不是 miss：訊息沒有凍結前綴，eval/lib/replayMiss.js 不會把它當成 miss。錯誤物件另外帶
 //      errorCassette:{agent,key,kind}、cassetteKey、replayed:true，給探針與 eval 報表辨認（agent 不讀這幾個欄位）。
@@ -77,6 +77,8 @@ function errorFromCassette({ agent, key, response }) {
     if (err.name !== name) err.name = name;
     if (e.errorClass !== undefined && e.errorClass !== null) err.errorClass = e.errorClass;
     if (e.finishReason !== undefined && e.finishReason !== null) err.finishReason = String(e.finishReason);
+    // 〔審查 dec/r9-record-tooling〕單次逾時只會從 adapter 自己的計時器來（services/llm/ollama.js 的 transportError 掛 timedOut）
+    if (e.kind === 'timeout') err.timedOut = true;
     // 被截斷的呼叫有用量（adapter 掛在 err.usage，有自己預算閘門的呼叫端會記帳）；回放與一般回放一樣只給四個 token 欄位
     const u = response.usage;
     if (u && typeof u === 'object') {

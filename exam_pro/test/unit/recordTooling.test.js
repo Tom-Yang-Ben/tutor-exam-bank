@@ -154,13 +154,17 @@ describe('errorCassetteKind：哪些錯誤錄成錯誤回放檔', () => {
         assert.equal(errorCassetteKind({ errorClass: 'schema_invalid', finishReason: 'MAX_TOKENS' }, { vendor: 'ollama' }), 'truncated');
         assert.equal(errorCassetteKind({ errorClass: 'schema_invalid', finishReason: 'MAX_TOKENS' }, { vendor: 'gemini' }), 'truncated');
     });
-    test('單次逾時：只有 ollama、而且呼叫端的 signal 沒有被中止', () => {
-        assert.equal(errorCassetteKind({ errorClass: 'timeout' }, { vendor: 'ollama' }), 'timeout');
+    test('單次逾時：只有 ollama、adapter 自己的計時器到了（timedOut）、而且呼叫端的 signal 沒有被中止', () => {
+        const to = { errorClass: 'timeout', timedOut: true };
+        assert.equal(errorCassetteKind(to, { vendor: 'ollama' }), 'timeout');
         const ac = new AbortController();
-        assert.equal(errorCassetteKind({ errorClass: 'timeout' }, { vendor: 'ollama', signal: ac.signal }), 'timeout');
+        assert.equal(errorCassetteKind(to, { vendor: 'ollama', signal: ac.signal }), 'timeout');
         ac.abort();
-        assert.equal(errorCassetteKind({ errorClass: 'timeout' }, { vendor: 'ollama', signal: ac.signal }), null, '節點逾時／現在放棄不錄');
-        assert.equal(errorCassetteKind({ errorClass: 'timeout' }, { vendor: 'gemini' }), null, 'Gemini 的逾時是網路狀況，不錄');
+        assert.equal(errorCassetteKind(to, { vendor: 'ollama', signal: ac.signal }), null, '節點逾時／現在放棄不錄');
+        assert.equal(errorCassetteKind(to, { vendor: 'gemini' }), null, 'Gemini 的逾時是網路狀況，不錄');
+        // 〔審查 dec/r9-record-tooling〕errorClass 是 timeout、但不是計時器造成的（transportError 的第三支）：不錄
+        assert.equal(errorCassetteKind({ errorClass: 'timeout' }, { vendor: 'ollama' }), null, '沒有 timedOut 不錄');
+        assert.equal(errorCassetteKind({ errorClass: 'timeout', timedOut: 'yes' }, { vendor: 'ollama' }), null, 'timedOut 只認 true');
     });
     test('環境錯誤與其他模型輸出錯誤不錄', () => {
         for (const err of [
@@ -343,6 +347,79 @@ describe('錯誤回放檔：錄製時寫下、回放丟出同形狀的錯', () =
         assert.equal(fs.existsSync(cassette.cassettePath('rectool', keyOf(o))), false);
         assert.ok(logs.filter(l => l.includes('不錄回放檔')).length >= 4, logs.join('\n'));
         assert.deepEqual(cassette.errorCassettesSeen(), []);
+    });
+
+    test('〔審查〕AbortError 但兩個 signal 都沒中止（transportError 的第三支）：errorClass 仍是 timeout、不帶 timedOut、不錄', async (t) => {
+        const logs = quiet(t);
+        process.env.LLM_MODE = 'record';
+        process.env.OLLAMA_TIMEOUT_MS = '60000';
+        installOllama(async () => { throw Object.assign(new Error('The operation was aborted'), { name: 'AbortError' }); });
+        const o = jsonOpts({ cacheKeyParts: { template: 'rectool.v1', env: 'stray-abort' } });
+        let live;
+        await assert.rejects(llm.generateJson(o), (err) => { live = err; return true; });
+        assert.equal(live.errorClass, 'timeout');
+        assert.match(live.message, /^Ollama 呼叫已被中止：/);
+        assert.equal(live.timedOut, undefined);
+        assert.equal(live.errorCassette, undefined);
+        assert.equal(fs.existsSync(cassette.cassettePath('rectool', keyOf(o))), false);
+        assert.ok(logs.some(l => l.includes('不錄回放檔')), logs.join('\n'));
+    });
+
+    test('〔審查〕計時器到了的那一支帶 timedOut:true（message、errorClass 不變）；回放的錯同樣帶 timedOut', async (t) => {
+        quiet(t);
+        process.env.LLM_MODE = 'record';
+        process.env.OLLAMA_TIMEOUT_MS = '30';
+        installOllama((url, payload, opts) => hang(opts));
+        const o = jsonOpts({ cacheKeyParts: { template: 'rectool.v1', env: 'timer' } });
+        let live;
+        await assert.rejects(llm.generateJson(o), (err) => { live = err; return true; });
+        assert.equal(live.timedOut, true);
+        assert.equal(live.errorClass, 'timeout');
+        assert.match(live.message, /^Ollama 呼叫超過 OLLAMA_TIMEOUT_MS（30 ms）仍未完成：/);
+        assert.equal(readSaved('rectool', keyOf(o)).response.error.timedOut, undefined, '回放檔不另存旗標（kind:timeout 就是它）');
+        process.env.LLM_MODE = 'replay';
+        forbidOllama();
+        await assert.rejects(llm.generateJson(o), (err) => err.timedOut === true && err.message === live.message && err.errorClass === 'timeout');
+    });
+
+    test('〔審查〕完整重錄時錯誤回放檔蓋掉「正常回放檔」：印醒目警告；原本沒有檔或原本就是錯誤回放檔時不印', async (t) => {
+        const logs = quiet(t);
+        const warns = [];
+        t.mock.method(console, 'warn', (m) => warns.push(String(m)));
+        process.env.LLM_MODE = 'record';
+        process.env.OLLAMA_TIMEOUT_MS = '30';
+        const o = jsonOpts({ cacheKeyParts: { template: 'rectool.v1', n: 'replace-normal' } });
+        const file = cassette.cassettePath('rectool', keyOf(o));
+        installOllama((url, payload) => chatReply(payload, { answer: '正常' }));
+        await llm.generateJson(o);
+        assert.equal(readSaved('rectool', keyOf(o)).response.data.answer, '正常');
+        assert.deepEqual(warns, []);
+
+        installOllama((url, payload, opts) => hang(opts));
+        await assert.rejects(llm.generateJson(o), (err) => err.errorClass === 'timeout');
+        assert.equal(readSaved('rectool', keyOf(o)).response.error.kind, 'timeout', '照實錄下這一次的結果');
+        assert.equal(warns.length, 1, warns.join('\n'));
+        assert.equal(warns[0], llm.replacedNormalWarning({ agent: 'rectool', key: keyOf(o), what: '單次逾時', file }));
+        assert.ok(warns[0].startsWith('⚠️ [llm:record] 注意：原本是正常回放檔，這次單次逾時，已覆寫成錯誤回放檔'));
+        assert.ok(warns[0].includes('git checkout -- ') && warns[0].includes('10.23 第 5 點第 4 步'));
+        assert.ok(logs.some(l => l.startsWith('[llm:record] 覆寫錯誤回放檔（單次逾時）')), logs.join('\n'));
+
+        // 再錄一次：原本就是錯誤回放檔 → 不再警告
+        installOllama((url, payload) => chatReply(payload, '{"answer":"寫到一半', 'length'));
+        await assert.rejects(llm.generateJson(o), (err) => err.finishReason === 'MAX_TOKENS');
+        assert.equal(warns.length, 1, '錯誤回放檔蓋錯誤回放檔不警告');
+        // 原本沒有檔：不警告
+        const o2 = jsonOpts({ cacheKeyParts: { template: 'rectool.v1', n: 'replace-none' } });
+        await assert.rejects(llm.generateJson(o2), (err) => err.finishReason === 'MAX_TOKENS');
+        assert.equal(warns.length, 1);
+        // 正常回放檔被「被截斷」蓋掉：說法是被截斷
+        const o3 = jsonOpts({ cacheKeyParts: { template: 'rectool.v1', n: 'replace-trunc' } });
+        installOllama((url, payload) => chatReply(payload, { answer: '正常' }));
+        await llm.generateJson(o3);
+        installOllama((url, payload) => chatReply(payload, '{"answer":"寫到一半', 'length'));
+        await assert.rejects(llm.generateJson(o3), (err) => err.finishReason === 'MAX_TOKENS');
+        assert.equal(warns.length, 2);
+        assert.ok(warns[1].includes('這次被截斷，已覆寫成錯誤回放檔'));
     });
 
     test('完整重錄（沒開只補缺的）：已有的一般回放檔照舊重新呼叫並覆寫', async (t) => {
@@ -903,6 +980,23 @@ describe('scripts/windows/record_local.bat 把 --only-missing 傳下去', () => 
         assert.ok(at > lines.indexOf('if not "%~1"=="" set "SUITES=-- --suites %*"'), '要在原本那一行之後蓋過去');
         assert.ok(at < lines.indexOf('echo yes| %TEE% npm run cassettes:rerecord %SUITES%'));
         assert.equal(rerecord().parseArgs(['--only-missing']).onlyMissing, true);
+    });
+
+    test('〔審查〕--only-missing 寫在 suite 前面：在動資料庫之前擋下、印出正確寫法（不會組成 -- --only-missing variant）', () => {
+        const guard = 'if /i "%~1"=="--only-missing" if not "%~2"=="" goto :bad_order';
+        const at = lines.indexOf(guard);
+        assert.ok(at > 0, '要有這一行');
+        assert.ok(at < lines.indexOf('cd /d "%~dp0..\\.."'), '在最前面（還沒寫 log、還沒 db:up）');
+        assert.ok(at < lines.indexOf('%TEE% npm run db:up'));
+        const label = lines.indexOf(':bad_order');
+        assert.ok(label > lines.indexOf('echo yes| %TEE% npm run cassettes:rerecord %SUITES%'), '標籤在子程序區');
+        const body = lines.slice(label, lines.indexOf('exit /b 1', label) + 1);
+        assert.ok(body.some(l => l.startsWith('echo') && l.includes('record_local.bat variant --only-missing')), body.join('\n'));
+        assert.ok(body.some(l => l.startsWith('echo') && l.includes('record_local.bat classify,nlq --only-missing')));
+        assert.ok(!body.some(l => l.includes('%LOG%')), '這時還沒有 log 檔');
+        assert.equal(body[body.length - 1], 'exit /b 1');
+        // 沒有這一道時 rerecord_all.js 收到的就是這樣：會被當成未知的參數（這一道擋的就是它）
+        assert.throws(() => rerecord().parseArgs(['--only-missing', 'variant']), /未知的參數「variant」/);
     });
 
     test('說明與失敗提示寫到 --only-missing 與錯誤回放檔', () => {

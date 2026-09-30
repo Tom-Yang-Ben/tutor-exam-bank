@@ -180,11 +180,16 @@ function tagged(message, errorClass, extra = {}) {
     return Object.assign(new Error(message), { errorClass }, extra);
 }
 
-/** 連線層的失敗 → timeout（被中止或逾時）或 provider_error（連不上） */
+/**
+ * 連線層的失敗 → timeout（被中止或逾時）或 provider_error（連不上）
+ * 〔審查 dec/r9-record-tooling〕只有「這支 adapter 自己的計時器到了」的那一支另帶 timedOut:true（message、errorClass 不變），
+ * 錄製時的錯誤回放檔只認這個旗標（services/llm/cassette.js 的 errorCassetteKind）；
+ * 呼叫端中止與「AbortError／TimeoutError 但兩個 signal 都沒中止」的那兩支不帶。
+ */
 function transportError(err, { signal, timer, limitMs, limitName = ' OLLAMA_TIMEOUT_MS', target, label }) {
     if (signal && signal.aborted) return tagged(`Ollama 呼叫已被中止（節點逾時）：${label}`, 'timeout', { cause: err });
     if (timer.aborted) {
-        return tagged(`Ollama 呼叫超過${limitName}（${limitMs} ms）仍未完成：${label}`, 'timeout', { cause: err });
+        return tagged(`Ollama 呼叫超過${limitName}（${limitMs} ms）仍未完成：${label}`, 'timeout', { cause: err, timedOut: true });
     }
     if (err && (err.name === 'AbortError' || err.name === 'TimeoutError')) return tagged(`Ollama 呼叫已被中止：${label}`, 'timeout', { cause: err });
     const code = err?.code || err?.cause?.code;
