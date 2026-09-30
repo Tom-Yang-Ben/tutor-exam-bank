@@ -191,7 +191,8 @@ async function generateJson(opts = {}) {
 
     if (mode === 'replay') {
         const fake = require('./fake');
-        return repairLatex(fake.generateJson({ ...opts, model: id }));
+        // vendor 只用來決定 miss 訊息指向哪一種重錄（〔dec/r8-b1-abandon〕）；cassette 的鍵照舊只看裸模型 ID
+        return repairLatex(fake.generateJson({ ...opts, model: id, vendor }));
     }
 
     const { callOpts, overrides } = adapterOpts(vendor, id, opts);
@@ -251,7 +252,7 @@ async function generateText(opts = {}) {
 
     if (mode === 'replay') {
         const fake = require('./fake');
-        return fake.generateText({ ...opts, model: id });
+        return fake.generateText({ ...opts, model: id, vendor });
     }
 
     const { callOpts, overrides } = adapterOpts(vendor, id, opts);

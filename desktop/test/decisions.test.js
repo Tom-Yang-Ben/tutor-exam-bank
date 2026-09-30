@@ -92,7 +92,7 @@ describe('系統匣的「結束」', () => {
         assert.match(d.message, /背景還有 2 件工作在處理/);
     });
 
-    test('寫明重跑範圍：照現行 jobRunner（沿用 A 的同一句），不記成失敗、不用掉重試次數、要等租約', () => {
+    test('寫明重跑範圍：照現行 jobRunner（沿用 A 的同一句），不記成失敗、不用掉重試次數；〔dec/r8-b1-abandon〕下次開啟馬上接手，被強制結束時才要等租約', () => {
         const d = D.quitDialog({ inFlight: 1, leaseMs: 180000 });
         const plan = require(path.join(APP_DIR, 'scripts', 'desktop', 'lib', 'plan'));
         assert.ok(d.detail.includes(plan.UNFINISHED_WORK_NOTE), '要和桌面啟動器 A 的說法一字不差（A 或 DA-13 更新時跟著變）');
@@ -101,8 +101,12 @@ describe('系統匣的「結束」', () => {
         assert.match(d.detail, /單題的檢查從中斷那一步接著做/);
         assert.match(plan.UNFINISHED_WORK_NOTE, /拆題/);
         assert.match(plan.UNFINISHED_WORK_NOTE, /變式生成/);
-        assert.match(d.detail, /不會記成失敗，也不會用掉重試次數/);
-        assert.match(d.detail, /要等租約到期才會重新接手（從現在算起最多 3 分鐘，馬上重開的話會先等一下）/);
+        // 〔dec/r8-b1-abandon〕放棄改走 jobRunner 的 shutdown({ abandon })：中止在途節點、不記成逾時、只放掉自己的租約
+        assert.match(d.detail, /「現在放棄」：中止正在跑的那一步（例如拆題的 OCR 或模型呼叫），幾秒內結束/);
+        assert.match(d.detail, /不會記成失敗或逾時，也不會用掉重試次數/);
+        assert.match(d.detail, /下次開啟馬上就會接手，不必等租約到期/);
+        assert.match(d.detail, /萬一後端沒在 15 秒內結束而被強制結束，就要等租約到期才會接手（從現在算起最多 3 分鐘）/);
+        assert.doesNotMatch(d.detail, /馬上重開的話會先等一下/, '放棄不再要等租約（舊說法）');
         assert.match(d.detail, /拆題是整份卷算一件：正在拆的卷會拆到完/);
         assert.match(d.detail, /最多 6 小時/);
         assert.match(d.detail, /還在排隊的工作留到下次開啟再做/);
@@ -129,6 +133,12 @@ describe('系統匣的「結束」', () => {
     test('「等處理完」的上限與 launcherControl 的 MAX_GRACE_MS 相同（6 小時）', () => {
         const lc = require(path.join(APP_DIR, 'services', 'launcherControl'));
         assert.equal(D.WAIT_ALL_MS, lc.MAX_GRACE_MS);
+    });
+
+    test('〔dec/r8-b1-abandon〕放棄時等後端收尾的時間與 launcherControl 的 ABANDON_WAIT_MS 相同；對話框的「15 秒」＝它＋KILL_AFTER_MS', () => {
+        const lc = require(path.join(APP_DIR, 'services', 'launcherControl'));
+        assert.equal(D.ABANDON_WAIT_MS, lc.ABANDON_WAIT_MS);
+        assert.equal(D.fmtDuration(D.ABANDON_WAIT_MS + D.KILL_AFTER_MS), '15 秒');
     });
 });
 

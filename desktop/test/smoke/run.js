@@ -191,6 +191,10 @@ function checksFor(r) {
             check('通知「正在結束出題系統」與「背景工作處理完了」', get('notify', n => n.title === '正在結束出題系統') && get('notify', n => n.title === '背景工作處理完了'), all('notify'));
         } else {
             check('放棄時不跳「處理完了」', !get('notify', n => n.title === '背景工作處理完了'), all('notify'));
+            // 〔dec/r8-b1-abandon〕送給後端的是「放棄」（jobRunner 的 shutdown({ abandon }) 放掉租約），後端自己結束、沒有被強制結束
+            const ac = get('abandon-called');
+            check('「現在放棄」走 host.abandon（等後端 10 秒＋5 秒才強制結束），後端自己結束（結束碼 0）',
+                ac && ac.waitMs === 10_000 && ac.killAfterMs === 5_000 && be.length === 1 && be[0].code === 0, { ac, be });
         }
     }
 

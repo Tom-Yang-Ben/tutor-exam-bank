@@ -3,7 +3,9 @@
 //
 //   1. startServer({ port: 0 })：回傳實際的埠，連得上（/api/health 認得出是這套系統）；預設只綁 127.0.0.1。
 //   2. close()：停止認領（runner.stop）→ 埠放掉 → 關連線池 → 結束（exit 注入，不會真的結束測試行程）。
-//      close({ graceMs: 0 })＝「現在放棄」：在途工作還在就不關連線池、直接結束（與當機、A 的時限到了同一條路）。
+//      close({ graceMs: 0 })：在途工作還在、runner 沒有 shutdown（舊版、假 runner）→ 不關連線池、直接結束（與當機同一條路）。
+//      〔dec/r8-b1-abandon〕close({ abandon: true })＝「現在放棄」：runner.shutdown({ abandon: true }) 中止在途節點、只放掉自己的租約，
+//      都收尾了就照常關連線池、結束（jobRunner 本身的行為在 jobRunnerAbandon／jobAbandon.pg 測）。
 //   3. 聽不了埠：reject（err.code＝EADDRINUSE），而且**不啟動 runner**（不留下沒有網頁、卻在背景認領工作的行程）。
 //   4. 不讀 .env（環境變數由呼叫的人放好）；server.js（npm start）一個字都沒改。
 // 不連資料庫（DATABASE_URL 指向不存在的埠；健康檢查回 503）。node --test 每個檔案各跑一個行程，這裡改的環境變數不影響別的測試檔。
@@ -99,6 +101,18 @@ describe('startServer', () => {
         assert.deepEqual(r, { left: 2 });
         assert.equal(h.runner.stopped, 1);
         assert.deepEqual(h.pools, [], '不關連線池');
+        assert.deepEqual(h.exits, [0]);
+    });
+
+    test('〔dec/r8-b1-abandon〕close({ abandon: true })：把 abandon 交給 runner.shutdown，收尾後照常關連線池、結束', async () => {
+        const h = harness({ inFlight: 2 });
+        const calls = [];
+        h.runner.shutdown = async o => { calls.push(o); h.runner.inFlight = 0; return { left: 0, abandoned: 2, released: 2, kept: 0 }; };
+        const s = await startServer({ port: 0, ...h.opts });
+        const r = await s.close({ abandon: true });
+        assert.deepEqual(calls, [{ abandon: true, waitMs: 10_000 }]);
+        assert.equal(r.left, 0);
+        assert.deepEqual(h.pools, ['closed'], '都收尾了就關連線池');
         assert.deepEqual(h.exits, [0]);
     });
 

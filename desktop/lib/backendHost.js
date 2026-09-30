@@ -35,6 +35,7 @@ function createBackendHost({ fork, entryPath, cwd, serviceName = 'TutorExamBank 
     let exited = null;         // { code, expected }
     let stopRequested = false; // 我們送了 shutdown 或 kill（之後的 exit 不算異常）
     let shutdownGraceMs = null;
+    let abandonSent = false;   // 〔dec/r8-b1-abandon〕送過「現在放棄」
     let tail = '';
     let seq = 0;
     let logStream = null;
@@ -62,7 +63,8 @@ function createBackendHost({ fork, entryPath, cwd, serviceName = 'TutorExamBank 
             return;
         }
         if (msg.type === TYPES.SHUTDOWN_ACK) {
-            log(`後端收到關閉要求：最多等 ${Math.round(Number(msg.grace_ms) / 1000)} 秒、在途 ${msg.in_flight} 件${msg.already ? '（已經在關閉中）' : ''}`);
+            if (msg.abandon) log(`後端收到「現在放棄」：中止在途 ${msg.in_flight} 件、放掉自己的租約後結束${msg.already ? '（原本在等處理完）' : ''}`);
+            else log(`後端收到關閉要求：最多等 ${Math.round(Number(msg.grace_ms) / 1000)} 秒、在途 ${msg.in_flight} 件${msg.already ? '（已經在關閉中）' : ''}`);
         }
     }
 
@@ -92,7 +94,7 @@ function createBackendHost({ fork, entryPath, cwd, serviceName = 'TutorExamBank 
         if (child && !exited) return Promise.resolve({ ok: false, error: '前一個後端還在執行' });
         generation += 1;
         const gen = generation;
-        child = null; pid = null; ready = null; exited = null; stopRequested = false; shutdownGraceMs = null; tail = '';
+        child = null; pid = null; ready = null; exited = null; stopRequested = false; shutdownGraceMs = null; abandonSent = false; tail = '';
         pending.clear();
         try { logStream = openLog(); } catch (_) { logStream = null; }
         if (banner) {
@@ -191,11 +193,15 @@ function createBackendHost({ fork, entryPath, cwd, serviceName = 'TutorExamBank 
     }
 
     /**
-     * 優雅關閉：送 shutdown，最多等 graceMs＋killAfterMs，還沒結束就強制結束。
+     * 優雅關閉：送 shutdown，最多等 graceMs＋abandonWaitMs＋killAfterMs，還沒結束就強制結束。
+     * 〔審查 dec/r8-b1-abandon-fix〕後端在 graceMs 到了還有在途工作時會先放棄（services/launcherControl.js：最多 ABANDON_WAIT_MS
+     * 等工作單位收尾，再最多 5 秒關連線池），所以強制結束的時限要把 abandonWaitMs 算進去；原本只有 graceMs＋killAfterMs，
+     * 放棄只剩約 5 秒可用，超過就被強制結束、退回等租約到期。
      * 還沒聽到埠（沒有任何工作可等）時直接強制結束。
-     * @param {{graceMs:number, killAfterMs?:number}} o
+     * @param {{graceMs:number, abandonWaitMs?:number, killAfterMs?:number}} o
+     *        abandonWaitMs 與後端的 ABANDON_WAIT_MS（services/launcherControl.js；desktop/lib/decisions.js 同名常數）相同
      */
-    async function shutdown({ graceMs, killAfterMs = 5000 }) {
+    async function shutdown({ graceMs, abandonWaitMs = 10_000, killAfterMs = 5000 }) {
         if (!child || exited) return exited ? { ...exited } : { code: null, expected: true };
         stopRequested = true;
         if (!ready) { kill(); return waitExit(); }
@@ -203,10 +209,11 @@ function createBackendHost({ fork, entryPath, cwd, serviceName = 'TutorExamBank 
             shutdownGraceMs = graceMs;
             try { child.postMessage({ type: TYPES.SHUTDOWN, grace_ms: graceMs }); } catch (_) { kill(); }
         }
+        const limitMs = graceMs + abandonWaitMs + killAfterMs;
         const timer = timers.setTimeout(() => {
-            log(`後端在 ${Math.round((graceMs + killAfterMs) / 1000)} 秒內沒有結束，強制結束`);
+            log(`後端在 ${Math.round(limitMs / 1000)} 秒內沒有結束（時限 ${Math.round(graceMs / 1000)} 秒＋放棄在途工作 ${Math.round(abandonWaitMs / 1000)} 秒＋${Math.round(killAfterMs / 1000)} 秒），強制結束`);
             kill();
-        }, graceMs + killAfterMs);
+        }, limitMs);
         try {
             return await waitExit();
         } finally {
@@ -215,15 +222,32 @@ function createBackendHost({ fork, entryPath, cwd, serviceName = 'TutorExamBank 
     }
 
     /**
-     * 現在放棄：後端馬上結束，不等在途工作（不關連線池、不寫結果；租約到期後下次開啟重新認領）。
-     * 已經在「等處理完」的關閉中（時限以第一次為準，改不了）→ 直接強制結束，效果相同。
-     * @param {{killAfterMs?:number}} [o]
+     * 現在放棄（〔dec/r8-b1-abandon〕）：送 { type:'shutdown', grace_ms:0, abandon:true }，後端中止在途節點、不寫結果、不動重試次數、
+     * 只放掉自己的租約，然後照常關連線池結束——下次開啟立刻重新認領，不必等租約到期（jobRunner 的 shutdown({ abandon })）。
+     * 已經在「等處理完」的關閉中也一樣送（後端會讓正在等的那一輪提早改成放棄）。
+     * 最多等 waitMs＋killAfterMs，後端還沒結束（例如同步運算卡住事件迴圈、收不到訊息）才強制結束——那樣就退回當機的那條路：
+     * 不寫結果、不動重試次數，但租約要等到期（JOB_LEASE_MS，預設 3 分鐘）才會重新認領。
+     * 還沒聽到埠（沒有任何工作可放棄）時直接強制結束。
+     * @param {{waitMs?:number, killAfterMs?:number}} [o]  waitMs 與後端的 ABANDON_WAIT_MS（services/launcherControl.js）相同
      */
-    function abandon({ killAfterMs = 5000 } = {}) {
-        if (!child || exited) return Promise.resolve(exited ? { ...exited } : { code: null, expected: true });
+    async function abandon({ waitMs = 10_000, killAfterMs = 5000 } = {}) {
+        if (!child || exited) return exited ? { ...exited } : { code: null, expected: true };
         stopRequested = true;
-        if (!ready || shutdownGraceMs !== null) { kill(); return waitExit(); }
-        return shutdown({ graceMs: 0, killAfterMs });
+        if (!ready) { kill(); return waitExit(); }
+        if (!abandonSent) {
+            abandonSent = true;
+            if (shutdownGraceMs === null) shutdownGraceMs = 0;
+            try { child.postMessage({ type: TYPES.SHUTDOWN, grace_ms: 0, abandon: true }); } catch (_) { kill(); }
+        }
+        const timer = timers.setTimeout(() => {
+            log(`後端在放棄後 ${Math.round((waitMs + killAfterMs) / 1000)} 秒內沒有結束，強制結束（被放棄的工作要等租約到期才會重新認領）`);
+            kill();
+        }, waitMs + killAfterMs);
+        try {
+            return await waitExit();
+        } finally {
+            timers.clearTimeout(timer);
+        }
     }
 
     return {
@@ -234,6 +258,8 @@ function createBackendHost({ fork, entryPath, cwd, serviceName = 'TutorExamBank 
         get pid() { return pid; },
         get ready() { return ready ? { ...ready } : null; },
         get shuttingDown() { return shutdownGraceMs !== null; },
+        /** 〔dec/r8-b1-abandon〕送過「現在放棄」 */
+        get abandoning() { return abandonSent; },
         get tail() { return tail; }
     };
 }

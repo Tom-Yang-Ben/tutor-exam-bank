@@ -16,10 +16,12 @@
 //     - 等處理完：不再認領新工作，等在途的做完（最多 6 小時，與 A 的「是」相同），留在系統匣可以改成「現在放棄」。
 //       「在途」是 jobRunner 的工作單位：拆題、變式生成是整份 job 一件；單題一次只跑一個節點，所以只做完正在跑的那一步，
 //       後面的步驟（和剛拆出來、剛生成的題目）要等下次開啟、runner 重新認領才接著做（runner.stop() 之後不再認領）。
-//     - 現在放棄：後端馬上結束、**不關連線池、不寫結果**——與當機、A 的「時限到了直接結束」同一條既有的路：
-//       不記成失敗、不動重試次數，租約（JOB_LEASE_MS，預設 3 分）到期後下次開啟重新認領。
-//       重跑範圍照現行 workers/jobRunner.js（沿用 A 的 UNFINISHED_WORK_NOTE 那一句，A 或 DA-13 更新時這裡跟著變）。
-//       設計稿 2.3 節的 shutdown({abandon}) 快速放租約（jobRunner 要改）不在 B1 這一版。
+//     - 現在放棄（〔dec/r8-b1-abandon〕設計稿 2.3 節第 4 點）：後端中止在途的節點（OCR 的 python 被殺、模型呼叫被中止），
+//       被放棄的工作**不寫結果、不記成失敗或逾時、不動重試次數**，只放掉自己的租約，然後照常關連線池結束（通常幾秒內）——
+//       下次開啟**立刻**重新認領，不必等租約。後端在 ABANDON_WAIT_MS＋KILL_AFTER_MS 內沒結束（例如同步運算卡住、收不到訊息）
+//       才強制結束，那樣就退回當機的那條路：一樣不記成失敗、不動重試次數，但要等租約（JOB_LEASE_MS，預設 3 分）到期。
+//       重跑範圍照 workers/jobRunner.js（沿用 A 的 UNFINISHED_WORK_NOTE 那一句，A 或 DA-13 更新時這裡跟著變）。
+//       等處理完的途中從系統匣改選「現在放棄」也走同一條路（原本是直接強制結束）。
 //   後端異常結束（不是我們叫它結束的）：10 分鐘內第一次 → 自動重開（畫面回到啟動畫面）；再一次 → 停下來顯示原因。
 //     視窗已經關掉（在系統匣等處理完）時不重開，直接結束並通知。
 //   Windows 登出、關機：只有 session-end（確定要結束）才算「正在登出或關機」；query-session-end 只是問問看，
@@ -41,6 +43,11 @@ const AUMID = 'TutorExamBank.Desktop';
 const QUIT_GRACE_MS = 10_000;
 /** 送出關閉之後，時限再加這麼久後端還沒結束就強制結束（例如 mupdf 同步渲染卡住事件迴圈，收不到訊息） */
 const KILL_AFTER_MS = 5_000;
+/**
+ * 〔dec/r8-b1-abandon〕「現在放棄」之後，後端最多花多久中止在途節點、放掉租約（與 services/launcherControl.js 的 ABANDON_WAIT_MS 相同）；
+ * 主行程再多等 KILL_AFTER_MS 才強制結束後端。
+ */
+const ABANDON_WAIT_MS = 10_000;
 /** 「等處理完」最多等多久：與 services/launcherControl.js 的 MAX_GRACE_MS（6 小時）相同 */
 const WAIT_ALL_MS = 6 * 60 * 60 * 1000;
 /** 問後端狀態的間隔與逾時 */
@@ -148,9 +155,10 @@ function quitDialog({ inFlight, leaseMs }) {
                 '剛拆出來或剛生成的題目也是下次開啟才開始檢查；還在排隊的工作留到下次開啟再做。' +
                 '等的時候出題系統留在右下角的系統匣，隨時可以從那裡改選「現在放棄」。',
             '',
-            '「現在放棄」：馬上結束。放棄的工作不會記成失敗，也不會用掉重試次數。' +
-                `${plan.UNFINISHED_WORK_NOTE}；要等租約到期才會重新接手（從現在算起最多${leaseText(leaseMs).replace(/^約/, '')}，馬上重開的話會先等一下）。` +
-                '用 Gemini 時，重跑的部分會再計一次費用；本機模式只花時間。',
+            '「現在放棄」：中止正在跑的那一步（例如拆題的 OCR 或模型呼叫），幾秒內結束。放棄的工作不會記成失敗或逾時，也不會用掉重試次數。' +
+                `${plan.UNFINISHED_WORK_NOTE}。下次開啟馬上就會接手，不必等租約到期；` +
+                `萬一後端沒在 ${fmtDuration(ABANDON_WAIT_MS + KILL_AFTER_MS)}內結束而被強制結束，就要等租約到期才會接手（從現在算起最多${leaseText(leaseMs).replace(/^約/, '')}）。` +
+                '用 Gemini 時，被中止的那一步重跑會再計一次費用；本機模式只花時間。',
             '',
             '「取消」：不結束，繼續處理。'
         ].join('\n'),
@@ -285,7 +293,7 @@ function crashQuitNotice(logFile) {
 
 module.exports = {
     SHORTCUT_NAME, AUMID,
-    QUIT_GRACE_MS, KILL_AFTER_MS, WAIT_ALL_MS, STATUS_POLL_MS, STATUS_TIMEOUT_MS, DONE_SETTLE_MS, DONE_QUIT_DELAY_MS,
+    QUIT_GRACE_MS, KILL_AFTER_MS, ABANDON_WAIT_MS, WAIT_ALL_MS, STATUS_POLL_MS, STATUS_TIMEOUT_MS, DONE_SETTLE_MS, DONE_QUIT_DELAY_MS,
     CRASH_WINDOW_MS, MAX_AUTO_RESTARTS,
     fmtDuration, leaseText,
     decideWindowClose, sessionEndingAfter, nextDoneState, decideTrayQuit, quitDialog, decideSecondInstance, decideBackendExit,

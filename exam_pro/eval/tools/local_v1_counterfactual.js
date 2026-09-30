@@ -58,8 +58,8 @@ function installRawLlm(raw) {
         const data = opts.agent === 'classify' ? byQuestion.get(parts.questionText)
             : opts.agent === 'nlq' ? byQuery.get(parts.query) : undefined;
         if (data === undefined) {
-            // 與 services/llm/fake.js 同一個凍結前綴：suite 會把它算成 replay miss，不當成模型答錯
-            throw new Error(`LLM_MODE=replay 找不到 cassette（agent=${opts.agent} key=反事實回放：原始回應裡沒有這一題）。請在本機執行 npm run eval:record -- --suite <suite>`);
+            // 與 services/llm/fake.js 同一支訊息（凍結前綴＋重錄標記）：suite 會把它算成 replay miss，不當成模型答錯
+            throw new Error(require('../../services/llm/fake').replayMissMessage({ agent: opts.agent, key: '反事實回放：原始回應裡沒有這一題', vendor: 'ollama' }));
         }
         // 與 services/llm/index.js 的 replay 相同：先修 LaTeX 反斜線再交給 agent
         return repairLatex({

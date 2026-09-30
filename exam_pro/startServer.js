@@ -11,6 +11,9 @@
 //      不會留下沒有網頁、卻在背景認領工作的行程。
 //   4. 關閉交給同一份 createLifecycle：停止認領 → server.close() → 等在途工作到時限 → 在途歸零才關連線池 → 結束；
 //      時限到了還有在途工作就不關連線池、直接結束（與當機同一條路：不寫結果、不動重試次數，租約到期後重新認領）。
+//      〔dec/r8-b1-abandon〕時限到了（或 close({ abandon: true })＝桌面版的「現在放棄」）先放棄在途工作：
+//      jobRunner 的 shutdown({ abandon: true }) 中止在途節點、不寫結果、不動重試次數、只放掉自己的租約，
+//      都收尾了就照常關連線池、結束（下次開啟立刻重新認領）；收不了尾的才退回「不關連線池、直接結束、等租約到期」。
 //
 // server.js（npm start、npm run dev、桌面啟動器 A）**沒有改**，行為逐位元不變。沒有把 server.js 改成呼叫這裡，
 // 是為了不和同時進行中的 DA-11（網頁版改用 HOST 設定）的分支改同一支檔；兩邊之後要合成一份時，
@@ -59,7 +62,7 @@ function urlHost(host) {
  * @param {() => Promise<void>} [opts.closePool]  預設關 config/db.js 的連線池；測試注入
  * @returns {Promise<{url:string, port:number, host:string, server:import('http').Server,
  *   runner:object|null, status:() => {pid:number, in_flight:number, shutting_down:boolean},
- *   close:(o?:{graceMs?:number}) => Promise<{left:number}>}>}
+ *   close:(o?:{graceMs?:number, abandon?:boolean}) => Promise<{left:number}>}>}
  */
 async function startServer({ port = 0, host = DEFAULT_HOST, startRunner, exit, logger, closePool } = {}) {
     const app = require('./app');
@@ -84,9 +87,14 @@ async function startServer({ port = 0, host = DEFAULT_HOST, startRunner, exit, l
         status: () => lifecycle.status(),
         /**
          * 優雅關閉（冪等：第二次呼叫回同一個 promise，graceMs 以第一次為準）。
-         * graceMs：最多等在途工作幾毫秒；0＝不等（在途的工作停在原狀態，租約到期後重新認領）。
+         * graceMs：最多等在途工作幾毫秒；時限到了還有在途工作就放棄它們（〔dec/r8-b1-abandon〕）。
+         * abandon：true＝不等、馬上放棄在途工作（中止節點、不寫結果、不動重試次數、只放掉自己的租約，下次開啟立刻重新認領）；
+         *          已經在等（前一次沒有 abandon）時再以 abandon 呼叫，正在等的那一輪會提早改成放棄。
          */
-        close: ({ graceMs } = {}) => lifecycle.shutdown(graceMs === undefined ? {} : { graceMs })
+        close: ({ graceMs, abandon } = {}) => lifecycle.shutdown({
+            ...(graceMs === undefined ? {} : { graceMs }),
+            ...(abandon ? { abandon: true } : {})
+        })
     };
 }
 
