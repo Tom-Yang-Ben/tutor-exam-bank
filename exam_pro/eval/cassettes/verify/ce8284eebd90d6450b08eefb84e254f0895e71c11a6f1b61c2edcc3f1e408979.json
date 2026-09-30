@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T18:43:21.089Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 91,
+        "sha256": "1266c652a4db4c6b98fb3b01d69a51dc34d39a059fb699cd45915de42dffbfc0"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "機車行駛在平直道路上，其速度計顯示的數值代表的是下列哪一種物理量？ (A) 平均速度 (B) 平均速率 (、C) 瞬時速率 (D) 位移",
+      "questionType": "單選",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(C)",
+      "answer_form": "option",
+      "steps_summary": "速度計顯示的是機車行駛的瞬時速度大小，屬於標量。平均速度與平均速率為時間平均值，位移為向量。題目選項中僅(C)瞬時速率符合速度計的物理量性質。"
+    },
+    "usage": {
+      "tokenIn": 313,
+      "tokenOut": 252,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 125450,
+        "loadMs": 19,
+        "promptEvalMs": 8645,
+        "evalMs": 115501
+      }
+    },
+    "latencyMs": 125466
+  }
+}

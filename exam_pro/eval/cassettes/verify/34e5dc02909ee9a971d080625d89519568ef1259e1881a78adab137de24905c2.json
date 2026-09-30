@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T11:00:16.235Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 99,
+        "sha256": "c3264e514ac9d147dacf152f83c71ad73be941366183061cc42a81ffff5a47f6"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "設平面向量 $\\bar{a} = (4, -1)$、$\\bar{b} = (2, 6)$，求 $\\bar{a} \\bullet \\bar{b}$ 的值。",
+      "questionType": "計算",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "2",
+      "answer_form": "number",
+      "steps_summary": "根據點積公式，將向量a與向量b的對應分量相乘後相加。計算4×2 + (-1)×6 = 8 - 6 = 2。"
+    },
+    "usage": {
+      "tokenIn": 304,
+      "tokenOut": 381,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 164769,
+        "loadMs": 27,
+        "promptEvalMs": 6168,
+        "evalMs": 157473
+      }
+    },
+    "latencyMs": 164808
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T15:21:39.054Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2056,
+        "sha256": "515ee5181670b5619a4b0bdbff06e0497d537341109034439692832847130b7b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 25,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        1,
+        2,
+        26
+      ],
+      "total": 2,
+      "siblings": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "直角三角形的邊角關係",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 1,
+      "question_text": "某座橋的斜拉索與橋面形成 $30^\theta$ 的角度，若斜拉索的長度為 $12$ 公尺，則此斜拉索在橋面上的投影長度為多少公尺？ (A) $6$ (B) $6\\sqrt{3}$ (C) $12$ (D) $12\\sqrt{3}$",
+      "answer_text": "(A)。根據直角三角形的邊角關係，投影長度為斜邊乘以 $\\cos 30^\theta$，即 $12 \\times \\cos 30^\theta = 12 \\times \\frac{\\sqrt{3}}{2} = 6\\sqrt{3}$，但此題問的是投影長度，因此正確答案為 $6$。",
+      "figure_desc": "圖中顯示一座橋與斜拉索，斜拉索與橋面形成 $30^\theta$ 的角度，斜拉索長度為 $12$ 公尺，投影長度為橋面上的水平線段。"
+    },
+    "usage": {
+      "tokenIn": 2148,
+      "tokenOut": 287,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 270331,
+        "loadMs": 20,
+        "promptEvalMs": 131918,
+        "evalMs": 134339
+      }
+    },
+    "latencyMs": 270340
+  }
+}

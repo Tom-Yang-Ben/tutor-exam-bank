@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T19:54:58.806Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2922,
+        "sha256": "22af4a006147be2ef4fc6f90b558b6ba41fe3f022848e81888c1208fad1d9917"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "長 1 m 的輕繩繫住質量 2 kg 的小球，在光滑水平面上以 3 m/s 的速率作等速圓周運動，求繩的張力。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及圓周運動中向心力的計算，需應用向心力公式求張力，屬於摩擦力與向心力章節的範疇。",
+      "chapter": "摩擦力與向心力",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 2801,
+      "tokenOut": 68,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 324529,
+        "loadMs": 8,
+        "promptEvalMs": 288936,
+        "evalMs": 35470
+      }
+    },
+    "latencyMs": 324555
+  }
+}

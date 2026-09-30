@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T19:47:36.156Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 111,
+        "sha256": "5095d4afb3bcb383e008d21649ad65881408cb7d6c41c5c92d78bdac78ef9e45"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "$\\sin^2 40^{\\circ} + \\cos^2 40^{\\circ}$ 之值為何？\n\n(A) 1 (B) 0 (C) $\\frac{1}{2}$ (D) 需查表才能得知",
+      "questionType": "單選",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(A)",
+      "answer_form": "option",
+      "steps_summary": "根據畢達哥拉斯三角恆等式，任何角θ均滿足sin²θ + cos²θ = 1。題目中θ=40°，故直接應用恆等式得結果為1。選項(A)正確，無需查表計算。"
+    },
+    "usage": {
+      "tokenIn": 317,
+      "tokenOut": 304,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 110027,
+        "loadMs": 8,
+        "promptEvalMs": 6970,
+        "evalMs": 102413
+      }
+    },
+    "latencyMs": 110037
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T13:17:17.562Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1929,
+        "sha256": "310a05d3196637dcc1dc247bad43e2d3745bbcf657dfb2bcc32a39133930cc63"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 16,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [],
+      "total": 2,
+      "siblings": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "chapter_confidence": 1,
+      "question_type": "證明",
+      "difficulty": 5,
+      "question_text": "試證：對任意平面向量 $\boldsymbol{u}$、$\boldsymbol{v}$，恆有 $|\boldsymbol{u} \boldsymbol{\bullet} \boldsymbol{v}| \neq |\boldsymbol{u}||\boldsymbol{v}|$ 之情形僅發生於 $\boldsymbol{u}$ 與 $\boldsymbol{v}$ 互相垂直時。",
+      "answer_text": "設兩向量夾角為 $\theta$，則 $\boldsymbol{u} \boldsymbol{\bullet} \boldsymbol{v} = |\boldsymbol{u}||\boldsymbol{v}| \times \frac{1}{2}$。因 $\theta = 90^\bullet$ 時，$\frac{1}{2} = 0$，故 $|\boldsymbol{u} \boldsymbol{\bullet} \boldsymbol{v}| = 0$，而 $|\boldsymbol{u}||\boldsymbol{v}| \neq 0$，因此 $|\boldsymbol{u} \boldsymbol{\bullet} \boldsymbol{v}| \neq |\boldsymbol{u}||\boldsymbol{v}|$。等號成立於 $\theta = 90^\bullet$ 時。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2014,
+      "tokenOut": 325,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 206794,
+        "loadMs": 32,
+        "promptEvalMs": 59520,
+        "evalMs": 146327
+      }
+    },
+    "latencyMs": 206830
+  }
+}

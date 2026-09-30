@@ -1,0 +1,55 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T10:05:17.416Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2051,
+        "sha256": "271bd3f611f1891519fb8ba553089fc4aa2456b0613d9bed9432ae92341eea02"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 1,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        2,
+        25,
+        26
+      ],
+      "total": 2,
+      "siblings": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數函數與對數函數",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 1,
+      "question_text": "某電池的電壓 $V$ 與時間 $t$ 之間的關係為 $V = 12 \times 2^{t/3}$，當 $t = 6$ 時，電壓 $V$ 的值為何？\n(A) $24$　(B) $48$　(C) $96$　(D) $192$",
+      "answer_text": "(B)。$2^{6/3} = 2^2 = 4$，故 $V = 12 \times 4 = 48$。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2153,
+      "tokenOut": 186,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 391786,
+        "loadMs": 29119,
+        "promptEvalMs": 260354,
+        "evalMs": 102125
+      }
+    },
+    "latencyMs": 391949
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T11:21:56.312Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 92,
+        "sha256": "8ebcfc24cf6df1c51a518c5816ad49388a05704a47923e2ba48fab11952acfe9"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "設平面向量 $\\textbf{a} = (4, -1)$、$\\textbf{b} = (-2, 3)$，求兩向量的夾角 $\\theta$。",
+      "questionType": "計算",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "138.2°",
+      "answer_form": "number",
+      "steps_summary": "計算向量a·b = 4*(-2) + (-1)*3 = -11，|a|=√(4²+(-1)²)=√17，|b|=√((-2)²+3²)=√13。代入公式cosθ = -11/(√17√13) ≈ -0.7416，θ = arccos(-0.7416) ≈ 138.2°。"
+    },
+    "usage": {
+      "tokenIn": 302,
+      "tokenOut": 888,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 404391,
+        "loadMs": 18,
+        "promptEvalMs": 5921,
+        "evalMs": 396580
+      }
+    },
+    "latencyMs": 404431
+  }
+}

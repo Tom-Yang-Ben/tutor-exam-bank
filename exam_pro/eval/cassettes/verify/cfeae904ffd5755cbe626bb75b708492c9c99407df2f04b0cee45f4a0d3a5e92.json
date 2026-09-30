@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T14:10:58.945Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 96,
+        "sha256": "940b010f11e0c3529d3eb6ac00ba02d425cf1cb612739cb1ea001570d746f637"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "設空間向量 $\\tilde{a} = (2, -1, 3)$、$\\tilde{b} = (1, 2, -1)$，求兩向量的夾角 $\\theta$。",
+      "questionType": "計算",
+      "sampleNo": 2
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "110.7°",
+      "answer_form": "number",
+      "steps_summary": "計算向量a·b = 2*1 + (-1)*2 + 3*(-1) = -3。計算|a|=√(2²+(-1)²+3²)=√14，|b|=√(1²+2²+(-1)²)=√6。cosθ = -3/(√14√6) ≈ -0.3273，θ = arccos(-0.3273) ≈ 110.7°。"
+    },
+    "usage": {
+      "tokenIn": 308,
+      "tokenOut": 2174,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 1054173,
+        "loadMs": 15,
+        "promptEvalMs": 306,
+        "evalMs": 1051916
+      }
+    },
+    "latencyMs": 1054188
+  }
+}

@@ -39,10 +39,12 @@ describe('① 誤觸檢查：現有的全部文字', () => {
 
     // 〔審查修正 dec/r6-classify-rules-fix〕10.22 第 3 點的數字：1,098 段原本就含公式 golden 150 則（沒有章）；
     // 補掃 pdf_sample golden 10 題、拆題回放檔（走閘門的 9 題；第 4 題的章「三角函數的定義」不在白名單，不走閘門）之後的精確值
-    test('掃描範圍（10.22 第 3、7 點的數字）：共 1,108 段、有章的 958 段、沒有章的 150 段（公式 golden）；模型回答 466 筆', () => {
-        assert.equal(r.counts.labeled, 1108);
-        assert.equal(r.counts.labeledWithChapter, 958);
-        assert.equal(r.counts.predictions, 466);
+    // 〔2026-09-28 重錄第 2、3 步入庫〕語料變大：variant 回放檔（qwen3:8b）多 59 題（本機 60 → 119；var-008#1 錄製逾時，少 1 題），
+    // 1,108 → 1,167、有章 958 → 1,017；pipeline 錄的 classify.v2 多 2 筆（樣卷第 6、10 題），模型回答 466 → 468。10.22 第 3 點的附記。
+    test('掃描範圍（10.22 第 3、7 點的數字；2026-09-28 重錄入庫後）：共 1,167 段、有章的 1,017 段、沒有章的 150 段（公式 golden）；模型回答 468 筆', () => {
+        assert.equal(r.counts.labeled, 1167);
+        assert.equal(r.counts.labeledWithChapter, 1017);
+        assert.equal(r.counts.predictions, 468);
         assert.equal(r.counts.nlq, 90);
         const corpora = [...new Set(r.evidence.map(e => e.corpus))];
         assert.ok(corpora.includes('pdf_sample golden 題幹＋答案'), '有掃 pdf_sample golden');
@@ -61,7 +63,8 @@ describe('① 誤觸檢查：現有的全部文字', () => {
         assert.deepEqual(kinds, ['target']);
         const perRule = Object.fromEntries(r.ruleIds.map(id => [id, r.evidence.filter(e => e.rule === id).length]));
         // 〔審查修正 dec/r6-classify-rules-fix〕trig_square_relation 11 → 12：多掃了 pdf_sample golden 第 4 題（fixture #25，本來就是 to 的章）
-        assert.deepEqual(perRule, { trig_square_relation: 12, general_angle: 9, friction_coefficient: 22, circular_kinematics: 2 });
+        // 〔2026-09-28 重錄入庫〕friction_coefficient 22 → 24：新錄的 variant 回放檔（qwen3:8b）多 2 題，章＝藍本的「摩擦力與向心力」（to 的章）
+        assert.deepEqual(perRule, { trig_square_relation: 12, general_angle: 9, friction_coefficient: 24, circular_kinematics: 2 });
         // classify golden 裡找得到證據的題（題號與規則）
         const golden = r.evidence.filter(e => e.corpus === 'classify golden').map(e => `${e.id}:${e.rule}`).sort();
         assert.deepEqual(golden, [
@@ -77,6 +80,10 @@ describe('① 誤觸檢查：現有的全部文字', () => {
         assert.deepEqual(rows, [
             '2026-09-25 本機 classify.v1 回放檔｜cls-dr-008｜三角函數的疊合→直角三角形的邊角關係｜fixed',
             '2026-09-25 本機 classify.v1 回放檔｜cls-fx-046｜摩擦力與向心力→平面運動｜fixed',
+            // 〔2026-09-28 重錄入庫〕pipeline 錄的樣卷第 10 題（「關於等速圓周運動，下列敘述何者正確？（複選）」）：模型答「摩擦力與向心力」、
+            // 規則 4 改成「平面運動」，與 pdf_sample golden 第 10 題相同＝改對的方向。工具只用 classify golden 對答案，所以判成 unknown。
+            // 同一次錄的第 6 題（繩的張力）模型答「摩擦力與向心力」＝golden，規則沒有動它。
+            '2026-09-27 本機 classify.v2 回放檔｜1b7f0693｜摩擦力與向心力→平面運動｜unknown',
             '2026-09-27 本機 classify.v2 回放檔｜cls-fx-025｜三角函數的疊合→直角三角形的邊角關係｜fixed',
             '2026-09-27 本機 classify.v2 回放檔｜cls-fx-026｜三角函數的疊合→直角三角形的邊角關係｜fixed',
             '2026-09-27 本機 classify.v2 回放檔｜cls-fx-027｜直角三角形的邊角關係→廣義角與極坐標｜fixed',

@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T15:17:03.799Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 109,
+        "sha256": "f4f7ba99aea74263131cb479becc526d0d0e794f0949b8d24ffafde3be0fa00b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "設空間向量 $\\vec{a} = (3, -2, 1)$，依 $\\frac{1}{\\left\\| \\vec{a} \\right\\|}$ 求它與 $z$ 軸正向夾角的餘弦值。",
+      "questionType": "填空",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "1/√14",
+      "answer_form": "number",
+      "steps_summary": "計算向量a與z軸單位向量(0,0,1)的點積為1，再求a的模長√(3²+(-2)²+1²)=√14。依餘弦定義cosθ=點積/(|a||k|)=1/√14。"
+    },
+    "usage": {
+      "tokenIn": 320,
+      "tokenOut": 503,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 217377,
+        "loadMs": 17,
+        "promptEvalMs": 8886,
+        "evalMs": 206543
+      }
+    },
+    "latencyMs": 217385
+  }
+}

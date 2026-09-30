@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T16:12:29.317Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 132,
+        "sha256": "d41d2641ac64a1474e437b6c38de91d6f18d99031b4db6eee64b57a72b7b9e57"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "某船隻從港口出發後，航行方向為 $620^\\theta$，求與之同界的最小正角為何？ (A) $20^\\theta$ (B) $100^\\theta$ (C) $140^\\theta$ (D) $260^\\theta$",
+      "questionType": "單選",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(D)",
+      "answer_form": "option",
+      "steps_summary": "題目中「620θ」應理解為620度（因角度通常以度數表示）。求與之同界的最小正角，即求等效角度。因角度超過360度，需減去36，得620°−360°=260°，故最小正角為260°，對應選項(D)。"
+    },
+    "usage": {
+      "tokenIn": 329,
+      "tokenOut": 872,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 392161,
+        "loadMs": 15,
+        "promptEvalMs": 9839,
+        "evalMs": 378398
+      }
+    },
+    "latencyMs": 392185
+  }
+}

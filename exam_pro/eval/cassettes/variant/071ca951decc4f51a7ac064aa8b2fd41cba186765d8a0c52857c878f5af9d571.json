@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T13:21:03.388Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2183,
+        "sha256": "e33bc99f18666ba7d39eba4c67a51f46907ed891196a58e5373932c039471fed"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 17,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        9,
+        10,
+        18,
+        24,
+        28
+      ],
+      "total": 2,
+      "siblings": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "空間向量內積",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "某建築工地使用兩根鋼樑 $\tilde{a} = (4, -1, 2)$ 與 $\tilde{b} = (-2, 3, 5)$ 作為結構支撐，求這兩根鋼樑之間的內積。",
+      "answer_text": "($\tilde{a} \times \tilde{b}$) = $4 \times (-2) + (-1) \times 3 + 2 \times 5 = -8 - 3 + 10 = -1$",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2215,
+      "tokenOut": 172,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 217386,
+        "loadMs": 196,
+        "promptEvalMs": 136020,
+        "evalMs": 79858
+      }
+    },
+    "latencyMs": 217402
+  }
+}
