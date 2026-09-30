@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T17:10:10.223Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 146,
+        "sha256": "dc5688db39e066f26ae820e5da59eed87edf68b5fba1d0f608d4936075e66bf6"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "質量 $8$ kg 的物體置於傾角 $37^\\theta$ 的斜面上（$\\tan 37^\\theta = \\frac{3}{4}$），與斜面間的動摩擦係數 $\\nu = 0.2$，求物體沿斜面下滑的加速度（取 $g = 10$ m/s$^2$）。",
+      "questionType": "計算",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "4.4",
+      "answer_form": "number",
+      "steps_summary": "物體受重力分解為沿斜面分力 $mg\\sin\\theta = 8\\times10\\times\\frac{3}{5}=48\\,\\text{N}$ 與垂直斜面分力 $mg\\cos\\theta = 8\\times10\\times\\frac{4}{5}=64\\,\\text{N}$。支持力 $N=64\\,\\text{N}$，摩擦力 $f=\\nu N=0.2\\times64=12.8\\,\\text{N}$。沿斜面淨力 $F=48-12.8=35.2\\,\\text{N}$，加速度 $a=F/m=35.2/8=4.4\\,\\text{m/s}^2$。"
+    },
+    "usage": {
+      "tokenIn": 340,
+      "tokenOut": 709,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 325576,
+        "loadMs": 22,
+        "promptEvalMs": 12522,
+        "evalMs": 310613
+      }
+    },
+    "latencyMs": 325585
+  }
+}

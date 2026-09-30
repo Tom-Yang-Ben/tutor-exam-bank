@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T17:33:15.904Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 92,
+        "sha256": "2b51067bfb5d01e16ce1a96c21414a03ef85e4fd77f4c514ffb11a17c9890011"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "一質量為 $4$ kg 的物體，以 $5$ m/s 的速率在水平面上做等速圓周運動，所用的輕繩長度為 $3$ m，求繩子所施加的張力大小。",
+      "questionType": "計算",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "100/3",
+      "answer_form": "number",
+      "steps_summary": "物體做勻速圓周運動，張力提供向心力。公式為 F = m*v²/r，代入 m=4kg、v=5m/s、r=3m，計算得 F = 4*(5²)/3 = 100/3 N。"
+    },
+    "usage": {
+      "tokenIn": 313,
+      "tokenOut": 468,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 220856,
+        "loadMs": 18,
+        "promptEvalMs": 8217,
+        "evalMs": 210345
+      }
+    },
+    "latencyMs": 220872
+  }
+}

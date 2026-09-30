@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T19:08:46.951Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2335,
+        "sha256": "bb0480e045e527f52382e27ef8ed6494e51f6df4554aa71a83d98766c071091d"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 59,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        44,
+        46,
+        56,
+        57,
+        62
+      ],
+      "total": 2,
+      "siblings": [
+        "d0d6166bff89b0a9"
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "電場與電位",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "在靜電平衡狀態下，電場線與等位面的關係為何？（提示：電場沿等位面方向的分量）\n(A) 互相平行\n(B) 互相垂直\n(C) 夾 $45^\text{o}$\n(D) 無固定關係",
+      "answer_text": "(B)。沿等位面移動電荷不作功，故電場沿等位面方向的分量為零，電場線必與等位面互相垂直。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2383,
+      "tokenOut": 165,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 188490,
+        "loadMs": 57,
+        "promptEvalMs": 84542,
+        "evalMs": 103124
+      }
+    },
+    "latencyMs": 188618
+  }
+}

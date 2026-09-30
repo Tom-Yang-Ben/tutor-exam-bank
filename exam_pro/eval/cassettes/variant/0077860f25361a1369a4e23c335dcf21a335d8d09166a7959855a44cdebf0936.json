@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T18:14:08.761Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2113,
+        "sha256": "405430cc90b7cc200e66cca1f6f9f966a2fa077ccd426c67e0f7f46d76eea892"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 49,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        32,
+        46,
+        47,
+        48,
+        50
+      ],
+      "total": 2,
+      "siblings": [
+        "e5d07f34b5ed7b30"
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "直線運動",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "一輛自行車從 $15$ m 高的樓頂自由落下，求其落地所需的時間（取 $g = 10$ m/s$^2$，不計空氣阻力）。",
+      "answer_text": "(C)。$h = \\frac{1}{2} g t^2$，故 $t = \\sqrt{\\frac{2h}{g}} = \\sqrt{\\frac{30}{10}} = \\sqrt{3}$ 秒。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2184,
+      "tokenOut": 156,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 178740,
+        "loadMs": 54,
+        "promptEvalMs": 80995,
+        "evalMs": 94101
+      }
+    },
+    "latencyMs": 178781
+  }
+}

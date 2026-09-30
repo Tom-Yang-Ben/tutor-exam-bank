@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T10:31:30.460Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 74,
+        "sha256": "7596f83cfea0d00151b897c9c302fd240c4e9dc399da4f1c95730cf57b0f14b2"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "已知 $\\text{log}_{10} 5 = 0.6990$，求 $5^{30}$ 是幾位數的整數。",
+      "questionType": "計算",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "21",
+      "answer_form": "number",
+      "steps_summary": "利用對數性質計算log₁₀(5³⁰)=30×0.6990=20.97。因10^20.97=10^20×10^0.97，而10^0.97≈9.33，故5³⁰≈9.33×10²⁰，為21位數。"
+    },
+    "usage": {
+      "tokenIn": 295,
+      "tokenOut": 620,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 269757,
+        "loadMs": 34,
+        "promptEvalMs": 3691,
+        "evalMs": 265066
+      }
+    },
+    "latencyMs": 269805
+  }
+}

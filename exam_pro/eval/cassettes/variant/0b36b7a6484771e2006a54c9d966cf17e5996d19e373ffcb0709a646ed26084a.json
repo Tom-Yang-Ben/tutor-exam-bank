@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T11:35:26.299Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2132,
+        "sha256": "85a2341db6921d1a8d247418a6318c1c077bd07f71fe4a2a9f0ec455e5c6fe3e"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 13,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        11,
+        12,
+        14,
+        19,
+        21
+      ],
+      "total": 2,
+      "siblings": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 3,
+      "question_text": "某建築工地使用兩根鋼索 $\\vec{a} = (k, 4)$ 與 $\\vec{b} = (-2, 1)$ 來支撐一塊水平板，若兩根鋼索互相垂直，求 $k$ 的值。",
+      "answer_text": "垂直即內積為 $0$：$k \times (-2) + 4 \times 1 = 0$，得 $-2k + 4 = 0$，$k = 2$。",
+      "figure_desc": "圖中顯示兩根鋼索 $\\vec{a}$ 與 $\\vec{b}$ 以垂直方式支撐水平板，圖中標註 $\\vec{a} = (k, 4)$、$\\vec{b} = (-2, 1)$。"
+    },
+    "usage": {
+      "tokenIn": 2198,
+      "tokenOut": 229,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 260899,
+        "loadMs": 249,
+        "promptEvalMs": 141089,
+        "evalMs": 115769
+      }
+    },
+    "latencyMs": 260929
+  }
+}

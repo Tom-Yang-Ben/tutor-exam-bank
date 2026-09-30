@@ -1,0 +1,55 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T10:08:04.407Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2051,
+        "sha256": "ee0b4d1a541e2dce5186571b241fd44bef27daeeb698bf403fdf6cf942c47e08"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 1,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        2,
+        25,
+        26
+      ],
+      "total": 2,
+      "siblings": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數函數與對數函數",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 1,
+      "question_text": "某電池的電壓 $V$ 與時間 $t$ 之間的關係為 $V = 12 \times 2^{-t}$，當 $t = 2$ 時，電壓 $V$ 的值為何？ (A) $3$　(B) $6$　(C) $12$　(D) $24$",
+      "answer_text": "(A)。$2^{-2} = \frac{1}{4}$，故 $V = 12 \times \frac{1}{4} = 3$。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2153,
+      "tokenOut": 181,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 158267,
+        "loadMs": 30,
+        "promptEvalMs": 63178,
+        "evalMs": 94910
+      }
+    },
+    "latencyMs": 158277
+  }
+}

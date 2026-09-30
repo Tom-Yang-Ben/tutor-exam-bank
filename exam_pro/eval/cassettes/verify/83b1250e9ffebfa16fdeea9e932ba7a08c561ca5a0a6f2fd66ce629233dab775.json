@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T11:43:49.110Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 112,
+        "sha256": "57b2756ce84908b93b1b326db2a6542560c2a58fff6d4ce8a5893fb967c782f2"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "某物理實驗中，兩力向量 $\\tilde{F}_1 = (k, -3)$ 與 $\\tilde{F}_2 = (6, 2)$ 作用於同一物體上，若兩力向量互相垂直，求 $k$ 的值。",
+      "questionType": "填空",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "1",
+      "answer_form": "number",
+      "steps_summary": "根據向量垂直的條件，兩力向量的點積為零。計算 $\tilde{F}_1 \bullet \tilde{F}_2 = k \times 6 + (-3) \times 2 = 6k - 6$，令其等於零解得 $6k = 6$，故 $k = 1$。"
+    },
+    "usage": {
+      "tokenIn": 323,
+      "tokenOut": 393,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 193358,
+        "loadMs": 73,
+        "promptEvalMs": 10253,
+        "evalMs": 180324
+      }
+    },
+    "latencyMs": 193393
+  }
+}

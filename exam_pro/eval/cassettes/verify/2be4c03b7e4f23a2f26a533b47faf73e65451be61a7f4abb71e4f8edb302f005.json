@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T20:04:31.189Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 115,
+        "sha256": "5405659db4be9154f35a4ed2134ad21f5bee2fc2733d4f235d6191982bf9eeb7"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "馬拉車前進時，馬對車的作用力 $\\vec{F}$ 與車對馬的反作用力，兩者的關係為何？\n\n(A) 馬對車的力較大 (B) 大小相等、方向相反 (C) 車對馬的力較大 (D) 視速度而定",
+      "questionType": "單選",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(B)",
+      "answer_form": "option",
+      "steps_summary": "根據牛頓第三定律，作用力與反作用力大小相等、方向相反，作用於不同物體。馬對車的力與車對馬的反作用力符合此定律，故選(B)。"
+    },
+    "usage": {
+      "tokenIn": 335,
+      "tokenOut": 319,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 127923,
+        "loadMs": 8,
+        "promptEvalMs": 7901,
+        "evalMs": 119281
+      }
+    },
+    "latencyMs": 127936
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T16:47:24.488Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1991,
+        "sha256": "4421903fd24394759959491ba24c423e390f6d55c4a801f1aff3486942a6476a"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 37,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        36,
+        45
+      ],
+      "total": 2,
+      "siblings": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 4,
+      "question_text": "一光滑定滑輪兩端以輕繩懸掛 $4$ kg 與 $8$ kg 的物體，由靜止釋放後求系統的加速度與繩張力（取 $g = 10$ m/s$^2$，繩與滑輪質量不計）。",
+      "answer_text": "$a = \\frac{(m_2 - m_1)g}{m_1 + m_2} = \\frac{(8 - 4) \\times 10}{12} = \\frac{40}{12} = \\frac{10}{3}$ m/s$^2$；張力 $T = m_1(g + a) = 4 \\times \\left(10 + \\frac{10}{3}\\right) = 4 \\times \\frac{40}{3} = \\frac{160}{3}$ N。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2098,
+      "tokenOut": 251,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 208626,
+        "loadMs": 211,
+        "promptEvalMs": 64935,
+        "evalMs": 143317
+      }
+    },
+    "latencyMs": 208662
+  }
+}

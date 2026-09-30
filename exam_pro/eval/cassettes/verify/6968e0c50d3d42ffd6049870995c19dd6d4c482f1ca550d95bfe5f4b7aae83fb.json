@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T10:47:14.497Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 80,
+        "sha256": "c5b729e8e7885f8593f6351311586cc9426fe5bacda06a4034d9b85f9a596806"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "某種植物的生長速率與時間的關係為 $\\log_{5} 2 \\times \\log_{2} 125$，求其結果為何？",
+      "questionType": "填空",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "3",
+      "answer_form": "number",
+      "steps_summary": "利用對數性質與換底公式簡化計算。首先將log₂125轉為3log₂5，再觀察log₅2與log₂5互為倒數關係，最終得到3。"
+    },
+    "usage": {
+      "tokenIn": 297,
+      "tokenOut": 594,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 269003,
+        "loadMs": 32,
+        "promptEvalMs": 6103,
+        "evalMs": 261681
+      }
+    },
+    "latencyMs": 269063
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T17:25:11.397Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 159,
+        "sha256": "606d9443f4127975e39cb3bcba33f70d2058c49349bc86ab7ea94d112417788d"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "質量 $7$ kg 的物體置於傾角 $60^\\theta$ 的斜面上（$\\frac{\\tan 60^\\theta}{\\tan 30^\\theta} = 3$），與斜面間的動摩擦係數 $\\nu = 0.3$，求物體沿斜面下滑的加速度（取 $g = 10$ m/s$^2$）。",
+      "questionType": "計算",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "7.16",
+      "answer_form": "number",
+      "steps_summary": "物體沿斜面下滑的加速度由合力決定。分解重力得沿斜面分量為mg sinθ，垂直分量為mg cosθ。支持力N=mg cosθ，摩擦力f=νN。合力ma=mg sinθ - νmg cosθ，故a=g(sinθ - ν cosθ)。已知θ=60°，代入計算得a=10*(sin60° - 0.3*cos60°)=10*(√3/2 - 0.3*0.5)=10*(0.866 - 0.15)=7.16 m/s²。"
+    },
+    "usage": {
+      "tokenIn": 347,
+      "tokenOut": 1284,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 687510,
+        "loadMs": 17,
+        "promptEvalMs": 12052,
+        "evalMs": 673492
+      }
+    },
+    "latencyMs": 687600
+  }
+}

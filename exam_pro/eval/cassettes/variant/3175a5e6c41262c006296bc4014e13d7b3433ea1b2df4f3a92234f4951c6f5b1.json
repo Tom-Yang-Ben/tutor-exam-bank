@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T16:19:09.671Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2228,
+        "sha256": "2c9f831a0a8bbd09bfcc7f9adab0518a07460e0e47d51f323ca792ba72176399"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 31,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        24,
+        27,
+        28,
+        29,
+        61
+      ],
+      "total": 2,
+      "siblings": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "若 $\theta$ 落在第三象限，則 $\tan \theta$ 的正負為何？\n(A) 恆為正　(B) 恆為負　(C) 恆為零　(D) 無法判斷",
+      "answer_text": "(B)。第三象限中 $x < 0$、$y < 0$，故 $\tan \theta = \frac{y}{x} > 0$，恆為正。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2259,
+      "tokenOut": 162,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 132441,
+        "loadMs": 20,
+        "promptEvalMs": 58774,
+        "evalMs": 73491
+      }
+    },
+    "latencyMs": 132447
+  }
+}

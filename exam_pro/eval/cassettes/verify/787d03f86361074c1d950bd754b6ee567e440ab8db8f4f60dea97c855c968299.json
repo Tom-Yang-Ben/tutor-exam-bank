@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T11:11:47.056Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 90,
+        "sha256": "22636015e0e2d6e55a21231690ce747e36d1058e4a52f77e9b4265f184d30c63"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "設平面向量 $\\textbf{a} = (3, 1)$、$\\textbf{b} = (2, 4)$，求兩向量的夾角 $\\theta$。",
+      "questionType": "計算",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "45°",
+      "answer_form": "number",
+      "steps_summary": "利用向量點積公式計算夾角：cosθ = (a·b)/(|a||b|)。計算得a·b=10，|a|=√10，|b|=2√5，故cosθ=10/(√10×2√5)=1/√2，对应θ=45°。"
+    },
+    "usage": {
+      "tokenIn": 302,
+      "tokenOut": 500,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 227986,
+        "loadMs": 20,
+        "promptEvalMs": 9838,
+        "evalMs": 215019
+      }
+    },
+    "latencyMs": 228012
+  }
+}

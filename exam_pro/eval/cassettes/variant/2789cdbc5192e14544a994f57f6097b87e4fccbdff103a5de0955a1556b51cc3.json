@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T18:01:07.906Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2001,
+        "sha256": "b6d31e508d957d8bedde5de907d9b6cca6568a5006113e407813a3784dc11b1b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 49,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        32,
+        46,
+        47,
+        48,
+        50
+      ],
+      "total": 2,
+      "siblings": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "直線運動",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "一顆石頭從 $30$ m 高的橋上被拋出，做自由落體運動，求它落地所需的時間（取 $g = 10$ m/s$^2$，不計空氣阻力）。",
+      "answer_text": "(C)。$h = \\frac{1}{2} g t^2$，故 $t = \\sqrt{\\frac{2h}{g}} = \\sqrt{\\frac{60}{10}} = \\sqrt{6}$ 秒。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2095,
+      "tokenOut": 164,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 205484,
+        "loadMs": 14,
+        "promptEvalMs": 128550,
+        "evalMs": 76530
+      }
+    },
+    "latencyMs": 205493
+  }
+}

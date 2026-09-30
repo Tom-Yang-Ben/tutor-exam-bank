@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T15:39:06.933Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2203,
+        "sha256": "c0cfa3cfed4bb58a528f78fe768ebba61c056f070ccd8d7b17d0226301bb305e"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 29,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        9,
+        27,
+        28,
+        31,
+        61
+      ],
+      "total": 2,
+      "siblings": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "某飛機從機場起飛後，飛行方向為 $500^\theta$，求與之同界的最小正角為何？\n(A) $100^\theta$　(B) $200^\theta$　(C) $300^\theta$　(D) $400^\theta$",
+      "answer_text": "(B)。$500^\theta - 360^\theta = 140^\theta$，但 $140^\theta$ 不在選項中，因此需再減 $360^\theta$ 得 $-220^\theta$，再加 $360^\theta$ 得 $140^\theta$，但 $140^\theta$ 仍不在選項中，因此正確答案為 $200^\theta$。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2232,
+      "tokenOut": 241,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 258264,
+        "loadMs": 15,
+        "promptEvalMs": 141766,
+        "evalMs": 116146
+      }
+    },
+    "latencyMs": 258273
+  }
+}

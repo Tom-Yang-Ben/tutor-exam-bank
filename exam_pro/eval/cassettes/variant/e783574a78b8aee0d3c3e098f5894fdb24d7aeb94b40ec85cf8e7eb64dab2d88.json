@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T18:28:45.114Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2079,
+        "sha256": "7b5161983d3070580295e5dc7a3b4854c37277da74bd96fe16fcee4bd694d68b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 51,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        32,
+        33,
+        46,
+        47,
+        48
+      ],
+      "total": 2,
+      "siblings": [
+        "14113a1bca6305ee"
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "物體的運動（速度與加速度）",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "在 $v$-$t$ 圖中，若圖形為一水平線，其與時間軸所圍成的面積代表下列何者？(A) 加速度 (B) 位移 (C) 速率 (D) 力",
+      "answer_text": "(B)。$v$-$t$ 圖的面積等於 $\frac{1}{2} \times \text{時間} \times \text{速度}$，即位移；圖形的斜率才是加速度。",
+      "figure_desc": "圖形為一水平線，與時間軸所圍成的區域為矩形，其面積代表位移。"
+    },
+    "usage": {
+      "tokenIn": 2174,
+      "tokenOut": 198,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 179864,
+        "loadMs": 40,
+        "promptEvalMs": 67105,
+        "evalMs": 109161
+      }
+    },
+    "latencyMs": 180058
+  }
+}

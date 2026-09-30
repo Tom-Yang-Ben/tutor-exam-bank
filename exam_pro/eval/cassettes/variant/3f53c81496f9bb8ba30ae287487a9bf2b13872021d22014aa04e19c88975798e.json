@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T17:36:05.647Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2328,
+        "sha256": "4c5b548d81dbf87dd21239ef8f4e7b941b2fcb5ed6bd61642b58c2a9a8168367"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 43,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        34,
+        35,
+        40,
+        41,
+        42
+      ],
+      "total": 2,
+      "siblings": [
+        "ce61c43427725140"
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "摩擦力與向心力",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 3,
+      "question_text": "一質量為 $6$ kg 的物體，以 $2$ m/s 的速率在水平面上做等速圓周運動，所用的輕繩長度為 $4$ m，求繩子所施加的張力大小。",
+      "answer_text": "繩子的張力提供向心力：$T = \frac{mv^2}{r} = \frac{6 \times 2^2}{4} = 6$ N。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2332,
+      "tokenOut": 155,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 167971,
+        "loadMs": 57,
+        "promptEvalMs": 79801,
+        "evalMs": 87043
+      }
+    },
+    "latencyMs": 168019
+  }
+}

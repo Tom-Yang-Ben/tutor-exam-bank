@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T13:26:18.729Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2312,
+        "sha256": "594f868edd55058ccb09c9691f117734ec37274028169ced50035c9b8efaee3b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 17,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        9,
+        10,
+        18,
+        24,
+        28
+      ],
+      "total": 2,
+      "siblings": [
+        "476caaae68c0b85c"
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "空間向量內積",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "某物理實驗中，兩根電磁鐵產生的磁場可視為空間向量 $\tilde{a} = (3, -2, 1)$ 與 $\tilde{b} = (4, 1, -3)$，求這兩個磁場向量之間的內積。",
+      "answer_text": "($\\vec{a} \\cdot \\vec{b}$) = 3 \\times 4 + (-2) \\times 1 + 1 \\times (-3) = 12 - 2 - 3 = 7",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2312,
+      "tokenOut": 175,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 150569,
+        "loadMs": 27,
+        "promptEvalMs": 67748,
+        "evalMs": 82551
+      }
+    },
+    "latencyMs": 150589
+  }
+}
