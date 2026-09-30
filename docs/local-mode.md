@@ -1606,6 +1606,7 @@ replay（CI 設定）：accuracy 0.9348（86/92）、macro-F1 0.8477，門檻 0.
 - 文字共 1,108 段，其中有「自己的章」的 958 段：classify golden 92 題、fixture 62 題（題幹＋答案）、知識點種子檔 451 條（數學、物理的名稱＋說明＋口語版）、各章例句 86 句、dedup golden 60 段、variant 回放檔生成的題 147 題（Gemini 87、本機 60；章＝藍本的章）、nlq golden 查詢句 50 句、〔審查修正補掃〕pdf_sample golden 10 題（題幹＋答案）；另 150 則公式 golden 沒有章（只列不判）。〔審查更正〕原本寫「有自己的章的文字 1,098 段……另有公式 golden 150 則」，數字寫錯：1,098 已經含那 150 則，有章的是 948 段。dedup 60 段、variant 147 題都對得到章（審查說「有少數對不到章」，重算是 0 段）。
 - 模型的回答 466 筆：2026-09-27 本機 classify.v2 回放檔 92、2026-09-25 本機 classify.v1 回放檔 92、`local_raw_2026-09-25.json` 92、Gemini classify.v1 回放檔 181、〔審查修正補掃〕Gemini extract.v2 拆題回放檔裡會走零成本閘門的 9 題（拆題給的章在白名單內、信心 ≥ 0.8；10 題裡第 4 題給的是舊章名「三角函數的定義」，不走閘門；golden 以 `pdfSha256`＋題號對到 pdf_sample golden）。原本是 457 筆。
 - nlq 90 筆：golden 50 句（以期望章當成 LLM 的回答）、全部 nlq 回放檔 32 支（Gemini nlq.v1 16、本機 nlq.v1 8、nlq.v2 8）、原始回應檔 8 句。
+- 〔2026-09-28 重錄第 2、3 步入庫（`dec/r8-recorded`）〕語料變大，`classifyRulesLc2.test.js` 釘的數字跟著改（誤觸、改錯仍是 0）：variant 回放檔（qwen3:8b）多 59 題（var-008#1 錄製逾時，少 1 題），文字 1,108 → 1,167 段、有章 958 → 1,017 段，`friction_coefficient` 的證據 22 → 24（新的 2 題章是藍本的「摩擦力與向心力」＝to）；pipeline 錄的 classify.v2 多 2 筆（樣卷第 6、10 題），模型回答 466 → 468。其中第 10 題（等速圓周運動的敘述，複選）模型答「摩擦力與向心力」、規則 4 改成「平面運動」，與 pdf_sample golden 相同＝改對；工具只用 classify golden 對答案，所以列成 unknown。第 6 題（繩的張力）模型答對，規則沒有動。
 
 結果（誤觸＝文字自己的章就是規則的 from、會把對的改錯）：
 
