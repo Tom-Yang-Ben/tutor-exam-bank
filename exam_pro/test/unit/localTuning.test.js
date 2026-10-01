@@ -13,6 +13,9 @@
 // 〔Owner 第五輪 C-b、C-c 核准，dec/r6-local-tuning〕第 1 點改成：什麼都沒寫＝本機預設（kc_tag 不思考、verify／verify_chem
 // 上限 3072），其他 agent 與加這個功能之前逐位元相同；OLLAMA_NO_THINK=none＋OLLAMA_MAX_OUTPUT_VERIFY=8192（NO_DEFAULTS）
 // 取消預設後，全部 agent 與之前逐位元相同。原本測「明寫的設定」的幾則改在 NO_DEFAULTS 上疊加，斷言本身不變。
+// 〔Owner 第七輪 R7-1＝4，dec/r10-variant-cap〕本機預設多一個 variant／variant_chem 上限 1024：釘住預設清單的幾處
+// （LOCAL_DEFAULTS、DEFAULT_LINES、只剩某幾個預設時的 defaults）跟著多一項；NO_DEFAULTS 多寫 OLLAMA_MAX_OUTPUT_VARIANT=8192
+// （取消這個預設），「取消預設後全部 agent 與之前逐位元相同」照舊成立。variant 自己的測試在 test/unit/variantCap.test.js。
 // 不連 Ollama、不連 Gemini（假的傳輸與假的 client）。
 // ─────────────────────────────────────────────────────────────
 
@@ -35,7 +38,7 @@ const { buildSchema } = require('../../agents/schemas');
 const APP_DIR = path.resolve(__dirname, '..', '..');
 const ENV_KEYS = [
     'LLM_MODE', 'EVAL_CASSETTE_DIR', 'OLLAMA_HOST', 'OLLAMA_NUM_CTX', 'OLLAMA_KEEP_ALIVE', 'OLLAMA_PROGRESS_MS', 'OLLAMA_NO_THINK',
-    'OLLAMA_MAX_OUTPUT_VERIFY', 'OLLAMA_MAX_OUTPUT_LINT', 'OLLAMA_NUM_CTX_VERIFY', 'OLLAMA_NUM_CTX_EXTRACT_OCR', 'OLLAMA_NUM_CTX_TUTOR',
+    'OLLAMA_MAX_OUTPUT_VERIFY', 'OLLAMA_MAX_OUTPUT_LINT', 'OLLAMA_MAX_OUTPUT_VARIANT', 'OLLAMA_NUM_CTX_VERIFY', 'OLLAMA_NUM_CTX_EXTRACT_OCR', 'OLLAMA_NUM_CTX_TUTOR',
     'GEMINI_API_KEY'
 ];
 const saved = {};
@@ -75,8 +78,8 @@ function fakeOllama(content = '{"final_answer":"(A)","answer_form":"option","ste
     return calls;
 }
 
-/** 〔C-b、C-c〕取消兩個本機預設的寫法（與 .env.example 說明的一致） */
-const NO_DEFAULTS = Object.freeze({ OLLAMA_NO_THINK: 'none', OLLAMA_MAX_OUTPUT_VERIFY: '8192' });
+/** 〔C-b、C-c〕取消本機預設的寫法（與 .env.example 說明的一致）；〔R7-1〕多一個 variant 的 8192 */
+const NO_DEFAULTS = Object.freeze({ OLLAMA_NO_THINK: 'none', OLLAMA_MAX_OUTPUT_VERIFY: '8192', OLLAMA_MAX_OUTPUT_VARIANT: '8192' });
 
 const VERIFY_CALL = Object.freeze({
     model: 'ollama:qwen3:8b', system: '你是解題老師。', parts: [{ text: '請解 1+1' }], schema: buildSchema('verify'),
@@ -140,7 +143,7 @@ describe('resolveOllamaOverrides', () => {
         assert.equal(tuning.defaultMaxOutputFor('verify_chem'), 3072);
         assert.equal(tuning.defaultMaxOutputFor('lint'), null);
         assert.equal(tuning.defaultMaxOutputFor(undefined), null);
-        assert.deepEqual(JSON.parse(JSON.stringify(tuning.LOCAL_DEFAULTS)), { noThink: ['kc_tag'], maxOutput: { verify: 3072 } });
+        assert.deepEqual(JSON.parse(JSON.stringify(tuning.LOCAL_DEFAULTS)), { noThink: ['kc_tag'], maxOutput: { verify: 3072, variant: 1024 } });
     });
 
     test('OLLAMA_NO_THINK：列出的才關；基本名稱連化學版一起；不分大小寫；全形逗號、頓號、空白都能分隔', () => {
@@ -259,7 +262,8 @@ describe('THINKING_AGENTS 與程式一致', () => {
 describe('checkOverrides／announceOverrides', () => {
     const DEFAULT_LINES = [
         '不思考：kc_tag（本機預設，Owner 第五輪 C-b；OLLAMA_NO_THINK 有寫就整個取代）',
-        '輸出上限：verify、verify_chem 3072（本機預設，Owner 第五輪 C-c；OLLAMA_MAX_OUTPUT_VERIFY 可覆寫）'
+        '輸出上限：verify、verify_chem 3072（本機預設，Owner 第五輪 C-c；OLLAMA_MAX_OUTPUT_VERIFY 可覆寫）',
+        '輸出上限：variant、variant_chem 1024（本機預設，Owner 第七輪 R7-1；OLLAMA_MAX_OUTPUT_VARIANT 可覆寫）'   // 〔R7-1〕
     ];
 
     test('什麼都沒寫：沒有生效的、沒有警告；〔C-b、C-c〕本機預設另列在 defaults', () => {
@@ -270,12 +274,13 @@ describe('checkOverrides／announceOverrides', () => {
 
     test('〔C-b、C-c〕取消預設列在生效的裡面、不警告；只寫 _CHEM 時數學／物理版仍列在預設', () => {
         assert.deepEqual(tuning.checkOverrides(NO_DEFAULTS), {
-            active: ['不思考：無（OLLAMA_NO_THINK=none，取消本機預設 kc_tag）', '輸出上限：OLLAMA_MAX_OUTPUT_VERIFY=8192（不降：取消本機預設 3072）'],
+            active: ['不思考：無（OLLAMA_NO_THINK=none，取消本機預設 kc_tag）',
+                '輸出上限：OLLAMA_MAX_OUTPUT_VARIANT=8192（不降：取消本機預設 1024）、OLLAMA_MAX_OUTPUT_VERIFY=8192（不降：取消本機預設 3072）'],
             warnings: [], defaults: []
         });
         assert.deepEqual(tuning.checkOverrides({ OLLAMA_NO_THINK: 'lint', OLLAMA_MAX_OUTPUT_VERIFY_CHEM: '2048' }), {
             active: ['不思考：lint（寫基本名稱的連化學版一起）', '輸出上限：OLLAMA_MAX_OUTPUT_VERIFY_CHEM=2048'],
-            warnings: [], defaults: ['輸出上限：verify 3072（本機預設，Owner 第五輪 C-c；OLLAMA_MAX_OUTPUT_VERIFY 可覆寫）']
+            warnings: [], defaults: ['輸出上限：verify 3072（本機預設，Owner 第五輪 C-c；OLLAMA_MAX_OUTPUT_VERIFY 可覆寫）', DEFAULT_LINES[2]]
         });
         assert.deepEqual(tuning.checkOverrides({ OLLAMA_MAX_OUTPUT_VERIFY: 'abc' }).defaults, DEFAULT_LINES, '亂填＝沒寫：仍用預設（另有警告）');
     });
@@ -304,7 +309,7 @@ describe('checkOverrides／announceOverrides', () => {
 
     test('all／*：全部會思考的；化學版寫全名也認得', () => {
         assert.deepEqual(tuning.checkOverrides({ OLLAMA_NO_THINK: 'all' }).active, ['不思考：全部會思考的 agent（verify、lint、kc_tag、tutor、voice）']);
-        assert.deepEqual(tuning.checkOverrides({ OLLAMA_NO_THINK: 'verify_chem' }), { active: ['不思考：verify_chem（寫基本名稱的連化學版一起）'], warnings: [], defaults: [DEFAULT_LINES[1]] });
+        assert.deepEqual(tuning.checkOverrides({ OLLAMA_NO_THINK: 'verify_chem' }), { active: ['不思考：verify_chem（寫基本名稱的連化學版一起）'], warnings: [], defaults: [DEFAULT_LINES[1], DEFAULT_LINES[2]] });
         assert.deepEqual(tuning.checkOverrides({ OLLAMA_NUM_CTX_CLASSIFY_CHEM: '8192' }).warnings, []);
     });
 
