@@ -280,6 +280,8 @@
 | R7-4 | B：`/desktop` 的 Dependabot 不分組（每個版本各開一個 PR） | 本分支：`dependabot.yml` 的 `/desktop` 拿掉 `groups`（`minor-and-patch`），註解照實改寫；`/exam_pro` 的分組不動 |
 | R7-5 | 1：B2 等 Owner 驗收 A（啟動器）與 B1（桌面版）之後才送 | `dec/r8-b2-paths-fix`（`3a57d62`）**先不併入任何整合分支**；Owner 驗收完 A 與 B1（`desktop-launcher.md`、`desktop-app-design.md` 6.2 的驗收步驟）再送 |
 
+〔2026-10-01 r11〕R7-2 的補錄已入庫（`9137783`，兩筆都被截斷、存成錯誤回放檔）；`dec/integration-r11` 的最終實況、未達項與開 PR 前後的步驟見 PR 說明稿 [`pr-drafts/local-integration-to-main.md`](pr-drafts/local-integration-to-main.md)（開 PR 前只剩把 r11 併進 `local/integration` 與推送）。
+
 ### 0.0 章節重整（2026-09-25）〔修訂 2026-09-25 章節重整〕
 
 - **範圍**：數學 34→52 章、物理 32→34 章（刪「流體的壓力與浮力」「宇宙學簡介」，新增 4 章），對齊 108 課綱龍騰版目錄；化學章名不動（依龍騰版核對，知識點不需搬移）。契約 [`chapter-restructure.md`](chapter-restructure.md)（裁決 CR-1～CR-6 在第 8 條）、ADR-016。
