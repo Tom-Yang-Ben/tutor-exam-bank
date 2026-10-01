@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T15:06:22.019Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2579,
+        "sha256": "4700e05be345843546f4eb7e4804125fd52892c7b7e4125c4e4372cac34abf4f"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "物體自 $45$ m 高處自由落下，求落地所需的時間（取 $g = 10$ m/s$^2$，不計空氣阻力）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "物體的運動（速度與加速度）",
+      "confidence": 0.95,
+      "rationale": "題目涉及自由落體運動，需應用加速度與位移的關係式，屬於物體的運動（速度與加速度）章節。"
+    },
+    "usage": {
+      "tokenIn": 2499,
+      "tokenOut": 69,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 61199
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:39:39.301Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 3832,
+        "sha256": "9ab80c8a20a12d84907531ab7d638747e3a6906c1b18e542afe076967a5053e6"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "設 $\\vec{a} = (1, 1, 2)$、$\\vec{b} = (2, 3, 0)$ 為三維向量，求其點積。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "空間向量內積",
+      "confidence": 1,
+      "rationale": "題目給定兩個三維空間中的向量 $\\vec{a}$ 與 $\\vec{b}$，並要求計算它們的點積（即內積），因此屬於「空間向量內積」章節。"
+    },
+    "usage": {
+      "tokenIn": 2906,
+      "tokenOut": 69,
+      "tokenThinking": 148,
+      "tokenCached": 0
+    },
+    "latencyMs": 1945
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:02:44.200Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4424,
+        "sha256": "c3747d1b7b2c734396e7502720c61f5f8afa24174e00048ed6cf861eeef6231f"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "設空間向量 $\\vec{a} = (1, 2, 2)$，依 $\\frac{1}{\\sqrt{1^2 + 2^2 + 2^2}$ 求它與 $x$ 軸正向夾角的餘弦值。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及空間向量與x軸正向的夾角餘弦值計算，需使用空間向量內積公式。",
+      "chapter": "空間向量內積",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3972,
+      "tokenOut": 60,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 50138,
+        "loadMs": 12,
+        "promptEvalMs": 12252,
+        "evalMs": 37842
+      }
+    },
+    "latencyMs": 50141
+  }
+}

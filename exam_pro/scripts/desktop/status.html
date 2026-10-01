@@ -1,0 +1,210 @@
+<!doctype html>
+<!--
+  scripts/desktop/status.html — 桌面啟動器的啟動畫面（docs/desktop-launcher.md 第 7.2 節）
+  由 lib/statusServer.js 在 127.0.0.1 的隨機埠供應；每 0.7 秒讀一次 /state。
+  完成且沒有注意事項 → 同一個視窗直接轉到系統首頁；有注意事項 → 列出來，按「進入出題系統」才轉；失敗 → 顯示原因與處置。
+  不引用任何外部資源（本機模式「執行期零外連」；test/unit/desktopLauncherScripts.test.js 用 check_html_offline 的規則檢查）。
+-->
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>出題系統・啟動中</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f6fa; --card: #ffffff; --fg: #1f2430; --muted: #5f6b7d; --line: #e2e6ee;
+    --ok: #1a7f37; --warn: #b35c00; --err: #c62828; --run: #1e4e8c; --skip: #9aa3b2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171f; --card: #1c202a; --fg: #e8eaf0; --muted: #9aa3b5; --line: #2c3240;
+      --ok: #4cc38a; --warn: #f0a44b; --err: #ff6b6b; --run: #7fb0ff; --skip: #6b7385;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: "Microsoft JhengHei UI", "Microsoft JhengHei", "PingFang TC", "Segoe UI", system-ui, sans-serif;
+    font-size: 15px; line-height: 1.55;
+  }
+  main { max-width: 680px; margin: 0 auto; padding: 32px 20px 40px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  ol.steps { list-style: none; margin: 0; padding: 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+  ol.steps li { display: grid; grid-template-columns: 26px 1fr; column-gap: 12px; padding: 12px 16px; border-top: 1px solid var(--line); }
+  ol.steps li:first-child { border-top: 0; }
+  .icon {
+    width: 22px; height: 22px; margin-top: 1px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; color: #fff; background: var(--line);
+  }
+  li[data-state="done"] .icon { background: var(--ok); }
+  li[data-state="warn"] .icon { background: var(--warn); }
+  li[data-state="error"] .icon { background: var(--err); }
+  li[data-state="skipped"] .icon { background: var(--skip); }
+  li[data-state="running"] .icon {
+    background: transparent; border: 3px solid var(--run); border-right-color: transparent;
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .label { font-weight: 600; }
+  .detail { grid-column: 2; color: var(--muted); font-size: 13px; }
+  li[data-state="error"] .detail { color: var(--err); }
+  .box { margin-top: 18px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); }
+  .box.err { border-color: var(--err); }
+  .box.warn { border-color: var(--warn); }
+  .box h2 { font-size: 16px; margin: 0 0 6px; }
+  .box.err h2 { color: var(--err); }
+  .box.warn h2 { color: var(--warn); }
+  .box p { margin: 0 0 6px; }
+  .box ul { margin: 6px 0 0; padding-left: 20px; }
+  .box li { margin: 4px 0; }
+  pre {
+    white-space: pre-wrap; word-break: break-all; font-size: 12px; line-height: 1.45;
+    background: var(--bg); padding: 8px 10px; border-radius: 8px; max-height: 240px; overflow: auto; margin: 10px 0 0;
+  }
+  button {
+    font: inherit; font-weight: 600; margin-top: 12px; padding: 9px 18px;
+    border: 0; border-radius: 8px; background: var(--run); color: #fff; cursor: pointer;
+  }
+  .foot { color: var(--muted); font-size: 12px; margin-top: 18px; word-break: break-all; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title">出題系統啟動中</h1>
+  <p class="sub" id="sub">正在準備資料庫、本機 AI 與後端。完成後這個視窗會自動轉到系統畫面。</p>
+  <ol class="steps" id="steps" aria-live="polite"></ol>
+
+  <section class="box err" id="failure" hidden>
+    <h2 id="failure-title"></h2>
+    <p id="failure-message"></p>
+    <ul id="failure-hints"></ul>
+    <pre id="failure-detail" hidden></pre>
+  </section>
+
+  <section class="box warn" id="warnings" hidden>
+    <h2>注意事項</h2>
+    <ul id="warning-list"></ul>
+    <button type="button" id="enter" hidden>我知道了，進入出題系統</button>
+  </section>
+
+  <p class="foot" id="foot"></p>
+</main>
+<script>
+(function () {
+  'use strict';
+
+  var ICON = { done: '✓', warn: '!', error: '✕', skipped: '–', pending: '', running: '' };
+  var POLL_MS = 700;
+  var finished = false;
+  var misses = 0;
+
+  function $(id) { return document.getElementById(id); }
+
+  function item(tag, text, className) {
+    var el = document.createElement(tag);
+    el.textContent = text;
+    if (className) el.className = className;
+    return el;
+  }
+
+  function fill(listId, lines) {
+    var list = $(listId);
+    list.textContent = '';
+    (lines || []).forEach(function (line) { list.appendChild(item('li', line)); });
+  }
+
+  function renderSteps(state) {
+    var list = $('steps');
+    list.textContent = '';
+    (state.steps || []).forEach(function (step) {
+      var li = document.createElement('li');
+      li.setAttribute('data-state', step.state);
+      li.appendChild(item('span', ICON[step.state] || '', 'icon'));
+      li.appendChild(item('span', step.label, 'label'));
+      var detail = step.detail || '';
+      if (step.state === 'running' && state.note) detail = state.note;
+      if (detail) li.appendChild(item('span', detail, 'detail'));
+      list.appendChild(li);
+    });
+  }
+
+  function renderFoot(state) {
+    var logs = state.logs || {};
+    var parts = [];
+    if (logs.launcher) parts.push('啟動紀錄：' + logs.launcher);
+    if (logs.server) parts.push('後端紀錄：' + logs.server);
+    $('foot').textContent = parts.join('　');
+  }
+
+  function enter(url) {
+    finished = true;
+    window.location.replace(url);
+  }
+
+  function render(state) {
+    renderSteps(state);
+    renderFoot(state);
+
+    var warnings = state.warnings || [];
+    $('warnings').hidden = warnings.length === 0;
+    fill('warning-list', warnings.map(function (w) { return w.text; }));
+
+    if (state.phase === 'failed' && state.failure) {
+      finished = true;
+      document.title = '出題系統・無法啟動';
+      $('title').textContent = '出題系統無法啟動';
+      $('sub').textContent = '已經啟動的部分維持原狀。照下面的方式處理之後，再點一次桌面的「出題系統」圖示。這個視窗可以直接關掉。';
+      $('failure').hidden = false;
+      $('failure-title').textContent = state.failure.title;
+      $('failure-message').textContent = state.failure.message;
+      fill('failure-hints', state.failure.hint);
+      $('failure-detail').hidden = !state.failure.detail;
+      $('failure-detail').textContent = state.failure.detail || '';
+      return;
+    }
+
+    if (state.phase === 'done' && state.appUrl) {
+      finished = true;
+      if (warnings.length === 0) {
+        $('sub').textContent = '完成，正在開啟系統畫面…';
+        enter(state.appUrl);
+        return;
+      }
+      document.title = '出題系統・已啟動（有注意事項）';
+      $('title').textContent = '出題系統已啟動';
+      $('sub').textContent = '系統可以使用了，但請先看一下下面的注意事項。';
+      var button = $('enter');
+      button.hidden = false;
+      button.onclick = function () { enter(state.appUrl); };
+      button.focus();
+    }
+  }
+
+  function lost() {
+    $('sub').textContent = '啟動程式已經結束，這個畫面不會再更新。若系統沒有開啟，請再點一次桌面的「出題系統」圖示。';
+  }
+
+  function poll() {
+    fetch('state', { cache: 'no-store' })
+      .then(function (res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+      .then(function (state) {
+        misses = 0;
+        render(state);
+        if (!finished) setTimeout(poll, POLL_MS);
+      })
+      .catch(function () {
+        misses += 1;
+        if (misses >= 5) { lost(); return; }
+        setTimeout(poll, POLL_MS * 2);
+      });
+  }
+
+  poll();
+})();
+</script>
+</body>
+</html>

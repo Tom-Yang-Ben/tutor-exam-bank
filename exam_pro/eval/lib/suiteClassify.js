@@ -85,7 +85,8 @@ async function runClassifySuite(args) {
                 jq: { id: 0, idx: 0, payload: {}, retries: {} },
                 logger: { info() {}, warn() {}, error() {} },
                 config: {
-                    models: { extract: require('../../config/models').MODEL_EXTRACT, verify: require('../../config/models').MODEL_VERIFY },   // 單一真相：config/models.js（裁決 S2-29）
+                    // 單一真相：config/models.js（裁決 S2-29）；〔LM-15〕text＝分類實際用的模型（Gemini 模式＝extract）
+                    models: { extract: require('../../config/models').MODEL_EXTRACT, verify: require('../../config/models').MODEL_VERIFY, text: require('../../config/models').MODEL_TEXT },
                     limits: sm.tables().DEFAULT_LIMITS,
                     thresholds: { classifyMinConf: minConf },
                     // 第 3.1 條（裁決 S2-8）：features 由 runner 組。similar 關掉，
@@ -127,13 +128,18 @@ async function runClassifySuite(args) {
             if (src === 'gate') sourceCounts.gate++;
             else if (src === 'llm') sourceCounts.llm++;
 
-            rows.push({
+            const row = {
                 id: e.id, gold: e.chapter, pred,
                 subject: e.subject, source: e.source, drift_kind: e.drift_kind,
                 decoy: e.decoy_chapter,
                 hit_decoy: !!(e.decoy_chapter && pred === e.decoy_chapter),
                 outcome_kind: outcome ? outcome.kind : 'error'
-            });
+            };
+            // 〔dec/local-classify-nlq-prep〕第二層的程式後處理改過章的題（agents/classify.js 的 postProcessChapter）：
+            // 記下規則與「模型原本挑的章」，重錄後看得出分數有多少是程式補的、多少是模型自己答對的
+            const adjustments = outcome && outcome.data && Array.isArray(outcome.data.adjustments) ? outcome.data.adjustments : [];
+            if (adjustments.length) row.adjustments = adjustments.map(a => `${a.rule}:${a.from}→${a.to}`);
+            rows.push(row);
         }
 
         if (misses.length) {
@@ -145,6 +151,18 @@ async function runClassifySuite(args) {
                 '部分回放的分數只反映「哪幾題剛好錄過」。'
             );
             rows = null;
+        }
+        if (rows) {
+            const adjusted = rows.filter(r => r.adjustments);
+            if (adjusted.length) {
+                const right = adjusted.filter(r => r.pred === r.gold).length;
+                warnings.push(
+                    `程式後處理改了 ${adjusted.length} 題的章（改完與 golden 相同 ${right} 題）：` +
+                    adjusted.slice(0, 8).map(r => `${r.id} ${r.adjustments.join('、')}`).join('；') +
+                    // 〔Owner 2026-09-27 改答 LC-2〕新加的四條規則寫在 10.22
+                    `${adjusted.length > 8 ? ' …' : ''}（規則：utils/chapterPostRules.js；docs/local-mode.md 10.15、10.22）`
+                );
+            }
         }
         if (sourceCounts.gate > 0) {
             warnings.push(

@@ -427,13 +427,15 @@ describe('config/models.js — MODEL_TUTOR／MODEL_VOICE／MODEL_KC_TAG（第 5.
         process.env.MODEL_KC_TAG = '   ';
         assert.equal(models.MODEL_TUTOR, 'gemini:tutor-a');
         assert.equal(models.MODEL_VOICE, 'gemini:voice-b');
-        assert.equal(models.MODEL_KC_TAG, models.MODEL_EXTRACT);
+        // 〔LM-15〕空白＝未設 → 退回 MODEL_TEXT（Gemini 模式＝MODEL_EXTRACT；這裡沒設 MODEL_EXTRACT，是本機預設＝MODEL_VERIFY）
+        assert.equal(models.MODEL_KC_TAG, models.MODEL_TEXT);
     });
 
     test('既有 getter 行為不變（MODEL_VARIANT 未設仍回 null）', () => {
         for (const k of ['MODEL_EXTRACT', 'MODEL_VERIFY', 'MODEL_VARIANT']) delete process.env[k];
         assert.equal(models.MODEL_VARIANT, null);
-        assert.equal(models.MODEL_EXTRACT, 'gemini:gemini-3.5-flash');
-        assert.equal(models.MODEL_VERIFY, 'gemini:gemini-3.1-pro-preview');
+        // 本機模式預設（docs/local-mode.md 第 2 條；原為 gemini:gemini-3.5-flash／gemini:gemini-3.1-pro-preview）
+        assert.equal(models.MODEL_EXTRACT, 'ollama:qwen3-vl:8b');
+        assert.equal(models.MODEL_VERIFY, 'ollama:qwen3:8b');
     });
 });

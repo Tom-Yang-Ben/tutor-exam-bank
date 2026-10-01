@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:39:48.293Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 3806,
+        "sha256": "638d20a345ffae4c8c9e4fd2ea35dfc2c14c06d190ead8203a7bd675739d63a3"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "依單位圓的定義，寫出 $\\cos 240^\\circ$ 之值。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "confidence": 1,
+      "rationale": "題目要求利用單位圓定義求出 240 度（大於 90 度的廣義角）的餘弦函數值，這屬於廣義角三角函數的定義與求值，歸於「廣義角與極坐標」章節。"
+    },
+    "usage": {
+      "tokenIn": 2884,
+      "tokenOut": 90,
+      "tokenThinking": 165,
+      "tokenCached": 0
+    },
+    "latencyMs": 2119
+  }
+}

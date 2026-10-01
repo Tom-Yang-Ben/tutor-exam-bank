@@ -86,7 +86,10 @@ describe('化學模板的註冊字串 = SYSTEM + "\\n---\\n" + TEMPLATE', () => 
 
     test('既有模板的註冊內容不變（仍是模板原文本身，不含 SYSTEM——已知缺口，本階段不修）', () => {
         assert.equal(getTemplate(extract.TEMPLATE), extract.PROMPT_TEMPLATE);
-        assert.equal(getTemplate(classify.TEMPLATE), classify.PROMPT_TEMPLATE);
+        // 〔重練與收尾決策單 2026-09-26〕classify 原為「等於 PROMPT_TEMPLATE」：審查意見把界線規則（序列化的
+        //   SUBJECT_RULES）併進註冊的模板文字，改規則才會改 cassette 的鍵。仍是逐字比對，仍不含 SYSTEM（已知缺口不變）。
+        assert.equal(getTemplate(classify.TEMPLATE), `${classify.PROMPT_TEMPLATE}\n---\n${JSON.stringify(classify.SUBJECT_RULES)}`);
+        assert.ok(!getTemplate(classify.TEMPLATE).includes(classify.SYSTEM));
         assert.equal(getTemplate(lint.TEMPLATE), lint.PROMPT_TEMPLATE);
         assert.equal(getTemplate(verify.TEMPLATE), verify.PROMPT_TEMPLATE);
         assert.equal(getTemplate(generateVariant.TEMPLATE), generateVariant.PROMPT_TEMPLATE);
@@ -102,11 +105,11 @@ describe('extract：化學卷（ctx.job.subject_group = chemistry）', () => {
         assert.equal(outcome.kind, 'pass');
         assert.equal(outcome.data.questions[0].subject, '化學');
         assert.equal(calls[0].agent, 'extract_chem');
-        assert.equal(calls[0].template, 'extract_chem.v1');
+        assert.equal(calls[0].template, 'extract_chem.v2');
         assert.equal(calls[0].system, extract.SYSTEM_CHEM);
         assert.equal(calls[0].schema, buildSchema('extract', { group: 'chemistry' }));
         assert.deepEqual(Object.keys(calls[0].cacheKeyParts), ['template', 'chunkNo', 'pdfSha256']);
-        assert.equal(calls[0].cacheKeyParts.template, 'extract_chem.v1');
+        assert.equal(calls[0].cacheKeyParts.template, 'extract_chem.v2');
     });
 
     test('化學卷的 prompt 列化學 44 章、不列任何數學／物理章節，並帶化學式規範', () => {
@@ -134,7 +137,7 @@ describe('extract：化學卷（ctx.job.subject_group = chemistry）', () => {
             const { ctx, calls } = fakeCtx({ responses: [{ questions: [] }], job });
             await extract.run(ctx, { pdfBytes: await makePdf(), chunk: { no: 1, fromPage: 1, toPage: 1 } });
             assert.equal(calls[0].agent, 'extract');
-            assert.equal(calls[0].template, 'extract.v2');
+            assert.equal(calls[0].template, 'extract.v3');
             assert.equal(calls[0].system, extract.SYSTEM);
             assert.equal(calls[0].schema, buildSchema('extract'));
             assert.equal(calls[0].parts[1].text, extract.buildPrompt());
@@ -185,7 +188,8 @@ describe('classify：化學題', () => {
         const { ctx, calls } = fakeCtx({ responses: [{ chapter: '向量內積', confidence: 0.9, rationale: 'x' }], job: { subject_group: 'chemistry' } });
         await classify.run(ctx, { subject: '數學', question_text: '求向量夾角' });
         assert.equal(calls[0].agent, 'classify');
-        assert.equal(calls[0].template, 'classify.v1');
+        // 〔決策單 2026-09-26 A5／A7；CR-9〕原為 'classify.v1'：數學／物理的分類模板升版（化學的 classify_chem.v1 不變）
+        assert.equal(calls[0].template, 'classify.v2');
         assert.equal(calls[0].system, classify.SYSTEM);
         assert.equal(calls[0].schema, buildSchema('classify'));
     });
@@ -210,7 +214,7 @@ describe('lint：化學題', () => {
         const outcome = await lint.run(ctx, { question_text: '$\\ce{H2O$ 的莫耳質量', answer_text: '$18$' });
         assert.equal(outcome.kind, 'pass');
         assert.equal(calls[0].agent, 'lint_chem');
-        assert.equal(calls[0].template, 'lint_chem.v1');
+        assert.equal(calls[0].template, 'lint_chem.v2');
         assert.equal(calls[0].system, lint.SYSTEM_CHEM);
         assert.ok(calls[0].parts[0].text.includes('\\ce{'));
     });
@@ -222,7 +226,7 @@ describe('lint：化學題', () => {
         });
         await lint.run(ctx, { question_text: '$\\frac{1}{2$', answer_text: '' });
         assert.equal(calls[0].agent, 'lint');
-        assert.equal(calls[0].template, 'lint.v2');
+        assert.equal(calls[0].template, 'lint.v3');
         assert.equal(calls[0].system, lint.SYSTEM);
         assert.equal(calls[0].schema, buildSchema('lint'));
     });
@@ -293,9 +297,9 @@ describe('generateVariant：化學藍本', () => {
         assert.equal(outcome.kind, 'pass', JSON.stringify(outcome));
         assert.equal(outcome.data.subject, '化學');
         assert.equal(calls[0].agent, 'variant_chem');
-        assert.equal(calls[0].template, 'variant_chem.v1');
+        assert.equal(calls[0].template, 'variant_chem.v2');
         assert.equal(calls[0].schema, buildSchema('variant', { group: 'chemistry' }));
-        assert.equal(calls[0].cacheKeyParts.template, 'variant_chem.v1');
+        assert.equal(calls[0].cacheKeyParts.template, 'variant_chem.v2');
         assert.ok(calls[0].parts[0].text.includes('「勒沙特列原理」'));
     });
 

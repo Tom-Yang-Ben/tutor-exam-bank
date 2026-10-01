@@ -217,7 +217,7 @@ async function runRetrieval(args) {
 
     const fixture = loadFixture();
     if (fixture.needsHumanConfirm) {
-        warnings.push('fixture 仍標記 needs_human_confirm：60 題的答案尚未由開發者本人逐題核對，數字只能當骨架驗證用。');
+        warnings.push(`fixture 仍標記 needs_human_confirm：${fixture.questions.length} 題的答案尚未由開發者本人逐題核對，數字只能當骨架驗證用。`);
     }
 
     const golden = loadGolden({ file: args.golden, fixtureById: fixture.byId });
@@ -368,7 +368,8 @@ async function runStage2Suite(args, runner) {
         if (w.kept.length) console.log(`  保持不變：\n  - ${w.kept.join('\n  - ')}`);
     }
 
-    const cmp = thresholds.compareSuite(thresholds.loadThresholds(), res.suite, res.measured);
+    // 〔Owner 第五輪 D-2〕suite 宣告「這一輪設計上不比」的指標（只認 thresholds.js 白名單裡的，例：OCR 模式的 saved_rate）
+    const cmp = thresholds.compareSuite(thresholds.loadThresholds(), res.suite, res.measured, { notApplicable: res.notApplicable });
     if (cmp.skipped.length) console.log(`未設門檻（只報告不擋）：${cmp.skipped.join('、')}`);
     if (cmp.failures.length) {
         console.error(`\n❌ ${res.suite} eval 未達門檻：\n  - ${cmp.failures.join('\n  - ')}`);

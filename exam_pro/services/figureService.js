@@ -52,18 +52,23 @@ function boxToPixels(box, imgWidth, imgHeight, marginRatio = MARGIN_RATIO) {
  * 把一批題目的附圖裁成 PNG，路徑（`/figures/<jobId>-<idx>.png`，可直接當 <img src>）
  * **就地**寫回各題的 `figure_img`。沒有任何一題帶框時什麼都不做。
  *
- * @param {{pdfBytes:Buffer, jobId:number,
+ * 呼叫端有兩個：管線（workers/jobRunner.js，jobId 是 jobs.id）與舊的 /analyze-pdf 相容包裝
+ * （services/aiService.js，jobId 是 `legacy-<請求編號>` 這種字串前綴）〔Owner 決策單 2026-09-25 B21〕。
+ * 兩者共用同一套渲染＋裁切與同一個附圖目錄；jobId 只拿來組檔名與記 log。
+ *
+ * @param {{pdfBytes:Buffer, jobId:number|string,
  *          questions:Array<{idx:number, figure_page?:number, figure_box?:number[]}>,
- *          logger?:object}} opts  figure_page 是整份 PDF 的絕對頁碼（1-based）
+ *          logger?:object, figuresDir?:string}} opts  figure_page 是整份 PDF 的絕對頁碼（1-based）；
+ *          figuresDir 只給測試注入暫存目錄用，正式執行一律是 FIGURES_DIR（app.js 的 /figures 靜態掛載）
  * @returns {Promise<number>} 成功裁出的張數
  */
-async function cropFigures({ pdfBytes, jobId, questions, logger = console }) {
+async function cropFigures({ pdfBytes, jobId, questions, logger = console, figuresDir = FIGURES_DIR }) {
     const targets = (questions || []).filter(
         q => Number.isInteger(q?.figure_page) && Array.isArray(q?.figure_box)
     );
     if (targets.length === 0) return 0;
 
-    fs.mkdirSync(FIGURES_DIR, { recursive: true });
+    fs.mkdirSync(figuresDir, { recursive: true });
     const sharp = require('sharp');
     const mupdf = await loadMupdf();
 
@@ -97,7 +102,7 @@ async function cropFigures({ pdfBytes, jobId, questions, logger = console }) {
                     continue;
                 }
 
-                const file = path.join(FIGURES_DIR, `${jobId}-${q.idx}.png`);
+                const file = path.join(figuresDir, `${jobId}-${q.idx}.png`);
                 await sharp(rendered.png).extract(rect).png().toFile(file);
                 q.figure_img = `/figures/${jobId}-${q.idx}.png`;
                 cropped += 1;

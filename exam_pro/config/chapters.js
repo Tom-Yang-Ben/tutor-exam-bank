@@ -10,26 +10,22 @@
 // 之後 SUBJECTS = ['數學','物理','化學']、CHAPTERS['化學'] 有 44 章。
 // 既有 LLM 呼叫（數學／物理的 prompt、schema enum、cassette 鍵）一律改讀 LEGACY_*：
 //   LEGACY_SUBJECTS = ['數學','物理']、LEGACY_CHAPTERS = 兩科合併 66 章（順序與原本逐字相同）。
+//   （〔章節重整 CH-A〕2026-09-25 起為重整後的 86 章，見下一段與 LEGACY_* 的註解。）
 // SUBJECT_GROUPS 是上傳時的「卷別」（jobs.subject_group）→ 該卷可能出現的科目，見 ADR-010。
+//
+// 〔章節重整 CH-A〕2026-09-25（docs/chapter-restructure.md 第 3.1 條第 1 點、ADR-016）：
+// 數學／物理的 VOLUMES 改讀 config/chapterPlan.js 的 PLAN_VOLUMES（Owner 定案的 108 龍騰目錄對照），
+// 數學 34 → 52 章、物理 32 → 34 章，化學不動。這是**刻意**讓數學／物理的 schema enum 改變：
+// 既有 classify／extract／variant／nlq 的 cassette 與部分 embeddings fixture 因此失效，由 Owner 一次重錄
+// （第 5 條）。舊題的章節由 scripts/migrate_chapters.js（npm run chapters:migrate）提議＋老師確認後搬移。
 
 const { CHEMISTRY_VOLUMES } = require('./chemistryChapters');
+const { PLAN_VOLUMES } = require('./chapterPlan');
 
 const VOLUMES = {
-    '數學': [
-        { name: '第一冊', chapters: ['實數', '絕對值', '指數與對數', '直線方程式', '圓方程式', '多項式除法', '三次函數'] },
-        { name: '第二冊', chapters: ['數列與級數', '排列', '組合', '古典機率', '期望值', '一維數據分析', '二維數據分析'] },
-        { name: '第三冊(A/B)', chapters: ['三角函數的定義', '正弦與餘弦定理', '三角測量', '向量的加減與係數積', '向量內積', '面積與行列式'] },
-        { name: '第四冊(A/B)', chapters: ['空間概念與座標系', '空間向量內積', '外積', '平面方程式', '空間直線方程式', '矩陣的加減與乘法', '克拉瑪公式'] },
-        { name: '選修數學', chapters: ['數列的極限', '函數的極限', '微分導函數', '函數圖形與極值', '定積分與面積', '隨機變數', '常態分配'] }
-    ],
-    '物理': [
-        { name: '必修物理', chapters: ['科學的態度與方法', '物質的組成（夸克與原子）', '物體的運動（速度與加速度）', '四大基本交互作用', '能量的形式與守恆', '量子現象（光電效應與波粒二象性）', '宇宙學簡介'] },
-        { name: '選修物理一', chapters: ['直線運動', '平面運動', '牛頓運動定律', '摩擦力與向心力', '動量與衝量', '動量守恆與碰撞'] },
-        { name: '選修物理二', chapters: ['功與動能', '位能與能量守恆', '重力場與重力位能', '剛體轉動與平衡', '簡諧運動(SHM)', '流體的壓力與浮力'] },
-        { name: '選修物理三', chapters: ['波動的性質', '聲波與交互作用', '幾何光學（反射折射）', '物理光學（干涉繞射）'] },
-        { name: '選修物理四', chapters: ['靜電學', '電場與電位', '電流與電路', '電流磁效應', '電磁感應', '交流電'] },
-        { name: '選修物理五', chapters: ['近代物理的序幕', '原子結構與光譜', '核物理與基本粒子'] }
-    ],
+    // 〔章節重整 CH-A〕唯一真相是 config/chapterPlan.js（本檔不重抄清單）
+    '數學': PLAN_VOLUMES['數學'],
+    '物理': PLAN_VOLUMES['物理'],
     // 〔stage5 WS-B〕第 3.3 條凍結的 44 章（AI 草擬，待 Owner 對照教科書定稿）
     '化學': CHEMISTRY_VOLUMES
 };
@@ -58,10 +54,16 @@ const SUBJECTS = Object.keys(CHAPTERS);
 // 為什麼要有「舊值域」：數學／物理的 extract／classify／variant／nlq schema 的 enum 與
 // prompt 的白名單都進了既有 cassette 的鍵（schemaHash）或錄製當下的 prompt。
 // 化學併入 SUBJECTS／CHAPTERS 之後，那些地方若繼續讀 SUBJECTS 就會多出化學、cassette 全數失效，
-// 所以它們改讀下面這兩個常數——內容與順序和併入化學之前逐字相同。
-/** 數學與物理（化學併入之前的 SUBJECTS，順序不變） */
+// 所以它們改讀下面這兩個常數。
+//
+// 〔章節重整 CH-A〕LEGACY 指的是「數學／物理這一組（math_physics 卷別）的 schema 值域」，
+// 不是「重整之前的舊章名」：2026-09-25 起，它的值是重整後的數學 52 章＋物理 34 章（順序：數學各冊 → 物理各冊）。
+// 名稱沿用，是因為 agents/schemas、promptParts、nlqService、nlqHeuristics 都以這兩個名字區分
+// 「數學／物理這組」與「化學」（docs/chapter-restructure.md 第 2 條）。重整前的舊章名只留在
+// config/chapterPlan.js 的 MIGRATION（舊→新對照）。
+/** 數學與物理（math_physics 卷別的科目，順序不變） */
 const LEGACY_SUBJECTS = Object.freeze(['數學', '物理']);
-/** 數學＋物理合併的 66 章（化學併入之前的 SUBJECTS.flatMap(s => CHAPTERS[s])，順序逐字相同） */
+/** 數學＋物理合併的 86 章（2026-09-25 重整後；SUBJECTS 前兩科的 flatMap，順序：數學各冊 → 物理各冊） */
 const LEGACY_CHAPTERS = Object.freeze(LEGACY_SUBJECTS.flatMap(subject => CHAPTERS[subject]));
 
 /**

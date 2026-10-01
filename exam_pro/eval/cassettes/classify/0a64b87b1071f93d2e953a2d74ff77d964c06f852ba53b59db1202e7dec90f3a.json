@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T14:44:10.531Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4025,
+        "sha256": "b59f8967e29cdb44ccdcbc096f43f3c88508b98b08017892e32f8ef326786f4b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "$\\cos 120^\\circ$ 之值為何？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "confidence": 0.95,
+      "rationale": "題目涉及計算 $\\cos 120^\bullet$，而 $120^\bullet$ 是第二象限角，需使用廣義角的三角函數定義進行計算，因此屬於廣義角與極坐標章節。"
+    },
+    "usage": {
+      "tokenIn": 3599,
+      "tokenOut": 88,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 64878
+  }
+}

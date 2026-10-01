@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T15:28:46.449Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2636,
+        "sha256": "5c578c975107a95e363eb5be6e57c791502cc978ad31e856ee5010d009564a29"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "相距 $0.3$ m 的兩個點電荷分別帶 $2 \\times 10^{-6}$ C 與 $3 \\times 10^{-6}$ C，試求它們之間的庫侖力（$k = 9 \\times 10^9$ N·m$^2$/C$^2$）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "靜電學",
+      "confidence": 0.95,
+      "rationale": "題目涉及兩個點電荷之間的庫侖力計算，屬於靜電學中庫侖定律的應用，直接使用庫侖公式計算力的大小。"
+    },
+    "usage": {
+      "tokenIn": 2537,
+      "tokenOut": 67,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 46268
+  }
+}

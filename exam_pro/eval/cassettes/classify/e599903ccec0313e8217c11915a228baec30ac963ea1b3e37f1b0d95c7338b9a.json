@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:39:09.045Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 3836,
+        "sha256": "ff48a2ce474676aa0d8271b7b604ba7c6cec7ab5c8b3f7974c1c333b9d2eba3c"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "平面向量 $\\vec{a} = (2, k)$ 與 $\\vec{b} = (3, 6)$ 的夾角為直角，試求實數 $k$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "confidence": 1,
+      "rationale": "題目給定兩平面向量，並以「夾角為直角」為條件求未知數，此條件等價於兩向量的內積為零，屬於「向量內積」章節中利用內積判定垂直的典型應用。"
+    },
+    "usage": {
+      "tokenIn": 2905,
+      "tokenOut": 83,
+      "tokenThinking": 256,
+      "tokenCached": 0
+    },
+    "latencyMs": 2347
+  }
+}

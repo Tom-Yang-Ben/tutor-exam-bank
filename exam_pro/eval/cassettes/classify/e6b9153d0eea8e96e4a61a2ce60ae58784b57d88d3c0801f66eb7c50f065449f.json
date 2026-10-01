@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T06:52:06.243Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4410,
+        "sha256": "eb006f2155d84262e9a9bc85d1a79f5e83972290cfb12be1f5e8bb05ed706c3e"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "設平面向量 $\\vec{a} = (2, 0)$、$\\vec{b} = (1, \\sqrt{3})$，求兩向量的夾角 $\\theta$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目要求計算兩向量的夾角，需使用向量內積公式與餘弦定義，屬於向量內積的應用。",
+      "chapter": "向量內積",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3953,
+      "tokenOut": 62,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 59682,
+        "loadMs": 10,
+        "promptEvalMs": 19194,
+        "evalMs": 40419
+      }
+    },
+    "latencyMs": 59686
+  }
+}

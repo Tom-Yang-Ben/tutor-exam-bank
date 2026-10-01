@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T21:44:04.476Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1757,
+        "sha256": "1a5c08532f9abe0a9cf5dfbae7baaaf70846f71fc77a600eb6dbe2e279e11e62"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 11,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        12,
+        13,
+        14,
+        19,
+        20
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 3,
+      "question_text": "在一場物理實驗中，學生觀察到一個木塊同時受到兩個拉力作用。若在二維直角坐標系中，測得第一個拉力向量為 $\\vec{F}_1 = (3, \\sqrt{3})$ 牛頓，第二個拉力向量為 $\\vec{F}_2 = (0, 4)$ 牛頓。請計算這兩個拉力之間的夾角 $\\theta$ 為多少度？",
+      "answer_text": "$\\cos \\theta = \\frac{\\vec{F}_1 \\cdot \\vec{F}_2}{|\\vec{F}_1||\\vec{F}_2|} = \\frac{3 \\times 0 + \\sqrt{3} \\times 4}{\\sqrt{3^2 + (\\sqrt{3})^2} \\times \\sqrt{0^2 + 4^2}} = \\frac{4\\sqrt{3}}{\\sqrt{12} \\times 4} = \\frac{4\\sqrt{3}}{8\\sqrt{3}} = \\frac{1}{2}$，故 $\\theta = 60^\\circ$。"
+    },
+    "usage": {
+      "tokenIn": 1266,
+      "tokenOut": 301,
+      "tokenThinking": 1208,
+      "tokenCached": 0
+    },
+    "latencyMs": 12576
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T18:14:12.609Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1488,
+        "sha256": "3c45abc2e8a19f3abb75a6210d71888c083a49fb8468cbcd2cacffbce11b1f7e"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 39,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        38,
+        53
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 1,
+      "question_text": "當列車突然啟動時，乘客的身體會向後傾，主要原因為何？ (A) 慣性　(B) 向心力　(C) 摩擦力變小　(D) 重力變小",
+      "answer_text": "(A)。由牛頓第一運動定律，乘客原有的運動狀態傾向維持不變，車體加速而乘客下肢仍保持原速度，故向後傾。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 1758,
+      "tokenOut": 147,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 114701
+  }
+}

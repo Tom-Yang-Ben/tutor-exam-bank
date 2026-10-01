@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T08:03:06.272Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4382,
+        "sha256": "485cb2a2b83e40ebca44f867c7b90e9b5a79c826b75de7f22fa6239c439c7de5"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "利用對數律化簡 $\\log_{5} 25 + \\log_{5} 5$，並求其值。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目使用對數律進行化簡，並求其值，屬於指數與對數的運算範疇。",
+      "chapter": "指數與對數",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3937,
+      "tokenOut": 58,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 55784,
+        "loadMs": 11,
+        "promptEvalMs": 17309,
+        "evalMs": 38424
+      }
+    },
+    "latencyMs": 55791
+  }
+}

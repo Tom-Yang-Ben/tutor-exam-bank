@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T15:27:18.706Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2586,
+        "sha256": "3d635b453e5d53444d27f53798def89729b56f437db4ff823b2cd7366fdb9c8a"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "一條長 $1$ m 的輕繩綁著 $2$ kg 的小球，在光滑水平面上以固定速率 $3$ m/s 繞圈，試求繩子所受的張力。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "摩擦力與向心力",
+      "confidence": 0.95,
+      "rationale": "題目涉及物體以固定速率繞圈，需計算繩子的張力，這與向心力的計算有關，屬於摩擦力與向心力章節的內容。"
+    },
+    "usage": {
+      "tokenIn": 2507,
+      "tokenOut": 73,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 54100
+  }
+}

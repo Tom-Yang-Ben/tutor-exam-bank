@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T15:15:37.853Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2658,
+        "sha256": "6df3e668c945f6dd1b3819a7892a7fa6615188c9cbd6d1d9e6ada8aea3949347"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "將一根帶正電的玻璃棒靠近一顆原本不帶電、放在絕緣支架上的金屬球（兩者不接觸）。玻璃棒保持不動，先用導線將金屬球接地，再拆掉導線，最後才移走玻璃棒。此時金屬球的帶電情形為何？\n(A) 帶正電　(B) 帶負電　(C) 不帶電　(D) 一側帶正電、另一側帶負電，淨電量為零",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "靜電學",
+      "confidence": 0.95,
+      "rationale": "題目涉及帶電體對導體的影響，以及接地後電荷的重新分布，屬於靜電學中電荷誘導與接地的內容。"
+    },
+    "usage": {
+      "tokenIn": 2572,
+      "tokenOut": 65,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 50761
+  }
+}

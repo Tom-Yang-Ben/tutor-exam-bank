@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T15:41:05.377Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2574,
+        "sha256": "3fb9b697a2b53b65c159f8495756a8a0a1ed50ba47ce68c2fc20365f28002c73"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "不計空氣阻力，物體自 $80$ m 高處自由落下，求落地時間（$g = 10$ m/s$^2$）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "直線運動",
+      "confidence": 0.95,
+      "rationale": "題目涉及自由落體運動，需使用直線運動的公式計算落地時間，屬於直線運動章節的核心內容。"
+    },
+    "usage": {
+      "tokenIn": 2497,
+      "tokenOut": 57,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 43387
+  }
+}

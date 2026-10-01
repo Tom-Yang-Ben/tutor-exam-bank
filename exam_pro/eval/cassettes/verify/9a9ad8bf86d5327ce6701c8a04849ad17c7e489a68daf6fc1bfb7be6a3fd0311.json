@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-25T18:59:30.270Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 99,
+        "sha256": "60c698f9638c1830b41df93661da59310cfcbe152bd3ae8e0c2a778acaba51b5"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "一質量為 $4$ kg 的物體，以 $5$ m/s 的速率在水平面上做等速圓周運動，其運動半徑為 $3$ m，求繩子對物體的張力。假設系統為光滑無摩擦。",
+      "questionType": "計算",
+      "sampleNo": 2
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "100/3",
+      "answer_form": "number",
+      "steps_summary": "物體做等速圓周運動需向心力，張力即為向心力。公式為 F = m*v²/r，代入 m=4kg、v=5m/s、r=3m，計算得 F = 4*(5²)/3 = 100/3 N。"
+    },
+    "usage": {
+      "tokenIn": 316,
+      "tokenOut": 465,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 167104
+  }
+}

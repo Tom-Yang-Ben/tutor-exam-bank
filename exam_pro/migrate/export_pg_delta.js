@@ -1,6 +1,11 @@
 // ─────────────────────────────────────────────────────────────
 // migrate/export_pg_delta.js — 切換之後的新增資料反向匯出（規劃 §5.3.6 步驟 6）
 //
+// ⚠ 〔retrain PR-1〕只適用於 migrations/0016_assignment_attempt_split.sql 之前的 schema：
+//   0016 把 attempts 拆成 assignments（派題）＋attempt_records（作答），attempts 改成唯讀檢視。
+//   這支是 2026-08-21 MySQL 切換用的一次性工具（已完成），讀的是舊的 attempts 表，不另外改寫
+//   （docs/retrain-and-review.md 第 3.6 節第 6 點）。
+//
 // 用途：切換之夜之後的 1～14 天內若決定退回 MySQL，這段期間在 PostgreSQL 上
 //       新增的題目、試卷與作答紀錄不會自己回到 MySQL。這支把它們倒出來，
 //       並把 attempts 摺回舊的 history_json 形狀。

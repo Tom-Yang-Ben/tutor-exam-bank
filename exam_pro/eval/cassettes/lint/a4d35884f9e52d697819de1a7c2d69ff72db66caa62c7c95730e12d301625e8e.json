@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "agent": "lint",
+    "model": "qwen3:8b",
+    "template": "lint.v2",
+    "recorded_at": "2026-09-25T18:27:01.285Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1083,
+        "sha256": "8de903b01fb3a8f96bdf59ab7877c80f2b2cbbd1680aab1a2957db78818e0c8f"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "lint.v2",
+      "questionText": "質量 $8$ kg 的物體置於傾角 $37^\rcirc$ 的斜面上（$\tan 37^\rcirc = \frac{3}{4}$），與斜面間的動摩擦係數 $\theta = 0.2$，求物體沿斜面下滑的加速度（取 $g = 10$ m/s$^2$）。",
+      "answerText": "$a = g(\tan 37^\rcirc - \frac{\theta}{\tan 37^\rcirc}) = 10 \times \frac{3}{4} \times (1 - 0.2) = 10 \times \frac{3}{4} \times 0.8 = 6$ m/s$^2$，方向沿斜面向下。",
+      "issues": [
+        "bare_script",
+        "bare_script",
+        "bare_script",
+        "bare_script",
+        "bare_script",
+        "bare_script",
+        "missing_rbrace"
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "question_text": "質量 $8$ kg 的物體置於傾角 $37^\\circ$ 的斜面上（$\\tan 37^\\circ = \\frac{3}{4}$），與斜面間的動摩擦係數 $\\mu = 0.2$，求物體沿斜面下滑的加速度（取 $g = 10$ m/s$^2$）。",
+      "answer_text": "$a = g(\\tan 37^\\circ - \\frac{\\mu}{\\tan 37^\\circ}) = 10 \\times \\frac{3}{4} \\times (1 - 0.2) = 10 \\times \\frac{3}{4} \\times 0.8 = 6$ m/s$^2$，方向沿斜面向下。",
+      "notes": "修正上下標空值、括號閉合、符號錯誤，調整 \\tan 與 \\mu 位置，補齊所有缺失的 \\{ 和 \\}，統一使用 \\circ 表示角度，修正 \\frac 的格式與空格問題。"
+    },
+    "usage": {
+      "tokenIn": 906,
+      "tokenOut": 805,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 496927
+  }
+}

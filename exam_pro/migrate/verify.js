@@ -1,6 +1,11 @@
 // ─────────────────────────────────────────────────────────────
 // migrate/verify.js — 匯入後的獨立校驗（D-D5，規劃 §5.3.6 步驟 4）
 //
+// ⚠ 〔retrain PR-1〕只適用於 migrations/0016_assignment_attempt_split.sql 之前的 schema：
+//   0016 把 attempts 拆成 assignments（派題）＋attempt_records（作答），attempts 改成唯讀檢視。
+//   這支是 2026-08-21 MySQL 切換用的一次性工具（已完成），讀的是舊的 attempts 表，不另外改寫
+//   （docs/retrain-and-review.md 第 3.6 節第 6 點）。
+//
 // 用法（在 exam_pro 資料夾內）：
 //   node migrate/verify.js                       比對 migrate/out 的匯出檔與 DATABASE_URL
 //   node migrate/verify.js --test                改比對 TEST_DATABASE_URL

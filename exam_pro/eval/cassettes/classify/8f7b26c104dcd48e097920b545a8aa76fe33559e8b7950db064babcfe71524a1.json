@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T14:24:12.161Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4049,
+        "sha256": "ff44be2efad9932a689447b29f948d3951d95dd8e66fcf376ec6725577aef748"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "已知 $\\log_{10} 2 = 0.3010$，求 $2^{100}$ 是幾位數的整數。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "confidence": 0.95,
+      "rationale": "題目涉及指數運算與對數的應用，需利用對數性質計算 $2^{100}$ 的位數，屬於指數與對數章節。"
+    },
+    "usage": {
+      "tokenIn": 3620,
+      "tokenOut": 71,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 53292
+  }
+}

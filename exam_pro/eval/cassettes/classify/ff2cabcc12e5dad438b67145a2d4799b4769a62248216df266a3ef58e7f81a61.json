@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:39:32.707Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2510,
+        "sha256": "6644fc6f574d2ab2f64667553a8b44336ec5c9f92628bf190c5236aa96aa8402"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "均勻電場的量值為 $200$ N/C，一個帶電量 $3 \\times 10^{-6}$ C 的電荷順著電場方向移動 $0.4$ m，試問電場力對它作了多少功？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "電場與電位",
+      "confidence": 0.95,
+      "rationale": "題目計算帶電粒子在均勻電場中移動時電場力所作的功（$W=qEd$），涉及電荷在電場中的受力與位能變化，屬於「電場與電位」章節的範疇。"
+    },
+    "usage": {
+      "tokenIn": 2003,
+      "tokenOut": 88,
+      "tokenThinking": 333,
+      "tokenCached": 0
+    },
+    "latencyMs": 2898
+  }
+}

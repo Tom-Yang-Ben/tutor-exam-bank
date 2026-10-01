@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T10:35:49.095Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2172,
+        "sha256": "331effff7845f9c05e74ab96b8349e02b4eb57c7c6c8dd2f923340b3f434ebd0"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 7,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        11,
+        12,
+        19,
+        20,
+        21
+      ],
+      "total": 2,
+      "siblings": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數函數與對數函數",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 3,
+      "question_text": "某種細菌的繁殖速率與時間的關係為 $\\log_{3} 5 \\times \\log_{5} 27$，求其結果為何？",
+      "answer_text": "$3$。換底後 $\\frac{\\log 5}{\\log 3} \\times \\frac{\\log 27}{\\log 5} = \\frac{\\log 27}{\\log 3} = \\log_{3} 27 = 3$。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2218,
+      "tokenOut": 165,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 258105,
+        "loadMs": 14,
+        "promptEvalMs": 172295,
+        "evalMs": 82236
+      }
+    },
+    "latencyMs": 258309
+  }
+}

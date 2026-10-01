@@ -75,12 +75,17 @@ describe('jobRunner — loadSourceCheckConfig（SOURCE_CHECK_MODE）', () => {
 
 describe('jobRunner — loadConfig', () => {
     test('全空的環境用第 9 條的預設值', () => {
+        // 〔Owner 第五輪 V5-3、V5-4、V5-5 核准 2026-09-27〕去重門檻依向量模型：全空＝EMBED_MODEL 沒寫＝本機 → 0.99／0.90；
+        // Gemini 向量維持第 9 條原值 0.97／0.90。形狀（鍵）一個都沒變。
         const c = loadConfig({});
         assert.deepEqual(c, {
             pollMs: 2000, concurrency: 2, leaseMs: 180000, nodeTimeoutMs: 120000,
             costBudgetUsd: 0.5, dailyCostBudgetUsd: 5, pdfChunkPages: 20,
-            inlineMaxBytes: 15728640, classifyMinConf: 0.8, dedupDup: 0.97, dedupVariant: 0.90
+            inlineMaxBytes: 15728640, classifyMinConf: 0.8, dedupDup: 0.99, dedupVariant: 0.90
         });
+        assert.deepEqual(loadConfig({ EMBED_MODEL: 'gemini-embedding-001' }), { ...c, dedupDup: 0.97, dedupVariant: 0.90 });
+        assert.deepEqual(loadConfig({ EMBED_MODEL: 'gemini-embedding-001', DEDUP_DUP_THRESHOLD: '0.95', DEDUP_VARIANT_THRESHOLD: '0.85' }),
+            { ...c, dedupDup: 0.95, dedupVariant: 0.85 }, '.env 明寫一律優先');
     });
 
     test('讀得到就用環境值（字串會轉數字）', () => {

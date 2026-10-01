@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T21:41:29.531Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1694,
+        "sha256": "33ea2394f7d2f4b48a69d57faeb7f3dba1f196ff117c07398f742cfbec47a80a"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 3,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        4,
+        8,
+        10,
+        17,
+        18
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數函數與對數函數",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "在某項生物實驗中，研究員觀察到某種特殊細胞的數量 $N$（單位：萬個）與培養時間 $t$（單位：天）之間滿足指數關係式 $N(t) = 5^{2t-3}$。若在某次觀測中，發現培養皿內的細胞總數恰好為 $125$ 萬個，試求觀測時的培養時間 $t$ 為幾天？",
+      "answer_text": "因為 $125 = 5^3$，所以我們可建立等式 $5^{2t-3} = 5^3$。比較兩邊的指數可得 $2t - 3 = 3$，解得 $2t = 6$，故 $t = 3$。"
+    },
+    "usage": {
+      "tokenIn": 1265,
+      "tokenOut": 228,
+      "tokenThinking": 715,
+      "tokenCached": 0
+    },
+    "latencyMs": 9215
+  }
+}

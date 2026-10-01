@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T14:19:31.270Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4067,
+        "sha256": "090ed59f41fc5d4a71305adb55be53d8372735fbe0013a5cd7df10853316d9d6"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "$\\log_{2} 8 + \\log_{2} 4$ 之值為何？\n(A) $5$　(B) $6$　(C) $7$　(D) $12$",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "confidence": 0.95,
+      "rationale": "題目涉及對數運算，需使用對數的性質進行計算，屬於指數與對數章節。"
+    },
+    "usage": {
+      "tokenIn": 3630,
+      "tokenOut": 58,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 517863
+  }
+}

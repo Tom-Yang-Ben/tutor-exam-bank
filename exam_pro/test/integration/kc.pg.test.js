@@ -99,7 +99,7 @@ function runSuite() {
 
         beforeEach(async () => {
             await query('TRUNCATE question_kcs, kc_prerequisites, knowledge_components RESTART IDENTITY CASCADE');
-            await query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE');
+            await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE');
             const res = await kc.loadSeeds({ pool, query }, [readSeed('數學'), readSeed('物理')], { chapters: CHAPTERS });
             assert.equal(res.ok, true, res.errors.join('\n'));
             const [vec, add, work, archived, real] = await seedQuestions([

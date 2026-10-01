@@ -9,6 +9,11 @@
 // 三道防線與其他整合測試相同：只讀 TEST_DATABASE_URL、庫名必須以 _test 結尾、
 // 在 require config/db.js 之前覆寫 DATABASE_URL。不連 Gemini、不需金鑰、不讀 cassette。
 // ─────────────────────────────────────────────────────────────
+// 〔本機模式整合 LM-8〕本檔測的是 Gemini 路徑（Gemini 的模板、cassette、code execution／語音）。
+// 預設模型改成本機後（docs/local-mode.md 第 2 條），在本檔的行程內明寫 Gemini；本機路徑另有
+// test/integration/localExtract.pg.test.js 與 test/unit/llmOllama*.test.js 覆蓋。每個測試檔是獨立行程，不會外溢。
+process.env.MODEL_EXTRACT = 'gemini:gemini-3.5-flash';
+process.env.MODEL_VERIFY = 'gemini:gemini-3.1-pro-preview';
 const { test, describe, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
@@ -142,7 +147,7 @@ function runSuite() {
         for (let i = 1; ; i++) {
             try {
                 await query('TRUNCATE job_events, job_questions, jobs CASCADE');
-                await query('TRUNCATE attempts, exam_papers, students, questions CASCADE');
+                await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions CASCADE');
                 return;
             } catch (err) {
                 if ((err.code !== '40P01' && err.code !== '55P03') || i >= 10) throw err;
@@ -230,7 +235,7 @@ function runSuite() {
                 const agents = fakeLlm.calls.map(c => c.agent).sort();
                 assert.deepEqual(agents, ['extract_chem', 'verify_chem', 'verify_chem']);
                 const ex = fakeLlm.calls.find(c => c.agent === 'extract_chem');
-                assert.equal(ex.template, 'extract_chem.v1');
+                assert.equal(ex.template, 'extract_chem.v2');
                 assert.deepEqual(ex.schema.properties.questions.items.properties.subject.enum, ['化學']);
                 assert.equal(ex.schema.properties.questions.items.properties.chapter.enum.length, 44);
             });
@@ -279,6 +284,48 @@ function runSuite() {
                 assert.equal(body.filters.subject, '化學');
                 assert.deepEqual(body.filters.chapters, ['緩衝溶液']);
                 assert.ok(body.results.some(r => r.id === ids['緩衝溶液']), JSON.stringify(body));
+            });
+
+            // 〔Owner 決策單 2026-09-25 B5〕NLQ 的 LLM 輔路徑（nlq.v2）加上化學：規則沒抓到章節的化學句子交給 LLM，
+            // LLM 挑的化學章節過伺服器端再驗後拿去檢索。
+            test('NLQ：規則沒抓到章節的化學句子走 LLM 輔路徑（nlq.v2），LLM 挑的化學章節落在化學題', async () => {
+                const seen = [];
+                const nlqLlm = {
+                    async generateJson(opts) {
+                        seen.push(opts);
+                        return {
+                            data: { subject: '化學', chapters: ['緩衝溶液', '化學平衡'], question_types: [], semantic_text: '醋酸 醋酸鈉 氫離子濃度', keywords: [] },
+                            usage: USAGE, latencyMs: 1, raw: null, schemaFallback: false
+                        };
+                    },
+                    embed: (...a) => fakeLlm.embed(...a)      // embedOk=false → LIKE（fallback_level 3），檢索只看 metadata
+                };
+                const body = await nlq.searchNl({ query: '醋酸加醋酸鈉之後氫離子濃度怎麼算', limit: 10 }, { db: { pool, query }, llm: nlqLlm });
+                assert.equal(seen.length, 1);
+                assert.equal(seen[0].agent, 'nlq');
+                assert.equal(seen[0].template, 'nlq.v2');
+                assert.ok(seen[0].schema.properties.chapters.items.enum.includes('緩衝溶液'));
+                assert.equal(body.parse_path, 'llm');
+                assert.equal(body.filters.subject, '化學');
+                assert.deepEqual(body.filters.chapters, ['緩衝溶液'], '非法章名「化學平衡」被丟掉');
+                assert.ok(body.warnings.includes('章節「化學平衡」不在白名單內，已忽略。'));
+                assert.ok(body.results.some(r => r.id === ids['緩衝溶液']), JSON.stringify(body));
+                assert.ok(body.results.every(r => r.subject === '化學'));
+            });
+
+            // 〔Owner 決策單 2026-09-25 B5〕助教 preview_paper 接受化學科＋化學章節；非法章名在 validate 擋下
+            test('助教 preview_paper：化學科＋化學章節可預覽（不寫庫）；非法章名在執行前擋下', async () => {
+                const { TOOLS } = require(path.join(APP_DIR, 'services', 'assistantService'));
+                await query("INSERT INTO students (name) VALUES ('化學助教測試生')");
+                const args = { student_name: '化學助教測試生', subject: '化學', chapter: '緩衝溶液', count: 1 };
+                assert.equal(TOOLS.preview_paper.validate(args), null);
+                const before = (await query('SELECT COUNT(*)::int AS n FROM exam_papers')).rows[0].n;
+                const out = await TOOLS.preview_paper.run(args);
+                assert.ok(!out.error, JSON.stringify(out));
+                assert.deepEqual(out.questions.map(q => q.id), [ids['緩衝溶液']]);
+                assert.equal((await query('SELECT COUNT(*)::int AS n FROM exam_papers')).rows[0].n, before, '預覽不寫庫');
+                assert.match(TOOLS.preview_paper.validate({ ...args, chapter: '緩衝' }), /可能是：「緩衝溶液」/);
+                await query("DELETE FROM students WHERE name = '化學助教測試生'");
             });
 
             test('組卷 → 批改 → 弱點面板（subject=化學）', async () => {

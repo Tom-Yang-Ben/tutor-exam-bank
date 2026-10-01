@@ -89,7 +89,7 @@ function runSuite() {
         for (let i = 0; i < 5; i++) {
             try {
                 await query('TRUNCATE job_events, job_questions, jobs CASCADE');
-                await query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE');
+                await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE');
                 await query('TRUNCATE question_kcs, kc_prerequisites, knowledge_components RESTART IDENTITY CASCADE');
                 return;
             } catch (err) {

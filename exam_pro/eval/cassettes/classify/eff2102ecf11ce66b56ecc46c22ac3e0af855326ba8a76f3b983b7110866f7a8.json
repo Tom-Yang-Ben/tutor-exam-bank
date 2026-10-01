@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:37:15.860Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 3797,
+        "sha256": "21f6ea1e629efb8e7fd310808b6d5b88b5773e411c1488631648d7d0c06429cb"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "$\\sin 150^\\circ$ 之值為何？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "confidence": 1,
+      "rationale": "題目要求計算 150 度的正弦值，此角度為第二象限的廣義角，需利用廣義角的三角函數定義與同界角、補角關係化簡求值，故屬於「廣義角與極坐標」章節。"
+    },
+    "usage": {
+      "tokenIn": 2877,
+      "tokenOut": 93,
+      "tokenThinking": 144,
+      "tokenCached": 0
+    },
+    "latencyMs": 1985
+  }
+}

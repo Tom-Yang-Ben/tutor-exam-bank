@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:33:37.857Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2921,
+        "sha256": "7ae76e5a67e7305dcb2296cd1edee6c5a0b48b552c4ef9cafe1d883e629dd9aa"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "物體自 $45$ m 高處自由落下，求落地所需的時間（取 $g = 10$ m/s$^2$，不計空氣阻力）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及自由落體運動，需應用等加速度公式計算落地時間，屬於直線運動的範疇。",
+      "chapter": "直線運動",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 2798,
+      "tokenOut": 55,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 54763,
+        "loadMs": 15,
+        "promptEvalMs": 20346,
+        "evalMs": 34354
+      }
+    },
+    "latencyMs": 54773
+  }
+}

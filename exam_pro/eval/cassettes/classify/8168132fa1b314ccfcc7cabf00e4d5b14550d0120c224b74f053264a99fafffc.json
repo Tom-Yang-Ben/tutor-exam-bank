@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:36:22.607Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 3845,
+        "sha256": "1d47f4fd0fdd7487758ccd97b2c50fa11b9fc8e5527fe8cf71be70ca9cca380a"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "設平面向量 $\\vec{a} = (5, 2)$、$\\vec{b} = (3, 1)$，求 $\\vec{a} \\cdot \\vec{b}$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "confidence": 1,
+      "rationale": "題目給定兩個平面向量並要求計算其內積 $\\vec{a}\\cdot\\vec{b}$，直接對應「向量內積」章節的基本運算。"
+    },
+    "usage": {
+      "tokenIn": 2907,
+      "tokenOut": 61,
+      "tokenThinking": 166,
+      "tokenCached": 0
+    },
+    "latencyMs": 1859
+  }
+}

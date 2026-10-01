@@ -24,6 +24,16 @@
 //   pg（`--engine pg`）—— 把 fixture 灌進測試庫，跑 services/variantService.js 的
 //       **那一段真的 SQL**。SQL 本身的正確性由 test/integration/variants.pg.test.js 保證，
 //       這裡只是讓「eval 與 prod 走同一段 SQL」這件事在需要時可驗證。
+//
+// 〔dec/r9-record-tooling〕錯誤回放檔（錄製當時被截斷或單次逾時；docs/local-mode.md 10.23）：
+//   - 變式生成那一次：agents/generateVariant.js 照舊接住錯、回 {kind:'error', errorClass, message}
+//     （〔Owner 第七輪 R7-1〕被截斷的另帶 finishReason；這裡每一題本來就只生成一次、不重試，所以截斷與否結果相同，
+//     與 runner 的「本機截斷不重試、放棄那一題」一致——錄製與回放走同一條路）。
+//     這裡認得出那是錯誤回放檔（makeCtx 的 generateJson 看到錯誤帶 errorCassette），就把這一題記成**沒通過**
+//     （算進 generations、不算進 passed，perEntry 的 stopped_at 是 'generate'），寫一行 warning，**不進 failures**——
+//     run.js 因此照常比門檻，不會把它當成「呼叫失敗」讓整個 suite 紅在執行錯誤上，也不會當成 replay miss 讓分數變 n/a。
+//   - 閘門（分類／lint／驗算）那一次：agent 照舊回 {kind:'error'}，runGates 本來就把那一道記成沒過；這裡另外記下是哪一題。
+//   其他不是 replay miss、也不是錯誤回放檔的 error（例：連不上）照舊進 failures。
 // ─────────────────────────────────────────────────────────────
 
 const fs = require('fs');
@@ -31,8 +41,9 @@ const path = require('path');
 
 const { loadFixture } = require('./fixtures');
 const { loadEmbeddings, assertComplete } = require('./embeddings');
-const { isValidChapter, isValidSubject, isValidQuestionType, normalizeDifficulty } = require('../../config/chapters');
+const { isValidQuestionType, normalizeDifficulty } = require('../../config/chapters');
 const { isPrivatePath } = require('./golden');
+const { chapterGate } = require('./chapterGate');
 const metrics = require('./metrics');
 const shims = require('./stage2Shims');
 const replayMiss = require('./replayMiss');
@@ -61,9 +72,12 @@ const GOLDEN_DEFAULT_PATH = path.resolve(__dirname, '..', 'golden', 'variant.jso
  * 逐筆驗證，回傳「所有」問題（不是遇到第一個就停）——一次修完比修五輪省事。
  * @param {Array<object>} entries
  * @param {Map<number,object>} [fixtureById]
+ * @param {{chapters?:Record<string,string[]>}} [opts] 〔章節重整 CH-B〕注入章節白名單（見 eval/lib/chapterGate.js）；
+ *        未給時照舊用 config/chapters.js
  * @returns {string[]}
  */
-function validateGoldenEntries(entries, fixtureById) {
+function validateGoldenEntries(entries, fixtureById, opts = {}) {
+    const { isValidSubject, isValidChapter } = chapterGate(opts.chapters);
     const problems = [];
     if (!Array.isArray(entries) || entries.length === 0) {
         return ['variant golden 的 entries 必須是非空陣列'];
@@ -115,7 +129,8 @@ function validateGoldenEntries(entries, fixtureById) {
 }
 
 /**
- * @param {{file?:string, fixtureById?:Map<number,object>}} [opts]
+ * @param {{file?:string, fixtureById?:Map<number,object>, chapters?:Record<string,string[]>}} [opts]
+ *        chapters：〔章節重整 CH-B〕注入章節白名單（同 validateGoldenEntries）
  * @returns {{file:string, isPrivate:boolean, version:number, entries:Array<object>, pendingConfirm:number}}
  */
 function loadVariantGolden(opts = {}) {
@@ -123,7 +138,7 @@ function loadVariantGolden(opts = {}) {
     if (!fs.existsSync(target)) throw new Error(`找不到 variant golden：${target}`);
 
     const raw = JSON.parse(fs.readFileSync(target, 'utf8'));
-    const problems = validateGoldenEntries(raw.entries, opts.fixtureById);
+    const problems = validateGoldenEntries(raw.entries, opts.fixtureById, { chapters: opts.chapters });
     if (problems.length > 0) {
         throw new Error(`variant golden 未通過硬閘門（${target}）：\n  - ${problems.join('\n  - ')}`);
     }
@@ -147,12 +162,6 @@ function cosine(a, b) {
 }
 
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
-
-/** 讀環境變數的浮點數；缺值或壞值退回預設 */
-function numFromEnv(name, dflt) {
-    const n = Number.parseFloat(process.env[name]);
-    return Number.isFinite(n) ? n : dflt;
-}
 
 /**
  * 記憶體版的第 3.1 條候選條件。fixture 沒有 `archived_at`／`attempts`／`variant_of`，
@@ -265,8 +274,9 @@ async function runGates(ctx, deps, variant, source, seenHashes) {
     mark('verify', verifyOutcome.kind === 'pass' || verifyOutcome.kind === 'skipped');
     if (stoppedAt) return { gates, passedAll: false, stoppedAt, misses, embedMisses };
 
-    // dedup1：與 fixture 比餘弦，**排除藍本整個家族**（裁決 S3-14）
-    const dedup1 = deps.dedup1({ source, chapter, question_text: questionText, answer_text: answerText, difficulty: variant.data.difficulty, question_type: variant.data.question_type, subject: variant.data.subject });
+    // dedup1：與 fixture 比餘弦，**排除藍本整個家族**（裁決 S3-14）。
+    // embed_text 用 classify 之後的章節與 lint 之後的題幹（與 runner 相同），不一定等於跑題檢查 embed 過的那一段。
+    const dedup1 = await deps.dedup1({ source, chapter, question_text: questionText, answer_text: answerText, difficulty: variant.data.difficulty, question_type: variant.data.question_type, subject: variant.data.subject });
     mark('dedup1', dedup1.ok);
     if (dedup1.miss) embedMisses.push(dedup1.miss);
 
@@ -309,10 +319,10 @@ async function runVariantSuite(args = {}) {
 
     // 裁決 S3-R9：兩個門檻分家。retrieved_coverage 量的是「檢索側」，用 RETRIEVE；
     // 生成後的跑題檢查（gate_pass_rate 的第二道）用 OFFTOPIC。舊名 VARIANT_SIM_MIN 是退路。
-    const legacySimMin = Number.parseFloat(process.env.VARIANT_SIM_MIN);
-    const legacy = Number.isFinite(legacySimMin) ? legacySimMin : null;
-    const retrieveSimMin = numFromEnv('VARIANT_RETRIEVE_SIM_MIN', legacy ?? 0.80);
-    const offtopicSimMin = numFromEnv('VARIANT_OFFTOPIC_SIM_MIN', legacy ?? 0.90);   // S3-R29
+    // 〔Owner 第五輪 V5-5 核准 2026-09-27〕預設依向量模型（本機 0.72／0.87、Gemini 0.80／0.90），與 runner 同一支 resolver
+    const sim = require('../../config/similarityThresholds').resolveSimilarityThresholds(process.env);
+    const retrieveSimMin = sim.variantRetrieveSimMin;
+    const offtopicSimMin = sim.variantOfftopicSimMin;   // S3-R29（Gemini 0.90）；V5-2 本機 0.87（暫定）
     const engine = args.engine === 'pg' ? 'pg' : 'memory';
 
     // ── ① retrieved_coverage（零 LLM、零 embedding 呼叫）──
@@ -365,6 +375,7 @@ async function runVariantSuite(args = {}) {
     let gateCounts = null;
     let costUsd = null;
     let generations = 0;
+    let recordedErrors = [];   // 〔dec/r9-record-tooling〕
 
     if (!agentExists) {
         warnings.push('agents/generateVariant.js 尚未合入：gate_pass_rate 與每題成本印 n/a。');
@@ -383,6 +394,7 @@ async function runVariantSuite(args = {}) {
         gateCounts = driver.counts;
         costUsd = driver.costUsd;
         generations = driver.generations;
+        recordedErrors = driver.recordedErrors || [];
         for (const row of perEntry) {
             const g = driver.byEntry.get(row.id);
             if (g) Object.assign(row, { generated: g.generated, gate_passed: g.passed, stopped_at: g.stoppedAt });
@@ -410,6 +422,8 @@ async function runVariantSuite(args = {}) {
         engine,
         failures,
         warnings,
+        // 〔dec/r9-record-tooling〕讀到錯誤回放檔的那幾次（沒有時不出現這個鍵）
+        ...(recordedErrors.length ? { recordedErrors } : {}),
         perEntry: golden.isPrivate ? [] : perEntry,
         meta: {
             agent: agentExists ? 'agents/generateVariant.js' : '（未合入）',
@@ -461,6 +475,7 @@ async function runGeneration({ golden, fixture, emb, offtopicSimMin, generateFn,
     let anyCost = false;
     const misses = [];
     const embedMisses = [];
+    const recordedErrors = [];   // 〔dec/r9-record-tooling〕讀到錯誤回放檔的那幾次（哪一題、哪一道、哪一支）
 
     // fixture 的題也算「庫裡已有的題」：dedup0 撞到它們就是重複
     for (const q of fixture.questions) {
@@ -480,22 +495,39 @@ async function runGeneration({ golden, fixture, emb, offtopicSimMin, generateFn,
 
         let entryPassed = 0;
         let stoppedAt = null;
+        // 〔Owner 第五輪 V5-6〕與 workers/jobRunner.js 的 runGenerateJob 相同：依序生成，
+        // 前面通過生成節點的兄弟（runner 會建成 job_questions 的那幾題）連同總題數一起傳給下一題。
+        const siblings = [];
         for (let idx = 1; idx <= PER_SOURCE; idx++) {
             generations += 1;
             const ctx = makeCtx({ llm, models, offtopicSimMin });
+            const input = { source, neighbors, difficulty_delta: 0, idx, total: PER_SOURCE, siblings: siblings.slice() };
             let outcome;
             try {
                 outcome = generateFn
-                    ? await generateFn(ctx, { source, neighbors, difficulty_delta: 0, idx })
-                    : await variantAgent.run(ctx, { source, neighbors, difficulty_delta: 0, idx });
+                    ? await generateFn(ctx, input)
+                    : await variantAgent.run(ctx, input);
             } catch (err) {
                 outcome = { kind: 'error', errorClass: 'provider_error', message: err.message };
             }
 
             if (outcome.kind === 'error') {
                 if (replayMiss.isReplayMiss(outcome.message)) misses.push(outcome.message);
-                else failures.push(`${e.id}#${idx}：${outcome.message}`);
+                else if (ctx.__usage.errorCassettes.length) {
+                    // 〔dec/r9-record-tooling〕錯誤回放檔（錄製當時這一題的生成呼叫被截斷或單次逾時）：那是模型的結果，
+                    // 記成這一題沒通過（generations 已經加過、passed 不加），不是執行失敗——不進 failures，suite 照常算分數比門檻。
+                    // 錄製時（LLM_MODE=record）寫下錯誤回放檔的那一次也走這裡，錄製與回放的結果相同。
+                    const ec = ctx.__usage.errorCassettes[0];
+                    recordedErrors.push({ at: `${e.id}#${idx}`, node: 'generate', agent: ec.agent, key: ec.key, kind: ec.kind });
+                    warnings.push(`${e.id}#${idx}：變式生成的呼叫${ec.kind === 'timeout' ? '單次逾時' : '被截斷'}` +
+                        `（錯誤回放檔 ${ec.agent}/${String(ec.key).slice(0, 12)}…），記成這一題沒通過（不是 replay miss、不是執行失敗）。`);
+                    if (stoppedAt === null) stoppedAt = 'generate';
+                } else failures.push(`${e.id}#${idx}：${outcome.message}`);
                 continue;
+            }
+
+            if (outcome.kind === 'pass' && outcome.data && String(outcome.data.question_text ?? '').trim()) {
+                siblings.push({ idx, question_text: outcome.data.question_text });
             }
 
             const variant = {
@@ -511,7 +543,8 @@ async function runGeneration({ golden, fixture, emb, offtopicSimMin, generateFn,
 
             const res = await runGates(ctx, {
                 agents, textHash,
-                dedup1: (fields) => dedup1InMemory({ fields, source, fixture, emb, buildEmbedText })
+                // 向量走 ctx.llm.embed：錄製時（EMBED_MODE=record）與跑題檢查一樣真的呼叫模型並錄檔
+                dedup1: (fields) => dedup1InMemory({ fields, source, fixture, emb, buildEmbedText, embed: ctx.llm.embed })
             }, variant, source, seenHashes);
 
             for (const g of GATES) if (res.gates[g] === true) counts[g] += 1;
@@ -519,6 +552,13 @@ async function runGeneration({ golden, fixture, emb, offtopicSimMin, generateFn,
             else if (stoppedAt === null) stoppedAt = res.stoppedAt;
             misses.push(...res.misses);
             embedMisses.push(...res.embedMisses);
+            // 〔dec/r9-record-tooling〕閘門（分類／lint／驗算）讀到錯誤回放檔：agent 照規則回 error、那一道記成沒過（runGates 已處理），
+            // 這裡只記下是哪一題、哪一道，報表列出來
+            for (const ec of ctx.__usage.errorCassettes) {
+                recordedErrors.push({ at: `${e.id}#${idx}`, node: res.stoppedAt || null, agent: ec.agent, key: ec.key, kind: ec.kind });
+                warnings.push(`${e.id}#${idx}：${ec.agent} 的呼叫${ec.kind === 'timeout' ? '單次逾時' : '被截斷'}` +
+                    `（錯誤回放檔 ${ec.agent}/${String(ec.key).slice(0, 12)}…），${res.stoppedAt ? `停在 ${res.stoppedAt} 閘門` : '照 agent 的規則處理'}（不是 replay miss）。`);
+            }
 
             const usage = ctx.__usage;
             if (usage.calls > 0) {
@@ -539,16 +579,21 @@ async function runGeneration({ golden, fixture, emb, offtopicSimMin, generateFn,
         failures.push(...misses);       // **原樣**，run.js 的 partitionFailures 靠凍結前綴辨識
     }
     if (embedMisses.length) {
-        warnings.push(
-            `${embedMisses.length} 次在 embedding fixture 查不到變式題的向量：` +
-            '**錄製時 LLM_MODE=record 與 EMBED_MODE=record 必須一起開**（裁決 S3-20）——' +
-            '變式題幹是新字串，只錄 LLM 不錄向量的話跑題檢查與 dedup1 這兩道永遠量不到。' +
-            'gate_pass_rate 這一輪 n/a。'
+        const mode = currentEmbedMode();
+        warnings.push(mode === 'fixture'
+            ? `${embedMisses.length} 次在 embedding fixture 查不到變式題的向量：` +
+              '**錄製時 LLM_MODE=record 與 EMBED_MODE=record 必須一起開**（裁決 S3-20）——' +
+              '變式題幹是新字串，只錄 LLM 不錄向量的話跑題檢查與 dedup1 這兩道永遠量不到。' +
+              'gate_pass_rate 這一輪 n/a。'
+            // 錄製時（record／live）還拿不到向量，是 embedding 模型的呼叫失敗，不是「忘了開 record」
+            : `${embedMisses.length} 次取變式題的向量時 embedding 模型呼叫失敗（EMBED_MODE=${mode}）：` +
+              '其餘的向量已照常錄進向量檔；確認模型可用後以 LLM_MODE=replay、EMBED_MODE=record 再跑一次 variant suite 補齊' +
+              '（docs/local-mode.md 第 10.7 節）。gate_pass_rate 這一輪 n/a。'
         );
         failures.push(...embedMisses);
     }
     if (misses.length || embedMisses.length) {
-        return { rate: null, counts, costUsd: null, generations, byEntry };
+        return { rate: null, counts, costUsd: null, generations, byEntry, recordedErrors };
     }
 
     return {
@@ -556,26 +601,48 @@ async function runGeneration({ golden, fixture, emb, offtopicSimMin, generateFn,
         counts,
         costUsd: anyCost ? metrics.round4(costUsd) : null,
         generations,
-        byEntry
+        byEntry,
+        recordedErrors
     };
 }
 
-/** dedup1 的記憶體版：與 fixture 比餘弦，排除藍本整個家族 */
-function dedup1InMemory({ fields, source, fixture, emb, buildEmbedText }) {
-    const dupTh = Number(process.env.DEDUP_DUP_THRESHOLD || 0.97);
+/** 現在的 EMBED_MODE（只拿來寫訊息；非法值由 services/llm 的 embed() 自己丟錯） */
+function currentEmbedMode() {
+    return String(process.env.EMBED_MODE || 'fixture').toLowerCase();
+}
+
+/**
+ * dedup1 的記憶體版：與 fixture 比餘弦，排除藍本整個家族。
+ *
+ * 變式題幹的向量走 ctx.llm.embed（＝services/llm 的 embed()，與 workers/jobRunner.js 的 dedup1 同一個入口），
+ * 所以**跟著 EMBED_MODE**：fixture（CI）查 eval/fixtures/embeddings.<model>.<dim>.json，查不到就誠實回 miss；
+ * record 真的呼叫 embedding 模型並錄進同一個檔（裁決 S3-20：錄製時 LLM_MODE 與 EMBED_MODE 一起開 record）。
+ *
+ * 〔dec/fix-variant-embed-record〕之前這裡寫死 embedFromFixture：錄製時 dedup1 仍去讀檔，只有「剛好與
+ * generateVariant 跑題檢查錄過的是同一段文字」才查得到。dedup1 的 embed_text 用的是 classify 之後的章節與
+ * lint 之後的題幹，其中一個變了（例：lint 第三層把 \overrightarrow 改寫成 \vec）就查不到——Owner
+ * 2026-09-26 以本機模型重錄時有 1 題因此缺向量，gate_pass_rate 整輪 n/a。訊息裡的 EMBED_MODE 以前也是寫死的
+ * 「fixture」，錄製時看起來像子行程沒拿到 record；現在寫的是實際的模式。
+ *
+ * @param {{fields:object, source:object, fixture:object, emb:object, buildEmbedText:Function,
+ *          embed:(opts:object)=>Promise<{vectors:number[][]}>}} opts
+ * @returns {Promise<{ok:boolean, miss?:string}>}
+ */
+async function dedup1InMemory({ fields, source, fixture, emb, buildEmbedText, embed }) {
+    const dupTh = require('../../config/similarityThresholds').resolveSimilarityThresholds(process.env).dedupDup;   // 〔Owner 第五輪 V5-3〕
     let vec;
     try {
-        const { embedFromFixture } = require('../../services/llm/fixture');
         const text = buildEmbedText(fields);
-        const res = embedFromFixture({
-            model: process.env.EMBED_MODEL || 'gemini-embedding-001',
+        const res = await embed({
+            model: require('./localMode').embedModelFromEnv(),   // 〔本機模式 L4〕沒設時是本機預設
             texts: [text],
-            dim: Number(process.env.EMBED_DIM || 768)
+            dim: Number(process.env.EMBED_DIM || 768),
+            taskType: 'RETRIEVAL_DOCUMENT'                         // 與 generateVariant 的跑題檢查相同（寫入用）
         });
         vec = res.vectors[0];
     } catch (err) {
-        // 第 4 條：**不得靜默回退成假向量**。沒錄到向量就誠實回報。
-        return { ok: false, miss: `dedup1 取不到變式題的向量（EMBED_MODE=fixture）：${err.message}` };
+        // 第 4 條：**不得靜默回退成假向量**。沒錄到（或錄製時沒算到）向量就誠實回報。
+        return { ok: false, miss: `dedup1 取不到變式題的向量（EMBED_MODE=${currentEmbedMode()}）：${err.message}` };
     }
     let best = 0;
     for (const q of fixture.questions) {
@@ -587,17 +654,30 @@ function dedup1InMemory({ fields, source, fixture, emb, buildEmbedText }) {
 
 /** eval 的 ctx：ctx.db 一律 null（裁決 S2-8，cassette 鍵才可重現） */
 function makeCtx({ llm, models, offtopicSimMin }) {
-    const usage = { calls: 0, costUsd: 0 };
+    // 〔dec/r9-record-tooling〕errorCassettes：這一題讀到（或錄製時寫下）的錯誤回放檔（services/llm 丟的錯帶 errorCassette）
+    const usage = { calls: 0, costUsd: 0, errorCassettes: [] };
+    const sim = require('../../config/similarityThresholds').resolveSimilarityThresholds(process.env);
     const pricing = safeRequire(path.resolve(ROOT, 'config', 'pricing.js'));
     return {
         __usage: usage,
         llm: {
             async generateJson(opts) {
-                const res = await llm.generateJson(opts);
+                let res;
+                try {
+                    res = await llm.generateJson(opts);
+                } catch (err) {
+                    if (err && err.errorCassette) {
+                        usage.errorCassettes.push({
+                            ...err.errorCassette, errorClass: err.errorClass ?? null, finishReason: err.finishReason ?? null
+                        });
+                    }
+                    throw err;   // 行為不變：agent 照舊接住、回 {kind:'error'}
+                }
                 usage.calls += 1;
                 if (pricing && typeof pricing.estimateCost === 'function') {
                     const spec = String(opts.model || '');
-                    const modelId = spec.includes(':') ? spec.split(':').pop() : spec;
+                    // 只切第一個冒號（config/models.js 的 parseModel 同一條規則）：'ollama:qwen3:8b' 的裸 ID 是 'qwen3:8b'
+                    const modelId = require('./localMode').modelIdOf(spec);
                     const c = pricing.estimateCost({
                         modelId,
                         tokenIn: res.usage?.tokenIn ?? 0,
@@ -619,16 +699,18 @@ function makeCtx({ llm, models, offtopicSimMin }) {
             models: {
                 extract: models.MODEL_EXTRACT,
                 verify: models.MODEL_VERIFY,
-                variant: models.MODEL_VARIANT || models.MODEL_VERIFY
+                variant: models.MODEL_VARIANT || models.MODEL_VERIFY,
+                text: models.MODEL_TEXT   // 〔LM-15〕變式的分類／lint 用的純文字模型（與 runner 相同）
             },
             limits: {},
             thresholds: {
                 classifyMinConf: Number(process.env.CLASSIFY_MIN_CONF || 0.8),
-                dedupDup: Number(process.env.DEDUP_DUP_THRESHOLD || 0.97),
-                dedupVariant: Number(process.env.DEDUP_VARIANT_THRESHOLD || 0.90),
+                // 〔Owner 第五輪 V5-5〕去重與 kNN 門檻依向量模型（config/similarityThresholds.js，與 runner 相同）
+                dedupDup: sim.dedupDup,
+                dedupVariant: sim.dedupVariant,
                 variantOfftopicSimMin: offtopicSimMin,
                 variantMinEdit: Number(process.env.VARIANT_MIN_EDIT || 0.08),
-                knnVoteSim: Number(process.env.KNN_VOTE_SIM || 0.90)
+                knnVoteSim: sim.knnVoteSim
             },
             features: { similar: false, pipeline: true }
         },
@@ -644,4 +726,8 @@ function safeRequire(abs) {
     }
 }
 
-module.exports = { runVariantSuite, retrieveInMemory, cosine, loadVariantGolden, validateGoldenEntries, GATES, PER_SOURCE, AGENT_PATH };
+module.exports = {
+    runVariantSuite, retrieveInMemory, cosine, loadVariantGolden, validateGoldenEntries, GATES, PER_SOURCE, AGENT_PATH,
+    // 單元測試用（test/unit/evalVariantEmbedRecord.test.js）：不經 loadEmbeddings，直接餵 fixture 題的向量
+    runGeneration
+};

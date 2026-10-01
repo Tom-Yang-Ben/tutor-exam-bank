@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T14:43:05.648Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4025,
+        "sha256": "b3fe25073d745a9e29924634d42f8a7e238d143dd5cd4336bf20b21d5130ad4e"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "$\\sin 150^\\circ$ 之值為何？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "confidence": 0.95,
+      "rationale": "題目涉及計算 $\theta = 150^\fdg$ 的正弦值，屬於廣義角的三角函數計算，符合該章節的範疇。"
+    },
+    "usage": {
+      "tokenIn": 3599,
+      "tokenOut": 72,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 53603
+  }
+}

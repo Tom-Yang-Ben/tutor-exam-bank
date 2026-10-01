@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T08:01:01.858Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4399,
+        "sha256": "8bf1844a918df1f538bd1134dc844ed570fc9bf865090f48dc552f10c098ee36"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "設 $\\vec{a} = (1, 1, 2)$、$\\vec{b} = (2, 3, 0)$ 為三維向量，求其點積。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目要求計算三維向量的點積，屬於空間向量內積的計算。",
+      "chapter": "空間向量內積",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3953,
+      "tokenOut": 51,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 57035,
+        "loadMs": 9,
+        "promptEvalMs": 23668,
+        "evalMs": 33325
+      }
+    },
+    "latencyMs": 57041
+  }
+}

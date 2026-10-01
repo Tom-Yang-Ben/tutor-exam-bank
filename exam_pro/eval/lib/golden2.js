@@ -17,8 +17,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const { isValidChapter, isValidSubject, isValidQuestionType } = require('../../config/chapters');
+const { isValidQuestionType } = require('../../config/chapters');
 const { isPrivatePath } = require('./golden');
+const { chapterGate } = require('./chapterGate');
 
 const GOLDEN_DIR = path.resolve(__dirname, '..', 'golden');
 
@@ -69,9 +70,12 @@ function checkIds(entries, problems) {
 
 /**
  * @param {Array<object>} entries
+ * @param {{chapters?:Record<string,string[]>}} [opts] 〔章節重整 CH-B〕注入章節白名單（見 eval/lib/chapterGate.js）；
+ *        未給時照舊用 config/chapters.js
  * @returns {string[]}
  */
-function validateClassify(entries) {
+function validateClassify(entries, opts = {}) {
+    const { isValidSubject, isValidChapter } = chapterGate(opts.chapters);
     const problems = [];
     if (!Array.isArray(entries) || entries.length === 0) return ['classify golden 的 entries 必須是非空陣列'];
     checkIds(entries, problems);
@@ -115,12 +119,13 @@ function validateClassify(entries) {
  * @param {object} [opts]
  * @param {string} [opts.file] 預設 eval/golden/classify.json
  * @param {Map<number,object>} [opts.fixtureById] 給了就檢查 from 指到存在的 fixture 題
+ * @param {Record<string,string[]>} [opts.chapters] 〔章節重整 CH-B〕注入章節白名單（同 validateClassify）
  */
 function loadClassifyGolden(opts = {}) {
     const res = loadWithGate(
         opts.file || path.join(GOLDEN_DIR, 'classify.json'),
         entries => {
-            const problems = validateClassify(entries);
+            const problems = validateClassify(entries, { chapters: opts.chapters });
             if (opts.fixtureById) {
                 for (const e of entries) {
                     if (e.from !== null && e.from !== undefined && !opts.fixtureById.has(e.from)) {

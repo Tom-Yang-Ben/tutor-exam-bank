@@ -1,0 +1,55 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T10:18:15.595Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2027,
+        "sha256": "7d8fb25ec8cd705a157b0b081cf98d98120caa7456b78a8d1fbf98932b5b3198"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 5,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        6,
+        15,
+        22
+      ],
+      "total": 2,
+      "siblings": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 4,
+      "question_text": "已知 $\text{log}_{10} 3 = 0.4771$，求 $3^{40}$ 是幾位數的整數。",
+      "answer_text": "$\\log_{10} 3^{40} = 40 \\times 0.4771 = 19.084$，即 $10^{19} < 3^{40} < 10^{20}$，故 $3^{40}$ 為 $20$ 位數。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2136,
+      "tokenOut": 170,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 237473,
+        "loadMs": 23,
+        "promptEvalMs": 137457,
+        "evalMs": 99788
+      }
+    },
+    "latencyMs": 237527
+  }
+}

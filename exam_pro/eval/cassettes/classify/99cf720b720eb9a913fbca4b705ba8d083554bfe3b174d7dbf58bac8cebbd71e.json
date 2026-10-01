@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T14:23:18.861Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4048,
+        "sha256": "ca2aee61235ab0ff46c5d3f14baa4206591e33a2a72e38ce78e2e0f6ff0304c4"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "已知 $\\log_{10} 2 = 0.3010$，求 $2^{50}$ 是幾位數的整數。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "confidence": 0.95,
+      "rationale": "題目涉及指數運算與對數的應用，需利用對數換底公式計算 $2^{50}$ 的位數，屬於指數與對數章節的範疇。"
+    },
+    "usage": {
+      "tokenIn": 3619,
+      "tokenOut": 75,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 64277
+  }
+}

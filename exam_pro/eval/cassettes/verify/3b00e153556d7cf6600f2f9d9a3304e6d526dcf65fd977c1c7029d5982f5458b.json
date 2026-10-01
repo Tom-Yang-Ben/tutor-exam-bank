@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-24T22:05:15.990Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 112,
+        "sha256": "4a185f985244d30df886df210d2d125050725991a07dfa6255dde5251403f7ca"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "當列車從靜止狀態突然加速啟動時，車廂內站立的乘客身體會向後傾倒，這個現象主要是由下列哪一項物理概念造成的？\n(A) 慣性　(B) 向心力　(C) 摩擦力減小　(D) 萬有引力變小",
+      "questionType": "單選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(A)",
+      "answer_form": "option",
+      "steps_summary": "當列車突然加速時，車廂和乘客的腳一起受到向前的力而向前運動，但乘客的上半身因為「慣性」的作用，會傾向保持原本的靜止狀態。因此，相對於向前加速的車廂，乘客的身體會感覺向後傾倒。這個現象是牛頓第一運動定律（慣性定律）的具體表現，與向心力、摩擦力減小或萬有引力無關。"
+    },
+    "usage": {
+      "tokenIn": 188,
+      "tokenOut": 120,
+      "tokenThinking": 179,
+      "tokenCached": 0
+    },
+    "latencyMs": 3881
+  }
+}

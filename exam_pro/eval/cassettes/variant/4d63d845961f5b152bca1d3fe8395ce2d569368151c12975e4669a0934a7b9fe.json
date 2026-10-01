@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T22:03:06.645Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1518,
+        "sha256": "0e1f3072ae116ef949bcb8ac3f831ed877af9c013fb4f6bdfd94b43810af8522"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 33,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        32,
+        44,
+        47,
+        48,
+        49
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "一名旅客在光滑水平地面上，以 $45$ N 的水平推力推動一個質量為 $15$ kg 的行李箱。若不計任何阻力，求行李箱的加速度量值。",
+      "answer_text": "根據牛頓第二運動定律 $F = ma$，可得行李箱的加速度為 $a = \\frac{F}{m} = \\frac{45}{15} = 3$ m/s$^2$。"
+    },
+    "usage": {
+      "tokenIn": 1147,
+      "tokenOut": 156,
+      "tokenThinking": 529,
+      "tokenCached": 0
+    },
+    "latencyMs": 6701
+  }
+}

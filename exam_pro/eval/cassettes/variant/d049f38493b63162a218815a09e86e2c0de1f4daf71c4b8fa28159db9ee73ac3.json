@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T21:42:19.279Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1573,
+        "sha256": "238a9e9373bee67d11db4b075de17ecb8b3001cbce57baee14924aed4a20e186"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 5,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        6,
+        15,
+        22
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 4,
+      "question_text": "在生物實驗中，某種細菌在理想環境下迅速繁殖，經過數天的培養後，研究員推算出培養皿中的細菌總數理論值達到 $15^{20}$ 個。已知 $\\log_{10} 2 = 0.3010$ 且 $\\log_{10} 3 = 0.4771$，請問此細菌總數展開為十進位整數時，會是一個幾位數的數字？",
+      "answer_text": "計算 $\\log_{10} 15^{20}$ 的值：首先，$\\log_{10} 15 = \\log_{10} \\frac{30}{2} = \\log_{10} 3 + \\log_{10} 10 - \\log_{10} 2 = 0.4771 + 1 - 0.3010 = 1.1761$。接著，$\\log_{10} 15^{20} = 20 \\times 1.1761 = 23.522$。因為其值介於 $23$ 與 $24$ 之間，即 $10^{23} < 15^{20} < 10^{24}$，故 $15^{20}$ 為 $24$ 位數。"
+    },
+    "usage": {
+      "tokenIn": 1185,
+      "tokenOut": 360,
+      "tokenThinking": 2992,
+      "tokenCached": 0
+    },
+    "latencyMs": 24770
+  }
+}

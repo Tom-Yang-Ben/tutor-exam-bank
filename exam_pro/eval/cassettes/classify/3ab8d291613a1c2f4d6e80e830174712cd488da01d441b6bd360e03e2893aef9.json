@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T15:20:45.960Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4065,
+        "sha256": "904a62840c6b0ca95785830c24e6034b9e7ff27c018ac474141d462d4b731928"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "已知 $\\vec{a} = (1, 0)$、$\\vec{b} = (1, 1)$ 為平面向量，問此兩向量所夾的角度為多少度？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "confidence": 0.95,
+      "rationale": "題目要求計算兩向量的夾角，需使用向量內積公式計算餘弦值，因此屬於向量內積章節。"
+    },
+    "usage": {
+      "tokenIn": 3631,
+      "tokenOut": 63,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 61166
+  }
+}

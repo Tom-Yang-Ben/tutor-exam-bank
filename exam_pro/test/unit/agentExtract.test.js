@@ -64,7 +64,9 @@ describe('agents/schemas — buildSchema', () => {
         assert.deepEqual(props.subject.enum, ['數學', '物理']);
         assert.deepEqual(props.question_type.enum, QUESTION_TYPES);
         assert.deepEqual(props.chapter.enum, [...CHAPTERS['數學'], ...CHAPTERS['物理']]);
-        assert.equal(props.chapter.enum.length, 66);
+        // 〔章節重整 CH-A〕66 → 86（數學 52＋物理 34）：Owner 2026-09-25 定案、刻意讓 schema enum 改變
+        // （docs/chapter-restructure.md 第 1 條）。enum 內容仍逐字等於兩科攤平，斷言沒有放寬。
+        assert.equal(props.chapter.enum.length, 86);
     });
 
     test('chapter 是兩科合併（Gemini 的 schema 沒辦法依 subject 切 enum）', () => {
@@ -279,7 +281,7 @@ describe('extract.run', () => {
 
         // 送進 generateJson 的參數：agent／template／cacheKeyParts 必須齊全（第 5.2 條）
         assert.equal(calls[0].agent, 'extract');
-        assert.equal(calls[0].template, 'extract.v2');
+        assert.equal(calls[0].template, 'extract.v3');
         assert.deepEqual(Object.keys(calls[0].cacheKeyParts), ['template', 'chunkNo', 'pdfSha256']);
         assert.equal(calls[0].cacheKeyParts.pdfSha256, outcome.data.pdf_sha256);
         assert.ok(calls[0].parts[0].pdfBase64, 'PDF 要以 inlineData 送出');
@@ -324,7 +326,8 @@ describe('extract.run', () => {
         const pdf = await makePdf(1);
         const ctx = {
             llm: { generateJson: async () => { const e = new Error('429 配額用盡'); e.errorClass = 'rate_limited'; throw e; } },
-            logger: console, config: { models: {}, thresholds: {} }
+            // 〔本機模式整合〕預設模型改成本機後，這則測的是 Gemini 路徑：明寫 extract 模型
+            logger: console, config: { models: { extract: 'gemini:gemini-3.5-flash' }, thresholds: {} }
         };
         const outcome = await extract.run(ctx, { pdfBytes: pdf, chunk: { no: 1, fromPage: 1, toPage: 1 } });
         assert.equal(outcome.kind, 'error');

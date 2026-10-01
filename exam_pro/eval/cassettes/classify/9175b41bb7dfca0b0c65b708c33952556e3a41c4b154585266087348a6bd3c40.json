@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:00:54.084Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4406,
+        "sha256": "4dddebb83cf6aa19d063e465455f3081ccdcfcfc748401be682d1b8e5748d711"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "設空間向量 $\\vec{a} = (1, 2, k)$ 與 $\\vec{b} = (2, -1, 3)$ 互相垂直，求 $k$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及空間向量垂直的條件，需利用空間向量內積為零的性質求解參數 k。",
+      "chapter": "空間向量內積",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3953,
+      "tokenOut": 58,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 56314,
+        "loadMs": 9,
+        "promptEvalMs": 18931,
+        "evalMs": 37334
+      }
+    },
+    "latencyMs": 56318
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:38:59.765Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 3808,
+        "sha256": "621f461b3b474564c9abe6499b3cf5caa28ac60e7bc86ec1d9c48c95c77476ef"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "若 $2^{x+1}$ 等於 $32$，試求未知數 $x$ 的值。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "confidence": 1,
+      "rationale": "題目要求解指數方程式 $2^{x+1} = 32$，利用同底數（$32=2^5$）比較指數大小來求解未知數 $x$，屬於指數的基本運算與方程式，歸類於「指數與對數」。"
+    },
+    "usage": {
+      "tokenIn": 2888,
+      "tokenOut": 79,
+      "tokenThinking": 404,
+      "tokenCached": 0
+    },
+    "latencyMs": 2959
+  }
+}

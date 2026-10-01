@@ -18,7 +18,14 @@ const { TERMINAL_STATES } = require('../../pipeline/stateMachine');
 
 describe('loadStage3Config（第 9 條的五個新變數）', () => {
     test('全空的環境用預設值（裁決 S3-R9：兩個門檻分家，預設不同）', () => {
+        // 〔Owner 第五輪 V5-1、V5-2、O-2、V5-5 核准 2026-09-27〕依向量模型：全空＝本機 → 0.72／0.87（暫定）／kNN 0.90
         assert.deepEqual(runner.loadStage3Config({}), {
+            variantRetrieveSimMin: 0.72, variantOfftopicSimMin: 0.87,
+            variantMinEdit: 0.08, knnVoteSim: 0.90,
+            variantLintRetries: 2, variantAutoApprove: false
+        });
+        // Gemini 向量：S3-R9／S3-R29 的原值
+        assert.deepEqual(runner.loadStage3Config({ EMBED_MODEL: 'gemini-embedding-001' }), {
             variantRetrieveSimMin: 0.80, variantOfftopicSimMin: 0.90,   // S3-R29
             variantMinEdit: 0.08, knnVoteSim: 0.90,
             variantLintRetries: 2, variantAutoApprove: false
@@ -63,9 +70,13 @@ describe('loadStage3Config（第 9 條的五個新變數）', () => {
 
     test('亂填的數字退回預設，不會變成 NaN', () => {
         const c = runner.loadStage3Config({ VARIANT_RETRIEVE_SIM_MIN: 'abc', VARIANT_SIM_MIN: 'x', KNN_VOTE_SIM: '' });
-        assert.equal(c.variantRetrieveSimMin, 0.80);
-        assert.equal(c.variantOfftopicSimMin, 0.90);   // S3-R29
+        assert.equal(c.variantRetrieveSimMin, 0.72);   // 〔Owner 第五輪 V5-1〕本機預設
+        assert.equal(c.variantOfftopicSimMin, 0.87);   // 〔Owner 第五輪 V5-2〕本機預設（暫定）
         assert.equal(c.knnVoteSim, 0.90);
+        const g = runner.loadStage3Config({ EMBED_MODEL: 'gemini-embedding-001', VARIANT_RETRIEVE_SIM_MIN: 'abc', VARIANT_SIM_MIN: 'x', KNN_VOTE_SIM: '' });
+        assert.equal(g.variantRetrieveSimMin, 0.80);
+        assert.equal(g.variantOfftopicSimMin, 0.90);   // S3-R29
+        assert.equal(g.knnVoteSim, 0.90);
     });
 
     test('既有的 loadConfig 形狀一個鍵都沒變（階段 2 的契約）', () => {
@@ -208,8 +219,14 @@ describe('政策停等（第 4.7 條）', () => {
         assert.ok(REVIEW_REASONS.includes('awaiting_approval'));
         // 第 4.7 條只承諾「政策停等不新增值」；〔修訂 2026-09-15f〕0009 為原卷比對加了第九個
         // transcription_mismatch（docs/source-check.md），與停等無關。
-        assert.equal(REVIEW_REASONS.length, 9);
+        // 〔本機模式 L2〕0015 為本機拆題交叉驗證加了第十個 extract_disagree（docs/local-mode.md 第 4 條），同樣與變式停等無關。
+        // 〔OCR 為主 2026-09-26〕0019 為「只用 OCR 拆題」加了第十一個 ocr_only（docs/local-mode.md 10.12），同樣與變式停等無關。
+        // 〔Owner 第五輪 C-f〕0020 為「本機模型回應被截斷」加了第十二個 output_truncated（docs/local-mode.md 10.17），同樣與變式停等無關。
+        assert.equal(REVIEW_REASONS.length, 12);
         assert.equal(REVIEW_REASONS[8], 'transcription_mismatch');
+        assert.equal(REVIEW_REASONS[9], 'extract_disagree');
+        assert.equal(REVIEW_REASONS[10], 'ocr_only');
+        assert.equal(REVIEW_REASONS[11], 'output_truncated');
     });
 
     test('停等寫的 error_class 是 NULL（不在九個合法值內的字串會撞 CHECK）', () => {

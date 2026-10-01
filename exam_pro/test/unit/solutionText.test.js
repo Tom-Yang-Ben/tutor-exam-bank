@@ -285,3 +285,65 @@ describe('wordService — edition（第 4.1 條第 6 項）', () => {
         }
     });
 });
+
+// ═════════════ 5. 〔retrain PR-3〕重練題的標示（docs/retrain-and-review.md 第 5.2 節 API-12；TC-039-4 的單元部分）═════════════
+
+describe('wordService — 重練題標示（〔Owner 決策單 2026-09-26 R7 選 1〕）', () => {
+    const { mock } = require('node:test');
+    const QS = [
+        { id: 11, question_type: '填空', difficulty: 1, question_text: '[單測] 新題甲 $1+1$。', answer_text: '$2$', solution_text: '甲的詳解' },
+        { id: 12, question_type: '計算', difficulty: 2, question_text: '[單測] 重練題乙 $\\sqrt{4}$。', answer_text: '$2$', solution_text: '乙的詳解' },
+        { id: 13, question_type: '計算', difficulty: 3, question_text: '[單測] 新題丙。', answer_text: '$3$', solution_text: null }
+    ];
+    const silent = { warn() { }, error() { } };
+
+    /** 固定時鐘產生 .docx（列印日期、docProps 的時間、zip 裡的檔案時間都相同），才比得了逐位元。 */
+    async function frozen(options) {
+        mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-12T02:00:00Z').getTime() });
+        try {
+            return await wordService.generateExamPaperDocx('單測卷', '學生', QS, { logger: silent, ...options });
+        } finally {
+            mock.timers.reset();
+        }
+    }
+
+    test('answerHeading：沒有重練時與 PR-3 之前逐字相同；重練題在題號後加「（重練）」', () => {
+        assert.equal(wordService.RETRAIN_MARK, '（重練）');
+        assert.equal(wordService.answerHeading(3, false), '第 3 題答案：');
+        assert.equal(wordService.answerHeading(3, true), '第 3 題（重練）答案：');
+    });
+
+    test('沒帶重練題（省略、空陣列、卷上沒有這幾題）→ 三個版本都與 PR-3 之前逐位元相同', async () => {
+        for (const edition of ['standard', 'student', 'solution']) {
+            const base = await frozen({ edition });
+            const again = await frozen({ edition });
+            assert.ok(base.equals(again), `${edition}：固定時鐘下兩次產生的 .docx 要逐位元相同（比對方法本身成立）`);
+            for (const retrainQuestionIds of [undefined, [], [999]]) {
+                const buf = await frozen({ edition, retrainQuestionIds });
+                assert.ok(buf.equals(base), `${edition}／${JSON.stringify(retrainQuestionIds)}：逐位元不同`);
+            }
+        }
+    });
+
+    test('標準版：答案區在重練題的題號後標「（重練）」，題目區（卷面）不標', async () => {
+        const xml = documentXml(await frozen({ retrainQuestionIds: [12] }));
+        assert.ok(xml.includes('第 2 題（重練）答案：'));
+        assert.ok(xml.includes('第 1 題答案：') && xml.includes('第 3 題答案：'), '新題照舊');
+        assert.equal(xml.split('（重練）').length - 1, 1, '只有答案區那一處');
+        const answersAt = xml.indexOf('參考答案區');
+        assert.ok(xml.indexOf('（重練）') > answersAt, '標示在答案區，不在題目區');
+        const plain = documentXml(await frozen({}));
+        assert.equal(xml.replace('第 2 題（重練）答案：', '第 2 題答案：'), plain, '除了標示之外逐字相同');
+    });
+
+    test('詳解版：答案與詳解區標；學生版完全不標（也沒有答案區）', async () => {
+        const sol = documentXml(await frozen({ edition: 'solution', retrainQuestionIds: new Set([12, 13]) }));
+        assert.ok(sol.includes('第 2 題（重練）答案：') && sol.includes('第 3 題（重練）答案：'));
+        assert.equal(sol.split('（重練）').length - 1, 2);
+        assert.ok(sol.indexOf('第 2 題（重練）答案：') < sol.indexOf('乙的詳解'), '標示在答案那一行，詳解照舊接在後面');
+        const stu = documentXml(await frozen({ edition: 'student', retrainQuestionIds: [11, 12, 13] }));
+        assert.ok(!stu.includes('（重練）'), '學生版完全不標');
+        assert.ok(stu.includes('[單測] 重練題乙'), '題目照印');
+        assert.ok(documentXml(await frozen({ edition: 'student' })) === stu, '學生版帶不帶重練題都一樣');
+    });
+});

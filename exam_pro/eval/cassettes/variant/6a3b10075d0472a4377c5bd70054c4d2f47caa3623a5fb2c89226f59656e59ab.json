@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T10:26:59.540Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2124,
+        "sha256": "0dd6fa9bb3ce53fa56eb7ca5ed326ec1704bc5ca275b9216a7b74965417dbd8e"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 5,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        6,
+        15,
+        22
+      ],
+      "total": 2,
+      "siblings": [
+        "74a108f63f32716b"
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 4,
+      "question_text": "已知 $\text{log}_{10} 5 = 0.6990$，求 $5^{30}$ 是幾位數的整數。",
+      "answer_text": "$\\log_{10} 5^{30} = 30 \\times 0.6990 = 20.97$，即 $10^{20} < 5^{30} < 10^{21}$，故 $5^{30}$ 為 $21$ 位數。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2208,
+      "tokenOut": 169,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 157571,
+        "loadMs": 11,
+        "promptEvalMs": 69109,
+        "evalMs": 84946
+      }
+    },
+    "latencyMs": 157582
+  }
+}

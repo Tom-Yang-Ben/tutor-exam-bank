@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T17:56:37.476Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1602,
+        "sha256": "fd8d5fa4e604ebc2730f6bf40f69a0db4016cf4849fa3321355e5d94f43a8b93"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 33,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        32,
+        44,
+        46,
+        47,
+        48
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "一輛質量為 $6$ kg 的自行車，受到 $24$ N 的合力作用，求其加速度。假設自行車由靜止開始運動，求 $3$ 秒後的瞬時速度。",
+      "answer_text": "由 $F = ma$，得 $a = \frac{F}{m} = \frac{24}{6} = 4$ m/s$^2$。再由 $v = u + at$，其中 $u = 0$，$t = 3$ s，故 $v = 0 + 4 \times 3 = 12$ m/s。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 1822,
+      "tokenOut": 189,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 91823
+  }
+}

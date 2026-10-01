@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T18:17:22.699Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 83,
+        "sha256": "0feb1cef3c97dbbf5df8bcf4dcbe8661ec3cdd92cee2b0d69dade18181e18772"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "一輛自行車從 $15$ m 高的樓頂自由落下，求其落地所需的時間（取 $g = 10$ m/s$^2$，不計空氣阻力）。",
+      "questionType": "計算",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "√3 s",
+      "answer_form": "expression",
+      "steps_summary": "使用自由落體公式 s = ½gt²，代入 s=15m、g=10m/s² 得 15=5t² → t²=3 → t=√3 s。因時間為正數，故答案為 √3 秒。"
+    },
+    "usage": {
+      "tokenIn": 303,
+      "tokenOut": 407,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 188724,
+        "loadMs": 17,
+        "promptEvalMs": 6855,
+        "evalMs": 179689
+      }
+    },
+    "latencyMs": 188734
+  }
+}

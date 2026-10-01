@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T16:50:14.419Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1548,
+        "sha256": "b411e6a8f4cd29f747b10b4a7e4b03c00002fc814913cd9a8122b1e6b6cc9b8d"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 16,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "chapter_confidence": 1,
+      "question_type": "證明",
+      "difficulty": 5,
+      "question_text": "試證：對任意平面向量 $\boldsymbol{u}$、$\boldsymbol{v}$，恆有 $|\boldsymbol{u} \boldsymbol{\bullet} \boldsymbol{v}| \neq |\boldsymbol{u}||\boldsymbol{v}|$ 除非 $\boldsymbol{u}$ 與 $\boldsymbol{v}$ 之間的夾角為 $0^\bullet$ 或 $180^\bullet$。假設 $\boldsymbol{u}$ 的長度為 $5$，$\boldsymbol{v}$ 的長度為 $3$，且兩向量的夾角為 $60^\bullet$，請說明此不等式是否成立。",
+      "answer_text": "(C)。$|\boldsymbol{u} \boldsymbol{\bullet} \boldsymbol{v}| = |\boldsymbol{u}||\boldsymbol{v}||\boldsymbol{\theta}|$，其中 $\boldsymbol{\theta}$ 為兩向量的夾角。因 $|\boldsymbol{\theta}| = \frac{1}{2}$，故 $|\boldsymbol{u} \boldsymbol{\bullet} \boldsymbol{v}| = 5 \times 3 \times \frac{1}{2} = \frac{15}{2}$，而 $|\boldsymbol{u}||\boldsymbol{v}| = 15$，因此 $|\boldsymbol{u} \boldsymbol{\bullet} \boldsymbol{v}| < |\boldsymbol{u}||\boldsymbol{v}|$，不等式成立。",
+      "figure_desc": "圖中顯示兩向量 $\boldsymbol{u}$ 與 $\boldsymbol{v}$ 之間的夾角為 $60^\bullet$，並標示出兩向量的長度為 $5$ 與 $3$。"
+    },
+    "usage": {
+      "tokenIn": 1750,
+      "tokenOut": 454,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 195791
+  }
+}

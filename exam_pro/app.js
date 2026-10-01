@@ -47,6 +47,60 @@ app.use(express.json({ limit: '2mb' }));
 // index: false → 不讓 static 直接吐出 index.html，改由下方路由注入 API 金鑰
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
+// 本機模式 L3（docs/local-mode.md 第 1 條第 1 點、第 5 條第 1、2 點）：前端用到的第三方程式庫與字型
+// 一律由本機的 npm 套件供應，執行期不連任何 CDN。每一項只公開套件裡瀏覽器真正要讀的那個目錄，
+// 不把整個 node_modules 掛出去。版本由 package-lock.json 固定。
+//   /vendor/mathjax            mathjax@3 的 es5/。tex-mml-chtml.js 用自己的網址推出根目錄
+//                              （document.currentScript，退回 #MathJax-script），所以 [tex]/mhchem、ui/safe、
+//                              CHTML 字型（output/chtml/fonts/woff-v2）、無障礙選單的 SRE 規則（sre/mathmaps）
+//                              都會從這個目錄相對載入——index.html 的 window.MathJax 設定一個字都不用改。
+//   /vendor/gsap               gsap 的 dist/（index.html 只讀 gsap.min.js）
+//   /vendor/tailwindcss        @tailwindcss/browser 的 dist/（瀏覽器端即時產生 Tailwind CSS）
+//   /vendor/fonts/manrope      @fontsource-variable/manrope（index.css ＋ files/*.woff2）
+//   /vendor/fonts/noto-sans-tc @fontsource-variable/noto-sans-tc（同上；依 unicode-range 分成約一百個切片，
+//                              瀏覽器只抓頁面上真的用到的字所在的切片）
+const VENDOR_ASSETS = [
+    { route: '/vendor/mathjax', pkg: 'mathjax', dir: 'es5' },
+    { route: '/vendor/gsap', pkg: 'gsap', dir: 'dist' },
+    { route: '/vendor/tailwindcss', pkg: '@tailwindcss/browser', dir: 'dist' },
+    { route: '/vendor/fonts/manrope', pkg: '@fontsource-variable/manrope', dir: '' },
+    { route: '/vendor/fonts/noto-sans-tc', pkg: '@fontsource-variable/noto-sans-tc', dir: '' }
+];
+
+/**
+ * 找 npm 套件的安裝目錄。不用 require.resolve(`${pkg}/package.json`)：
+ * @fontsource 的 exports 會把 './package.json' 對應成 './package.json.css' 而解析失敗。
+ * @param {string} pkg
+ * @returns {string|null}
+ */
+function packageDir(pkg) {
+    for (const base of require.resolve.paths(pkg) || []) {
+        const dir = path.join(base, pkg);
+        if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
+    }
+    return null;
+}
+
+/**
+ * 路由表裡有沒有這一條（Express 的 Router 把每條 router.post(...) 記成 stack 裡帶 route 的 layer）。
+ * @param {Function & {stack?: any[]}} router
+ * @param {string} method 小寫，例如 'post'
+ * @param {string} routePath 例如 '/voice/transcribe'
+ * @returns {boolean}
+ */
+function hasRoute(router, method, routePath) {
+    const stack = router && Array.isArray(router.stack) ? router.stack : [];
+    return stack.some(layer => Boolean(layer && layer.route && layer.route.path === routePath
+        && layer.route.methods && layer.route.methods[method]));
+}
+
+// 本機模式 L3（docs/local-mode.md 第 3 條第 9 點、第 5 條第 4 點）：語音轉寫路由有沒有真的掛上。
+// 直接看路由表，而不是在這裡重算「MODEL_VOICE 是不是 Gemini」——要不要掛載只由 routes/index.js 決定（L1），
+// 這裡照實轉告前端，兩邊不會各算各的。routes/index.js 在 require 當下讀旗標，所以結果在啟動時就固定。
+// 'mounted'＝有掛；'none'＝沒掛（FEATURE_TUTOR／FEATURE_VOICE 關閉，或本機模式不提供語音）。
+// 前端只在 feature-voice 開著、這裡卻是 'none' 時顯示「本機模式不提供語音」（public/js/tutor.js）。
+const VOICE_ROUTE = hasRoute(routes, 'post', '/voice/transcribe') ? 'mounted' : 'none';
+
 // 2. 首頁路由：把伺服器端才知道的六個值注入頁面
 //    __API_KEY__          讓同源前端自動帶上 x-api-key
 //    __FEATURE_PIPELINE__ 上傳區要不要改走 POST /api/jobs（裁決 S2-20）
@@ -62,6 +116,9 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 //                         [WS-C: retrieval] 區塊）「找相似」會打到 404，所以按鈕得跟著關。
 //                         「找相似」歸 feature-similar、「出變式」歸 feature-variants——
 //                         兩顆按鈕在同一列，但背後是兩條各自獨立的路由。
+//    __VOICE_ROUTE__      POST /api/voice/transcribe 實際上有沒有掛（本機模式 L3；不是旗標，是路由表的結果）
+//    __FEATURE_RETRAIN__  錯題重練與間隔複習的畫面（docs/retrain-and-review.md 第 5.1 節；預設關）
+//    __RETRAIN_ATTACH_RATIO__ 〔retrain PR-3〕附上到期重練題的預設比例（RETRAIN_ATTACH_RATIO；不是旗標，只在旗標開啟時被讀）
 function serveIndex(req, res, next) {
     fs.readFile(path.join(PUBLIC_DIR, 'index.html'), 'utf8', (err, html) => {
         if (err) return next(err);
@@ -84,7 +141,14 @@ function serveIndex(req, res, next) {
                 .replaceAll('__FEATURE_KC__', process.env.FEATURE_KC || 'false')
                 .replaceAll('__FEATURE_REMEDIAL__', process.env.FEATURE_REMEDIAL || 'false')
                 .replaceAll('__FEATURE_TUTOR__', process.env.FEATURE_TUTOR || 'false')
-                .replaceAll('__FEATURE_VOICE__', process.env.FEATURE_VOICE || 'false'));
+                .replaceAll('__FEATURE_VOICE__', process.env.FEATURE_VOICE || 'false')
+                // 錯題重練與間隔複習（docs/retrain-and-review.md 第 5.1 節）：畫面由第四階段的 public/js/retrain.js 讀
+                .replaceAll('__FEATURE_RETRAIN__', process.env.FEATURE_RETRAIN || 'false')
+                // 〔retrain PR-3〕附上到期重練題的預設比例（RETRAIN_ATTACH_RATIO，R6）：組卷頁與補救卷的題數預設值
+                // ＝capForAttach(新題數)，比例跟著 .env 走（config/retrain.js 讀、非法值退回 0.3）。不是旗標。
+                .replaceAll('__RETRAIN_ATTACH_RATIO__', String(require('./config/retrain').loadRetrainConfig().attachRatio))
+                // 本機模式 L3：語音路由實際上有沒有掛（見上方 VOICE_ROUTE）
+                .replaceAll('__VOICE_ROUTE__', VOICE_ROUTE));
     });
 }
 app.get('/', serveIndex);
@@ -97,11 +161,41 @@ app.get('/index.html', serveIndex);
 // FEATURE_PIPELINE 也不會注入。改成後掛，兩個進入點才真的走同一支 serveIndex。
 app.use(express.static(PUBLIC_DIR, { index: false }));
 
+// 本機的第三方前端資產（見上方 VENDOR_ASSETS）。套件不在時只警告、不中止：API 照常可用，
+// 但頁面會缺樣式或數學式——警告寫明要跑 npm install，而不是讓人對著一片白的畫面猜原因。
+for (const { route, pkg, dir } of VENDOR_ASSETS) {
+    const root = packageDir(pkg);
+    if (!root) {
+        console.warn(`[vendor] 找不到前端套件 ${pkg}，${route} 無法供應（頁面會缺樣式、數學式或字型）。請在 exam_pro 執行 npm install。`);
+        continue;
+    }
+    app.use(route, express.static(path.join(root, dir), { index: false }));
+}
+
 // 附圖靜態目錄（docs/figures.md）：只放管線從考卷 PDF 裁出的 PNG，
 // questions.question_img 存的相對路徑（/figures/<jobId>-<idx>.png）由這裡供圖。
 const FIGURES_DIR = path.join(__dirname, 'data', 'figures');
 if (!fs.existsSync(FIGURES_DIR)) fs.mkdirSync(FIGURES_DIR, { recursive: true });
 app.use('/figures', express.static(FIGURES_DIR));
+
+// 3a. 健康檢查（桌面啟動器 A，docs/desktop-launcher.md）：**刻意掛在 apiKeyAuth 之前**。
+//     理由：啟動器與關閉捷徑要先認出「3000 埠上的是不是這套系統」才決定下一步（開視窗、報埠衝突、送關閉），
+//     .env 的 API_KEY 可能在伺服器啟動後被改過，帶金鑰去問會被 401 擋住而分不出是誰在聽。
+//     回應只有服務名稱、版本、資料庫連不連得上與 migration 檔名，不含任何題目、學生、設定或錯誤原文
+//     （controllers/healthController.js 檔頭）；首頁 serveIndex 本來就不經 apiKeyAuth，沒金鑰能拿到的東西沒有變多。
+//     本機以外的來源另有寬鬆的限流（每分鐘 60 次；本機的啟動器不限），同一網段的電腦不能無限次查資料庫。
+//     〔Owner 第六輪 DA-11＝1〕後端預設只聽 127.0.0.1（server.js、config/listenHost.js）；只有設了 HOST=0.0.0.0 才會有區網來源。
+{
+    const healthController = require('./controllers/healthController');
+    app.get('/api/health', healthController.createHealthRateLimit(), healthController.health);
+}
+
+// 3b. 桌面啟動器的關閉通道（services/launcherControl.js）：只有環境裡有 LAUNCHER_CONTROL_TOKEN
+//     （由桌面啟動器開的後端）才掛；npm start、npm run dev、CI 都沒有這個變數，行為不變：
+//     請求落到下面既有的 /api 路由（設了 API_KEY 又沒帶金鑰先回 401，否則 404）。
+//     照慣例在 apiKeyAuth 之後，另外還要 x-launcher-token。
+const launcherRouter = require('./services/launcherControl').routerFromEnv();
+if (launcherRouter) app.use('/api/launcher', apiKeyAuth, launcherRouter);
 
 // 3. API 路由掛載（套用可選的 API Key 認證）
 app.use('/api', apiKeyAuth, routes);

@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T22:04:41.009Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1533,
+        "sha256": "fe2f191ff5f2bfc9719909f714ecd2f3421e5bb94770da6fd5db77f2eecba54c"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 37,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        36,
+        45
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 4,
+      "question_text": "劇團的舞台工作人員利用固定於天花板的定滑輪系統來控制佈景。一條質量不計的輕繩跨過光滑定滑輪，兩端分別懸掛著質量為 $12$ kg 的沙袋與質量為 $8$ kg 的燈具。當系統由靜止釋放後，求沙袋與燈具運動時的加速度大小，以及輕繩上的張力大小。（取重力加速度 $g = 10$ m/s$^2$，並忽略滑輪質量與空氣阻力）",
+      "answer_text": "設沙袋質量為 $m_1 = 12$ kg，燈具質量為 $m_2 = 8$ kg，加速度大小為 $a$，繩張力為 $T$。\n根據牛頓第二運動定律，對沙袋（向下加速）列式：$m_1 g - T = m_1 a$\n對燈具（向上加速）列式：$T - m_2 g = m_2 a$\n兩式相加可得 $(m_1 - m_2)g = (m_1 + m_2)a$\n加速度 $a = \\frac{(m_1 - m_2)g}{m_1 + m_2} = \\frac{(12 - 8) \\times 10}{12 + 8} = 2$ m/s$^2$；\n將 $a$ 代入第二式可得張力 $T = m_2(g + a) = 8 \\times (10 + 2) = 96$ N。\n故系統的加速度大小為 $2$ m/s$^2$，繩張力為 $96$ N。"
+    },
+    "usage": {
+      "tokenIn": 1158,
+      "tokenOut": 438,
+      "tokenThinking": 1445,
+      "tokenCached": 0
+    },
+    "latencyMs": 15244
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:38:20.399Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2485,
+        "sha256": "3688c6daf6b2e738758aa506ed5444ed64be7688a5d33bfae6e3d81a181d7880"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "物體自 $20$ m 高處自由落下，求落地所需的時間（取 $g = 10$ m/s$^2$，不計空氣阻力）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "直線運動",
+      "confidence": 1,
+      "rationale": "題目為物體自由落下的時間計算，屬於等加速度運動中的自由落體，應歸類於「直線運動」。"
+    },
+    "usage": {
+      "tokenIn": 1982,
+      "tokenOut": 46,
+      "tokenThinking": 120,
+      "tokenCached": 0
+    },
+    "latencyMs": 1744
+  }
+}

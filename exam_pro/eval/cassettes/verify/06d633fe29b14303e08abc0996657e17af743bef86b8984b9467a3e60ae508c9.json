@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T16:59:12.055Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 86,
+        "sha256": "8286607744b46856198c49768e03db8dce197b1ad44c1bfde87a3389916cfe53"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "當電車突然停止時，乘客的身體會向前傾，這是因為什麼原因？ (A) 慣性　(B) 向心力　(C) 摩擦力變小　(D) 重的力變大",
+      "questionType": "單選",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(A)",
+      "answer_form": "option",
+      "steps_summary": "電車突然停止時，乘客因慣性保持原有運動狀態而向前傾。慣性是物體維持原有運動的性質，與外力無直接關係。向心力涉及圓周運動，與電車直線停止無關。摩擦力變小或重力變大均不符合物理現象，故選(A)慣性。"
+    },
+    "usage": {
+      "tokenIn": 311,
+      "tokenOut": 351,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 148363,
+        "loadMs": 23,
+        "promptEvalMs": 7060,
+        "evalMs": 140315
+      }
+    },
+    "latencyMs": 148381
+  }
+}

@@ -33,8 +33,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const { isValidChapter, isValidSubject, isValidQuestionType } = require('../../config/chapters');
+const { isValidQuestionType } = require('../../config/chapters');
 const { CHAPTER_ALIASES } = require('../../config/chapterAliases');
+const { chapterGate } = require('./chapterGate');
 const { parseQuery } = require('../../utils/nlqHeuristics');
 const { loadFixture } = require('./fixtures');
 const { isPrivatePath } = require('./golden');
@@ -55,7 +56,9 @@ const RECALL_K = 10;
  * filters_exact 就永遠不可能是 1，而報表上看起來只是「解析很爛」。
  * @returns {string[]}
  */
-function validateNlqGolden(entries, fixtureById) {
+function validateNlqGolden(entries, fixtureById, opts = {}) {
+    // 〔章節重整 CH-B〕opts.chapters 可注入章節白名單（見 eval/lib/chapterGate.js）；未給時照舊用 config/chapters.js
+    const { isValidSubject, isValidChapter } = chapterGate(opts.chapters);
     const problems = [];
     if (!Array.isArray(entries) || entries.length === 0) return ['nlq golden 的 entries 必須是非空陣列'];
 
@@ -116,14 +119,15 @@ function validateNlqGolden(entries, fixtureById) {
 }
 
 /**
- * @param {{file?:string, fixtureById?:Map<number,object>}} [opts]
+ * @param {{file?:string, fixtureById?:Map<number,object>, chapters?:Record<string,string[]>}} [opts]
+ *        chapters：〔章節重整 CH-B〕注入章節白名單（同 validateNlqGolden）
  * @returns {{file:string, isPrivate:boolean, version:number, entries:Array<object>, pendingConfirm:number}}
  */
 function loadNlqGolden(opts = {}) {
     const target = path.resolve(opts.file || DEFAULT_GOLDEN);
     if (!fs.existsSync(target)) throw new Error(`找不到 nlq golden：${target}`);
     const raw = JSON.parse(fs.readFileSync(target, 'utf8'));
-    const problems = validateNlqGolden(raw.entries, opts.fixtureById);
+    const problems = validateNlqGolden(raw.entries, opts.fixtureById, { chapters: opts.chapters });
     if (problems.length > 0) {
         throw new Error(`nlq golden 未通過硬閘門（${target}）：\n  - ${problems.join('\n  - ')}`);
     }
@@ -141,15 +145,40 @@ function loadNlqGolden(opts = {}) {
 const sortedCopy = (a) => (Array.isArray(a) ? a.slice().sort() : []);
 
 /**
+ * 〔Owner 第五輪 LC-4 核准，2026-09-27，dec/r6-gates〕放寬計分只套在這種句子：
+ * expect_path 為 'llm'、而且期望的章有兩章以上。rules 路徑（決定性的程式）與單章期望照舊四欄 exact。
+ * @param {{chapters?:string[]}} expect
+ * @param {string} [expectPath]
+ * @returns {boolean}
+ */
+function lenientChaptersApply(expect, expectPath) {
+    return expectPath === 'llm' && Array.isArray(expect.chapters) && new Set(expect.chapters).size >= 2;
+}
+
+/**
  * 四欄 exact match：subject／chapters／question_types／difficulty_min+max。
  * 陣列先排序再比——「計算、單選」與「單選、計算」是同一組條件，
  * 讓語序影響分數只會製造噪音。
- * @returns {{ok:boolean, diff:string[]}}
+ *
+ * 〔Owner 第五輪 LC-4 核准，放寬計分〕opts.expectPath 為 'llm' 且期望兩章以上時，chapters 一欄改成
+ * 「回的章都在期望內、至少一章」就算對（其餘三欄照舊 exact）。回傳的 lenient 為 true 表示這一句用的是放寬規則；
+ * 不傳 opts（或 rules 路徑、單章期望）時行為與改版前逐位元相同。
+ * @param {object} expect
+ * @param {object} got
+ * @param {{expectPath?:string}} [opts]
+ * @returns {{ok:boolean, diff:string[], lenient?:boolean}}
  */
-function filtersExact(expect, got) {
+function filtersExact(expect, got, opts = {}) {
     const diff = [];
+    const lenient = lenientChaptersApply(expect, opts.expectPath);
     if (expect.subject !== got.subject) diff.push(`subject: 期望 ${expect.subject} 得到 ${got.subject}`);
-    if (JSON.stringify(sortedCopy(expect.chapters)) !== JSON.stringify(sortedCopy(got.chapters))) {
+    if (lenient) {
+        const want = new Set(expect.chapters);
+        const gotChapters = Array.isArray(got.chapters) ? got.chapters : [];
+        if (gotChapters.length === 0 || !gotChapters.every(c => want.has(c))) {
+            diff.push(`chapters: 期望 [${expect.chapters}] 中的至少一章、不含其他章（放寬計分，Owner 第五輪 LC-4） 得到 [${gotChapters}]`);
+        }
+    } else if (JSON.stringify(sortedCopy(expect.chapters)) !== JSON.stringify(sortedCopy(got.chapters))) {
         diff.push(`chapters: 期望 [${expect.chapters}] 得到 [${got.chapters}]`);
     }
     if (JSON.stringify(sortedCopy(expect.question_types)) !== JSON.stringify(sortedCopy(got.question_types))) {
@@ -158,8 +187,12 @@ function filtersExact(expect, got) {
     if (expect.difficulty_min !== got.difficulty_min || expect.difficulty_max !== got.difficulty_max) {
         diff.push(`difficulty: 期望 ${expect.difficulty_min}~${expect.difficulty_max} 得到 ${got.difficulty_min}~${got.difficulty_max}`);
     }
-    return { ok: diff.length === 0, diff };
+    return lenient ? { ok: diff.length === 0, diff, lenient: true } : { ok: diff.length === 0, diff };
 }
+
+/** 報表註記（Owner 第五輪 LC-4）：放寬計分的說明，放進 warnings 與 meta.scoring */
+const LENIENT_NOTE = 'llm 欄 filters_exact 為放寬計分（Owner 第五輪 LC-4 核准）：expect_path 為 llm、期望兩章以上的句子，'
+    + '「回的章都在期望內、至少一章」就算對；rules 路徑與單章期望照舊四欄全對。與 2026-09-25 以前的分數不可直接比。';
 
 /** rows 裡 ok 為 true 的比例；rows 為空回 null（沒有樣本不等於 0 分） */
 function rate(rows, field = 'exact') {
@@ -175,7 +208,7 @@ function rate(rows, field = 'exact') {
  */
 function queryVectorsAvailable(rows) {
     const { fixturePath, sha256Hex } = require('../../services/llm/fixture');
-    const model = process.env.EMBED_MODEL || 'gemini-embedding-001';
+    const model = require('./localMode').embedModelFromEnv();   // 〔本機模式 L4〕沒設時是本機預設（docs/local-mode.md 第 2 條）
     const dim = Number(process.env.EMBED_DIM || 768);
     const file = fixturePath(model, dim);
     if (!fs.existsSync(file)) return { available: false, missing: rows.map(r => ({ id: r.id, text: r.queryText })) };
@@ -378,15 +411,24 @@ async function runNlqSuite(args = {}) {
             // 比對凍結前綴的，裁決 S2-14），不加 `${e.id}：` 前綴。
             for (const err of captured) {
                 if (replayMiss.isReplayMiss(err.message)) { misses.push(err.message); missIds.add(e.id); }
+                else if (err && err.errorCassette) {
+                    // 〔dec/r9-record-tooling〕錯誤回放檔（錄製當時被截斷或單次逾時；docs/local-mode.md 10.23）：那是模型的結果，
+                    // nlqService 照它的規則退回規則解析，這一句照常計分；不是執行失敗，不進 failures
+                    warnings.push(`${e.id}：LLM 呼叫${err.errorCassette.kind === 'timeout' ? '單次逾時' : '被截斷'}` +
+                        `（錯誤回放檔 ${err.errorCassette.agent}/${String(err.errorCassette.key).slice(0, 12)}…），照錄製當時的結果計分。`);
+                }
                 else { failures.push(`${e.id}：generateJson 失敗——${err.message}`); }
             }
 
             if (parsed) {
                 row.got = parsed.filters;
                 row.parse_path = parsed.parse_path;
-                const cmp = filtersExact(e.expect, parsed.filters);
+                // 〔dec/local-classify-nlq-prep〕mergeLlm 擋下或換掉的 LLM 條件（證據檢查、平面／空間、界線規則），報表逐句列出
+                row.adjustments = Array.isArray(parsed.adjustments) ? parsed.adjustments.slice() : [];
+                const cmp = filtersExact(e.expect, parsed.filters, { expectPath: e.expect_path });
                 row.exact = cmp.ok;
                 row.diff = cmp.diff;
+                if (cmp.lenient) row.lenient = true;
                 // parse_path='llm_failed' 時 semantic_text 只是規則的輸出，
                 // 拿它跟 golden 比是在量一件沒發生的事——不報漂移。
                 row.drifted = parsed.parse_path !== 'llm_failed' && parsed.semantic_text !== e.expect.semantic_text;
@@ -461,6 +503,10 @@ async function runNlqSuite(args = {}) {
         ? metrics.round4(rows.filter(r => r.recallHit).length / rows.length)
         : null;
 
+    // 〔Owner 第五輪 LC-4〕放寬計分的句子（golden 裡符合條件的都算，不論這一輪有沒有量到）
+    const lenientIds = golden.entries.filter(e => lenientChaptersApply(e.expect, e.expect_path)).map(e => e.id);
+    if (lenientIds.length) warnings.push(`${LENIENT_NOTE}本 golden 套用的句子：${lenientIds.join('、')}。`);
+
     if (misses.length) {
         warnings.push(
             `${misses.length} 句是 replay miss（${[...missIds].slice(0, 5).join('、')}${missIds.size > 5 ? ' …' : ''}）：` +
@@ -487,7 +533,9 @@ async function runNlqSuite(args = {}) {
             goldenEntries: golden.entries.length,
             goldenPending: golden.pendingConfirm,
             fixture: path.relative(ROOT, fixture.file).replace(/\\/g, '/'),
-            sources: shims.sources()
+            sources: shims.sources(),
+            // 〔Owner 第五輪 LC-4〕計分規則（報表 JSON 看得出這一份是放寬後的分數）
+            scoring: { llm_multi_chapter: 'lenient_subset', note: LENIENT_NOTE, lenient_ids: lenientIds }
         },
         perEntry: golden.isPrivate ? [] : rows.map(r => ({
             id: r.id,
@@ -496,7 +544,9 @@ async function runNlqSuite(args = {}) {
             confident: r.confident,
             exact: r.exact,
             diff: r.diff,
+            lenient: Boolean(r.lenient),
             drifted: r.drifted,
+            adjustments: r.adjustments || [],
             recall_hit: r.recallHit ?? null,
             fallback_level: r.fallbackLevel ?? null
         })),
@@ -508,5 +558,7 @@ module.exports = {
     runNlqSuite,
     // 給單元測試用（不是第 8.1 條凍結形狀的一部分）
     loadNlqGolden, validateNlqGolden, filtersExact, queryVectorsAvailable,
+    // 〔Owner 第五輪 LC-4〕
+    lenientChaptersApply, LENIENT_NOTE,
     SERVICE_PATH, DEFAULT_GOLDEN, RECALL_K
 };

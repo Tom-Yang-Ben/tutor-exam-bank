@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T17:55:04.333Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1602,
+        "sha256": "fd8d5fa4e604ebc2730f6bf40f69a0db4016cf4849fa3321355e5d94f43a8b93"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 33,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        32,
+        44,
+        46,
+        47,
+        48
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "一輛質量為 $6$ kg 的自行車，受到 $24$ N 的合力作用，求其加速度的大小與方向。",
+      "answer_text": "由 $F = ma$，$a = \frac{F}{m} = \frac{24}{6} = 4$ m/s$^2$，方向與合力同向。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 1822,
+      "tokenOut": 129,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 223483
+  }
+}

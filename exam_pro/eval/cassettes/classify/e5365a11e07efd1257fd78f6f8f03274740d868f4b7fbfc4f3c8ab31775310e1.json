@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T15:03:23.931Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2586,
+        "sha256": "05fe0d75f89344ba5567f59937d94ba03f73718562490765512b5615468abc6d"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "關於等速圓周運動，下列敘述何者正確？（複選）\n(A) 速率不變　(B) 速度不變　(C) 加速度指向圓心　(D) 合力為零",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "摩擦力與向心力",
+      "confidence": 0.95,
+      "rationale": "題目涉及等速圓周運動的特性，關鍵在於向心力與加速度的關係，屬於摩擦力與向心力章節的核心內容。"
+    },
+    "usage": {
+      "tokenIn": 2507,
+      "tokenOut": 67,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 50217
+  }
+}

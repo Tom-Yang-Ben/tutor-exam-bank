@@ -121,7 +121,7 @@ async function main() {
             jq: { id: 0, idx: 0, payload: {}, retries: {} },
             logger: { info() {}, warn() {}, error() {} },
             config: {
-                models: { extract: models.MODEL_EXTRACT, verify: models.MODEL_VERIFY },
+                models: { extract: models.MODEL_EXTRACT, verify: models.MODEL_VERIFY, text: models.MODEL_TEXT },   // 〔LM-15〕
                 thresholds: { classifyMinConf: Number(process.env.CLASSIFY_MIN_CONF || 0.8) },
                 features: { similar: false, pipeline: true }
             },

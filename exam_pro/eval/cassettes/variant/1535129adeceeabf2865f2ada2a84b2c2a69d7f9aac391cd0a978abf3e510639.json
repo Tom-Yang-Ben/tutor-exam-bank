@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T21:43:32.347Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1711,
+        "sha256": "a1b69179c1d9d8fad3b9f7d98e037affb8d5a9770b77d619c0081edb2a6cf439"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 9,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        10,
+        17,
+        18,
+        24,
+        28
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "在物理學中，力對物體所作的功 $W$ 定義為作用力向量 $\\vec{F}$ 與位移向量 $\\vec{S}$ 的內積，即 $W = \\vec{F} \\cdot \\vec{S}$。若一名工人推動貨箱時，施加的力向量為 $\\vec{F} = (20, 10)$ 牛頓，且貨箱在平面上產生的位移向量為 $\\vec{S} = (5, 2)$ 公尺，試求該名工人對貨箱作了多少焦耳的功？",
+      "answer_text": "功 $W = \\vec{F} \\cdot \\vec{S} = 20 \\times 5 + 10 \\times 2 = 100 + 20 = 120$（焦耳）。"
+    },
+    "usage": {
+      "tokenIn": 1251,
+      "tokenOut": 248,
+      "tokenThinking": 1054,
+      "tokenCached": 0
+    },
+    "latencyMs": 11599
+  }
+}

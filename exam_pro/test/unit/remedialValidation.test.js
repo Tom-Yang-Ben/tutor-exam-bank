@@ -156,16 +156,71 @@ describe('generate-paper 的 blueprint 驗證', () => {
     });
 
     test('blueprintPolicyError：FOLLOW_UP_SHORTFALL_POLICY 是單點切換，blueprint 分支也聽它的', () => {
-        assert.equal(exam.FOLLOW_UP_SHORTFALL_POLICY, 'note', '預設仍是少出題附註');
+        // 〔Owner 決策單 2026-09-25 B10〕預設從 'note'（少出題附註）改成 'error'（直接報錯請老師改題數）；
+        // 政策改由環境變數決定，這裡先清掉環境變數再看預設
+        const saved = process.env.FOLLOW_UP_SHORTFALL_POLICY;
+        delete process.env.FOLLOW_UP_SHORTFALL_POLICY;
+        try {
+            assert.equal(exam.FOLLOW_UP_SHORTFALL_POLICY, 'error', '預設是直接報錯〔Owner 決策單 2026-09-25 B10〕');
+        } finally {
+            if (saved !== undefined) process.env.FOLLOW_UP_SHORTFALL_POLICY = saved;
+        }
         const shortfalls = [
             { row: 1, chapter: '向量內積', wanted: 3, got: 1, reason: 'insufficient_stock' },
             { row: 2, chapter: '實數', wanted: 4, got: 3, reason: 'follow_up_group' }
         ];
         assert.equal(blueprintPolicyError(shortfalls, 'note'), null, "'note'：不回 400");
+        // 〔Owner 決策單 2026-09-25 B10〕訊息改成「哪一列要幾題、最多湊到幾題」＋建議題數；沒給建議（hints）時說「請調整題數」
         assert.equal(blueprintPolicyError(shortfalls, 'error'),
-            '承上題須與前題整組出題，blueprint 第 2 列「實數」無法剛好湊滿 4 題（最多可出 3 題），請調整題數。');
+            '承上題須與前題整組出題，blueprint 第 2 列「實數」要 4 題無法剛好湊滿（4 題以內最多只能湊到 3 題），請調整題數。');
         assert.equal(blueprintPolicyError([shortfalls[0]], 'error'), null, '庫存不足不受此政策影響（同單章路徑）');
         assert.equal(blueprintPolicyError([], 'error'), null);
+    });
+
+    test('〔Owner 決策單 2026-09-25 B10〕blueprintPolicyError 帶建議題數：逐列說出改成幾題湊得滿；非 note 的政策值一律當 error', () => {
+        const shortfalls = [
+            { row: 1, chapter: '向量內積', wanted: 3, got: 1, reason: 'insufficient_stock' },
+            { row: 2, chapter: '實數', wanted: 4, got: 3, reason: 'follow_up_group' },
+            { row: 3, chapter: '排列', wanted: 1, got: 0, reason: 'follow_up_group' }
+        ];
+        const hints = {
+            2: { below: 3, above: 5, minUnitSize: 2 },
+            3: { below: null, above: 2, minUnitSize: 2 }
+        };
+        const expected = '承上題須與前題整組出題，blueprint '
+            + '第 2 列「實數」要 4 題無法剛好湊滿（4 題以內最多只能湊到 3 題），請把題數改成 3 題或 5 題；'
+            + '第 3 列「排列」要 1 題無法剛好湊滿（可用的題組每組至少 2 題，一題都湊不出來），請把題數改成 2 題。';
+        assert.equal(blueprintPolicyError(shortfalls, 'error', hints), expected);
+        assert.equal(blueprintPolicyError(shortfalls, 'bogus', hints), expected, '非法政策值退回 error');
+        assert.equal(blueprintPolicyError(shortfalls, undefined, hints), expected, '沒給政策值也是 error');
+        assert.equal(blueprintPolicyError(shortfalls, 'note', hints), null);
+    });
+
+    test('〔Owner 決策單 2026-09-25 B10〕blueprintShortfallHints：只算承上組不足的列；往上的建議不讓整張卷超過 50 題', () => {
+        const { blueprintShortfallHints } = exam._blueprintInternals;
+        const shortfalls = [
+            { row: 1, wanted: 3, got: 1, reason: 'insufficient_stock' },
+            { row: 2, wanted: 3, got: 2, reason: 'follow_up_group' }
+        ];
+        const results = [{ unitSizes: [1] }, { unitSizes: [2, 2] }];
+        assert.deepEqual(blueprintShortfallHints(shortfalls, results, 10), { 2: { below: 2, above: 4, minUnitSize: 2 } });
+        // 其他列合計 47 題：這一列最多 3 題，往上改成 4 題會超過 50 → 只建議往下
+        assert.deepEqual(blueprintShortfallHints(shortfalls, results, 50), { 2: { below: 2, above: null, minUnitSize: 2 } });
+        // pickByQuotas 沒帶 unitSizes（例如測試替身）：不給建議，訊息退回「請調整題數」
+        assert.deepEqual(blueprintShortfallHints(shortfalls, [{}, {}], 10), { 2: { below: null, above: null, minUnitSize: null } });
+        assert.deepEqual(blueprintShortfallHints([], results, 10), {});
+    });
+
+    test('〔Owner 決策單 2026-09-25 B10〕followUpShortfallText：章／列、要幾題、最多湊到幾題、改成幾題', () => {
+        const { followUpShortfallText } = exam._blueprintInternals;
+        assert.equal(followUpShortfallText({ label: '「向量內積」', wanted: 3, got: 2, suggest: { below: 2, above: 4 } }),
+            '「向量內積」要 3 題無法剛好湊滿（3 題以內最多只能湊到 2 題），請把題數改成 2 題或 4 題');
+        assert.equal(followUpShortfallText({ label: '「向量內積」', wanted: 5, got: 4, suggest: { below: 4, above: null } }),
+            '「向量內積」要 5 題無法剛好湊滿（5 題以內最多只能湊到 4 題），請把題數改成 4 題');
+        assert.equal(followUpShortfallText({ label: '第 1 列「實數」', wanted: 1, got: 0, suggest: { below: null, above: 3 }, minUnitSize: 3 }),
+            '第 1 列「實數」要 1 題無法剛好湊滿（可用的題組每組至少 3 題，一題都湊不出來），請把題數改成 3 題');
+        assert.equal(followUpShortfallText({ label: '「實數」', wanted: 1, got: 0 }),
+            '「實數」要 1 題無法剛好湊滿（一題都湊不出來），請調整題數');
     });
 
     test('blueprintTitle：1 章同單章路徑、2–3 章列出、4 章以上「等 N 章」', () => {

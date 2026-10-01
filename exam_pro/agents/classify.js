@@ -17,7 +17,7 @@
 //     B. 題庫各章各取 2 題
 //     C. config/chapterExamples.js 的自製例句（補上 A/B 取不到的章；永遠執行）
 //   取材失敗一律降級，不算節點失敗。
-//   輸出**再過一次** isValidChapter：schema 的 enum 是兩科合併的 66 個，
+//   輸出**再過一次** isValidChapter：schema 的 enum 是兩科合併的 86 個（〔章節重整 CH-A〕原 66 個），
 //   模型可能給出「物理題配到數學章節」這種跨科錯配，只有伺服器端擋得住。
 //
 //   ── 階段 3（interfaces-stage3.md 第 5 條，P-14）──
@@ -34,14 +34,41 @@
 //
 // ⚠ 錄 cassette 與跑 eval 時 **ctx.db 一律為 null**（裁決 S2-8）：cassette 的鍵含 fewShotIds，
 //   接了資料庫錄出來的鍵帶著一串題目 id，CI 沒有那個庫、fewShotIds 會是 []，鍵對不上、全部 miss。
+//
+// 〔dec/local-classify-nlq-prep〕2026-09-26 第二層的輸出多一道**程式後處理**（postProcessChapter，
+//   規則在 utils/chapterPostRules.js；docs/local-mode.md 10.15）：名稱容錯，以及題幹有 Owner 規則寫明的證據時
+//   在相鄰兩章之間換章（A5 的指數／對數分冊、平面／空間、靜電學／電場與電位、K2 的一維／二維相對速度、
+//   自由落體的數值題）。後處理在 generateJson 之後，**不進 cassette 的鍵**：模板、schema、cacheKeyParts 一個字都沒動，
+//   classify.v2 的版號不變；回放照樣吃得到後處理（改規則不必重錄）。
+// 〔Owner 第五輪 LC-3 核准，2026-09-27，dec/r6-gates〕同一套界線規則也套在第一層零成本閘門：拆題模型給的章
+//   規則判定要換時直接改章，仍記為閘門通過（source='gate'），data 多一個 adjustments。不呼叫 LLM、不動任何 cassette 的鍵。
+// 〔Owner 2026-09-27 改答 LC-2：加四條規則，dec/r6-classify-rules〕規則表多四條（docs/local-mode.md 10.22）：K3 的平方關係
+//   （疊合 → 直角三角形的邊角關係）、廣義角（直角三角形 → 廣義角與極坐標）、摩擦係數（牛頓運動定律 → 摩擦力與向心力）、
+//   等速圓周運動的運動學（摩擦力與向心力 → 平面運動）。接線不變：第二層與閘門都經 boundaryTarget，本檔程式沒改。
 
 const { CHAPTERS, SUBJECTS, isValidChapter, isValidSubject } = require('../config/chapters');
 const { getChapterExample } = require('../config/chapterExamples');
 const { buildSchema } = require('./schemas');
 const { chapterWhitelistText, resolveSubjectGroup } = require('./promptParts');
 const { registerTemplate } = require('../services/llm/templates');
+// 〔dec/local-classify-nlq-prep〕模型挑的章的後處理：名稱容錯＋相鄰兩章的界線（與 services/nlqService.js 共用）
+const { canonicalChapter, boundaryTarget } = require('../utils/chapterPostRules');
 
-const TEMPLATE = 'classify.v1';
+// 〔章節重整整合 CR-9〕2026-09-26 v1 → v2（docs/chapter-restructure.md 第 8 條 CR-9）：
+//   ① 規則 5 補上「指數與對數」（第一冊）／「指數函數與對數函數」（第三冊）的分冊界線（決策單 A5）；
+//   ② config/chapterExamples.js 這兩章的例句改寫。
+//   ③ 〔CR-9 審查〕v2 發布前再調整：界線規則改成「只給該科看」（下方 SUBJECT_RULES，模板只留
+//      {{SUBJECT_RULES}} 占位），並補上已有書面原則的界線（數學：平面／空間向量內積；物理：
+//      eval/CHAPTER_RELABEL-2026-09.md 第 8.0 節的三組相鄰章）。v2 還沒錄過任何 cassette，所以不再升版。
+//   ④ 〔重練與收尾決策單 2026-09-26 K2／K3〕v2 發布前再補兩條 Owner 定的界線（物理 8：直線運動／平面運動；
+//      數學 7：直角三角形的邊角關係／三角函數的疊合），並把 SUBJECT_RULES 併進註冊的模板文字（見下方
+//      REGISTERED_TEMPLATE）。v2 仍然沒錄過任何 cassette，所以不再升版。
+//   cassette 的鍵只含模板原文、題幹與 few-shot 的 **id**（第 5.2 條），**不含例句文字**——只改例句的話鍵不變，
+//   回放會拿到舊答案、量不到改善。所以改例句要把識別名版號 +1：cacheKeyParts.template 跟著變，數學與物理
+//   （共用這一份模板與識別名）的 classify cassette 全部要重錄。化學走 classify_chem.v1，不受影響。
+//   界線規則自 ④ 起已在註冊的模板文字裡，改規則鍵會自己變（回放 miss、不會拿到舊答案）；仍照慣例升版，
+//   單元測試把規則雜湊與版號一起釘住當提醒。
+const TEMPLATE = 'classify.v2';
 const DEFAULT_MIN_CONF = 0.8;
 const FEW_SHOT_K = 8;              // 向量最近鄰取幾題（階段 3 第 5.1 條把 5 改成 8）
 const KNN_VOTE_N = 5;              // 投票只看最近的幾個鄰居（第 5.2 條）
@@ -55,12 +82,14 @@ const SYSTEM = '你是一位資深的台灣高中數學與物理家教老師，�
 const PROMPT_TEMPLATE = `請判斷下面這道題目屬於哪一個精細章節。
 
 {{CHAPTER_WHITELIST}}
+（白名單依冊別分組列出；「第一冊」「選修物理一」這類冊名只是分組標題，不是章名。）
 
 【規則】
 1. chapter 必須「完全等於」白名單裡的某一個字串，一個字都不能差，也不得自創新詞。
 2. 判斷依據是「解這一題需要用到哪一章的觀念」，不是題目裡出現了哪些名詞。例如用到向量夾角公式的題目屬於向量內積，即使題幹在講風力或斜面。
 3. 若題目橫跨兩章，選「非用不可」的那一章；只是順帶用到的計算工具不算。
 4. confidence 請誠實給分：低於門檻的題目會被送去人工複核，這比標錯章節便宜得多。
+{{SUBJECT_RULES}}
 
 {{FEW_SHOT}}
 
@@ -69,7 +98,73 @@ const PROMPT_TEMPLATE = `請判斷下面這道題目屬於哪一個精細章節�
 【要分類的題目】
 {{QUESTION}}`;
 
-registerTemplate(TEMPLATE, PROMPT_TEMPLATE);
+// 〔重練與收尾決策單 2026-09-26〕模板的註冊（registerTemplate）移到 SUBJECT_RULES 之後，見下方 REGISTERED_TEMPLATE。
+
+// ───────────── 各科的章節界線規則（〔CR-9 審查〕2026-09-26，docs/chapter-restructure.md CR-9） ─────────────
+//
+// 數學與物理共用上面的模板；界線規則會提到該科的章名，放在共用模板裡的話，物理題也會看到
+// 「指數函數與對數函數」這類數學章名。所以改成只把「該科」的規則填進 {{SUBJECT_RULES}}，
+// 接在共用的規則 1～4 後面、從 5 開始編號；沒有規則的科目整行拿掉（不留空行）。
+//
+// 只收**已有書面原則**的界線，不自創新原則；除了數學 5 沿用 CR-9 原文（前面兩句是前言），每條一句：
+//   數學 5：決策單 A5（第一冊只教常用對數；CR-6／CR-9）。文字與 CR-9 寫在共用模板時逐字相同，只是搬過來。
+//   數學 6：章名本身的定義——第三冊「向量內積」是平面向量，第四冊「空間向量內積」是空間（三維坐標）向量。
+//          只談內積；空間向量的加減沒有章（CR-8 待 Owner），這裡不涵蓋。
+//          〔整合 2026-09-26〕Owner 已依 A6／M5 決定：空間向量的坐標運算（含加減）放在「空間概念與座標系」
+//          （知識點 MATH.空間概念與座標系.06，config/kc/數學.json）。分類界線規則目前仍只收內積，
+//          Owner 沒有另定空間向量加減的分類規則。
+//   物理 5～7：eval/CHAPTER_RELABEL-2026-09.md 第 8.0 節的分界原則（Owner 2026-09-25 裁決；CR-8 之二），
+//          等位面與電力線歸電場與電位見同檔第 8.6 節第 5 點；與 config/chapterAliases.js 既有別名一致
+//          （等速圓周運動→平面運動、向心力→摩擦力與向心力、等位面→電場與電位、庫侖定律→靜電學）。
+//   尚未有書面原則、**刻意不寫**的界線（待 Owner）：直線運動／平面運動（一維相對速度，#52 維持直線運動）、
+//   直角三角形的邊角關係／三角函數的疊合。
+//   〔重練與收尾決策單 2026-09-26 K2／K3〕上一行的兩組 Owner 已定原則（都選 1），各寫成一條、接在該科最後：
+//   數學 7（K3）：只用到銳角與平方、商數、餘角關係 → 第二冊「直角三角形的邊角關係」；化成 r sin(x＋φ) 的
+//          疊合才歸第三冊「三角函數的疊合」（與 eval/CHAPTER_RELABEL-2026-09.md 第 0 節的原則一致）。
+//   物理 8（K2）：同一直線上（一維）的運動，含一維相對速度 →「直線運動」；要用向量分解或二維才解得出 →「平面運動」。
+//
+// 〔重練與收尾決策單 2026-09-26〕規則文字已併進註冊的模板文字（下方 REGISTERED_TEMPLATE），改這裡 cassette 的鍵
+//   會自己變。原本的做法仍照舊：改規則就把 TEMPLATE 的版號 +1，數學＋物理的 classify cassette 全部重錄
+//   （docs/llm.md「什麼時候必須重錄」）；單元測試把規則文字的雜湊與版號一起釘住，當作升版的提醒。
+const SUBJECT_RULES = Object.freeze({
+    '數學': Object.freeze([
+        '冊別依 108 課綱。章名相近、分在不同冊的兩章，看題目實際用到的內容，不要只看章名字面。數學第一冊「指數與對數」只收指數律與以 10 為底的常用對數（不寫底數的 log；含其運算、科學記號、首數與尾數、位數估計）；底數不是 10 的對數（含對數律、換底公式）、指數或對數方程式與不等式、指數函數與對數函數的圖形，都屬第三冊「指數函數與對數函數」。',
+        '同樣是向量的內積，平面向量（二維坐標）屬第三冊「向量內積」，空間向量（三維坐標）屬第四冊「空間向量內積」。',
+        // 〔重練與收尾決策單 2026-09-26 K3〕選 1
+        '題目只用到銳角與平方、商數、餘角關係的，屬第二冊「直角三角形的邊角關係」；要化成 r sin(x＋φ) 的疊合，才屬第三冊「三角函數的疊合」。'
+    ]),
+    '物理': Object.freeze([
+        '必修「物體的運動（速度與加速度）」與選修「直線運動」：只需定義、名詞辨析、圖形意義或定性說明就能作答的，歸「物體的運動（速度與加速度）」；需要代入等加速度公式或從圖求數值的，歸「直線運動」。',
+        '「平面運動」與「摩擦力與向心力」：圓周運動只問速率、速度方向、向心加速度或週期（運動學）的，歸「平面運動」；需要求向心力、張力或摩擦力的，歸「摩擦力與向心力」。',
+        '「靜電學」與「電場與電位」：求兩個電荷之間的力（庫侖定律）的，歸「靜電學」；求電場、電位、電位能或作功，或問電力線（電場線）與等位面的，歸「電場與電位」。',
+        // 〔重練與收尾決策單 2026-09-26 K2〕選 1
+        '「直線運動」與「平面運動」：在同一直線上（一維）的運動，包含一維的相對速度，歸「直線運動」；要用向量分解或在二維平面上才解得出來的，歸「平面運動」。'
+    ])
+});
+const SHARED_RULE_COUNT = 4;        // 模板裡共用的規則 1～4；各科規則從 5 開始編號
+
+// 〔重練與收尾決策單 2026-09-26〕審查意見：原本註冊的是挖空後的 PROMPT_TEMPLATE，SUBJECT_RULES 不在裡面，
+//   改了規則 cassette 的鍵不會變，只能靠人記得升版。改成把規則（序列化）接在模板後面一起註冊，
+//   分隔符照化學與 tutor 的慣例用 '\n---\n'；改任何一條規則，templateHash 就跟著變。
+//   送給模型的 prompt 不變：仍由 fillSubjectRules 只填該科的規則。
+const REGISTERED_TEMPLATE = `${PROMPT_TEMPLATE}\n---\n${JSON.stringify(SUBJECT_RULES)}`;
+registerTemplate(TEMPLATE, REGISTERED_TEMPLATE);
+
+/**
+ * 該科的界線規則（已編號、以換行分隔）；沒有規則的科目回空字串。
+ * @param {string} subject
+ * @returns {string}
+ */
+function subjectRulesText(subject) {
+    const rules = Object.prototype.hasOwnProperty.call(SUBJECT_RULES, subject) ? SUBJECT_RULES[subject] : [];
+    return rules.map((rule, i) => `${SHARED_RULE_COUNT + 1 + i}. ${rule}`).join('\n');
+}
+
+/** 把 {{SUBJECT_RULES}} 換成該科規則；沒有規則就連同前面的換行一起拿掉。用函式替換，規則裡的 $ 不會被當成替換樣式 */
+function fillSubjectRules(template, subject) {
+    const rules = subjectRulesText(subject);
+    return template.replace('\n{{SUBJECT_RULES}}', () => (rules ? `\n${rules}` : ''));
+}
 
 // ───────────────────── 化學題（〔stage5 WS-B〕DEC-019、ADR-010）─────────────────────
 //
@@ -161,6 +256,32 @@ function nearestChapters(subject, value, k = 2) {
 function invalidChapterFeedback(subject, value) {
     const near = nearestChapters(subject, value, 2);
     return `「${value}」不在白名單內，最接近的是${near.map(c => `「${c}」`).join('')}`;
+}
+
+/**
+ * 〔dec/local-classify-nlq-prep〕第二層 LLM 的章節後處理（utils/chapterPostRules.js；docs/local-mode.md 10.15）：
+ *   ① 名稱容錯（canonicalChapter 已在呼叫端做完，這裡只記錄）；
+ *   ② 相鄰兩章的界線：題幹有 Owner 規則寫明的證據時（A5 的底數、K2 的一維相對速度…），把模型挑的章換成另一章。
+ * 換過章時 rationale 前面加一句說明（複核的人才看得懂為什麼理由寫的是另一章），並回傳 adjustments。
+ * 套在第二層（source='llm'）與零成本閘門（〔Owner 第五輪 LC-3〕閘門的接線在 run() 裡，只用界線規則、不做名稱容錯——
+ * 閘門的章本來就要在白名單內）；kNN 投票照舊不套（kNN 的票來自人工標籤，不該被字面規則推翻）。
+ * @param {string} subject
+ * @param {unknown} rawChapter 模型原本回的字串
+ * @param {string} chapter 名稱容錯後的白名單章名
+ * @param {string} questionText
+ * @returns {{chapter:string, note:string, adjustments:Array<{rule:string, from:string, to:string, evidence?:string}>}}
+ */
+function postProcessChapter(subject, rawChapter, chapter, questionText) {
+    const adjustments = [];
+    if (chapter !== rawChapter) adjustments.push({ rule: 'chapter_name', from: String(rawChapter), to: chapter });
+    const hit = boundaryTarget(chapter, questionText);
+    if (!hit || !isValidChapter(subject, hit.to)) return { chapter, note: '', adjustments };
+    adjustments.push({ rule: hit.rule, from: chapter, to: hit.to, evidence: hit.evidence });
+    return {
+        chapter: hit.to,
+        note: `〔界線規則：模型選「${chapter}」，依題幹的「${hit.evidence}」改為「${hit.to}」〕`,
+        adjustments
+    };
 }
 
 /** rationale 太長就截斷（schema 不設 maxLength：那會讓「話多」變成整題失敗，代價不成比例） */
@@ -412,12 +533,29 @@ async function run(ctx, input = {}) {
         const confidence = Number(input.chapter_confidence);
         const confidenceUsable = Number.isFinite(confidence) && confidence > 0;
         if (isValidChapter(subject, input.chapter) && confidenceUsable && confidence >= minConf) {
+            const rationale = `拆題模型給的章節在白名單內，且信心 ${confidence} ≥ ${minConf}，零成本閘門直接採用。`;
+            // 〔Owner 第五輪 LC-3 核准，2026-09-27〕第二層的相鄰兩章界線規則也套在閘門上：規則只看題幹，
+            // 與章節是哪個模型猜的無關。規則判定要換章時直接改章，仍記為閘門通過（source 'gate'、不呼叫 LLM），
+            // 附上 adjustments；沒換的題 outcome.data 與改版前逐鍵相同。
+            const hit = boundaryTarget(input.chapter, questionText);
+            if (hit && isValidChapter(subject, hit.to)) {
+                return {
+                    kind: 'pass',
+                    data: {
+                        chapter: hit.to,
+                        confidence,
+                        rationale: `〔界線規則：拆題模型給「${input.chapter}」，依題幹的「${hit.evidence}」改為「${hit.to}」〕${rationale}`,
+                        source: 'gate',
+                        adjustments: [{ rule: hit.rule, from: input.chapter, to: hit.to, evidence: hit.evidence }]
+                    }
+                };
+            }
             return {
                 kind: 'pass',
                 data: {
                     chapter: input.chapter,
                     confidence,
-                    rationale: `拆題模型給的章節在白名單內，且信心 ${confidence} ≥ ${minConf}，零成本閘門直接採用。`,
+                    rationale,
                     source: 'gate'
                 }
             };
@@ -449,14 +587,16 @@ async function run(ctx, input = {}) {
             || (ctx.jq && ctx.jq.payload && ctx.jq.payload.classify && ctx.jq.payload.classify.feedback)
             || '';
 
-        const prompt = v.promptTemplate
+        // 〔CR-9 審查〕界線規則只填該科的（化學模板沒有這個占位，fillSubjectRules 原樣回傳）
+        const prompt = fillSubjectRules(v.promptTemplate, subject)
             .replace('{{CHAPTER_WHITELIST}}', chapterWhitelistText(subject))
             .replace('{{FEW_SHOT}}', fewShotText(examples))
             .replace('{{FEEDBACK}}', feedback ? `【上一次的錯誤，請不要再犯】\n${feedback}` : '')
             .replace('{{QUESTION}}', questionText);
 
         const res = await ctx.llm.generateJson({
-            model: (ctx.config && ctx.config.models && ctx.config.models.extract) || undefined,
+            // 〔LM-15〕分類只讀題目文字：用 models.text（runner 由 MODEL_TEXT 組；Gemini 模式＝extract），沒給退回 extract
+            model: (ctx.config && ctx.config.models && (ctx.config.models.text || ctx.config.models.extract)) || undefined,
             system: v.system,
             parts: [{ text: prompt }],
             schema: buildSchema('classify', v.schemaOpts),
@@ -469,7 +609,9 @@ async function run(ctx, input = {}) {
         });
 
         const data = res.data || {};
-        if (!isValidChapter(subject, data.chapter)) {
+        // 〔dec/local-classify-nlq-prep〕名稱容錯：只差空白、引號、全形半形的章名對回白名單（utils/chapterPostRules.js）
+        const chapter = canonicalChapter(subject, data.chapter);
+        if (chapter === null) {
             return {
                 kind: 'fail',
                 reason: 'chapter_invalid',
@@ -484,21 +626,24 @@ async function run(ctx, input = {}) {
             };
         }
 
-        return {
-            kind: 'pass',
-            data: {
-                chapter: data.chapter,
-                confidence: Number.isFinite(Number(data.confidence)) ? Number(data.confidence) : 0,
-                rationale: clampRationale(data.rationale),
-                source: 'llm',
-                few_shot_ids: fewShotIds
-            }
+        const post = postProcessChapter(subject, data.chapter, chapter, questionText);
+        const out = {
+            chapter: post.chapter,
+            confidence: Number.isFinite(Number(data.confidence)) ? Number(data.confidence) : 0,
+            rationale: clampRationale(post.note ? `${post.note}${String(data.rationale ?? '').trim()}` : data.rationale),
+            source: 'llm',
+            few_shot_ids: fewShotIds
         };
+        // 有改過才多這個鍵：沒改的題 outcome.data 與改版前逐鍵相同
+        if (post.adjustments.length) out.adjustments = post.adjustments;
+        return { kind: 'pass', data: out };
     } catch (err) {
+        // 〔Owner 第五輪 C-f 核准〕供應商回報的 finishReason（'MAX_TOKENS'＝寫到輸出上限被截斷）帶給 runner：本機模式被截斷的不重試、直接進複核
         return {
             kind: 'error',
             errorClass: err.errorClass || 'provider_error',
-            message: err.message
+            message: err.message,
+            ...(err && err.finishReason ? { finishReason: String(err.finishReason) } : {})
         };
     }
 }
@@ -510,6 +655,12 @@ module.exports = {
     // 階段 3（第 5 條）
     knnVote, orderExamples,
     TEMPLATE, SYSTEM, PROMPT_TEMPLATE,
+    // 〔CR-9 審查〕各科的界線規則
+    SUBJECT_RULES, subjectRulesText, fillSubjectRules,
+    // 〔重練與收尾決策單 2026-09-26〕註冊的模板文字（PROMPT_TEMPLATE＋'\n---\n'＋序列化的 SUBJECT_RULES）
+    REGISTERED_TEMPLATE,
+    // 〔dec/local-classify-nlq-prep〕第二層的章節後處理
+    postProcessChapter,
     FEW_SHOT_K, KNN_VOTE_N, KNN_VOTE_MIN_HUMAN, DEFAULT_KNN_VOTE_SIM,
     // 〔stage5 WS-B〕化學題
     AGENT_CHEM, TEMPLATE_CHEM, SYSTEM_CHEM, PROMPT_TEMPLATE_CHEM

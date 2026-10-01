@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T21:41:54.136Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1573,
+        "sha256": "238a9e9373bee67d11db4b075de17ecb8b3001cbce57baee14924aed4a20e186"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 5,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        6,
+        15,
+        22
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 4,
+      "question_text": "某款熱門的加密貨幣理財商品宣稱，每年年底的帳戶結餘會是年初的 $1.2$ 倍。若小明一開始投入新台幣 $1000$ 元，並且不再存入或提領任何資金，假設該平台能持續運作，經過 $60$ 年後，他帳面上的總金額（單位：元）其整數部分是幾位數？（已知 $\\log_{10} 2 \\approx 0.3010$，$\\log_{10} 3 \\approx 0.4771$）",
+      "answer_text": "設經過 $60$ 年後的帳面金額為 $M$ 元，則 $M = 1000 \\times (1.2)^{60}$。\n對 $M$ 取以 $10$ 為底的對數：\n$\\log_{10} M = \\log_{10} \\left(10^3 \\times (1.2)^{60}\\right) = 3 + 60 \\times \\log_{10} 1.2$。\n利用對數律計算 $\\log_{10} 1.2$ 的值：\n$\\log_{10} 1.2 = \\log_{10} \\frac{12}{10} = \\log_{10} (2^2 \\times 3) - \\log_{10} 10 = 2\\log_{10} 2 + \\log_{10} 3 - 1$。\n代入近似值可得：\n$\\log_{10} 1.2 \\approx 2 \\times 0.3010 + 0.4771 - 1 = 0.6020 + 0.4771 - 1 = 0.0791$。\n將其代回原式：\n$\\log_{10} M \\approx 3 + 60 \\times 0.0791 = 3 + 4.746 = 7.746$。\n因為 $10^{7.746}$ 介於 $10^7$ 與 $10^8$ 之間，即 $10^7 < M < 10^8$，故帳面總金額的整數部分為 $8$ 位數。"
+    },
+    "usage": {
+      "tokenIn": 1185,
+      "tokenOut": 594,
+      "tokenThinking": 2539,
+      "tokenCached": 0
+    },
+    "latencyMs": 23758
+  }
+}

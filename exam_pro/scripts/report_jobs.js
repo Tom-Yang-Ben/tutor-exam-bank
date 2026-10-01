@@ -136,9 +136,37 @@ function renderMarkdown(r) {
         ['verify 事件數', int(r.verify.calls)],
         ['skipped（證明題）', int(r.verify.skipped)],
         ['answer_mismatch 次數', int(r.verify.mismatch)],
-        ['不一致率', pct(r.verify.mismatch_rate)]
+        ['不一致率', pct(r.verify.mismatch_rate)],
+        // 〔dec/local-thinking-speed-fix〕舊的報表物件沒有 rerun：不列
+        ...(r.verify.rerun ? [
+            ['answer_mismatch 之後原地重跑（同一題下一次 verify）', int(r.verify.rerun.reruns)],
+            ['　重跑後通過', int(r.verify.rerun.rerun_pass)],
+            ['　重跑後仍 answer_mismatch', int(r.verify.rerun.rerun_mismatch)],
+            ['　重跑後是其他結果（error 等）', int(r.verify.rerun.rerun_other)],
+            ['answer_mismatch 之後沒有再跑 verify（停在複核或還沒輪到）', int(r.verify.rerun.no_next)]
+        ] : [])
     ]));
     out.push('> 線上 `answer_mismatch` 比例 > 15% 時先查 prompt，不要急著接第二家模型（規劃 §3.8）。\n');
+    if (r.verify.rerun) {
+        out.push('> 不一致時狀態機會原地重跑一次 verify；「重跑後通過」很少時，這次重跑多半只是多等一次（本機模式一次幾分鐘），' +
+            '要不要關掉見 docs/local-mode.md 第 10.14 條。\n');
+    }
+
+    // 〔審查 2026-09-26〕LOCAL_EXTRACT_MODE=ocr 的版面配圖（docs/local-mode.md 10.12 第 4 點）：期間內有只用 OCR 拆的塊才印
+    const of = r.ocrFigures;
+    if (of && of.chunks > 0) {
+        out.push('\n## OCR 版面配圖（LOCAL_EXTRACT_MODE=ocr）\n');
+        out.push(table(['指標', '值'], [
+            ['只用 OCR 拆的塊數', int(of.chunks)],
+            ['版面偵測到的圖（印章以外）', int(of.detected)],
+            ['自動配到題目', int(of.assigned)],
+            ['標了補圖提示的題', int(of.hinted)],
+            ['讀不到版面或框數對不上的塊', int(of.no_layout)],
+            ['可能被截斷、整塊只給提示的塊', int(of.truncated)]
+        ]));
+        out.push('> 逐題的提示：停在 `ocr_only` 的題記在 save 事件的 `detail.figure_hint`；被其他閘門先攔下的題只在 ' +
+            '`job_questions.payload->\'extract\'->\'figure_hint\'`。沒配到的圖用 `npm run figures:backfill` 補（docs/figures.md）。\n');
+    }
 
     return out.join('');
 }
@@ -223,6 +251,23 @@ async function collect(db, since) {
     const judged = verifyStats.calls - verifyStats.skipped;
     verifyStats.mismatch_rate = judged > 0 ? verifyStats.mismatch / judged : null;
 
+    // 〔dec/local-thinking-speed-fix〕answer_mismatch 之後狀態機原地重跑 verify（pipeline/stateMachine.js 的 maxRetries.verify=1）：
+    // 同一題下一次 verify 的結果。本機模式要不要關掉這次重跑（docs/local-mode.md 第 10.14 條）看「重跑後通過」占多少。
+    const verifyRerun = await one(
+        `WITH v AS (
+             SELECT error_class,
+                    LEAD(outcome)     OVER w AS next_outcome,
+                    LEAD(error_class) OVER w AS next_error
+               FROM job_events
+              WHERE created_at >= $1 AND node = 'verify' AND jq_id IS NOT NULL
+             WINDOW w AS (PARTITION BY jq_id ORDER BY id))
+         SELECT COUNT(*) FILTER (WHERE error_class = 'answer_mismatch' AND next_outcome IS NOT NULL)::int AS reruns,
+                COUNT(*) FILTER (WHERE error_class = 'answer_mismatch' AND next_outcome = 'pass')::int     AS rerun_pass,
+                COUNT(*) FILTER (WHERE error_class = 'answer_mismatch' AND next_error = 'answer_mismatch')::int AS rerun_mismatch,
+                COUNT(*) FILTER (WHERE error_class = 'answer_mismatch' AND next_outcome IS NULL)::int     AS no_next
+           FROM v`);
+    verifyRerun.rerun_other = (verifyRerun.reruns || 0) - (verifyRerun.rerun_pass || 0) - (verifyRerun.rerun_mismatch || 0);
+
     // 「同家／異家」用**實際跑過的模型**判定，不是 .env 寫什麼就信什麼
     const models = await all(
         `SELECT node, model, COUNT(*)::int AS n FROM job_events
@@ -231,10 +276,23 @@ async function collect(db, since) {
     const topModel = (node) => models.find(m => m.node === node)?.model ?? null;
     const relation = verifyRelation(topModel('extract') ?? topModel('classify'), topModel('verify'));
 
+    // 〔審查 2026-09-26〕只用 OCR 拆的塊（LOCAL_EXTRACT_MODE=ocr）的版面配圖：extract 事件的
+    // detail.cross_check.figures（agents/extractOcrFigures.js 的摘要：detected／assigned／hinted／layout／truncated）
+    const ocrFigures = await one(
+        `SELECT COUNT(*)::int                                                              AS chunks,
+                COALESCE(SUM((detail->'cross_check'->'figures'->>'detected')::int), 0)::int AS detected,
+                COALESCE(SUM((detail->'cross_check'->'figures'->>'assigned')::int), 0)::int AS assigned,
+                COALESCE(SUM((detail->'cross_check'->'figures'->>'hinted')::int), 0)::int   AS hinted,
+                COUNT(*) FILTER (WHERE COALESCE(detail->'cross_check'->'figures'->>'layout', 'none') <> 'ok')::int AS no_layout,
+                COUNT(*) FILTER (WHERE detail->'cross_check'->'figures'->>'truncated' = 'true')::int AS truncated
+           FROM job_events
+          WHERE created_at >= $1 AND node = 'extract' AND outcome = 'pass'
+            AND detail->'cross_check'->>'mode' = 'ocr'`);
+
     return {
         since: { ...since, from },
         totals, nodes, outcomes, errorClasses, reviewReasons, perJob,
-        classifyGate, verify: { ...verifyStats, ...relation }, models
+        classifyGate, verify: { ...verifyStats, ...relation, rerun: verifyRerun }, models, ocrFigures
     };
 }
 

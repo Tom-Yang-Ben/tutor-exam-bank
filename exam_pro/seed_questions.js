@@ -15,6 +15,10 @@
 //    失敗——題庫的價值不在題數總和，而在「單章密度」。
 //    現行分佈：4 章各 7~8 題（共 30 題），抽 5 題後仍有餘裕可再抽一次。
 //
+// 〔章節重整 CH-A〕2026-09-25：舊章「三角函數的定義」拆分（docs/chapter-restructure.md），那 7 題改標
+//    「廣義角與極坐標」——其中 4 題是廣義角（150°、120°、225°、第二象限），另 3 題（銳角、平方關係、
+//    特別角）放在「直角三角形的邊角關係」更精確，但分開會讓兩章都不到 5 題，違反上面的單章密度。
+//    平方關係與特別角在廣義角一樣成立，所以整組放廣義角。已入庫的舊種子題由 npm run chapters:migrate 處理。
 // 所有章節名稱皆對齊 config/chapters.js 白名單；
 // 公式使用 utils/textFormatter.js 支援的 LaTeX 子集（\frac、\sqrt、\int、^\circ…）。
 // ─────────────────────────────────────────────────────────────
@@ -69,39 +73,39 @@ const QUESTIONS = [
         answer_text: '$\\log_{10} 2^{50} = 50 \\times 0.3010 = 15.05$，即 $10^{15} < 2^{50} < 10^{16}$，故 $2^{50}$ 為 $16$ 位數。'
     },
 
-    // ══════════ 數學 · 三角函數的定義（7 題）══════════
+    // ══════════ 數學 · 廣義角與極坐標（7 題；〔章節重整 CH-A〕原「三角函數的定義」）══════════
     {
-        subject: '數學', chapter: '三角函數的定義', question_type: '單選', difficulty: 1,
+        subject: '數學', chapter: '廣義角與極坐標', question_type: '單選', difficulty: 1,
         question_text: '$\\sin^2 40^\\circ + \\cos^2 40^\\circ$ 之值為何？\n(A) $1$　(B) $0$　(C) $\\frac{1}{2}$　(D) 需查表才能得知',
         answer_text: '(A)。由畢氏恆等式 $\\sin^2 \\theta + \\cos^2 \\theta = 1$，與角度無關。'
     },
     {
-        subject: '數學', chapter: '三角函數的定義', question_type: '填空', difficulty: 2,
+        subject: '數學', chapter: '廣義角與極坐標', question_type: '填空', difficulty: 2,
         question_text: '$\\sin 150^\\circ$ 之值為何？',
         answer_text: '$\\frac{1}{2}$。因 $\\sin 150^\\circ = \\sin (180^\\circ - 30^\\circ) = \\sin 30^\\circ = \\frac{1}{2}$。'
     },
     {
-        subject: '數學', chapter: '三角函數的定義', question_type: '單選', difficulty: 2,
+        subject: '數學', chapter: '廣義角與極坐標', question_type: '單選', difficulty: 2,
         question_text: '$\\cos 120^\\circ$ 之值為何？\n(A) $-\\frac{1}{2}$　(B) $\\frac{1}{2}$　(C) $-\\frac{\\sqrt{3}}{2}$　(D) $\\frac{\\sqrt{3}}{2}$',
         answer_text: '(A)。$\\cos 120^\\circ = -\\cos 60^\\circ = -\\frac{1}{2}$（第二象限餘弦為負）。'
     },
     {
-        subject: '數學', chapter: '三角函數的定義', question_type: '填空', difficulty: 2,
+        subject: '數學', chapter: '廣義角與極坐標', question_type: '填空', difficulty: 2,
         question_text: '已知 $\\theta$ 為銳角且 $\\sin \\theta = \\frac{3}{5}$，求 $\\cos \\theta$。',
         answer_text: '$\\frac{4}{5}$。由 $\\cos^2 \\theta = 1 - \\left( \\frac{3}{5} \\right)^2 = \\frac{16}{25}$，銳角餘弦為正，故 $\\cos \\theta = \\frac{4}{5}$。'
     },
     {
-        subject: '數學', chapter: '三角函數的定義', question_type: '填空', difficulty: 3,
+        subject: '數學', chapter: '廣義角與極坐標', question_type: '填空', difficulty: 3,
         question_text: '$\\tan 225^\\circ$ 之值為何？',
         answer_text: '$1$。$225^\\circ = 180^\\circ + 45^\\circ$ 位於第三象限，正切為正，故 $\\tan 225^\\circ = \\tan 45^\\circ = 1$。'
     },
     {
-        subject: '數學', chapter: '三角函數的定義', question_type: '計算', difficulty: 3,
+        subject: '數學', chapter: '廣義角與極坐標', question_type: '計算', difficulty: 3,
         question_text: '已知 $\\sin \\theta = \\frac{5}{13}$ 且 $\\theta$ 位於第二象限，求 $\\cos \\theta$ 與 $\\tan \\theta$。',
         answer_text: '$\\cos^2 \\theta = 1 - \\frac{25}{169} = \\frac{144}{169}$，第二象限餘弦為負，故 $\\cos \\theta = -\\frac{12}{13}$；$\\tan \\theta = \\frac{\\sin \\theta}{\\cos \\theta} = -\\frac{5}{12}$。'
     },
     {
-        subject: '數學', chapter: '三角函數的定義', question_type: '計算', difficulty: 3,
+        subject: '數學', chapter: '廣義角與極坐標', question_type: '計算', difficulty: 3,
         question_text: '求 $\\sin 30^\\circ \\cos 60^\\circ + \\cos 30^\\circ \\sin 60^\\circ$ 之值。',
         answer_text: '原式 $= \\frac{1}{2} \\times \\frac{1}{2} + \\frac{\\sqrt{3}}{2} \\times \\frac{\\sqrt{3}}{2} = \\frac{1}{4} + \\frac{3}{4} = 1$（亦即 $\\sin (30^\\circ + 60^\\circ) = \\sin 90^\\circ = 1$）。'
     },

@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:36:27.312Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 3843,
+        "sha256": "d7a345815bc0bb0df2bb835adc21ce95c63ca8134841e83b2c3266474b15ea6f"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "設平面向量 $\\vec{a} = (2, 0)$、$\\vec{b} = (1, \\sqrt{3})$，求兩向量的夾角 $\\theta$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "confidence": 1,
+      "rationale": "題目給定兩個平面向量並要求其夾角，解法非用不可的觀念為向量內積公式 $\\cos\\theta = \\frac{\\vec{a}\\cdot\\vec{b}}{|\\vec{a}||\\vec{b}|}$，故歸屬於「向量內積」。"
+    },
+    "usage": {
+      "tokenIn": 2905,
+      "tokenOut": 80,
+      "tokenThinking": 269,
+      "tokenCached": 0
+    },
+    "latencyMs": 2211
+  }
+}

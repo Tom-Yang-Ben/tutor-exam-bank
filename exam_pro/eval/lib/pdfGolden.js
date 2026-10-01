@@ -18,8 +18,9 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const { isValidChapter, isValidSubject, isValidQuestionType } = require('../../config/chapters');
+const { isValidQuestionType } = require('../../config/chapters');
 const { isPrivatePath } = require('./golden');
+const { chapterGate } = require('./chapterGate');
 
 const EVAL_DIR = path.resolve(__dirname, '..');
 const PUBLIC_DIR = path.join(EVAL_DIR, 'golden', 'pdf_sample');
@@ -37,9 +38,12 @@ function sha256File(file) {
 /**
  * @param {object} doc
  * @param {string} expectSha 由 PDF 實際算出來的 sha256
+ * @param {{chapters?:Record<string,string[]>}} [opts] 〔章節重整 CH-B〕注入章節白名單（見 eval/lib/chapterGate.js）；
+ *        未給時照舊用 config/chapters.js
  * @returns {string[]} 問題描述；空 = 通過
  */
-function validateSheet(doc, expectSha) {
+function validateSheet(doc, expectSha, opts = {}) {
+    const { isValidSubject, isValidChapter } = chapterGate(opts.chapters);
     const problems = [];
     if (!doc || typeof doc !== 'object') return ['答案卷必須是 JSON 物件'];
 
@@ -82,6 +86,7 @@ function validateSheet(doc, expectSha) {
  * @param {object} opts
  * @param {string} opts.pdfPath
  * @param {string} [opts.dir] 答案卷目錄；未給時先找公開層再找私有層
+ * @param {Record<string,string[]>} [opts.chapters] 〔章節重整 CH-B〕注入章節白名單（同 validateSheet）
  * @returns {{file:string, isPrivate:boolean, sha256:string, doc:object, pendingConfirm:boolean}}
  * @throws 找不到或沒過閘門
  */
@@ -94,7 +99,7 @@ function loadSheet(opts) {
         const file = path.join(dir, `${sha}.json`);
         if (!fs.existsSync(file)) continue;
         const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
-        const problems = validateSheet(doc, sha);
+        const problems = validateSheet(doc, sha, { chapters: opts.chapters });
         if (problems.length > 0) {
             throw new Error(`答案卷未通過硬閘門（${file}）：\n  - ${problems.join('\n  - ')}`);
         }

@@ -247,7 +247,8 @@ async function main() {
             token_out: median(runs.map(r => r.once.tokenOut)),
             cost_usd: median(runs.map(r => r.once.costUsd ?? null)),
             latency_ms: median(runs.map(r => r.once.latencyMs)),
-            model: args.method === 'legacy' ? (legacy.model || null) : (process.env.MODEL_EXTRACT || 'gemini:gemini-3.5-flash'),
+            // 〔本機模式 L4〕報表上的模型名取 config/models.js（單一真相；預設已改成本機），不再寫死 Gemini
+            model: args.method === 'legacy' ? (legacy.model || null) : require('../config/models').MODEL_EXTRACT,
             prompt_hash: args.method === 'legacy' ? legacy.promptHash : null,
             answer_agree_rate: args.method === 'pipeline' ? median(runs.map(r => r.once.answerAgreeRate)) : null,
             dedup_hits: args.method === 'pipeline' ? median(runs.map(r => r.once.dedupHits)) : null,

@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:39:21.034Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2502,
+        "sha256": "647f5deb9c503067f9202c903bfc5e6f97373d0bbae474647ef5e2ff58eb7aab"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "電梯以 $2$ m/s$^2$ 向上加速，站在體重計上的人質量為 $50$ kg，體重計此時指示多少牛頓（$g = 10$ m/s$^2$）？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "confidence": 1,
+      "rationale": "題目探討電梯加速上升時人站在體重計上的讀數（即視重問題），解題關鍵在於利用牛頓第二運動定律 F = ma 分析人所受的重力與體重計支持力之關係，故歸屬於「牛頓運動定律」。"
+    },
+    "usage": {
+      "tokenIn": 1999,
+      "tokenOut": 84,
+      "tokenThinking": 273,
+      "tokenCached": 0
+    },
+    "latencyMs": 2545
+  }
+}

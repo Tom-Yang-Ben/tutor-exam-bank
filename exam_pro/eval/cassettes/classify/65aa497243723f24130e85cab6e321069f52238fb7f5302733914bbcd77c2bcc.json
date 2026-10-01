@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:43:56.407Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 3000,
+        "sha256": "367876845d1717a25faa15af6c5f01fe56dcab8872e59d1707811ff678740448"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "將一根帶正電的玻璃棒靠近一顆原本不帶電、放在絕緣支架上的金屬球（兩者不接觸）。玻璃棒保持不動，先用導線將金屬球接地，再拆掉導線，最後才移走玻璃棒。此時金屬球的帶電情形為何？\n(A) 帶正電　(B) 帶負電　(C) 不帶電　(D) 一側帶正電、另一側帶負電，淨電量為零",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及帶電體接近導體時的電荷分佈與接地後的電荷轉移，關鍵在於接地時電荷會流向大地，使金屬球帶負電。",
+      "chapter": "靜電學",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 2871,
+      "tokenOut": 71,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 57173,
+        "loadMs": 8,
+        "promptEvalMs": 16975,
+        "evalMs": 39393
+      }
+    },
+    "latencyMs": 57177
+  }
+}

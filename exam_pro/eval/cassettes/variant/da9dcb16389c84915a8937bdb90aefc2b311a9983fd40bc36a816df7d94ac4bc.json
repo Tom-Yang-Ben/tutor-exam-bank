@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T22:02:26.126Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1769,
+        "sha256": "17b9ef63187e5324fdfc17f0d82c0bd077514ff3e8377e796b15ba15665637a8"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 29,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        24,
+        27,
+        28,
+        31,
+        61
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "一座摩天輪在維修測試時，某個座艙從初始位置逆時針旋轉了 $850^\rd$ 後停住。若將座艙的初始位置視為 $0^\rd$ 且逆時針方向為正，請問與 $850^\rd$ 同界的最小正角為何？ (A) $40^\rd$ (B) $130^\rd$ (C) $150^\rd$ (D) $230^\rd$",
+      "answer_text": "(B)。$850^\rd - 360^\rd \\times 2 = 850^\rd - 720^\rd = 130^\rd$，故最小正同界角為 $130^\rd$。"
+    },
+    "usage": {
+      "tokenIn": 1295,
+      "tokenOut": 230,
+      "tokenThinking": 1972,
+      "tokenCached": 0
+    },
+    "latencyMs": 16113
+  }
+}

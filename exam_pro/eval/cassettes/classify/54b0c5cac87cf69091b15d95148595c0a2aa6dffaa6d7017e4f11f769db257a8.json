@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:37:47.879Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2522,
+        "sha256": "aa2b543cf94ef18384f92777ad435c21b3b6a5aa5b33664c155a0fad22567aa0"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "質量 $10$ kg 的物體置於傾角 $30^\\circ$ 的斜面上，與斜面間的動摩擦係數 $\\mu = 0.2$，求物體沿斜面下滑的加速度（取 $g = 10$ m/s$^2$）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "摩擦力與向心力",
+      "confidence": 0.9,
+      "rationale": "題目要求計算在有動摩擦係數的斜面上物體下滑的加速度，解題關鍵在於計算動摩擦力（$f_k = \\mu_k N$）並進行受力分析，屬於「摩擦力與向心力」章節中對摩擦力的應用。"
+    },
+    "usage": {
+      "tokenIn": 2009,
+      "tokenOut": 88,
+      "tokenThinking": 671,
+      "tokenCached": 0
+    },
+    "latencyMs": 4349
+  }
+}

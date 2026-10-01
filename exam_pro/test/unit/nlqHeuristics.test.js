@@ -108,12 +108,14 @@ describe('parseQuery：章節本名與別名的子字串比對（長的優先）
 
     test('subject 由第一個命中的章節反推；沒命中章節時為 null', () => {
         assert.equal(parse('向量內積').filters.subject, '數學');
-        assert.equal(parse('浮力').filters.subject, '物理');
+        // 〔章節重整 CH-A〕「浮力」的章（流體的壓力與浮力）已刪除、別名一併移除，改用仍在的物理別名
+        assert.equal(parse('衝量').filters.subject, '物理');
+        assert.equal(parse('浮力').filters.subject, null);
         assert.equal(parse('難度 3 的計算題').filters.subject, null);
     });
 
     test('解析出的章節一定過得了 isValidChapter', () => {
-        const samples = ['對數', '力矩', '干涉', '克拉瑪法則', '半衰期', '常態分布', '斜率'];
+        const samples = ['常用對數', '力矩', '干涉', '克拉瑪法則', '半衰期', '常態分布', '直線的斜率']; // 〔CR-8〕「對數」「斜率」跨章，已不是別名
         for (const q of samples) {
             const r = parse(q);
             assert.equal(r.filters.chapters.length, 1, `「${q}」應該命中一章`);

@@ -96,8 +96,13 @@ function markdownPipeline(res) {
 
     lines.push('### 結果分佈', '',
         `- 已入庫 ${c.saved}／待複核 ${c.needs_review}／不採用 ${c.rejected}／未完成 ${c.pending}（共 ${c.total} 題）`,
-        `- saved_rate：${cell(m.saved_rate)}　classify 零成本閘門通過率：${cell(m.gate_pass_rate)}　answer_agree_rate：${cell(m.answer_agree_rate)}`,
+        `- saved_rate：${cell(m.saved_rate)}${res.ocrOnly ? `（${res.ocrOnly.saved_rate_note}）` : ''}　classify 零成本閘門通過率：${cell(m.gate_pass_rate)}　answer_agree_rate：${cell(m.answer_agree_rate)}`,
         '');
+    // 〔Owner 第五輪 D-2〕OCR 模式的替代指標：只報告、不設門檻
+    if (res.ocrOnly) {
+        const p = res.ocrOnly.pre_approval || { passed: 0, total: 0, rate: null };
+        lines.push(`- 人工核准前的通過率（OCR 模式）：${cell(p.rate)}（${p.passed}／${p.total} 題走完全部閘門、只因「只用 OCR 拆題」停下；只報告、不設門檻）`, '');
+    }
 
     lines.push('**needs_review 原因分佈**：', '');
     if (!res.reviewReasons || res.reviewReasons.length === 0) {
@@ -167,8 +172,27 @@ function markdownGeneric(res) {
  * @param {boolean} [opts.private]
  * @returns {{file:string, doc:object}}
  */
+/**
+ * 〔dec/r9-record-tooling〕這個行程讀到（回放）或寫下（錄製）的錯誤回放檔（services/llm/cassette.js 的 errorCassettesSeen）。
+ * 回放出來的是錄製當時的截斷／逾時：那一次呼叫的結果照 agent 的規則記成失敗，不是正常命中，也不是 replay miss。
+ * 沒有任何一支時回 null（報表與之前逐字相同）。
+ * @returns {{count:number, items:Array<object>}|null}
+ */
+function errorCassetteSummary() {
+    const items = require('../../services/llm/cassette').errorCassettesSeen();
+    return items.length ? { count: items.length, items } : null;
+}
+
+/** 錯誤回放檔的一行說明（Markdown 的 ⚠️ 行） */
+function errorCassetteLine(ec) {
+    const label = (k) => (k === 'timeout' ? '單次逾時' : k === 'truncated' ? '被截斷' : String(k));
+    return `錯誤回放檔 ${ec.count} 支（錄製當時被截斷或單次逾時；回放照樣丟那個錯，照 agent 的規則記成失敗，不是正常命中、也不是 replay miss）：` +
+        ec.items.map(i => `${i.agent}/${i.key.slice(0, 12)}…（${label(i.kind)}）`).join('、');
+}
+
 function emit(opts) {
     const res = opts.res;
+    const errorCassettes = errorCassetteSummary();
     // classify／pipeline 有各自談好的專用表；階段 3 的 nlq／variant 走通用表（第 8 條）。
     const RENDERER = { classify: markdownClassify, pipeline: markdownPipeline };
     const md = (RENDERER[res.suite] || markdownGeneric)(res) + '\n' +
@@ -177,7 +201,8 @@ function emit(opts) {
             (res.meta.goldenPending ? `（其中 ${res.meta.goldenPending} 筆仍是 needs_human_confirm 草稿）` : ''),
             `- 轉接層：${JSON.stringify(res.meta.sources)}`,
             `- cassette 目錄：\`${res.meta.cassetteDir}\``,
-            ...[...new Set(res.warnings || [])].map(w => `- ⚠️ ${w}`)
+            ...[...new Set(res.warnings || [])].map(w => `- ⚠️ ${w}`),
+            ...(errorCassettes ? [`- ⚠️ ${errorCassetteLine(errorCassettes)}`] : [])
         ].join('\n') + '\n';
 
     console.log(md);
@@ -190,7 +215,12 @@ function emit(opts) {
         suite: res.suite,
         meta: res.meta,
         measured: res.measured,
+        // 〔Owner 第五輪 D-2〕這一輪設計上不比的指標（run.js 比門檻時用的同一份）；
+        // 重錄工具的回放驗證表（eval/lib/cassettePlan.js 的 thresholdRows）讀它，才不會把 OCR 模式的 saved_rate 列成 ❌
+        not_applicable: res.notApplicable || null,
         warnings: [...new Set(res.warnings || [])],
+        // 〔dec/r9-record-tooling〕有讀到錯誤回放檔才有這一欄（沒有時報表與之前逐欄相同）
+        ...(errorCassettes ? { error_cassettes: errorCassettes } : {}),
         // 私有層一律不寫逐題明細（規劃 §5.3.2）
         detail: opts.private ? null : {
             confusion: res.confusion || null,
@@ -213,4 +243,4 @@ function emit(opts) {
     return { file, doc };
 }
 
-module.exports = { emit, markdownClassify, markdownPipeline, markdownGeneric, cell };
+module.exports = { emit, markdownClassify, markdownPipeline, markdownGeneric, cell, errorCassetteSummary, errorCassetteLine };

@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T22:01:55.109Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1805,
+        "sha256": "75c87bdbfbd421c250944148d9a6f374b03adf942ec872a6332a4ae38211e558"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 27,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        18,
+        28,
+        29,
+        31,
+        61
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 2,
+      "question_text": "在一個坐標平面上，雷達掃描器的中心位於原點 $(0, 0)$，並以正東方（$x$ 軸正向）為起始方向，進行逆時針掃描。若掃描器的探測範圍邊界是一個半徑為 $1$ 單位長的圓，當雷達掃描到 $300^\\circ$ 的方位時，探測點所在位置的 $y$ 坐標為何？",
+      "answer_text": "$-\\frac{\\sqrt{3}}{2}$。探測點的 $y$ 坐標即為 $1 \\times \\sin 300^\\circ$。因為 $300^\\circ$ 位於第四象限，其參考角為 $60^\\circ$，且第四象限的正弦值為負，故 $y = \\sin 300^\\circ = -\\sin 60^\\circ = -\\frac{\\sqrt{3}}{2}$。"
+    },
+    "usage": {
+      "tokenIn": 1306,
+      "tokenOut": 276,
+      "tokenThinking": 2037,
+      "tokenCached": 0
+    },
+    "latencyMs": 19336
+  }
+}

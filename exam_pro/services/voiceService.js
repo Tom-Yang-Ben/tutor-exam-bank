@@ -19,6 +19,11 @@
 //   3. 成本併入 TUTOR_DAILY_BUDGET_USD（與家教共用 services/tutorService.js 的同一個預算）。
 //
 // 可注入依賴：deps.llm { generateJson }、deps.budget（createBudget() 的實例）。
+//
+// 〔本機模式 L1，docs/local-mode.md 第 3 條第 9 點〕語音只有 Gemini 做得到（本機的 Ollama 模型不收音訊）：
+// MODEL_VOICE 解析出來不是 gemini 時，即使 FEATURE_VOICE=true 也**不掛載**語音路由，啟動時印一行警告。
+// 「掛不掛」的唯一判斷是 voiceStatus()：routes/index.js 據此掛載，前端（app.js 注入的 meta，L3）也應該讀它，
+// 而不是直接讀 FEATURE_VOICE——否則本機模式下前端會顯示一顆按了只會 404 的按鈕。
 // ─────────────────────────────────────────────────────────────
 const crypto = require('crypto');
 const Ajv = require('ajv');
@@ -93,6 +98,36 @@ function validate(data) {
     return { ok, errors: ok ? [] : (validator.errors || []).map(e => `${e.instancePath || '(root)'} ${e.message}`) };
 }
 
+/** 本機模式下的啟動警告與 502 訊息（逐字；前端與文件引用同一句） */
+const LOCAL_MODE_MESSAGE = '本機模式不提供語音';
+
+/**
+ * 語音功能現在的狀態（本機模式第 3 條第 9 點；純函式，旗標與模型都即時讀）。
+ *   'on'     FEATURE_TUTOR 與 FEATURE_VOICE 都開、MODEL_VOICE 是 gemini → 掛載
+ *   'off'    旗標沒開（與之前相同）→ 不掛載
+ *   'local'  旗標開了，但 MODEL_VOICE 不是 gemini（本機模式；或 MODEL_VOICE 寫錯無法解析）→ 不掛載、啟動時警告
+ * @returns {{status:'on'|'off'|'local', available:boolean, message:string|null}}
+ *          message：status 為 'local' 時給人看的一句話（含原因），其餘為 null
+ */
+function voiceStatus() {
+    const features = require('../config/features');
+    if (!features.FEATURE_TUTOR || !features.FEATURE_VOICE) return { status: 'off', available: false, message: null };
+    const models = require('../config/models');
+    let vendor;
+    try {
+        vendor = models.parseModel(models.MODEL_VOICE).vendor;
+    } catch (err) {
+        return { status: 'local', available: false, message: `${LOCAL_MODE_MESSAGE}（MODEL_VOICE 無法解析：${err.message}）` };
+    }
+    if (vendor !== 'gemini') {
+        return {
+            status: 'local', available: false,
+            message: `${LOCAL_MODE_MESSAGE}（MODEL_VOICE=${models.MODEL_VOICE} 不是 gemini；本機模型不收音訊，所以即使 FEATURE_VOICE=true 也不掛載語音路由）`
+        };
+    }
+    return { status: 'on', available: true, message: null };
+}
+
 /** 'audio/webm;codecs=opus' → 'audio/webm' */
 function normalizeMime(mime) {
     return String(mime ?? '').split(';')[0].trim().toLowerCase();
@@ -158,7 +193,9 @@ async function transcribe(input, deps = {}) {
     budget.assertAvailable();
 
     const models = require('../config/models');
-    const { id: modelId } = models.parseModel(models.MODEL_VOICE);
+    const { id: modelId, vendor } = models.parseModel(models.MODEL_VOICE);
+    // 本機模式路由本來就不掛載；直接呼叫 service（腳本、測試）時也不要把錄音送進不收音訊的 adapter
+    if (vendor !== 'gemini') throw tutor.httpError(502, `${LOCAL_MODE_MESSAGE}（MODEL_VOICE=${models.MODEL_VOICE} 不是 gemini）。`);
     const llm = deps.llm || require('./llm');
 
     const audioSha256 = crypto.createHash('sha256').update(buffer).digest('hex');
@@ -209,7 +246,7 @@ async function transcribe(input, deps = {}) {
 }
 
 module.exports = {
-    transcribe, validateVoiceInput, normalizeTranscript, normalizeMime, validate,
+    transcribe, validateVoiceInput, normalizeTranscript, normalizeMime, validate, voiceStatus, LOCAL_MODE_MESSAGE,
     SYSTEM, PROMPT_TEMPLATE, TEMPLATE, SCHEMA, AGENT, ALLOWED_AUDIO_MIME, MAX_AUDIO_BYTES,
     MAX_OUTPUT_TOKENS, THINKING_BUDGET
 };

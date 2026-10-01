@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T18:38:36.450Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 114,
+        "sha256": "c3478a80902d1d91119272017e02d529f9b89a1bf2fa3ac506d51d1c283efa8c"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "自行車騎士在平直道路上以 $12\\text{ m/s}$ 的速度行駛，其速度計顯示的數值代表的是下列哪一種物理量？ (A) 平均速度　(B) 平均速率　(C) 瞬時速率　(D) 位移",
+      "questionType": "單選",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(C)",
+      "answer_form": "option",
+      "steps_summary": "速度計顯示的是當下瞬時的速度值，而非平均值或位移。瞬時速率是速度的大小，單位為m/s，與題幹的12 m/s符合，因此選(C)。"
+    },
+    "usage": {
+      "tokenIn": 326,
+      "tokenOut": 244,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 106882,
+        "loadMs": 17,
+        "promptEvalMs": 8078,
+        "evalMs": 96897
+      }
+    },
+    "latencyMs": 106890
+  }
+}

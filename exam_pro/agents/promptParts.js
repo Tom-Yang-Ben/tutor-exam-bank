@@ -7,6 +7,10 @@
 //
 // 分冊標題（第一冊、選修物理二…）刻意**不寫**：config/chapters.js 只有「科 → 章節陣列」
 // 這一層結構，分冊資訊在那裡不存在，硬要在 prompt 裡補一份就又是一份會漂的真相。
+// 〔章節重整整合 CR-8〕上一段已過時：章節重整後分冊資料有唯一真相 config/chapterPlan.js 的 PLAN_VOLUMES
+// （CHAPTERS 就是由它攤平而來）。拆章後出現多組「同主題分兩章」（第一冊「指數與對數」vs 第三冊
+// 「指數函數與對數函數」、必修物理 vs 選修物理），Owner 2026-09-25 裁決：數學／物理的白名單改成依冊別分組列出，
+// 幫模型分辨邊界。章節集合與順序不變（仍等於 CHAPTERS），只多了冊名前綴；化學的輸出逐字不變。
 
 //
 // 〔stage5 WS-B〕化學併入 config/chapters.js 之後（docs/interfaces-stage5.md 第 3.2 條）：
@@ -15,8 +19,14 @@
 //     化學卷一律明確傳 '化學'。
 //   - CHEM_LATEX_RULES：化學卷專用的化學式寫法（mhchem 的 \ce{…}），只進化學模板。
 //   - resolveSubjectGroup()：各 agent 決定走數學／物理路徑還是化學路徑的唯一判準（ADR-010）。
+//
+// 〔章節重整 CH-A〕2026-09-25（docs/chapter-restructure.md 第 3.1 條第 5 點）：數學／物理的白名單
+// 換成 config/chapterPlan.js 定案的 52＋34 章。本檔一直是從 CHAPTERS 動態產生白名單文字，所以不必改程式：
+// chapterWhitelistText() 沒指定科目時就列出新的兩科清單（「共 52 章」「共 34 章」）。
+// 這段文字進的是 extract.v2／classify.v1 等既有 prompt，對應的 cassette 本來就要依第 5 條重錄。
 
 const { CHAPTERS, QUESTION_TYPES, LEGACY_SUBJECTS, subjectGroupOf, isValidSubject } = require('../config/chapters');
+const { PLAN_VOLUMES } = require('../config/chapterPlan');
 
 /**
  * 產生章節白名單的 prompt 文字。
@@ -27,8 +37,24 @@ function chapterWhitelistText(subject = null) {
     const subjects = subject ? [subject] : LEGACY_SUBJECTS;
     return subjects
         .filter(s => Array.isArray(CHAPTERS[s]))
-        .map(s => `【${s}科精細章節白名單（共 ${CHAPTERS[s].length} 章）】\n${joinChapters(CHAPTERS[s])}`)
+        .map(s => `【${s}科精細章節白名單（共 ${CHAPTERS[s].length} 章）】\n${chapterListBody(s)}`)
         .join('\n\n');
+}
+
+/**
+ * 白名單本文。〔CR-8〕數學／物理依 PLAN_VOLUMES 分冊，每冊一行「冊名：章、章、…」；
+ * 分冊攤平後必須與 CHAPTERS 完全一致（集合與順序），不一致就退回平鋪，避免 prompt 與 schema enum 分岔。
+ * 化學（不在 PLAN_VOLUMES）照舊平鋪，輸出與階段 5 逐字相同。
+ * @param {string} subject
+ * @returns {string}
+ */
+function chapterListBody(subject) {
+    const volumes = PLAN_VOLUMES[subject];
+    const flat = CHAPTERS[subject];
+    if (!Array.isArray(volumes)) return joinChapters(flat);
+    const same = volumes.flatMap(v => v.chapters).join('\u0000') === flat.join('\u0000');
+    if (!same) return joinChapters(flat);
+    return volumes.map(v => `${v.name}：${joinChapters(v.chapters)}`).join('\n');
 }
 
 /**
@@ -48,17 +74,47 @@ function questionTypeText() {
 }
 
 /**
+ * 〔Owner 第五輪 L-2 核准，2026-09-27，dec/r6-templates〕JSON 字串裡的反斜線要寫成兩個。
+ *
+ * 模型在 JSON 字串裡寫 LaTeX 常只寫一個反斜線：\f \t \n \r \b 被 JSON.parse 讀成控制字元
+ * （\frac → 換頁＋rac），\c \s 這類不是合法跳脫，Ollama 的文法會逼模型換字母（\circ → \rcirc）。
+ * 事後修復（services/llm/latexEscapeRepair.js，docs/llm.md 第 10 節）保留當第二道防線；這一條從源頭要求。
+ * 上面各條（與化學的 \ce 規範）寫的是 LaTeX 本身，所以這條明講「那是 LaTeX，放進 JSON 要寫兩個」，
+ * 並附正例與反例。正例裡引號括起來的是 **JSON 原文**：test/unit/r6Templates.test.js 把它們當 JSON 字串解析，
+ * 確認解析後是單一反斜線的正確 LaTeX、而且事後修復對它們是 no-op（照做時修復不會誤動）。
+ *
+ * 用 String.raw：這裡的反斜線就是模型看到的反斜線，不必再在原始碼裡多跳脫一層。
+ * 改這段文字＝下面兩份規範的文字改變＝所有用到它們的模板（清單見 docs/local-mode.md「第五輪 A 模板與 schema」一節）的雜湊都變，
+ * 照專案慣例要把那些模板的版號 +1，對應的 cassette 要重錄。
+ * 〔Owner 2026-09-27 O-5 選 2，dec/r6-lint-v3〕agents/lint.js 第三層（lint.v3／lint_chem.v2）也直接呼叫本函式，
+ * 改這段文字時那兩個模板也要一起升版。
+ * @param {string} positives 正例（JSON 原文，含引號，以頓號分隔）
+ * @returns {string}
+ */
+function jsonBackslashRule(positives) {
+    return String.raw`你的輸出是 JSON：上面寫的是 LaTeX 本身，寫進 JSON 字串時，每一個反斜線都要寫成兩個。正確（JSON 原文）：${positives}；LaTeX 的換列 \\ 在 JSON 裡要寫成 "\\\\"。錯誤："$\frac{1}{2}$"——只寫一個反斜線時，\f、\t、\n、\r、\b 會被 JSON 讀成換頁、定位、換行、歸位、退格字元（\frac 變成「換頁＋rac」，公式就壞了），\c、\s 這類則會讓 JSON 不合法。`;
+}
+
+/** 數學／物理規範第 (5) 條的正例（JSON 原文） */
+const JSON_BACKSLASH_POSITIVES = String.raw`"$\\frac{1}{2}$"、"$\\theta$"、"$\\sqrt{2}\\times 3$"`;
+/** 化學規範第 (6) 條的正例（JSON 原文） */
+const JSON_BACKSLASH_POSITIVES_CHEM = String.raw`"$\\ce{H2SO4}$"、"$\\ce{2H2 + O2 -> 2H2O}$"、"$\\frac{1}{2}$"`;
+
+/**
  * LaTeX 書寫規範。逐條沿用現況 aiService.js 的敘述——它是既有題庫的實際格式，
  * 一改，新舊題目的公式風格就會分岔，utils/formulaFix 的規則也會對不上。
+ * 〔Owner 第五輪 L-2 核准〕第 (5) 條：JSON 字串裡的反斜線寫兩個（jsonBackslashRule）；(1)～(4) 一字未改。
  */
 const LATEX_RULES = `【數學公式格式規範，務必嚴格遵守】
 (1) 所有數學／物理式子、變數、符號都必須用 LaTeX 撰寫，並用單一錢號 $...$ 包起來（行內公式），例如：圓方程式寫成 $x^2+y^2=r^2$、速度寫成 $v_0$、希臘字母寫成 $\\theta$、$\\alpha$。
 (2) 分數一律用 $\\frac{分子}{分母}$（例如 $\\frac{\\pi}{2}$、$\\frac{16}{3}$），絕對禁止用斜線如 π/2 或 16/3。
 (3) 次方用 ^、下標用 _（例如 $x^2$、$a_{n+1}$）；根號用 $\\sqrt{...}$；積分 $\\int_a^b$；級數 $\\sum_{n=1}^{\\infty}$；三角函數 $\\sin\\theta$。
-(4) 請使用 LaTeX 指令而非 Unicode 符號（用 $\\times$ 而非 ×、用 $\\leq$ 而非 ≤、用 $\\theta$ 而非 θ），中文敘述文字則維持中文、不要包進 $ $。`;
+(4) 請使用 LaTeX 指令而非 Unicode 符號（用 $\\times$ 而非 ×、用 $\\leq$ 而非 ≤、用 $\\theta$ 而非 θ），中文敘述文字則維持中文、不要包進 $ $。
+(5) ${jsonBackslashRule(JSON_BACKSLASH_POSITIVES)}`;
 
 /**
  * 化學式書寫規範（〔stage5 WS-B〕只進化學模板；DEC-019、ADR-010）。
+ * 〔Owner 第五輪 L-2 核准〕第 (6) 條與數學／物理的 (5) 同一段（等效的共用段落），正例換成 \ce；(1)～(5) 一字未改。
  *
  * 寫法以 MathJax 的 mhchem 擴充為準——網頁端 index.html 明確載入 mhchem，
  * Word 端由 utils/textFormatter.js 把 \ce{…} 的子集轉成 OMML（docs/chemistry.md 第 3 節）。
@@ -69,7 +125,8 @@ const CHEM_LATEX_RULES = `【化學式與方程式格式規範，務必嚴格遵
 (2) 下標直接寫數字（\\ce{H2O}、\\ce{Ca(OH)2}）；離子電荷一律用 ^ 寫在右上並加大括號（\\ce{Ca^{2+}}、\\ce{NO3^-}）；絕對禁止用 Unicode 上下標（H₂O、Ca²⁺）。
 (3) 反應箭頭：單向用 ->、可逆用 <=>；箭頭上下的反應條件寫成 ->[上方][下方]（例如 \\ce{->[\\Delta]}、\\ce{->[MnO2]}）。物態緊接在化學式後面寫 (s)、(l)、(g)、(aq)；生成氣體寫 ^、生成沉澱寫 v（前後各留一個空白）；結晶水用句點（\\ce{CuSO4.5H2O}）。
 (4) 數值計算、分數、次方與科學記號用 LaTeX 並包在 $…$ 裡（$\\frac{1}{2}$、$6.02\\times10^{23}$、$K_c$），分數一律用 \\frac，不要用斜線；單位用 \\mathrm{…}（$0.10\\ \\mathrm{M}$、$22.4\\ \\mathrm{L}$）。
-(5) 請使用 LaTeX 指令而非 Unicode 符號（用 $\\times$ 而非 ×、用 $\\Delta$ 而非 Δ、用 $\\leq$ 而非 ≤）；中文敘述維持中文，不要包進 $ $；也不要用 Markdown 或 HTML。`;
+(5) 請使用 LaTeX 指令而非 Unicode 符號（用 $\\times$ 而非 ×、用 $\\Delta$ 而非 Δ、用 $\\leq$ 而非 ≤）；中文敘述維持中文，不要包進 $ $；也不要用 Markdown 或 HTML。
+(6) ${jsonBackslashRule(JSON_BACKSLASH_POSITIVES_CHEM)}`;
 
 /**
  * 決定這一次呼叫走數學／物理路徑還是化學路徑（〔stage5 WS-B〕ADR-010）。
@@ -94,4 +151,9 @@ function resolveSubjectGroup(ctx, input) {
     return group === 'chemistry' ? 'chemistry' : 'math_physics';
 }
 
-module.exports = { chapterWhitelistText, questionTypeText, LATEX_RULES, CHEM_LATEX_RULES, resolveSubjectGroup };
+// 〔Owner 決策單 2026-09-25 B5〕joinChapters 另外匯出給 services/nlqService.js 的三科白名單用（化學章名加「」的同一條規則）
+// 〔Owner 第五輪 L-2〕jsonBackslashRule 與兩組正例匯出給單元測試（正例當 JSON 解析、確認修復是 no-op）
+module.exports = {
+    chapterWhitelistText, questionTypeText, joinChapters, LATEX_RULES, CHEM_LATEX_RULES, resolveSubjectGroup,
+    jsonBackslashRule, JSON_BACKSLASH_POSITIVES, JSON_BACKSLASH_POSITIVES_CHEM
+};

@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "nlq",
+    "model": "qwen3:8b",
+    "template": "nlq.v1",
+    "recorded_at": "2026-09-25T15:48:34.409Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 938,
+        "sha256": "9e863c381fd462e566301616983505fcdb921c7c8b2fc84055d7353e022fad85"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "nlq.v1",
+      "query": "平面上兩個向量互相垂直時，座標裡的未知數是多少"
+    }
+  },
+  "response": {
+    "data": {
+      "chapters": [
+        "向量的加減與係數積",
+        "空間向量內積"
+      ],
+      "question_types": [
+        "計算"
+      ],
+      "semantic_text": "平面上兩個向量互相垂直 座標 未知數",
+      "keywords": [
+        "向量",
+        "垂直",
+        "座標",
+        "未知數"
+      ]
+    },
+    "usage": {
+      "tokenIn": 1443,
+      "tokenOut": 73,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 34494
+  }
+}

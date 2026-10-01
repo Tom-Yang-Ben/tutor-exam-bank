@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-25T19:06:30.698Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 94,
+        "sha256": "67ec57cd3dbdd81609fbed6cc2720f3c2d7a733a4796d9d4dd4af9df3308d302"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "關於等速圓周運動，下列敘述何者正確？（複選）\n(A) 速率固定不變　(B) 速度方向固定不變　(C) 加速度方向指向圓心　(D) 所受合力為零",
+      "questionType": "多選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(A)(C)",
+      "answer_form": "option",
+      "steps_summary": "等速圓周運動中，速率固定（A正確）。速度方向持續改變（B錯誤）。加速度指向圓心（C正確）。合力提供向心力而非為零（D錯誤）。"
+    },
+    "usage": {
+      "tokenIn": 312,
+      "tokenOut": 286,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 130918
+  }
+}

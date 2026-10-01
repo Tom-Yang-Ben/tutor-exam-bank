@@ -199,7 +199,11 @@ exports.batchSaveQuestions = async (req, res, next) => {
     const rejected = [];
     // PG 沒有 mysql2 的 `VALUES ?`（二維陣列）批次語法，改成「每欄一個陣列參數」餵給 unnest，
     // 因此這裡以「欄」為單位收集，而不是以「列」為單位。
-    const cols = { subject: [], chapter: [], question_type: [], difficulty: [], question_text: [], answer_text: [], source_type: [], source_detail: [] };
+    const cols = { subject: [], chapter: [], question_type: [], difficulty: [], question_text: [], answer_text: [], source_type: [], source_detail: [], question_img: [] };
+    // 〔Owner 決策單 2026-09-25 B21〕/analyze-pdf 補裁附圖後，每題可能多帶一個 question_img（/figures/<檔名>），
+    // 入庫到管線同一個欄位（docs/figures.md「舊流程 /analyze-pdf 的附圖」）。只收附圖目錄內的本機路徑
+    // （與 Word 匯出同一個判斷 resolveFigurePath）；其他值照補裁圖之前的行為忽略、落 NULL，不整題退回。
+    const { resolveFigurePath } = require('../services/wordService');
     questions.forEach((q, idx) => {
         const subject = q.subject;
         const chapter = (q.chapter || '').trim();
@@ -221,6 +225,7 @@ exports.batchSaveQuestions = async (req, res, next) => {
         cols.source_type.push(isValidSourceType(q.source_type) ? q.source_type : 'unknown');
         // 註記超長在此路徑不整題退回（值來自上傳區單一欄位、UI 已限長）；落 NULL 而非截斷
         cols.source_detail.push(normalizeSourceDetail(q.source_detail) ?? null);
+        cols.question_img.push(resolveFigurePath(q.question_img) ? q.question_img.trim() : null);
     });
 
     const savedCount = cols.subject.length;
@@ -241,9 +246,9 @@ exports.batchSaveQuestions = async (req, res, next) => {
 
     try {
         // AI 拆題入庫：origin / chapter_src 走 DDL 預設（'pdf' / 'ai'）
-        const sql = `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text, source_type, source_detail)
-                     SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::int[], $5::text[], $6::text[], $7::text[], $8::text[])`;
-        await query(sql, [cols.subject, cols.chapter, cols.question_type, cols.difficulty, cols.question_text, cols.answer_text, cols.source_type, cols.source_detail]);
+        const sql = `INSERT INTO questions (subject, chapter, question_type, difficulty, question_text, answer_text, source_type, source_detail, question_img)
+                     SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::int[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[])`;
+        await query(sql, [cols.subject, cols.chapter, cols.question_type, cols.difficulty, cols.question_text, cols.answer_text, cols.source_type, cols.source_detail, cols.question_img]);
         const message = rejected.length === 0
             ? `🎉 成功！已將共 ${savedCount} 題自動錄入資料庫！`
             : `已寫入 ${savedCount} 題；另有 ${rejected.length} 題未通過驗證（已在下方標紅），修正後可再次送出。`;
@@ -427,6 +432,11 @@ exports.updateQuestion = async (req, res, next) => {
 // 兩步之間先 SELECT … FOR UPDATE 鎖住該列：attempts 的外鍵插入會取 FOR KEY SHARE，與
 // FOR UPDATE 互斥，因此不會出現「檢查時沒紀錄、硬刪前剛好被組卷寫進一筆」的競態。
 //
+// 〔retrain PR-1〕migrations/0016 之後作答紀錄在 assignments（派題）＋attempt_records（作答），
+// attempts 是只含「新題」派題的唯讀檢視。「有沒有紀錄」直接看 assignments（任何用途的派題都算，
+// 設計稿 docs/retrain-and-review.md 第 3.9 節「有任何派題就只能封存」）；外鍵鎖的說明同上，
+// 取 FOR KEY SHARE 的是 assignments 的外鍵檢查。沒有重練資料時與讀檢視的結果相同。
+//
 // 承上題保護（FR-019 PR3）：
 //   - 帶 ?group=1 → deleteQuestionGroup：此題與其後所有承上題（多層鏈）整組處理，單一交易。
 //   - 未帶 group 而此題仍有**在庫**（未封存）的承上題：鎖列後先查、硬刪與封存都預先擋下，
@@ -459,7 +469,7 @@ exports.deleteQuestion = async (req, res, next) => {
             return res.status(409).json(followUpConflictBody(kids.map(r => r.id)));
         }
 
-        const { rows: used } = await client.query('SELECT 1 FROM attempts WHERE question_id = $1 LIMIT 1', [id]);
+        const { rows: used } = await client.query('SELECT 1 FROM assignments WHERE question_id = $1 LIMIT 1', [id]);
         if (used.length > 0) {
             await client.query('UPDATE questions SET archived_at = now() WHERE id = $1', [id]);
             await client.query('COMMIT');
@@ -524,7 +534,7 @@ function followUpConflictBody(children) {
  * - 組員＝此題（必須在庫）＋沿 follows_question_id 反查的所有後代，**含已封存的後代**：
  *   已封存的承上題仍以 FK 指著前題，不一起刪就硬刪不掉。只往後走、不往前走——
  *   從中間題開始時，它的前題本來就不缺前情，不必動。
- * - 組內任一題有 attempts、job_questions 或 jobs.source_question_id 引用 → 整組改封存
+ * - 組內任一題有派題（assignments，任何用途；〔retrain PR-1〕）、job_questions 或 jobs.source_question_id 引用 → 整組改封存
  *   （沿用「有作答紀錄改封存」的語意；已封存的組員維持原封存時間）。
  * - 否則一句 DELETE 刪整組（0008 的 FK 是 NO ACTION，同一句內前題與子題一起刪不會被擋）。
  *
@@ -557,7 +567,7 @@ async function deleteQuestionGroup(id, res, next) {
         }
 
         const { rows: refs } = await client.query(
-            `SELECT EXISTS (SELECT 1 FROM attempts      WHERE question_id        = ANY($1::int[]))
+            `SELECT EXISTS (SELECT 1 FROM assignments   WHERE question_id        = ANY($1::int[]))
                  OR EXISTS (SELECT 1 FROM job_questions WHERE question_id        = ANY($1::int[]))
                  OR EXISTS (SELECT 1 FROM jobs          WHERE source_question_id = ANY($1::int[])) AS referenced`,
             [ids]);

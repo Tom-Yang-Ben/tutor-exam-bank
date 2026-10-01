@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:45:53.643Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4375,
+        "sha256": "172f4cbd30391d0e6493a267f8fc2e902bd72fc7570305ab9f75259aa18e81b9"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "若 $2^{x+1}$ 等於 $32$，試求未知數 $x$ 的值。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及指數方程式的解法，需使用指數律與對數運算，屬於指數與對數的範疇。",
+      "chapter": "指數與對數",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3935,
+      "tokenOut": 63,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 70627,
+        "loadMs": 13,
+        "promptEvalMs": 16950,
+        "evalMs": 53630
+      }
+    },
+    "latencyMs": 70630
+  }
+}

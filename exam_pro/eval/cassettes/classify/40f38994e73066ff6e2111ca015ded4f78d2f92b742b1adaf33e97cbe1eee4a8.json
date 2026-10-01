@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:36:06.444Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 3795,
+        "sha256": "344107a9fc135cd67438380fedf75173c8444bcb15a1137735cea39d4e36a4e0"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "解方程式 $2^{x+1} = 32$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "confidence": 0.9,
+      "rationale": "此題為求解簡單的底數相同指數方程式 $2^{x+1} = 2^5$，屬於基本的指數運算與性質，應歸類於「指數與對數」章節。"
+    },
+    "usage": {
+      "tokenIn": 2879,
+      "tokenOut": 68,
+      "tokenThinking": 189,
+      "tokenCached": 0
+    },
+    "latencyMs": 1984
+  }
+}

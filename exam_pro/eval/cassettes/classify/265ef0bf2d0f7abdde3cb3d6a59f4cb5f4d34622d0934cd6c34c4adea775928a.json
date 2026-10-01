@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:34:34.510Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2922,
+        "sha256": "e10f6379c15da23d246ee366084091595ba2de61e2d230123ea53c666243e795"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "速度—時間圖中，圖形與時間軸所圍成的面積代表下列何者？\n(A) 加速度　(B) 位移　(C) 速率　(D) 力",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目提及速度—時間圖形與時間軸所圍成的面積，此為積分概念，用以計算位移。",
+      "chapter": "位能與能量守恆",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 2801,
+      "tokenOut": 63,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 56644,
+        "loadMs": 10,
+        "promptEvalMs": 18104,
+        "evalMs": 38492
+      }
+    },
+    "latencyMs": 56648
+  }
+}

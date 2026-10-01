@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:38:40.911Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2549,
+        "sha256": "948c331f9a74431767870fb585a22eba0b0c7458a24a6c648c7a926935b56ec4"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "兩點電荷 $q_1 = 4 \\times 10^{-6}$ C 與 $q_2 = 3 \\times 10^{-6}$ C 相距 $0.6$ m，求兩者間的靜電力（取 $k = 9 \\times 10^9$ N·m$^2$/C$^2$）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "靜電學",
+      "confidence": 1,
+      "rationale": "題目要求利用庫侖定律公式 $F = k\\frac{q_1 q_2}{r^2}$ 計算兩點電荷之間的靜電力（庫侖力），此為「靜電學」的典型基礎計算題。"
+    },
+    "usage": {
+      "tokenIn": 2022,
+      "tokenOut": 80,
+      "tokenThinking": 256,
+      "tokenCached": 0
+    },
+    "latencyMs": 2278
+  }
+}

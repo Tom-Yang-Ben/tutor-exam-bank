@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-25T20:06:10.716Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 138,
+        "sha256": "1710f62eaf2bc13746acfde75ae79d6b76fe1138b3e425c865297a6bd1e82ee9"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "兩點電荷 $q_1 = 6 \times 10^{-6}$ C 與 $q_2 = 5 \times 10^{-6}$ C 相距 $0.5$ m，求兩者間的靜電力（取 $k = 9 \times 10^9$ N·m$^2$/C$^2$）。",
+      "questionType": "計算",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "1.08",
+      "answer_form": "number",
+      "steps_summary": "應用庫倫定律 F = k|q1q2|/r²，代入 k=9×10⁹，q1=6×10⁻⁶，q2=5×10⁻⁶，r=0.5。計算分子：9×6×5×10⁹⁻⁶⁻⁶=270×10⁻³=0.27；分母：0.5²=0.25。力 F=0.27/0.25=1.08 N。"
+    },
+    "usage": {
+      "tokenIn": 346,
+      "tokenOut": 716,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 338228
+  }
+}

@@ -67,7 +67,8 @@ async function main() {
         return 0;
     }
 
-    const model = process.env.EMBED_MODEL || 'gemini-embedding-001';
+    // 〔本機模式整合〕預設跟 config/models.js 的 EMBED_MODEL（未設＝本機 ollama:qwen3-embedding:0.6b；無前綴的舊值＝Gemini）
+    const model = require('../config/models').EMBED_MODEL;
     const dim = Number.parseInt(process.env.EMBED_DIM || '768', 10);
     const mode = process.env.EMBED_MODE || 'fixture';
     console.log(`模型 ${model}／${dim} 維，EMBED_MODE=${mode}${args.dryRun ? '（dry-run）' : ''}${args.test ? '（測試庫）' : ''}`);

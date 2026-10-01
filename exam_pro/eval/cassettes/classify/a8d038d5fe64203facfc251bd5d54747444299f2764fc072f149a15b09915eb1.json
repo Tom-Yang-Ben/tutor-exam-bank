@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:38:10.195Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2492,
+        "sha256": "ba7e5ddf907a5d7eb305bb426411cf2293bd430fcd62c8ecaabbcee40def1c17"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "關於等速圓周運動，下列敘述何者正確？（複選）\n(A) 速率不變　(B) 速度不變　(C) 加速度指向圓心　(D) 合力為零",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "平面運動",
+      "confidence": 0.9,
+      "rationale": "等速圓周運動為典型的二維平面運動。題目考查其速率不變、速度方向改變、向心加速度指向圓心，以及需要向心力（合力不為零）等基本運動學與力學觀念，故歸類於「平面運動」。"
+    },
+    "usage": {
+      "tokenIn": 2001,
+      "tokenOut": 91,
+      "tokenThinking": 1107,
+      "tokenCached": 0
+    },
+    "latencyMs": 6304
+  }
+}

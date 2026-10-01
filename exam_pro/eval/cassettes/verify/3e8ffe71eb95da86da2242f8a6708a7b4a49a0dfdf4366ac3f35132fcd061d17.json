@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "gemini-3.1-pro-preview",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-24T22:04:25.762Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 218,
+        "sha256": "c8e9de6860db3564474ba0aca3e3aed3dd2da5689383a1a073513993f8e51b3b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "在一個建築工地中，工人利用固定在高處的輕質定滑輪與一條不可伸長的輕質纜繩來運送物料。纜繩的一端懸掛著載滿磁磚的吊籃，總質量為 $12$ kg；另一端則懸掛著質量為 $20$ kg 的金屬配重塊。當工人將系統由靜止狀態釋放後，配重塊會向下掉落並帶動吊籃向上運動。若不計滑輪的質量及所有摩擦力，且重力加速度取 $g = 10$ m/s$^2$，試求系統釋放後吊籃的加速度大小，以及纜繩上的張力。",
+      "questionType": "計算",
+      "sampleNo": 2
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "加速度 2.5 m/s^2，張力 150 N",
+      "answer_form": "text",
+      "steps_summary": "1. 此系統為典型的阿特午機，設吊籃與配重塊的加速度大小為 a，纜繩上的張力為 T。\n2. 對載滿磁磚的吊籃（m1 = 12 kg）受力分析，列出牛頓第二運動定律：T - m1 g = m1 a。\n3. 對金屬配重塊（m2 = 20 kg）受力分析，列出牛頓第二運動定律：m2 g - T = m2 a。\n4. 將兩式相加消去 T，得到 (m2 - m1)g = (m1 + m2)a。代入數值：(20 - 12) * 10 = (12 + 20) * a，解得 a = 80 / 32 = 2.5 m/s^2。\n5. 將 a = 2.5 代回第一式，解得張力 T = m1(g + a) = 12 * (10 + 2.5) = 150 N。\n故吊籃的加速度大小為 2.5 m/s^2，纜繩上的張力為 150 N。"
+    },
+    "usage": {
+      "tokenIn": 262,
+      "tokenOut": 323,
+      "tokenThinking": 811,
+      "tokenCached": 0
+    },
+    "latencyMs": 9079
+  }
+}

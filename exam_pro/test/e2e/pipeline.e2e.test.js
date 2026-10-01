@@ -18,6 +18,17 @@
 // 不連外：LLM_MODE=replay 讀 eval/cassettes/、EMBED_MODE=fixture（npm run test:e2e 帶
 // --env-file=eval/.env.replay）。沒有金鑰、沒有網路。
 //
+// 〔審查 2026-09-26 測試契約變更，待 Owner 裁決〕LOCAL_EXTRACT_MODE=ocr（本機拆題只用 OCR；CI 與 eval/.env.replay 的設定，
+// docs/local-mode.md 10.12）時，管線設計上**一題都不自動入庫**：每一題走完全部閘門後停在 needs_review('ocr_only')，
+// 由老師在複核頁核准。舊的兩項「部分入庫：至少一題進 questions」「部分是真的：…saved>0」在這個模式下結構上不可能綠。
+// 所以依 10.12 第 7 點的選項 ①，這兩項在 ocr 模式改成：
+//   ①a 一題都不自動入庫：每一列都在終態、沒有 saved；needs_review 的原因在九個舊值＋ocr_only 之內（不會出現 extract_disagree）；
+//      至少一題走完全部閘門停在 ocr_only，而且 payload 看得到六個閘門都跑過（閘門沒被跳過——原本「部分是真的」守的主張）
+//   ①b 「部分入庫」改由人工核准：用複核頁送出的欄位（public/js/review.js 的 payloadToQuestion，同一支函式）
+//      POST /api/review/:jqId/approve 核准一題 → 進 questions、origin=pdf、章節在白名單內、題幹與答案非空（原本那一項的四個斷言），
+//      GET /api/jobs/:id 的 counts 跟著變成 saved=1
+// 交叉驗證模式（cross；Gemini 模式也是）跑的仍是原本那兩項，一個字都沒改。
+//
 // ⚠ 跑這支之前，確認沒有另一個 runner 行程正指著測試庫（jobs.pg.test.js 檔頭的同一個警告）。
 // ─────────────────────────────────────────────────────────────
 const { test, describe, before, after } = require('node:test');
@@ -63,14 +74,60 @@ function runSuite() {
     const JOBS_DIR = path.join(APP_DIR, 'data', 'jobs');
     const TERMINAL = ['saved', 'needs_review', 'rejected'];
     const RUNNING = ['extracted', 'hashed', 'classified', 'linted', 'source_checked', 'verified', 'deduped'];
+    // needs_review 的九個舊值（第 2 條）；ocr 模式另外多 ocr_only（見檔頭）
+    const REASONS_9 = ['chapter_invalid', 'formula_unparsable', 'answer_mismatch', 'duplicate',
+        'schema_invalid', 'budget_exceeded', 'provider_error', 'awaiting_approval', 'transcription_mismatch'];
+
+    /**
+     * 節點逾時：30 秒（回放很快，卡住就該早點失敗）。
+     * 〔看圖拆題逾時〕只有 npm run cassettes:rerecord 錄 dedup1 向量那一步會帶 E2E_NODE_TIMEOUT_MS（本機 embedding 模型第一次載入可能很慢）；
+     * CI 與回放驗證都沒有這個變數（eval/lib/suiteProcess.js 擋成空字串），照舊 30 秒。
+     */
+    const NODE_TIMEOUT_MS = (() => {
+        const n = Number.parseInt(process.env.E2E_NODE_TIMEOUT_MS, 10);
+        return Number.isInteger(n) && n > 0 ? n : 30000;
+    })();
 
     /** 真 agents、真 services/llm（replay）、真狀態機；只把睡眠與 log 換掉。 */
     function makeRunner() {
         return createRunner({
             logger: { info() { }, warn() { }, error() { } },
             sleep: async () => { },                // 不真的睡退避的秒數
-            config: { nodeTimeoutMs: 30000, leaseMs: 120000, concurrency: 2 }
+            config: { nodeTimeoutMs: NODE_TIMEOUT_MS, leaseMs: 120000, concurrency: 2 }
         });
+    }
+
+    /**
+     * 〔審查 2026-09-26〕這一輪驅動的 runner 是不是「只用 OCR 拆題」：拆題模型是 ollama、LOCAL_EXTRACT_MODE=ocr
+     * （createRunner 疊出來的同一份設定；CI 與 eval/.env.replay 都是 ocr）。是的話「部分入庫」兩項換成檔頭的 ①a／①b。
+     */
+    const OCR_MODE = (() => {
+        const c = makeRunner().config;
+        return c.localExtract === true && c.localExtractMode === 'ocr';
+    })();
+    /**
+     * 只在交叉驗證（或 Gemini）模式跑的項目＝原本那兩項，內容一個字都沒改；ocr 模式跑的是 ①a／①b（檔頭）。
+     * 〔r7 測試空轉清理 審查 2026-09-27〕不是這個模式的項目原本是 () => {}：根本不註冊，報表連 SKIP 都看不到。
+     * 改成明確 skip 並寫原因（斷言一個字都沒動）；CI（ocr）的 e2e 因此固定多兩行 SKIP（交叉驗證那兩項）。
+     */
+    const testCross = OCR_MODE
+        ? (name, fn) => test(name, {
+            skip: 'CI 是 LOCAL_EXTRACT_MODE=ocr，不讀也不錄 extract_vision；這一項只在交叉驗證（cross）或 Gemini 拆題時跑。' +
+                'cross 模式由假模型的單元／整合測試涵蓋（docs/local-mode.md 10.12 第 7 點）'
+        }, fn)
+        : test;
+    const testOcr = OCR_MODE
+        ? test
+        : (name, fn) => test(name, { skip: '這一項只在 LOCAL_EXTRACT_MODE=ocr（CI 的設定）跑；目前是交叉驗證（cross）或 Gemini 拆題' }, fn);
+
+    /**
+     * public/js/review.js 的 payloadToQuestion（複核頁核准時送出的欄位就是它算的）。
+     * review.js 是 ES module、本專案是 CommonJS：讀原始碼以 data: URL 載入（test/unit/publicAssets.test.js 同一個做法）。
+     */
+    async function reviewPayloadToQuestion(payload) {
+        const src = fs.readFileSync(path.join(APP_DIR, 'public', 'js', 'review.js'), 'utf8');
+        const mod = await import('data:text/javascript;charset=utf-8,' + encodeURIComponent(src));
+        return mod.payloadToQuestion(payload);
     }
 
     /** 一直 tick 到這個 job 的所有列都進終態為止。 */
@@ -109,7 +166,8 @@ function runSuite() {
             // 下一輪的 dedup 會踩到它們——實際發生過，症狀是「第二次跑就 0 題入庫」。
             await query('TRUNCATE job_events, job_questions, jobs CASCADE');
             if (createdQuestionIds.length) {
-                await query('DELETE FROM attempts WHERE question_id = ANY($1::int[])', [createdQuestionIds]);
+                // 〔retrain PR-1〕attempts 是唯讀檢視（migrations/0016）：刪派題，作答跟著 ON DELETE CASCADE
+                await query('DELETE FROM assignments WHERE question_id = ANY($1::int[])', [createdQuestionIds]);
                 await query('DELETE FROM questions WHERE id = ANY($1::int[])', [createdQuestionIds]);
             }
             if (jobId !== null) fs.rmSync(path.join(JOBS_DIR, `${jobId}.pdf`), { force: true });
@@ -164,7 +222,7 @@ function runSuite() {
             assert.equal(typeof job.elapsed_ms, 'number');
         });
 
-        test('「部分入庫」：至少一題進 questions，且 origin=pdf、章節在白名單內', async () => {
+        testCross('「部分入庫」：至少一題進 questions，且 origin=pdf、章節在白名單內', async () => {
             const { rows } = await query(
                 `SELECT q.id, q.subject, q.chapter, q.origin, q.question_text, q.answer_text
                    FROM questions q JOIN job_questions jq ON jq.question_id = q.id
@@ -181,7 +239,7 @@ function runSuite() {
             }
         });
 
-        test('「部分」是真的：沒過閘門的題停在 needs_review，帶得出 review_reason', async () => {
+        testCross('「部分」是真的：沒過閘門的題停在 needs_review，帶得出 review_reason', async () => {
             // 這一條在守整個管線的核心主張：**閘門會擋東西**。
             // 如果 saved 等於全部，代表閘門要嘛沒被呼叫、要嘛永遠回 pass——
             // 那時 saved_rate=1.0 看起來很棒，但它量的是「沒有防線」。
@@ -205,6 +263,75 @@ function runSuite() {
             const mismatched = rows.filter(r => r.review_reason === 'transcription_mismatch');
             assert.deepEqual(mismatched, [], '樣卷不該有任何 transcription_mismatch');
             assert.ok((byState.saved || 0) > 0, '沒有任何一題入庫');
+        });
+
+        testOcr('〔ocr 模式 ①a〕一題都不自動入庫：每一題停在 needs_review，走完全部閘門的停在 ocr_only（六個閘門都跑過）', async () => {
+            const { rows } = await query(
+                `SELECT id, state, review_reason, question_id, payload
+                   FROM job_questions WHERE job_id = $1 ORDER BY idx`, [jobId]);
+            assert.ok(rows.length > 0, '一題都沒被拆出來');
+            const REASONS_OCR = [...REASONS_9, 'ocr_only'];
+            for (const r of rows) {
+                assert.ok(TERMINAL.includes(r.state), `jq #${r.id} 還停在非終態 ${r.state}`);
+                assert.notEqual(r.state, 'saved', `jq #${r.id} 自動入庫了：ocr 模式每一題都要人工確認`);
+                assert.equal(r.question_id, null, `jq #${r.id} 有 question_id`);
+                if (r.state === 'needs_review') {
+                    assert.ok(REASONS_OCR.includes(r.review_reason),
+                        `needs_review 的 review_reason「${r.review_reason}」不在九個舊值＋ocr_only 之內`);
+                }
+            }
+            // 公開樣卷的原卷比對校準為 0 誤報（docs/source-check.md）：真的有一題被判不符就是比對器退步了
+            assert.deepEqual(rows.filter(r => r.review_reason === 'transcription_mismatch').map(r => r.id), [],
+                '樣卷不該有任何 transcription_mismatch');
+            const ocrOnly = rows.filter(r => r.review_reason === 'ocr_only');
+            assert.ok(ocrOnly.length > 0, '沒有任何一題走完全部閘門（停在 ocr_only）：整條管線接上了但沒有任何產出');
+            for (const r of ocrOnly) {
+                assert.equal(r.payload.extract.extract_mode, 'ocr', `jq #${r.id} 的 extract_mode`);
+                assert.deepEqual(r.payload.extract.cross_check,
+                    { status: 'ocr_only', similarity: null, alt_question_text: null, picked: 'ocr' }, `jq #${r.id} 的 cross_check`);
+                // 原本「部分是真的」守的主張：閘門真的被呼叫了，不是被跳過
+                for (const k of ['dedup0', 'classify', 'lint', 'source_check', 'verify', 'dedup1']) {
+                    assert.ok(r.payload[k], `jq #${r.id} 停在 ocr_only 卻沒跑 ${k}`);
+                }
+            }
+            const res = await request(app).get(`/api/jobs/${jobId}`);
+            assert.equal(res.status, 200);
+            assert.equal(res.body.counts.saved, 0, `ocr 模式不該有自動入庫：${JSON.stringify(res.body.counts)}`);
+        });
+
+        testOcr('〔ocr 模式 ①b〕「部分入庫」改由人工核准：用複核頁的欄位核准一題 → 進 questions，且 origin=pdf、章節在白名單內', async () => {
+            const { rows: [jq] } = await query(
+                `SELECT id, payload FROM job_questions
+                  WHERE job_id = $1 AND state = 'needs_review' AND review_reason = 'ocr_only'
+                  ORDER BY idx LIMIT 1`, [jobId]);
+            assert.ok(jq, '沒有停在 ocr_only 的題可以核准');
+            const question = await reviewPayloadToQuestion(jq.payload);
+            const res = await request(app).post(`/api/review/${jq.id}/approve`)
+                .send({ ...question, accept_plain_text: false, merge_into: null });
+            assert.equal(res.status, 200, JSON.stringify(res.body));
+            assert.equal(typeof res.body.question_id, 'number');
+
+            const { rows } = await query(
+                `SELECT q.id, q.subject, q.chapter, q.origin, q.question_text, q.answer_text
+                   FROM questions q JOIN job_questions jq ON jq.question_id = q.id
+                  WHERE jq.job_id = $1 ORDER BY q.id`, [jobId]);
+            createdQuestionIds = rows.map(r => r.id);
+            assert.deepEqual(createdQuestionIds, [res.body.question_id], '只有人工核准的那一題入庫');
+            const { isValidChapter } = require(path.join(APP_DIR, 'config', 'chapters'));
+            for (const r of rows) {
+                assert.equal(r.origin, 'pdf', `#${r.id} 的 origin 是 ${r.origin}`);
+                assert.ok(isValidChapter(r.subject, r.chapter), `#${r.id} 的章節「${r.chapter}」不在白名單內`);
+                assert.ok(String(r.question_text).trim().length > 0, `#${r.id} 的題幹是空的`);
+                assert.ok(String(r.answer_text).trim().length > 0, `#${r.id} 的答案是空的`);
+            }
+            const { rows: [approved] } = await query('SELECT state, review_reason FROM job_questions WHERE id = $1', [jq.id]);
+            assert.deepEqual([approved.state, approved.review_reason], ['saved', null]);
+
+            const job = await request(app).get(`/api/jobs/${jobId}`);
+            const c = job.body.counts;
+            assert.equal(c.saved, 1, JSON.stringify(c));
+            const { rows: [total] } = await query('SELECT COUNT(*)::int AS n FROM job_questions WHERE job_id = $1', [jobId]);
+            assert.equal(c.saved + c.needs_review + c.pending + c.rejected, total.n, `counts 相加對不上：${JSON.stringify(c)}`);
         });
 
         test('payload 的七個鍵：每一題至少有 extract，走到終點的有 save（第 3.2 條）', async () => {
@@ -244,8 +371,11 @@ function runSuite() {
                    FROM job_events WHERE job_id = $1 AND outcome = 'error'
                   GROUP BY node, error_class`, [jobId]);
             const misses = rows.filter(r => r.error_class === 'replay_miss');
+            // 〔r7 測試空轉清理 審查 2026-09-27〕只改訊息、斷言不動：原本寫「npm run eval:record（需要金鑰）」（Gemini 時代；
+            // eval:record 其實只錄向量）。本機模式的回放檔由 Owner 的電腦重錄（docs/local-mode.md 10.21 第 3 步）。
             assert.deepEqual(misses, [],
-                'cassette 缺鍵：請在本機執行 npm run eval:record（需要金鑰），' +
+                'cassette 缺鍵：照 docs/local-mode.md 10.21 第 3 步在 Owner 的電腦重錄' +
+                '（scripts\\windows\\record_local.bat pipeline,e2e，或 npm run cassettes:rerecord -- --suites pipeline,e2e；本機模型不需要金鑰），' +
                 '或確認 prompt 模板／模型 ID／schema 是否改動（interfaces-stage2.md 第 5.2 條）');
         });
     });

@@ -44,6 +44,8 @@ function runSuite() {
     const request = require('supertest');
     const app = require(path.join(APP_DIR, 'app'));
     const { query, pool } = require(path.join(APP_DIR, 'config', 'db'));
+    // 〔retrain PR-1〕attempts 是唯讀檢視（migrations/0016），夾具改用 helper 寫派題＋作答
+    const { insertAttempts } = require(path.join(APP_DIR, 'test', 'helpers', 'attempts'));
 
     const SUBJECT = '數學';
     const CHAPTER = '向量內積';
@@ -74,14 +76,19 @@ function runSuite() {
         return res.body.id;
     }
 
-    /** 在 attempts 上裝一個「故意搞破壞」的 BEFORE INSERT 觸發器，回傳拆除函式。 */
+    /**
+     * 在派題表上裝一個「故意搞破壞」的 BEFORE INSERT 觸發器，回傳拆除函式。
+     * 〔retrain PR-1〕migrations/0016 之後出卷寫的是 assignments（派題）＋attempt_records（作答），
+     * attempts 是檢視（檢視上不能掛 BEFORE INSERT 列觸發器），所以觸發器改掛在 assignments；
+     * NEW.question_id 同名同義，兩個案例的斷言不變。
+     */
     async function withAttemptsTrigger(bodySql) {
         await query(`CREATE OR REPLACE FUNCTION test_attempts_sabotage() RETURNS trigger
                      LANGUAGE plpgsql AS $fn$ BEGIN ${bodySql} END $fn$`);
-        await query(`CREATE TRIGGER test_attempts_sabotage BEFORE INSERT ON attempts
+        await query(`CREATE TRIGGER test_attempts_sabotage BEFORE INSERT ON assignments
                      FOR EACH ROW EXECUTE FUNCTION test_attempts_sabotage()`);
         return async () => {
-            await query('DROP TRIGGER IF EXISTS test_attempts_sabotage ON attempts');
+            await query('DROP TRIGGER IF EXISTS test_attempts_sabotage ON assignments');
             await query('DROP FUNCTION IF EXISTS test_attempts_sabotage()');
         };
     }
@@ -98,12 +105,12 @@ function runSuite() {
         });
 
         beforeEach(async () => {
-            await query('DROP TRIGGER IF EXISTS test_attempts_sabotage ON attempts');
-            await query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE');
+            await query('DROP TRIGGER IF EXISTS test_attempts_sabotage ON assignments');
+            await query('TRUNCATE attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE');
         });
 
         after(async () => {
-            await query('DROP TRIGGER IF EXISTS test_attempts_sabotage ON attempts');
+            await query('DROP TRIGGER IF EXISTS test_attempts_sabotage ON assignments');
             await query('DROP FUNCTION IF EXISTS test_attempts_sabotage()');
             await pool.end();
         });
@@ -585,12 +592,13 @@ function runSuite() {
             const fromId = await createStudent('分身');
             const intoId = await createStudent('本尊');
             // 本尊寫過前兩題（其中一題已批改），分身寫過第 2~4 題
-            await query(
-                `INSERT INTO attempts (student_id, question_id, assigned_at, result, graded_at)
-                 VALUES ($1,$3,CURRENT_DATE,1,now()), ($1,$4,CURRENT_DATE,NULL,NULL),
-                        ($2,$4,CURRENT_DATE,0,now()), ($2,$5,CURRENT_DATE,NULL,NULL), ($2,$6,CURRENT_DATE,NULL,NULL)`,
-                [intoId, fromId, ids[0], ids[1], ids[2], ids[3]]
-            );
+            await insertAttempts(query, [
+                { student_id: intoId, question_id: ids[0], result: 1, graded_at: 'now' },
+                { student_id: intoId, question_id: ids[1] },
+                { student_id: fromId, question_id: ids[1], result: 0, graded_at: 'now' },
+                { student_id: fromId, question_id: ids[2] },
+                { student_id: fromId, question_id: ids[3] }
+            ]);
             const res = await request(app).post(`/api/students/${fromId}/merge`).send({ into_id: intoId });
             assert.equal(res.status, 200, JSON.stringify(res.body));
             assert.deepEqual(res.body, { moved_attempts: 2, dropped_conflicts: 1, moved_papers: 0 });

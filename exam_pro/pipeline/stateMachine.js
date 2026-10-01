@@ -14,6 +14,11 @@
 //
 // 不屬於這裡的事（都是 runner 的責任）：退避的睡眠、payload 的寫入、job_events、
 // 預算的實際扣減、feedback 塞回 payload[node].feedback。
+//
+// 〔Owner 第五輪 C-f 核准，dec/r6-local-tuning〕規則 6 前面多一條（規則 6a）：error 的 outcome.finishReason 是
+// 'MAX_TOKENS'（回應寫到輸出上限被截斷）而且 limits.retryTruncated === false 時，不重試、直接 needs_review('output_truncated')
+// （migration 0020）。limits.retryTruncated 沒給＝true＝照舊重試（DEFAULT_LIMITS 不變）；只有 runner 判定這一次呼叫的是
+// 本機模型（ollama）時才給 false——Gemini 模式照舊重試 maxErrorRetries 次。
 // ─────────────────────────────────────────────────────────────
 
 /** 每個非終態恰好對應一個節點：這一格要跑哪一支 agent。 */
@@ -73,7 +78,8 @@ const OUTCOME_KINDS = Object.freeze(['pass', 'skipped', 'fail', 'error']);
  */
 function REVIEW_REASON_FOR_FAIL(reason) {
     const known = ['chapter_invalid', 'formula_unparsable', 'answer_mismatch',
-        'duplicate', 'schema_invalid', 'budget_exceeded', 'provider_error', 'transcription_mismatch'];
+        'duplicate', 'schema_invalid', 'budget_exceeded', 'provider_error', 'transcription_mismatch',
+        'output_truncated'];   // 〔Owner 第五輪 C-f〕0020
     return known.includes(reason) ? reason : 'awaiting_approval';
 }
 
@@ -100,7 +106,8 @@ function toReview(retries, reason) {
  * @param {string}  args.state    job_questions.state；必須是六個可推進狀態之一
  * @param {object} [args.retries] {classify:1, 'classify:error':2, …}；未給視為 {}
  * @param {object}  args.outcome  {kind:'pass'|'skipped'|'fail'|'error', …}（第 2.2 條）
- * @param {object} [args.limits]  {maxRetries, maxErrorRetries, budgetLeft}；缺的欄位用 DEFAULT_LIMITS 補
+ * @param {object} [args.limits]  {maxRetries, maxErrorRetries, budgetLeft, retryTruncated?}；缺的欄位用 DEFAULT_LIMITS 補
+ *                               （retryTruncated〔C-f〕沒給＝true：被截斷的 error 照一般 error 重試）
  * @returns {{state:string, retries:object, review_reason:string|null}}
  *          review_reason 在不進 needs_review 時一律是 null（不是 undefined）
  * @throws  {Error} state 不可推進、或 outcome.kind 不是四種之一（兩者都是程式錯誤，不是資料狀態）
@@ -156,6 +163,11 @@ function transition({ state, retries, outcome, limits } = {}) {
 
     // 規則 6：供應商錯誤 → 另一組計數器（`<node>:error`），退避的睡眠由 runner 做。
     if (outcome.errorClass === 'budget_exceeded') return toReview(prev, 'budget_exceeded');
+
+    // 規則 6a〔Owner 第五輪 C-f〕：本機模式被截斷的回應不重試（溫度 0 重跑多半又寫到上限），直接進複核。
+    if (outcome.finishReason === 'MAX_TOKENS' && lim.retryTruncated === false) {
+        return toReview(prev, 'output_truncated');
+    }
 
     const key = `${node}:error`;
     const usedError = prev[key] ?? 0;

@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T10:40:05.253Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 79,
+        "sha256": "e4dfc1fe3bd72131f66e28cc65272eb9677ea003254bd092a4e229ca61ef39e0"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "某種細菌的繁殖速率與時間的關係為 $\\log_{3} 5 \\times \\log_{5} 27$，求其結果為何？",
+      "questionType": "填空",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "3",
+      "answer_form": "number",
+      "steps_summary": "利用對數換底公式及性質簡化計算。將log₅27轉換為3/log₃5，原式變為log₃5 × 3/log₃5 = 3。或直接觀察log₃5與log₅3互為倒數，相乘得1，再乘以3得結果3。"
+    },
+    "usage": {
+      "tokenIn": 296,
+      "tokenOut": 566,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 253325,
+        "loadMs": 25,
+        "promptEvalMs": 7488,
+        "evalMs": 243645
+      }
+    },
+    "latencyMs": 253368
+  }
+}

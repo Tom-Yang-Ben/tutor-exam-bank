@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T17:13:37.916Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2427,
+        "sha256": "61987bed40a42c415135dc1d63de9f72dad06af120704d2c0d7de78c52b60ce1"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 41,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        34,
+        35,
+        40,
+        42,
+        43
+      ],
+      "total": 2,
+      "siblings": [
+        "004dfa08d62d14bf"
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "摩擦力與向心力",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 3,
+      "question_text": "質量 $7$ kg 的物體置於傾角 $60^\theta$ 的斜面上（$\frac{\tan 60^\theta}{\tan 30^\theta} = 3$），與斜面間的動摩擦係數 $\nu = 0.3$，求物體沿斜面下滑的加速度（取 $g = 10$ m/s$^2$）。",
+      "answer_text": "$a = g\\left(\\sin 60^\theta - \\nu \\cos 60^\theta\\right) = 10 \\times \\frac{\\sqrt{3}}{2} \\times \\left(1 - 0.3\\right) = 10 \\times 0.866 \\times 0.7 \\approx 6.06$ m/s$^2$，方向沿斜面向下。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2383,
+      "tokenOut": 243,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 207657,
+        "loadMs": 30,
+        "promptEvalMs": 75764,
+        "evalMs": 130670
+      }
+    },
+    "latencyMs": 207664
+  }
+}

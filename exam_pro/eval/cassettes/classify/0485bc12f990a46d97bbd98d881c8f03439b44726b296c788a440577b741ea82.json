@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T15:19:05.912Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4057,
+        "sha256": "c3b08889913c9f751698da61fac42e487d4c7c3a7c49e73d384e1f92868dfeaf"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "在 $\\log_{10} 2 = 0.3010$ 的條件下，$2^{50}$ 寫成十進位整數時共有幾個數字？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "confidence": 0.95,
+      "rationale": "題目涉及將指數形式 $2^{50}$ 轉換為十進位整數的位數，需使用對數性質計算 $\\log_{10} 2^{50} = 50 \\log_{10} 2$，並取整數部分加一，屬於指數與對數章節的應用。"
+    },
+    "usage": {
+      "tokenIn": 3626,
+      "tokenOut": 111,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 95322
+  }
+}

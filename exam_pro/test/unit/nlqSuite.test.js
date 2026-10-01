@@ -117,3 +117,60 @@ describe('runNlqSuite 的匯出形狀（第 8.1 條）', () => {
         assert.equal(typeof suite.runNlqSuite, 'function');
     });
 });
+
+// 〔Owner 第五輪 LC-4 核准，2026-09-27，dec/r6-gates〕放寬計分：只對 expect_path='llm'、期望兩章以上的句子
+describe('filtersExact：放寬計分（Owner 第五輪 LC-4）', () => {
+    const multi = {
+        subject: '物理', chapters: ['摩擦力與向心力', '牛頓運動定律'], question_types: [],
+        difficulty_min: null, difficulty_max: null
+    };
+    const llm = { expectPath: 'llm' };
+
+    test('llm 路徑、期望兩章：回其中一章或兩章都回 → 算對，並標 lenient', () => {
+        for (const chapters of [['摩擦力與向心力'], ['牛頓運動定律'], ['牛頓運動定律', '摩擦力與向心力']]) {
+            const r = suite.filtersExact(multi, { ...multi, chapters }, llm);
+            assert.equal(r.ok, true, chapters.join());
+            assert.equal(r.lenient, true);
+        }
+    });
+
+    test('llm 路徑、期望兩章：回了期望外的章、或一章都沒回 → 算錯', () => {
+        for (const chapters of [['直線運動'], ['摩擦力與向心力', '直線運動'], []]) {
+            const r = suite.filtersExact(multi, { ...multi, chapters }, llm);
+            assert.equal(r.ok, false, chapters.join());
+            assert.ok(r.diff[0].startsWith('chapters'));
+            assert.match(r.diff[0], /放寬計分，Owner 第五輪 LC-4/);
+        }
+    });
+
+    test('其他三欄照舊 exact（放寬的只有 chapters）', () => {
+        assert.equal(suite.filtersExact(multi, { ...multi, chapters: ['牛頓運動定律'], question_types: ['計算'] }, llm).ok, false);
+        assert.equal(suite.filtersExact(multi, { ...multi, chapters: ['牛頓運動定律'], subject: '數學' }, llm).ok, false);
+    });
+
+    test('rules 路徑的多章期望（例：nlq-050）與沒給路徑時：照舊兩章全對，回傳形狀與改版前相同（沒有 lenient 鍵）', () => {
+        const r1 = suite.filtersExact(multi, { ...multi, chapters: ['牛頓運動定律'] }, { expectPath: 'rules' });
+        assert.equal(r1.ok, false);
+        assert.equal('lenient' in r1, false);
+        const r2 = suite.filtersExact(multi, { ...multi, chapters: ['牛頓運動定律'] });
+        assert.equal(r2.ok, false);
+        assert.deepEqual(Object.keys(r2), ['ok', 'diff']);
+    });
+
+    test('llm 路徑、單章期望：照舊 exact（多回一章就算錯）', () => {
+        const one = { ...multi, chapters: ['向量內積'], subject: '數學' };
+        const r = suite.filtersExact(one, { ...one, chapters: ['向量的加減與係數積', '向量內積'] }, llm);
+        assert.equal(r.ok, false);
+        assert.equal('lenient' in r, false);
+    });
+
+    test('目前的 golden 只有 nlq-036 套用放寬（nlq-050 是 rules 路徑、不套用）', () => {
+        const golden = suite.loadNlqGolden();
+        const ids = golden.entries.filter(e => suite.lenientChaptersApply(e.expect, e.expect_path)).map(e => e.id);
+        assert.deepEqual(ids, ['nlq-036']);
+        const n050 = golden.entries.find(e => e.id === 'nlq-050');
+        assert.equal(n050.expect_path, 'rules');
+        assert.ok(n050.expect.chapters.length >= 2);
+        assert.match(suite.LENIENT_NOTE, /與 2026-09-25 以前的分數不可直接比/);
+    });
+});

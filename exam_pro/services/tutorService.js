@@ -29,6 +29,14 @@
 //   deps.db      { getQuestion, listQuestionKcs, listChapterKcs, getStudent, listStudents,
 //                  chapterWeakness, errorTypeCounts }   預設走 config/db（延遲 require）
 //   deps.budget  createBudget() 的實例             預設為程序內共用的那一個
+//
+// 〔本機模式 L1，docs/local-mode.md 第 3 條第 10 點〕MODEL_TUTOR 的供應商沒有 code execution（ollama）時：
+//   - 改用本機版系統提示（模板 tutor.direct.local.v1／tutor.socratic.local.v1）：只換掉「用 Python／sympy 驗算」
+//     那幾行，改成「逐步寫出、代回或反算自行檢查」，並明令不得聲稱執行過程式；其餘講法、安全規則逐字相同。
+//     tools.codeExecution 送 false（ollama adapter 本來就忽略它；cassette 的 request 摘要因此如實）。
+//   - 回覆裡若仍出現「用程式／Python／sympy 驗算」之類的說法（codeRuns 是空的），在回覆後面附上更正
+//     （UNVERIFIED_CLAIM_NOTE）——不改寫模型的文字，但不讓它的宣稱無人糾正。
+//   Gemini（有 code execution）的系統提示、模板、tools 與回覆處理一個字都沒改。
 // ─────────────────────────────────────────────────────────────
 const { createPseudonymizer } = require('../utils/pseudonym');
 const { registerTemplate, sha256Hex } = require('./llm/templates');
@@ -127,6 +135,76 @@ const TEMPLATES = {
     direct: registerTemplate('tutor.direct.v1', `${SYSTEM.direct}\n---\n${PROMPT_TEMPLATE}`),
     socratic: registerTemplate('tutor.socratic.v1', `${SYSTEM.socratic}\n---\n${PROMPT_TEMPLATE}`)
 };
+
+// ───────────────────────── 本機模式（沒有 code execution）的系統提示 ─────────────────────────
+// docs/local-mode.md 第 3 條第 10 點。只換掉「用 code execution 驗算」的那幾行；換的方式是逐字比對原文，
+// 原文一改（這裡沒跟著改）模組載入就丟錯——兩份提示不會悄悄走鐘。
+
+/** SYSTEM_BASE 裡【計算驗證】那一段的原文（逐字） */
+const VERIFY_BLOCK = [
+    '【計算驗證】',
+    '4. 所有數值計算與代數結果（化簡、解方程式、微積分、向量運算、化學計量、單位換算）都必須用 code execution',
+    '   執行 Python（可用 sympy）驗算，不得只靠心算或推理。',
+    '5. 回覆的最後一段以「**驗算**：」開頭，用一兩句話寫出驗算結論（例如「以 sympy 解得 x = 3，與上面的推導一致」）。',
+    '   沒有需要計算的內容時寫「**驗算**：本題不涉及數值計算」。驗算結果與推導不一致時，以驗算結果為準並說明哪一步錯了。'
+].join('\n');
+
+/** 本機版：沒有程式可跑，改成逐步寫出＋代回檢查，並明令不得聲稱執行過程式（最後一段仍叫「驗算」，截斷提醒因此不必分兩份） */
+const LOCAL_CHECK_BLOCK = [
+    '【計算檢查】',
+    '4. 這個環境沒有任何程式執行工具（不能跑 Python，也沒有 sympy）。數值計算與代數結果（化簡、解方程式、微積分、',
+    '   向量運算、化學計量、單位換算）請逐步寫出，關鍵結果用代回原式、反向運算或估算數量級自行檢查。',
+    '5. 回覆的最後一段以「**驗算**：」開頭，用一兩句話寫出你怎麼檢查、結果如何（例如「把 x = 3 代回原式，左右兩邊都等於 0」）。',
+    '   沒有需要計算的內容時寫「**驗算**：本題不涉及數值計算」。檢查結果與推導不一致時，要明白指出哪一步可能錯了。',
+    '   不得聲稱執行過程式、用過 Python 或 sympy、或「已用程式驗算」——這裡沒有任何程式被執行。'
+].join('\n');
+
+/** text 裡 from 必須恰好出現一次，換成 to；否則丟錯（載入時就發現兩份提示走鐘） */
+function replaceExactlyOnce(text, from, to, what) {
+    const i = text.indexOf(from);
+    if (i === -1 || text.indexOf(from, i + 1) !== -1) {
+        throw new Error(`tutorService：${what}對不上家教系統提示的原文（改了 Gemini 版卻沒同步本機版）。`);
+    }
+    return text.slice(0, i) + to + text.slice(i + from.length);
+}
+
+const SYSTEM_BASE_LOCAL = replaceExactlyOnce(SYSTEM_BASE, VERIFY_BLOCK, LOCAL_CHECK_BLOCK, '【計算驗證】段落');
+
+const MODE_TEXT_LOCAL = {
+    direct: MODE_TEXT.direct,
+    socratic: replaceExactlyOnce(
+        MODE_TEXT.socratic,
+        '- 學生給出中間結果時，先用 code execution 檢查對不對再回應：對了就肯定並推進下一步；',
+        '- 學生給出中間結果時，先自己重算一次、確認對不對再回應：對了就肯定並推進下一步；',
+        '引導式模式的檢查那一行'
+    )
+};
+
+/** 本機版的兩種系統提示（凍結；改一個字＝cassette 鍵改變） */
+const SYSTEM_LOCAL = {
+    direct: `${SYSTEM_BASE_LOCAL}\n\n${MODE_TEXT_LOCAL.direct}`,
+    socratic: `${SYSTEM_BASE_LOCAL}\n\n${MODE_TEXT_LOCAL.socratic}`
+};
+
+const TEMPLATES_LOCAL = {
+    direct: registerTemplate('tutor.direct.local.v1', `${SYSTEM_LOCAL.direct}\n---\n${PROMPT_TEMPLATE}`),
+    socratic: registerTemplate('tutor.socratic.local.v1', `${SYSTEM_LOCAL.socratic}\n---\n${PROMPT_TEMPLATE}`)
+};
+
+/** 沒有 codeRuns 卻宣稱用程式驗算時，附在回覆最後的更正（本機模式第 3 條第 10 點） */
+const UNVERIFIED_CLAIM_NOTE = '**⚠ 更正**：這則回覆沒有執行任何程式；上文若提到「用程式／Python／sympy 驗算」，那並沒有真的執行，數值請自行核對。';
+
+/** 「用程式驗算過」一類的說法（寧可多抓：多附一句更正無害，漏抓就是一句假話） */
+const PROGRAM_CLAIM_RE = /sympy|python|code\s*execution|(?:用|以|透過|經過?|藉由)\s*(?:程式|電腦)|程式(?:碼)?\s*(?:驗算|驗證|計算|執行|跑)|執行(?:了|過)?\s*(?:程式|程式碼)|驗算程式/i;
+
+/**
+ * 回覆有沒有宣稱執行過程式（純函式）。
+ * @param {string} text
+ * @returns {boolean}
+ */
+function claimsProgramRun(text) {
+    return PROGRAM_CLAIM_RE.test(String(text ?? ''));
+}
 
 // ───────────────────────── 錯誤型別 ─────────────────────────
 
@@ -540,6 +618,8 @@ async function prepareTutorRequest(input, deps = {}) {
     const db = { ...defaultDb, ...(deps.db || {}) };
     const models = require('../config/models');
     const { id: modelId } = models.parseModel(models.MODEL_TUTOR);
+    // 本機模式第 3 條第 10 點：沒有 code execution 的供應商改用本機版提示與模板
+    const { codeExecution } = require('./llm').capabilitiesOf(models.MODEL_TUTOR);
 
     // ── 題目 ──
     let question = null;
@@ -593,13 +673,13 @@ async function prepareTutorRequest(input, deps = {}) {
 
     const llmOpts = {
         model: models.MODEL_TUTOR,
-        system: SYSTEM[input.mode],
+        system: (codeExecution ? SYSTEM : SYSTEM_LOCAL)[input.mode],
         parts: [{ text: prompt }],
-        tools: { codeExecution: true },
+        tools: { codeExecution },                       // Gemini：true（與之前相同）；本機：false
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         thinkingBudget: THINKING_BUDGET,                // 與 MAX_OUTPUT_TOKENS 成對；不在 cassette 鍵內
         agent: AGENT,
-        template: TEMPLATES[input.mode],
+        template: (codeExecution ? TEMPLATES : TEMPLATES_LOCAL)[input.mode],
         // 只放雜湊：cassette 的 request.cacheKeyParts 會原樣進檔，題幹與學生資料不得進版控
         cacheKeyParts: { mode: input.mode, prompt: sha256Hex(prompt) }
     };
@@ -607,7 +687,7 @@ async function prepareTutorRequest(input, deps = {}) {
     const context = { kc_codes: kcs.map(kc => kc.code), student_context: studentContext };
     if (question) context.question_id = question.id;
 
-    return { llmOpts, context, pseudo, modelId };
+    return { llmOpts, context, pseudo, modelId, codeExecution };
 }
 
 /**
@@ -631,7 +711,7 @@ async function runTutor(body, deps = {}) {
     const budget = deps.budget || sharedBudget;
     budget.assertAvailable();                       // 用完就在查 DB、呼叫 LLM 之前擋下
 
-    const { llmOpts, context, pseudo, modelId } = await prepareTutorRequest(input, deps);
+    const { llmOpts, context, pseudo, modelId, codeExecution } = await prepareTutorRequest(input, deps);
 
     const llm = deps.llm || require('./llm');
     let res;
@@ -658,6 +738,8 @@ async function runTutor(body, deps = {}) {
     let reply;
     if (truncated) reply = text ? withTruncationNote(text) : EMPTY_TRUNCATED_REPLY;
     else reply = text || EMPTY_REPLY;
+    // 本機模式第 3 條第 10 點：沒有 code execution、也沒有 codeRuns，回覆卻說「用程式驗算過」→ 附上更正
+    if (!codeExecution && runs.length === 0 && claimsProgramRun(text)) reply = `${reply}\n\n${UNVERIFIED_CLAIM_NOTE}`;
 
     return {
         reply,
@@ -689,6 +771,7 @@ module.exports = {
     questionBlock, kcBlock, studentBlock, historyBlock, errorTypeLabel,
     createBudget, sharedBudget, readDailyBudget, estimateUsd, httpError, withTruncationNote, publicLlmError,
     SYSTEM, PROMPT_TEMPLATE, TEMPLATES, AGENT, MODES,
+    SYSTEM_LOCAL, TEMPLATES_LOCAL, UNVERIFIED_CLAIM_NOTE, claimsProgramRun,
     MAX_OUTPUT_TOKENS, THINKING_BUDGET, EMPTY_REPLY, EMPTY_TRUNCATED_REPLY, TRUNCATED_NOTE,
     MAX_MESSAGE_LEN, MAX_HISTORY, MAX_HISTORY_TEXT_LEN, MAX_KCS, TOP_CHAPTERS, STUDENT_WINDOW_DAYS,
     DEFAULT_DAILY_BUDGET_USD, INT4_MAX

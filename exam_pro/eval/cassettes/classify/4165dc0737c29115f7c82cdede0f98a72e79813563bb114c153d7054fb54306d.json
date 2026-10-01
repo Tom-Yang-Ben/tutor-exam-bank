@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:05:35.224Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4429,
+        "sha256": "8b29983dc3fe8213784c38decabcc0d346902b589129ff388b948098647e21f8"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "$\\sin^2 25^\\circ + \\cos^2 25^\\circ$ 之值為何？\n(A) $0$　(B) $\\frac{1}{2}$　(C) $1$　(D) 需查表才能得知",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目使用了三角函數的平方和公式，屬於三角函數的基本性質，與直角三角形的邊角關係無關，而是屬於三角函數的疊合或基本公式。",
+      "chapter": "三角函數的疊合",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3965,
+      "tokenOut": 77,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 63106,
+        "loadMs": 10,
+        "promptEvalMs": 11254,
+        "evalMs": 51810
+      }
+    },
+    "latencyMs": 63110
+  }
+}

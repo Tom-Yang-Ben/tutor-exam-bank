@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:53:04.328Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4367,
+        "sha256": "d9e1774796a72c0cc0eb950461ecdfe8f3784367fa0405e9c528bd36074ac7ea"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "請寫出角度 $150^\\circ$ 的正弦函數值。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目要求計算 $150^\fd$ 的正弦值，涉及廣義角的三角函數計算，需使用三角函數的性質與公式。",
+      "chapter": "廣義角與極坐標",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3926,
+      "tokenOut": 69,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 60290,
+        "loadMs": 12,
+        "promptEvalMs": 13300,
+        "evalMs": 46941
+      }
+    },
+    "latencyMs": 60294
+  }
+}

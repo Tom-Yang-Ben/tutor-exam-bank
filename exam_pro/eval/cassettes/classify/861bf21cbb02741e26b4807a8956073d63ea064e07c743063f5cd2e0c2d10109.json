@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:38:29.725Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2486,
+        "sha256": "a4e43151fe98886b08fcbc014d3b242133205d1df1b7c6e935d6fb2dec0ce522"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "速度—時間圖中，圖形與時間軸所圍成的面積代表下列何者？\n(A) 加速度　(B) 位移　(C) 速率　(D) 力",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "物體的運動（速度與加速度）",
+      "confidence": 0.9,
+      "rationale": "題目探討速度-時間（v-t）圖的幾何意義，其中圖形與時間軸所圍成的面積代表「位移」，這屬於運動學中關於速度、時間與位移關係的基本概念。"
+    },
+    "usage": {
+      "tokenIn": 1993,
+      "tokenOut": 83,
+      "tokenThinking": 757,
+      "tokenCached": 0
+    },
+    "latencyMs": 5073
+  }
+}

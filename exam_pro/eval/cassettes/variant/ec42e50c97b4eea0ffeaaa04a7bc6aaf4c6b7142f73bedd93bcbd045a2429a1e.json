@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T21:43:07.313Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1718,
+        "sha256": "6dd81eeb738d08a64425e63f515156721f0a5768186d00313700906ea2b47143"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 7,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        12,
+        13,
+        14,
+        21,
+        23
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數函數與對數函數",
+      "chapter_confidence": 1,
+      "question_type": "填空",
+      "difficulty": 3,
+      "question_text": "某資訊安全團隊開發了一套加密系統，其中產生了兩把密鑰的參數 $a$ 與 $b$。已知參數 $a$ 滿足方程式 $4^a = 9$，而參數 $b$ 滿足方程式 $9^b = 64$。系統定義的綜合安全係數為 $a \times b$，求此綜合安全係數之值為何？",
+      "answer_text": "$3$。由題意可知 $a = \\log_{4} 9$，$b = \\log_{9} 64$。利用對數的換底公式，可得 $a \\times b = \\frac{\\log 9}{\\log 4} \\times \\frac{\\log 64}{\\log 9} = \\frac{\\log 64}{\\log 4} = \\log_{4} 64 = 3$。"
+    },
+    "usage": {
+      "tokenIn": 1254,
+      "tokenOut": 254,
+      "tokenThinking": 1739,
+      "tokenCached": 0
+    },
+    "latencyMs": 16461
+  }
+}

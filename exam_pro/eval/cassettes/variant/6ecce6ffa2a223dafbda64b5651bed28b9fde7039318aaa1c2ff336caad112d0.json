@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T11:07:53.177Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2237,
+        "sha256": "17c49743af83bb6a1212da6ef9e3a4771065f47772edcfe23558768c5ee4ca26"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 11,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        12,
+        13,
+        19,
+        20,
+        23
+      ],
+      "total": 2,
+      "siblings": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 3,
+      "question_text": "設平面向量 $\textbf{a} = (3, 1)$、$\textbf{b} = (2, 4)$，求兩向量的夾角 $\theta$。",
+      "answer_text": "$\\cos \\theta = \\frac{\\textbf{a} \\cdot \\textbf{b}}{\\left|\\textbf{a}\\right|\\left|\\textbf{b}\\right|} = \\frac{3 \\times 2 + 1 \\times 4}{\\sqrt{3^2 + 1^2} \\times \\sqrt{2^2 + 4^2}} = \\frac{6 + 4}{\\sqrt{10} \\times \\sqrt{20}} = \\frac{10}{\\sqrt{200}} = \\frac{10}{10\\sqrt{2}} = \\frac{1}{\\sqrt{2}}$，故 $\\theta = 45^\\circ$。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2253,
+      "tokenOut": 265,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 300200,
+        "loadMs": 15,
+        "promptEvalMs": 150435,
+        "evalMs": 147721
+      }
+    },
+    "latencyMs": 300230
+  }
+}

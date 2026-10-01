@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-25T19:44:53.597Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 90,
+        "sha256": "f798e0650a1cf7eeeeda1d9eb08bcdbcb2ed385f2c5daddc2e55ec634892a4d0"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "在 $v$-$t$ 圖中，若圖形為一斜線，其與時間軸所圍成的面積代表下列何者？\n(A) 加速度\n(B) 位移\n(C) 速率\n(D) 力",
+      "questionType": "單選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(B)",
+      "answer_form": "option",
+      "steps_summary": "在v-t圖中，速度與時間的乘積（即圖形與時間軸圍成的面積）代表位移。斜線表示速度均勻變化（存在加速度），但面積計算需積分速度對時間的積分，結果為位移（含方向）。速率為速度的絕對值，與面積無直接關係。加速度為速度變化率（斜率），力與質量及加速度相關，題幹未提及質量故排除。因此選(B)位移。"
+    },
+    "usage": {
+      "tokenIn": 314,
+      "tokenOut": 414,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 197530
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T14:30:22.601Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4060,
+        "sha256": "b07a2a6fe24af083a7b78c4e5a92f5114d653324e33e2300c7ea939501065f0e"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "設平面向量 $\\vec{a} = (2, k)$ 與 $\\vec{b} = (3, 6)$ 互相垂直，求 $k$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "confidence": 0.95,
+      "rationale": "題目中提到向量互相垂直，需利用向量內積為零的條件求解，屬於向量內積章節的核心概念。"
+    },
+    "usage": {
+      "tokenIn": 3623,
+      "tokenOut": 62,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 52028
+  }
+}

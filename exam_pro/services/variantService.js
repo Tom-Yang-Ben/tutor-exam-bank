@@ -22,7 +22,7 @@
 
 const DEFAULT_COUNT = 1;
 const DEFAULT_MAX_PER_REQUEST = 3;
-const DEFAULT_SIM_MIN = 0.80;
+// 〔Owner 第五輪 V5-5〕原本的 DEFAULT_SIM_MIN＝0.80 移到 config/similarityThresholds.js（依向量模型：本機 0.72、Gemini 0.80）
 const DEFAULT_TOKEN_BUDGET_USD = 0.30;
 
 /** 一個變式 job 只要還沒收工，同一個藍本的新請求就合流到它身上（裁決 S3-8） */
@@ -66,7 +66,9 @@ function maxPerRequest(env = process.env) {
  * 行為不變；`.env.example` 註明過渡期後移除。
  */
 function simMin(env = process.env) {
-    return numEnv('VARIANT_RETRIEVE_SIM_MIN', numEnv('VARIANT_SIM_MIN', DEFAULT_SIM_MIN, env), env);
+    // 〔Owner 第五輪 V5-1、V5-5 核准 2026-09-27〕沒寫 .env 時的預設依向量模型決定（本機 0.72、Gemini 0.80），
+    // 由 config/similarityThresholds.js 統一決定（與 runner 同一條規則；優先順序：新名 > 舊名 > 預設）。
+    return require('../config/similarityThresholds').resolveSimilarityThresholds(env).variantRetrieveSimMin;
 }
 
 /** 每個變式 job 的成本上限，建立時複製進 jobs.budget_usd */
@@ -222,7 +224,7 @@ async function loadSource(db, sourceId) {
  * @param {object} db
  * @param {object} source           loadSource 的輸出（embedding 不可為 null）
  * @param {{count:number, difficultyDelta:number, studentId:number|null}} params
- * @param {number} [threshold]      預設讀 VARIANT_SIM_MIN
+ * @param {number} [threshold]      預設＝simMin()（VARIANT_RETRIEVE_SIM_MIN；沒寫時依向量模型）
  * @returns {Promise<Array<object>>} 已是回應形狀
  */
 async function findRetrieved(db, source, params, threshold = simMin()) {

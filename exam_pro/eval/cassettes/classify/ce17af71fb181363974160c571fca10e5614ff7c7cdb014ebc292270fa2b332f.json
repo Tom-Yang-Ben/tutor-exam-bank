@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:37:31.293Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2504,
+        "sha256": "44356dd95c0c785dfd4a693f551aff61f97271e656cb3878e6832159ce8c5a00"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "質量 $50$ kg 的人站在體重計上，電梯以 $2$ m/s$^2$ 的加速度向上加速，求體重計的讀數（取 $g = 10$ m/s$^2$）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "confidence": 1,
+      "rationale": "本題探討電梯加速時體重計的讀數（視重問題），需運用牛頓第二運動定律 $N - mg = ma$ 來求解人所受的支持力（即讀數），屬於「牛頓運動定律」的典型應用。"
+    },
+    "usage": {
+      "tokenIn": 1998,
+      "tokenOut": 79,
+      "tokenThinking": 274,
+      "tokenCached": 0
+    },
+    "latencyMs": 2496
+  }
+}

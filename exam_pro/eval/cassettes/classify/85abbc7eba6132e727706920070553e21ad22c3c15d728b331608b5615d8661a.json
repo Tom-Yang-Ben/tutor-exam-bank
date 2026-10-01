@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:08:52.317Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4427,
+        "sha256": "f4c61fd0abdbbe501d8b8ef784ea4715b8f4e41c605f16b8e1c30b8b702c595b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "與 $400^\\circ$ 同界的最小正角為何？\n(A) $20^\\circ$　(B) $40^\\circ$　(C) $60^\\circ$　(D) $340^\\circ$",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及角度的同界角計算，需將角度轉換為 $0^\bullet$ 到 $360^\bullet$ 之間的等效角，屬於角度的基礎運算。",
+      "chapter": "廣義角與極坐標",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3961,
+      "tokenOut": 76,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 66032,
+        "loadMs": 17,
+        "promptEvalMs": 11357,
+        "evalMs": 54618
+      }
+    },
+    "latencyMs": 66037
+  }
+}

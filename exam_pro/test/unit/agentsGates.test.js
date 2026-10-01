@@ -119,9 +119,9 @@ describe('agents/lint — ③ 仍有 error 才呼叫 LLM 重寫', () => {
         await lintAgent.run(ctx, broken);
         const opts = calls.gen[0];
         assert.equal(opts.agent, 'lint');
-        assert.equal(opts.template, 'lint.v2');
+        assert.equal(opts.template, 'lint.v3');
         assert.equal(opts.model, DEFAULT_CONFIG.models.extract, 'lint 的第三層用 MODEL_EXTRACT');
-        assert.equal(opts.cacheKeyParts.template, 'lint.v2');
+        assert.equal(opts.cacheKeyParts.template, 'lint.v3');
         assert.ok(Array.isArray(opts.cacheKeyParts.issues));
         assert.deepEqual(opts.cacheKeyParts.issues, [...opts.cacheKeyParts.issues].sort(), 'issues 必須排序過才可重現');
         assert.ok(opts.schema && opts.schema.type === 'object');

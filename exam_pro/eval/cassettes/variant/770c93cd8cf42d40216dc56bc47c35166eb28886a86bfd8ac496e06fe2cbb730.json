@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T22:02:09.657Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1769,
+        "sha256": "17b9ef63187e5324fdfc17f0d82c0bd077514ff3e8377e796b15ba15665637a8"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 29,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        24,
+        27,
+        28,
+        31,
+        61
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "在自動化手臂的控制程式中，工程師輸入的旋轉角度參數為 $850^\\circ$。為了讓系統判讀更直觀，工程師想將此參數修改為與其同界的最小正角（即最終停放的相對位置不變，但角度介於 $0^\\circ$ 到 $360^\\circ$ 之間）。請問修改後的角度參數為何？\n(A) $50^\\circ$　(B) $130^\\circ$　(C) $230^\\circ$　(D) $310^\\circ$",
+      "answer_text": "(B)。由於 $850^\\circ = 360^\\circ \\times 2 + 130^\\circ$，即 $850^\\circ$ 減去兩圈（$720^\\circ$）後得到 $130^\\circ$。因為 $0^\\circ \\leq 130^\\circ < 360^\\circ$，故其最小正同界角為 $130^\\circ$。"
+    },
+    "usage": {
+      "tokenIn": 1295,
+      "tokenOut": 316,
+      "tokenThinking": 1161,
+      "tokenCached": 0
+    },
+    "latencyMs": 14219
+  }
+}

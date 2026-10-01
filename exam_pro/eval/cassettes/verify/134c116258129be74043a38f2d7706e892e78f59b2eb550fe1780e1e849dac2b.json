@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-27T19:43:41.904Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 111,
+        "sha256": "363e0f6c530a1acea031d941576d788966f9e175d5d35321f729a86d7e5ea3f7"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "設平面向量 $\\vec{\\alpha} = (3, 4)$、$\\vec{\\beta} = (1, 2)$，求 $\\vec{\\alpha} \\cdot \\vec{\\beta}$。",
+      "questionType": "計算",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "11",
+      "answer_form": "number",
+      "steps_summary": "根據點積公式，將向量α=(3,4)與β=(1,2)的對應分量相乘後相加，即3×1 + 4×2 = 3 + 8 = 11。"
+    },
+    "usage": {
+      "tokenIn": 302,
+      "tokenOut": 279,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 99684,
+        "loadMs": 8,
+        "promptEvalMs": 4934,
+        "evalMs": 93728
+      }
+    },
+    "latencyMs": 99699
+  }
+}

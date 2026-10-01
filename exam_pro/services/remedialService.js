@@ -21,7 +21,7 @@
 //      同一個 pickPaperUnits（家族互斥＋承上題整組）；跨目標不重複、家族互斥。
 //   5. 不足量逐目標回報在 shortfalls，不自動拿別的單位補——補什麼由老師決定（可用題目 ID 加題）。
 //   6. items 每題帶 follows_question_id 與 group_ids（同一承上組在草稿裡的全部成員，承接順序），
-//      前端據此「整組刪、整組加」，不會把承上題和它的前題拆開（confirm-paper 不重驗組是否完整）。
+//      前端據此「整組刪、整組加」，不會把承上題和它的前題拆開（confirm-paper 也會整組檢查，〔Owner 決策單 2026-09-25 B7〕）。
 //
 // 另有 lookupItems（GET /api/students/:id/remedial-paper/items）：草稿「用題目 ID 加題」前查題目資料與
 // 所在承上組的完整成員（含封存、已寫過的旗標），讓前端能整組加入或拒絕（docs/remedial.md 第 2.5 節）。
@@ -357,6 +357,8 @@ function buildPrereqQuery(kcIds) {
  * 往下找承上題、往上找前題；UNION 去重，資料有環也會停）。這裡**不排除**封存題與已寫過的題——
  * 它們正是「這一組能不能加」要知道的事，改用 archived／answered 兩個旗標回報。
  * 不存在的 id 自然不會出現在結果裡。
+ * confirm-paper 的承上題整組檢查也用這一段（〔Owner 決策單 2026-09-25 B7〕，controllers/examController.js）：
+ * 改欄位時要保留 id、follows_question_id、archived、answered。
  *
  * @param {number[]} ids
  * @param {number} studentId
@@ -489,7 +491,8 @@ async function planRemedialPaper({ studentId, subject, total, mix, days, sourceT
  * 查草稿要手動加的題（只讀）：每題的資料，以及它所在承上組的**全部**成員。
  *
  * 前端用它決定「整組加入」或「拒絕」：承上題要與前題整組出（同 generate-paper 的 pickPaperUnits），
- * 而 confirm-paper 不重驗組是否完整，所以把關只能在草稿這一端。
+ * confirm-paper 也用同一段查詢（buildItemLookupQuery）做伺服器端整組檢查（〔Owner 決策單 2026-09-25 B7〕），
+ * 兩邊對「整組」與「封存／已寫過就不能出」的判斷一致。
  *
  * @param {{studentId:number, ids:number[]}} p
  * @param {{query:Function}} deps

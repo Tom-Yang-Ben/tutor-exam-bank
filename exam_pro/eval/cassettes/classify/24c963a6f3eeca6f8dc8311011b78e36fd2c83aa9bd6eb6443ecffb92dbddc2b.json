@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T08:05:30.615Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4373,
+        "sha256": "2d1494e56dc28367efd18c3f7b3185e7bdef9d6421db3d4f29bb4980a575ad35"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "依單位圓的定義，寫出 $\\cos 240^\\circ$ 之值。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目使用單位圓定義求 $\theta=240^\ring$ 的 $\theta$ 的餘弦值，屬於廣義角與極坐標的範疇。",
+      "chapter": "廣義角與極坐標",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 3930,
+      "tokenOut": 71,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 61148,
+        "loadMs": 10,
+        "promptEvalMs": 14652,
+        "evalMs": 46453
+      }
+    },
+    "latencyMs": 61153
+  }
+}

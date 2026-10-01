@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T16:05:51.155Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2359,
+        "sha256": "8f76b9d375a0aedaaf5ea8db963671ee1e17ed4e4384b4fd0e8e1857ed6753fd"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 29,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        9,
+        27,
+        28,
+        31,
+        61
+      ],
+      "total": 2,
+      "siblings": [
+        "7724411e4868c419"
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "某船隻從港口出發後，航行方向為 $620^\theta$，求與之同界的最小正角為何？ (A) $20^\theta$ (B) $100^\theta$ (C) $140^\theta$ (D) $260^\theta$",
+      "answer_text": "(D)。$620^\theta - 360^\theta = 260^\theta$，故最小正同界角為 $260^\theta$。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2340,
+      "tokenOut": 170,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 174577,
+        "loadMs": 34,
+        "promptEvalMs": 74586,
+        "evalMs": 97070
+      }
+    },
+    "latencyMs": 174605
+  }
+}

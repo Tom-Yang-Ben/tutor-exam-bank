@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T17:29:29.549Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2213,
+        "sha256": "9f553a4b9d17185b1a40180fb3a83234e7edf37a1f19fda4f47c4e6a4e133c9f"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 43,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        34,
+        35,
+        40,
+        41,
+        42
+      ],
+      "total": 2,
+      "siblings": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "摩擦力與向心力",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 3,
+      "question_text": "一質量為 $4$ kg 的物體，以 $5$ m/s 的速率在水平面上做等速圓周運動，所用的輕繩長度為 $3$ m，求繩子所施加的張力大小。",
+      "answer_text": "繩子的張力提供向心力，因此 $T = \frac{mv^2}{r} = \frac{4 \times 5^2}{3} = \frac{100}{3}$ N。",
+      "figure_desc": "圖中顯示一物體以固定速率在水平面上做圓周運動，繩子與物體之間的張力方向朝向圓心。"
+    },
+    "usage": {
+      "tokenIn": 2242,
+      "tokenOut": 196,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 258046,
+        "loadMs": 52,
+        "promptEvalMs": 152824,
+        "evalMs": 102045
+      }
+    },
+    "latencyMs": 258107
+  }
+}

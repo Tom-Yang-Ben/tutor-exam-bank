@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-09-27T10:14:17.548Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2140,
+        "sha256": "9194144ae47a08d0bcec537ea8e5ec387bd11458495cd8291de813af60d78bc2"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 3,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        4,
+        8,
+        9,
+        10,
+        18
+      ],
+      "total": 2,
+      "siblings": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數函數與對數函數",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "某種細菌每小時繁殖的數量為原來的 $5$ 倍，若初始時有 $125$ 個細菌，求經過 $t$ 小時後細菌總數為 $625$ 個，求 $t$ 的值。",
+      "answer_text": "(C)。$625 = 5^4$，故 $125 \times 5^t = 625$，即 $5^t = 5$，得 $t = 1$。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2216,
+      "tokenOut": 175,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 149198,
+        "loadMs": 11,
+        "promptEvalMs": 60984,
+        "evalMs": 88170
+      }
+    },
+    "latencyMs": 149202
+  }
+}

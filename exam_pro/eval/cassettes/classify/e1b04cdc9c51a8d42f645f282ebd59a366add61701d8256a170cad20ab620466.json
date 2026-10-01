@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T14:25:01.961Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4039,
+        "sha256": "12db3285e85312a36eb94c3b446b0555d5fd60708caeef4c4a12aadaa773f53b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "$\\log_{2} 3 \\times \\log_{3} 8$ 之值為何？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數與對數",
+      "confidence": 0.95,
+      "rationale": "題目涉及對數的換底公式與性質，需運用指數與對數的運算規則進行簡化計算。"
+    },
+    "usage": {
+      "tokenIn": 3607,
+      "tokenOut": 61,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 49793
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:37:36.673Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2511,
+        "sha256": "99b06dec32c663aa442022cddc03bef52257677b87afacaf320dd5a590b536dd"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "光滑定滑輪兩端以輕繩懸掛 $3$ kg 與 $5$ kg 的物體，由靜止釋放後求系統的加速度與繩張力（取 $g = 10$ m/s$^2$，繩與滑輪質量不計）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "confidence": 1,
+      "rationale": "此題為經典的阿特午機問題，需要對兩個懸掛物體分別進行受力分析（考慮重力與繩子張力），並列出牛頓第二運動定律 $F=ma$ 的方程式來聯立求解系統的加速度與張力，故屬於「牛頓運動定律」"
+    },
+    "usage": {
+      "tokenIn": 2005,
+      "tokenOut": 90,
+      "tokenThinking": 188,
+      "tokenCached": 0
+    },
+    "latencyMs": 2139
+  }
+}

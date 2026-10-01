@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:37:17.776Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 3797,
+        "sha256": "bd0939b86fba6b6baa658e2c6f060d8a2d27335188c9e2197ca2729c9cb49a05"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "$\\cos 120^\\circ$ 之值為何？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "confidence": 1,
+      "rationale": "題目要求求出非銳角（120度）的餘弦函數值，屬於廣義角三角比的範疇，因此歸類於「廣義角與極坐標」。"
+    },
+    "usage": {
+      "tokenIn": 2877,
+      "tokenOut": 66,
+      "tokenThinking": 160,
+      "tokenCached": 0
+    },
+    "latencyMs": 1905
+  }
+}

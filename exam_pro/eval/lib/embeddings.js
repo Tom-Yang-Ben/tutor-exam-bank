@@ -15,18 +15,31 @@ const fs = require('fs');
 const path = require('path');
 
 const { buildEmbedText, embedHash } = require('./embedText');
+const { embedModelFromEnv } = require('./localMode');
 
 const FIXTURE_DIR = path.resolve(__dirname, '..', 'fixtures');
-const DEFAULT_MODEL = process.env.EMBED_MODEL || 'gemini-embedding-001';
+// 〔本機模式 L4〕沒設 EMBED_MODEL 時是本機預設 ollama:qwen3-embedding:0.6b（docs/local-mode.md 第 2 條），
+// 與 services/llm 的預設一致；要讀 repo 裡既有的 Gemini 向量檔請明寫 EMBED_MODEL=gemini-embedding-001。
+const DEFAULT_MODEL = embedModelFromEnv();
 const DEFAULT_DIM = Number(process.env.EMBED_DIM || 768);
 
 /**
- * @param {string} model
+ * 檔名裡的模型段：`:`、`/`、`\` 一律換成 `-`（docs/local-mode.md 第 3 條第 6 點：Windows 檔名不能有冒號）。
+ * Gemini 的舊值（gemini-embedding-001）沒有這三個字元，檔名與之前逐字相同。純函式。
+ * @param {string} model 例：'ollama:qwen3-embedding:0.6b' → 'ollama-qwen3-embedding-0.6b'
+ * @returns {string}
+ */
+function safeModelName(model) {
+    return String(model).replace(/[:/\\]/g, '-');
+}
+
+/**
+ * @param {string} model EMBED_MODEL 的完整字串（含 vendor 前綴，與 services/llm/index.js 交給 fixture 的相同）
  * @param {number} dim
  * @returns {string} 絕對路徑
  */
 function fixturePath(model, dim) {
-    return path.join(FIXTURE_DIR, `embeddings.${model}.${dim}.json`);
+    return path.join(FIXTURE_DIR, `embeddings.${safeModelName(model)}.${dim}.json`);
 }
 
 /**
@@ -41,12 +54,13 @@ function fixturePath(model, dim) {
  *            vectorOf:(q:object)=>number[]|null, missing:number[], reason?:string}}
  */
 function loadEmbeddings(opts) {
-    const model = opts.model || DEFAULT_MODEL;
-    const dim = opts.dim || DEFAULT_DIM;
+    // 〔本機模式 L4〕預設在呼叫當下讀 EMBED_MODEL（不是載入本檔時的快照）：測試與工具先設環境變數再跑 suite 也生效
+    const model = opts.model || embedModelFromEnv();
+    const dim = opts.dim || Number(process.env.EMBED_DIM || DEFAULT_DIM);
     const file = fixturePath(model, dim);
 
     if (!fs.existsSync(file)) {
-        const reason = `找不到向量 fixture：${file}\n   請在本機執行 npm run eval:record（需要 GEMINI_API_KEY；CI 永遠只讀這個檔，不呼叫 Gemini）。`;
+        const reason = `找不到向量 fixture：${file}\n   請在本機執行 npm run eval:record（ollama: 模型要 Ollama 在跑、Gemini 要 GEMINI_API_KEY；CI 永遠只讀這個檔，不呼叫任何模型）。`;
         if (opts.optional) return { available: false, file, model, dim, vectorOf: () => null, missing: [], reason };
         throw new Error(reason);
     }
@@ -91,4 +105,4 @@ function assertComplete(emb) {
     }
 }
 
-module.exports = { loadEmbeddings, assertComplete, fixturePath, DEFAULT_MODEL, DEFAULT_DIM };
+module.exports = { loadEmbeddings, assertComplete, fixturePath, safeModelName, DEFAULT_MODEL, DEFAULT_DIM };

@@ -157,6 +157,18 @@ describe('report_jobs — renderMarkdown', () => {
         assert.ok(renderMarkdown(REPORT).includes('同家異級驗證（gemini：gemini-3.5-flash → gemini-3.7-flash）'));
     });
 
+    test('〔dec/local-thinking-speed-fix〕answer_mismatch 之後原地重跑的結果：有 rerun 才列；舊的報表物件照樣排得出來', () => {
+        const withRerun = { ...REPORT, verify: { ...REPORT.verify, rerun: { reruns: 3, rerun_pass: 1, rerun_mismatch: 2, rerun_other: 0, no_next: 2 } } };
+        const md = renderMarkdown(withRerun);
+        assert.ok(md.includes('| answer_mismatch 之後原地重跑（同一題下一次 verify） | 3 |'));
+        assert.ok(md.includes('| 　重跑後通過 | 1 |'));
+        assert.ok(md.includes('| 　重跑後仍 answer_mismatch | 2 |'));
+        assert.ok(md.includes('| answer_mismatch 之後沒有再跑 verify（停在複核或還沒輪到） | 2 |'));
+        assert.ok(md.includes('docs/local-mode.md 第 10.14 條'));
+        const old = renderMarkdown(REPORT);
+        assert.ok(!old.includes('原地重跑'), '沒有 rerun 欄位的報表物件不列');
+    });
+
     test('全空的報表也排得出來（不丟例外、不出現 NaN／undefined）', () => {
         const empty = {
             since: { label: '7d', from: '2026-08-15T00:00:00.000Z' },
@@ -169,5 +181,18 @@ describe('report_jobs — renderMarkdown', () => {
         const md = renderMarkdown(empty);
         assert.equal(/NaN|undefined|null/.test(md), false, md);
         assert.ok(md.includes('（期間內沒有資料）'));
+    });
+
+    test('〔審查 2026-09-26〕只用 OCR 拆題的版面配圖：期間內有 ocr 模式的塊才印（配到幾張、幾題有提示、讀不到版面、截斷）', () => {
+        assert.equal(renderMarkdown(REPORT).includes('OCR 版面配圖'), false, '沒有 ocrFigures（Gemini／cross）不印');
+        assert.equal(renderMarkdown({ ...REPORT, ocrFigures: { chunks: 0, detected: 0, assigned: 0, hinted: 0, no_layout: 0, truncated: 0 } })
+            .includes('OCR 版面配圖'), false, '期間內沒有 ocr 模式的塊不印');
+        const md = renderMarkdown({ ...REPORT, ocrFigures: { chunks: 2, detected: 5, assigned: 3, hinted: 4, no_layout: 1, truncated: 1 } });
+        assert.ok(md.includes('## OCR 版面配圖（LOCAL_EXTRACT_MODE=ocr）'));
+        for (const row of ['| 只用 OCR 拆的塊數 | 2 |', '| 版面偵測到的圖（印章以外） | 5 |', '| 自動配到題目 | 3 |',
+            '| 標了補圖提示的題 | 4 |', '| 讀不到版面或框數對不上的塊 | 1 |', '| 可能被截斷、整塊只給提示的塊 | 1 |']) {
+            assert.ok(md.includes(row), row);
+        }
+        assert.match(md, /detail\.figure_hint/);
     });
 });

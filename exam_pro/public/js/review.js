@@ -43,7 +43,13 @@ const REASON_LABEL = {
     schema_invalid: '欄位不合格',
     budget_exceeded: '超出成本上限',
     provider_error: '供應商錯誤',
-    awaiting_approval: '等待人工確認'
+    awaiting_approval: '等待人工確認',
+    // 〔本機模式 L2〕0015：本機拆題（PaddleOCR 與視覺模型）兩版不一致或只有一版（docs/local-mode.md 第 4 條）
+    extract_disagree: '拆題交叉驗證不一致',
+    // 〔OCR 為主 2026-09-26〕0019：LOCAL_EXTRACT_MODE=ocr 只用 OCR 拆題，沒有第二版可以比對，每題都要人工確認（docs/local-mode.md 10.12）
+    ocr_only: '只用 OCR 拆題',
+    // 〔Owner 第五輪 C-f〕0020：本機模型的回應寫到輸出上限被截斷，不重試直接進複核（docs/local-mode.md 10.17）
+    output_truncated: '本機模型回應被截斷'
 };
 
 const REASON_TONE = {
@@ -55,7 +61,10 @@ const REASON_TONE = {
     schema_invalid: 'rose',
     budget_exceeded: 'slate',
     provider_error: 'slate',
-    awaiting_approval: 'indigo'
+    awaiting_approval: 'indigo',
+    extract_disagree: 'amber',
+    ocr_only: 'amber',
+    output_truncated: 'slate'
 };
 
 const TONE_CLASS = {
@@ -333,9 +342,61 @@ export function reasonSentence(reason, payload) {
             return '供應商連續錯誤（逾時或配額），重試次數已用盡。這一題沒有被判定為壞題，重跑通常就會過。';
         case 'awaiting_approval':
             return '沒有任何閘門判定它壞掉，但流程需要人點頭。';
+        case 'extract_disagree': {
+            // 〔本機模式 L2〕cross_check 由 agents/extractCrossCheck.js 寫進 payload.extract
+            const cc = (p.extract && p.extract.cross_check) || {};
+            const used = cc.picked === 'ocr' ? 'OCR 版' : '視覺版';
+            const alt = typeof cc.alt_question_text === 'string' && cc.alt_question_text.trim()
+                ? cc.alt_question_text.trim() : '';
+            const altShort = alt.length > 160 ? `${alt.slice(0, 160)}…` : alt;
+            if (cc.status === 'vision_only') {
+                return '只有視覺模型拆出這一題，OCR 版沒有對應的題（或 OCR 未啟用），無法交叉驗證。請對照原卷確認題幹與選項。';
+            }
+            if (cc.status === 'ocr_only') {
+                return '只有 OCR 版拆出這一題，視覺模型沒有對應的題。請對照原卷確認題幹、選項與附圖。';
+            }
+            const sim = typeof cc.similarity === 'number' ? `（相似度 ${cc.similarity.toFixed(2)}）` : '';
+            return `視覺模型與 OCR 讀出的題幹不一致${sim}，目前採用${used}。` +
+                (altShort ? `另一版題幹：「${altShort}」。` : '') + '請對照原卷確認。';
+        }
+        case 'ocr_only': {
+            // 〔OCR 為主 2026-09-26〕agents/extract.js 的 runLocalOcrOnly：只用 PaddleOCR＋文字模型拆，公式最容易錯
+            const ex = p.extract || {};
+            const auto = typeof ex.figure_img === 'string' || (Number.isInteger(ex.figure_page) && Array.isArray(ex.figure_box));
+            return '只用 OCR 拆題，請核對題目與公式。' +
+                (auto ? '附圖是依 OCR 的版面位置自動配的，請確認裁到的是這一題的圖。' : '') +
+                figureHintNote(p);
+        }
+        case 'output_truncated':
+            // 〔Owner 第五輪 C-f〕workers/jobRunner.js：本機模式被截斷（Ollama done_reason=length）不重試。
+            // classify、lint、verify 三步被截斷都進這個原因，複核頁拿不到是哪一步（error 路徑不寫 payload），
+            // 所以說明句不綁特定步驟。OLLAMA_MAX_OUTPUT_<步驟> 只降不升（services/llm/localTuning.js）：
+            // 只有驗算有低於原本上限的本機預設（3072，原本 8192）可以調高；分類沒設上限、題目檢查已是原本的 8192，
+            // 這兩步被截斷多半是 num_ctx 不夠（OLLAMA_NUM_CTX_<步驟>），或 .env 自己把上限調低過。
+            return '本機模型寫到這一步的輸出上限被截斷，依設定不重試、直接交給老師。請自己核對題目與答案。' +
+                '要讓模型再跑一次：被截斷的是驗算的話，可在 .env 調高 OLLAMA_MAX_OUTPUT_VERIFY（本機預設 3072，最高 8192）後重跑這一題；' +
+                '分類或題目檢查被截斷，多半是上下文長度不夠（OLLAMA_NUM_CTX_CLASSIFY／_LINT），' +
+                '或 .env 設過較低的 OLLAMA_MAX_OUTPUT_CLASSIFY／_LINT。';
         default:
             return `複核原因：${reason}`;
     }
+}
+
+/**
+ * 〔OCR 為主 2026-09-26〕附圖沒配到的提示（payload.extract.figure_hint，agents/extractOcrFigures.js 寫的）。
+ * 題目核准入庫之後，可以用舊題補附圖工具（npm run figures:backfill，docs/figures.md）拿原卷補圖。
+ * ocr_only 的說明句會帶上；其他原因的卡片由 reasonBar 接在後面。
+ * @param {object} payload
+ * @returns {string} 沒有提示回空字串
+ */
+export function figureHintNote(payload) {
+    const hint = payload && payload.extract && payload.extract.figure_hint;
+    if (!hint || typeof hint !== 'object') return '';
+    const count = Number.isInteger(hint.count) && hint.count > 0 ? hint.count : null;
+    const why = hint.reason === 'multiple' ? `這一題範圍內有 ${count ?? '多'} 張圖，無法判斷要用哪一張`
+        : hint.reason === 'nearby' ? `OCR 在這一題附近偵測到${count ? ` ${count} 張` : ''}圖，但配不準`
+            : '題幹提到圖，但版面上沒有配到';
+    return `疑似有圖未配到，可用 figures:backfill 補（${why}）。`;
 }
 
 /**
@@ -544,9 +605,11 @@ function takeOverUpload(app) {
 function reasonBar(reason, payload) {
     const tone = TONE_CLASS[REASON_TONE[reason]] || TONE_CLASS.slate;
     const bar = el('div', `mb-3 rounded-xl border px-3 py-2 text-xs font-bold leading-5 ${tone}`);
+    // 〔OCR 為主〕只用 OCR 拆的題先被別的閘門攔下（例如答案對不上）時，補圖提示接在那一句後面
+    const note = reason === 'ocr_only' ? '' : figureHintNote(payload);
     bar.append(
         el('span', 'mr-2 rounded-md bg-white/70 px-1.5 py-0.5', { textContent: REASON_LABEL[reason] || reason }),
-        el('span', '', { textContent: reasonSentence(reason, payload) })
+        el('span', '', { textContent: reasonSentence(reason, payload) + (note ? ` ${note}` : '') })
     );
     return bar;
 }

@@ -14,25 +14,48 @@ const path = require('node:path');
 
 const rm = require('../../eval/lib/replayMiss');
 
-// 第 5.2 條凍結訊息的完整長相（services/llm/fake.js 實際會丟的那一串）
-const REAL_MISS =
+// 第 5.2 條訊息的完整長相（services/llm/fake.js 實際會丟的那一串）。
+// 〔dec/r8-b1-abandon〕前綴不變，「怎麼重錄」依模式寫：本機模式指向 Owner 電腦上的 record_local.bat，Gemini 模式指向
+// npm run cassettes:rerecord；兩種都有 `npm run cassettes:rerecord -- --suites `（新的標記）。改之前的訊息（舊標記）照樣認得。
+const fake = require('../../services/llm/fake');
+const REAL_MISS = fake.replayMissMessage({ agent: 'classify', key: '3f2a8c1d', vendor: 'ollama', path: 'eval/cassettes/classify/3f2a8c1d.json' });
+const REAL_MISS_GEMINI = fake.replayMissMessage({ agent: 'classify', key: '3f2a8c1d', vendor: 'gemini', path: 'eval/cassettes/classify/3f2a8c1d.json' });
+const LEGACY_MISS =
     'LLM_MODE=replay 找不到 cassette（agent=classify key=3f2a8c1d）。請在本機執行 npm run eval:record -- --suite <suite>' +
     '\n（預期路徑：eval/cassettes/classify/3f2a8c1d.json）';
 
-describe('isReplayMiss（裁決 S2-14：只比到 --suite 為止）', () => {
-    test('認得出實作端真正丟的那一串', () => {
-        assert.equal(rm.isReplayMiss(new Error(REAL_MISS)), true);
-        assert.equal(rm.isReplayMiss(REAL_MISS), true);
+describe('isReplayMiss（裁決 S2-14：只比前綴與重錄的標記）', () => {
+    test('認得出實作端真正丟的那一串（本機、Gemini 兩種說法）', () => {
+        assert.equal(REAL_MISS,
+            'LLM_MODE=replay 找不到 cassette（agent=classify key=3f2a8c1d）。本機模式：請在 Owner 的電腦（exam_pro 資料夾）執行 ' +
+            'scripts\\windows\\record_local.bat <suite> 重錄（它跑的就是 npm run cassettes:rerecord -- --suites <suite>；步驟見 docs/local-mode.md 10.21）' +
+            '\n（預期路徑：eval/cassettes/classify/3f2a8c1d.json）');
+        // 〔審查 dec/r8-b1-abandon-fix〕rerecord_all.js 照 ci.yml 的模型錄：Gemini 那一句註明「ci.yml 的模型要是 Gemini」
+        assert.equal(REAL_MISS_GEMINI,
+            'LLM_MODE=replay 找不到 cassette（agent=classify key=3f2a8c1d）。Gemini 模式：請在本機執行 npm run cassettes:rerecord -- --suites <suite> 重錄' +
+            '（ci.yml 的模型要是 Gemini；要 GEMINI_API_KEY，會產生費用）\n（預期路徑：eval/cassettes/classify/3f2a8c1d.json）');
+        for (const m of [REAL_MISS, REAL_MISS_GEMINI]) {
+            assert.equal(rm.isReplayMiss(new Error(m)), true);
+            assert.equal(rm.isReplayMiss(m), true);
+        }
     });
 
-    test('`--suite ` 之後接什麼都不影響判定', () => {
-        const base = 'LLM_MODE=replay 找不到 cassette（agent=x key=y）。請在本機執行 npm run eval:record -- --suite ';
-        for (const tail of ['<suite>', 'classify', 'pipeline', 'all', '', '\n（預期路徑：a/b.json）', '\n任何未來新增的說明']) {
-            assert.equal(rm.isReplayMiss(base + tail), true, JSON.stringify(tail));
+    test('改訊息之前的那一串（舊標記 npm run eval:record -- --suite）照樣認得', () => {
+        assert.equal(rm.isReplayMiss(LEGACY_MISS), true);
+        assert.deepEqual(rm.parseReplayMiss(LEGACY_MISS), { agent: 'classify', key: '3f2a8c1d' });
+    });
+
+    test('標記之後接什麼都不影響判定', () => {
+        for (const base of ['LLM_MODE=replay 找不到 cassette（agent=x key=y）。Gemini 模式：請在本機執行 npm run cassettes:rerecord -- --suites ',
+            'LLM_MODE=replay 找不到 cassette（agent=x key=y）。請在本機執行 npm run eval:record -- --suite ']) {
+            for (const tail of ['<suite>', 'classify', 'pipeline', 'all', '', '\n（預期路徑：a/b.json）', '\n任何未來新增的說明']) {
+                assert.equal(rm.isReplayMiss(base + tail), true, JSON.stringify(base + tail));
+            }
         }
     });
 
     test('agent 與 key 換成什麼都不影響判定（訊息中段不是比對對象）', () => {
+        assert.equal(rm.isReplayMiss(fake.replayMissMessage({ agent: 'extract', key: 'deadbeefcafe', vendor: 'gemini' })), true);
         const msg = 'LLM_MODE=replay 找不到 cassette（agent=extract key=deadbeefcafe）。請在本機執行 npm run eval:record -- --suite pipeline';
         assert.equal(rm.isReplayMiss(msg), true);
     });
@@ -42,7 +65,9 @@ describe('isReplayMiss（裁決 S2-14：只比到 --suite 為止）', () => {
             'cassette 缺少 response.data：eval/cassettes/classify/abc.json',
             'LLM_MODE 只能是 live / record / replay，收到「bogus」。',
             '找不到 cassette',                                   // 缺前綴的 LLM_MODE=replay
-            'LLM_MODE=replay 找不到 cassette（agent=x key=y）。',   // 缺 --suite 標記
+            'LLM_MODE=replay 找不到 cassette（agent=x key=y）。',   // 缺標記
+            'LLM_MODE=replay 找不到 cassette（agent=x key=y）。請重錄 <suite>',   // 缺標記（新舊兩種都沒有）
+            '找不到 cassette（agent=x key=y）。本機模式：請執行 npm run cassettes:rerecord -- --suites x',   // 缺前綴
             '',
             null,
             undefined
@@ -55,7 +80,13 @@ describe('isReplayMiss（裁決 S2-14：只比到 --suite 為止）', () => {
         // 而不是等到某次 fork PR 的 miss 沒有被降級才發現。
         const src = fs.readFileSync(path.resolve(__dirname, '..', '..', 'services', 'llm', 'fake.js'), 'utf8');
         assert.ok(src.includes(rm.REPLAY_MISS_PREFIX), `fake.js 找不到前綴「${rm.REPLAY_MISS_PREFIX}」`);
+        // 〔dec/r8-b1-abandon〕標記由 fake.js 的 RERECORD_CMD 組出來：兩種模式的訊息都要帶著它
         assert.ok(src.includes(rm.REPLAY_MISS_SUITE_MARKER), `fake.js 找不到標記「${rm.REPLAY_MISS_SUITE_MARKER}」`);
+        assert.equal(fake.REPLAY_MISS_PREFIX, rm.REPLAY_MISS_PREFIX);
+        assert.ok(fake.RERECORD_CMD.startsWith(rm.REPLAY_MISS_SUITE_MARKER), `fake.js 的 RERECORD_CMD 不是以標記「${rm.REPLAY_MISS_SUITE_MARKER}」開頭`);
+        for (const vendor of ['ollama', 'gemini']) {
+            assert.ok(fake.replayMissMessage({ agent: 'a', key: 'b', vendor }).includes(rm.REPLAY_MISS_SUITE_MARKER), vendor);
+        }
     });
 });
 

@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:39:50.400Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 3828,
+        "sha256": "bbd300627383f63dd658681298f0f80a5a2e5cf8ea8daabd747cedd88be46feb"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "角 $\\theta$ 的終邊通過點 $P(-3, 4)$，試依廣義角的定義求 $\\cos \\theta$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "confidence": 1,
+      "rationale": "題目要求根據角 $\\theta$ 的終邊所通過的點 $P(-3, 4)$，依廣義角定義求出 $\\cos \\theta$，這是「廣義角與極坐標」章節中定義任意角三角函數（如 $\\cos \\theta = x/r$）的典型範例。"
+    },
+    "usage": {
+      "tokenIn": 2895,
+      "tokenOut": 97,
+      "tokenThinking": 187,
+      "tokenCached": 0
+    },
+    "latencyMs": 2103
+  }
+}

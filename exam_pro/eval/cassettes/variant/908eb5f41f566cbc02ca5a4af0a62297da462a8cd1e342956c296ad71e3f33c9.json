@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T17:43:40.199Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1822,
+        "sha256": "5332d6db5f5d3f602e76ff84a5f5e77d49adae08fb2a09fe31506d49904d298f"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 29,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        9,
+        27,
+        28,
+        31,
+        61
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "某座摩天大樓的觀景台在 $500^\theta$ 的方位角上，請問與此方位角同界的最小正角為何？(A) $140^\theta$　(B) $100^\theta$　(C) $200^\theta$　(D) $340^\theta$",
+      "answer_text": "(D)。$500^\theta - 360^\theta = 140^\theta$，但 $140^\theta$ 不是最小正同界角，正確計算為 $500^\theta - 360^\theta = 140^\theta$，再減去 $360^\theta$ 得 $-220^\theta$，因此最小正同界角為 $340^\theta$。",
+      "figure_desc": "圖中顯示一個以原點為中心的極坐標系，標示出 $500^\theta$ 的方位角，並標出與之同界的最小正角 $340^\theta$。"
+    },
+    "usage": {
+      "tokenIn": 1968,
+      "tokenOut": 287,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 264736
+  }
+}

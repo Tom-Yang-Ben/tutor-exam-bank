@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-09-25T19:55:01.589Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 89,
+        "sha256": "30465b139bf8e3062d55cf45bd2261e574fe5901da3af0c652af5a91bebec81e"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "自行車騎士在競賽中使用速度計，該速度計顯示的是下列哪一種物理量？\n(A) 平均速度　(B) 平均速率　(C) 瞬時速率　(D) 位移",
+      "questionType": "單選",
+      "sampleNo": 1
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(C)",
+      "answer_form": "option",
+      "steps_summary": "速度計顯示的是瞬時速率。速度是矢量，速率是標量。平均速度需位移與時間，平均速率需路程與時間，而瞬時速率是某一瞬間的速率。速度計實時顯示當前速度值，屬瞬時速率，非位移或平均值。"
+    },
+    "usage": {
+      "tokenIn": 309,
+      "tokenOut": 311,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 150441
+  }
+}

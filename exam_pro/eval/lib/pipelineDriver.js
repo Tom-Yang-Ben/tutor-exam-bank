@@ -189,6 +189,20 @@ function stubSave(fields) {
 // ───────────────────── 主流程 ─────────────────────
 
 /**
+ * 一份考卷的成本預算（美元）：opts.config.budgetUsd ＞ JOB_COST_BUDGET_USD ＞ 0.5。
+ * 〔章節重整 CH-B〕抽成函式、行為不變，讓單元測試能驗 eval/lib/suiteProcess.js 組出來的子行程環境下預算是多少。
+ * 注意讀法是 `??`：變數是**空字串**時不會退回 0.5（`'' ?? 0.5` 是 `''`，Number('') 是 0）；
+ * 預算 0 會讓任何一次 fail 直接進 needs_review(budget_exceeded)、不重試。所以子行程不能用空字串擋這個變數
+ * （suiteProcess.js 的 CI_EFFECTIVE_DEFAULTS）。
+ * @param {{budgetUsd?:number}} [config] runPipeline 的 opts.config
+ * @param {Record<string,string|undefined>} [env=process.env]
+ * @returns {number}
+ */
+function resolveBudgetUsd(config, env = process.env) {
+    return Number((config && config.budgetUsd) ?? env.JOB_COST_BUDGET_USD ?? 0.5);
+}
+
+/**
  * 把一份 PDF 走完整條管線。
  *
  * @param {object} opts
@@ -209,14 +223,16 @@ async function runPipeline(opts) {
 
     const thresholds = Object.assign({
         classifyMinConf: Number(process.env.CLASSIFY_MIN_CONF || 0.8),
-        dedupDup: Number(process.env.DEDUP_DUP_THRESHOLD || 0.97),
-        dedupVariant: Number(process.env.DEDUP_VARIANT_THRESHOLD || 0.90),
-        pdfChunkPages: Number(process.env.JOB_PDF_CHUNK_PAGES || 20),
+        // 〔Owner 第五輪 V5-3、V5-4、V5-5 核准 2026-09-27〕去重門檻依向量模型（config/similarityThresholds.js，與 runner 相同）
+        dedupDup: require('../../config/similarityThresholds').resolveSimilarityThresholds(process.env).dedupDup,
+        dedupVariant: require('../../config/similarityThresholds').resolveSimilarityThresholds(process.env).dedupVariant,
+        // 〔本機模式整合〕與 runner 同一條規則：拆題模型是 ollama 且沒明寫時一塊 2 頁
+        pdfChunkPages: Number(process.env.JOB_PDF_CHUNK_PAGES || require('../../workers/jobRunner').loadLocalModeConfig().pdfChunkPages || 20),
         inlineMaxBytes: Number(process.env.GEMINI_INLINE_MAX_BYTES || 15728640),
         nodeTimeoutMs: Number(process.env.JOB_NODE_TIMEOUT_MS || 120000)
     }, (opts.config && opts.config.thresholds) || {});
 
-    const budgetUsd = Number((opts.config && opts.config.budgetUsd) ?? process.env.JOB_COST_BUDGET_USD ?? 0.5);
+    const budgetUsd = resolveBudgetUsd(opts.config);
 
     const agents = {};
     const agentSources = {};
@@ -311,8 +327,11 @@ async function runPipeline(opts) {
             logger,
             config: {
                 models: {
-                    extract: process.env.MODEL_EXTRACT || 'gemini:gemini-3.5-flash',
-                    verify: require('../../config/models').MODEL_VERIFY   // 單一真相：config/models.js（裁決 S2-29）
+                    // 〔本機模式整合〕extract 也改讀 config/models.js（未設＝本機預設），不再寫死 Gemini
+                    extract: require('../../config/models').MODEL_EXTRACT,
+                    verify: require('../../config/models').MODEL_VERIFY,   // 單一真相：config/models.js（裁決 S2-29）
+                    ocrStructure: String(process.env.MODEL_OCR_STRUCTURE || '').trim() || require('../../config/models').MODEL_VERIFY,
+                    text: require('../../config/models').MODEL_TEXT   // 〔LM-15〕分類、公式重寫（與 runner 相同）
                 },
                 limits: sm.tables().DEFAULT_LIMITS,
                 thresholds,
@@ -395,6 +414,22 @@ async function runPipeline(opts) {
             const node = NODE_FOR_STATE[row.state];
             limits.budgetLeft = budgetUsd - costUsd;
 
+            // 〔本機模式 L2〕與 runner 相同的政策停等：本機拆題兩版不一致（cross_check.status ≠ 'agree'）的題
+            // 走到 save 時停在 needs_review('extract_disagree')，eval 的入庫數才與正式管線一致。
+            // Gemini 路徑的題沒有 cross_check，這一段不會觸發。
+            const stopReason = node === 'save' ? require('../../workers/jobRunner').crossCheckStopReason(row.payload) : null;
+            if (stopReason) {
+                events.push({
+                    jq_id: row.id, node: 'save', attempt: 1, model: null,
+                    token_in: null, token_out: null, token_thinking: null, token_cached: null,
+                    cost_usd: 0, cost_estimated: false, latency_ms: 0, outcome: 'skipped', error_class: null,
+                    detail: { reason: stopReason }
+                });
+                row.state = 'needs_review';
+                row.review_reason = stopReason;
+                break;
+            }
+
             const ex = row.payload.extract;
             const lintText = row.payload.lint || {};
             const outcome = await callNode({
@@ -408,7 +443,9 @@ async function runPipeline(opts) {
                             return runDedup0({ questionText: ex.question_text, dbHashes, jobHashes, idx: row.id });
                         case 'classify':
                             if (agents.classify) {
-                                return agents.classify.run(makeCtx(row), {
+                                // 〔CR-8〕裁決 S2-8：eval 時 classify 的 ctx.db 一律為 null——few-shot 只走 config 例句，
+                                // cassette 鍵的 fewShotIds 恆為 []，不會隨測試庫裡先前 suite 灌了什麼而改變（dedup 仍用真連線）。
+                                return agents.classify.run({ ...makeCtx(row), db: null }, {
                                     subject: ex.subject, chapter: ex.chapter,
                                     chapter_confidence: ex.chapter_confidence, question_text: ex.question_text
                                 });
@@ -561,5 +598,6 @@ function stubCaveats(res) {
 
 module.exports = {
     runPipeline, summarizePipeline, stubCaveats,
-    runDedup0, gateClassify, oracleExtract, AGENT_FILES
+    runDedup0, gateClassify, oracleExtract, AGENT_FILES,
+    resolveBudgetUsd   // 〔章節重整 CH-B〕
 };

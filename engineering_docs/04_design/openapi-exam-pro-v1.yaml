@@ -28,6 +28,9 @@ info:
     /students/{id}/remedial-paper/items、/coverage、/tutor、/voice/transcribe；擴充 PATCH /papers/{id}/results（錯因、部分給分、
     學生答案、註記；並更正 body 鍵名為 results）、GET /papers/{id}、GET /students/{id}/weakness（by_error_type）、學生三支（檔案欄位）、
     題目列表／新增／修改（文字詳解）、POST /generate-paper（blueprint）、POST /download-word（edition）、POST /jobs 與 GET /jobs/{id}（subject_group）。
+    2026-09-26 合併回填（Owner 決策單 2026-09-25 B7、B10，已合入 local/integration 7dc14a0）：POST /generate-paper 的承上題湊不滿政策
+    （FOLLOW_UP_SHORTFALL_POLICY）預設改為 error（400，訊息給建議題數；note 可切回）；POST /confirm-paper 新增 400「承上題組不完整」
+    （回應多 incomplete_groups）。端點與 200 形狀不變。
 servers:
   - url: http://localhost:3000/api
 security:
@@ -241,8 +244,11 @@ paths:
         #   shortfalls:[{row, chapter, difficulty_min, difficulty_max, wanted, got, reason}]（reason ∈ insufficient_stock／follow_up_group），
         #   有不足時加 note；部分列不足仍 200；全部列抽不到才 400（同樣附兩鍵）；FOLLOW_UP_SHORTFALL_POLICY='error' 時承上組不足的列 → 400
         # 修訂 2026-09-15g（feat/follow-up-paper-group，FR-019 PR2）：承上題整組抽取，契約見 docs/interfaces-stage1.md 第 7.1 條
-        "200": { description: "成功；回傳草稿題目清單。承上題以組為單位整組抽、相鄰排列，questions[] 逐題帶 follows_question_id；題數因整組而湊不滿時（FOLLOW_UP_SHORTFALL_POLICY='note'，預設）少出題並額外帶 shortfall {requested, actual, reason:'follow_up_group'} 與 note（僅少出時出現）" }
-        "400": { description: "欄位缺漏、該生可抽題數不足（家族互斥與承上組整組剔除後計算，examController 回 400 非 409）、source_types 含非法值；承上組一題都湊不出來，或政策為 'error' 時湊不滿題數" } # 修訂 2026-08-29（PR #7 source_type / PR #6 chapter-volumes）；修訂 2026-09-15g
+        # 修訂 2026-09-26 合併回填（Owner 決策單 2026-09-25 B10，local/integration 7dc14a0）：FOLLOW_UP_SHORTFALL_POLICY 改由環境變數切換，
+        #   預設 'error'（未設、空白、非法值都當 error）——承上組湊不滿題數時單章路徑與 blueprint 都回 400，訊息說出哪一章（blueprint 為哪一列）
+        #   要幾題、最多湊到幾題、建議改成幾題（blueprint 另附 blueprint／shortfalls）；設 note 才恢復下方 200 少出題附註的舊行為
+        "200": { description: "成功；回傳草稿題目清單。承上題以組為單位整組抽、相鄰排列，questions[] 逐題帶 follows_question_id；題數因整組而湊不滿時，僅在 FOLLOW_UP_SHORTFALL_POLICY='note'（修訂 2026-09-26 合併回填：已非預設，預設是 'error' 回 400）少出題並額外帶 shortfall {requested, actual, reason:'follow_up_group'} 與 note（僅少出時出現）" }
+        "400": { description: "欄位缺漏、該生可抽題數不足（家族互斥與承上組整組剔除後計算，examController 回 400 非 409）、source_types 含非法值；承上組一題都湊不出來；承上組湊不滿題數（政策 'error'，修訂 2026-09-26 合併回填：預設；例「承上題須與前題整組出題，「向量內積」要 3 題無法剛好湊滿（3 題以內最多只能湊到 2 題），請把題數改成 2 題或 4 題。」）" } # 修訂 2026-08-29（PR #7 source_type / PR #6 chapter-volumes）；修訂 2026-09-15g；修訂 2026-09-26 合併回填（B10）
         "404": { description: student_id／student_name 查無學生——不自動建立，提示先新增（裁決 S4-1） }
         "409": { description: 非 dry_run 寫入時，部分題目已被並發指派給該學生 }
   /confirm-paper:
@@ -262,7 +268,34 @@ paths:
                 question_ids: { type: array, items: { type: integer }, minItems: 1 }
       responses:
         "200": { description: 已確認建卷 }
-        "400": { $ref: "#/components/responses/BadRequest" }
+        # 修訂 2026-09-26 合併回填（Owner 決策單 2026-09-25 B7，local/integration 7dc14a0）：伺服器端檢查承上題整組；
+        #   卷裡有某組的任一題、整組卻沒有全部在卷裡 → 400，不寫卷、不寫 attempts，回應多 incomplete_groups（契約見 docs/interfaces-stage1.md 第 7.1 條）
+        "400":
+          description: "欄位驗證失敗；部分題目已不存在或已封存；承上題組不完整（修訂 2026-09-26 合併回填：訊息逐組列出缺哪幾題，不含學生姓名）"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message: { type: string, description: "人可讀訊息；例「承上題必須與前題整組出卷，以下題組不完整：承上題組（#40、#41、#42）缺 #42。請把缺的題加回卷裡，或把整組刪掉後再確認。」" }
+                  incomplete_groups:
+                    type: array
+                    description: 僅在承上題組不完整時出現；組與組依組首 id 由小到大
+                    items:
+                      type: object
+                      required: [group_ids, missing]
+                      properties:
+                        group_ids: { type: array, items: { type: integer }, description: 整組成員（承接順序：組首 → 承上題深度優先，同一前題的多個承上題依 id） }
+                        missing:
+                          type: array
+                          description: 不在卷裡的成員（依 group_ids 的順序）
+                          items:
+                            type: object
+                            required: [question_id, reason]
+                            properties:
+                              question_id: { type: integer }
+                              reason: { type: string, enum: [not_in_paper, archived, answered], description: "not_in_paper＝可以加回；archived＝已封存；answered＝該生已寫過（後兩種加不回來，那一組只能整組刪）" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: 題目已被同學生作答等衝突 }
   /papers/{id}:

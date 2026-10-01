@@ -126,8 +126,10 @@ async function seedFixture(opts) {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        // attempts / exam_papers 對 questions 有 FK，一起清掉；RESTART IDENTITY 讓 id 每次相同。
-        await client.query('TRUNCATE attempts, exam_papers, students, questions RESTART IDENTITY CASCADE');
+        // 派題／作答／exam_papers 對 questions 有 FK，一起清掉；RESTART IDENTITY 讓 id 每次相同。
+        // 〔retrain PR-1〕migrations/0016 之後 attempts 是唯讀檢視（TRUNCATE 檢視會報錯），清的是
+        // attempt_records 與 assignments 兩張實體表。eval 不灌作答紀錄，量測值不受影響。
+        await client.query('TRUNCATE attempt_records, assignments, exam_papers, students, questions RESTART IDENTITY CASCADE');
 
         const idMap = new Map();
         for (const q of opts.questions) {

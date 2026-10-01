@@ -1,7 +1,7 @@
 # ADR-015: 批改細節以 attempts 加欄與伺服器端白名單記錄，文字詳解分來源並以 verify 摘要零成本回填 - 家教專用數理題庫系統
 
-> **版本:** v1.0 | **更新:** 2026-09-24 | **狀態:** 提議（實作於 `stage5/ws-a`；需求側 DEC-015、DEC-017 待 Owner 簽核）
-> **Owner:** Ben（楊本顥） | **決策狀態:** 提議（AI 依 `docs/interfaces-stage5.md` 第 4.1 條實作；AI 不代填核准）
+> **版本:** v1.0 | **更新:** 2026-09-26 | **狀態:** 活躍〔修訂 2026-09-26 決策單〕（原：~~提議（實作於 `stage5/ws-a`；需求側 DEC-015、DEC-017 待 Owner 簽核）~~；已隨 `stage5/integration` 由 PR #38 合入 main；DEC-015、DEC-017 已於 2026-09-25 核准，見 requirements_tracker）
+> **Owner:** Ben（楊本顥） | **決策狀態:** 已接受（Owner 2026-09-25 決策單）〔修訂 2026-09-26 決策單 B2〕（原：~~提議（AI 依 `docs/interfaces-stage5.md` 第 4.1 條實作；AI 不代填核准）~~；本欄依 Owner 決策單的答覆登錄，AI 未代填）
 > **語域:** L3
 > **實例:** 每決策一份（`ADR-NNN-<slug>.md`）
 > **定位:** 本文件回答兩件事：①「為什麼錯」要怎麼記，才能讓診斷、補救卷與 AI 家教都讀得到；②題目詳解從哪裡來、怎麼標示可信度。API、訊息與操作說明歸 [`docs/grading-and-profile.md`](../../../docs/grading-and-profile.md)，欄位定義歸 `exam_pro/migrations/0010`、`0011`。

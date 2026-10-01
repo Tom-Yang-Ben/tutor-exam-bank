@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T14:28:37.391Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4064,
+        "sha256": "b9dee92493e9390b081de177d18abc7cd195cac3de6fcf8f47c1cbf9de58401e"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "設平面向量 $\\vec{a} = (1, 0)$、$\\vec{b} = (1, 1)$，求兩向量的夾角 $\\theta$。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "向量內積",
+      "confidence": 0.95,
+      "rationale": "題目要求求兩向量的夾角，需使用向量內積公式計算，屬於向量內積章節。"
+    },
+    "usage": {
+      "tokenIn": 3626,
+      "tokenOut": 59,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 52677
+  }
+}

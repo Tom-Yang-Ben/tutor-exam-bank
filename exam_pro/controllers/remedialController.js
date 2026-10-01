@@ -20,6 +20,10 @@ const { _internals: studentInternals } = require('./studentController');
 const kcWeakness = require('../services/kcWeaknessService');
 const remedial = require('../services/remedialService');
 const coverage = require('../services/coverageService');
+// 〔retrain PR-3〕補救卷附上到期的重練題（API-8）
+const features = require('../config/features');
+const retrainSelect = require('../services/retrainSelect');
+const retrainValidation = require('../utils/retrainValidation');
 
 const { parseId, parseWeaknessQuery, weaknessMinN } = studentInternals;
 const STUDENT_NOT_FOUND = '找不到該學生';
@@ -149,15 +153,27 @@ exports.getKcWeakness = async (req, res, next) => {
 
 // ─────────────────── POST /api/students/:id/remedial-paper ───────────────────
 
+// 〔retrain PR-3〕docs/retrain-and-review.md 第 5.2 節 API-8：body 可多帶 retrain_count（0–20，預設 0；total＋retrain_count ≤ 50）。
+// > 0 時草稿多一組 bucket = 'retrain'（「到期重練」；blueprint、shortfalls、notes 照既有格式回報），
+// 承上組整組放不下 → 400、不產生草稿（R12 選 2）；確認時前端把這組的題號放進 confirm-paper 的 retrain_question_ids。
+// 旗標關閉卻帶了 retrain_count → 400；沒帶或 0 時回應逐字不變。補救卷的 basis 與弱點排序照舊只看每題第一次作答（R10 選 1）。
+// 檢查排在既有的 body 檢查之後。
 exports.remedialPaper = async (req, res, next) => {
     const studentId = parseId(req.params.id);
     if (studentId === null) return res.status(404).json({ message: STUDENT_NOT_FOUND });
     const parsed = parseRemedialBody(req.body);
     if (parsed.error) return res.status(400).json({ message: parsed.error });
+    const rt = retrainValidation.parseRemedialRetrain(req.body, { enabled: features.FEATURE_RETRAIN, total: parsed.value.total });
+    if (rt.error) return res.status(400).json({ message: rt.error });
 
     try {
         if (!(await studentExists(studentId))) return res.status(404).json({ message: STUDENT_NOT_FOUND });
         const draft = await remedial.planRemedialPaper({ studentId, ...parsed.value, minN: weaknessMinN() });
+        if (rt.count > 0) {
+            const out = await retrainSelect.appendRetrainBucket(query, draft, { studentId, count: rt.count });
+            if (out.error) return res.status(400).json({ message: out.error.message });
+            return res.status(200).json(out.draft);
+        }
         res.status(200).json(draft);
     } catch (err) {
         next(err);

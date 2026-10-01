@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "agent": "lint",
+    "model": "qwen3:8b",
+    "template": "lint.v3",
+    "recorded_at": "2026-09-27T13:45:41.707Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1707,
+        "sha256": "b20a51dd33ff39ea9a9c9690c293840ef7aec26b962086cacdf0ebcaa555495f"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "lint.v3",
+      "questionText": "設空間向量 $\\tilde{a} = (2, -1, 3)$、$\\tilde{b} = (1, 2, -1)$，求兩向量的夾角 $\\theta$。",
+      "answerText": "($\\tilde{a} \\bullet \\tilde{b}$) = $2 \\times 1 + (-1) \\times 2 + 3 \\times (-1)$ = $2 - 2 - 3$ = $-3$，$|\\tilde{a}| = \\frac{\\text{sqrt}(2^2 + (-1)^2 + 3^2)}{1}$ = $\\text{sqrt}(4 + 1 + 9)$ = $\\text{sqrt}(14)$，$|\\tilde{b}| = \\frac{\\text{sqrt}(1^2 + 2^2 + (-1)^2)}{1}$ = $\\text{sqrt}(1 + 4 + 1)$ = $\\text{sqrt}(6)$，故 $\\text{cos} \\theta = \\frac{-3}{\\text{sqrt}(14) \\times \\text{sqrt}(6)}$ = $\\frac{-3}{\\text{sqrt}(84)}$，$\\theta = \\text{acos}\\bigg(\\frac{-3}{\\sqrt{84}}\\bigg)$。",
+      "issues": [
+        "bare_frac_sqrt",
+        "bare_frac_sqrt",
+        "bare_frac_sqrt",
+        "bare_frac_sqrt",
+        "bare_frac_sqrt",
+        "unknown_command",
+        "unknown_command"
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "question_text": "設空間向量 $\\tilde{a} = (2, -1, 3)$、$\\tilde{b} = (1, 2, -1)$，求兩向量的夾角 $\\theta$。",
+      "answer_text": "($\\tilde{a} \\bullet \\tilde{b}$) = $2 \\times 1 + (-1) \\times 2 + 3 \\times (-1)$ = $2 - 2 - 3$ = $-3$，|$\\tilde{a}| = \\frac{\\sqrt{2^2 + (-1)^2 + 3^2}}{1}$ = $\\sqrt{4 + 1 + 9}$ = $\\sqrt{14}$，|$\\tilde{b}| = \\frac{\\sqrt{1^2 + 2^2 + (-1)^2}}{1}$ = $\\sqrt{1 + 4 + 1}$ = $\\sqrt{6}$，故 $\\cos \\theta = \\frac{-3}{\\sqrt{14} \\times \\sqrt{6}}$ = $\\frac{-3}{\\sqrt{84}}$，$\\theta = \\arccos\\left(\\frac{-3}{\\sqrt{84}}\\right)$。",
+      "notes": "修正所有 sqrt 為 \\sqrt，acos 為 \\arccos，並補足反斜線。將 text{sqrt} 改為 \\sqrt，text{acos} 改為 \\arccos，所有公式使用 $...$ 包裹，分數使用 \\frac，根號使用 \\sqrt。"
+    },
+    "usage": {
+      "tokenIn": 1222,
+      "tokenOut": 979,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 599887,
+        "loadMs": 124,
+        "promptEvalMs": 133210,
+        "evalMs": 464999
+      }
+    },
+    "latencyMs": 599930
+  }
+}

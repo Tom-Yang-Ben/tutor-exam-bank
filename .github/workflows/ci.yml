@@ -1,9 +1,10 @@
 name: CI
 
-# 這個 repo 有 exam / exam_pro 兩個子專案，測試在 exam_pro 底下，
-# 因此所有 run 步驟都設定 working-directory: exam_pro。
+# 系統本體與測試都在 exam_pro 底下（舊版原型 exam/ 已於 2026-09-27 從主線移除，
+# 原始碼保留在 tag v1-mysql），
+# 因此 unit、integration 兩個 job 的 run 步驟都設定 working-directory: exam_pro。
 #
-# 兩個 job（規劃 §5.3.4）：
+# unit、integration 兩個 job（規劃 §5.3.4）：
 #   unit         矩陣 22/24，**不連資料庫、不呼叫 Gemini、不需要任何 secrets**。
 #                任何人 fork 都能在不設定 .env 的情況下跑出同一個結果。
 #                這個 job **刻意不設定 TEST_DATABASE_URL**：設了的話，
@@ -11,6 +12,15 @@ name: CI
 #   integration  Node 24 + pgvector/pgvector:pg16 的 service container。
 #                跑 migrations、整合測試與五個 eval suite；同樣不需要 secrets——
 #                embedding 走 fixture（EMBED_MODE=fixture）、LLM 走 replay。
+#
+# 第三個 job（〔Owner 2026-10-01 同意，選 1〕docs/desktop-app-design.md 6.2「決策說明：desktop 納入 CI 與 dependabot」）：
+#   desktop      Node 24，只跑 desktop/（Electron 桌面殼）的純函式測試（node --test）。
+#                不下載 Electron 執行檔、不開視窗、不連資料庫、不需要 secrets；說明在該 job 上方。
+#                run 步驟預設在 desktop/，只有安裝 exam_pro 相依套件那一步在 exam_pro/。
+#
+# 本機模式（docs/local-mode.md，2026-09-25）：模型預設改成本機 Ollama，cassette 與 embedding fixture
+# 由 Owner 在自己的電腦上以本機模型錄（npm run cassettes:rerecord，照本檔下方的模型）。
+# CI 本身**不裝 Ollama、不裝 Python、不連任何模型**：仍然只讀 cassette（replay）與向量檔（fixture）。
 on:
   push:
     branches: [main]
@@ -78,9 +88,29 @@ jobs:
       EMBED_MODE: fixture
       LLM_MODE: replay
       # cassette 的鍵含模型 ID：CI 沒有 .env，這裡明寫錄製時用的模型（interfaces-stage2 裁決 S0-5／S2-29），
-      # 與 config/models.js 的預設值一致；換模型＝重錄 cassette 並同步改這兩行。
-      MODEL_EXTRACT: gemini:gemini-3.5-flash
-      MODEL_VERIFY: gemini:gemini-3.1-pro-preview
+      # 與 config/models.js 的預設值一致；換模型＝重錄 cassette 並同步改這幾行。
+      # 本機模式（docs/local-mode.md 第 2 條、第 6 條第 1 點）：拆題＝視覺模型、驗算＝純文字模型，都跑在 Owner 的電腦上。
+      # npm run cassettes:rerecord 的子行程照這裡錄（eval/lib/suiteProcess.js 的 readCiModels），
+      # 所以這幾行就是「CI 讀哪一組 cassette」的單一真相。切回 Gemini：改回 gemini:… 並用 Gemini 重錄。
+      MODEL_EXTRACT: ollama:qwen3-vl:8b
+      MODEL_VERIFY: ollama:qwen3:8b
+      # 〔OCR 為主 2026-09-26〕Owner 的電腦（純 CPU）看圖拆題 1 頁要 54 分鐘，正式環境改用「只用 OCR」拆題
+      # （docs/local-mode.md 10.12）：本機拆題只跑 PaddleOCR＋extract_ocr、不呼叫看圖模型，每題都停在人工複核（ocr_only）。
+      # CI 回放照同一條路（pipeline／e2e 讀 ocr 與 extract_ocr 的回放檔，不讀 extract_vision），重錄也照它錄。
+      # eval/.env.replay 也寫同一個值（在本機手動跑 e2e 或 eval 時一致）；兩處一起改。改回 cross＝交叉驗證（要重錄看圖）。
+      # 'cross' 模式由單元與整合測試（假模型）覆蓋，不靠回放。
+      # 〔審查 2026-09-26〕這一行與 e2e 的 ocr 分支一起進：ocr 模式一題都不自動入庫，所以 test/e2e/pipeline.e2e.test.js 的
+      # 「部分入庫」兩項在 ocr 模式改驗「每一題停在複核（ocr_only）→ 經複核 API 核准一題入庫」（檔頭；10.12 第 7 點選項 ①，
+      # 測試契約變更、待 Owner 裁決）。eval:pipeline 的 saved_rate 在 ocr 模式固定是 0（設計如此，10.12 第 7 點）；
+      # 〔Owner 第五輪 D-2 核准〕ocr 模式印 n/a、不比門檻，另報「人工核准前的通過率」（只報告，docs/local-mode.md 10.18 第 5 點）。
+      # 〔Owner 第五輪 D-3 2026-09-27〕程式預設（沒寫時）也已改成 ocr（docs/local-mode.md 10.19）；這裡仍明寫，讓 CI 走哪條路在 workflow 檔上看得見。
+      LOCAL_EXTRACT_MODE: ocr
+      # 向量檔 eval/fixtures/embeddings.<模型>.768.json 的模型段（`:`、`/`、`\` 換成 `-`）：
+      # 這一行對應 embeddings.ollama-qwen3-embedding-0.6b.768.json。沒有前綴的舊值（gemini-embedding-001）視為 Gemini。
+      EMBED_MODEL: ollama:qwen3-embedding:0.6b
+      # 自然語言查題的 LLM 輔路徑。〔LM-7〕services/nlqService.js 沒設時的預設已改成同一個本機模型；
+      # 這裡仍明寫，讓 CI 讀哪一組 nlq cassette 在 workflow 檔上看得見。
+      MODEL_NLQ: ollama:qwen3:8b
       # fork PR 的 replay miss 降為 warning（規劃 §5.3.3、介面第 5.2 條）。
       # 判斷本身在 eval/lib/replayMiss.js（介面明說「這個判斷不在 services/llm 裡」）；
       # 這裡只負責把 GitHub 的事實傳進去。同 repo 分支與 main 上這個值是空的＝不降級。
@@ -103,7 +133,8 @@ jobs:
         run: npm run test:integration
 
       # ── e2e（E-X15，階段 3）──
-      # 兩條端到端：① POST /api/jobs 上傳自製樣卷 → 真 runner 走完 → 部分入庫；
+      # 兩條端到端：① POST /api/jobs 上傳自製樣卷 → 真 runner 走完 → 部分入庫
+      #               （LOCAL_EXTRACT_MODE=ocr：全部停在複核 → 經複核 API 核准一題入庫）；
       #             ② 組卷 → download-word，解開 .docx 斷言公式是 <m:oMath> 不是純文字。
       # 與 eval:pipeline 量的不是同一件事：那支量分數、不經 HTTP 也不碰 jobs 兩張表，
       # 這兩條量的是「接線有沒有斷」。同樣不連外（LLM_MODE=replay、EMBED_MODE=fixture）。
@@ -156,3 +187,57 @@ jobs:
           path: exam_pro/eval/reports/
           retention-days: 30
           if-no-files-found: warn
+
+  # ── desktop（〔Owner 2026-10-01 同意，選 1〕docs/desktop-app-design.md 6.2「決策說明：desktop 納入 CI 與 dependabot」、R-7）──
+  # 跑 desktop/ 的 npm test（node --test）：關閉／系統匣的規則、權限與導覽、下載、環境變數、
+  # A 的文字換成桌面版說法、主行程↔後端的訊息（假的 utilityProcess）、啟動流程（真的 A 的 plan＋假的 I/O）。
+  # 這些測試**不需要 Electron**。desktop/test/package.test.js 只靜態檢查 lib/ 與 backend-entry.js 不 require electron；
+  # 測試檔本身、以及測試載入的 exam_pro 模組沒有這道檢查，所以下面在測試前後各確認一次。
+  #
+  # 不下載 Electron 執行檔（壓縮後一百多 MB）：
+  #   - Electron 44 起 npm 套件沒有 postinstall，執行檔改成第一次執行 electron 時才下載，所以 npm ci 本來就不下載
+  #     （desktop/package-lock.json 的 electron 沒有 hasInstallScript；2026-09-27 實測 npm ci 後沒有 dist/）。
+  #   - 舊版用的 ELECTRON_SKIP_BINARY_DOWNLOAD 在 44 已經沒有任何程式讀它，所以不靠它；
+  #     改用 npm ci --ignore-scripts：不管 Dependabot 之後升到哪一版，安裝時都不會執行任何腳本。
+  #   - 安裝後、測試後各確認一次 node_modules/electron 底下沒有 dist 與 path.txt：
+  #     44 的 node_modules/electron/index.js 在 require('electron') 時，找不到 path.txt 或 dist 就會自己執行
+  #     install.js 下載。以後哪一則測試不小心 require('electron')，CI 會下載成功、測試照樣綠，
+  #     只有測試後這一步會紅，退步才看得見。
+  #   - 真的 Electron 的冒煙測試（npm run smoke：xvfb＋測試庫）**不在 CI**，仍在本機與 Owner 驗收時跑。
+  #
+  # 也要裝 exam_pro 的相依套件：desktop 的測試直接載入 exam_pro 的程式（A 的 plan.js／probes.js、
+  # services/launcherControl.js（會 require express）、workers/jobRunner.js 的 loadConfig、scripts/check_html_offline.js）。
+  # 同一個理由，這個 job 不設 paths 篩選：只改 exam_pro 的 PR 也可能讓 desktop 的測試轉紅。
+  #
+  # Node 只跑 24.x、不跑矩陣：桌面版的程式跑在 Electron 內建的 Node（44.4.5＝Node 24.21.0），不會跑在 22 上。
+  # 和 unit job 一樣沒有 env: 區塊、不設 TEST_DATABASE_URL。
+  desktop:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.x'
+          cache: npm
+          cache-dependency-path: |
+            exam_pro/package-lock.json
+            desktop/package-lock.json
+
+      - name: 安裝 exam_pro 的相依套件（desktop 的測試會載入 exam_pro 的程式）
+        working-directory: exam_pro
+        run: npm ci
+
+      - name: 安裝 desktop 的相依套件（不執行安裝腳本＝不下載 Electron 執行檔）
+        run: npm ci --ignore-scripts
+
+      - name: 確認安裝時沒有下載 Electron 執行檔
+        run: test ! -e node_modules/electron/dist && test ! -e node_modules/electron/path.txt
+
+      - name: desktop 的單元測試（node --test，不需要 Electron）
+        run: npm test
+
+      - name: 確認測試時也沒有下載 Electron 執行檔（require('electron') 會自動下載）
+        run: test ! -e node_modules/electron/dist && test ! -e node_modules/electron/path.txt

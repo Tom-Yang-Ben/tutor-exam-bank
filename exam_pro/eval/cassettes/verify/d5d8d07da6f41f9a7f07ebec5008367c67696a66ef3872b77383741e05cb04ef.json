@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-10-01T08:03:04.887Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 133,
+        "sha256": "5d5289bd77b4f73e75d18bdf29f717219e1aea7522fa71635a56ae9e6172b16a"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "某飛機從機場起飛後，飛行方向為 $500^\\theta$，求與之同界的最小正角為何？\n(A) $100^\\theta$　(B) $200^\\theta$　(C) $300^\\theta$　(D) $400^\\theta$",
+      "questionType": "單選",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "error": {
+      "kind": "truncated",
+      "name": "Error",
+      "message": "Ollama 回了空字串（多半是 maxOutputTokens（num_predict）太小，思考把額度用完了）。",
+      "errorClass": "schema_invalid",
+      "finishReason": "MAX_TOKENS"
+    },
+    "usage": {
+      "tokenIn": 331,
+      "tokenOut": 3072,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 1340866,
+        "loadMs": 35,
+        "promptEvalMs": 35522,
+        "evalMs": 1305053
+      }
+    },
+    "latencyMs": 1340887
+  }
+}

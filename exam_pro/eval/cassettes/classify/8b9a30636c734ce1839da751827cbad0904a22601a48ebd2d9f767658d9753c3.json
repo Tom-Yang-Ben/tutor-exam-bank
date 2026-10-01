@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T15:29:28.754Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2604,
+        "sha256": "030bde262ad4b62d90ebf45a28f1c77c82a6556690bd31f2546e805642751760"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "均勻電場的量值為 $200$ N/C，一個帶電量 $3 \\times 10^{-6}$ C 的電荷順著電場方向移動 $0.4$ m，試問電場力對它作了多少功？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "電場與電位",
+      "confidence": 0.95,
+      "rationale": "題目涉及電場力做功的計算，需使用電場力與位移的關係，屬於電場與電位章節的核心內容。"
+    },
+    "usage": {
+      "tokenIn": 2519,
+      "tokenOut": 64,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 42299
+  }
+}

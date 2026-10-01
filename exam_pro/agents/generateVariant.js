@@ -1,11 +1,16 @@
 // ─────────────────────────────────────────────────────────────
 // agents/generateVariant.js — 變式題生成節點（P-11a／P-12；docs/interfaces-stage3.md 第 4.2 條）
 //
-//   input  : { source, neighbors, difficulty_delta, idx, feedback? }
+//   input  : { source, neighbors, difficulty_delta, idx, total?, siblings?, feedback? }
+//            〔Owner 第五輪 V5-6 核准〕total＝這次一共要出幾題、siblings＝同一個 job 前面已生成（通過本節點）的兄弟
+//            [{idx, question_text}]。runner 依序生成（idx 1→N），把前面的結果傳進來；prompt 寫「第 N 題（共 M 題）」
+//            並列出兄弟題幹，要求換情境與數字。兩者都進 cassette 的鍵（下面 cacheKeyParts）。
 //   outcome: {kind:'pass', data:{…與 payload.extract 同形…, variant_of_root, anchor_ids},
 //             gate:{ text_gate, sim }}
 //            {kind:'fail', reason:'text_gate'|'off_topic'|'schema_invalid'|'chapter_invalid', feedback}
-//            {kind:'error', errorClass:…}
+//            {kind:'error', errorClass:…, message, finishReason?}
+//            〔Owner 第七輪 R7-1＝4〕模型回應被截斷時 finishReason＝'MAX_TOKENS'（照 verify／lint／classify 的寫法），
+//            runner 據此在本機模式不重試、放棄這一題（C-f 納入變式）。
 //
 // 這個節點是「job 層」的（第 4.1 條）：它把 PDF job 的 `extract` 換掉，產出一列
 // `job_questions(state='extracted')`，之後**走完全相同的六個節點**
@@ -34,7 +39,14 @@ const { registerTemplate } = require('../services/llm/templates');
 const { textGate } = require('../utils/variantTextGate');
 const { buildEmbedText } = require('../utils/embedText');
 
-const TEMPLATE = 'variant.v1';
+// v2（2026-09-27，dec/r6-templates）：
+//   ①〔Owner 第五輪 V5-6 核准〕加規則 6（和兄弟換情境與數字）、「這是第 {{IDX}} 題（共 {{TOTAL}} 題）」與 {{SIBLINGS}}
+//     （同一藍本這次已出好的題幹）。溫度 0 下同一藍本的兩題常逐字相同或只是換句話說（docs/local-mode.md 10.13 V5-6）。
+//     「第幾題」刻意放在規則之後、不放開頭：兄弟之間 prompt 的前段（系統提示、白名單、藍本、鄰居、規則）逐字相同，
+//     本機 Ollama 的 prompt 快取可以重用；放在第一行的話，第 2 題從第一行就分岔、白名單要整段重讀。
+//   ②〔Owner 第五輪 L-2 核准〕共用的 LATEX_RULES 加第 (5) 條「JSON 字串裡的反斜線寫兩個」。
+//   variant.v1 的 cassette（本機 60、Gemini 87）全部對不上，要整步重錄（LLM 與向量）。
+const TEMPLATE = 'variant.v2';
 
 // ctx.config.thresholds 沒帶到時的保底（值與 .env.example 一致；agent 不讀 process.env）
 const DEFAULT_OFFTOPIC_SIM_MIN = 0.90;   // 裁決 S3-R9 分家、S3-R29 由 0.92 下修（實錄：合格變式餘弦多在 0.85～0.92）
@@ -42,6 +54,12 @@ const DEFAULT_MIN_EDIT = 0.08;
 
 /** 錨點鄰居最多幾題（第 4.2 條：藍本 + 前 5 題鄰居） */
 const MAX_NEIGHBORS = 5;
+
+/**
+ * 〔Owner 第五輪 V5-6〕兄弟題幹在 prompt 裡最多列幾個字（一題）。變式題幹多在 300 字以內；
+ * 列得太短，模型看不出兄弟用了什麼情境與數字。鍵用的是全文的雜湊，截斷不影響「內容變了鍵就變」。
+ */
+const SIBLING_TEXT_MAX = 400;
 
 /** 章節繼承藍本時固定寫這個信心值（第 4.2 條） */
 const INHERITED_CHAPTER_CONFIDENCE = 0.9;
@@ -52,6 +70,7 @@ const SYSTEM = '你是一位資深的台灣高中數學與物理家教老師，�
 const PROMPT_TEMPLATE = `請以下面這道「藍本題」為範本，改寫出**一道**同概念的新題目。
 
 {{CHAPTER_WHITELIST}}
+（白名單依冊別分組列出；「第一冊」「選修物理一」這類冊名只是分組標題，不是章名。）
 
 【藍本題】
 章節：{{SOURCE_CHAPTER}}
@@ -68,6 +87,10 @@ const PROMPT_TEMPLATE = `請以下面這道「藍本題」為範本，改寫出*
 3. 章節原則上沿用藍本的「{{SOURCE_CHAPTER}}」；只有在改寫後真的落到另一章時才換成白名單裡的另一個字串。
 4. answer_text 必須是你**自己算過**的答案，而且要能被一個獨立的模型重算出同樣的結果。單選／多選以選項代號開頭。
 5. 不要輸出跟藍本或下面任何一題「同一組數字、同一個情境」的題目——那是重複題，會被去重擋掉。
+6. 同一道藍本這次要出好幾題，老師要的是彼此不同的題目：若下面列有「這次已經出好的題目」，這一題必須換一個和它們都不同的情境、換一組不同的數字，不能只改問法或只換一兩個數字。
+
+【這是這次要出的第 {{IDX}} 題（共 {{TOTAL}} 題）】
+{{SIBLINGS}}
 
 ${LATEX_RULES}
 
@@ -77,13 +100,14 @@ registerTemplate(TEMPLATE, PROMPT_TEMPLATE);
 
 // ───────────────────── 化學藍本（〔stage5 WS-B〕DEC-019、ADR-010）─────────────────────
 //
-// 藍本是化學題時改走這一組：agent 名 variant_chem、模板 variant_chem.v1、化學值域的 schema。
+// 藍本是化學題時改走這一組：agent 名 variant_chem、模板 variant_chem.v2、化學值域的 schema。
 // 兩道閘門（只改字、跑題）、章節繼承與 cacheKeyParts 的算法與數學／物理完全相同。
 // 上面數學／物理的 SYSTEM、模板與 schema 一個字都沒動（第 1.1 條）。
 // 註冊字串 = SYSTEM + '\n---\n' + 模板（第 1.2 條）。
 
 const AGENT_CHEM = 'variant_chem';
-const TEMPLATE_CHEM = 'variant_chem.v1';
+// v2（2026-09-27）：與上面 variant.v2 同樣的兩處（V5-6 的第幾題與兄弟題幹、L-2 的 CHEM_LATEX_RULES 第 (6) 條）
+const TEMPLATE_CHEM = 'variant_chem.v2';
 
 const SYSTEM_CHEM = '你是一位資深的台灣高中化學家教老師，正在替題庫出「換湯不換藥」的化學變式題：考的觀念與解法不變，物質、情境、數據與敘述全部重寫。你只輸出 JSON，不輸出任何其他文字。';
 
@@ -107,6 +131,10 @@ const PROMPT_TEMPLATE_CHEM = `請以下面這道「藍本題」為範本，改�
 4. 章節原則上沿用藍本的「{{SOURCE_CHAPTER}}」；只有在改寫後真的落到另一章時才換成白名單裡的另一個字串。
 5. answer_text 必須是你**自己算過**的答案，而且要能被一個獨立的模型重算出同樣的結果；數值答案要帶單位。單選／多選以選項代號開頭。
 6. 不要輸出跟藍本或下面任何一題「同一組物質與數據、同一個情境」的題目——那是重複題，會被去重擋掉。
+7. 同一道藍本這次要出好幾題，老師要的是彼此不同的題目：若下面列有「這次已經出好的題目」，這一題必須換一組和它們都不同的物質或情境、換一組不同的數據，不能只改問法或只換一兩個數字。
+
+【這是這次要出的第 {{IDX}} 題（共 {{TOTAL}} 題）】
+{{SIBLINGS}}
 
 ${CHEM_LATEX_RULES}
 
@@ -169,6 +197,49 @@ function neighborsText(neighbors) {
 }
 
 /**
+ * 〔Owner 第五輪 V5-6〕同一個 job 前面已生成的兄弟，依 idx 由小到大、只留題幹非空的。
+ * @param {Array<{idx?:number, question_text:string}>} siblings
+ * @returns {Array<{idx:number|null, question_text:string}>}
+ */
+function normalizeSiblings(siblings) {
+    const list = Array.isArray(siblings) ? siblings : [];
+    return list
+        .filter(s => s && String(s.question_text ?? '').trim())
+        .map(s => ({ idx: Number.isInteger(s.idx) ? s.idx : null, question_text: String(s.question_text).trim() }))
+        .sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
+}
+
+/**
+ * 兄弟區塊。沒有兄弟（第 1 題、或前面的都沒生成成功）時回空字串。
+ * @param {Array<{idx?:number, question_text:string}>} siblings
+ * @returns {string}
+ */
+function siblingsText(siblings) {
+    const list = normalizeSiblings(siblings);
+    if (!list.length) return '';
+    const lines = list.map((s, i) => `- 第 ${s.idx ?? i + 1} 題：${oneLine(s.question_text, SIBLING_TEXT_MAX)}`);
+    return `【這次已經出好的題目（同一道藍本），這一題的情境與數字必須和它們都不一樣】\n${lines.join('\n')}`;
+}
+
+/**
+ * 兄弟題幹進 cassette 鍵的形式：每題全文的 sha256（16 碼）。cassette 的 request 只存摘要、不存試題全文（NOTICE 第 4 條），
+ * 所以不放原文；內容一變鍵就變，replay 不會拿同一捲帶回答「前面兄弟不同」的兩次請求。
+ * @param {Array<{idx?:number, question_text:string}>} siblings
+ * @returns {string[]}
+ */
+function siblingKeyOf(siblings) {
+    const crypto = require('crypto');
+    return normalizeSiblings(siblings)
+        .map(s => crypto.createHash('sha256').update(s.question_text, 'utf8').digest('hex').slice(0, 16));
+}
+
+/** 〔Owner 第五輪 V5-6〕這次一共幾題：沒給或小於 idx 時當作 idx（不會出現「第 3 題（共 2 題）」） */
+function totalOf(input, idx) {
+    const t = Number.parseInt(input && input.total, 10);
+    return Number.isInteger(t) && t >= idx ? t : idx;
+}
+
+/**
  * 這次用到的錨點 id，由小到大（第 4.2 條的 anchor_ids 與 cassette 鍵都用它）。
  * @param {Array<{id:number}>} neighbors
  * @returns {number[]}
@@ -180,11 +251,13 @@ function anchorIdsOf(neighbors) {
 
 /**
  * 組出真正送出去的 prompt。
- * @param {{source:object, neighbors:Array<object>, difficulty_delta:number, feedback?:string}} input
+ * @param {{source:object, neighbors:Array<object>, difficulty_delta:number, idx?:number, total?:number,
+ *          siblings?:Array<{idx:number, question_text:string}>, feedback?:string}} input
  * @returns {string}
  */
 function buildPrompt(input) {
     const s = input.source || {};
+    const idx = Number.isInteger(input.idx) && input.idx > 0 ? input.idx : 1;
     // 〔stage5 WS-B〕化學藍本用化學模板；數學／物理的模板與階段 5 之前相同
     const template = VARIANTS[resolveSubjectGroup(null, { subject: s.subject })].promptTemplate;
     return template
@@ -194,7 +267,11 @@ function buildPrompt(input) {
         .replace('{{SOURCE_DIFFICULTY}}', String(s.difficulty ?? ''))
         .replace('{{SOURCE_QUESTION}}', String(s.question_text ?? ''))
         .replace('{{SOURCE_ANSWER}}', String(s.answer_text ?? ''))
+        .replace('{{IDX}}', String(idx))
+        .replace('{{TOTAL}}', String(totalOf(input, idx)))
         .replace('{{NEIGHBORS}}', neighborsText(input.neighbors))
+        // 兄弟題幹是模型寫的，可能含 $；用函式替換，$& $1 這類才不會被當成替換樣式
+        .replace('{{SIBLINGS}}', () => siblingsText(input.siblings))
         .replace('{{TARGET_DIFFICULTY}}', String(targetDifficulty(s.difficulty, input.difficulty_delta)))
         .replace('{{FEEDBACK}}', input.feedback ? `【上一次生成被退回的理由，請不要再犯】\n${input.feedback}` : '');
 }
@@ -280,6 +357,7 @@ async function run(ctx, input = {}) {
     try {
         const source = input.source || {};
         const idx = Number.isInteger(input.idx) ? input.idx : 1;
+        const total = totalOf(input, idx);
         const delta = Number.isInteger(input.difficulty_delta) ? input.difficulty_delta : 0;
         const { variantOfftopicSimMin, variantMinEdit } = thresholdsOf(ctx);
 
@@ -305,7 +383,7 @@ async function run(ctx, input = {}) {
         const res = await ctx.llm.generateJson({
             model: modelOf(ctx),
             system: v.system,
-            parts: [{ text: buildPrompt({ ...input, source, difficulty_delta: delta }) }],
+            parts: [{ text: buildPrompt({ ...input, source, difficulty_delta: delta, idx }) }],
             schema: buildSchema('variant', v.schemaOpts),
             signal: ctx.signal,
             agent: v.agent,
@@ -313,12 +391,16 @@ async function run(ctx, input = {}) {
             // 第 4.2 條：鍵是 { template, sourceQuestionId, difficultyDelta, idx, anchorIds }，
             // **不放題幹全文**（理由同 classify 的 fewShotIds：題庫動一下就換一份 cassette，
             // 紅燈全是噪音）。feedback 也刻意不進鍵——重試時回放同一捲帶是確定性的行為。
+            // 〔Owner 第五輪 V5-6〕prompt 多了「共幾題」與兄弟題幹，兩者都要進鍵，否則「前面兄弟不同」的兩次請求
+            // 會在 replay 撞同一捲帶：total 與 siblings（兄弟全文的 sha256 前 16 碼，依 idx 排）接在原本五個鍵後面。
             cacheKeyParts: {
                 template: v.template,
                 sourceQuestionId: source.id,
                 difficultyDelta: delta,
                 idx,
-                anchorIds
+                anchorIds,
+                total,
+                siblings: siblingKeyOf(input.siblings)
             }
         });
 
@@ -412,7 +494,10 @@ async function run(ctx, input = {}) {
         return {
             kind: 'error',
             errorClass: err.errorClass || 'provider_error',
-            message: err.message
+            message: err.message,
+            // 〔Owner 第七輪 R7-1＝4，C-f 納入變式〕供應商回報的 finishReason（'MAX_TOKENS'＝寫到輸出上限被截斷）帶給 runner：
+            // 本機模式被截斷的不重試、直接放棄這一題並記事件（workers/jobRunner.js 的 runGenerateOne）。沒有時不多這個鍵（與之前逐欄相同）
+            ...(err && err.finishReason ? { finishReason: String(err.finishReason) } : {})
         };
     }
 }
@@ -421,7 +506,9 @@ module.exports = {
     run,
     // 給 runner、cassette 錄製腳本與單元測試用的內部零件
     buildPrompt, neighborsText, anchorIdsOf, targetDifficulty, familyRoot, cosine,
-    TEMPLATE, SYSTEM, PROMPT_TEMPLATE, MAX_NEIGHBORS, INHERITED_CHAPTER_CONFIDENCE, DEFAULT_OFFTOPIC_SIM_MIN,
+    // 〔Owner 第五輪 V5-6〕
+    siblingsText, siblingKeyOf, normalizeSiblings, SIBLING_TEXT_MAX,
+    TEMPLATE, SYSTEM, PROMPT_TEMPLATE, MAX_NEIGHBORS, INHERITED_CHAPTER_CONFIDENCE, DEFAULT_OFFTOPIC_SIM_MIN, DEFAULT_MIN_EDIT,
     // 〔stage5 WS-B〕化學藍本
     AGENT_CHEM, TEMPLATE_CHEM, SYSTEM_CHEM, PROMPT_TEMPLATE_CHEM
 };

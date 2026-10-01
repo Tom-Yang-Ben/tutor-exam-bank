@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T21:40:51.423Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1597,
+        "sha256": "f984604ae3c9971db79a832f8a7b330f0dedba31f0a50377ee62582e0ba22f30"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 1,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        2,
+        25,
+        26
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "指數函數與對數函數",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 1,
+      "question_text": "在資訊科學中，若要以二進位儲存 $N$ 種不同的狀態，所需的位元數為 $\\log_{2} N$。某電子設備包含兩個獨立的元件，元件甲有 $16$ 種可能的狀態，元件乙有 $32$ 種可能的狀態。若工程師需要分別紀錄這兩個元件的狀態，所需的總位元數為 $\\log_{2} 16 + \\log_{2} 32$。請問此總和之值為何？ (A) $7$ (B) $8$ (C) $9$ (D) $10$",
+      "answer_text": "(C)。$\\log_{2} 16 = 4$、$\\log_{2} 32 = 5$，故兩者之和為 $4 + 5 = 9$。"
+    },
+    "usage": {
+      "tokenIn": 1205,
+      "tokenOut": 242,
+      "tokenThinking": 1994,
+      "tokenCached": 0
+    },
+    "latencyMs": 18229
+  }
+}

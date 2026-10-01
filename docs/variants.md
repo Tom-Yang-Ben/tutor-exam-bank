@@ -75,6 +75,8 @@ S3-R8 把它改成**只看「數字遮罩後文字相同」**（每段連續數�
 
 ## 3. 跑題閾值與檢索下限的校準（P-11b）
 
+> 〔2026-09-26 `dec/local-embed-thresholds`〕本節的數字全是 Gemini 向量量的。換成本機 embedding（`ollama:qwen3-embedding:0.6b`）後，用同一套方法重算的分布、選項與建議在 [`local-mode.md` 10.13](local-mode.md)（`npm run embed:thresholds`）；**待 Owner 核准，門檻尚未改**。
+
 ### 3.1 量法
 
 在 `eval/fixtures/questions.public.json` 的 60 題自製題上，用已錄好的向量
@@ -138,8 +140,8 @@ S3-R8 把它改成**只看「數字遮罩後文字相同」**（每段連續數�
 
 | 變數 | 值 | 誰讀 | 為什麼是這個數字 |
 |---|---:|---|---|
-| `VARIANT_RETRIEVE_SIM_MIN` | `0.80` | `services/variantService.js` 的 retrieved 分支 | 覆蓋率最高（0.8667）而候選仍都是同章同概念 |
-| `VARIANT_OFFTOPIC_SIM_MIN` | ~~`0.92`~~ **`0.90`**（S3-R29） | `agents/generateVariant.js`（經 `ctx.config.thresholds.variantOfftopicSimMin`） | 0.92 是用「同概念換數字」的現成題對校準的——但那正是只改字閘門要退回的東西；實錄合格變式餘弦多在 0.85～0.92（第 4 節），0.90 時跨章誤收仍 0.76% |
+| `VARIANT_RETRIEVE_SIM_MIN` | `0.80`（Gemini 向量）；〔Owner 第五輪 V5-1〕本機向量 **`0.72`** | `services/variantService.js` 的 retrieved 分支 | 覆蓋率最高（0.8667）而候選仍都是同章同概念（Gemini 向量）；本機向量見 [`local-mode.md`](local-mode.md) 10.13、10.19 |
+| `VARIANT_OFFTOPIC_SIM_MIN` | ~~`0.92`~~ **`0.90`**（S3-R29；Gemini 向量）；〔Owner 第五輪 V5-2〕本機向量 **`0.87`**（暫定） | `agents/generateVariant.js`（經 `ctx.config.thresholds.variantOfftopicSimMin`） | 0.92 是用「同概念換數字」的現成題對校準的——但那正是只改字閘門要退回的東西；實錄合格變式餘弦多在 0.85～0.92（第 4 節），0.90 時跨章誤收仍 0.76% |
 
 - 兩者**都沒設**時退回舊名 `VARIANT_SIM_MIN`（過渡期的退路，`.env.example` 註明之後移除）：
   還沒更新 `.env` 的環境行為與 S3-R9 之前完全相同。

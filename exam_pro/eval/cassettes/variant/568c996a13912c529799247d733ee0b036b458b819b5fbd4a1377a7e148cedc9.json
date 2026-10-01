@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T19:46:54.664Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1586,
+        "sha256": "3fa4fea577d5a6ccb9752c723c633fdfb0dc78f245088e75c425f0baafd1a3cf"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 51,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        32,
+        33,
+        46,
+        47,
+        48
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "物體的運動（速度與加速度）",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "在 $v$-$t$ 圖中，圖形與時間軸所圍成的面積代表下列何者？\n(A) 加速度　(B) 位移　(C) 速率　(D) 力",
+      "answer_text": "(B)。$v$-$t$ 圖的面積等於 $\frac{1}{2} \times 4 \times 6 = 12$ m，即位移；圖形的斜率才是加速度。",
+      "figure_desc": "圖形為一斜線，起點為 $t=0$、$v=0$，終點為 $t=4$ s、$v=6$ m/s。"
+    },
+    "usage": {
+      "tokenIn": 1818,
+      "tokenOut": 205,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 121024
+  }
+}

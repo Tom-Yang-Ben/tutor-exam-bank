@@ -78,7 +78,7 @@ describe('config/models.js — parseModel', () => {
         process.env.MODEL_EXTRACT = 'gemini:custom-a';
         assert.equal(models.MODEL_EXTRACT, 'gemini:custom-a');
         delete process.env.MODEL_EXTRACT;
-        assert.equal(models.MODEL_EXTRACT, 'gemini:gemini-3.5-flash');   // 裁決 S0-5 的預設
+        assert.equal(models.MODEL_EXTRACT, 'ollama:qwen3-vl:8b');   // 本機模式預設（docs/local-mode.md 第 2 條；原為裁決 S0-5 的 gemini:gemini-3.5-flash）
     });
 });
 
@@ -215,7 +215,9 @@ describe('services/llm/templates.js 的匯出（裁決 S2-5）', () => {
     test('四個 LLM 節點的模板都要註冊——WS-B 的 extract／classify 在模組載入時就註冊好了', () => {
         // 快照在檔頭取（模組載入時），不受其他測試的 _resetForTest 影響
         assert.equal(REGISTERED_AT_LOAD.extract, extractAgent.PROMPT_TEMPLATE);
-        assert.equal(REGISTERED_AT_LOAD.classify, classifyAgent.PROMPT_TEMPLATE);
+        // 〔重練與收尾決策單 2026-09-26〕classify 原為「等於 PROMPT_TEMPLATE」：界線規則（序列化的 SUBJECT_RULES）
+        //   併進註冊的模板文字，改規則才會改 cassette 的鍵（agents/classify.js 的 REGISTERED_TEMPLATE）。仍是逐字比對。
+        assert.equal(REGISTERED_AT_LOAD.classify, `${classifyAgent.PROMPT_TEMPLATE}\n---\n${JSON.stringify(classifyAgent.SUBJECT_RULES)}`);
         assert.ok(REGISTERED_AT_LOAD.extract.length > 0);
     });
 });
@@ -264,15 +266,47 @@ describe('LLM_MODE=replay（services/llm/fake.js）', () => {
         assert.equal(res.replayed, true);
     });
 
-    test('miss：丟錯，訊息前半段逐字凍結，且不得回假資料', () => {
+    // 〔dec/r8-b1-abandon〕前綴不變；「怎麼重錄」依模式寫（原本的 npm run eval:record -- --suite 其實只錄向量，
+    // 本機模式的重錄在 Owner 的電腦用 record_local.bat／cassettes:rerecord，docs/local-mode.md 10.21）
+    // 〔審查 dec/r8-b1-abandon-fix〕rerecord_all.js 一律照 ci.yml 的模型錄：Gemini 那一句註明「ci.yml 的模型要是 Gemini」（跟著字句改，不是放寬）
+    test('miss：丟錯，前綴逐字凍結；Gemini 模式指向 npm run cassettes:rerecord（ci.yml 的模型要是 Gemini、要金鑰、會產生費用），且不得回假資料', () => {
         const missOpts = { ...opts, cacheKeyParts: { template: opts.template, questionText: '沒錄過的題', fewShotIds: [] } };
         const key = cassette.cassetteKey({ ...missOpts, modelId: missOpts.model });
         assert.throws(() => fake.generateJson(missOpts), (err) => {
             assert.ok(err.message.startsWith(
-                `LLM_MODE=replay 找不到 cassette（agent=classify key=${key}）。請在本機執行 npm run eval:record -- --suite <suite>`
+                `LLM_MODE=replay 找不到 cassette（agent=classify key=${key}）。Gemini 模式：請在本機執行 npm run cassettes:rerecord -- --suites <suite> 重錄（ci.yml 的模型要是 Gemini；要 GEMINI_API_KEY，會產生費用）\n（預期路徑：`
             ), err.message);
             return true;
         });
+        assert.throws(() => fake.generateJson({ ...missOpts, vendor: 'gemini' }), /LLM_MODE=replay 找不到 cassette（agent=classify key=[0-9a-f]{64}）。Gemini 模式：/);
+    });
+
+    test('miss（本機模式，vendor=ollama）：指向 Owner 電腦上的 record_local.bat／npm run cassettes:rerecord，不再寫 npm run eval:record', () => {
+        const missOpts = { ...opts, model: 'qwen3:8b', vendor: 'ollama', cacheKeyParts: { template: opts.template, questionText: '沒錄過的本機題', fewShotIds: [] } };
+        const key = cassette.cassetteKey({ ...missOpts, modelId: missOpts.model });
+        assert.throws(() => fake.generateJson(missOpts), (err) => {
+            assert.ok(err.message.startsWith(
+                `LLM_MODE=replay 找不到 cassette（agent=classify key=${key}）。本機模式：請在 Owner 的電腦（exam_pro 資料夾）執行 scripts\\windows\\record_local.bat <suite> 重錄（它跑的就是 npm run cassettes:rerecord -- --suites <suite>；步驟見 docs/local-mode.md 10.21）\n（預期路徑：`
+            ), err.message);
+            assert.doesNotMatch(err.message, /eval:record/);
+            return true;
+        });
+        // 沒有 vendor（直接呼叫）時看裸模型 ID：不是 gemini 開頭的算本機
+        assert.throws(() => fake.generateJson({ ...missOpts, vendor: undefined }), /。本機模式：/);
+    });
+
+    test('miss 的 vendor 只影響訊息，不影響 cassette 的鍵：同一支 cassette 有沒有 vendor 都命中', () => {
+        const hitOpts = { ...opts, cacheKeyParts: { template: opts.template, questionText: 'vendor 不進鍵', fewShotIds: [] } };
+        const key = cassette.cassetteKey({ ...hitOpts, modelId: hitOpts.model });
+        cassette.writeCassette({
+            agent: 'classify', key,
+            meta: { agent: 'classify', model: hitOpts.model, template: hitOpts.template, recorded_at: 'x', fixtureHash: null },
+            request: { parts: [], cacheKeyParts: hitOpts.cacheKeyParts },
+            response: { data: { ok: 1 }, usage: {}, latencyMs: 1 }
+        });
+        assert.deepEqual(fake.generateJson(hitOpts).data, { ok: 1 });
+        assert.deepEqual(fake.generateJson({ ...hitOpts, vendor: 'gemini' }).data, { ok: 1 });
+        assert.deepEqual(fake.generateJson({ ...hitOpts, vendor: 'ollama' }).data, { ok: 1 });
     });
 
     test('meta.fixtureHash 與現況不符：印 warning 但**仍然回放**', () => {

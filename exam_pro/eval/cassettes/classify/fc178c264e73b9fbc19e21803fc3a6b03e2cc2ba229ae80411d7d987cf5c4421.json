@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-09-27T07:17:47.186Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2898,
+        "sha256": "8d2a095f81071428b8b6036b9a560a0a6ac6a3712d046cc9438a1b414aca02d0"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "質量 $4$ kg 的物體受到合力 $18$ N，求其加速度。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及合力與加速度的關係，需使用牛頓第二定律 $ F = ma $ 進行計算，屬於牛頓運動定律的範疇。",
+      "chapter": "牛頓運動定律",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 2779,
+      "tokenOut": 64,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 43047,
+        "loadMs": 35,
+        "promptEvalMs": 9807,
+        "evalMs": 33109
+      }
+    },
+    "latencyMs": 43054
+  }
+}

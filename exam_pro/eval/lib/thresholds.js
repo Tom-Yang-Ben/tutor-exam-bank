@@ -146,19 +146,39 @@ const SUITE_METRICS = {
 };
 
 /**
+ * 〔Owner 第五輪 D-2 核准，2026-09-27，dec/r6-gates〕「設計上沒有意義、這一輪不比」的指標**白名單**。
+ * suite 回報 notApplicable 時，只有列在這裡的 <suite>.<column>.<metric> 會被略過；其他一律照舊比
+ *（不讓任何 suite 自己宣告「這個門檻不算」）。thresholds.json 的數字一個都不動。
+ *   pipeline.pipeline.saved_rate：OCR 為主（LOCAL_EXTRACT_MODE=ocr、拆題模型是 ollama）每一題都停在人工複核（ocr_only），
+ *   自動入庫率設計上恆為 0，不是品質訊號；交叉驗證與 Gemini 模式照舊比 0.87。
+ */
+const NOT_APPLICABLE_ALLOWED = Object.freeze({
+    pipeline: Object.freeze({ pipeline: Object.freeze(['saved_rate']) })
+});
+
+/**
  * 通用的門檻比對。
  * @param {object} thresholds  整份 thresholds.json
  * @param {string} suite       'retrieval'|'classify'|'pipeline'
  * @param {object} measured    { <column>: { <metric>: number|null } | null }
+ * @param {{notApplicable?:Record<string,Record<string,string>>}} [opts]
+ *        notApplicable：{ <column>: { <metric>: 原因 } }——只接受 NOT_APPLICABLE_ALLOWED 裡的組合，其餘丟錯
  * @returns {{failures:string[], checked:number, skipped:string[]}}
  */
-function compareSuite(thresholds, suite, measured) {
+function compareSuite(thresholds, suite, measured, opts = {}) {
     const spec = SUITE_METRICS[suite];
     if (!spec) throw new Error(`未知的 suite「${suite}」`);
     const failures = [];
     const skipped = [];
     let checked = 0;
     const table = (thresholds && thresholds[suite]) || {};
+    const na = (opts && opts.notApplicable) || {};
+    for (const [column, metricsNa] of Object.entries(na)) {
+        for (const metric of Object.keys(metricsNa || {})) {
+            const allowed = ((NOT_APPLICABLE_ALLOWED[suite] || {})[column] || []).includes(metric);
+            if (!allowed) throw new Error(`${suite}.${column}.${metric} 不在「可以不比門檻」的白名單（eval/lib/thresholds.js 的 NOT_APPLICABLE_ALLOWED）`);
+        }
+    }
 
     for (const column of spec.columns) {
         const want = table[column];
@@ -171,6 +191,8 @@ function compareSuite(thresholds, suite, measured) {
         if (!got) { failures.push(`${column}：門檻已存在但這次沒有量到任何數字`); continue; }
         for (const metric of spec.metrics) {
             if (want[metric] === null || want[metric] === undefined) continue;
+            const naReason = na[column] && na[column][metric];
+            if (naReason) { skipped.push(`${column}.${metric}（${naReason}）`); continue; }
             checked++;
             const v = got[metric];
             if (v === null || v === undefined) {
@@ -234,5 +256,6 @@ function writeBaselineSuite(opts) {
 
 module.exports = {
     loadThresholds, compare, writeBaseline, DEFAULT_PATH, BASELINE_MARGIN,
-    compareSuite, writeBaselineSuite, SUITE_METRICS
+    compareSuite, writeBaselineSuite, SUITE_METRICS,
+    NOT_APPLICABLE_ALLOWED   // 〔Owner 第五輪 D-2〕
 };

@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T15:37:51.119Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2580,
+        "sha256": "e5ef37e09011aab9b7216b223daa3d9ce2a49d455a5b294dcfd8df6560ef24bd"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "依「力與運動」的基本關係式 $F = ma$，質量 $3$ kg 的物體受 $12$ N 合力時，加速度為何？",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "confidence": 0.95,
+      "rationale": "題目直接應用牛頓第二定律 F = ma，屬於牛頓運動定律章節的核心內容。"
+    },
+    "usage": {
+      "tokenIn": 2498,
+      "tokenOut": 52,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 43973
+  }
+}

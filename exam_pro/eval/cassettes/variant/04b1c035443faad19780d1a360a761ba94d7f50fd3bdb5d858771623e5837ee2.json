@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T22:02:59.448Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1774,
+        "sha256": "4306f12390e20be7fe8bf73b54e8db79199b41afe604393e6f0dd09f571c029d"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 31,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        24,
+        27,
+        28,
+        29,
+        61
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "chapter_confidence": 1,
+      "question_type": "單選",
+      "difficulty": 2,
+      "question_text": "某飛行控制中心利用雷達追蹤一架無人機，以控制中心為原點，正東方為 $x$ 軸正向，正北方為 $y$ 軸正向建立直角坐標系。已知無人機目前的位置在控制中心的東南方，若將無人機與控制中心的連線視為標準位置角 $\\phi$ 的終邊，則下列關於 $\\sin \\phi$ 與 $\\cos \\phi$ 之值的正負判斷，何者正確？\n(A) $\\sin \\phi > 0$ 且 $\\cos \\phi > 0$\n(B) $\\sin \\phi > 0$ 且 $\\cos \\phi < 0$\n(C) $\\sin \\phi < 0$ 且 $\\cos \\phi > 0$\n(D) $\\sin \\phi < 0$ 且 $\\cos \\phi < 0$",
+      "answer_text": "(C)。無人機位於控制中心的東南方，代表其在坐標系中的位置落於第四象限，因此坐標滿足 $x > 0$、$y < 0$。由廣義角三角函數的定義可知，距離 $r = \\sqrt{x^2+y^2} > 0$，故 $\\sin \\phi = \\frac{y}{r} < 0$ 且 $\\cos \\phi = \\frac{x}{r} > 0$。"
+    },
+    "usage": {
+      "tokenIn": 1298,
+      "tokenOut": 381,
+      "tokenThinking": 1688,
+      "tokenCached": 0
+    },
+    "latencyMs": 15742
+  }
+}

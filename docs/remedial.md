@@ -93,8 +93,11 @@ body：
 - `items` 依 bucket 分組（remedial → prerequisite → extension），同一目標內保持抽出順序（承上組相鄰、依承接順序）。
 - `items[].follows_question_id`（前題 id，沒有就 `null`）與 `items[].group_ids`（同一承上組在草稿裡的**全部**成員，
   承接順序；沒有綁定就是 `[自己]`）是契約之外多給的鍵。抽題是整組抽，所以草稿裡的組一定完整；前端靠這兩個鍵
-  標「承上 #x」、把刪除鈕改成「刪這組」並整組刪——`confirm-paper` 照給的題出卷、**不重驗組是否完整**，
-  只刪前題就會出一張有「承上題卻沒有前題」、學生寫不了的卷。
+  標「承上 #x」、把刪除鈕改成「刪這組」並整組刪——~~`confirm-paper` 照給的題出卷、**不重驗組是否完整**，
+  只刪前題就會出一張有「承上題卻沒有前題」、學生寫不了的卷。~~
+  〔修訂 2026-09-26 合併回填 B7〕`confirm-paper` 現在由伺服器檢查承上題是否整組（Owner 決策單 2026-09-25 B7，
+  已合入 `local/integration` `7dc14a0`）：卷裡有某組的任何一題、整組卻沒有全部在卷裡時回 400＋`incomplete_groups`（見下方「確認」）。
+  前端的整組刪、整組加與確認前擋缺前題的承上題照舊是第一道，訊息貼近草稿操作；伺服器那一道擋的是直接呼叫 API 自行拼題。
 - `target.type` 是 `'kc'` 或 `'chapter'`；`chapter` 基底時 `name` 就是章名、沒有 `code`。
 - `blueprint` 每個目標一列；`difficulty_min`／`difficulty_max`／`rationale` 是契約之外**多給**的鍵（前端要顯示「為什麼選這個單位」）。
 - `shortfalls` 只列 `got < wanted` 的目標；`reason` 是 `insufficient_stock`（可用題數本來就不夠）或 `follow_up_group`（夠，但承上題組塞不進剩下的名額）。
@@ -103,6 +106,12 @@ body：
 - 確認：前端把 `question_ids`（刪題、加題後的版本）交給既有的 `POST /api/confirm-paper { student_id, question_ids }`。
   卷名沿用 confirm-paper 的規則（`<姓名>-<第一題的章節>特訓卷(日期)`）；手動加的題由 confirm-paper 驗「還在、沒封存」，
   已寫過的題會回 409（`UNIQUE(student_id, question_id)` 硬閘門，DEC-003 不變）。
+  〔修訂 2026-09-26 合併回填 B7〕「還在、沒封存」之後，confirm-paper 另驗**承上題整組**（`utils/followUpPaperCheck.js`；成員查詢與
+  2.5 的加題查詢同一段 `remedialService.buildItemLookupQuery`）：半組 → 400，不寫卷、不寫 attempts，回應
+  `{ message, incomplete_groups: [{ group_ids, missing: [{ question_id, reason }] }] }`，`reason` 為 `not_in_paper`（加回來就好）、
+  `archived`（已封存）或 `answered`（該生已寫過）——後兩種加不回來，那一組只能整組刪。訊息逐組列出，例
+  `承上題必須與前題整組出卷，以下題組不完整：承上題組（#40、#41、#42）缺 #42。請把缺的題加回卷裡，或把整組刪掉後再確認。`，
+  不含學生姓名。順序不擋：伺服器一律重排成整組相鄰、依承接順序。沒有綁定的題（含題幹寫「承上題」但沒綁定的舊題）不受影響。
 
 ### 2.3 `POST /api/generate-paper` 的 `blueprint`（跨章配額）
 
@@ -118,11 +127,19 @@ body：
   - `note`：有不足時的一句話摘要（與單章路徑的 `note` 同一個鍵，既有前端會顯示它）
 - **不足量不回 400**：照抽到的題出（dry_run 預覽或真出卷），逐列回報；**全部列都抽不到任何一題**才回 400
   `新題目庫存不足！blueprint 每一列都抽不到…`（回應同時帶 `blueprint`／`shortfalls`）。
-- 承上題湊不滿的政策與單章路徑是**同一個開關** `FOLLOW_UP_SHORTFALL_POLICY`（`controllers/examController.js`，待 owner 決定）：
-  預設 `'note'` 即上一條；切成 `'error'` 時，`reason = follow_up_group` 的列會讓整個請求回 400
-  `承上題須與前題整組出題，blueprint 第 N 列「章」無法剛好湊滿…`（同樣帶 `blueprint`／`shortfalls`）。
+- 承上題湊不滿的政策與單章路徑是**同一個開關** `FOLLOW_UP_SHORTFALL_POLICY`（`controllers/examController.js`，~~待 owner 決定~~）：
+  ~~預設 `'note'` 即上一條；切成 `'error'` 時，`reason = follow_up_group` 的列會讓整個請求回 400
+  `承上題須與前題整組出題，blueprint 第 N 列「章」無法剛好湊滿…`（同樣帶 `blueprint`／`shortfalls`）。~~
+  〔修訂 2026-09-26 合併回填 B10〕Owner 決策單 2026-09-25 B10 選「直接報錯，請老師改題數」，已合入 `local/integration`（`7dc14a0`）。
+  開關改成環境變數，每次組卷時讀（改了要重啟伺服器）：
+  - **預設 `error`**（未設、空白或打錯字都當 `error`，打錯字時伺服器 log 警告一次）：`reason = follow_up_group` 的列讓整個請求回 400，
+    逐列說出要幾題、承上題整組最多湊得到幾題、建議改成幾題（離原題數最近、剛好湊得滿的上下兩個；往上的建議不讓整張卷超過 50 題），
+    例 `承上題須與前題整組出題，blueprint 第 2 列「向量內積」要 3 題無法剛好湊滿（3 題以內最多只能湊到 2 題），請把題數改成 2 題或 4 題。`
+    （多列以「；」分隔；同樣帶 `blueprint`／`shortfalls`；dry_run 與真出卷都不寫庫）。這個檢查排在「全部列都抽不到」之前：
+    承上組塞不進才一題都抽不到時，回的是改題數的建議，不是「庫存不足」。
+  - `FOLLOW_UP_SHORTFALL_POLICY=note`：決策前的行為（上一條：照抽到的題出並附 `note`），逐字不變，可隨時切回。
   「庫存不足」的列不受這個開關影響（同單章路徑）。
-- 補救卷草稿（2.2）不看這個開關：它本來就不出卷，不足量一律逐目標回報，由老師在草稿裡補。
+- 補救卷草稿（2.2）不看這個開關：它本來就不出卷，不足量一律逐目標回報，由老師在草稿裡補。〔修訂 2026-09-26 合併回填 B10〕B10 的預設報錯不影響補救卷草稿。
 - 卷名：1 章同單章路徑；2–3 章列出（`小明-向量內積、排列特訓卷(…)`）；4 章以上 `小明-向量內積等4章特訓卷(…)`。
 - **沒帶 `blueprint`（或為 `null`）時，單章路徑的行為與回應逐字不變**（既有整合測試與 e2e 驗）。
   候選池抽成共用的 `buildCandidatePoolQuery`（`q.chapter = ANY($2::text[])`）後，單章路徑把 `chapter` 先過 pg 的
@@ -180,6 +197,7 @@ body：
 | 題目本身不同科／封存／他寫過／查不到／已在草稿 | 不加，逐項提示 |
 
 確認前還有最後一道：草稿裡若有「前題不在草稿」的承上題，不送 `confirm-paper`。
+〔修訂 2026-09-26 合併回填 B7〕送出之後伺服器也會再檢查一次承上題整組（2.2「確認」）；前端這一道先擋，提示貼近草稿操作。
 
 ---
 
@@ -296,6 +314,8 @@ body：
    **標準版**（卷末附答案）、**學生版**（不附答案，直接印給學生）、**詳解版**（答案＋文字詳解）——再按「下載 Word 考卷」，
    檔名會加註版本（例如「王小明-向量內積特訓卷(2026_9_24)（學生版）.docx」）。〔最終審查修正：原本只拿得到標準版〕
    若出現「部分題目已被指派給該學生」，表示草稿產生之後他又被出了其中某題（例如另一張卷先確認了），重新產生草稿即可。
+   〔修訂 2026-09-26 合併回填 B7〕若出現「承上題必須與前題整組出卷，以下題組不完整：…」，照提示把缺的題加回草稿，
+   或按「刪這組」整組刪掉再確認；提示標「已封存」或「該生已寫過」的題加不回來，那一組只能整組刪。
 
 > 掌握度為什麼不是答對率？答對率 100% 可能只是「1 題對 1 題」。系統用的是「在 95% 信心下，他的答對率至少有多少」
 > （Wilson 下界）：1 題對 1 題只有 21%，10 題對 8 題是 49%。所以批改越多，判斷越準；剛開始上課的學生，
@@ -311,6 +331,8 @@ body：
 
 `POST /api/generate-paper` 可以改送 `blueprint`（見 2.3），一次指定多章、每章幾題、難度範圍。
 本階段只開放 API（補救卷畫面就是它的主要使用者）；組卷分頁的單章流程不變。
+〔修訂 2026-09-26 合併回填 B10〕某一列因為承上題要整組出而湊不滿題數時，預設整份擋下，訊息會說是第幾列、改成幾題湊得滿；
+照建議改題數再送一次即可（想恢復「少出題並附註」，在 `.env` 設 `FOLLOW_UP_SHORTFALL_POLICY=note` 並重啟）。
 
 ---
 
@@ -321,9 +343,9 @@ body：
 | 第 4.4 條第 5 項：「`public/js/students.js` 唯一的掛鉤：最近錯題的『找相似』結果每列加一顆『加入補救卷』按鈕」 | 按鈕掛在 **`public/js/variants.js`** 的 `findSimilar`（加註〔stage5 WS-D〕），`students.js` 完全沒改 | 「找相似」的結果是 `variants.js` 畫的：`students.js` 只在最近錯題列上發 `examapp:variant-request` 事件，自己沒有結果列可以掛按鈕。掛在 students.js 只能把按鈕放在「錯題本身」上，而錯題學生已經寫過、confirm-paper 必定 409。掛鉤同樣只 dispatch `remedial:add`、`FEATURE_REMEDIAL` 關閉時不顯示 |
 | 回應欄位 | `remedial-paper` 的 `blueprint[]` 多 `difficulty_min`、`difficulty_max`、`rationale`；`generate-paper` 的 blueprint 回應多 `note`（有不足時） | 前端要顯示「為什麼選這個單位」；`note` 讓既有組卷畫面不用改就能顯示不足量。契約列出的鍵全部照給 |
 | 補救卷的限流 | 四支新端點沒有套 `createRateLimiter` | 契約第 1.2 條的限流要求是針對會呼叫 LLM 的端點；這四支只讀資料庫 |
-| 第 4.4 條第 2 項的 `items` 形狀 | 多 `follows_question_id`、`group_ids` | 契約要求候選「套用承上題整組規則」，但草稿交到前端後老師可以刪題、加題，`confirm-paper`（契約：不改）又不重驗組是否完整；前端要知道誰跟誰一組才能整組刪。契約列出的鍵全部照給 |
+| 第 4.4 條第 2 項的 `items` 形狀 | 多 `follows_question_id`、`group_ids` | 契約要求候選「套用承上題整組規則」，但草稿交到前端後老師可以刪題、加題，`confirm-paper`（契約：不改）又不重驗組是否完整；前端要知道誰跟誰一組才能整組刪。契約列出的鍵全部照給。〔修訂 2026-09-26 合併回填 B7〕Owner 決策單 B7 之後 `confirm-paper` 也會整組檢查（裁決 S5-28 改判）；這兩個鍵仍是草稿整組刪、整組加的依據 |
 | 第 4.4 條只列三支 API | 多一支 `GET /api/students/:id/remedial-paper/items`（2.5），同樣在 `FEATURE_REMEDIAL` 後、只讀 | 「用題目 ID 加題」只有 ID，前端不知道那題是不是承上題、前題在不在草稿、是不是別科或已封存；既有 API 沒有「依 ID 查題目」的端點（`GET /api/questions` 沒有 id 篩選、`/similar` 不回 `follows_question_id`，兩者都不屬 WS-D）。沒有這支就只能在確認時才發現、或根本發現不了 |
-| 第 4.4 條第 3 項：單章路徑「逐字不變」 | `FOLLOW_UP_SHORTFALL_POLICY` 的效果延伸到 blueprint 分支（2.3） | 那個常數是「承上題湊不滿怎麼辦」的單點切換；只有單章路徑聽它的話，owner 切成 `'error'` 時兩條組卷路徑的行為會不一致。預設 `'note'` 時 blueprint 行為不變 |
+| 第 4.4 條第 3 項：單章路徑「逐字不變」 | `FOLLOW_UP_SHORTFALL_POLICY` 的效果延伸到 blueprint 分支（2.3） | 那個常數是「承上題湊不滿怎麼辦」的單點切換；只有單章路徑聽它的話，owner 切成 `'error'` 時兩條組卷路徑的行為會不一致。預設 `'note'` 時 blueprint 行為不變。〔修訂 2026-09-26 合併回填 B10〕Owner 決策單 B10 之後預設是 `error`（環境變數，兩條路徑一起擋）；切回 `note` 時 blueprint 行為與原本相同 |
 | ADR 編號 | 新增 ADR-014（契約第 6 條只分配到 ADR-013） | 任務要求 WS-D 交付 ADR；整合時若要改號，改檔名與本檔連結即可 |
 
 契約沒有寫、由本實作決定的細節（都寫在第 3 節）：k = min(3, ⌈n/2⌉)、先備難度 ≤ 3、延伸難度 ≥ ⌊平均⌋+1、
@@ -338,11 +360,15 @@ body：
 | 單元 | `test/unit/kcWeakness.test.js` | Wilson 下界（n=0、全對、全錯、小數樣本）、SQL 參數順序、排序與 low_sample |
 | 單元 | `test/unit/remedialService.test.js` | 最大餘數配額、目標挑選、難度區間、併桶 notes、草稿組裝（注入假依賴）、items 的承上組資訊、`lookupItems` |
 | 單元 | `test/unit/coverageService.test.js` | 白名單每章都列、舊章節、unseen 的 null／數字、知識點排序 |
-| 單元 | `test/unit/remedialValidation.test.js` | 補救卷 body（含 mix 總和溢位）、覆蓋率 query、加題查詢的 `ids`、blueprint 驗證與承上題政策開關、候選池 SQL 的參數順序 |
+| 單元 | `test/unit/remedialValidation.test.js` | 補救卷 body（含 mix 總和溢位）、覆蓋率 query、加題查詢的 `ids`、blueprint 驗證與承上題政策開關、候選池 SQL 的參數順序；〔修訂 2026-09-26 合併回填 B10〕blueprint 逐列建議題數（`blueprintPolicyError`、`blueprintShortfallHints`、`followUpShortfallText`） |
 | 單元 | `test/unit/remedialUi.test.js` | 前端檔案契約、純函式、miniDom 渲染（旗標關閉不渲染、草稿、刪題加題、`remedial:add`、確認、覆蓋率）、承上題整組（「承上 #x」、「刪這組」、整組加入或拒絕、不混科、確認前擋缺前題的承上題）、variants.js 掛鉤 |
 | 整合 | `test/integration/remedial.pg.test.js` | 旗標關閉 404；kc 加權與 Wilson 排序；kc 基底／chapter 退回；各 bucket 配額；不足量；已作答、封存、跨科、題源排除；家族互斥；承上題整組與 items 的組資訊；不寫庫並接 confirm-paper；加題查詢（承上組成員、封存與已寫過旗標、missing、400／404）；blueprint 的互斥 400、逐列不足、跨列家族互斥與不重複、真出卷；單章路徑收到非字串 chapter 仍是 400 庫存不足；覆蓋率 |
 
 整合測試自己插入知識點、`question_kcs`、`kc_prerequisites`、`attempts` fixture，不依賴 WS-C 的種子檔。
+
+〔修訂 2026-09-26 合併回填〕B7、B10 的測試不在上表的檔案裡：`confirm-paper` 承上題整組檢查在 `test/unit/followUpPaperCheck.test.js`
+與 `test/integration/paperGroups.pg.test.js`（「confirm-paper 整組檢查」6 項）；`FOLLOW_UP_SHORTFALL_POLICY` 的預設與讀法在
+`test/unit/followUpShortfallPolicy.test.js`，blueprint 預設報錯與建議題數上限在 `paperGroups.pg.test.js`。
 
 ---
 

@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v2",
+    "recorded_at": "2026-10-01T07:40:43.430Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1929,
+        "sha256": "3aa05d461c51b6cd67e58e6d0f895287eb5ad0ca52d614fd489d2709b4973ed8"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v2",
+      "sourceQuestionId": 16,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [],
+      "total": 2,
+      "siblings": []
+    },
+    "ollamaOverrides": {
+      "numPredict": 1024
+    }
+  },
+  "response": {
+    "error": {
+      "kind": "truncated",
+      "name": "SyntaxError",
+      "message": "Unterminated string in JSON at position 2214 (line 6 column 2121)",
+      "errorClass": "schema_invalid",
+      "finishReason": "MAX_TOKENS"
+    },
+    "usage": {
+      "tokenIn": 2014,
+      "tokenOut": 1024,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 762355,
+        "loadMs": 25998,
+        "promptEvalMs": 214523,
+        "evalMs": 521752
+      }
+    },
+    "latencyMs": 762412
+  }
+}

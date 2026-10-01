@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-25T14:44:59.567Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 4088,
+        "sha256": "270cd4d2e0d79db64aa62340dec5fef1225a162c62eedb3f9487026cdac0c5c5"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "與 $400^\\circ$ 同界的最小正角為何？\n(A) $20^\\circ$　(B) $40^\\circ$　(C) $60^\\circ$　(D) $340^\\circ$",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "廣義角與極坐標",
+      "confidence": 0.95,
+      "rationale": "題目涉及同界角的計算，屬於廣義角的範疇，需利用角度的周期性來求最小正角。"
+    },
+    "usage": {
+      "tokenIn": 3637,
+      "tokenOut": 63,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 49031
+  }
+}

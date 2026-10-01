@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "qwen3:8b",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-25T20:00:29.285Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1887,
+        "sha256": "5d70a645fdfd4c3e01d6652cd696a7c356fd4b3d04e2ddf701e088505af5d91a"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 55,
+      "difficultyDelta": 0,
+      "idx": 1,
+      "anchorIds": [
+        35,
+        42,
+        54,
+        58,
+        60
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "靜電學",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 3,
+      "question_text": "兩點電荷 $q_1 = 6 \times 10^{-6}$ C 與 $q_2 = 5 \times 10^{-6}$ C 相距 $0.5$ m，求兩者間的靜電力（取 $k = 9 \times 10^9$ N·m$^2$/C$^2$）。",
+      "answer_text": "$F = k \\frac{q_1 q_2}{r^2} = 9 \\times 10^9 \\times \\frac{30 \\times 10^{-12}}{0.25} = 1.08$ N，同號電荷故為斥力。",
+      "figure_desc": ""
+    },
+    "usage": {
+      "tokenIn": 2028,
+      "tokenOut": 207,
+      "tokenThinking": 0,
+      "tokenCached": 0
+    },
+    "latencyMs": 258126
+  }
+}

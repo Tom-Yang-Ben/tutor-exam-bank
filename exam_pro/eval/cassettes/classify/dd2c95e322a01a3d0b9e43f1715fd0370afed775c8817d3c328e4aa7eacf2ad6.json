@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "gemini-3.5-flash",
+    "template": "classify.v1",
+    "recorded_at": "2026-09-24T21:37:39.483Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2511,
+        "sha256": "b9b52c3a775cb0a2ce4c80003ddcdd4af675041bb5972ad8113739712d6e9409"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v1",
+      "questionText": "光滑定滑輪兩端以輕繩懸掛 $2$ kg 與 $6$ kg 的物體，由靜止釋放後求系統的加速度與繩張力（取 $g = 10$ m/s$^2$，繩與滑輪質量不計）。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "confidence": 1,
+      "rationale": "此題為經典的阿特午機（Atwood Machine）問題，解法需要對兩個懸掛物體分別進行受力分析（重力與繩張力），並列出牛頓第二運動定律（F=ma）的方程式組來聯立求解系統加速度與繩張力，故屬於「牛頓運動定律」。"
+    },
+    "usage": {
+      "tokenIn": 2005,
+      "tokenOut": 106,
+      "tokenThinking": 361,
+      "tokenCached": 0
+    },
+    "latencyMs": 2807
+  }
+}

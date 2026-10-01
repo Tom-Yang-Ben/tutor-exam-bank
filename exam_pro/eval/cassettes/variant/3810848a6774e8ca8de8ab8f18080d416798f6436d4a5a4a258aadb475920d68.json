@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "agent": "variant",
+    "model": "gemini-3.1-pro-preview",
+    "template": "variant.v1",
+    "recorded_at": "2026-09-24T22:03:17.290Z",
+    "fixtureHash": "8655adc4f373deb77b7ddbe4a72c05904c8276ef57b06fd3a73c16559fecc8a8"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 1518,
+        "sha256": "0e1f3072ae116ef949bcb8ac3f831ed877af9c013fb4f6bdfd94b43810af8522"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "variant.v1",
+      "sourceQuestionId": 33,
+      "difficultyDelta": 0,
+      "idx": 2,
+      "anchorIds": [
+        32,
+        44,
+        47,
+        48,
+        49
+      ]
+    }
+  },
+  "response": {
+    "data": {
+      "chapter": "牛頓運動定律",
+      "chapter_confidence": 1,
+      "question_type": "計算",
+      "difficulty": 2,
+      "question_text": "在無摩擦力的水平冰面上，一輛質量為 $15$ kg 的雪橇受到水平方向持續 $45$ N 的推力作用。求此雪橇的加速度大小。",
+      "answer_text": "由牛頓第二運動定律 $F = ma$，可得加速度 $a = \\frac{F}{m} = \\frac{45}{15} = 3$ m/s$^2$。"
+    },
+    "usage": {
+      "tokenIn": 1147,
+      "tokenOut": 147,
+      "tokenThinking": 975,
+      "tokenCached": 0
+    },
+    "latencyMs": 10264
+  }
+}

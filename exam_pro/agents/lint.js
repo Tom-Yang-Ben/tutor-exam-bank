@@ -9,7 +9,7 @@
 // 三層，一層比一層貴：
 //   ① utils/formulaFix.js    確定性修復，零成本
 //   ② utils/formulaLint.js   硬閘門，零成本
-//   ③ 仍有 error 才呼叫 LLM 重寫（MODEL_EXTRACT），改完再跑一次 ①②
+//   ③ 仍有 error 才呼叫 LLM 重寫（MODEL_TEXT；Gemini 模式＝MODEL_EXTRACT，docs/local-mode.md LM-15），改完再跑一次 ①②
 //
 // 為什麼第三層放最後：階段 1 的題庫健檢顯示，絕大多數壞公式都是舊轉換器的殘留標記
 // 與錯位的 $——這些用規則就能修好，沒有理由為它們付錢給模型。
@@ -17,10 +17,12 @@
 const { formulaFix } = require('../utils/formulaFix');
 const { formulaLint } = require('../utils/formulaLint');
 const { buildSchema } = require('./schemas');
-const { resolveSubjectGroup } = require('./promptParts');
+const { resolveSubjectGroup, jsonBackslashRule, JSON_BACKSLASH_POSITIVES, JSON_BACKSLASH_POSITIVES_CHEM } = require('./promptParts');
 const { registerTemplate } = require('../services/llm/templates');
 
-const TEMPLATE = 'lint.v2';   // v2（2026-09-15）：規則 3 補 array 表格、\mathbb 已支援（PR #18）
+// v2（2026-09-15）：規則 3 補 array 表格、\mathbb 已支援（PR #18）
+// v3（2026-09-27，Owner O-5 選 2）：要求第 5 條＝JSON 字串裡的反斜線寫兩個（promptParts.jsonBackslashRule，與 L-2 同一段文字）
+const TEMPLATE = 'lint.v3';
 // 兩個數字成對設定，不要單獨調（同 agents/verify.js 的教訓；2026-08-27 job #5 的
 // lint 節點也出現 4 次「Unterminated string in JSON」）：MODEL_EXTRACT 是 thinking
 // 模型，思考 token 計入 maxOutputTokens 額度，不設 thinkingBudget 時長題的重寫
@@ -60,6 +62,8 @@ const PROMPT_TEMPLATE = [
     '2. 分數用 \\frac{分子}{分母}，根號用 \\sqrt{…}，上下標用 ^{…} 與 _{…}，大括號必須成對。',
     '3. 矩陣、方程組與表格可用 \\begin{bmatrix}…\\end{bmatrix}、\\begin{pmatrix}…\\end{pmatrix}、\\begin{cases}…\\end{cases}、\\matrix{…} 或 \\begin{array}{|c|c|}…\\end{array}（表格可含 \\hline，整個表格放在同一對 $$…$$ 裡、可以跨行；列以 \\\\ 分隔、欄以 & 分隔），這些本系統支援、不要改寫掉；\\mathbb{R} 也支援。\\overrightarrow 仍不支援，請改寫為 \\vec。',
     '4. 中文敘述、數字、單位、選項內容保持原樣。',
+    // 〔Owner 2026-09-27 O-5 選 2〕與 LATEX_RULES 第 (5) 條同一段文字（直接共用，不另寫措辭）；1～4 一字未改
+    `5. ${jsonBackslashRule(JSON_BACKSLASH_POSITIVES)}`,
 ].join('\n');
 
 // 模組載入時註冊（裁決 S2-5）：四個 LLM 節點都必須註冊，否則 cassette 鍵會退回 sha256(識別名)
@@ -70,11 +74,12 @@ registerTemplate(TEMPLATE, PROMPT_TEMPLATE);
 // ①② 兩層零成本閘門兩條路徑共用：utils/textFormatter.js 自階段 5 起認得 \ce{…}、
 // \rightleftharpoons、\xrightarrow 等化學寫法，formulaLint 就不會把它們當未知指令擋下。
 // 只有第三層（LLM 重寫）換成化學用的 SYSTEM 與模板：數學版的規則 3 叫模型「改寫掉不支援的
-// 指令」，化學題照那一版重寫會把 \ce{…} 拆成一般 LaTeX。agent 名 lint_chem、模板 lint_chem.v1。
+// 指令」，化學題照那一版重寫會把 \ce{…} 拆成一般 LaTeX。agent 名 lint_chem、模板 lint_chem.v2
+// （v2，2026-09-27，Owner O-5 選 2：要求第 6 條＝CHEM_LATEX_RULES 第 (6) 條同一段 jsonBackslashRule，正例用 \ce）。
 // 上面數學／物理的 SYSTEM 與模板一個字都沒動（第 1.1 條）。
 
 const AGENT_CHEM = 'lint_chem';
-const TEMPLATE_CHEM = 'lint_chem.v1';
+const TEMPLATE_CHEM = 'lint_chem.v2';
 
 const SYSTEM_CHEM = [
     '你是化學題庫的 LaTeX 校對員。',
@@ -102,6 +107,8 @@ const PROMPT_TEMPLATE_CHEM = [
     '3. \\ce{…} 以外的式子：分數用 \\frac{分子}{分母}，根號用 \\sqrt{…}，上下標用 ^{…} 與 _{…}，大括號必須成對；表格用 \\begin{array}{|c|c|}…\\end{array} 放在同一對 $$…$$ 裡；單位用 \\mathrm{…}。',
     '4. 不要把 Unicode 的上下標（H₂O、Ca²⁺）留在文字裡，一律改成 \\ce{…}。',
     '5. 中文敘述、數字、單位、選項內容保持原樣。',
+    // 〔Owner 2026-09-27 O-5 選 2〕與 CHEM_LATEX_RULES 第 (6) 條同一段文字；1～5 一字未改
+    `6. ${jsonBackslashRule(JSON_BACKSLASH_POSITIVES_CHEM)}`,
 ].join('\n');
 
 registerTemplate(TEMPLATE_CHEM, `${SYSTEM_CHEM}\n---\n${PROMPT_TEMPLATE_CHEM}`);
@@ -186,7 +193,7 @@ async function run(ctx, input) {
     let res;
     try {
         res = await ctx.llm.generateJson({
-            model: ctx.config.models.extract,
+            model: ctx.config.models.text || ctx.config.models.extract,   // 〔LM-15〕重寫只看文字：MODEL_TEXT，沒給退回 extract
             system: v.system,
             parts: [{ text: renderPrompt({
                 questionText: first.questionText,
@@ -212,7 +219,11 @@ async function run(ctx, input) {
         if (ctx.logger && ctx.logger.warn) {
             ctx.logger.warn({ node: 'lint', errorClass, message: String((err && err.message) || err) });
         }
-        return { kind: 'error', errorClass, message: String((err && err.message) || err) };
+        // 〔Owner 第五輪 C-f 核准〕供應商回報的 finishReason（'MAX_TOKENS'＝寫到輸出上限被截斷）帶給 runner：本機模式被截斷的不重試、直接進複核
+        return {
+            kind: 'error', errorClass, message: String((err && err.message) || err),
+            ...(err && err.finishReason ? { finishReason: String(err.finishReason) } : {})
+        };
     }
 
     const data = (res && res.data) || {};
@@ -267,6 +278,8 @@ async function run(ctx, input) {
 
 module.exports = {
     run, PROMPT_TEMPLATE, TEMPLATE, gate,
+    // 〔dec/local-thinking-speed〕只多匯出、值不變：services/llm/localTuning.js 的 THINKING_AGENTS 由單元測試對照這兩個數字
+    MAX_OUTPUT_TOKENS, THINKING_BUDGET,
     // 〔stage5 WS-B〕化學題
     SYSTEM, AGENT_CHEM, TEMPLATE_CHEM, SYSTEM_CHEM, PROMPT_TEMPLATE_CHEM
 };
