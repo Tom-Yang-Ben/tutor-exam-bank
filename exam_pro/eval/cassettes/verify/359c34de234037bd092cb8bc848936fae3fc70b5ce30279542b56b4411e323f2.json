@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-10-02T09:06:53.037Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 89,
+        "sha256": "ce6482cb49131cf1ae2efb758b5ca7ea8f8ca911f6a2d01fb4169e927d9d95f6"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "設平面向量$\\alpha\\to=(3,4)$、$\\beta\\to=(1,2)$ ，求$\\alpha\\to\\cdot\\beta\\to$",
+      "questionType": "計算",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "11",
+      "answer_form": "number",
+      "steps_summary": "根據點積公式，將向量α→=(3,4)與β→=(1,2)的對應坐標相乘後相加，即3×1 + 4×2 = 3 + 8 = 11。"
+    },
+    "usage": {
+      "tokenIn": 294,
+      "tokenOut": 333,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 121624,
+        "loadMs": 8,
+        "promptEvalMs": 5187,
+        "evalMs": 115803
+      }
+    },
+    "latencyMs": 121633
+  }
+}

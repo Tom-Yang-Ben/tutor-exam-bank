@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-10-02T09:25:27.052Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 127,
+        "sha256": "1e6494f6a688673ab22b686892954cde88df6b915895542d11bbd0c290cbd74a"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "已知log_10 2=0.3010，利用log_10 5=log_10 $\\frac{10}{2}$求log_10 5之近似值。\n\n(A) 0.6990(B)0.3010(C) 0.1505(D)1.6990",
+      "questionType": "單選",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(A)",
+      "answer_form": "option",
+      "steps_summary": "根據log₁₀5=log₁₀(10/2)，應用對數除法法則得log₁₀10 - log₁₀2。因log₁₀10=1，且已知log₁₀2=0.3010，故計算1 - 0.3010=0.6990，對應選項(A)。"
+    },
+    "usage": {
+      "tokenIn": 340,
+      "tokenOut": 496,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 192376,
+        "loadMs": 9,
+        "promptEvalMs": 8114,
+        "evalMs": 183516
+      }
+    },
+    "latencyMs": 192388
+  }
+}

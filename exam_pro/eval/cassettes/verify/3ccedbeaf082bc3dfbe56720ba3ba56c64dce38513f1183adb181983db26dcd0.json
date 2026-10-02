@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-10-02T09:08:41.922Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 80,
+        "sha256": "9444b816f070e7542fae007fdaec38c5478241c14c57d55bbca1809567ebd0fb"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "設平面向量$\\mathbf{a}\\to=(k,6)$與$\\mathbf{b}\\to=(3,6)$ 互相垂直，求k。",
+      "questionType": "填空",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "-12",
+      "answer_form": "number",
+      "steps_summary": "根據向量垂直條件，兩向量點積為零。計算點積得3k + 36 = 0，解得k = -12。"
+    },
+    "usage": {
+      "tokenIn": 295,
+      "tokenOut": 311,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 108873,
+        "loadMs": 6,
+        "promptEvalMs": 4640,
+        "evalMs": 103626
+      }
+    },
+    "latencyMs": 108880
+  }
+}
