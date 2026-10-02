@@ -64,11 +64,16 @@ const DEFAULT_DIM = 768;
  */
 function adapterOpts(vendor, id, opts) {
     if (vendor !== 'ollama') return { callOpts: { ...opts, model: id }, overrides: null };
-    const tuned = require('./localTuning').resolveOllamaOverrides(opts);
-    if (!Object.keys(tuned.applied).length) return { callOpts: { ...opts, model: id }, overrides: null };
+    const tuning = require('./localTuning');
+    const tuned = tuning.resolveOllamaOverrides(opts);
+    // 〔dec/r13-extract-fixes〕lint／verify 的單次逾時（本機預設 30 分；OLLAMA_TIMEOUT_MS_<AGENT> 可覆寫）。呼叫端自己帶了
+    // timeoutMs（本機量測工具）時以呼叫端為準。逾時不改模型的輸出：不寫進 overrides（回放檔的 request.ollamaOverrides），鍵也不變。
+    const timeout = opts && opts.timeoutMs ? null : tuning.resolveTimeout(opts && opts.agent);
+    const withTimeout = (o) => (timeout ? { ...o, timeoutMs: timeout.timeoutMs, timeoutName: timeout.name } : o);
+    if (!Object.keys(tuned.applied).length) return { callOpts: withTimeout({ ...opts, model: id }), overrides: null };
     const callOpts = { ...opts, model: id, thinkingBudget: tuned.thinkingBudget, maxOutputTokens: tuned.maxOutputTokens };
     if (tuned.numCtx) callOpts.numCtx = tuned.numCtx;
-    return { callOpts, overrides: tuned.applied };
+    return { callOpts: withTimeout(callOpts), overrides: tuned.applied };
 }
 
 /**

@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-10-02T09:12:43.098Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 45,
+        "sha256": "c11ac1a8108ecda4e796d38a5c73192b345cdb949ce50a49b9312f4be9059cad"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "質量2kg的物體受到合力10N，求其加速度。",
+      "questionType": "計算",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "5",
+      "answer_form": "number",
+      "steps_summary": "根據牛頓第二定律 F=ma，已知合力 F=10N、質量 m=2kg，代入公式得 a=F/m=10/2=5 m/s²。"
+    },
+    "usage": {
+      "tokenIn": 275,
+      "tokenOut": 299,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 115255,
+        "loadMs": 8,
+        "promptEvalMs": 2580,
+        "evalMs": 112043
+      }
+    },
+    "latencyMs": 115262
+  }
+}

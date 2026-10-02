@@ -26,6 +26,10 @@
 //   generateJson 這條路已經有 record/replay cassette、節流、模式閘門與 1,400 個測試
 //   釘住的行為；用它組出 tool-calling，等於 cassette 與異家 adapter（A-T17）都免費
 //   繼承——原生 function calling 綁定 gemini 的請求形狀，換供應商就要重做一層。
+//
+// 〔dec/r13-engine-choice，docs/local-mode.md 10.26〕POST /api/assistant 多一個選填的 engine（'local'／'gemini'）：
+// 老師在畫面上選「本機／Gemini」回答。沒帶、或等於 .env 的助教引擎＝原本的模型（cassette 的鍵逐字不變）；
+// 不同＝主控與查題工具都換成那個引擎的模型（config/engines.js）。選 Gemini 卻沒有金鑰回 400。
 // ─────────────────────────────────────────────────────────────
 // config/db 在 require 當下就要 DATABASE_URL，而本檔的主控迴圈要能在純單元測試
 // （不連 DB、llm 由 deps 注入）底下載入——所以 db 延遲到**工具執行時**才 require。
@@ -151,7 +155,9 @@ const TOOLS = {
         },
         async run(args, deps) {
             const nlq = require('./nlqService');
-            const body = await nlq.searchNl({ query: args.query.trim(), limit: Math.min(Number(args.limit) || 10, 20) }, { llm: deps.llm });
+            // 〔dec/r13-engine-choice〕deps.nlqModel：助教選了與 .env 不同的引擎時查題也用那個引擎（沒有＝MODEL_NLQ，與之前相同）
+            const body = await nlq.searchNl({ query: args.query.trim(), limit: Math.min(Number(args.limit) || 10, 20) },
+                deps.nlqModel ? { llm: deps.llm, model: deps.nlqModel } : { llm: deps.llm });
             return {
                 filters: body.filters, fallback_level: body.fallback_level,
                 results: (body.results || []).map(r => ({
@@ -321,11 +327,23 @@ function maxSteps(env = process.env) {
  *   deps.students：注入學生清單（單元測試用）；未注入則從 students 表載入。
  * @returns {Promise<{reply:string, steps:Array<{tool:string,args:object,ok:boolean,result:any}>, truncated?:true}>}
  */
-async function runAssistant({ message, history = [], deps = {} }) {
+async function runAssistant({ message, history = [], engine = null, deps = {} }) {
     const llm = deps.llm || require('./llm');
     const models = require('../config/models');
+    const engines = require('../config/engines');
+    // 〔dec/r13-engine-choice〕回答方式（docs/local-mode.md 10.26）：engine 不合法或選了 Gemini 卻沒有金鑰 → 400（呼叫 LLM 之前）
+    const parsedEngine = engines.parseEngine(engine);
+    if (parsedEngine.error) throw Object.assign(new Error(parsedEngine.error), { status: 400 });
+    const engineProblem = engines.engineProblem(parsedEngine.engine, 'assistant');
+    if (engineProblem) throw Object.assign(new Error(engineProblem), { status: 400 });
+    const override = engines.overrideEngine(parsedEngine.engine, 'assistant');
+    const engineSet = override ? engines.modelsForEngine(override) : null;
     // 〔LM-15〕主控助教只處理文字與工具呼叫：未設 MODEL_ASSISTANT 時用 MODEL_TEXT（Gemini 模式下＝MODEL_EXTRACT，行為不變）
-    const model = (process.env.MODEL_ASSISTANT || '').trim() || models.MODEL_TEXT || models.MODEL_EXTRACT;
+    // 〔dec/r13-engine-choice〕選了與 .env 不同的引擎：主控與查題工具（search_questions 的 NLQ）都換成那個引擎的模型；
+    // 沒選或相同＝這一行原本的規則，模型與 cassette 的鍵逐字不變
+    const model = engineSet ? engineSet.assistant
+        : ((process.env.MODEL_ASSISTANT || '').trim() || models.MODEL_TEXT || models.MODEL_EXTRACT);
+    if (engineSet) deps = { ...deps, nlqModel: engineSet.nlq };
 
     const text = String(message ?? '').trim();
     if (!text) throw Object.assign(new Error('message 必填'), { status: 400 });

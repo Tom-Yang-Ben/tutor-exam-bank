@@ -9,9 +9,45 @@
 //   - FEATURE_ASSISTANT 關閉時**整段不渲染**（不是隱藏）。
 //   - 透過 window.ExamApp 橋接 apiFetch／showToast／renderMath。
 //   - 伺服器回的所有文字一律 textContent，不進 innerHTML。
+//   - 〔dec/r13-engine-choice〕「回答方式：本機／Gemini」（docs/local-mode.md 10.26）：讀 GET /api/engines 填選項、
+//     記住上次的選擇（localStorage），請求帶 engine；Gemini 沒有金鑰時選項停用並說明。讀不到就不顯示、不帶（照 .env）。
 // ─────────────────────────────────────────────────────────────
 const MAX_MESSAGE = 500;          // 與 services/assistantService.js 的 MAX_MESSAGE_LEN 一致
 const HISTORY_KEEP = 8;           // 送回伺服器的歷史輪數（同後端 MAX_HISTORY）
+
+// 〔dec/r13-engine-choice〕本機／Gemini 的小工具（review.js、tutor.js 各有一份：測試以 data: URL 載入單一檔案，不能互相 import）
+const ENGINE_IDS = ['local', 'gemini'];
+const ENGINE_TEXT = { local: '本機（免費、較慢）', gemini: 'Gemini（需要 API 費用、較快）' };
+const ENGINE_STORAGE_KEY = 'examPro.engine.assistant';
+
+/**
+ * 預設選哪一個：上次選的（還能用）→ .env 的預設（能用）→ 第一個能用的；都不能用回 null。
+ * @param {{default:string|null, options:Object<string,{available:boolean}>}|null} info GET /api/engines 的 purposes.assistant
+ * @param {string|null} stored
+ * @returns {'local'|'gemini'|null}
+ */
+export function pickEngine(info, stored) {
+    const opts = (info && info.options) || {};
+    const ok = (e) => ENGINE_IDS.includes(e) && Boolean(opts[e] && opts[e].available);
+    if (ok(stored)) return stored;
+    if (info && ok(info.default)) return info.default;
+    return ENGINE_IDS.find(ok) || null;
+}
+
+function engineOptionText(id, opt, isDefault) {
+    let text = ENGINE_TEXT[id] || id;
+    if (isDefault) text += '・.env 預設';
+    if (opt && !opt.available) text += id === 'gemini' ? '・尚未設定 Gemini 金鑰' : '・目前不能用';
+    return text;
+}
+
+function readStoredEngine() {
+    try { return window.localStorage.getItem(ENGINE_STORAGE_KEY); } catch { return null; }
+}
+
+function storeEngine(v) {
+    try { window.localStorage.setItem(ENGINE_STORAGE_KEY, v); } catch { /* 隱私模式：不記也能用 */ }
+}
 
 /** 對話狀態（只活在頁面裡；重整就歸零——助教沒有長期記憶，這是誠實的呈現）。 */
 const history = [];
@@ -105,7 +141,11 @@ async function send(app, ui) {
         const res = await app.apiFetch('/api/assistant', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text, history: history.slice(-HISTORY_KEEP) })
+            // 〔dec/r13-engine-choice〕選單有顯示才帶 engine（沒帶＝照 .env）
+            body: JSON.stringify({
+                message: text, history: history.slice(-HISTORY_KEEP),
+                ...(ui.engineRow && !ui.engineRow.classList.contains('hidden') && ENGINE_IDS.includes(ui.engine.value) ? { engine: ui.engine.value } : {})
+            })
         });
         const body = await res.json();
         thinking.remove();
@@ -155,11 +195,52 @@ function mountAssistantSection(app, section) {
     });
     inputRow.append(input, send_);
 
-    section.append(head, log, inputRow);
+    // 〔dec/r13-engine-choice〕回答方式：先藏著，loadEngines 讀到 /api/engines 才顯示
+    const engineRow = el('div', 'mb-4 hidden flex flex-wrap items-center gap-2', { id: 'asstEngineRow' });
+    const engine = el('select', 'field-control block p-2 text-sm', { id: 'asstEngine', 'aria-label': '回答方式' });
+    const engineNote = el('span', 'text-[11px] text-slate-400', { id: 'asstEngineNote' });
+    engineRow.append(el('span', 'text-xs font-bold text-slate-500', { textContent: '回答方式' }), engine, engineNote);
 
-    const ui = { log, input, send: send_ };
+    section.append(head, engineRow, log, inputRow);
+
+    const ui = { log, input, send: send_, engineRow, engine, engineNote };
     send_.addEventListener('click', () => send(app, ui));
     input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) send(app, ui); });
+    return ui;
+}
+
+/**
+ * 〔dec/r13-engine-choice〕讀 GET /api/engines 填「回答方式」；讀不到就維持隱藏（不帶 engine＝照 .env）。
+ * @param {object} app
+ * @param {object} ui
+ */
+async function loadEngines(app, ui) {
+    let info = null;
+    try {
+        const res = await app.apiFetch('/api/engines');
+        if (res.ok) info = ((await res.json()).purposes || {}).assistant || null;
+    } catch { info = null; }
+    if (!info) return;
+    for (const id of ENGINE_IDS) {
+        const opt = (info.options || {})[id] || { available: false, reason: null };
+        const o = el('option', '', { value: id, textContent: engineOptionText(id, opt, info.default === id) });
+        o.disabled = !opt.available;
+        if (opt.reason) o.title = opt.reason;
+        ui.engine.appendChild(o);
+    }
+    const picked = pickEngine(info, readStoredEngine());
+    if (picked) ui.engine.value = picked;
+    const describe = () => {
+        const opt = (info.options || {})[ui.engine.value] || {};
+        const gem = (info.options || {}).gemini || {};
+        const parts = [];
+        if (opt.model) parts.push(`用 ${opt.model}。`);
+        if (!gem.available && gem.reason) parts.push(`Gemini 選項停用：${gem.reason}。`);
+        ui.engineNote.textContent = parts.join(' ');
+    };
+    describe();
+    ui.engine.addEventListener('change', () => { storeEngine(ui.engine.value); describe(); });
+    ui.engineRow.classList.remove('hidden');
 }
 
 // ───────────────────────── 進入點 ─────────────────────────
@@ -174,7 +255,8 @@ export function init() {
     }
     const app = bridge();
     if (!app) return;
-    mountAssistantSection(app, section);
+    const ui = mountAssistantSection(app, section);
+    loadEngines(app, ui).catch(err => console.error('[assistant] 載入回答方式失敗（照 .env 的設定）', err));
 }
 
 if (typeof document !== 'undefined') {

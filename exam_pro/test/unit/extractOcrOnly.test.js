@@ -158,7 +158,7 @@ describe('extract — LOCAL_EXTRACT_MODE=ocr', () => {
             assert.deepEqual(ocrOnly[k], crossOcr[k], k);
         }
         const text = ocrService.pagesToText([{ page: 3, markdown: '第 3 頁的 OCR 文字' }, { page: 4, markdown: '第 4 頁的 OCR 文字' }]);
-        assert.deepEqual(ocrOnly.cacheKeyParts, { template: 'extract_ocr.v2', chunkNo: 2, pdfSha256: pdfSha, ocrSha256: sha256Hex(text) });
+        assert.deepEqual(ocrOnly.cacheKeyParts, { template: 'extract_ocr.v3', chunkNo: 2, pdfSha256: pdfSha, ocrSha256: sha256Hex(text) });
         assert.equal(ocrOnly.maxOutputTokens, extract.LOCAL_MAX_OUTPUT_TOKENS);
         assert.equal(ocrOnly.maxOutputTokens, 8192);
         assert.ok(!('thinkingBudget' in ocrOnly), 'services/llm/ollama.js：沒有 thinkingBudget＝think:false');
@@ -175,10 +175,12 @@ describe('extract — LOCAL_EXTRACT_MODE=ocr', () => {
             assert.deepEqual(q.cross_check, OCR_CC);
             assert.equal(q.extract_mode, 'ocr');
         }
+        // 〔dec/r13-extract-fixes〕假 OCR 的頁面上沒有寫答案：模型回的答案被清成空字串，原文記在 answer_dropped（新契約，docs/local-mode.md 10.25）
         assert.deepEqual(Object.keys(d.questions[0]).sort(), [
-            'answer_text', 'chapter', 'chapter_confidence', 'chunk_no', 'cross_check', 'difficulty',
+            'answer_dropped', 'answer_text', 'chapter', 'chapter_confidence', 'chunk_no', 'cross_check', 'difficulty',
             'extract_mode', 'idx', 'page_range', 'question_text', 'question_type', 'subject'
         ]);
+        assert.equal(d.questions[0].answer_text, '');
         for (const k of ['questions', 'rejected', 'chunk_no', 'page_range', 'pdf_sha256', 'page_count', 'schema_fallback', 'usage', 'latency_ms']) {
             assert.ok(k in d, `少了 ${k}`);
         }
@@ -302,9 +304,9 @@ describe('extract — LOCAL_EXTRACT_MODE=ocr', () => {
         const outcome = await extract.run(ctx, { pdfBytes: pdf, chunk: CHUNK });
         assert.equal(outcome.kind, 'pass', JSON.stringify(outcome));
         assert.equal(calls[0].agent, 'extract_ocr_chem');
-        assert.equal(calls[0].template, 'extract_ocr_chem.v2');
+        assert.equal(calls[0].template, 'extract_ocr_chem.v3');
         assert.equal(calls[0].system, extract.SYSTEM_CHEM);
-        assert.equal(calls[0].schema, buildSchema('extract', { group: 'chemistry' }));
+        assert.equal(calls[0].schema, extract.localExtractSchema('chemistry'));   // 〔dec/r13-extract-fixes〕本機版 schema
         assert.deepEqual(outcome.data.questions[0].cross_check, OCR_CC);
     });
 

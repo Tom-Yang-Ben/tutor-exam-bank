@@ -49,6 +49,13 @@
 // finish_reason、truncated、max_output_tokens（這一次實際送出的 num_predict，appliedNumPredictOf；replay 記 null）與說明；job 繼續下一題、不 failed（一題都沒建成時照舊
 // 是第 4.1 條那句）。其他 error（含 Gemini 的截斷、本機的逾時）照舊退避重試 maxErrorRetries 次（docs/local-mode.md 10.24）。
 //
+// 〔dec/r13-extract-fixes，Owner 2026-10-02 同意「本機的這些修改都先做了」；docs/local-mode.md 10.25〕
+//   - 本機模型的 lint／verify 逾時不重試（isLocalTimeout → 狀態機規則 6b → needs_review('provider_error')），比照 C-f 與 R7-1；
+//     單次逾時的本機預設是 30 分鐘（services/llm/localTuning.js 的 OLLAMA_TIMEOUT_MS_<AGENT>）。Gemini 照舊重試。
+//   - 答案是空的題（本機拆題在題目頁沒寫答案時留空）不自動入庫：save 前停在 needs_review('awaiting_approval')（saveStopReason）。
+//   - 解答頁：extract 事件記 answer_key／skipped_answer_key；拆完整份後 applyAnswerKey 把解析得出的答案回填到題目
+//     （payload.extract.answer_src='answer_key'），runJobQuestion 寫回 payload 時保留回填。
+//
 // 〔dec/r8-b1-abandon，設計稿 docs/desktop-app-design.md 2.3 節第 4 點、第 3 條第 2 項〕shutdown({ abandon: true })：
 // 桌面版從系統匣選「現在放棄」、或關閉的時限到了還有在途工作時用。先停止認領，再中止在途的節點（AbortController；
 // OCR 的 python 會被殺掉），被放棄的工作單位**不寫 outcome、不動 retries、不寫 job_events、迴圈不重試**（被中止的那一次呼叫不記用量），
@@ -74,6 +81,11 @@
 //   ③ 退避睡眠改走 pause，沒有放棄時等同 sleep(ms)：每次自己登記一個喚醒函式、睡完就移除。〔審查 dec/r8-b1-abandon-fix〕
 //      dec/r8-b1-abandon 原本讓每次退避 race 一個常駐的 promise，沒有 shutdown 時那個 promise 永遠不 settle，每次退避都在它身上
 //      留下一個永遠不釋放的 reaction（每次約 300 位元組），長時間開著的伺服器記憶體會緩慢增加；現在不會。
+//
+// 〔dec/r13-engine-choice，docs/local-mode.md 10.26〕上傳時可以選「本機／Gemini」（jobs.engine，migration 0021）。
+// 選的與 .env 的拆題引擎不同時，這份卷的拆題與逐題檢查改用那個引擎的模型與長節點預設（runtimeFor）；
+// NULL 或與 .env 相同時一切照舊（loadModels() 與 runner 的 config）。讀 engine 用 to_jsonb(jobs) ->> 'engine'：
+// 還沒套 0021 的庫取不到這個鍵、得到 NULL，不會因為欄位不存在而整個佇列卡住。
 // ─────────────────────────────────────────────────────────────
 const fs = require('fs');
 const path = require('path');
@@ -417,6 +429,63 @@ function isLocalTruncation(outcome, modelSpec) {
 }
 
 /**
+ * 〔dec/r13-extract-fixes〕extract 事件 detail 裡的解答頁欄位（agents/extract.js 本機路徑的 data.answer_key、data.latex_repaired）。
+ * 沒有就回空物件（Gemini 路徑的事件與之前逐鍵相同）。純函式。
+ * @param {object} data extract outcome 的 data
+ * @returns {object}
+ */
+function answerKeyDetail(data) {
+    const out = {};
+    const ak = data && data.answer_key;
+    if (ak && typeof ak === 'object') {
+        out.answer_key = ak;
+        const skipped = Array.isArray(ak.skipped) ? ak.skipped : [];
+        if (skipped.length) out.skipped_answer_key = { pages: Array.isArray(ak.pages) ? ak.pages : [], count: skipped.length };
+    }
+    if (data && Number.isInteger(data.latex_repaired) && data.latex_repaired > 0) out.latex_repaired = data.latex_repaired;
+    return out;
+}
+
+/**
+ * 〔dec/r13-extract-fixes〕各塊 extract 事件的 answer_key → 依塊序攤平的解答表項目。同一塊有多筆事件（舊版整份重拆）時取最後一筆。純函式。
+ * @param {Array<{chunk:number, answer_key:object}>} rows 依事件 id 排序
+ * @returns {Array<{label:string, value:string|null, certain:boolean}>}
+ */
+function collectAnswerKeyEntries(rows) {
+    const byChunk = new Map();
+    for (const r of rows || []) {
+        const ak = r && r.answer_key;
+        if (!ak || !Array.isArray(ak.entries)) continue;
+        byChunk.set(Number(r.chunk) || 0, ak.entries);
+    }
+    return [...byChunk.entries()].sort((a, b) => a[0] - b[0]).flatMap(([, list]) => list);
+}
+
+/** 〔dec/r13-extract-fixes〕逾時不重試的題目節點（本機模式；docs/local-mode.md 10.25 第 5 點） */
+const LOCAL_TIMEOUT_NO_RETRY_NODES = Object.freeze(['lint', 'verify']);
+
+/** 〔dec/r13-extract-fixes〕本機逾時不重試時寫進 job_events.detail 的說明 */
+const LOCAL_TIMEOUT_NOTE = '本機模型這一步逾時：不重試，直接交給老師複核（Owner 2026-10-02 同意；docs/local-mode.md 10.25）。' +
+    '單次逾時是 OLLAMA_TIMEOUT_MS_LINT／OLLAMA_TIMEOUT_MS_VERIFY（本機預設 30 分鐘）。';
+
+/**
+ * 〔dec/r13-extract-fixes，Owner 2026-10-02 同意〕這個 outcome 是不是「本機模型的 lint／verify 逾時」：
+ * error、errorClass='timeout'、節點是 lint 或 verify、這一次呼叫的模型是 ollama。是的話 runner 給狀態機 retryTimeout:false，
+ * 不重試、直接 needs_review('provider_error')（比照 C-f 的截斷不重試與第七輪 R7-1 的變式截斷）。Gemini 照舊重試。
+ * 節點層的逾時（JOB_NODE_TIMEOUT_MS）也算：那同樣是本機模型跑太久。
+ * @param {string} node
+ * @param {object} outcome
+ * @param {string|null|undefined} modelSpec meter.lastModel；這個節點沒有呼叫模型（lint 只跑了零成本那兩層）時是 null
+ * @returns {boolean}
+ */
+function isLocalTimeout(node, outcome, modelSpec) {
+    if (!outcome || outcome.kind !== 'error' || outcome.errorClass !== 'timeout') return false;
+    if (!LOCAL_TIMEOUT_NO_RETRY_NODES.includes(node)) return false;
+    // modelSpec 是 null（還沒呼叫到模型就逾時）時不判成本機：isLocalModelSpec(null) 會退回 MODEL_EXTRACT，那不是這一步的模型
+    return Boolean(modelSpec) && isLocalModelSpec(modelSpec);
+}
+
+/**
  * 〔Owner 第七輪 R7-1；審查 dec/r10-variant-cap〕這一次本機呼叫**實際送出的**輸出上限（Ollama 的 num_predict）：
  * 讀 services/llm 掛在錯誤物件上的 appliedNumPredict（services/llm/index.js 的 markAppliedNumPredict），不依事件當下的 env 重算。
  * 沒送 num_predict（取消了預設）、replay（沒有送出任何請求，錯誤物件不帶這個鍵）、或不是 services/llm 丟的錯時回 null。
@@ -682,14 +751,78 @@ function buildSaveFields(payload) {
         question_text = `${question_text}\n[附圖描述：${String(figure).trim()}]`;
     }
 
+    // 〔dec/r13-extract-fixes〕lint 的答案是空的（拆題時沒有答案、lint 照樣留空）而 extract 的答案後來有了
+    // （解答頁回填，payload.extract.answer_src='answer_key'）時用 extract 的；其餘與原本相同（lint 優先）
+    const lintAnswer = typeof lint.answer_text === 'string' && lint.answer_text.trim() === '' ? undefined : lint.answer_text;
     return {
         subject: ex.subject,
         chapter: cls.chapter ?? ex.chapter,
         question_type: ex.question_type,
         difficulty: ex.difficulty,
         question_text,
-        answer_text: lint.answer_text ?? ex.answer_text ?? ''
+        answer_text: lintAnswer ?? ex.answer_text ?? lint.answer_text ?? ''
     };
+}
+
+/**
+ * 〔dec/r13-extract-fixes，Owner 2026-10-02 同意；docs/local-mode.md 10.25 第 1 點〕答案是空的題不自動入庫：
+ * 本機拆題在題目頁沒寫答案時留空、解答頁也沒回填到，verify 只能給建議答案（payload.verify.suggested_answer）。
+ * 走到 save 時停在 needs_review('awaiting_approval')（沒有閘門判它壞掉，只是要人補答案；不新增 review_reason）。
+ * 原本這種題會以「略」入庫（saveNode 的 answer_text || '略'）。只看 PDF 拆出來的題（變式題一定有答案）。
+ * @param {object} payload
+ * @returns {'awaiting_approval'|null}
+ */
+function answerMissingStopReason(payload) {
+    if (!payload || typeof payload !== 'object' || !payload.extract) return null;
+    return String(buildSaveFields(payload).answer_text ?? '').trim() === '' ? 'awaiting_approval' : null;
+}
+
+/**
+ * 〔審查 dec/r13-extract-fixes〕解答頁回填的答案與驗算的交叉確認。
+ * applyAnswerKey 要等整份拆完才跑，前幾塊的題可能已經以 no_claim 跑完 verify——回填的答案就沒有跟驗算比過。
+ * 這種題（payload.extract.answer_src === 'answer_key' 而且 payload.verify.compare === 'no_claim'）在 save 前補比一次：
+ * 用 utils/answerCompare.js 比「要入庫的答案」（buildSaveFields）與驗算的建議答案（suggested_answer）。
+ * 不是 agree（含沒有建議答案）就不自動入庫——解答表與題目的對位只靠「題號總數＝題數」，丟一題又多一題時會整份錯開。
+ * 其餘情形（不是回填的、verify 比過的）回 null。純函式。
+ * @param {object} payload
+ * @returns {{compare:'agree'|'disagree'|'uncertain', key_answer:string, suggested_answer:string|null}|null}
+ */
+function answerKeyCheck(payload) {
+    const ex = payload && payload.extract;
+    const v = payload && payload.verify;
+    if (!ex || typeof ex !== 'object' || ex.answer_src !== 'answer_key') return null;
+    if (!v || typeof v !== 'object' || v.compare !== 'no_claim') return null;
+    const keyAnswer = String(buildSaveFields(payload).answer_text ?? '').trim();
+    if (!keyAnswer) return null;   // 答案是空的另由 answerMissingStopReason 處理
+    const suggested = [v.suggested_answer, v.final_answer].find(x => typeof x === 'string' && x.trim());
+    if (!suggested) return { compare: 'uncertain', key_answer: keyAnswer, suggested_answer: null };
+    const { answerCompare } = require('../utils/answerCompare');
+    const lint = payload.lint || {};
+    const compare = answerCompare({
+        question_type: ex.question_type,
+        claimed: keyAnswer,
+        model: { final_answer: suggested, answer_form: v.answer_form },
+        ...(ex.subject === '化學' ? { subject: ex.subject } : {}),
+        question_text: lint.question_text || ex.question_text || ''
+    });
+    return { compare, key_answer: keyAnswer, suggested_answer: suggested.trim() };
+}
+
+/**
+ * save 之前的政策停等（runner 與 eval/lib/pipelineDriver.js 共用）：先看拆題的交叉驗證（crossCheckStopReason），
+ * 再看答案是不是空的（answerMissingStopReason），最後看解答頁回填的答案與驗算對不對得上（answerKeyCheck；
+ * 〔審查 dec/r13-extract-fixes〕不是 agree 就停在 awaiting_approval，不新增 review_reason）。
+ * @param {object} payload
+ * @returns {{reason:string, kind:'cross_check'|'no_answer'|'answer_key_unverified', check?:object}|null}
+ */
+function saveStopReason(payload) {
+    const cc = crossCheckStopReason(payload);
+    if (cc) return { reason: cc, kind: 'cross_check' };
+    const na = answerMissingStopReason(payload);
+    if (na) return { reason: na, kind: 'no_answer' };
+    const check = answerKeyCheck(payload);
+    if (check && check.compare !== 'agree') return { reason: 'awaiting_approval', kind: 'answer_key_unverified', check };
+    return null;
 }
 
 /** questions.solution_text 的字數上限（migrations/0011 的 CHECK）。 */
@@ -860,8 +993,11 @@ function createRunner(opts = {}) {
     const sleep = opts.sleep || ((ms) => new Promise(r => setTimeout(r, ms)));
     const estimateCost = opts.estimateCost || estimateCostFromPricing;
     // 〔stage5 WS-C〕延遲 require：旗標關閉時連 kcTagService 都不載入
+    // 〔dec/r13-engine-choice〕第二個參數 { model }：這份 job 指定了與 .env 不同的引擎時，標註改用那個引擎的模型（沒給＝與之前相同）
     const kcTagger = opts.kcTagger
-        || ((questionId) => require('../services/kcTagService').tagQuestion(questionId, { db, llm, logger }));
+        || ((questionId, o) => require('../services/kcTagService').tagQuestion(questionId, {
+            db, llm, logger, ...(o && o.model ? { config: { model: o.model } } : {})
+        }));
 
     const agentCache = new Map();
     // 在途的工作單位。成員是每次 spawn 各自一個的 token（'jq:12#7'），不是列 id：
@@ -1214,6 +1350,9 @@ function createRunner(opts = {}) {
         const meter = newMeter();
         const startedAt = Date.now();
         let timeoutHandle = null;
+        // 〔dec/r13-engine-choice〕這份 job 的長節點設定（runtimeFor）；沒帶＝runner 的 config（與之前相同）
+        const rt = ctxBase.runtime || null;
+        const nodeTimeoutMs = rt ? rt.nodeTimeoutMs : config.nodeTimeoutMs;
 
         // 〔dec/r8-b1-abandon〕已經在放棄了：新的節點不開始（save 也一樣：還沒開始就不開始）
         if (abandoning) {
@@ -1247,9 +1386,9 @@ function createRunner(opts = {}) {
                     classifyMinConf: config.classifyMinConf,
                     dedupDup: config.dedupDup,
                     dedupVariant: config.dedupVariant,
-                    pdfChunkPages: config.pdfChunkPages,
+                    pdfChunkPages: rt ? rt.pdfChunkPages : config.pdfChunkPages,
                     inlineMaxBytes: config.inlineMaxBytes,
-                    nodeTimeoutMs: config.nodeTimeoutMs,
+                    nodeTimeoutMs,
                     // 階段 3（第 4.5 條 + 裁決 S3-R9）：generateVariant 的兩道閘門與 classify 的 kNN 短路。
                     // 跑題閾值走 variantOfftopicSimMin；檢索下限（variantRetrieveSimMin）不進 ctx——
                     // 那是 services/variantService.js 的事，agent 用不到。
@@ -1269,18 +1408,18 @@ function createRunner(opts = {}) {
                 localExtract: { mode: config.localExtractMode }
             }
         };
-        delete ctx.models; delete ctx.limits;
+        delete ctx.models; delete ctx.limits; delete ctx.runtime;
 
         let outcome;
         try {
             const timeout = new Promise((_, reject) => {
                 timeoutHandle = setTimeout(() => {
                     controller.abort();
-                    reject(Object.assign(new Error(`節點 ${node} 超過 ${config.nodeTimeoutMs} ms 未回應`), { errorClass: 'timeout' }));
-                }, config.nodeTimeoutMs);
+                    reject(Object.assign(new Error(`節點 ${node} 超過 ${nodeTimeoutMs} ms 未回應`), { errorClass: 'timeout' }));
+                }, nodeTimeoutMs);
                 if (typeof timeoutHandle.unref === 'function') timeoutHandle.unref();
             });
-            const run = node === 'save' ? saveNode(ctx, input) : loadAgent(node).run(ctx, input);
+            const run = node === 'save' ? saveNode(ctx, input, rt) : loadAgent(node).run(ctx, input);
             outcome = await Promise.race(abandonRace ? [run, timeout, abandonRace] : [run, timeout]);
             if (!abandonedHere && (!outcome || typeof outcome.kind !== 'string')) {
                 outcome = { kind: 'error', errorClass: 'provider_error', message: `節點 ${node} 回傳的不是合法 outcome` };
@@ -1319,7 +1458,7 @@ function createRunner(opts = {}) {
      * 最後一道閘門 + 入庫。validateQuestionFields 與 INSERT 在同一個交易裡，
      * 因此不會出現「questions 有了、job_questions.question_id 還是 NULL」的中間狀態。
      */
-    async function saveNode(ctx, input) {
+    async function saveNode(ctx, input, rt = null) {
         const { validateQuestionFields } = require('../utils/questionValidation');
         const fields = buildSaveFields(input);
         const v = validateQuestionFields(fields);
@@ -1375,9 +1514,11 @@ function createRunner(opts = {}) {
             // 〔stage5 WS-C〕save 成功（已 COMMIT）之後的唯一掛鉤：FEATURE_KC_TAGGING 關閉時完全不呼叫；
             // 開啟時 fire-and-forget，失敗只記 log，不影響 job 狀態（interfaces-stage5.md 第 4.3 條第 3 點）。
             // save 是零成本節點、預算用盡仍會跑，標註卻要付錢：該 job 的預算或當日預算用盡就不標。
+            // 〔dec/r13-engine-choice〕這份 job 指定了與 .env 不同的引擎：標註也用那個引擎的模型（kcTagModel）；照 .env 時呼叫方式與之前相同
+            const kcTagModel = rt && rt.kcTagModel ? rt.kcTagModel : null;
             runKcTagHook({
                 questionId, enabled: require('../config/features').FEATURE_KC_TAGGING,
-                tagger: kcTagger, logger: ctx.logger || logger,
+                tagger: kcTagModel ? (id) => kcTagger(id, { model: kcTagModel }) : kcTagger, logger: ctx.logger || logger,
                 budgetCheck: async () => {
                     const jobLeft = ctx?.config?.limits?.budgetLeft;
                     if (typeof jobLeft === 'number' && jobLeft <= 0) return 'job_budget';
@@ -1501,7 +1642,8 @@ function createRunner(opts = {}) {
             const { rows } = await db.query(
                 `SELECT q.id, q.job_id, q.idx, q.state, q.payload, q.retries,
                         j.kind, j.pdf_sha256, j.source_type, j.source_detail, j.subject_group,
-                        j.budget_usd::float8 AS budget_usd, j.cost_usd::float8 AS cost_usd
+                        j.budget_usd::float8 AS budget_usd, j.cost_usd::float8 AS cost_usd,
+                        to_jsonb(j) ->> 'engine' AS engine
                    FROM job_questions q JOIN jobs j ON j.id = q.job_id
                   WHERE q.id = $1`, [jqId]);
             if (rows.length === 0) return;
@@ -1509,6 +1651,8 @@ function createRunner(opts = {}) {
             if (!ADVANCEABLE_STATES.includes(jq.state)) return;   // 期間被人 approve／reject 了
 
             const node = NODE_FOR_STATE[jq.state];
+            // 〔dec/r13-engine-choice〕這份 job 的引擎（沒套 0021 的庫 to_jsonb 取不到這個鍵＝NULL＝照 .env）
+            const runtime = runtimeFor(jq.engine);
             const budgetLeft = Number(jq.budget_usd) - Number(jq.cost_usd);
             // 第 4.6 條：變式 job 的 lint 重試上限由 VARIANT_LINT_RETRIES 覆寫，其餘節點不變。
             const limits = jq.kind === 'variant'
@@ -1554,17 +1698,25 @@ function createRunner(opts = {}) {
             // 被前面的閘門先攔下的題，提示只在 job_questions.payload.extract.figure_hint。要逐題查就直接
             // SELECT detail->'figure_hint' FROM job_events WHERE node='save'（或查 payload）；整體的配圖數
             // （配到幾張、幾題有提示）看 npm run report:jobs 的「OCR 版面配圖」一節（讀 extract 事件的 cross_check.figures）。
-            const disagree = node === 'save' ? crossCheckStopReason(jq.payload) : null;
+            // 〔dec/r13-extract-fixes〕交叉驗證沒有停下來的題，答案是空的也停（answerMissingStopReason → awaiting_approval）
+            const stop = node === 'save' ? saveStopReason(jq.payload) : null;
+            const disagree = stop ? stop.reason : null;
             if (disagree) {
                 const cc = jq.payload.extract.cross_check;
                 const brief = cc && typeof cc === 'object'
                     ? { status: cc.status ?? null, similarity: cc.similarity ?? null, picked: cc.picked ?? null }
                     : { status: null };
                 const figureHint = disagree === 'ocr_only' ? jq.payload.extract.figure_hint : undefined;
+                const v = jq.payload.verify;
+                const noAnswer = stop.kind === 'no_answer'
+                    ? { no_answer: true, ...(v && typeof v.suggested_answer === 'string' ? { suggested_answer: v.suggested_answer } : {}) }
+                    // 〔審查 dec/r13-extract-fixes〕解答頁回填的答案與驗算的建議答案對不上（或沒得比）
+                    : stop.kind === 'answer_key_unverified' ? { answer_key_check: stop.check }
+                    : {};
                 await writeEvent({
                     job_id: jq.job_id, jq_id: jq.id, node: 'save', attempt: attemptNo(jq.retries, 'save'),
                     cost_usd: 0, cost_estimated: false, latency_ms: 0, outcome: 'skipped', error_class: null,
-                    detail: { reason: disagree, cross_check: brief, review_reason: disagree, ...(figureHint ? { figure_hint: figureHint } : {}) }
+                    detail: { reason: disagree, cross_check: brief, review_reason: disagree, ...(figureHint ? { figure_hint: figureHint } : {}), ...noAnswer }
                 });
                 await db.query(
                     `UPDATE job_questions SET state = 'needs_review', review_reason = $2,
@@ -1601,7 +1753,8 @@ function createRunner(opts = {}) {
                         budget_usd: Number(jq.budget_usd), cost_usd: Number(jq.cost_usd)
                     },
                     jq: { id: jq.id, idx: jq.idx, payload: jq.payload, retries: jq.retries },
-                    logger, models: loadModels(), limits
+                    // 〔dec/r13-engine-choice〕jobs.engine 照 .env（NULL 或相同）時 runtime.models 就是 loadModels()
+                    logger, models: runtime.models, limits, runtime
                 };
                 const res = await invokeNode(node, ctxBase, buildInput(node, jq));
                 if (res.abandoned) {
@@ -1619,9 +1772,12 @@ function createRunner(opts = {}) {
 
             // 〔Owner 第五輪 C-f〕本機模型的回應被截斷：不重試、直接進複核（Gemini 照舊重試）
             const localTruncation = isLocalTruncation(outcome, meter.lastModel);
+            // 〔dec/r13-extract-fixes，Owner 2026-10-02 同意〕本機模型的 lint／verify 逾時：不重試、直接進複核（provider_error；Gemini 照舊重試）
+            const localTimeout = isLocalTimeout(node, outcome, meter.lastModel);
             let next = transition({
                 state: jq.state, retries: jq.retries, outcome,
-                limits: localTruncation ? { ...limits, retryTruncated: false } : limits
+                limits: localTruncation ? { ...limits, retryTruncated: false }
+                    : localTimeout ? { ...limits, retryTimeout: false } : limits
             });
             if (next.review_reason === 'output_truncated') {
                 let accepted = truncatedSchemaOk;
@@ -1640,6 +1796,8 @@ function createRunner(opts = {}) {
             }
             const stayed = next.state === jq.state;
             const payload = mergePayload(jq.payload, node, outcome, stayed);
+            // 〔dec/r13-extract-fixes〕本機逾時不重試：error 路徑本來不寫 payload，這裡記一個旗標給複核頁的說明句用
+            if (localTimeout) payload[node] = { ...(payload[node] || {}), timed_out: true };
 
             await writeEvent({
                 job_id: jq.job_id, jq_id: jq.id, node, attempt: attemptNo(jq.retries, node),
@@ -1659,6 +1817,8 @@ function createRunner(opts = {}) {
                     // Gemini 的 schema_invalid 也帶 finishReason（services/llm/gemini.js），但 Gemini 路徑的事件照舊不多這一欄。
                     ...(outcome.kind === 'error' && outcome.finishReason && isLocalModelSpec(meter.lastModel)
                         ? { finish_reason: outcome.finishReason } : {}),
+                    // 〔dec/r13-extract-fixes〕本機逾時不重試：事件記一筆說明（npm run report:jobs 的錯誤類別照舊算在 timeout）
+                    ...(localTimeout ? { timeout_no_retry: true, note: LOCAL_TIMEOUT_NOTE } : {}),
                     ...(meter.usageMetadata.length > 0 ? { usage_metadata: meter.usageMetadata } : {}),
                     ...(schemaFallbackOf(meter, outcome) ? { schema_fallback: true } : {}),
                     // 階段 3 第 5.2 條：classify 是哪一層決定的（'gate'／'llm'／'knn'）要進事件，
@@ -1668,9 +1828,17 @@ function createRunner(opts = {}) {
                 }
             });
 
+            // 〔dec/r13-extract-fixes〕這個節點跑的期間，拆題可能剛好把解答頁的答案回填進這一列（applyAnswerKey 直接改資料庫裡的
+            // payload.extract）。寫回的 payload 是開跑前讀的那一份，直接蓋掉會把回填弄丟：資料庫裡有 answer_src 而這一份沒有時，
+            // 把 extract 的 answer_text／answer_src 從資料庫那一份帶過來（其餘照舊以這一份為準）。
             await db.query(
                 `UPDATE job_questions SET state = $2, retries = $3::jsonb, review_reason = $4,
-                        payload = $5::jsonb, locked_until = NULL, updated_at = now() WHERE id = $1`,
+                        payload = CASE
+                            WHEN (job_questions.payload->'extract') ? 'answer_src' AND NOT (($5::jsonb)->'extract') ? 'answer_src'
+                            THEN jsonb_set(jsonb_set($5::jsonb, '{extract,answer_text}', job_questions.payload->'extract'->'answer_text'),
+                                           '{extract,answer_src}', job_questions.payload->'extract'->'answer_src')
+                            ELSE $5::jsonb END,
+                        locked_until = NULL, updated_at = now() WHERE id = $1`,
                 [jq.id, next.state, JSON.stringify(next.retries), next.review_reason, JSON.stringify(payload)]);
             released = true;
 
@@ -1730,14 +1898,24 @@ function createRunner(opts = {}) {
         try {
             const { rows } = await db.query(
                 `SELECT id, pdf_path, pdf_sha256, page_count, subject_group,
-                        budget_usd::float8 AS budget_usd, cost_usd::float8 AS cost_usd
+                        budget_usd::float8 AS budget_usd, cost_usd::float8 AS cost_usd,
+                        to_jsonb(jobs) ->> 'engine' AS engine
                    FROM jobs WHERE id = $1`, [jobId]);
             if (rows.length === 0) return;
             const job = rows[0];
+            // 〔dec/r13-engine-choice〕這份卷指定的引擎（與 .env 相同或沒指定＝runner 的 config，與之前相同）
+            const runtime = runtimeFor(job.engine);
+            if (runtime.engine) {
+                logger.info({
+                    job_id: jobId, node: 'extract', engine: runtime.engine, model: runtime.models.extract,
+                    pdf_chunk_pages: runtime.pdfChunkPages, node_timeout_ms: runtime.nodeTimeoutMs,
+                    msg: `這份卷指定用${runtime.engine === 'gemini' ? ' Gemini' : '本機'}辨識（與 .env 的預設不同），拆題與逐題檢查都用這一組模型`
+                });
+            }
 
             // 〔DA-13〕逐塊檢查點：已經拆完的塊（extract 事件 pass／skipped）跳過，只跑沒拆完的（planResumeChunks）
             const checkpoints = await readExtractCheckpoints(jobId);
-            const plan = planResumeChunks(job.page_count, config.pdfChunkPages, checkpoints);
+            const plan = planResumeChunks(job.page_count, runtime.pdfChunkPages, checkpoints);
             if (plan.mode === 'inconsistent') {
                 // 〔dec/r7-checkpoints-fix〕不自動重拆（題號會撞、會建出重複列，理由見 planResumeChunks），留給人處理
                 logger.warn({
@@ -1773,7 +1951,7 @@ function createRunner(opts = {}) {
             for (const chunk of plan.todo) {
                 // 〔dec/r8-b1-abandon〕放棄：不開始下一塊；被中止的那一塊沒有留下題目列與檢查點（runExtractChunk 回 abandoned），
                 // job 停在 extracting、不 failed，只放掉自己的租約，下次開啟從這一塊接著拆（DA-13 的檢查點）
-                const r = abandoning ? { ok: false, abandoned: true } : await runExtractChunk(job, chunk);
+                const r = abandoning ? { ok: false, abandoned: true } : await runExtractChunk(job, chunk, runtime);
                 if (r.abandoned) {
                     await abandonUnit(lease, stopRenew, { unit: 'extract', job_id: jobId, node: 'extract', chunk: chunk.no, page_range: [chunk.fromPage, chunk.toPage] });
                     return;
@@ -1793,6 +1971,8 @@ function createRunner(opts = {}) {
                     msg: 'PDF 已經不在，但每一塊都已經拆完（上一輪在刪檔之後、轉 processing 之前被中斷）：直接轉 processing'
                 });
             }
+            // 〔dec/r13-extract-fixes〕解答頁的答案回填到同一份卷的題目（拆完整份才做：要知道全部題數才對得上題號）
+            await applyAnswerKey(jobId);
             await db.query(
                 `UPDATE jobs SET pdf_path = NULL, state = 'processing', locked_until = NULL, updated_at = now()
                   WHERE id = $1`, [jobId]);
@@ -1823,6 +2003,59 @@ function createRunner(opts = {}) {
         return Array.isArray(rows) ? rows : [];
     }
 
+    /**
+     * 〔dec/r13-extract-fixes，Owner 2026-10-02 同意；docs/local-mode.md 10.25 第 2 點〕解答頁的答案回填。
+     * 拆完整份之後（runExtractJob 轉 processing 之前；接著拆時也會在最後再跑一次，冪等）：
+     *   1. 讀這份 job 各塊 extract 事件的 detail.answer_key（agents/extract.js 本機路徑解析的「題號 → 答案」）；
+     *   2. 照 utils/answerKey.js 的 mapAnswerKey 對上題目（題號總數＝題數、題幹開頭的題號對得上，否則整份不回填、只記 log）；
+     *   3. 只改「答案是空的、還沒回填過」的題：payload.extract.answer_text ＝解答表的答案、answer_src ＝ 'answer_key'。
+     * 前幾塊的題可能已經在跑後面的節點：這裡直接改資料庫裡的 payload，runJobQuestion 寫回時會保留這兩個欄位（見那一句 UPDATE）。
+     * 已經跑過 verify 的題（compare='no_claim'）不重跑，複核頁同時看得到解答表的答案與驗算的建議答案。
+     * 失敗只記 warn：回填是加分項，不影響拆題本身。
+     */
+    async function applyAnswerKey(jobId) {
+        try {
+            const { rows: evs } = await db.query(
+                `SELECT detail->'chunk' AS chunk, detail->'answer_key' AS answer_key
+                   FROM job_events
+                  WHERE job_id = $1 AND node = 'extract' AND jq_id IS NULL AND outcome IN ('pass', 'skipped')
+                    AND detail ? 'answer_key'
+                  ORDER BY id`, [jobId]);
+            const entries = collectAnswerKeyEntries(evs);
+            if (!entries.length) return { applied: 0, reason: 'no_entries' };
+            const { rows: qs } = await db.query(
+                `SELECT id, idx, payload->'extract'->>'question_type' AS question_type,
+                        payload->'extract'->>'question_text' AS question_text,
+                        payload->'extract'->>'answer_text' AS answer_text
+                   FROM job_questions WHERE job_id = $1 ORDER BY idx`, [jobId]);
+            const { mapAnswerKey } = require('../utils/answerKey');
+            const plan = mapAnswerKey(entries, qs);
+            if (!plan.ok) {
+                logger.warn({ job_id: jobId, node: 'extract', msg: '解答頁的題號對不上題目，不回填答案（只記錄）', reason: plan.reason, entries: entries.length, questions: qs.length });
+                return { applied: 0, reason: plan.reason };
+            }
+            let applied = 0;
+            for (const u of plan.updates) {
+                const { rowCount } = await db.query(
+                    `UPDATE job_questions
+                        SET payload = jsonb_set(jsonb_set(payload, '{extract,answer_text}', to_jsonb($2::text)),
+                                                '{extract,answer_src}', '"answer_key"'::jsonb),
+                            updated_at = now()
+                      WHERE id = $1 AND COALESCE(payload->'extract'->>'answer_text', '') = ''
+                        AND NOT ((payload->'extract') ? 'answer_src')`, [u.id, u.answer_text]);
+                applied += rowCount || 0;
+            }
+            logger.info({
+                job_id: jobId, node: 'extract', msg: `解答頁回填 ${applied} 題答案（不確定、題型對不上的 ${plan.skipped.length} 題不回填）`,
+                applied, skipped: plan.skipped
+            });
+            return { applied, reason: null, skipped: plan.skipped };
+        } catch (err) {
+            logger.warn({ job_id: jobId, node: 'extract', msg: '解答頁回填失敗（題目照常，只是沒有回填答案）', error: String(err && err.message).split('\n')[0] });
+            return { applied: 0, reason: 'error' };
+        }
+    }
+
     /** 〔DA-13〕同一個交易跑 fn(client)：拆完一塊（變式建好一題）時，建題目列與寫那一列事件要一起成功或一起不算。 */
     async function inTransaction(fn) {
         const client = await db.pool.connect();
@@ -1843,7 +2076,7 @@ function createRunner(opts = {}) {
      * 單一 chunk 的拆題（含 fail 重試 1 次與 error 退避），成功時建 job_questions。
      * 〔第四輪 V3〕本機模式（config.localExtract）的 timeout 另有上限 LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES（見常數的說明）。
      */
-    async function runExtractChunk(job, chunk) {
+    async function runExtractChunk(job, chunk, runtime = runtimeFor(job.engine)) {
         let failRetries = 0;
         let errorRetries = 0;
         let timeoutRetries = 0;   // 〔第四輪 V3〕其中幾次是 timeout（只在本機模式用來設上限）
@@ -1869,7 +2102,7 @@ function createRunner(opts = {}) {
                     subject_group: job.subject_group ?? 'math_physics',
                     budget_usd: Number(job.budget_usd), cost_usd: Number(rows[0]?.cost_usd ?? 0)
                 },
-                jq: null, logger, models: loadModels(), limits: { ...DEFAULT_LIMITS, budgetLeft }
+                jq: null, logger, models: runtime.models, limits: { ...DEFAULT_LIMITS, budgetLeft }, runtime
             };
             const res = await invokeNode('extract', ctxBase, { jobId: job.id, pdfPath: resolveJobPath(job.pdf_path), chunk });
             // 〔dec/r8-b1-abandon〕被放棄：不裁圖、不建題目列、不寫事件（檢查點），迴圈不重試
@@ -1909,7 +2142,10 @@ function createRunner(opts = {}) {
                     ...(meter.usageMetadata.length > 0 ? { usage_metadata: meter.usageMetadata } : {}),
                     ...(schemaFallbackOf(meter, outcome) ? { schema_fallback: true } : {}),
                     // 〔本機模式 L2〕本機拆題的交叉驗證摘要（各 status 題數、OCR 引擎版本）；Gemini 路徑沒有這個鍵
-                    ...(outcome.data?.cross_check_summary ? { cross_check: outcome.data.cross_check_summary } : {})
+                    ...(outcome.data?.cross_check_summary ? { cross_check: outcome.data.cross_check_summary } : {}),
+                    // 〔dec/r13-extract-fixes〕解答頁（不建題的元素、解析出的題號→答案，拆完整份後 applyAnswerKey 讀它回填）、
+                    // 清掉的答案數、做過 LaTeX 修復的題數；本機路徑才有，沒有就不帶
+                    ...answerKeyDetail(outcome.data)
                 }
             });
             // 〔DA-13〕pass／skipped 的這一列事件就是這一塊的檢查點（readExtractCheckpoints）。有題目要建時，
@@ -1939,7 +2175,8 @@ function createRunner(opts = {}) {
             }
             // error：退避後重試，用盡就讓整份 job failed
             // 〔第四輪 V3〕本機模式的 timeout 用過 LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES 次就不再重試；總上限仍是 maxErrorRetries
-            const localTimeoutCapped = config.localExtract === true && outcome.errorClass === 'timeout'
+            // 〔dec/r13-engine-choice〕「本機」看這份卷實際用的引擎（runtime.localExtract；照 .env 時＝config.localExtract）
+            const localTimeoutCapped = runtime.localExtract === true && outcome.errorClass === 'timeout'
                 && timeoutRetries >= LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES;
             if (!localTimeoutCapped && errorRetries < DEFAULT_LIMITS.maxErrorRetries) {
                 await pause(backoffMs(errorRetries));   // 〔dec/r8-b1-abandon〕放棄時馬上醒來，迴圈開頭就結束
@@ -2326,6 +2563,45 @@ function createRunner(opts = {}) {
         logger.error({ job_id: jobId, node, outcome: 'error', latency_ms: 0, error: message });
     }
 
+    // ── 〔dec/r13-engine-choice〕這份 job 指定的引擎（jobs.engine，migration 0021；docs/local-mode.md 10.26）──
+    // engine 是 NULL、或等於 .env 的拆題引擎（MODEL_EXTRACT 的供應商）→ 一律照舊：loadModels() 與 runner 的 config，
+    // 送出的模型、cacheKeyParts、cassette 的鍵逐字不變。不同 → 這份卷的拆題與逐題檢查（classify、lint、verify、
+    // 知識點標註）都換成那個引擎的模型（config/engines.js 的 modelsForEngine），長節點設定（每塊頁數、節點逾時、
+    // 本機逾時只重試 1 次）也照那個引擎的預設；.env 明寫的 JOB_PDF_CHUNK_PAGES／JOB_NODE_TIMEOUT_MS 與 createRunner({config}) 給的值照樣優先。
+    // 向量不跟著換（embed 不經過這裡，一律 EMBED_MODEL）。工作槽數（JOB_CONCURRENCY）是整個 runner 共用的，不分 job。
+    const explicitConfigKeys = new Set(Object.keys(opts.config || {}));
+    const engineModelsCache = new Map();
+    /**
+     * @param {string|null|undefined} engine jobs.engine
+     * @returns {{engine:'local'|'gemini'|null, models:object, kcTagModel:string|null, localExtract:boolean,
+     *            pdfChunkPages:number, nodeTimeoutMs:number}}
+     */
+    function runtimeFor(engine) {
+        const engines = require('../config/engines');
+        const eng = engines.overrideEngine(engine, 'extract');
+        if (!eng) {
+            return {
+                engine: null, models: loadModels(), kcTagModel: null, localExtract: config.localExtract === true,
+                pdfChunkPages: config.pdfChunkPages, nodeTimeoutMs: config.nodeTimeoutMs
+            };
+        }
+        if (!engineModelsCache.has(eng)) engineModelsCache.set(eng, engines.modelsForEngine(eng));
+        const set = engineModelsCache.get(eng);
+        const local = eng === 'local';
+        const env = process.env;
+        const fixed = (envName, key) => explicitConfigKeys.has(key) || Number.isFinite(Number.parseInt(env[envName], 10));
+        const base = loadConfig(env);
+        return {
+            engine: eng,
+            // 與 loadModels() 同樣五個鍵（agent 只讀這五個）
+            models: { extract: set.extract, verify: set.verify, variant: set.variant, ocrStructure: set.ocrStructure, text: set.text },
+            kcTagModel: set.kcTag,
+            localExtract: local,
+            pdfChunkPages: fixed('JOB_PDF_CHUNK_PAGES', 'pdfChunkPages') ? config.pdfChunkPages : (local ? LOCAL_PDF_CHUNK_PAGES : base.pdfChunkPages),
+            nodeTimeoutMs: fixed('JOB_NODE_TIMEOUT_MS', 'nodeTimeoutMs') ? config.nodeTimeoutMs : (local ? LOCAL_NODE_TIMEOUT_MS : base.nodeTimeoutMs)
+        };
+    }
+
     // ── 模型設定（config/models.js 由 WS-B 提供，還沒合入時退回 .env）──
     let modelsCache = null;
     function loadModels() {
@@ -2560,6 +2836,9 @@ module.exports = {
     ocrOnlySchemaProblem, OCR_ONLY_SCHEMA_MESSAGE,   // 〔審查 2026-09-26〕
     outputTruncatedAccepted, OUTPUT_TRUNCATED_SCHEMA_MESSAGE, isLocalModelSpec, isLocalTruncation,   // 〔Owner 第五輪 C-f〕
     appliedNumPredictOf, variantTruncationNote,   // 〔Owner 第七輪 R7-1；審查 dec/r10-variant-cap〕
+    // 〔dec/r13-extract-fixes〕答案為空的停等、解答頁回填、本機 lint／verify 逾時不重試
+    answerMissingStopReason, saveStopReason, answerKeyCheck, answerKeyDetail, collectAnswerKeyEntries,
+    isLocalTimeout, LOCAL_TIMEOUT_NO_RETRY_NODES, LOCAL_TIMEOUT_NOTE,
     LOCAL_NODE_TIMEOUT_MS, LOCAL_PDF_CHUNK_PAGES, LOCAL_CONCURRENCY, RENEW_MIN_INTERVAL_MS,
     LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES,   // 〔第四輪 V3〕
     ADVANCEABLE_STATES, FREE_NODES, AGENT_MODULE_FOR_NODE, ERROR_CLASSES, SOURCE_CHECK_MODES,

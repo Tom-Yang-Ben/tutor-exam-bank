@@ -192,7 +192,10 @@ describe('cassette 回放 — extract_ocr（LOCAL_EXTRACT_MODE=ocr、LLM_MODE=re
             // payload.extract 的固定欄位
             assert.equal(q.chunk_no, 1);
             assert.deepEqual(q.page_range, [1, 1]);
-            assert.ok(typeof q.answer_text === 'string' && q.answer_text.length > 0);
+            // 〔dec/r13-extract-fixes，Owner 2026-10-02 核准的契約變更〕本機拆題在題目頁沒寫答案時 answer_text 是空字串
+            // （樣卷的題目頁沒有答案），原本斷言「非空」；不是放寬品質門檻——答案改由 verify 算、存成建議答案（docs/local-mode.md 10.25 第 1 點）
+            assert.equal(typeof q.answer_text, 'string');
+            if (q.answer_text === '') assert.ok(!('answer_dropped' in q) || q.answer_dropped.reason === 'not_on_page', `#${q.idx} 的 answer_dropped 形狀不對`);
             // 只用 OCR：文字模型看不到圖，figure_desc 一律拿掉；附圖只由 OCR 的版面位置配（agents/extractOcrFigures.js）
             assert.ok(!('figure_desc' in q), `#${q.idx} 不該有 figure_desc（只用 OCR 時文字模型回的附圖欄位一律拿掉）`);
             if ('figure_box' in q) {

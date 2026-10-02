@@ -147,9 +147,12 @@ function stepExtraEnv(step, plan, env = process.env, opts = {}) {
     const mode = typeof opts.onlyMissing === 'boolean'
         ? { LLM_RECORD_ONLY_MISSING: opts.onlyMissing ? '1' : '', EMBED_RECORD_ONLY_MISSING: opts.onlyMissing ? '1' : '' }
         : {};
+    const long = local.LONG_CALL_STEPS.includes(step.name);
     return {
         ...local.localRecordEnv(plan),
-        ...(local.LONG_CALL_STEPS.includes(step.name) ? local.longCallRecordEnv(plan, env) : {}),
+        // 〔審查 dec/r13-extract-fixes〕其他步驟的 lint／verify 跟著 .env 的全域 OLLAMA_TIMEOUT_MS（比本機預設 30 分長時）；
+        // pipeline／e2e 的在 longCallRecordEnv 裡跟著 3 小時
+        ...(long ? local.longCallRecordEnv(plan, env) : local.agentTimeoutRecordEnv(plan, env.OLLAMA_TIMEOUT_MS, env)),
         ...mode,
         ...(step.extra || {})
     };
@@ -202,7 +205,14 @@ function longCallNote(steps, plan, env = process.env) {
     if (!names.length || !plan || !plan.local) return null;
     const e = local.longCallRecordEnv(plan, env);
     const progress = Number(e.OLLAMA_PROGRESS_MS || env.OLLAMA_PROGRESS_MS || 0);
-    return `${names.join('、')}：單次 Ollama 呼叫逾時 ${local.formatDuration(Number(e.OLLAMA_TIMEOUT_MS) / 1000)}、` +
+    // 〔審查 dec/r13-extract-fixes〕lint／verify 的單次逾時：跟著放寬（e 裡有）或照 .env 寫的
+    const agentTimeouts = ['LINT', 'VERIFY'].map((s) => {
+        const k = `OLLAMA_TIMEOUT_MS_${s}`;
+        const v = Number(e[k] || env[k] || 0);
+        return v > 0 ? `${s.toLowerCase()} ${local.formatDuration(v / 1000)}` : null;
+    }).filter(Boolean);
+    return `${names.join('、')}：單次 Ollama 呼叫逾時 ${local.formatDuration(Number(e.OLLAMA_TIMEOUT_MS) / 1000)}` +
+        (agentTimeouts.length ? `（其中 ${agentTimeouts.join('、')}）` : '') + '、' +
         `節點逾時 ${local.formatDuration(Number(e.JOB_NODE_TIMEOUT_MS) / 1000)}（RERECORD_OLLAMA_TIMEOUT_MS／RERECORD_NODE_TIMEOUT_MS 可改；不動 .env）` +
         (progress > 0 ? `，每 ${local.formatDuration(progress / 1000)}印一次輸出進度` : '，不印輸出進度（.env 的 OLLAMA_PROGRESS_MS=0）') + '。';
 }

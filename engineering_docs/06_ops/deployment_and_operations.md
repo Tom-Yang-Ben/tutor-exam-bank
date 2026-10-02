@@ -203,7 +203,7 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 | 策略 | 本專案做法 |
 | :--- | :--- |
 | 發布 | 單行程原地重啟（Ctrl+C 停 `npm start` → `git pull`／checkout → 重啟）；無 Blue-Green／Rolling 需求。**含新 migration 的版本要先停服務或先 `npm run migrate`，再拉程式／重啟**〔修訂 2026-09-16〕：以 `npm run dev`（nodemon）執行時，`git pull` 一帶入新程式就會自動重啟，舊 schema 下寫入新 state／review_reason 會違反 CHECK（例：0009 之前的 schema 不接受 `source_checked`） |
-| DB migration | 只增不改（NFR-006；`0001_init`→`0009_source_check`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕→`0012_knowledge_components`〔修訂 2026-09-24〕→`0018_retrain_unflag_marker`〔整合 2026-09-26〕→`0019_ocr_only_review`〔整合 r5 2026-09-26〕），additive 先行，與 expand-contract 的 expand 段等價。〔整合 2026-09-26〕例外：0016 在同一支 migration 內把 `attempts` 表搬成 `assignments`＋`attempt_records`、原名改為唯讀檢視（既有 migration 檔不動），0016 之前的程式不能在新 schema 上寫入（§3.6） |
+| DB migration | 只增不改（NFR-006；`0001_init`→`0009_source_check`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕→`0012_knowledge_components`〔修訂 2026-09-24〕→`0018_retrain_unflag_marker`〔整合 2026-09-26〕→`0019_ocr_only_review`〔整合 r5 2026-09-26〕→`0020_output_truncated_review`→`0021_job_engine`〔dec/r13-engine-choice 2026-10-02〕），additive 先行，與 expand-contract 的 expand 段等價。〔整合 2026-09-26〕例外：0016 在同一支 migration 內把 `attempts` 表搬成 `assignments`＋`attempt_records`、原名改為唯讀檢視（既有 migration 檔不動），0016 之前的程式不能在新 schema 上寫入（§3.6） |
 | 風險控制 | `FEATURE_*` 旗標預設全關，逐一開啟並觀察，取代 canary（階段 2 起的新功能均走旗標掛載） |
 
 ### 4.1 對外部署前置條件

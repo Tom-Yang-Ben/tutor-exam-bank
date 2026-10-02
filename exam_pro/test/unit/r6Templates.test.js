@@ -250,15 +250,17 @@ describe('〔Owner 第五輪 L-2〕公式規範：JSON 字串裡的反斜線要�
 
     test('用到這段規範的 8 個模板都已升版、註冊內容含這條規則；舊版號不再註冊', () => {
         const rule = '每一個反斜線都要寫成兩個';
-        const current = ['extract.v3', 'extract_chem.v2', 'extract_vision.v2', 'extract_vision_chem.v2',
-            'extract_ocr.v2', 'extract_ocr_chem.v2', 'variant.v2', 'variant_chem.v2'];
+        // 〔dec/r13-extract-fixes〕四個本機模板再升一版（v2 → v3：多 answer_text 與矩陣等寫法，docs/local-mode.md 10.25），仍含這條規則
+        const current = ['extract.v3', 'extract_chem.v2', 'extract_vision.v3', 'extract_vision_chem.v3',
+            'extract_ocr.v3', 'extract_ocr_chem.v3', 'variant.v2', 'variant_chem.v2'];
         for (const name of current) {
             const t = getTemplate(name);
             assert.ok(t, `${name} 沒有註冊`);
             assert.ok(t.includes(rule), `${name} 不含新規則`);
         }
         for (const old of ['extract.v2', 'extract_chem.v1', 'extract_vision.v1', 'extract_vision_chem.v1',
-            'extract_ocr.v1', 'extract_ocr_chem.v1', 'variant.v1', 'variant_chem.v1']) {
+            'extract_ocr.v1', 'extract_ocr_chem.v1', 'variant.v1', 'variant_chem.v1',
+            'extract_vision.v2', 'extract_vision_chem.v2', 'extract_ocr.v2', 'extract_ocr_chem.v2']) {
             assert.equal(getTemplate(old), null, `${old} 不該再被註冊（改了模板要升版）`);
         }
         assert.deepEqual(

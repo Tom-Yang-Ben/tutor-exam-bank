@@ -417,7 +417,9 @@ async function runPipeline(opts) {
             // 〔本機模式 L2〕與 runner 相同的政策停等：本機拆題兩版不一致（cross_check.status ≠ 'agree'）的題
             // 走到 save 時停在 needs_review('extract_disagree')，eval 的入庫數才與正式管線一致。
             // Gemini 路徑的題沒有 cross_check，這一段不會觸發。
-            const stopReason = node === 'save' ? require('../../workers/jobRunner').crossCheckStopReason(row.payload) : null;
+            // 〔dec/r13-extract-fixes〕答案是空的題同樣停（awaiting_approval），與 runner 的 saveStopReason 同一支
+            const stop = node === 'save' ? require('../../workers/jobRunner').saveStopReason(row.payload) : null;
+            const stopReason = stop ? stop.reason : null;
             if (stopReason) {
                 events.push({
                     jq_id: row.id, node: 'save', attempt: 1, model: null,

@@ -10,7 +10,7 @@
 |---|---|---|
 | `--suite retrieval`（階段 1） | Recall@5／Recall@10／MRR，分 LIKE、純向量、hybrid 三欄對照 | ✅ |
 | `--suite classify`（階段 2，A-T14） | 章節分類的 accuracy／macro-F1／Top-5 混淆對，cassette 回放 vs golden | ✅ |
-| `--suite pipeline`（階段 2，A-T14） | 各節點通過率、needs_review 原因分佈、每份 PDF 的 token 與成本 | ✅ |
+| `--suite pipeline`（階段 2，A-T14） | 各節點通過率、needs_review 原因分佈、每份 PDF 的 token 與成本；門檻比 saved_rate、gate_pass_rate、answer_agree_rate、verify_agree_rate | ✅ |
 | `compare_pipeline.js`（E-X12a） | 舊流程 vs 新管線的逐欄對照 | ❌ 會連外，只在本機跑 |
 
 公式 golden（`eval/golden/formula.json`）由 **WS-C** 產出，以 `node --test` 的表格測試跑，
@@ -152,6 +152,18 @@ suite 仍保留「`source='gate'` 應為 0」的斷言——那是這條約定�
 輸出三組數字：各節點通過率（**分母是 `pass + fail + error`，不含 `skipped`**——
 證明題的 verify 與未就緒的 dedup1 本來就該跳過）、needs_review 原因分佈、
 每份 PDF 的 token 與成本（`token_out` 一定含 thinking，第 0.4 條）。
+
+比門檻的四個指標（`eval/thresholds.json` 的 `pipeline.pipeline`）：
+
+| 指標 | 量什麼 | 門檻 | 什麼時候不比（印 n/a、列在「未設門檻」） |
+|---|---|---:|---|
+| `saved_rate` | 自動入庫的比例 | 0.87 | OCR 模式（每題都停在人工複核，Owner 第五輪 D-2） |
+| `gate_pass_rate` | classify 零成本閘門通過率 | 0.97 | — |
+| `answer_agree_rate` | 拆題寫的答案對驗算模型答案的一致率（分母只算 agree／disagree／uncertain） | 0.87 | 全部題目都是 `no_claim`（拆題沒寫答案；Owner 2026-10-02 A 案） |
+| `verify_agree_rate` | 拆題沒寫答案（verify 記 `no_claim`）的題：驗算模型答案對答案卷 `answer_text` 的一致率 | 0.87（首次實測 0.9000 − 0.03，Owner 2026-10-02 A 案） | 沒有任何一題是 `no_claim` |
+
+「不比」只認 `eval/lib/thresholds.js` 的白名單 `NOT_APPLICABLE_ALLOWED`；條件由 `eval/lib/suitePipeline.js` 判斷，
+細節見 `docs/local-mode.md` 10.25 第 6 點。
 
 ### 兩個 suite 現在的狀態
 

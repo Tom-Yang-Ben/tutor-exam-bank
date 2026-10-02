@@ -76,8 +76,11 @@ function markdownPipeline(res) {
     // measured.pipeline 為 null = 這一輪根本沒跑起來（例如 replay miss）。
     // 用一組全 null 的替身讓報表照常印出來——report 的價值在這種時候最高，
     // 因為 meta 會告訴你是哪個 agent、哪支 cassette 出的問題。
-    const m = res.measured.pipeline || { saved_rate: null, gate_pass_rate: null, answer_agree_rate: null, n: 0 };
+    const m = res.measured.pipeline || { saved_rate: null, gate_pass_rate: null, answer_agree_rate: null, verify_agree_rate: null, n: 0 };
     const c = res.counts;
+    // 〔Owner 2026-10-02 A 案〕這一輪不比門檻的答案指標（suitePipeline.js 的 pipelineNotApplicable）：在數字後面註明原因
+    const na = (res.notApplicable && res.notApplicable.pipeline) || {};
+    const naNote = (metric) => na[metric] ? `（不比門檻：${na[metric]}）` : '';
     const lines = [
         '',
         '## 管線 eval（`--suite pipeline`）',
@@ -96,12 +99,20 @@ function markdownPipeline(res) {
 
     lines.push('### 結果分佈', '',
         `- 已入庫 ${c.saved}／待複核 ${c.needs_review}／不採用 ${c.rejected}／未完成 ${c.pending}（共 ${c.total} 題）`,
-        `- saved_rate：${cell(m.saved_rate)}${res.ocrOnly ? `（${res.ocrOnly.saved_rate_note}）` : ''}　classify 零成本閘門通過率：${cell(m.gate_pass_rate)}　answer_agree_rate：${cell(m.answer_agree_rate)}`,
+        `- saved_rate：${cell(m.saved_rate)}${res.ocrOnly ? `（${res.ocrOnly.saved_rate_note}）` : ''}　classify 零成本閘門通過率：${cell(m.gate_pass_rate)}　answer_agree_rate：${cell(m.answer_agree_rate)}${naNote('answer_agree_rate')}` +
+            // 〔Owner 2026-10-02 A 案〕verify_agree_rate 進門檻；舊報表的 measured 沒有這個鍵就不印（與改版前相同）
+            ('verify_agree_rate' in m ? `　verify_agree_rate：${cell(m.verify_agree_rate)}${naNote('verify_agree_rate')}` : ''),
         '');
     // 〔Owner 第五輪 D-2〕OCR 模式的替代指標：只報告、不設門檻
     if (res.ocrOnly) {
         const p = res.ocrOnly.pre_approval || { passed: 0, total: 0, rate: null };
         lines.push(`- 人工核准前的通過率（OCR 模式）：${cell(p.rate)}（${p.passed}／${p.total} 題走完全部閘門、只因「只用 OCR 拆題」停下；只報告、不設門檻）`, '');
+    }
+    // no_claim 題的驗算對標準答案：兩種比法都印（〔Owner 2026-10-02 A 案〕門檻比的是 answer_text 那一個）
+    if (res.verifyAgree) {
+        const v = res.verifyAgree;
+        lines.push(`- verify_agree_rate（${v.n} 題 no_claim）：對答案卷 answer_text ${cell(v.by_answer_text.rate)}（${v.by_answer_text.agree}／${v.n}）、` +
+            `對 final_answer ${cell(v.by_final_answer.rate)}（${v.by_final_answer.agree}／${v.n}）。${v.note}`, '');
     }
 
     lines.push('**needs_review 原因分佈**：', '');

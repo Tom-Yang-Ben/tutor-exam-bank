@@ -95,6 +95,8 @@ router.post('/jobs', aiRateLimit, upload.single('pdf'), jobController.handleUplo
 router.get('/jobs/:id', jobController.getJob);
 router.get('/jobs/:id/questions', jobController.listJobQuestions);
 router.post('/jobs/:id/retry', jobController.retryJob);
+// 〔dec/r13-engine-choice〕上傳、家教、助教的「本機／Gemini」選項讀這一支（只讀設定、不回金鑰；docs/local-mode.md 10.26）
+router.get('/engines', require('../controllers/engineController').listEngines);
 
 router.get('/review', reviewController.listReview);
 router.get('/review/:jqId', reviewController.getReviewItem);
