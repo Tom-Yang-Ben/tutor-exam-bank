@@ -262,7 +262,8 @@ describe('〔r6 審查〕10.21 的成功判準與 verifyReport／thresholdRows �
             suite: 'pipeline',
             // 〔Owner 2026-10-02 A 案〕回放驗證表讀 eval/thresholds.json 本身，那裡多了 verify_agree_rate 門檻：
             // 報表照新契約帶這個數字（有 no_claim 也有非 no_claim 的一輪，兩個都量）
-            measured: { pipeline: { saved_rate: null, gate_pass_rate: 1, answer_agree_rate: 0.9, verify_agree_rate: 0.9, n: 10 } },
+            // 〔Owner 2026-10-03 第 r14 輪 C-1〕同理多了 chapter_acc_rate 門檻（0.77），報表帶這個數字
+            measured: { pipeline: { saved_rate: null, gate_pass_rate: 1, answer_agree_rate: 0.9, verify_agree_rate: 0.9, chapter_acc_rate: 0.9, n: 10 } },
             notApplicable: na,
             ocrOnly: { saved_rate_note: suitePipeline.OCR_SAVED_RATE_NOTE, pre_approval: { passed: 10, total: 10, rate: 1 } },
             counts: { total: 10, saved: 0, needs_review: 10, rejected: 0, pending: 0 },
@@ -298,7 +299,8 @@ describe('〔r6 審查〕10.21 的成功判準與 verifyReport／thresholdRows �
         const t = thresholdRows({ suite: 'pipeline', measured }, TABLE);
         assert.deepEqual(t.failures, ['pipeline.saved_rate：門檻 0.87 但這次是 n/a']);
         assert.equal(t.rows.find(r => r.metric === 'pipeline.saved_rate').ok, false);
-        assert.throws(() => thresholdRows({ suite: 'pipeline', measured, not_applicable: { pipeline: { gate_pass_rate: 'x' } } }, TABLE), /白名單/);
+        // 〔Owner 2026-10-03 第 r14 輪 C-1〕gate_pass_rate 進白名單（OCR 模式只報告）之後，改用不在白名單的 chapter_acc_rate 驗這條
+        assert.throws(() => thresholdRows({ suite: 'pipeline', measured, not_applicable: { pipeline: { chapter_acc_rate: 'x' } } }, TABLE), /白名單/);
     });
 
     test('rerecord_all 錄完的「下一步」：cassettes:prune 先不要 --apply（與 10.21 第 4 步、record_local.bat 一致）', () => {

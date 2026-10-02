@@ -76,9 +76,10 @@ function markdownPipeline(res) {
     // measured.pipeline 為 null = 這一輪根本沒跑起來（例如 replay miss）。
     // 用一組全 null 的替身讓報表照常印出來——report 的價值在這種時候最高，
     // 因為 meta 會告訴你是哪個 agent、哪支 cassette 出的問題。
-    const m = res.measured.pipeline || { saved_rate: null, gate_pass_rate: null, answer_agree_rate: null, verify_agree_rate: null, n: 0 };
+    const m = res.measured.pipeline || { saved_rate: null, gate_pass_rate: null, answer_agree_rate: null, verify_agree_rate: null, chapter_acc_rate: null, n: 0 };
     const c = res.counts;
-    // 〔Owner 2026-10-02 A 案〕這一輪不比門檻的答案指標（suitePipeline.js 的 pipelineNotApplicable）：在數字後面註明原因
+    // 〔Owner 2026-10-02 A 案〕這一輪不比門檻的指標（suitePipeline.js 的 pipelineNotApplicable）：在數字後面註明原因
+    // （〔Owner 2026-10-03 第 r14 輪 C-1〕OCR 模式的 gate_pass_rate 也走這裡）
     const na = (res.notApplicable && res.notApplicable.pipeline) || {};
     const naNote = (metric) => na[metric] ? `（不比門檻：${na[metric]}）` : '';
     const lines = [
@@ -99,10 +100,19 @@ function markdownPipeline(res) {
 
     lines.push('### 結果分佈', '',
         `- 已入庫 ${c.saved}／待複核 ${c.needs_review}／不採用 ${c.rejected}／未完成 ${c.pending}（共 ${c.total} 題）`,
-        `- saved_rate：${cell(m.saved_rate)}${res.ocrOnly ? `（${res.ocrOnly.saved_rate_note}）` : ''}　classify 零成本閘門通過率：${cell(m.gate_pass_rate)}　answer_agree_rate：${cell(m.answer_agree_rate)}${naNote('answer_agree_rate')}` +
+        `- saved_rate：${cell(m.saved_rate)}${res.ocrOnly ? `（${res.ocrOnly.saved_rate_note}）` : ''}　classify 零成本閘門通過率：${cell(m.gate_pass_rate)}${naNote('gate_pass_rate')}　answer_agree_rate：${cell(m.answer_agree_rate)}${naNote('answer_agree_rate')}` +
             // 〔Owner 2026-10-02 A 案〕verify_agree_rate 進門檻；舊報表的 measured 沒有這個鍵就不印（與改版前相同）
             ('verify_agree_rate' in m ? `　verify_agree_rate：${cell(m.verify_agree_rate)}${naNote('verify_agree_rate')}` : ''),
         '');
+    // 〔Owner 2026-10-03 第 r14 輪 C-1〕章節正確率（兩種模式都比門檻）；舊報表的 measured 沒有這個鍵就不印（與改版前相同）
+    if ('chapter_acc_rate' in m) {
+        const a = res.chapterAcc;
+        const wrong = a && a.wrong && a.wrong.length
+            ? `；章節不對：${a.wrong.map(w => (w.no === null || w.no === undefined ? `idx ${w.idx}（配不上答案卷）` : `答案卷第 ${w.no} 題 ${w.expect}`) + ` → ${w.got}（${w.source || '?'}）`).join('、')}`
+            : '';
+        lines.push(`- 章節正確率 chapter_acc_rate：${cell(m.chapter_acc_rate)}` +
+            (a ? `（${a.correct}／${a.n} 題有 classify 結果的題，最後章節等於答案卷${wrong}）` : ''), '');
+    }
     // 〔Owner 第五輪 D-2〕OCR 模式的替代指標：只報告、不設門檻
     if (res.ocrOnly) {
         const p = res.ocrOnly.pre_approval || { passed: 0, total: 0, rate: null };
@@ -242,7 +252,9 @@ function emit(opts) {
             review_reasons: res.reviewReasons || null,
             counts: res.counts || null,
             cost: res.cost || null,
-            per_question: res.perQuestion || null
+            per_question: res.perQuestion || null,
+            // 〔Owner 2026-10-03 第 r14 輪 C-1〕章節正確率的明細（pipeline；其他 suite 沒有這一欄）
+            ...(res.chapterAcc ? { chapter_acc: res.chapterAcc } : {})
         }
     };
     fs.writeFileSync(file, JSON.stringify(doc, null, 2) + '\n', 'utf8');

@@ -50,9 +50,11 @@
       "saved_rate": 0.87,
       "gate_pass_rate": 0.97,
       "answer_agree_rate": 0.87,
-      "verify_agree_rate": 0.87
+      "verify_agree_rate": 0.87,
+      "chapter_acc_rate": 0.77
     },
-    "_note_verify_agree_rate": "Owner 2026-10-02 選 A 案（docs/local-mode.md 10.25 第 6 點）：verify_agree_rate＝拆題沒寫答案（verify 記 no_claim）的題，驗算模型的答案對答案卷 answer_text 的一致率。初值 0.87＝首次實測 0.9000（9／10，Owner 電腦 2026-10-02 錄完的樣卷回放，commit 422e4f5）− 0.03；之後只升不降。answer_agree_rate 定義與門檻不變，只在全部題目都是 no_claim 時 n/a、不比門檻（eval/lib/thresholds.js 的 NOT_APPLICABLE_ALLOWED）；verify_agree_rate 在沒有任何一題是 no_claim 時同樣 n/a、不比。"
+    "_note_verify_agree_rate": "Owner 2026-10-02 選 A 案（docs/local-mode.md 10.25 第 6 點）：verify_agree_rate＝拆題沒寫答案（verify 記 no_claim）的題，驗算模型的答案對答案卷 answer_text 的一致率。初值 0.87＝首次實測 0.9000（9／10，Owner 電腦 2026-10-02 錄完的樣卷回放，commit 422e4f5）− 0.03；之後只升不降。answer_agree_rate 定義與門檻不變，只在全部題目都是 no_claim 時 n/a、不比門檻（eval/lib/thresholds.js 的 NOT_APPLICABLE_ALLOWED）；verify_agree_rate 在沒有任何一題是 no_claim 時同樣 n/a、不比。",
+    "_note_chapter_acc_rate": "Owner 2026-10-03 第 r14 輪 C-1（docs/local-mode.md 10.27）：chapter_acc_rate＝有 classify 結果的題，最後章節等於答案卷 chapter 的比例（章節正確率），兩種模式都比。初值 0.77＝首次實測 0.8000（8／10，OCR 模式、樣卷回放，commit f61cab3）− 0.03；之後只升不降。同一個決定：OCR 模式（與 saved_rate 的 D-2 同一個條件）gate_pass_rate 只報告、不比門檻（eval/lib/thresholds.js 的 NOT_APPLICABLE_ALLOWED）——0.97 是照 Gemini 定的（閘門通過＝省一次付費呼叫），本機 classify 走 LLM 不花錢，拆題模型猜的章節不可靠（樣卷 8 題過閘門、其中 2 題錯；走 LLM 的 2 題都對），把閘門通過率推高只會讓章節更不準。Gemini（非 OCR）模式 gate_pass_rate 照舊比 0.97，數字不動。"
   },
   "_classify_measured_with": {
     "agent": "agents/classify.js",

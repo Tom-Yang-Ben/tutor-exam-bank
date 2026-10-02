@@ -130,7 +130,9 @@ const SUITE_METRICS = {
     // pipeline：對 sample_exam.pdf 跑整條管線（A-T14）
     // 〔Owner 2026-10-02 A 案〕verify_agree_rate：拆題沒寫答案（verify 記 no_claim）的題，驗算模型的答案對答案卷 answer_text 的
     //   一致率（eval/lib/suitePipeline.js）。與 answer_agree_rate（拆題答案對驗算答案）分開，歷史數字不混在一起。
-    pipeline: { columns: ['pipeline'], metrics: ['saved_rate', 'gate_pass_rate', 'answer_agree_rate', 'verify_agree_rate'] },
+    // 〔Owner 2026-10-03 第 r14 輪 C-1〕chapter_acc_rate：有 classify 結果的題，最後章節等於答案卷 chapter 的比例（章節正確率）。
+    //   OCR 模式的 gate_pass_rate 改為只報告之後，章節對不對由它把關；兩種模式都比。
+    pipeline: { columns: ['pipeline'], metrics: ['saved_rate', 'gate_pass_rate', 'answer_agree_rate', 'verify_agree_rate', 'chapter_acc_rate'] },
 
     // ── 階段 3 的兩個 suite（interfaces-stage3.md 第 8.2、8.3 條）──
     //
@@ -157,9 +159,13 @@ const SUITE_METRICS = {
  *   pipeline.pipeline.answer_agree_rate：全部題目都是 no_claim（拆題沒寫答案）時沒有分母；有任何一題不是 no_claim 就照舊比 0.87。
  *   pipeline.pipeline.verify_agree_rate：沒有任何一題是 no_claim 時沒有分母；有一題是就照比。
  *   兩者互斥（條件由 suitePipeline.js 的 pipelineNotApplicable 判斷），有題時至少一個照比。
+ * 〔Owner 2026-10-03 第 r14 輪 C-1，docs/local-mode.md 10.27〕
+ *   pipeline.pipeline.gate_pass_rate：OCR 模式（與 saved_rate 同一個條件）只報告、不比門檻——0.97 是照 Gemini 定的
+ *   （閘門通過＝省一次付費呼叫），本機 classify 走 LLM 不花錢、拆題模型猜的章節不可靠；章節對不對改由 chapter_acc_rate 把關
+ *  （不在白名單，兩種模式都比）。Gemini（非 OCR）模式 gate_pass_rate 照舊比 0.97。
  */
 const NOT_APPLICABLE_ALLOWED = Object.freeze({
-    pipeline: Object.freeze({ pipeline: Object.freeze(['saved_rate', 'answer_agree_rate', 'verify_agree_rate']) })
+    pipeline: Object.freeze({ pipeline: Object.freeze(['saved_rate', 'gate_pass_rate', 'answer_agree_rate', 'verify_agree_rate']) })
 });
 
 /**
