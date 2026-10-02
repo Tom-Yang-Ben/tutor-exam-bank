@@ -18,6 +18,7 @@
 > 〔整合 2026-09-27 `dec/integration-r6`〕`local/integration-r5`（`a670783`）依序以 `--no-ff` 併入第五輪五組：`dec/r6-templates-fix`（A）、`dec/r6-local-tuning-fix`（B）、`dec/r6-gates-fix`（C）、`dec/r6-defaults-fix`（D）、`dec/r6-docs-kc-fix`（E）。五組各自暫編的「10.16」依併入順序改號為 **10.16（A 模板與 schema）、10.17（B 本機呼叫調整）、10.18（C 閘門與計分）、10.19（D 預設值與門檻）、10.20（E 文件與知識點）**，交互參照（文件、程式註解、測試）一併改號；新增最後一節 **10.21 重錄計畫**（Owner 電腦要依序跑的重錄步驟）。
 > 〔Owner 2026-10-01，`dec/r13-engine-choice`〕上傳考卷、AI 家教、助教可以在畫面上逐次選「本機／Gemini」（新增 **10.25**；migration 0021、`config/engines.js`、`GET /api/engines`）。沒選或選的與 `.env` 相同時一切照舊；第 0 條「預設走本機、Gemini 保留」不變，只是多了不必改 `.env` 的切換方式。
 > 〔Owner 2026-10-03 第 r14 輪 C-1、C-2，`dec/r14-ci-green`〕CI 的兩個 eval 門檻（新增 **10.27**）：OCR 模式的 pipeline `gate_pass_rate` 只報告、章節改由新指標 `chapter_acc_rate`（0.77）把關；variant 的 `retrieved_coverage` 門檻依向量模型分開設（本機向量 0.47、Gemini 照舊 0.8367）。第 0～9 條沒有改。
+> 〔2026-10-03 `dec/r15-chapter-acc`〕pipeline 章節錯題的根因修正（新增 **10.28**）：OCR 純文字的對數下標 `log_10 2` 被讀成底數「1」的錯。第 0～9 條沒有改。
 
 ## 0. Owner 裁決（2026-09-25，對話中）
 
@@ -2174,3 +2175,19 @@ scripts\windows\record_local.bat pipeline,e2e --only-missing
 1. `npm run eval -- --suite pipeline`：最後印「✅ pipeline eval 通過」，「未設門檻」那一行多 `pipeline.gate_pass_rate（OCR 模式（本機）…）`，報表多一行「章節正確率」。
 2. `npm run eval -- --suite variant`：印「門檻組：向量模型 ollama:qwen3-embedding:0.6b 套用專屬門檻…」與「✅ variant eval 通過」。
 3. 每一步不到 1 分鐘。`.env` 若寫了 `EMBED_MODEL=gemini-embedding-001`，variant 會先因 Gemini 向量檔缺 5 題而拒絕執行（第 3 點）；補錄之後會照基準 0.8367 比，那是預期的行為。
+
+### 10.28 pipeline 章節錯題的根因修正（2026-10-03，`dec/r15-chapter-acc`）
+
+> 從 `main`（`0b234ef`）開。10.27 第 1 點列出樣卷 10 題裡章節錯的兩題（`chapter_acc_rate` 0.80）：第 7 題、第 8 題都是「過了零成本閘門、拆題模型給的章被直接採用」。這一節**修的是會在別的考卷重複出現的根因**，不是對這 10 題調參數；golden、回放檔、fixture 一個都沒動，門檻一個都沒動。
+
+#### 1. 對數的下標：OCR 純文字的 `log_10 2`（第 8 題）
+
+- **事實**：第 8 題的 OCR 原文是「已知log_10 2=0.3010，利用log_10 5=log_10 $\frac{10}{2}$求log_10 5之近似值。」（`eval/cassettes/extract_ocr/6d90f52e….json`）。拆題模型（`qwen3:8b`）給「指數與對數」、信心 0.95，**是對的**；但閘門上的界線規則 `exp_log_third`（10.15、Owner 第五輪 LC-3）以證據「log_1」把它改成第三冊「指數函數與對數函數」。原因在 `config/chapterMigrationRules.js` 的 `findNonCommonLogBase`：沒有大括號的下標只讀**一個字元**，`log_10` 被讀成底數「1」。LaTeX 題幹寫 `\log_{10}`（有大括號）所以以前沒出事；OCR 的純文字不寫大括號，這個錯會在每一份用到常用對數的 OCR 考卷重複出現。
+- **修法**：下標的寫法抽成一個常數 `LOG_SUBSCRIPT_SOURCE`：大括號整段、**一整串數字**、或單一個英文字母（`log_a b` 的 b 是真數，字母照舊只讀一個）。`findNonCommonLogBase`：大括號裡是 10 不算（照舊）；沒有大括號時**以「10」開頭的一串數字也當底數 10**——OCR 會把「log_10 2」的空白吃掉成「log_102」，高中題目幾乎沒有底數 100、102 的對數，這樣判是往「不換章」的方向錯。`log_2 8`、`\log_3 x`、`log_a b`、`\log_{\frac12}`、`log_28`（吃掉空白的 log_2 8）照舊算底數不是 10。
+- **同一個根因的另一處**：`utils/chapterPostRules.js` 的 `findVariableLogArgument`（找真數裡的未知數）跳過下標時也只跳一個字元，`log_10 x` 會把「0」當成真數、漏掉 x。改用同一個 `LOG_SUBSCRIPT_SOURCE`，兩邊對「下標到哪裡為止」的判斷一致；結果是「解 log_10 x = 2」這類常用對數的對數方程式會被認成第三冊（A5：對數方程式屬第三冊），有首數、尾數、位數的第一冊題照舊不換。
+- **呼叫端逐一確認**：`findNonCommonLogBase` 被 ① `chapterPostRules.js` 的 `thirdVolumeEvidence`（classify 第二層、零成本閘門、nlq 的 `alignChapters` 共用）、② 舊題搬章的規則表 `KEYWORD_RULES`（`npm run chapters:migrate`）、③ `test/unit/agentClassify.test.js` 的例句檢查用到。`eval/tools/chapter_rules_scan.js --all`（golden、fixture、知識點、例句、classify／nlq／extract 回放檔）改動前後輸出逐字相同；classify、nlq 兩個 eval 的報表除了產生時間以外逐字相同（沒有 replay miss）。
+- **測試**：`test/unit/chapterMigration.test.js`（正例 `log_2 8`、`log_28`、`\log_3 x`、`log_a b`、`\log_{\frac12}`；反例 `log_10 2`、`log_102`、`\log_{10}`、`\log_10 2`、樣卷第 8 題原文）、`test/unit/chapterPostRules.test.js`（樣卷第 1、8 題的 OCR 原文走 `boundaryTarget`：第 1 題照舊換、第 8 題不換；`findVariableLogArgument` 的 `log_10 x`）。
+
+#### 2. 結果（`ci.yml` 的 env，回放）
+
+- 只有第 1 點：pipeline `chapter_acc_rate` 0.8000 → **0.9000**（第 8 題改對；第 1 題 `log_2 8+log_2 4` 照舊由 `exp_log_third` 改到第三冊，答案卷也是第三冊），`verify_agree_rate` 0.9000 不變；lint／verify 的回放檔鍵不含章節，**不必重錄任何回放檔**。classify、nlq、retrieval、variant 的數字不變。

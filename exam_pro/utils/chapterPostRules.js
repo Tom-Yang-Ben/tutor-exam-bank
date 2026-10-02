@@ -39,7 +39,7 @@
 //   golden 上改對的 5 題不受影響。
 
 const { CHAPTERS, isValidChapter } = require('../config/chapters');
-const { KEYWORD_RULES, findNonCommonLogBase, findVariableExponent } = require('../config/chapterMigrationRules');
+const { KEYWORD_RULES, findNonCommonLogBase, findVariableExponent, LOG_SUBSCRIPT_SOURCE } = require('../config/chapterMigrationRules');
 const { PLANE_CUES, SPACE_CUES, SPACE_TO_PLANE } = require('./nlqHeuristics');
 
 // ───────────────────────── 名稱容錯 ─────────────────────────
@@ -114,16 +114,21 @@ const FIRST_VOLUME_BLOCK = /函數|圖形|圖像|方程式|不等式|遞增|遞�
  */
 const SOLVE_CUE = /(?<!了)解(?!答|析|釋|說)|求\s*(?:出\s*)?(?:未知數|實數)?\s*\$?\s*[xyt](?![A-Za-z])|(?<![A-Za-z\\])[xyt]\s*\$?\s*(?:的|之)(?:值|範圍)/;
 
+/** log、（可有可無的）下標、可有可無的左括號，之後的一小段當真數（第 2 組；第 1 組是下標） */
+const VARIABLE_LOG_ARGUMENT_RE = new RegExp(String.raw`\\?log(?:${LOG_SUBSCRIPT_SOURCE})?\s*(?:\\left\s*)?\(?\s*([^\s$=<>,，。；;、]{1,12})`);
+
 /**
  * 真數含未知數的對數：$\log (x-1)$、$\log_{2} x$、\log x。只看 log 後面緊接的一小段。
+ * 〔r15 dec/r15-chapter-acc〕跳過下標改用 config/chapterMigrationRules.js 的 LOG_SUBSCRIPT_SOURCE（沒有大括號時讀一整串數字）：
+ * 原本只跳一個字元，OCR 純文字的「log_10 x」會把「0」當成真數、漏掉 x（與 findNonCommonLogBase 同一個根因，docs/local-mode.md 10.28）。
  * @param {string} text
  * @returns {string|null}
  */
 function findVariableLogArgument(text) {
-    const re = /\\?log(?:_\s*(?:\{[^}]*\}|[A-Za-z0-9]))?\s*(?:\\left\s*)?\(?\s*([^\s$=<>,，。；;、]{1,12})/g;
+    const re = new RegExp(VARIABLE_LOG_ARGUMENT_RE.source, 'g');   // 每次呼叫一支新的 /g，lastIndex 不互相干擾
     let m;
     while ((m = re.exec(String(text ?? ''))) !== null) {
-        const arg = m[1].replace(/\\[A-Za-z]+/g, '');
+        const arg = m[2].replace(/\\[A-Za-z]+/g, '');
         if (/(?<![A-Za-z])[xyt](?![A-Za-z])/.test(arg)) return m[0].trim();
     }
     return null;
