@@ -37,7 +37,8 @@
 //     「矩陣、方程組、度數與填答格」一段。schema 換成 localExtractSchema（只換 answer_text 的說明，驗證相同）。
 //   - 確定性後處理 postprocessLocal：解答頁的元素不建題（data.answer_key 記頁碼與解析出的題號→答案，runner 拆完整份後回填）、
 //     題目頁沒寫答案就清掉模型編的答案（answer_dropped）、LaTeX 修復（latex_repairs）。
-//   Gemini 路徑（extract.v3、extract_chem.v2）的請求、schema、cassette 鍵與輸出逐位元不變。
+//   Gemini 的拆題（extract.v3、extract_chem.v2）的請求、schema、cassette 鍵與輸出逐位元不變；下游幾個邊界行為在 Gemini 模式也生效
+//   （verify 的 no_claim、save 前的答案停等、buildSaveFields、answerCompare 的新比法；docs/local-mode.md 10.25 第 0 點）。
 
 const fs = require('fs');
 const path = require('path');
@@ -151,7 +152,7 @@ const AGENT_VISION_CHEM = 'extract_vision_chem';
 // 〔Owner 第五輪 L-2〕本機模板由上面兩份模板組成，公式規範跟著變：四個識別名都 v1 → v2
 // 〔dec/r13-extract-fixes，Owner 2026-10-02 同意〕四個本機模板都多「answer_text 與解答頁」一段（不准自己編答案、解答頁不拆），
 // 數學／物理的兩個另多「矩陣、方程組、度數與填答格」一段（docs/local-mode.md 10.25）：四個識別名都 v2 → v3，對應 cassette 要重錄。
-// Gemini 路徑（extract.v3、extract_chem.v2）一個字都沒動。
+// Gemini 的拆題模板（extract.v3、extract_chem.v2）一個字都沒動（下游 verify／save／answerCompare 的改動在 Gemini 模式也生效，見 docs/local-mode.md 10.25 第 0 點）。
 const TEMPLATE_VISION = 'extract_vision.v3';
 const TEMPLATE_VISION_CHEM = 'extract_vision_chem.v3';
 const AGENT_OCR = 'extract_ocr';

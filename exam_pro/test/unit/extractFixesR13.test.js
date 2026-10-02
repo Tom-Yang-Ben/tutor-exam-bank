@@ -611,11 +611,14 @@ describe('複核頁（public/js/review.js）：建議答案預填、答案來源
         const { payloadToQuestion, answerSourceNote } = await load();
         const p = { extract: { question_text: 'q', answer_text: '', extract_mode: 'ocr' }, lint: { question_text: 'q', answer_text: '' }, verify: { compare: 'no_claim', final_answer: '84°', suggested_answer: '84°' } };
         assert.equal(payloadToQuestion(p).answer_text, '84°');
-        assert.match(answerSourceNote(p), /驗算模型算的建議答案「84°」，請核對後再核准/);
+        // 〔審查 dec/r13-extract-fixes〕說法是「沒有偵測到」，不斷言原卷沒寫答案
+        assert.match(answerSourceNote(p), /^這一題沒有偵測到印在頁面上的答案。答案欄預填的是驗算模型算的建議答案「84°」，請對照原卷核對後再核准/);
         const keyed = { extract: { question_text: 'q', answer_text: '(3)', answer_src: 'answer_key' }, lint: { answer_text: '' }, verify: { compare: 'no_claim', final_answer: '14' } };
         assert.equal(payloadToQuestion(keyed).answer_text, '(3)');
-        assert.equal(answerSourceNote(keyed), '答案取自這份卷的解答頁。');
-        assert.equal(answerSourceNote({ extract: { answer_text: '', answer_dropped: { reason: 'not_on_page' } } }), '原卷這一題沒有寫答案，請補上答案再核准。');
+        // 〔審查 dec/r13-extract-fixes〕回填的答案與驗算的建議答案不同：兩個都列出來
+        assert.equal(answerSourceNote(keyed), '答案取自這份卷的解答頁；驗算模型算的是「14」，兩者不同時請核對。');
+        assert.equal(answerSourceNote({ ...keyed, verify: undefined }), '答案取自這份卷的解答頁。');
+        assert.equal(answerSourceNote({ extract: { answer_text: '', answer_dropped: { reason: 'not_on_page' } } }), '這一題沒有偵測到印在頁面上的答案。請對照原卷補上答案再核准。');
         assert.equal(answerSourceNote({ extract: { answer_text: '$1$' }, verify: { compare: 'agree' } }), '');
     });
 

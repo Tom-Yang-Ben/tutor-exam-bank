@@ -551,8 +551,10 @@ describe('yes 確認與驗證表', () => {
             const by = Object.fromEntries(rerecord.recordSteps().map(s => [s.name, rerecord.stepExtraEnv(s, p, OWNER_ENV)]));
             const base = local.localRecordEnv(p);
             for (const n of ['embeddings', 'classify', 'nlq', 'variant']) assert.deepEqual(by[n], base, n);
+            // 〔審查 dec/r13-extract-fixes〕lint／verify 的單次逾時跟著 3 小時（.env 沒寫 OLLAMA_TIMEOUT_MS_LINT／_VERIFY）
             assert.deepEqual(by.pipeline, {
-                ...base, OLLAMA_TIMEOUT_MS: H3, JOB_NODE_TIMEOUT_MS: H3, E2E_NODE_TIMEOUT_MS: H3, OLLAMA_PROGRESS_MS: '300000'
+                ...base, OLLAMA_TIMEOUT_MS: H3, JOB_NODE_TIMEOUT_MS: H3, E2E_NODE_TIMEOUT_MS: H3, OLLAMA_PROGRESS_MS: '300000',
+                OLLAMA_TIMEOUT_MS_LINT: H3, OLLAMA_TIMEOUT_MS_VERIFY: H3
             });
             assert.deepEqual(by['e2e-similar'], { ...by.pipeline, FEATURE_SIMILAR: 'true' }, '步驟自己的 extra 最後蓋上去');
             assert.equal(by.pipeline.NLQ_TIMEOUT_MS, String(local.LOCAL_NLQ_TIMEOUT_MS), 'localRecordEnv 的其他值照留');
@@ -561,7 +563,8 @@ describe('yes 確認與驗證表', () => {
         test('RERECORD_* 覆寫；.env 的 OLLAMA_TIMEOUT_MS 比 3 小時長就照 .env；.env 明寫 OLLAMA_PROGRESS_MS（含 0）就不蓋', () => {
             const p = plan();
             assert.deepEqual(local.longCallRecordEnv(p, { ...OWNER_ENV, RERECORD_OLLAMA_TIMEOUT_MS: '14400000', RERECORD_NODE_TIMEOUT_MS: '21600000' }), {
-                OLLAMA_TIMEOUT_MS: '14400000', JOB_NODE_TIMEOUT_MS: '21600000', E2E_NODE_TIMEOUT_MS: '21600000', OLLAMA_PROGRESS_MS: '300000'
+                OLLAMA_TIMEOUT_MS: '14400000', JOB_NODE_TIMEOUT_MS: '21600000', E2E_NODE_TIMEOUT_MS: '21600000', OLLAMA_PROGRESS_MS: '300000',
+                OLLAMA_TIMEOUT_MS_LINT: '14400000', OLLAMA_TIMEOUT_MS_VERIFY: '14400000'
             });
             assert.equal(local.longCallRecordEnv(p, { OLLAMA_TIMEOUT_MS: '18000000' }).OLLAMA_TIMEOUT_MS, '18000000', '.env 設 5 小時就是 5 小時，不縮短');
             assert.equal(local.longCallRecordEnv(p, {}).OLLAMA_TIMEOUT_MS, H3, '.env 沒寫：3 小時');
@@ -584,11 +587,13 @@ describe('yes 確認與驗證表', () => {
 
         test('只影響逾時與進度：沒有任何一個會進 cassette 的鍵或改變流程（MODEL_*、FEATURE_*、EMBED_*、OCR_ENGINE／OCR_DPI）', () => {
             const keys = Object.keys(local.longCallRecordEnv(plan(), {}));
-            assert.deepEqual(keys.sort(), ['E2E_NODE_TIMEOUT_MS', 'JOB_NODE_TIMEOUT_MS', 'OLLAMA_PROGRESS_MS', 'OLLAMA_TIMEOUT_MS']);
+            assert.deepEqual(keys.sort(), ['E2E_NODE_TIMEOUT_MS', 'JOB_NODE_TIMEOUT_MS', 'OLLAMA_PROGRESS_MS', 'OLLAMA_TIMEOUT_MS',
+                'OLLAMA_TIMEOUT_MS_LINT', 'OLLAMA_TIMEOUT_MS_VERIFY']);
             for (const k of keys) {
                 assert.ok(!/^(MODEL_|FEATURE_|EMBED_)/.test(k), k);
                 assert.ok(!sp.CI_OPTIONAL_KEYS.includes(k), k);
-                assert.ok(sp.LOCAL_SHIELD.includes(k), `${k} 回放時一律擋成空字串（CI 與錄完的驗證不受影響）`);
+                // 〔審查 dec/r13-extract-fixes〕OLLAMA_TIMEOUT_MS_<AGENT> 走 LOCAL_TUNING_PATTERN（回放擋、錄製放行），不在固定清單
+                assert.ok(sp.LOCAL_SHIELD.includes(k) || sp.LOCAL_TUNING_PATTERN.test(k), `${k} 回放時一律擋成空字串（CI 與錄完的驗證不受影響）`);
             }
         });
 
@@ -632,7 +637,12 @@ describe('yes 確認與驗證表', () => {
             }
             assert.equal(by['e2e-similar'].LLM_MODE, 'replay', 'e2e 那一步 LLM 照舊只回放');
             assert.equal(by['e2e-similar'].FEATURE_SIMILAR, 'true');
-            assert.ok(out.some(l => l.includes('pipeline、e2e-similar：單次 Ollama 呼叫逾時 3 小時、節點逾時 3 小時') && l.includes('每 5 分印一次輸出進度')), out.join('\n'));
+            assert.ok(out.some(l => l.includes('pipeline、e2e-similar：單次 Ollama 呼叫逾時 3 小時（其中 lint 3 小時、verify 3 小時）、節點逾時 3 小時') && l.includes('每 5 分印一次輸出進度')), out.join('\n'));
+            // 〔審查 dec/r13-extract-fixes〕錄製子行程的 lint／verify 也是 3 小時（不會被 localTuning 的本機預設降回 30 分）
+            for (const n of ['pipeline', 'e2e-similar']) {
+                assert.equal(by[n].OLLAMA_TIMEOUT_MS_LINT, H3, n);
+                assert.equal(by[n].OLLAMA_TIMEOUT_MS_VERIFY, H3, n);
+            }
         });
 
         test('longCallNote：.env 明寫 OLLAMA_PROGRESS_MS=0 時講明不印進度；沒有長步驟時回 null', () => {

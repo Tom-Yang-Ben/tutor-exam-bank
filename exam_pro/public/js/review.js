@@ -420,9 +420,10 @@ export function suggestedAnswerOf(payload) {
 
 /**
  * 〔dec/r13-extract-fixes〕答案欄的來源說明（docs/local-mode.md「本機拆題修正」一節）：
- *   - 拆題沒有答案、預填的是驗算的建議答案 → 提醒老師核對；
- *   - 答案取自同一份卷的解答頁（payload.extract.answer_src === 'answer_key'）→ 說明來源；
- *   - 拆題模型編的答案被清掉（answer_dropped）且沒有建議答案 → 提醒要自己補。
+ *   - 拆題沒有答案、預填的是驗算的建議答案 → 提醒老師對照原卷核對；
+ *   - 答案取自同一份卷的解答頁（payload.extract.answer_src === 'answer_key'）→ 說明來源；驗算的建議答案不同時一併列出；
+ *   - 拆題模型給的答案被清掉（answer_dropped）→ 顯示被清掉的原文（droppedAnswerNote），沒有建議答案時提醒要自己補。
+ *   〔審查 dec/r13-extract-fixes〕說法是「沒有偵測到答案標記」，不斷言「原卷沒有寫答案」（偵測可能漏判）。
  * @param {object} payload
  * @returns {string} 沒有要說的回空字串
  */
@@ -430,12 +431,35 @@ export function answerSourceNote(payload) {
     const p = payload || {};
     const ex = p.extract || {};
     const own = ((p.lint && p.lint.answer_text) || ex.answer_text || '').trim();
-    if (own && ex.answer_src === 'answer_key') return '答案取自這份卷的解答頁。';
-    if (own) return '';
     const suggested = suggestedAnswerOf(p);
-    if (suggested) return `原卷這一題沒有寫答案，答案欄預填的是驗算模型算的建議答案「${suggested}」，請核對後再核准。`;
-    if (ex.answer_dropped || ex.extract_mode === 'ocr' || ex.cross_check) return '原卷這一題沒有寫答案，請補上答案再核准。';
+    if (own && ex.answer_src === 'answer_key') {
+        // 〔審查 dec/r13-extract-fixes〕回填的答案沒有跟驗算比過（verify 跑的時候答案還是空的）：兩個都給老師看
+        return suggested && suggested !== own
+            ? `答案取自這份卷的解答頁；驗算模型算的是「${suggested}」，兩者不同時請核對。`
+            : '答案取自這份卷的解答頁。';
+    }
+    if (own) return '';
+    // 〔審查 dec/r13-extract-fixes〕被清掉的原文要讓老師看得到；而且程式只知道「沒有偵測到答案標記」，不能斷言原卷沒寫答案
+    const dropped = droppedAnswerNote(ex.answer_dropped);
+    const lead = dropped || '這一題沒有偵測到印在頁面上的答案。';
+    if (suggested) return `${lead}答案欄預填的是驗算模型算的建議答案「${suggested}」，請對照原卷核對後再核准。`;
+    if (ex.answer_dropped || ex.extract_mode === 'ocr' || ex.cross_check) return `${lead}請對照原卷補上答案再核准。`;
     return '';
+}
+
+/**
+ * 〔審查 dec/r13-extract-fixes〕被清掉的拆題答案（payload.extract.answer_dropped）→ 說明句。沒有就回空字串。
+ * not_on_page：頁面上沒偵測到答案標記（「答：」「【解答】」「（ 3 ）1.」…），拆題模型給的答案視為自己編的；
+ * blank_marker：模型給的只是填答格記號（⑮⑯）。原文照實顯示（過長的在拆題時已截成 300 字）。
+ * @param {object|undefined} dropped
+ * @returns {string}
+ */
+export function droppedAnswerNote(dropped) {
+    if (!dropped || typeof dropped !== 'object') return '';
+    const text = typeof dropped.text === 'string' ? dropped.text.trim() : '';
+    if (!text) return '';
+    if (dropped.reason === 'blank_marker') return `拆題模型原本填「${text}」，那只是填答格記號，已清掉。`;
+    return `拆題模型原本填「${text}」，頁面上沒偵測到答案標記（「答：」「【解答】」「（ 3 ）1.」這類），視為模型自己推算的、已清掉；原卷若有印答案請照原卷改。`;
 }
 
 /**

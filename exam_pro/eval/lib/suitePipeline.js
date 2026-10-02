@@ -60,11 +60,16 @@ function isOcrOnlyRun(env = process.env, jq = []) {
  * 拿答案卷的 answer_text（標準答案的完整寫法；沒有才用 final_answer）當 claimed、驗算模型的 final_answer 當 model，
  * 照 utils/answerCompare.js 比——等於「拆題照抄到正確答案時」原本會比出的結果。
  * 配不到答案卷、或答案卷那一題沒有答案 → 'uncertain'（不回 agree，不讓配對失敗變成好分數）。
+ * 〔審查 dec/r13-extract-fixes〕這個比法**只報告、不進門檻**（verifyAgreeReport → 報表的 verify_agree_rate）：把它算進
+ * answer_agree_rate 等於換了門檻指標的定義，要 Owner 明確決定（docs/local-mode.md 10.25 第 6 點）。
+ * opts.field：'answer_text'（預設；沒有才退回 final_answer）或 'final_answer'（只用 final_answer）。兩種都報，
+ * 因為選 answer_text 是看過模擬數字（0.90 對 0.50）之後才定的，Owner 要看得到兩個數字。
  * @param {Array<object>} jq
  * @param {{doc:{questions:Array<object>}}} sheet
+ * @param {{field?:'answer_text'|'final_answer'}} [opts]
  * @returns {Map<object,'agree'|'disagree'|'uncertain'>} jq 列 → 比對結果（只有 no_claim 的列）
  */
-function noClaimCompares(jq, sheet) {
+function noClaimCompares(jq, sheet, { field = 'answer_text' } = {}) {
     const out = new Map();
     const rows = (jq || []).filter(r => r && r.payload && r.payload.verify && r.payload.verify.compare === 'no_claim');
     if (!rows.length) return out;
@@ -78,7 +83,8 @@ function noClaimCompares(jq, sheet) {
         const e = byExtracted.has(j) ? expected[byExtracted.get(j)] : null;
         const v = r.payload.verify;
         // 答案卷的 answer_text 是「拆題照抄到正確答案」時的樣子（含 $…$ 與等號，比對器抽得到最終答案）；沒有才退回 final_answer
-        const claimed = [e && e.answer_text, e && e.final_answer].find(x => typeof x === 'string' && x.trim());
+        const claimed = (field === 'final_answer' ? [e && e.final_answer] : [e && e.answer_text, e && e.final_answer])
+            .find(x => typeof x === 'string' && x.trim());
         if (!e || !claimed) { out.set(r, 'uncertain'); return; }
         out.set(r, answerCompare({
             question_type: e.question_type || r.payload.extract.question_type,
@@ -89,6 +95,33 @@ function noClaimCompares(jq, sheet) {
     });
     return out;
 }
+
+/**
+ * 〔審查 dec/r13-extract-fixes〕no_claim 題的「驗算答案對標準答案」一致率：只報告、不設門檻（不進 measured）。
+ * 沒有 no_claim 的題回 null。
+ * @param {Array<object>} jq
+ * @param {{doc:{questions:Array<object>}}} sheet
+ * @returns {{n:number, by_answer_text:{agree:number, rate:number|null}, by_final_answer:{agree:number, rate:number|null}, note:string}|null}
+ */
+function verifyAgreeReport(jq, sheet) {
+    const a = noClaimCompares(jq, sheet, { field: 'answer_text' });
+    if (!a.size) return null;
+    const f = noClaimCompares(jq, sheet, { field: 'final_answer' });
+    const tally = (m) => {
+        const agree = [...m.values()].filter(c => c === 'agree').length;
+        return { agree, rate: metrics.round4(agree / m.size) };
+    };
+    return {
+        n: a.size,
+        by_answer_text: tally(a),
+        by_final_answer: tally(f),
+        note: VERIFY_AGREE_NOTE
+    };
+}
+
+/** 報表上 verify_agree_rate 那一行的說明 */
+const VERIFY_AGREE_NOTE = '拆題沒寫答案（verify 記 no_claim）的題：驗算模型算的答案對答案卷的標準答案。' +
+    '只報告、不設門檻、不算進 answer_agree_rate（要不要拿它當門檻請 Owner 決定，docs/local-mode.md 10.25 第 6 點）。';
 
 /**
  * 〔Owner 第五輪 D-2〕人工核准前的通過率：走完全部閘門、只因 ocr_only 停下的題 ÷ 全部題（沒有題＝null）。
@@ -198,16 +231,15 @@ async function runPipelineSuite(args) {
         : classifySources.filter(s => s === 'gate').length / classifySources.length;
 
     // answer_agree_rate：只算 verify 真的跑過而且有 compare 的題（skipped 不進分母）
-    // 〔dec/r13-extract-fixes〕本機拆題在題目頁沒寫答案時留空（樣卷就是這樣），verify 記 compare='no_claim'、沒有東西可比。
-    // 這種題改拿答案卷的標準答案（answer_text）跟驗算模型算的比（noClaimCompares；配不到答案卷的題記 uncertain），
-    // 仍算進同一個指標：拆題沒答案時，「答案對不對」只剩驗算這一邊能量（docs/local-mode.md 10.25 第 7 點）。
-    const noClaim = noClaimCompares(res.jq, sheet);
-    const compares = res.jq.map(r => {
-        const c = r.payload.verify && r.payload.verify.compare;
-        return c === 'no_claim' ? noClaim.get(r) : c;
-    }).filter(c => ['agree', 'disagree', 'uncertain'].includes(c));
+    // 〔審查 dec/r13-extract-fixes〕定義照舊（拆題答案對驗算答案）：verify 記 compare='no_claim'（拆題沒寫答案）的題
+    // 沒有東西可比，**不進分母**。樣卷的題目頁沒有答案，重錄之後 10 題都會是 no_claim、這個指標會是 n/a（門檻有數字＝失敗）——
+    // 要改量法（A）或改成不比（B）都要 Owner 明確決定（docs/local-mode.md 10.25 第 6 點）。no_claim 題的「驗算對標準答案」
+    // 另報 verify_agree_rate（verifyAgreeReport），只報告、不設門檻。
+    const compares = res.jq.map(r => r.payload.verify && r.payload.verify.compare)
+        .filter(c => ['agree', 'disagree', 'uncertain'].includes(c));
     const answerAgreeRate = compares.length === 0 ? null
         : compares.filter(c => c === 'agree').length / compares.length;
+    const verifyAgree = verifyAgreeReport(res.jq, sheet);
 
     // oracle stub 的那一輪，saved_rate 與 gate_pass_rate 都是「答案卷抄給自己看」的產物，
     // 一律 n/a——理由見 pipelineDriver 檔頭紅線。
@@ -233,6 +265,8 @@ async function runPipelineSuite(args) {
         notApplicable,
         // 〔Owner 第五輪 D-2〕替代指標：只報告、不設門檻（不進 measured）
         ocrOnly: ocrOnly ? { saved_rate_note: OCR_SAVED_RATE_NOTE, pre_approval: fake ? { passed: 0, total, rate: null } : preApprovalPassRate(res.jq) } : null,
+        // 〔審查 dec/r13-extract-fixes〕no_claim 題的驗算對標準答案：只報告、不設門檻（不進 measured）；沒有 no_claim 的題時不帶這個鍵
+        ...(verifyAgree ? { verifyAgree } : {}),
         nodes,
         reviewReasons,
         counts: {
@@ -275,4 +309,4 @@ async function runPipelineSuite(args) {
     };
 }
 
-module.exports = { runPipelineSuite, DEFAULT_PDF, isOcrOnlyRun, preApprovalPassRate, OCR_SAVED_RATE_NOTE, noClaimCompares };
+module.exports = { runPipelineSuite, DEFAULT_PDF, isOcrOnlyRun, preApprovalPassRate, OCR_SAVED_RATE_NOTE, noClaimCompares, verifyAgreeReport, VERIFY_AGREE_NOTE };

@@ -1888,21 +1888,35 @@ scripts\windows\record_local.bat variant --only-missing
 ### 10.25 本機拆題修正：不准編答案、解答頁、LaTeX、答案比對、lint／verify 逾時（2026-10-02，`dec/r13-extract-fixes`；Owner 2026-10-02 同意）
 
 > 從 `origin/main`（`4d52987`，PR #40 合併後）開。起因是 2026-10-01 Owner 用本機模式（PaddleOCR＋`qwen3:8b`，`LOCAL_EXTRACT_MODE=ocr`）拆「114-2 興大附中 高二期末考數學 A」（5 頁，第 5 頁是解答表）的交叉驗證（Ben 的 Project 文件 `crosscheck-114-2-math-A.md`）：(a) 第 5 頁被拆成 8 題垃圾；(b) 題目頁沒有答案，拆題模型每題都自己編答案（單選、多選幾乎全錯，選填題抄 ⑮⑯），驗算跑完的 5 題全對、被拆題的假答案拖進 `answer_mismatch`；(c) 矩陣、方程組的 LaTeX 幾乎每題壞；(d) Q4 兩邊都是 84° 卻判比不出來；(e) lint 單次逾時（90 分）後又重試，單題卡 7.5 小時。Owner 回覆「本機的這些修改都先做了」，本節落實五項。
-> **Gemini 路徑一個字都沒動**（`extract.v3`、`extract_chem.v2` 的請求、schema、回放檔的鍵與輸出；Gemini 的 lint／verify 逾時照舊重試）。`eval/thresholds.json`、golden、既有回放檔都沒改。**有改到回放檔的鍵**：四個本機拆題模板與本機拆題的 schema，CI 讀的是其中的 `extract_ocr`——pipeline 與 e2e 在 Owner 重錄之前會 replay miss（第 8 點）。
+> **Gemini 的拆題請求不變**（`extract.v3`、`extract_chem.v2` 的請求、schema、回放檔的鍵與輸出；Gemini 的 lint／verify 逾時照舊重試）。〔審查修正〕原本這裡寫的說法太寬，不精確：下游有四個邊界行為在 Gemini 模式也生效，列在第 0 點。`eval/thresholds.json`、golden、既有回放檔都沒改。**有改到回放檔的鍵**：四個本機拆題模板與本機拆題的 schema，CI 讀的是其中的 `extract_ocr`——pipeline 與 e2e 在 Owner 重錄之前會 replay miss（第 8 點）。
+
+#### 0. Gemini 模式也生效的邊界行為（〔審查修正〕`dec/r13-extract-fixes-fix` 補記）
+
+Gemini 的拆題請求不變，但下面四點是共用的下游程式，Gemini 模式也照這樣跑。都只在「拆題答案是空的」或「比對器原本判 uncertain」的邊界才有差別，最後都會進人工複核，風險低：
+
+1. **verify**：`answer_text` 是空的題（Gemini 偶爾也會回空字串）只採樣 1 次、記 `compare: 'no_claim'`、pass，算出來的答案存 `suggested_answer`（原本要採樣 2 次、最後 `answer_mismatch`）。
+2. **save 前停等**：答案是空的題停在 `needs_review('awaiting_approval')`，不再以「略」入庫（`answerMissingStopReason`）；解答頁回填的答案與驗算對不上也停（`answerKeyCheck`，第 2 點；Gemini 路徑沒有解答頁回填，實際不會觸發）。
+3. **`buildSaveFields`**：lint 的答案是空字串時改用 extract 的答案（原本 lint 的空字串優先）。
+4. **`utils/answerCompare.js`**：數字選項比對、「選項＋數值」混寫、`\textcircled{\circ}` 度數的新比法對所有模式生效（兩邊都抽得到 (A)～(H) 的情形照原本凍結的比法，answer golden 不受影響）。
 
 #### 1. 拆題不准編答案（Owner 核准的契約變更）
 
 - **模板**（`agents/extract.js`）：四個本機模板（`extract_ocr`、`extract_vision` 與兩個化學版）最後多一段「answer_text 欄位與解答頁」：只抄頁面上這一題印出來的答案或解析；**頁面上沒有寫答案時 `answer_text` 一律填空字串**，不要自己解題、不要推算；選填題的填答格（⑨⑩⑪）不是答案；解答頁（答案表）不是題目。四個識別名都 v2 → **v3**。
 - **schema**：本機路徑改送 `localExtractSchema`——與 Gemini 的同一份（值域、必填、ajv 驗證都相同），只把 `answer_text` 的說明換成「頁面上這一題印出來的答案或解析；沒有寫答案時填空字串，不要自己解題」。原本那句「正確答案；單選／多選必須以選項代號開頭」會經 `services/llm/ollama.js` 的欄位說明附在 system 後面，等於叫模型自己解題。`answer_text` 本來就是 `type: string`、沒有 `minLength`，**schema 的契約沒有放寬**；改的是「空字串是合法而且預期的答案」這個語意。
 - **確定性後處理**（`postprocessLocal` → `utils/answerKey.js` 的 `processChunkAnswers`；cross、ocr 兩種模式都做，沒有 OCR 頁面時不做）：
-  - 這一塊的題目頁（不含解答頁）OCR 文字裡**沒有**「答：」「答案：」「【解答】」「解析：」這類標記（作答說明「請將答案畫記在答案卡上」「回答：」不算）→ 模型給的 `answer_text` 一律清成空字串，原文記在該題 `payload.extract.answer_dropped = { reason: 'not_on_page', text }`。
+  - 這一塊的題目頁（不含解答頁）OCR 文字裡**沒有偵測到**答案標記 → 模型給的 `answer_text` 一律清成空字串，原文記在該題 `payload.extract.answer_dropped = { reason: 'not_on_page', text }`。認得的標記（`utils/answerKey.js` 的 `ANSWER_MARKERS`）：「答：」「答案：」「正解：」「Ans:」（冒號後面接「請」「依序」「填入」「寫在」這類作答說明的不算）、【】〔〕［］（）包住的「答／答案／解答／詳解／解析」、「Ans. 4」「ANS. (2)」、「答 4」（單一個「答」＋空白＋答案的樣子）、**題號前的括號答案**「（ 3 ）1. 下列何者…」「( 245 ) 6.」、行首括號裡左右留空白的「（ B ）下列…」。作答說明「請將答案畫記在答案卡上」「回答：」「選填題答案：請依序填入」、空的作答格「（  ）1.」、小題標號「（1）求…」都不算。
+  - 〔審查修正〕原本只認帶冒號或【】的寫法，「（ 3 ）1.」「Ans. 4」「答 4」「〔答案〕4」「（答）4」都會被判成沒寫、把真的印在頁面上的答案清掉；「選填題答案：請依序填入」反而被當成有答案。上面補齊了，各自有單元測試（`test/unit/extractFixesR13Review.test.js`）。偵測仍可能漏判沒見過的寫法，所以複核頁一定顯示被清掉的原文（見下面「複核頁」）。
   - 有標記但答案只是填答格記號（⑮⑯、`\textcircled{m}\textcircled{q}`、底線）→ 一樣清掉（`reason: 'blank_marker'`）。
   - 〔限制〕判斷以「一塊」為單位：同一塊裡只要有一題寫了「答：」，這一塊其他題模型給的答案也會保留（逐題分不出哪些是抄的、哪些是編的）；那幾題仍靠模板的要求與 verify 的比對把關。
 - **下游**：
   - `agents/verify.js`：`claimed_answer` 是空字串 → 採樣一次、`compare: 'no_claim'`、**pass**（不比對、不再採樣、不進 `answer_mismatch`），算出來的答案另存 `suggested_answer`。不寫文字詳解（`buildSolutionFields` 只在 `agree` 時寫）。
   - `agents/lint.js`：原本沒有答案時，第三層重寫回什麼答案都不採用（prompt 裡寫的是「（空）」，模型可能照抄或自己補）。
   - `workers/jobRunner.js`：答案是空的題**不自動入庫**——交叉驗證沒有停下來的題走到 save 時停在 `needs_review('awaiting_approval')`（`answerMissingStopReason`／`saveStopReason`；事件記 `no_answer: true` 與 `suggested_answer`）。原本會以「略」入庫。ocr 模式本來就每題停在 `ocr_only`，不受影響。`eval/lib/pipelineDriver.js` 用同一支 `saveStopReason`。
-  - 複核頁（`public/js/review.js`）：答案欄空的時候預填驗算的建議答案（`payloadToQuestion`），原因列後面加一句「原卷這一題沒有寫答案，答案欄預填的是驗算模型算的建議答案「…」，請核對後再核准。」；答案取自解答頁時寫「答案取自這份卷的解答頁。」。
+  - 複核頁（`public/js/review.js`）：答案欄空的時候預填驗算的建議答案（`payloadToQuestion`）。原因列後面的說明句（`answerSourceNote`）：
+    - 有 `answer_dropped` 時先顯示被清掉的原文（`droppedAnswerNote`）：「拆題模型原本填「(4)」，頁面上沒偵測到答案標記（「答：」「【解答】」「（ 3 ）1.」這類），視為模型自己推算的、已清掉；原卷若有印答案請照原卷改。」（填答格記號是「…那只是填答格記號，已清掉。」）；沒有原文時寫「這一題沒有偵測到印在頁面上的答案。」；
+    - 接著：有建議答案「答案欄預填的是驗算模型算的建議答案「…」，請對照原卷核對後再核准。」，沒有就「請對照原卷補上答案再核准。」；
+    - 答案取自解答頁時寫「答案取自這份卷的解答頁。」，驗算的建議答案不同時改成「答案取自這份卷的解答頁；驗算模型算的是「…」，兩者不同時請核對。」。
+    - 〔審查修正〕原本的說明句斷言原卷沒寫答案——程式只知道「沒有偵測到答案標記」，不能這樣斷言；也不顯示被清掉的原文，拿附答案的講義來拆時老師看不出原卷答案被模型的答案取代。
 - **改到的既有測試**（新契約，不是放寬品質門檻）：`test/unit/cassetteReplay.test.js` 原本斷言每題 `answer_text` 非空，改成「是字串；空的話 `answer_dropped` 的原因是 `not_on_page`」；`test/unit/extractLocal.test.js`、`test/unit/extractOcrOnly.test.js` 的「每題的鍵」多一個 `answer_dropped`（假 OCR 的頁面上沒有答案）並斷言答案被清成空字串。
 
 #### 2. 解答頁不拆成題目；能可靠解析就回填
@@ -1917,6 +1931,7 @@ scripts\windows\record_local.bat variant --only-missing
 - **回填**（拆完整份之後，`runExtractJob` 轉 processing 之前；接著拆時最後也會再跑一次，冪等）：`applyAnswerKey` 讀各塊事件的 `answer_key`，用 `mapAnswerKey` 對上題目——**題號總數＝存活題數**（依 idx 一一對應）、題幹開頭有寫題號的都對得上，才回填；否則整份不回填、只記 log。依題型轉寫：單選 3 → `(3)`、多選 245 → `(2)(4)(5)`（要由小到大不重複）、填空 −2 → `$-2$`；題型與值對不上、已經有答案的那一題不回填。回填寫 `payload.extract.answer_text` 與 `answer_src: 'answer_key'`。
   - 前幾塊的題可能已經在跑後面的節點：回填直接改資料庫裡的 payload，`runJobQuestion` 寫回 payload 時若資料庫那一份有 `answer_src`、這一份沒有，就把 `answer_text`／`answer_src` 帶過來（同一句 UPDATE，整合測試在節點跑到一半回填的情況下驗證）。lint 已經跑過、存了空答案的題，`buildSaveFields` 改成「lint 的答案是空的就用 extract 的」。已經跑完 verify（`no_claim`）的題不重跑；複核頁同時看得到解答頁的答案與驗算的建議答案。
   - Ben 這份卷照這個規則：第 1～8 題回填、A～H 不回填（16 題對 16 個題號）。
+  - 〔審查修正〕**回填與驗算的交叉確認**（`workers/jobRunner.js` 的 `answerKeyCheck`，`saveStopReason` 的第三條）：回填要等整份拆完，前幾塊的題可能已經以 `no_claim` 跑完 verify，回填的答案就沒有跟驗算比過；cross 模式下 `cross_check` 是 agree 的題原本會直接自動入庫，正確性只靠「題號總數＝題數」的對位（丟一題又多一題、題幹又沒寫題號時會整份錯開）。現在 `answer_src` 是 `answer_key` 而且 `verify.compare` 是 `no_claim` 的題，save 前用 `answerCompare` 比「要入庫的答案」與 `suggested_answer`：不是 agree（含沒有建議答案）就停在 `needs_review('awaiting_approval')`，事件記 `answer_key_check: { compare, key_answer, suggested_answer }`；agree 才照常入庫。verify 在回填之後才跑的題本來就照常比對（不一致走 `answer_mismatch`）。ocr 模式每題都停在 `ocr_only`，不受影響。
 
 #### 3. LaTeX 規則與確定性修復
 
@@ -1925,7 +1940,7 @@ scripts\windows\record_local.bat variant --only-missing
 
 | 規則 | 壞法（這份卷實際出現的） | 修成 | 只在什麼時候修 |
 |---|---|---|---|
-| `end_newline` | 換行＋`end{bmatrix}`（Ollama 的 JSON 文法逼模型把 `\e` 寫成 `\n`） | `\end{bmatrix}` | 後面緊接 `end{已知環境}`；`services/llm/latexEscapeRepair.js` 刻意不修換行，這裡只修這一種 |
+| `end_newline` | 換行＋`end{bmatrix}`（Ollama 的 JSON 文法逼模型把 `\e` 寫成 `\n`）；〔審查修正〕換行前是一或兩個反斜線的變體「`3 & 4 \`⏎`end{bmatrix}`」 | `\end{bmatrix}`；變體修成 `\\ \end{bmatrix}`（最後一列後的換列 KaTeX 不多畫一列，已實測） | 後面緊接 `end{已知環境}`；`services/llm/latexEscapeRepair.js` 刻意不修換行，這裡只修這一種；三個以上反斜線分不出原意、不修 |
 | `cases_right` | `\begin{cases} … \right.`（沒有 `\end{cases}`） | `\end{cases}`，配對的 `\left\{` 一併拿掉 | `\right.` 出現在同一個 cases 的 `\end{cases}` 之前 |
 | `row_break` | 換列的 `\\` 只剩 `\`（後面接空白或換行） | `\\` | 只在 bmatrix／pmatrix／cases／array／aligned… 環境裡（環境外的 `\ ` 是控制空白） |
 | `degree_circled` | `84\textcircled{\circ}`、`84^{\textcircled{\circ}}` | `84^\circ`、`84^{\circ}` | 一律 |
@@ -1948,11 +1963,19 @@ scripts\windows\record_local.bat variant --only-missing
 - **單次逾時**（`services/llm/localTuning.js` 的 `resolveTimeout`，照 `OLLAMA_*` 的慣例）：`OLLAMA_TIMEOUT_MS_LINT`、`OLLAMA_TIMEOUT_MS_VERIFY`（化學版先找 `_CHEM`、再找基本名稱）有寫正整數就用它；沒寫時 lint、verify 的本機預設是 **30 分鐘**，只在全域 `OLLAMA_TIMEOUT_MS` 比它長時生效（Owner 的電腦為了拆題設 90 分；沒寫全域＝ollama.js 預設 30 分，結果相同）。`services/llm/index.js` 把它當 `timeoutMs` 交給 ollama adapter，逾時訊息寫「Ollama 呼叫超過 OLLAMA_TIMEOUT_MS_VERIFY（1800000 ms）仍未完成」（`npm run perf:local` 的逾時計數照樣認得）。不在回放檔的鍵裡、也不寫進 `request.ollamaOverrides`。啟動訊息在全域比 30 分長時多列一行「單次逾時：lint、lint_chem、verify、verify_chem 30 分鐘、逾時不重試（本機預設，Owner 2026-10-02；…）」；寫錯的後綴（例 `OLLAMA_TIMEOUT_MS_VERIFI`）警告。錄製子行程放行這兩個變數（`OVERRIDE_ENV_PATTERN`）。
 - **逾時不重試**（比照 C-f 的截斷不重試與第七輪 R7-1 對變式截斷的處理）：`workers/jobRunner.js` 的 `isLocalTimeout`——題目節點是 lint 或 verify、outcome 是 `error`／`timeout`、這一次呼叫的模型是 ollama——時給狀態機 `retryTimeout: false`，`pipeline/stateMachine.js` 新增**規則 6b**：直接 `needs_review('provider_error')`，計數器不動、不退避。事件 `detail` 記 `timeout_no_retry: true` 與說明，payload 記 `payload[節點].timed_out = true`，複核頁的說明句改成「本機模型的驗算／公式檢查這一步逾時，依設定不重試、直接交給老師…可在 .env 調高 OLLAMA_TIMEOUT_MS_VERIFY／_LINT 後重跑這一題」。節點層逾時（`JOB_NODE_TIMEOUT_MS`）也算。
 - **review_reason 選 `provider_error`、不新增值**：照 C-f 新增 `output_truncated` 的做法要多一支 migration 與「還沒套 migration 時退回」的保護；逾時本來就歸 `provider_error`（`REVIEW_REASON_FOR_ERROR`），差別只在不重試，所以沿用既有原因、用 `timed_out` 旗標讓說明句講清楚。Gemini 的逾時、本機的其他錯誤、classify 照舊退避重試。
-- 錄製（`LLM_MODE=record`）時本機預設照樣套用（與正式流程一致，比照 R7-1）：重錄工具把全域 `OLLAMA_TIMEOUT_MS` 放寬到 3 小時，lint／verify 仍是 30 分；超過的錄成「單次逾時」錯誤回放檔（10.23 第 3 點）。要讓錄製多等，在 `.env` 寫 `OLLAMA_TIMEOUT_MS_VERIFY`／`_LINT`。
+- 〔審查修正〕**錄製時 lint／verify 跟著放寬**（`eval/lib/localMode.js` 的 `agentTimeoutRecordEnv`，`eval/tools/rerecord_all.js` 的 `stepExtraEnv` 每一步都套）：原本重錄工具只放寬全域 `OLLAMA_TIMEOUT_MS`（pipeline／e2e 3 小時），`resolveTimeout` 的「全域比預設長就降回 30 分」讓 lint／verify 仍只等 30 分，慢的那一題會被錄成永久的「單次逾時」錯誤回放檔（10.23 第 3 點），CI 的 pipeline／e2e 會一直把那題記成失敗。現在 `.env`／shell 沒寫 `OLLAMA_TIMEOUT_MS_LINT`（或 `_VERIFY`）、而這一步錄製子行程的全域比 30 分長時，把它設成與全域同值：pipeline／e2e 是 3 小時（或 `RERECORD_OLLAMA_TIMEOUT_MS`），其他步驟跟著 `.env` 的 `OLLAMA_TIMEOUT_MS`（Owner 的 90 分）。`.env` 有寫的照寫的。錄製前的盤點訊息會印「單次 Ollama 呼叫逾時 3 小時（其中 lint 3 小時、verify 3 小時）」。只影響錄製（回放擋成空字串、不在鍵裡）；伺服器與桌面版照舊 30 分、逾時不重試。
 
-#### 6. eval 的計分（只改 no_claim 的算法，門檻沒動）
+#### 6. eval 的計分：`answer_agree_rate` 定義照舊；`no_claim` 的題另報、**量法要 Owner 決定**
 
-- `eval/lib/suitePipeline.js` 的 `answer_agree_rate` 原本只算 `compare` 是 agree／disagree／uncertain 的題。樣卷（`eval/fixtures/sample_exam.pdf`）的題目頁沒有答案，重錄之後拆題會留空、verify 全部是 `no_claim`，這個指標會變成 n/a 而被當成「量不到＝失敗」。改成：`no_claim` 的題用 `eval/lib/pdfMatch.js` 的配對規則對上答案卷，拿答案卷的標準答案（`answer_text`，即「拆題照抄到正確答案」時的寫法；沒有才用 `final_answer`）跟驗算模型算的比（配不到記 uncertain），仍算進同一個指標——拆題沒答案時，「答案對不對」只剩驗算這一邊能量。用 `answer_text` 而不是 `final_answer` 的理由：答案卷的 `final_answer` 多是裸的「11」，比對器的抽取規則（S2-12）抽不到，會一律 uncertain（模擬時 0.50；改用 `answer_text` 是 0.90，第 10 點）。門檻（0.87）與 `thresholds.json` 都沒動。**這是量法的改變，請 Owner 知悉**；不同意的話可以改回只報告、不比門檻（要另外決定）。
+- 〔審查修正〕`dec/r13-extract-fixes` 原本把 `no_claim` 的題改拿答案卷的標準答案跟驗算比、算進 `answer_agree_rate`。這不在 Owner 同意的七項裡，而且樣卷重錄後 10 題都是 `no_claim`，這個指標實際上會從「拆題答案對驗算答案」變成「驗算答案對標準答案」、門檻還是 0.87——等於換了門檻指標的定義，效果接近放寬門檻；選 `answer_text`（不選 `final_answer`）也是看過模擬數字（0.90 對 0.50）之後才定的。所以這一版**改回原本的定義**，量法等 Owner 決定：
+  - `eval/lib/suitePipeline.js` 的 `answer_agree_rate`：照舊只算 `compare` 是 agree／disagree／uncertain 的題，**`no_claim` 不進分母**。
+  - `no_claim` 的題另報 `verify_agree_rate`（`verifyAgreeReport`；報表 JSON 的 `verifyAgree`、Markdown 多一行）：驗算模型算的答案對答案卷，`answer_text`（沒有才 `final_answer`）與只用 `final_answer` **兩種都報**。只報告、不進 `measured`、不比門檻；沒有 `no_claim` 的題時不出現。
+  - `eval/thresholds.json`、`eval/lib/thresholds.js`（`SUITE_METRICS`、`NOT_APPLICABLE_ALLOWED`）都沒動。
+- **後果（重錄之後）**：樣卷的題目頁沒有答案，重錄後 verify 全部是 `no_claim`，`answer_agree_rate` 會是 n/a；門檻有數字卻量不到＝失敗，pipeline 多一條紅（`gate_pass_rate` 0.80 本來就紅）。這是不改定義的誠實結果，不是壞掉。
+- **請 Owner 選一個**（選了之後另開一支小改動；兩個都要動門檻相關的檔，所以這一版不替你選）：
+  - **A. 接受新量法、改名**：`verify_agree_rate`（用 `answer_text` 或 `final_answer`，請一併選）進 `SUITE_METRICS.pipeline`、`thresholds.json` 新增它的門檻（初值照「第一次量測 − 0.03」的規則），`answer_agree_rate` 在「全部是 `no_claim`」時列進 `NOT_APPLICABLE_ALLOWED`。歷史數字不會混在一起。
+  - **B. 只報告、不比門檻**：`verify_agree_rate` 維持只報告；`answer_agree_rate` 在「全部是 `no_claim`」時列進 `NOT_APPLICABLE_ALLOWED`（同 D-2 對 `saved_rate` 的做法）。管線裡「答案對不對」就沒有門檻把關，只靠人工複核。
+  - 不選的話：維持這一版（重錄後 `answer_agree_rate` n/a、pipeline 紅）。
 
 #### 7. 測試
 
@@ -1979,8 +2002,10 @@ npm ci
 scripts\windows\record_local.bat pipeline,e2e --only-missing
 ```
 
+  - 〔審查修正〕lint／verify 的單次逾時在錄製時自動跟著放寬（第 5 點最後一項），不必先改 `.env`。若 `.env` 自己寫了 `OLLAMA_TIMEOUT_MS_LINT`／`OLLAMA_TIMEOUT_MS_VERIFY`（例如 30 分），錄製會照寫的值——要錄得穩，重錄前把這兩行拿掉或改成 `10800000`（3 小時）。
+
   - 只補缺的：`ocr` 回放檔（鍵沒變）照回放；`extract_ocr.v3` 1 次（上次錄 `v2` 約 23 分）；新題幹的分類、lint、驗算（樣卷 10 題，驗算沒有答案可比、每題只採樣一次）。粗估 **約 1.5～3.5 小時**（10.21 第 3 步是 2～4.5 小時，那時驗算要比兩次的題比較多；以實際 log 為準）。
-  - 怎麼確認成功：回放驗證表 pipeline 那一列 replay miss 0；`answer_agree_rate` 改成跟答案卷比（第 6 點），預期不低於門檻 0.87（雲端模擬是 0.90，第 10 點；實際以重錄後的模型輸出為準〔要實測〕）；`gate_pass_rate` 照舊（原本就未達門檻）。e2e 那一列 `pass 12／fail 0`。錄完把 `eval/cassettes/` 的新檔一起 commit（舊的 `extract_ocr.v2` 那一支可以用 `npm run cassettes:prune` 清掉）。
+  - 怎麼確認成功：回放驗證表 pipeline 那一列 replay miss 0；`answer_agree_rate` 預期是 n/a（10 題都是 `no_claim`，第 6 點；要等 Owner 選 A 或 B）、報表多一行 `verify_agree_rate`（雲端模擬：對 `answer_text` 0.90、對 `final_answer` 0.50，第 11 點；實際以重錄後的模型輸出為準〔要實測〕）；`gate_pass_rate` 照舊（原本就未達門檻）。e2e 那一列 `pass 12／fail 0`。錄完把 `eval/cassettes/` 的新檔一起 commit（舊的 `extract_ocr.v2` 那一支可以用 `npm run cassettes:prune` 清掉）。
 
 #### 9. Owner 電腦〔要實測〕
 
@@ -2000,3 +2025,23 @@ scripts\windows\record_local.bat pipeline,e2e --only-missing
   - `test:e2e`：14 項 9 過、**3 失敗**、2 略過（`4d52987` 12 過、2 略過）——3 則都是 `extract_ocr`（key `6d90f52e…`）replay miss，第 8 點重錄前的預期結果。
   - 五個 eval：retrieval、classify、nlq、variant 的報表 JSON 與 `4d52987` 除了 `generated_at`／牆鐘時間以外**逐字相同**（variant 仍是那 2 支錯誤回放檔、`retrieved_coverage` 未達門檻，與 `4d52987` 相同）。pipeline 是 1 筆 replay miss（同上）；`4d52987` 原本就是 `gate_pass_rate` 0.80 < 0.97。
 - **模擬重錄後**（只在暫存目錄、不進 repo）：把 `extract_ocr.v2` 那一支的回應原封不動搬到 v3 的鍵（等於「模型還是照舊編答案」的最壞情況，後處理把答案全部清掉），以 `EVAL_CASSETTE_DIR` 指過去跑：pipeline 沒有任何 replay miss（題幹沒變，分類、驗算的鍵都還在）、`answer_agree_rate` 0.90（10 題全是 `no_claim`，照第 6 點跟答案卷比；未改成用 `answer_text` 之前是 0.50）、`gate_pass_rate` 0.80（與 `4d52987` 相同）；`test:e2e` 12 過、2 略過。實際重錄後題幹會變，下游要跟著補錄（第 8 點）。
+
+#### 11. 審查修正（2026-10-02，`dec/r13-extract-fixes-fix`）
+
+`dec/r13-extract-fixes`（`9236818`）審查的七點，逐條驗證屬實後處理：
+
+| # | 審查意見 | 驗證 | 處理 |
+|---|---|---|---|
+| 1 | 「有沒有寫答案」只認冒號／【】，漏判會清掉真答案；複核頁不顯示原文、還斷言原卷沒寫 | 屬實（「（ 3 ）1.」「Ans. 4」「答 4」「〔答案〕4」「（答）4」都判成沒寫；「選填題答案：請依序填入」判成有寫） | 第 1 點：補標記與作答說明的排除；複核頁顯示 `answer_dropped.text`、說法改成「沒偵測到答案標記」 |
+| 2 | 重錄時 lint／verify 仍只等 30 分 | 屬實（`longCallRecordEnv` 只放寬全域，`resolveTimeout` 降回 30 分） | 第 5 點：`agentTimeoutRecordEnv` |
+| 3 | `answer_agree_rate` 換了量法，等於改門檻指標定義 | 屬實 | 第 6 點：改回原定義，`verify_agree_rate` 只報告，**A／B 請 Owner 選** |
+| 4 | 「Gemini 路徑一字未動」不精確 | 屬實（只對拆題請求成立） | 第 0 點列出四個邊界行為；`agents/extract.js` 的註解一併改 |
+| 5 | 回填的答案沒跟驗算交叉確認，cross 模式可能直接入庫 | 屬實 | 第 2 點：`answerKeyCheck`，不是 agree 就停在 `awaiting_approval` |
+| 6 | `end_newline` 不修「單一反斜線＋換行＋end」 | 屬實 | 第 3 點：補修法與測試（KaTeX 實測最後一列後的 `\\` 不多畫一列） |
+| 7 | 同一則請求的另外三件事不在這個分支 | 屬實（不是本分支的範圍） | 不處理；由編排端追蹤（引擎選擇另有分支，錄入資料庫建議等本分支上線、重新上傳拆題後再做） |
+
+- 回放檔的鍵：這一輪沒有改模板、schema、prompt 或 `cacheKeyParts` 的算法。後處理（答案標記、`end_newline`）會改變某些卷子送進 lint／verify 的題幹與答案，但 CI 的樣卷在模擬重錄後 classify／lint／verify 全部命中（下面），**要重錄的與第 8 點相同**，沒有多出來的。
+- 驗證（以 `ci.yml` 的 env，5433 另建全新 UTF8 測試庫，用完刪掉；`origin/main` 在另一個全新測試庫跑同一組）：
+  - `npm test` 4,292 項（4,289 過、0 失敗、3 略過；`9236818` 4,272 項，多的 20 項是 `test/unit/extractFixesR13Review.test.js`）；`check:html` 通過；`test:integration` 662 項全過（`9236818` 660＋本輪 2 則回填交叉確認）。
+  - `test:e2e` 與五個 eval 的結果與 `9236818` 相同：e2e 3 則 `extract_ocr` replay miss（重錄前的預期）；retrieval、classify、nlq、variant 的報表 JSON 與 `origin/main`（`4d52987`）除時間欄位外逐字相同；pipeline 1 筆 replay miss。
+  - **模擬重錄後**（同第 10 點的做法，暫存目錄）：e2e 12 過、2 略過；pipeline 沒有 replay miss、`gate_pass_rate` 0.80（與 `4d52987` 相同）、`answer_agree_rate` **n/a**（10 題都是 `no_claim`，第 6 點）、`verify_agree_rate` 對 `answer_text` 0.90、對 `final_answer` 0.50。

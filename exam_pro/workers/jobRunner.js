@@ -773,16 +773,51 @@ function answerMissingStopReason(payload) {
 }
 
 /**
- * save 之前的政策停等（runner 與 eval/lib/pipelineDriver.js 共用）：先看拆題的交叉驗證（crossCheckStopReason），
- * 再看答案是不是空的（answerMissingStopReason）。
+ * 〔審查 dec/r13-extract-fixes〕解答頁回填的答案與驗算的交叉確認。
+ * applyAnswerKey 要等整份拆完才跑，前幾塊的題可能已經以 no_claim 跑完 verify——回填的答案就沒有跟驗算比過。
+ * 這種題（payload.extract.answer_src === 'answer_key' 而且 payload.verify.compare === 'no_claim'）在 save 前補比一次：
+ * 用 utils/answerCompare.js 比「要入庫的答案」（buildSaveFields）與驗算的建議答案（suggested_answer）。
+ * 不是 agree（含沒有建議答案）就不自動入庫——解答表與題目的對位只靠「題號總數＝題數」，丟一題又多一題時會整份錯開。
+ * 其餘情形（不是回填的、verify 比過的）回 null。純函式。
  * @param {object} payload
- * @returns {{reason:string, kind:'cross_check'|'no_answer'}|null}
+ * @returns {{compare:'agree'|'disagree'|'uncertain', key_answer:string, suggested_answer:string|null}|null}
+ */
+function answerKeyCheck(payload) {
+    const ex = payload && payload.extract;
+    const v = payload && payload.verify;
+    if (!ex || typeof ex !== 'object' || ex.answer_src !== 'answer_key') return null;
+    if (!v || typeof v !== 'object' || v.compare !== 'no_claim') return null;
+    const keyAnswer = String(buildSaveFields(payload).answer_text ?? '').trim();
+    if (!keyAnswer) return null;   // 答案是空的另由 answerMissingStopReason 處理
+    const suggested = [v.suggested_answer, v.final_answer].find(x => typeof x === 'string' && x.trim());
+    if (!suggested) return { compare: 'uncertain', key_answer: keyAnswer, suggested_answer: null };
+    const { answerCompare } = require('../utils/answerCompare');
+    const lint = payload.lint || {};
+    const compare = answerCompare({
+        question_type: ex.question_type,
+        claimed: keyAnswer,
+        model: { final_answer: suggested, answer_form: v.answer_form },
+        ...(ex.subject === '化學' ? { subject: ex.subject } : {}),
+        question_text: lint.question_text || ex.question_text || ''
+    });
+    return { compare, key_answer: keyAnswer, suggested_answer: suggested.trim() };
+}
+
+/**
+ * save 之前的政策停等（runner 與 eval/lib/pipelineDriver.js 共用）：先看拆題的交叉驗證（crossCheckStopReason），
+ * 再看答案是不是空的（answerMissingStopReason），最後看解答頁回填的答案與驗算對不對得上（answerKeyCheck；
+ * 〔審查 dec/r13-extract-fixes〕不是 agree 就停在 awaiting_approval，不新增 review_reason）。
+ * @param {object} payload
+ * @returns {{reason:string, kind:'cross_check'|'no_answer'|'answer_key_unverified', check?:object}|null}
  */
 function saveStopReason(payload) {
     const cc = crossCheckStopReason(payload);
     if (cc) return { reason: cc, kind: 'cross_check' };
     const na = answerMissingStopReason(payload);
-    return na ? { reason: na, kind: 'no_answer' } : null;
+    if (na) return { reason: na, kind: 'no_answer' };
+    const check = answerKeyCheck(payload);
+    if (check && check.compare !== 'agree') return { reason: 'awaiting_approval', kind: 'answer_key_unverified', check };
+    return null;
 }
 
 /** questions.solution_text 的字數上限（migrations/0011 的 CHECK）。 */
@@ -1659,6 +1694,8 @@ function createRunner(opts = {}) {
                 const v = jq.payload.verify;
                 const noAnswer = stop.kind === 'no_answer'
                     ? { no_answer: true, ...(v && typeof v.suggested_answer === 'string' ? { suggested_answer: v.suggested_answer } : {}) }
+                    // 〔審查 dec/r13-extract-fixes〕解答頁回填的答案與驗算的建議答案對不上（或沒得比）
+                    : stop.kind === 'answer_key_unverified' ? { answer_key_check: stop.check }
                     : {};
                 await writeEvent({
                     job_id: jq.job_id, jq_id: jq.id, node: 'save', attempt: attemptNo(jq.retries, 'save'),
@@ -2733,7 +2770,7 @@ module.exports = {
     outputTruncatedAccepted, OUTPUT_TRUNCATED_SCHEMA_MESSAGE, isLocalModelSpec, isLocalTruncation,   // 〔Owner 第五輪 C-f〕
     appliedNumPredictOf, variantTruncationNote,   // 〔Owner 第七輪 R7-1；審查 dec/r10-variant-cap〕
     // 〔dec/r13-extract-fixes〕答案為空的停等、解答頁回填、本機 lint／verify 逾時不重試
-    answerMissingStopReason, saveStopReason, answerKeyDetail, collectAnswerKeyEntries,
+    answerMissingStopReason, saveStopReason, answerKeyCheck, answerKeyDetail, collectAnswerKeyEntries,
     isLocalTimeout, LOCAL_TIMEOUT_NO_RETRY_NODES, LOCAL_TIMEOUT_NOTE,
     LOCAL_NODE_TIMEOUT_MS, LOCAL_PDF_CHUNK_PAGES, LOCAL_CONCURRENCY, RENEW_MIN_INTERVAL_MS,
     LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES,   // 〔第四輪 V3〕

@@ -7,6 +7,7 @@
 //   end_newline       「換行＋end{bmatrix}」→「\end{bmatrix}」。模型在 JSON 裡要寫 \\end，Ollama 的 JSON 文法只允許
 //                     \b \f \n \r \t \u \" \\ \/，模型被迫把 \e 寫成 \n，解析後就是換行＋end。services/llm/latexEscapeRepair.js
 //                     的規則 B 刻意不修換行（換行後接指令名比較可能是真的換行），這裡只修「後面緊接 end{已知環境}」這一種，不會誤傷。
+//                     〔審查〕換行前是一或兩個反斜線（「3 & 4 \⏎end{bmatrix}」，換列的 \\ 只剩一半）→「\\ \end{bmatrix}」。
 //   cases_right       \begin{cases} 用 \right. 收尾（沒有 \end{cases}）→ 換成 \end{cases}；前面若有配對用的 \left\{ 一併拿掉。
 //   row_break         矩陣／方程組／array 環境裡，換列的 \\ 只剩一個反斜線（後面接空白）→ 補回 \\。只在這些環境裡修
 //                     （環境外的「\ 」是 LaTeX 的控制空白）。
@@ -26,6 +27,13 @@ const ENVS = ['bmatrix', 'pmatrix', 'vmatrix', 'Vmatrix', 'Bmatrix', 'matrix', '
 const ENV_ALT = ENVS.join('|');
 
 const END_NEWLINE_RE = new RegExp(`(?<!\\\\)\\r?\\n[ \\t]*end\\{(${ENV_ALT})\\}`, 'g');
+/**
+ * 〔審查 dec/r13-extract-fixes〕同一種壞法的變體：換行前面是一或兩個反斜線（「3 & 4 \⏎end{bmatrix}」）。
+ * 模型在 JSON 裡寫的是「4 \\ \end」——前面的 \\ 被 JSON 解成一個反斜線（換列只剩一半），\e 被文法逼成 \n。
+ * 修成「\\ \end{env}」：最後一列後面的換列 KaTeX 不會多畫一列（已實測），所以補回 \\ 不改變版面。
+ * 前面有三個以上反斜線的不修（分不出原意）。
+ */
+const END_NEWLINE_BS_RE = new RegExp(`(?<!\\\\)\\\\{1,2}[ \\t]*\\r?\\n[ \\t]*end\\{(${ENV_ALT})\\}`, 'g');
 const ENV_BODY_RE = new RegExp(`\\\\begin\\{(${ENV_ALT})\\}(\\{[^{}]*\\})?([\\s\\S]*?)\\\\end\\{\\1\\}`, 'g');
 /** 環境內單一個反斜線後面接空白（不是 \\ 的一半） */
 const LONE_BACKSLASH_RE = /(?<!\\)\\(?=[ \t]*(?:\r?\n|[ \t]))(?!\\)/g;
@@ -92,7 +100,10 @@ function repairText(text, { questionType } = {}) {
     const repairs = [];
     const note = (rule, count) => { if (count > 0) repairs.push({ rule, count }); };
 
-    let n = countMatches(s, END_NEWLINE_RE);
+    // 先修「反斜線＋換行＋end{env}」（審查補的變體），再修只有換行的；兩種都記成 end_newline
+    let n = countMatches(s, END_NEWLINE_BS_RE);
+    s = s.replace(END_NEWLINE_BS_RE, (m, env) => `\\\\ \\end{${env}}`);
+    n += countMatches(s, END_NEWLINE_RE);
     s = s.replace(END_NEWLINE_RE, (m, env) => `\\end{${env}}`);
     note('end_newline', n);
 

@@ -235,10 +235,40 @@ function longCallRecordEnv(plan, env = process.env) {
     const out = {
         OLLAMA_TIMEOUT_MS: String(ollamaMs),
         JOB_NODE_TIMEOUT_MS: String(nodeMs),
-        E2E_NODE_TIMEOUT_MS: String(nodeMs)
+        E2E_NODE_TIMEOUT_MS: String(nodeMs),
+        // 〔審查 dec/r13-extract-fixes〕lint／verify 跟著放寬（agentTimeoutRecordEnv）
+        ...agentTimeoutRecordEnv(plan, ollamaMs, env)
     };
     const progressSet = env.OLLAMA_PROGRESS_MS !== undefined && String(env.OLLAMA_PROGRESS_MS).trim() !== '';
     if (!progressSet) out.OLLAMA_PROGRESS_MS = String(RECORD_PROGRESS_MS);
+    return out;
+}
+
+/**
+ * 〔審查 dec/r13-extract-fixes〕錄製子行程的 lint／verify 單次逾時跟著這一步的全域 OLLAMA_TIMEOUT_MS 走。純函式。
+ * services/llm/localTuning.js 的 resolveTimeout：OLLAMA_TIMEOUT_MS_<AGENT> 沒寫、而全域比本機預設（30 分）長時，lint／verify 降回 30 分。
+ * 重錄工具把全域放寬（pipeline／e2e 3 小時；其他步驟照 .env）之後，lint／verify 仍只等 30 分——Owner 的電腦上一次 5～20 分鐘，
+ * 偶爾超過的那一題會被錄成永久的「單次逾時」錯誤回放檔（10.23 第 3 點），CI 的 pipeline／e2e 會一直把那題記成失敗，直到再錄一次。
+ * 所以：.env／shell 沒寫 OLLAMA_TIMEOUT_MS_LINT（或 _VERIFY）、而這一步的全域比本機預設長時，把它設成與全域同值。
+ * 有寫（正整數）的照寫的（那是 Owner 自己的選擇）；全域不比預設長時不帶（結果本來就相同）。
+ * 只影響錄製：逾時不在 cassette 的鍵裡，回放時 OLLAMA_TIMEOUT_MS_* 一律擋成空字串（suiteProcess 的 LOCAL_TUNING_PATTERN）。
+ * 正式流程（伺服器、桌面版）照舊是 30 分、逾時不重試（docs/local-mode.md 10.25 第 5 點）。
+ * @param {ReturnType<typeof recordingPlan>} plan
+ * @param {number|string|null|undefined} globalMs 這一步錄製子行程實際的 OLLAMA_TIMEOUT_MS
+ * @param {NodeJS.ProcessEnv|Record<string,string>} [env]
+ * @returns {Record<string,string>}
+ */
+function agentTimeoutRecordEnv(plan, globalMs, env = process.env) {
+    if (!plan || !plan.local) return {};
+    const g = positiveIntOrNull(globalMs);
+    if (!g) return {};
+    const tuning = require('../../services/llm/localTuning');
+    const out = {};
+    for (const base of Object.keys(tuning.LOCAL_DEFAULTS.timeoutMs)) {
+        if (g <= tuning.LOCAL_DEFAULTS.timeoutMs[base]) continue;
+        if (tuning.perAgentInt('OLLAMA_TIMEOUT_MS_', base, env)) continue;
+        out[`OLLAMA_TIMEOUT_MS_${tuning.agentEnvSuffix(base)}`] = String(g);
+    }
     return out;
 }
 
@@ -596,7 +626,7 @@ module.exports = {
     OCR_SCRIPT, SEC_PER_CALL, DEFAULT_SEC_PER_CALL, DEFAULT_SEC_PER_EMBED, LOCAL_EXTRACT_CHAIN,
     LOCAL_EXTRACT_CHAIN_OCR, extractChainFor,   // 〔OCR 為主 2026-09-26〕
     GATE_CHAIN,   // 〔dec/r9-record-tooling〕
-    vendorOf, modelIdOf, embedModelFromEnv, effectiveModels, recordingPlan, isLocalRun, localRecordEnv, longCallRecordEnv,
+    vendorOf, modelIdOf, embedModelFromEnv, effectiveModels, recordingPlan, isLocalRun, localRecordEnv, longCallRecordEnv, agentTimeoutRecordEnv,
     ollamaHost, hasModel, checkOllama, ollamaAdvice,
     ocrPython, parseSelftest, checkOcr, ocrAdvice,
     secPerCall, secPerEmbed, estimateLocalTime, formatDuration, describeRates

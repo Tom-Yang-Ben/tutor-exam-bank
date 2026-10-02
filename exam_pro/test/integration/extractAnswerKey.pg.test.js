@@ -258,5 +258,38 @@ module.exports = { async run(ctx, input) {
             await query('UPDATE job_questions SET question_id = NULL WHERE id = $1', [rows[0].id]);
             await query('DELETE FROM questions WHERE id = $1', [r.question_id]);
         });
+
+        // 〔審查 dec/r13-extract-fixes〕回填的答案沒有跟驗算比過（verify 跑的時候答案還是空的、記 no_claim）：save 前補比一次
+        test('回填＋verify 是 no_claim：建議答案對得上（(3) 對 14，選項 (3) 是 14）→ 照常入庫', async () => {
+            const { rows } = await query(
+                `INSERT INTO job_questions (job_id, idx, state, payload) VALUES ($1, 1005, 'deduped', $2::jsonb) RETURNING id`,
+                [jobId, JSON.stringify({
+                    extract: { ...EX, question_text: '5. 求 g(2)。(1) 10 (2) 12 (3) 14', answer_text: '(3)', answer_src: 'answer_key' },
+                    lint: { question_text: '5. 求 g(2)。(1) 10 (2) 12 (3) 14', answer_text: '' },
+                    verify: { compare: 'no_claim', final_answer: '14', answer_form: 'number', suggested_answer: '14' }, dedup0: { text_hash: null }
+                })]);
+            await runnerFor().runJobQuestion(rows[0].id);
+            const { rows: [r] } = await query('SELECT state, question_id FROM job_questions WHERE id = $1', [rows[0].id]);
+            assert.equal(r.state, 'saved');
+            await query('UPDATE job_questions SET question_id = NULL WHERE id = $1', [rows[0].id]);
+            await query('DELETE FROM questions WHERE id = $1', [r.question_id]);
+        });
+
+        test('回填＋verify 是 no_claim：建議答案對不上（(3) 對 12）→ needs_review(awaiting_approval)、不入庫；事件記 answer_key_check', async () => {
+            const { rows } = await query(
+                `INSERT INTO job_questions (job_id, idx, state, payload) VALUES ($1, 1006, 'deduped', $2::jsonb) RETURNING id`,
+                [jobId, JSON.stringify({
+                    extract: { ...EX, question_text: '6. 求 h(2)。(1) 10 (2) 12 (3) 14', answer_text: '(3)', answer_src: 'answer_key' },
+                    lint: { question_text: '6. 求 h(2)。(1) 10 (2) 12 (3) 14', answer_text: '' },
+                    verify: { compare: 'no_claim', final_answer: '12', answer_form: 'number', suggested_answer: '12' }, dedup0: { text_hash: null }
+                })]);
+            await runnerFor().runJobQuestion(rows[0].id);
+            const { rows: [r] } = await query('SELECT state, review_reason, question_id FROM job_questions WHERE id = $1', [rows[0].id]);
+            assert.deepEqual([r.state, r.review_reason, r.question_id], ['needs_review', 'awaiting_approval', null]);
+            const { rows: ev } = await query(`SELECT outcome, detail FROM job_events WHERE jq_id = $1 AND node = 'save'`, [rows[0].id]);
+            assert.equal(ev.length, 1);
+            assert.equal(ev[0].outcome, 'skipped');
+            assert.deepEqual(ev[0].detail.answer_key_check, { compare: 'disagree', key_answer: '(3)', suggested_answer: '12' });
+        });
     });
 }
