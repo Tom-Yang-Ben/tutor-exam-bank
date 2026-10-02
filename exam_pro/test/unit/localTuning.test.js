@@ -143,7 +143,10 @@ describe('resolveOllamaOverrides', () => {
         assert.equal(tuning.defaultMaxOutputFor('verify_chem'), 3072);
         assert.equal(tuning.defaultMaxOutputFor('lint'), null);
         assert.equal(tuning.defaultMaxOutputFor(undefined), null);
-        assert.deepEqual(JSON.parse(JSON.stringify(tuning.LOCAL_DEFAULTS)), { noThink: ['kc_tag'], maxOutput: { verify: 3072, variant: 1024 } });
+        // 〔dec/r13-extract-fixes〕多一項 timeoutMs（lint、verify 的單次逾時 30 分；測試見 test/unit/extractFixesR13.test.js）
+        assert.deepEqual(JSON.parse(JSON.stringify(tuning.LOCAL_DEFAULTS)), {
+            noThink: ['kc_tag'], maxOutput: { verify: 3072, variant: 1024 }, timeoutMs: { lint: 1800000, verify: 1800000 }
+        });
     });
 
     test('OLLAMA_NO_THINK：列出的才關；基本名稱連化學版一起；不分大小寫；全形逗號、頓號、空白都能分隔', () => {

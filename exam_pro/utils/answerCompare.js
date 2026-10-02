@@ -170,6 +170,9 @@ function stripDecoration(str) {
         // LaTeX 的間距指令：\, \; \! \: \quad \qquad，以及「反斜線 + 空白」
         .replace(/\\(?:qquad|quad|left|right|[,;!:])/g, '')
         .replace(/\\(?=\s|$)/g, '')
+        // 〔dec/r13-extract-fixes〕本機拆題把度數寫成 \textcircled{\circ}（前面可能有 ^、外面可能包一層大括號）：與 ^\circ 同樣當單位去掉。
+        // 只影響含 \textcircled 的輸入（以前一律算不出數值、回 null）
+        .replace(/\^?\s*\{?\s*\\textcircled\s*\{\s*\\circ\s*\}\s*\}?/g, '')
         // 角度：$45^\circ$ 與 $45^{\circ}$ 的 ^\circ 是單位，不是指數
         //（第 4.2 條「單位後綴一律去掉再比」；Unicode 的 45° 由下面的單位後綴規則處理）
         .replace(/\^\s*\{?\s*\\(?:circ|degree)\s*\}?/g, '')
@@ -464,6 +467,126 @@ function compareOption(claimedAnswer, modelAnswer) {
     return sameSet(a, b) ? 'agree' : 'disagree';
 }
 
+// ───────────────────────── 數字選項與「選項＋數值」混寫（〔dec/r13-extract-fixes〕）─────────────────────────
+//
+// 台灣高中數學卷的選項多半是 (1)～(5)，不是 (A)～(E)；本機模型也常常不照「只寫代號」作答。
+// 114-2 興大附中高二期末考數學 A 的交叉驗證（docs/local-mode.md 10.25 第 4 點）實際碰到：
+//   Q4：claimed「(5)。$\theta$=84^\circ」對 verify「84°」→ 舊規則抽不到 (A)～(H)，判 uncertain；
+//   Q2：claimed「(3)」對 verify「14」（選項 (3) 的內容就是 14）→ 同上。
+// 下面只在「舊規則判 uncertain」的情形才介入（兩邊都抽得到 (A)～(H) 時一律照舊比，golden 不受影響）：
+//   1. 抽不到字母代號的那一邊改抽數字代號——只認**開頭**的一串括號數字「(5)」「(2)(4)(5)」，或整串只有括號數字；
+//      題幹或解說中間的「(1)」不算（那可能是小題或敘述代號）。
+//   2. 一邊是代號、另一邊是數值：有題幹時讀題幹的選項，數值恰好等於其中一個選項的內容 → 換成那個代號再比；
+//      讀不到選項時，若代號那一邊在代號之後也寫了數值（「(5)。θ=84°」），兩個數值相同 → agree，不同 → uncertain
+//      （寫在代號後面的數值可能是中間值，不夠格判 disagree）。
+//   3. 兩邊都是數值：數值相同 → agree，否則 uncertain。
+
+const DIGIT_OPTION_RE = /[（(［[【]\s*([1-9])\s*[）)］\]】]/g;
+const LEADING_DIGIT_RUN_RE = /^\s*(?:[（(［[【]\s*[1-9]\s*[）)］\]】]\s*[、，,]?\s*)+/;
+const OPTION_MARK_RE = /[（(]\s*([1-9]|[A-Ha-h])\s*[）)]/g;
+
+/** 開頭那一串括號數字代號（「(2)(4)(5)。…」→ {2,4,5}）；沒有回空集合 */
+function extractDigitOptionCodes(text) {
+    const out = new Set();
+    if (typeof text !== 'string') return out;
+    const s = text.normalize('NFKC');
+    const lead = LEADING_DIGIT_RUN_RE.exec(s);
+    if (lead) for (const m of lead[0].matchAll(DIGIT_OPTION_RE)) out.add(m[1]);
+    return out;
+}
+
+/** 代號之後寫的數值（「(5)。$\theta$=84^\circ」→ 84）；沒寫或算不出來回 null */
+function valueAfterCodes(text) {
+    const s = String(text ?? '').normalize('NFKC');
+    const lead = LEADING_OPTION_RUN_RE.exec(s) || LEADING_DIGIT_RUN_RE.exec(s);
+    const rest = (lead ? s.slice(lead[0].length) : s).replace(/^[\s。．.,，、:：;；]+/, '').replace(/\$/g, '');
+    if (!rest.trim()) return null;
+    const tail = rest.includes('=') ? rest.slice(rest.lastIndexOf('=') + 1) : rest;
+    return toNumber(tail);
+}
+
+/**
+ * 題幹裡的選項：最後一串從 (1) 或 (A) 開始、連號的括號代號，各自到下一個代號（或行尾）為止的內容。
+ * @param {string} questionText
+ * @returns {Map<string,string>} 代號（'1'…或 'A'…）→ 內容；讀不到回空 Map
+ */
+function parseOptions(questionText) {
+    const s = String(questionText ?? '').normalize('NFKC');
+    const marks = [...s.matchAll(OPTION_MARK_RE)].map(m => ({ code: m[1].toUpperCase(), at: m.index, end: m.index + m[0].length }));
+    const ord = (c) => (/^\d$/.test(c) ? Number(c) : c.charCodeAt(0) - 64);
+    let best = null;
+    for (let i = 0; i < marks.length; i++) {
+        if (ord(marks[i].code) !== 1) continue;
+        const chain = [marks[i]];
+        for (let j = i + 1; j < marks.length; j++) {
+            const last = chain[chain.length - 1];
+            if (/^\d$/.test(marks[j].code) === /^\d$/.test(last.code) && ord(marks[j].code) === ord(last.code) + 1) chain.push(marks[j]);
+        }
+        if (chain.length >= 2) best = chain;   // 取最後一串（選項在題幹最後面）
+    }
+    const out = new Map();
+    if (!best) return out;
+    best.forEach((m, k) => {
+        const stop = k + 1 < best.length ? best[k + 1].at : s.length;
+        let content = s.slice(m.end, stop);
+        if (k + 1 === best.length) content = content.split('\n')[0];
+        out.set(m.code, content.trim());
+    });
+    return out;
+}
+
+/** 一個數值答案等於哪一個選項的內容；恰好一個才回那個代號，否則 null */
+function optionOfValue(value, options) {
+    const v = toNumber(String(value ?? ''));
+    const norm = (x) => stripDecoration(x).replace(/\s+/g, '');
+    const hits = [];
+    for (const [code, content] of options) {
+        const c = toNumber(content);
+        if ((v !== null && c !== null && nearlyEqual(v, c)) || (norm(content) !== '' && norm(content) === norm(value))) hits.push(code);
+    }
+    return hits.length === 1 ? hits[0] : null;
+}
+
+/**
+ * 單選／多選。兩邊都抽得到 (A)～(H) 時與 compareOption 完全相同（凍結的比法）；其餘見上方說明。
+ * @param {string} claimed
+ * @param {string} modelAnswer
+ * @param {string} [questionText]
+ * @returns {'agree'|'disagree'|'uncertain'}
+ */
+function compareChoice(claimed, modelAnswer, questionText) {
+    const base = compareOption(claimed, modelAnswer);
+    if (base !== 'uncertain') return base;
+    const codesOf = (t) => {
+        const letters = extractOptionCodes(String(t ?? ''));
+        return letters.size ? letters : extractDigitOptionCodes(String(t ?? ''));
+    };
+    const a = codesOf(claimed);
+    const b = codesOf(modelAnswer);
+    const isDigit = (set) => [...set].every(x => /^\d$/.test(x));
+    if (a.size && b.size) {
+        if (isDigit(a) !== isDigit(b)) return 'uncertain';
+        return sameSet(a, b) ? 'agree' : 'disagree';
+    }
+    const options = parseOptions(questionText);
+    if (a.size || b.size) {
+        const codes = a.size ? a : b;
+        const valueSide = a.size ? modelAnswer : claimed;
+        const codeSide = a.size ? claimed : modelAnswer;
+        if (options.size) {
+            const code = optionOfValue(valueSide, options);
+            if (code !== null && isDigit(codes) === /^\d$/.test(code)) return sameSet(codes, new Set([code])) ? 'agree' : 'disagree';
+        }
+        const own = valueAfterCodes(codeSide);
+        const other = toNumber(String(valueSide ?? ''));
+        if (own !== null && other !== null && nearlyEqual(own, other)) return 'agree';
+        return 'uncertain';
+    }
+    const na = toNumber(String(claimed ?? ''));
+    const nb = toNumber(String(modelAnswer ?? ''));
+    return na !== null && nb !== null && nearlyEqual(na, nb) ? 'agree' : 'uncertain';
+}
+
 const BY_FORM = {
     option: compareOption,
     number: compareNumber,
@@ -598,8 +721,9 @@ function answerCompare(opts) {
     if (finalAnswer === null || finalAnswer === undefined || String(finalAnswer).trim() === '') return 'uncertain';
 
     // 單選／多選：兩邊各抽選項代號集合
+    // 〔dec/r13-extract-fixes〕(A)～(H) 兩邊都抽得到時與原本相同；數字選項、「選項＋數值」混寫見 compareChoice（question_text 選用）
     if (questionType === '單選' || questionType === '多選') {
-        return compareOption(claimed, finalAnswer);
+        return compareChoice(claimed, finalAnswer, o.question_text);
     }
 
     const modelAnswer = String(finalAnswer);
@@ -659,5 +783,7 @@ module.exports = {
     // 給單元測試與 agents/verify.js 使用的零件（形狀不在凍結介面內，但保持穩定）
     extractOptionCodes, extractFinalAnswer, toNumber, toNumberList,
     // 〔stage5 WS-B〕
-    locateFinalAnswer, compareChemistry, compareChemStructures
+    locateFinalAnswer, compareChemistry, compareChemStructures,
+    // 〔dec/r13-extract-fixes〕數字選項與「選項＋數值」混寫
+    compareChoice, extractDigitOptionCodes, parseOptions, valueAfterCodes
 };

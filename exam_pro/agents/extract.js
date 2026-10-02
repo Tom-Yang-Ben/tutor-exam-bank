@@ -31,6 +31,13 @@
 // 不呼叫視覺模型（runLocalOcrOnly）：每題 cross_check 固定是 ocr_only、帶 extract_mode:'ocr'（runner 據此停在
 // needs_review('ocr_only')），附圖依 OCR 的版面位置配（agents/extractOcrFigures.js）。extract_ocr 的請求（ocrStructureRequest）
 // 與交叉驗證第 3 步送出的逐位元相同（test/unit/extractOcrOnly.test.js 逐鍵比對），所以兩種模式讀同一支 cassette。
+//
+// 〔dec/r13-extract-fixes，Owner 2026-10-02 同意「本機的這些修改都先做了」；docs/local-mode.md 10.25〕本機路徑（cross、ocr 兩種模式）：
+//   - 四個本機模板 v2 → v3：多「answer_text 與解答頁」一段（頁面上沒寫答案就留空字串、解答頁不拆成題）；數學／物理多
+//     「矩陣、方程組、度數與填答格」一段。schema 換成 localExtractSchema（只換 answer_text 的說明，驗證相同）。
+//   - 確定性後處理 postprocessLocal：解答頁的元素不建題（data.answer_key 記頁碼與解析出的題號→答案，runner 拆完整份後回填）、
+//     題目頁沒寫答案就清掉模型編的答案（answer_dropped）、LaTeX 修復（latex_repairs）。
+//   Gemini 路徑（extract.v3、extract_chem.v2）的請求、schema、cassette 鍵與輸出逐位元不變。
 
 const fs = require('fs');
 const path = require('path');
@@ -142,14 +149,17 @@ const VARIANTS = {
 const AGENT_VISION = 'extract_vision';
 const AGENT_VISION_CHEM = 'extract_vision_chem';
 // 〔Owner 第五輪 L-2〕本機模板由上面兩份模板組成，公式規範跟著變：四個識別名都 v1 → v2
-const TEMPLATE_VISION = 'extract_vision.v2';
-const TEMPLATE_VISION_CHEM = 'extract_vision_chem.v2';
+// 〔dec/r13-extract-fixes，Owner 2026-10-02 同意〕四個本機模板都多「answer_text 與解答頁」一段（不准自己編答案、解答頁不拆），
+// 數學／物理的兩個另多「矩陣、方程組、度數與填答格」一段（docs/local-mode.md 10.25）：四個識別名都 v2 → v3，對應 cassette 要重錄。
+// Gemini 路徑（extract.v3、extract_chem.v2）一個字都沒動。
+const TEMPLATE_VISION = 'extract_vision.v3';
+const TEMPLATE_VISION_CHEM = 'extract_vision_chem.v3';
 const AGENT_OCR = 'extract_ocr';
 const AGENT_OCR_CHEM = 'extract_ocr_chem';
-const TEMPLATE_OCR = 'extract_ocr.v2';
-// 契約只寫了 'extract_ocr.v1'（〔Owner 第五輪 L-2〕現為 v2）；化學卷的模板內容不同（化學白名單與化學式規範），
-// 同一個識別名不能註冊兩種內容（services/llm/templates.js 會丟錯），所以化學另取 'extract_ocr_chem.v1'（現為 v2）。
-const TEMPLATE_OCR_CHEM = 'extract_ocr_chem.v2';
+const TEMPLATE_OCR = 'extract_ocr.v3';
+// 契約只寫了 'extract_ocr.v1'（〔Owner 第五輪 L-2〕v2；〔dec/r13-extract-fixes〕v3）；化學卷的模板內容不同（化學白名單與化學式規範），
+// 同一個識別名不能註冊兩種內容（services/llm/templates.js 會丟錯），所以化學另取 'extract_ocr_chem.v1'（現為 v3）。
+const TEMPLATE_OCR_CHEM = 'extract_ocr_chem.v3';
 
 /** 本機模型一次輸出的 token 上限：CPU 上一旦陷入重複輸出，沒有上限會一路寫到 num_ctx 用完（一兩個小時） */
 const LOCAL_MAX_OUTPUT_TOKENS = 8192;
@@ -180,12 +190,28 @@ const LOCAL_FIDELITY_VISION = '【照抄原卷】題目與選項一律照頁面�
 const LOCAL_FIDELITY_OCR = '【修正 OCR 錯誤】OCR 可能有錯字、漏字、公式辨識錯誤或把一個字拆成兩個：只依上下文修正「明顯的」辨識錯誤，不要補出原卷沒有的內容、不要改寫題意。數學式請整理成上面規範的 $…$ LaTeX；OCR 給的 HTML 表格請改寫成上面規範的 array。';
 
 /**
+ * 〔dec/r13-extract-fixes，Owner 2026-10-02 同意〕本機拆題不准自己編答案（114-2 興大附中高二期末考數學 A：題目頁沒有答案，
+ * qwen3:8b 每題都填了 answer_text，單選、多選幾乎全錯；第 5 頁的解答表被拆成 8 題）。四個本機模板都有這一段。
+ * 程式另有確定性的後處理（utils/answerKey.js：題目頁沒寫答案就清掉、解答頁的元素不建題），這一段是從源頭要求。
+ */
+const LOCAL_ANSWER_RULE = '【answer_text 欄位與解答頁】answer_text 只抄頁面上這一題「印出來的」答案或解析（例如題目後面寫的「答：」「【解答】」）。頁面上沒有寫出這一題的答案時，answer_text 一律填空字串 ""：不要自己解題、不要推算、不要猜；選填題的填答格（⑨⑩⑪ 這類圈起來的數字）不是答案。只有題號與答案的解答頁（答案表）不是題目，不要拆成題目。';
+
+/**
+ * 〔dec/r13-extract-fixes〕矩陣、聯立方程組、度數、填答格的明確寫法（同一份卷實測的壞法：換列的 \\ 只剩一個反斜線、
+ * \end{bmatrix} 斷成換行＋end{bmatrix}、\begin{cases} 用 \right. 收尾、度數寫成 \textcircled{\circ}、填答格寫成 \textcircled{m}、
+ * a,b 寫成上標 $^{a,b}$）。只進數學／物理的兩個本機模板；寫的是 LaTeX 本身（與上面的規範 (1)～(4) 同一個寫法），
+ * 寫進 JSON 的反斜線照規範 (5)。程式另有確定性修復（utils/extractLatexRepair.js）。
+ */
+const LOCAL_MATRIX_RULE = String.raw`【矩陣、聯立方程組、度數與填答格】(1) 矩陣寫成 $\begin{bmatrix} 1 & 2 \\ 3 & 4 \end{bmatrix}$：欄以 & 分隔，換列一律寫兩個反斜線 \\（寫進 JSON 是 "\\\\"），最後一定要寫 \end{bmatrix}，反斜線不能少。(2) 聯立方程組寫成 $\begin{cases} x+y=3 \\ x-y=1 \end{cases}$，一律用 \end{cases} 收尾，不要用 \left\{ … \right.。(3) 度數寫成 $84^\circ$，不要寫成 \textcircled{\circ}。(4) 選填題的填答格（⑨⑩⑪ 這類圈起來的數字）一律寫成「＿＿＿＿」，不要寫成 \textcircled{…}。(5) 變數照原卷寫，例如「$a,b$ 為實數」不要寫成上標 $^{a,b}$。`;
+
+/**
  * 由 Gemini 模板組出本機模板。
  * @param {string} geminiTemplate  PROMPT_TEMPLATE 或 PROMPT_TEMPLATE_CHEM
  * @param {'vision'|'ocr'} kind
  * @param {string} paperWord       '考卷' 或 '化學考卷'
+ * @param {string[]} [extraRules]  〔dec/r13-extract-fixes〕接在最後的段落（answer_text 規則；數學／物理另加矩陣等寫法）
  */
-function buildLocalTemplate(geminiTemplate, kind, paperWord) {
+function buildLocalTemplate(geminiTemplate, kind, paperWord, extraRules = []) {
     const intro = kind === 'vision'
         ? `以下依序附上一份${paperWord}第 {{FROM_PAGE}}～{{TO_PAGE}} 頁的頁面圖片，每頁一張、共 {{PAGE_COUNT}} 張。請細心閱讀，找出這幾頁裡「所有的」題目，每一題各自拆解成一個 JSON 物件。`
         : `最後面附上一份${paperWord}第 {{FROM_PAGE}}～{{TO_PAGE}} 頁經 OCR 辨識出來的文字（Markdown；數學式已盡量轉成 $…$ 或 $$…$$ 的 LaTeX，表格可能是 HTML，「<!-- 第 N 頁 -->」是分頁標記）。請依這段文字找出「所有的」題目，每一題各自拆解成一個 JSON 物件。`;
@@ -197,14 +223,34 @@ function buildLocalTemplate(geminiTemplate, kind, paperWord) {
         return p;
     });
     if (!sawIntro || !sawFigure) throw new Error('agents/extract.js：Gemini 模板找不到開頭段或附圖段，無法組出本機模板。');
-    body.push(LOCAL_BOUNDARY_RULE, kind === 'vision' ? LOCAL_FIDELITY_VISION : LOCAL_FIDELITY_OCR);
+    body.push(LOCAL_BOUNDARY_RULE, kind === 'vision' ? LOCAL_FIDELITY_VISION : LOCAL_FIDELITY_OCR, ...extraRules);
     return body.join('\n\n');
 }
 
-const LOCAL_VISION_TEMPLATE = buildLocalTemplate(PROMPT_TEMPLATE, 'vision', '考卷');
-const LOCAL_VISION_TEMPLATE_CHEM = buildLocalTemplate(PROMPT_TEMPLATE_CHEM, 'vision', '化學考卷');
-const LOCAL_OCR_TEMPLATE = buildLocalTemplate(PROMPT_TEMPLATE, 'ocr', '考卷');
-const LOCAL_OCR_TEMPLATE_CHEM = buildLocalTemplate(PROMPT_TEMPLATE_CHEM, 'ocr', '化學考卷');
+const LOCAL_EXTRA_MATH = [LOCAL_MATRIX_RULE, LOCAL_ANSWER_RULE];
+const LOCAL_EXTRA_CHEM = [LOCAL_ANSWER_RULE];
+const LOCAL_VISION_TEMPLATE = buildLocalTemplate(PROMPT_TEMPLATE, 'vision', '考卷', LOCAL_EXTRA_MATH);
+const LOCAL_VISION_TEMPLATE_CHEM = buildLocalTemplate(PROMPT_TEMPLATE_CHEM, 'vision', '化學考卷', LOCAL_EXTRA_CHEM);
+const LOCAL_OCR_TEMPLATE = buildLocalTemplate(PROMPT_TEMPLATE, 'ocr', '考卷', LOCAL_EXTRA_MATH);
+const LOCAL_OCR_TEMPLATE_CHEM = buildLocalTemplate(PROMPT_TEMPLATE_CHEM, 'ocr', '化學考卷', LOCAL_EXTRA_CHEM);
+
+/**
+ * 〔dec/r13-extract-fixes〕本機路徑用的 extract schema：與 Gemini 的同一份（值域、必填、ajv 驗證都相同），只換 answer_text 的說明。
+ * services/llm/ollama.js 會把欄位說明附在 system 後面給模型看（Ollama 的 format 只拿 schema 做文法約束），原本那句
+ * 「正確答案；單選／多選必須以選項代號開頭」等於叫模型自己解題，與上面的 LOCAL_ANSWER_RULE 矛盾。
+ * answer_text 本來就允許空字串（type:string、沒有 minLength），schema 的契約沒有改；Gemini 路徑的 schema 與 schemaHash 不變。
+ */
+const LOCAL_ANSWER_DESCRIPTION = '頁面上這一題印出來的答案或解析（數學式用 $...$ 的 LaTeX）；頁面上沒有寫答案時填空字串 ""，不要自己解題。';
+const localSchemas = new Map();
+function localExtractSchema(group) {
+    const key = VARIANTS[group] ? group : 'math_physics';
+    if (localSchemas.has(key)) return localSchemas.get(key);
+    const copy = JSON.parse(JSON.stringify(buildSchema('extract', VARIANTS[key].schemaOpts)));
+    copy.properties.questions.items.properties.answer_text.description = LOCAL_ANSWER_DESCRIPTION;
+    const freeze = (o) => { if (o && typeof o === 'object') { Object.freeze(o); Object.values(o).forEach(freeze); } return o; };
+    localSchemas.set(key, freeze(copy));
+    return localSchemas.get(key);
+}
 
 registerTemplate(TEMPLATE_VISION, `${SYSTEM}\n---\n${LOCAL_VISION_TEMPLATE}`);
 registerTemplate(TEMPLATE_VISION_CHEM, `${SYSTEM_CHEM}\n---\n${LOCAL_VISION_TEMPLATE_CHEM}`);
@@ -710,6 +756,34 @@ function sumUsage(list) {
     return out;
 }
 
+/**
+ * 〔dec/r13-extract-fixes，Owner 2026-10-02 同意；docs/local-mode.md 10.25〕本機拆題一塊的確定性後處理（cross、ocr 兩種模式共用）：
+ *   1. 答案（utils/answerKey.js 的 processChunkAnswers）：解答頁上拆出來的元素不建題（skip）；題目頁上沒有寫答案時，
+ *      模型給的 answer_text 清成空字串（answer_dropped 記原因與原文）；只是填答格記號（⑮⑯）的答案也清掉。
+ *      沒有 OCR 頁面（OCR_ENGINE=none 的 cross 模式）時這一步什麼都不做。
+ *   2. LaTeX（utils/extractLatexRepair.js）：矩陣換列、斷掉的 \end、cases 配 \right.、度數圈圈、填答格、開頭上標。修了什麼記在 latex_repairs。
+ * elements 會被就地改（answer_text、question_text），呼叫端再拿去做 ajv 驗證。
+ * @param {Array<object>} elements 這一塊的元素（依位置；不合格的格位用空題幹佔位）
+ * @param {Array<object>|null} pages 這一塊的 OCR 頁面
+ * @returns {{skip:Map<number,string>, extras:(position:number)=>object, summary:object|null, repaired:number}}
+ */
+function postprocessLocal(elements, pages) {
+    const { processChunkAnswers } = require('../utils/answerKey');
+    const { repairElement } = require('../utils/extractLatexRepair');
+    const answers = processChunkAnswers(elements, pages);
+    const repairs = elements.map((el, i) => (answers.skip.has(i) ? [] : repairElement(el)));
+    const repaired = repairs.filter(r => r.length > 0).length;
+    return {
+        skip: answers.skip,
+        repaired,
+        summary: answers.summary,
+        extras: (i) => ({
+            ...(answers.notes.has(i) ? { answer_dropped: answers.notes.get(i) } : {}),
+            ...(repairs[i] && repairs[i].length ? { latex_repairs: repairs[i] } : {})
+        })
+    };
+}
+
 /** 兩版都不合格（或唯一的一版不合格）那一格的錯誤訊息，前面標出是哪一版 */
 function slotErrors(slot, validate) {
     const errors = [];
@@ -729,7 +803,8 @@ async function runLocal(ctx, input, { bytes, pdfSha256, chunkNo, fromPage, toPag
     const group = resolveSubjectGroup(ctx, input);
     const v = VARIANTS[group];
     const lv = LOCAL_VARIANTS[group];
-    const schema = buildSchema('extract', v.schemaOpts);
+    // 〔dec/r13-extract-fixes〕本機版 schema（只換 answer_text 的說明；驗證與 Gemini 的同一份）
+    const schema = localExtractSchema(group);
     const models = (ctx && ctx.config && ctx.config.models) || {};
     const ocrCfg = (ctx && ctx.config && ctx.config.ocr) || {};
     const engine = ocrCfg.engine || deps.ocrConfig().engine;
@@ -824,22 +899,31 @@ async function runLocal(ctx, input, { bytes, pdfSha256, chunkNo, fromPage, toPag
         const questions = [];
         const rejected = [];
         const chunkInfo = { chunkNo, fromPage, toPage };
+        // 〔dec/r13-extract-fixes〕合併後的每一格先做答案處理（解答頁的元素不建題、題目頁沒寫答案就清掉）與 LaTeX 修復
+        const merged = slots.map((slot) => {
+            if (!slot.question) return { question_text: '', answer_text: '' };
+            const { cross_check: _cc, ...fields } = slot.question;
+            return fields;
+        });
+        const post = postprocessLocal(merged, ocr ? ocr.pages : null);
         slots.forEach((slot, position) => {
             // idx 的題序＝合併後的格位（含兩版都不合格的格），與原路徑「陣列位置」同一個語意：
             // 被丟的那一格會在 idx 上留下缺號，承上題綁定（utils/followUp.js）靠它判斷前題有沒有被丟。
             const idx = chunkNo * 1000 + position + 1;
             const source = slot.vision && slot.ocr ? 'both' : (slot.vision ? 'vision' : 'ocr');
+            if (post.skip.has(position)) return;   // 解答表：不建題、不算退件（記在 data.answer_key）
             if (!slot.question) {
                 rejected.push({ idx, errors: slotErrors(slot, validate), source });
                 return;
             }
-            const { cross_check: cc, ...fields } = slot.question;
+            const { cross_check: cc } = slot.question;
+            const fields = merged[position];
             if (!validate(fields)) {
                 // 合併（採 OCR 版＋視覺版的附圖欄位）後反而不合格：理論上不會發生，保守起見整格退件
                 rejected.push({ idx, errors: formatErrors(validate.errors).map(e => `合併後：${e}`), source });
                 return;
             }
-            questions.push({ ...toPayloadQuestion(fields, idx, chunkInfo), cross_check: cc });
+            questions.push({ ...toPayloadQuestion(fields, idx, chunkInfo), cross_check: cc, ...post.extras(position) });
         });
 
         const usage = sumUsage([visionRes.usage, ocrRes && ocrRes.usage]);
@@ -881,7 +965,10 @@ async function runLocal(ctx, input, { bytes, pdfSha256, chunkNo, fromPage, toPag
                 schema_fallback: schemaFallback,
                 usage,
                 latency_ms: latencyMs,
-                cross_check_summary: summary
+                cross_check_summary: summary,
+                // 〔dec/r13-extract-fixes〕解答頁、清掉的答案（沒有就不帶這兩個鍵）
+                ...(post.summary ? { answer_key: post.summary } : {}),
+                ...(post.repaired ? { latex_repaired: post.repaired } : {})
             }
         };
     } finally {
@@ -954,6 +1041,8 @@ async function runLocalOcrOnly(ctx, { bytes, pdfSha256, chunkNo, fromPage, toPag
         // 〔整合 r5 審查〕「用滿上限」比的是實際送出的上限（OLLAMA_MAX_OUTPUT_EXTRACT_OCR 降過就是降過的值）
         const truncated = budget.over || (Number.isFinite(tokenOut) && tokenOut >= budget.max_output_tokens);
         const fig = matchOcrFigures(elements, ocr.pages, { truncated });
+        // 〔dec/r13-extract-fixes〕答案處理與 LaTeX 修復（配圖用的是修復前的題幹，與之前相同）
+        const post = postprocessLocal(elements, ocr.pages);
 
         const questions = [];
         const rejected = [];
@@ -961,6 +1050,7 @@ async function runLocalOcrOnly(ctx, { bytes, pdfSha256, chunkNo, fromPage, toPag
         elements.forEach((el, position) => {
             // idx 的題序＝陣列位置（含不合格的元素，留缺號），與原路徑、交叉驗證同一個語意
             const idx = chunkNo * 1000 + position + 1;
+            if (post.skip.has(position)) return;   // 解答表：不建題、不算退件（記在 data.answer_key）
             if (!validate(el)) {
                 rejected.push({ idx, errors: formatErrors(validate.errors).map(e => `OCR 版：${e}`), source: 'ocr' });
                 return;
@@ -972,7 +1062,8 @@ async function runLocalOcrOnly(ctx, { bytes, pdfSha256, chunkNo, fromPage, toPag
                 ...(f.figure_box ? { figure_page: f.figure_page, figure_box: f.figure_box } : {}),
                 cross_check: { ...OCR_ONLY_CROSS_CHECK },
                 extract_mode: 'ocr',
-                ...(f.figure_hint ? { figure_hint: f.figure_hint } : {})
+                ...(f.figure_hint ? { figure_hint: f.figure_hint } : {}),
+                ...post.extras(position)
             });
         });
 
@@ -1016,7 +1107,10 @@ async function runLocalOcrOnly(ctx, { bytes, pdfSha256, chunkNo, fromPage, toPag
                 schema_fallback: res.schemaFallback === true,
                 usage: sumUsage([res.usage]),
                 latency_ms: res.latencyMs || 0,
-                cross_check_summary: summary
+                cross_check_summary: summary,
+                // 〔dec/r13-extract-fixes〕解答頁、清掉的答案（沒有就不帶這兩個鍵）
+                ...(post.summary ? { answer_key: post.summary } : {}),
+                ...(post.repaired ? { latex_repaired: post.repaired } : {})
             }
         };
     } finally {
@@ -1041,5 +1135,7 @@ module.exports = {
     LOCAL_MAX_OUTPUT_TOKENS,
     // 〔OCR 為主〕LOCAL_EXTRACT_MODE=ocr
     OCR_ONLY_CROSS_CHECK, estimatePromptTokens, ocrStructureRequest, ocrCallLimits,
+    // 〔dec/r13-extract-fixes〕不准編答案、解答頁、LaTeX 修復
+    LOCAL_ANSWER_RULE, LOCAL_MATRIX_RULE, LOCAL_ANSWER_DESCRIPTION, localExtractSchema, postprocessLocal,
     _setLocalDepsForTest
 };

@@ -99,11 +99,13 @@ describe('record_local.bat／rerecord_all.js 支援 10.21 的步驟與順序', (
 describe('10.21 要錄的模板版號', () => {
     const src = (rel) => fs.readFileSync(path.join(APP_DIR, rel), 'utf8');
 
-    test('classify.v2、nlq.v2、variant.v2、extract_ocr.v2', () => {
+    // 〔dec/r13-extract-fixes〕extract_ocr 已升到 v3（本機模板多了 answer_text 與矩陣等寫法；docs/local-mode.md 10.25 第 8 點重錄），
+    // 10.21 第 3 步錄的 v2 回放檔因此不再被讀到；其餘三個版號不變
+    test('classify.v2、nlq.v2、variant.v2；extract_ocr 已升到 v3', () => {
         assert.equal(require('../../agents/classify').TEMPLATE ?? src('agents/classify.js').match(/const TEMPLATE = '([^']+)'/)[1], 'classify.v2');
         assert.match(src('services/nlqService.js'), /const TEMPLATE = 'nlq\.v2';/);
         assert.equal(require('../../agents/generateVariant').TEMPLATE, 'variant.v2');
-        assert.match(src('agents/extract.js'), /const TEMPLATE_OCR = 'extract_ocr\.v2';/);
+        assert.match(src('agents/extract.js'), /const TEMPLATE_OCR = 'extract_ocr\.v3';/);
     });
 
     test('〔Owner 2026-09-27 O-5 選 2〕lint 是 lint.v3、lint_chem.v2；10.21 的 1a 寫成已落實（隨第 2、3 步一起錄、不另外跑），第 0 步不再要求答 O-5', () => {
@@ -136,13 +138,15 @@ describe('docs/local-mode.md 10.21 與工具一致', () => {
     // 〔Owner 2026-09-27 改答 LC-2〕原本釘「10.21 是最後一節」；末尾新增 10.22 之後，改成逐一釘住 10.21 之後的節（不允許其他節插進來）
     // 〔dec/r9-record-tooling〕末尾再新增 10.23（重錄工具補強），照同一個慣例登記
     // 〔dec/r10-variant-cap〕末尾再新增 10.24（變式生成的本機輸出上限與截斷不重試），照同一個慣例登記
-    test('10.21 之後依序只有 10.22、10.23、10.24 三節', () => {
+    // 〔dec/r13-extract-fixes〕末尾再新增 10.25（本機拆題修正），照同一個慣例登記
+    test('10.21 之後依序只有 10.22、10.23、10.24、10.25 四節', () => {
         assert.ok(start > 0);
         const after = [...doc.slice(start + 4).matchAll(/^### (.*)$/gm)].map(m => m[1]);
         assert.deepEqual(after, [
             '10.22 classify 重錄後的四條界線規則（2026-09-27，改答 LC-2）',
             '10.23 重錄工具補強：只補錄缺的、錯誤回放檔（2026-10-01，`dec/r9-record-tooling`）',
-            '10.24 變式生成的本機輸出上限與截斷不重試（2026-10-01，`dec/r10-variant-cap`；Owner 第七輪 R7-1＝4）'
+            '10.24 變式生成的本機輸出上限與截斷不重試（2026-10-01，`dec/r10-variant-cap`；Owner 第七輪 R7-1＝4）',
+            '10.25 本機拆題修正：不准編答案、解答頁、LaTeX、答案比對、lint／verify 逾時（2026-10-02，`dec/r13-extract-fixes`；Owner 2026-10-02 同意）'
         ]);
     });
 

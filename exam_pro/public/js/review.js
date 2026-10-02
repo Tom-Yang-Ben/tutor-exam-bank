@@ -338,8 +338,15 @@ export function reasonSentence(reason, payload) {
         }
         case 'budget_exceeded':
             return '這份 PDF 的成本已達上限，剩下的節點沒有執行。可在任務頁按「提高預算並重跑」。';
-        case 'provider_error':
+        case 'provider_error': {
+            // 〔dec/r13-extract-fixes〕本機模型的 lint／verify 逾時不重試（workers/jobRunner.js 在 payload[節點] 記 timed_out）
+            const step = (p.verify && p.verify.timed_out) ? '驗算' : (p.lint && p.lint.timed_out) ? '公式檢查' : null;
+            if (step) {
+                return `本機模型的${step}這一步逾時，依設定不重試、直接交給老師。這一題沒有被判定為壞題：請自己核對題目與答案；` +
+                    `要讓模型再跑一次，可在 .env 調高 ${step === '驗算' ? 'OLLAMA_TIMEOUT_MS_VERIFY' : 'OLLAMA_TIMEOUT_MS_LINT'}（本機預設 30 分鐘，單位毫秒）後重跑這一題。`;
+            }
             return '供應商連續錯誤（逾時或配額），重試次數已用盡。這一題沒有被判定為壞題，重跑通常就會過。';
+        }
         case 'awaiting_approval':
             return '沒有任何閘門判定它壞掉，但流程需要人點頭。';
         case 'extract_disagree': {
@@ -400,6 +407,38 @@ export function figureHintNote(payload) {
 }
 
 /**
+ * 〔dec/r13-extract-fixes〕驗算模型給的建議答案：拆題沒有答案（verify 的 compare 是 'no_claim'）時才有。
+ * @param {object} payload
+ * @returns {string} 沒有回空字串
+ */
+export function suggestedAnswerOf(payload) {
+    const v = payload && payload.verify;
+    if (!v || v.compare !== 'no_claim') return '';
+    const s = typeof v.suggested_answer === 'string' ? v.suggested_answer : (typeof v.final_answer === 'string' ? v.final_answer : '');
+    return s.trim();
+}
+
+/**
+ * 〔dec/r13-extract-fixes〕答案欄的來源說明（docs/local-mode.md「本機拆題修正」一節）：
+ *   - 拆題沒有答案、預填的是驗算的建議答案 → 提醒老師核對；
+ *   - 答案取自同一份卷的解答頁（payload.extract.answer_src === 'answer_key'）→ 說明來源；
+ *   - 拆題模型編的答案被清掉（answer_dropped）且沒有建議答案 → 提醒要自己補。
+ * @param {object} payload
+ * @returns {string} 沒有要說的回空字串
+ */
+export function answerSourceNote(payload) {
+    const p = payload || {};
+    const ex = p.extract || {};
+    const own = ((p.lint && p.lint.answer_text) || ex.answer_text || '').trim();
+    if (own && ex.answer_src === 'answer_key') return '答案取自這份卷的解答頁。';
+    if (own) return '';
+    const suggested = suggestedAnswerOf(p);
+    if (suggested) return `原卷這一題沒有寫答案，答案欄預填的是驗算模型算的建議答案「${suggested}」，請核對後再核准。`;
+    if (ex.answer_dropped || ex.extract_mode === 'ocr' || ex.cross_check) return '原卷這一題沒有寫答案，請補上答案再核准。';
+    return '';
+}
+
+/**
  * 複核卡片可展開的「原卷文字層片段」（docs/source-check.md）。
  * 只有 extract 階段定位成功的片段才給看；掃描檔、找不到、變式題一律回 null（不顯示這一塊）。
  * @param {object} payload
@@ -427,7 +466,8 @@ export function payloadToQuestion(payload) {
         question_type: ex.question_type || '填空',
         difficulty: ex.difficulty || 3,
         question_text: (p.lint && p.lint.question_text) || ex.question_text || '',
-        answer_text: (p.lint && p.lint.answer_text) || ex.answer_text || '',
+        // 〔dec/r13-extract-fixes〕拆題沒有答案（本機拆題在題目頁沒寫答案時留空）時，預填驗算模型算的建議答案（answerSourceNote 會說明）
+        answer_text: (p.lint && p.lint.answer_text) || ex.answer_text || suggestedAnswerOf(p) || '',
         // 管線裁出的附圖路徑（docs/figures.md）；approve 的 body 直接展開這個物件，
         // 所以入庫時 question_img 會跟著送到 reviewController
         question_img: ex.figure_img || null
@@ -606,7 +646,9 @@ function reasonBar(reason, payload) {
     const tone = TONE_CLASS[REASON_TONE[reason]] || TONE_CLASS.slate;
     const bar = el('div', `mb-3 rounded-xl border px-3 py-2 text-xs font-bold leading-5 ${tone}`);
     // 〔OCR 為主〕只用 OCR 拆的題先被別的閘門攔下（例如答案對不上）時，補圖提示接在那一句後面
-    const note = reason === 'ocr_only' ? '' : figureHintNote(payload);
+    const figureNote = reason === 'ocr_only' ? '' : figureHintNote(payload);
+    // 〔dec/r13-extract-fixes〕答案欄的來源（建議答案、解答頁、沒有答案）接在最後
+    const note = [figureNote, payload ? answerSourceNote(payload) : ''].filter(Boolean).join(' ');
     bar.append(
         el('span', 'mr-2 rounded-md bg-white/70 px-1.5 py-0.5', { textContent: REASON_LABEL[reason] || reason }),
         el('span', '', { textContent: reasonSentence(reason, payload) + (note ? ` ${note}` : '') })

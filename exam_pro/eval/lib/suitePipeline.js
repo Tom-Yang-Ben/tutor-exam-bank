@@ -56,6 +56,41 @@ function isOcrOnlyRun(env = process.env, jq = []) {
 }
 
 /**
+ * 〔dec/r13-extract-fixes〕verify 記 compare='no_claim'（拆題沒有答案）的題：用 eval/lib/pdfMatch.js 的配對規則對上答案卷，
+ * 拿答案卷的 answer_text（標準答案的完整寫法；沒有才用 final_answer）當 claimed、驗算模型的 final_answer 當 model，
+ * 照 utils/answerCompare.js 比——等於「拆題照抄到正確答案時」原本會比出的結果。
+ * 配不到答案卷、或答案卷那一題沒有答案 → 'uncertain'（不回 agree，不讓配對失敗變成好分數）。
+ * @param {Array<object>} jq
+ * @param {{doc:{questions:Array<object>}}} sheet
+ * @returns {Map<object,'agree'|'disagree'|'uncertain'>} jq 列 → 比對結果（只有 no_claim 的列）
+ */
+function noClaimCompares(jq, sheet) {
+    const out = new Map();
+    const rows = (jq || []).filter(r => r && r.payload && r.payload.verify && r.payload.verify.compare === 'no_claim');
+    if (!rows.length) return out;
+    const { matchQuestions } = require('./pdfMatch');
+    const { answerCompare } = require('../../utils/answerCompare');
+    const expected = (sheet && sheet.doc && Array.isArray(sheet.doc.questions)) ? sheet.doc.questions : [];
+    const extracted = rows.map(r => ({ question_text: (r.payload.lint && r.payload.lint.question_text) || r.payload.extract.question_text }));
+    const match = matchQuestions(expected, extracted);
+    const byExtracted = new Map(match.pairs.map(p => [p.extractedIdx, p.expectedIdx]));
+    rows.forEach((r, j) => {
+        const e = byExtracted.has(j) ? expected[byExtracted.get(j)] : null;
+        const v = r.payload.verify;
+        // 答案卷的 answer_text 是「拆題照抄到正確答案」時的樣子（含 $…$ 與等號，比對器抽得到最終答案）；沒有才退回 final_answer
+        const claimed = [e && e.answer_text, e && e.final_answer].find(x => typeof x === 'string' && x.trim());
+        if (!e || !claimed) { out.set(r, 'uncertain'); return; }
+        out.set(r, answerCompare({
+            question_type: e.question_type || r.payload.extract.question_type,
+            claimed,
+            model: { final_answer: v.final_answer, answer_form: v.answer_form },
+            question_text: extracted[j].question_text
+        }));
+    });
+    return out;
+}
+
+/**
  * 〔Owner 第五輪 D-2〕人工核准前的通過率：走完全部閘門、只因 ocr_only 停下的題 ÷ 全部題（沒有題＝null）。
  * 只報告、不設門檻。
  * @param {Array<{state:string, review_reason:string|null}>} jq
@@ -163,8 +198,14 @@ async function runPipelineSuite(args) {
         : classifySources.filter(s => s === 'gate').length / classifySources.length;
 
     // answer_agree_rate：只算 verify 真的跑過而且有 compare 的題（skipped 不進分母）
-    const compares = res.jq.map(r => r.payload.verify && r.payload.verify.compare)
-        .filter(c => ['agree', 'disagree', 'uncertain'].includes(c));
+    // 〔dec/r13-extract-fixes〕本機拆題在題目頁沒寫答案時留空（樣卷就是這樣），verify 記 compare='no_claim'、沒有東西可比。
+    // 這種題改拿答案卷的標準答案（answer_text）跟驗算模型算的比（noClaimCompares；配不到答案卷的題記 uncertain），
+    // 仍算進同一個指標：拆題沒答案時，「答案對不對」只剩驗算這一邊能量（docs/local-mode.md 10.25 第 7 點）。
+    const noClaim = noClaimCompares(res.jq, sheet);
+    const compares = res.jq.map(r => {
+        const c = r.payload.verify && r.payload.verify.compare;
+        return c === 'no_claim' ? noClaim.get(r) : c;
+    }).filter(c => ['agree', 'disagree', 'uncertain'].includes(c));
     const answerAgreeRate = compares.length === 0 ? null
         : compares.filter(c => c === 'agree').length / compares.length;
 
@@ -234,4 +275,4 @@ async function runPipelineSuite(args) {
     };
 }
 
-module.exports = { runPipelineSuite, DEFAULT_PDF, isOcrOnlyRun, preApprovalPassRate, OCR_SAVED_RATE_NOTE };
+module.exports = { runPipelineSuite, DEFAULT_PDF, isOcrOnlyRun, preApprovalPassRate, OCR_SAVED_RATE_NOTE, noClaimCompares };

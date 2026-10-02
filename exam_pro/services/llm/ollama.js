@@ -45,7 +45,9 @@
 //     cassette 內容也相同（test/unit/llmOllamaStream.test.js 證明）。**未設＝0＝照舊 stream:false**，逐位元不變。
 //     讀 prompt（含看圖）那一段 Ollama 不回報進度，只能印「還沒輸出第一個 token」與經過時間；
 //     那一段要多久用 npm run local:bench-vision 量（docs/local-mode.md 第 10.11 條）。
-//   - 呼叫端可帶 timeoutMs 取代 OLLAMA_TIMEOUT_MS（只有本機量測工具用；agent 不帶）。
+//   - 呼叫端可帶 timeoutMs 取代 OLLAMA_TIMEOUT_MS（本機量測工具用；agent 不帶）。〔dec/r13-extract-fixes〕services/llm/index.js 也會帶：
+//     lint／verify 的本機預設 30 分或 OLLAMA_TIMEOUT_MS_<AGENT>（services/llm/localTuning.js 的 resolveTimeout），同時帶 timeoutName
+//     （變數名稱），逾時訊息寫「超過 OLLAMA_TIMEOUT_MS_VERIFY（…）」，npm run perf:local 的逾時計數照樣認得。
 //
 // 〔dec/local-thinking-speed〕generateJson／generateText 多收兩個選用參數（docs/local-mode.md 第 10.14 條）：
 //   - numCtx：這一次的 num_ctx。services/llm/index.js 依 OLLAMA_NUM_CTX_<AGENT> 帶（services/llm/localTuning.js），
@@ -272,7 +274,7 @@ let transport = httpPostJson;
  * 〔串流進度〕opts.onStart：拿到併發槽、開始計時的那一刻呼叫；opts.onData：交給傳輸層；
  * opts.parse：取代 JSON.parse（串流時組回單一回應物件）；opts.timeoutMs：取代 OLLAMA_TIMEOUT_MS。
  */
-async function callApi(pathname, payload, { signal, model, label, onStart, onData, parse, timeoutMs: limitOverride }) {
+async function callApi(pathname, payload, { signal, model, label, onStart, onData, parse, timeoutMs: limitOverride, timeoutName }) {
     let target;
     try {
         target = resolveHost();
@@ -283,7 +285,8 @@ async function callApi(pathname, payload, { signal, model, label, onStart, onDat
     const override = positiveInt(limitOverride, 0);
     const limitMs = override || timeoutMs();
     // 訊息原文（「超過 OLLAMA_TIMEOUT_MS（…）」）被 npm run perf:local 的逾時計數與單元測試比對，前面的空白要保留
-    const limitName = override ? '這次指定的逾時' : ' OLLAMA_TIMEOUT_MS';
+    // 〔dec/r13-extract-fixes〕services/llm/index.js 依 OLLAMA_TIMEOUT_MS_<AGENT>（或本機預設）帶的逾時另外帶變數名稱，訊息寫「超過 OLLAMA_TIMEOUT_MS_VERIFY（…）」
+    const limitName = override ? (timeoutName ? ` ${timeoutName}` : '這次指定的逾時') : ' OLLAMA_TIMEOUT_MS';
 
     const release = await throttle.acquire('ollama', { signal });
     // 逾時用一般的 setTimeout（finally 一定清掉），不用 AbortSignal.timeout：後者的計時器是 unref 的，
@@ -664,13 +667,13 @@ function createProgressReporter({ label, log, now = Date.now }) {
  * @param {object} body  chatBody() 的結果（stream:false 會被換成 true，其餘逐位元相同）
  * @param {{signal?:AbortSignal, label:string, timeoutMs?:number, progress:{intervalMs:number, log:Function}}} opts
  */
-async function chatStream(body, { signal, label, timeoutMs: limit, progress }) {
+async function chatStream(body, { signal, label, timeoutMs: limit, timeoutName, progress }) {
     const reporter = createProgressReporter({ label, log: progress.log });
     const handle = setInterval(() => reporter.tick(), progress.intervalMs);
     if (typeof handle.unref === 'function') handle.unref();
     try {
         const res = await callApi('/api/chat', { ...body, stream: true }, {
-            signal, model: body.model, label, timeoutMs: limit,
+            signal, model: body.model, label, timeoutMs: limit, timeoutName,
             onStart: () => reporter.start(),
             onData: (chunk) => reporter.onData(chunk),
             parse: (text) => assembleStream(text, { pathname: '/api/chat' })
@@ -727,10 +730,10 @@ function chatBody({ model, system, parts, maxOutputTokens, thinkingBudget, numCt
  * POST /api/chat；模型不支援思考（400）時拿掉 think 重送一次。
  * 〔看圖拆題逾時〕progress 不是 null 時走串流（chatStream），組回來的物件與 stream:false 相同。
  */
-async function chat(body, { signal, label, timeoutMs: limit, progress = null }) {
+async function chat(body, { signal, label, timeoutMs: limit, timeoutName, progress = null }) {
     const send = (b, l) => (progress
-        ? chatStream(b, { signal, label: l, timeoutMs: limit, progress })
-        : callApi('/api/chat', b, { signal, model: b.model, label: l, timeoutMs: limit }));
+        ? chatStream(b, { signal, label: l, timeoutMs: limit, timeoutName, progress })
+        : callApi('/api/chat', b, { signal, model: b.model, label: l, timeoutMs: limit, timeoutName }));
     try {
         return await send(body, label);
     } catch (err) {
@@ -753,7 +756,7 @@ async function chat(body, { signal, label, timeoutMs: limit, progress = null }) 
  * @returns {Promise<{data:object, usage:{tokenIn,tokenOut,tokenThinking,tokenCached,timing?},
  *                    latencyMs:number, raw:any, schemaFallback:false}>}
  */
-async function generateJson({ model, system, parts, schema, maxOutputTokens, thinkingBudget, signal, progressMs, onProgress, timeoutMs: limit, numCtx: ctxOverride, numThread }) {
+async function generateJson({ model, system, parts, schema, maxOutputTokens, thinkingBudget, signal, progressMs, onProgress, timeoutMs: limit, timeoutName, numCtx: ctxOverride, numThread }) {
     const startedAt = Date.now();
     const format = schema ? toOllamaSchema(schema) : 'json';
     const guide = schemaGuide(schema ? format : undefined);
@@ -764,7 +767,7 @@ async function generateJson({ model, system, parts, schema, maxOutputTokens, thi
     });
     body.format = format;
 
-    const res = await chat(body, { signal, label: `/api/chat(${model})`, timeoutMs: limit, progress: resolveProgress(progressMs, onProgress) });
+    const res = await chat(body, { signal, label: `/api/chat(${model})`, timeoutMs: limit, timeoutName, progress: resolveProgress(progressMs, onProgress) });
     const usage = usageOf(res);
     let data;
     try {
@@ -788,10 +791,10 @@ async function generateJson({ model, system, parts, schema, maxOutputTokens, thi
  * @returns {Promise<{text:string, codeRuns:[], finishReason:string|null,
  *                    usage:{tokenIn,tokenOut,tokenThinking,tokenCached,timing?}, latencyMs:number, raw:any}>}
  */
-async function generateText({ model, system, parts, maxOutputTokens, thinkingBudget, signal, progressMs, onProgress, timeoutMs: limit, numCtx: ctxOverride, numThread }) {
+async function generateText({ model, system, parts, maxOutputTokens, thinkingBudget, signal, progressMs, onProgress, timeoutMs: limit, timeoutName, numCtx: ctxOverride, numThread }) {
     const startedAt = Date.now();
     const body = chatBody({ model, system, parts, maxOutputTokens, thinkingBudget, numCtx: ctxOverride, numThread });
-    const res = await chat(body, { signal, label: `/api/chat(${model}, text)`, timeoutMs: limit, progress: resolveProgress(progressMs, onProgress) });
+    const res = await chat(body, { signal, label: `/api/chat(${model}, text)`, timeoutMs: limit, timeoutName, progress: resolveProgress(progressMs, onProgress) });
     return {
         text: stripThink(res?.message?.content),
         codeRuns: [],

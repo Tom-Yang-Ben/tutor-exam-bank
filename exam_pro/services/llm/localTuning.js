@@ -40,6 +40,11 @@
 // 沒有本機預設的 agent（classify、nlq…）不受 UNCAPPED_CEILING 影響：照舊寫多少送多少。
 // 被截斷時的處理（C-f 納入變式：不重試、放棄那一題並記事件）在 workers/jobRunner.js 的 runGenerateOne。
 //
+// 〔dec/r13-extract-fixes，Owner 2026-10-02 同意〕lint、verify（含化學版）的單次逾時本機預設 30 分鐘（docs/local-mode.md 10.25）：
+// OLLAMA_TIMEOUT_MS_<AGENT>（例 OLLAMA_TIMEOUT_MS_VERIFY）沒寫、而全域 OLLAMA_TIMEOUT_MS 比 30 分長（Owner 的電腦為了拆題設 90 分）時，
+// 這兩步改用 30 分（resolveTimeout，只降不升）；寫了就照寫的。services/llm/index.js 把它當 timeoutMs 交給 ollama adapter。
+// 逾時不在 cassette 的鍵裡、也不寫進 request.ollamaOverrides。逾時之後不重試、直接進複核在 workers/jobRunner.js（isLocalTimeout）。
+//
 // 這支檔案只讀環境變數、不碰網路；除了 announceOverrides 會印字，全部是純函式（env 可注入）。
 // ─────────────────────────────────────────────────────────────
 
@@ -76,8 +81,14 @@ const NONE_WORDS = Object.freeze(['none']);
 const LOCAL_DEFAULTS = Object.freeze({
     noThink: Object.freeze(['kc_tag']),
     // 〔Owner 第七輪 R7-1＝4〕variant 1024：實錄 59 支變式生成的輸出中位 175、最多 358 token（docs/local-mode.md 10.24）
-    maxOutput: Object.freeze({ verify: 3072, variant: 1024 })
+    maxOutput: Object.freeze({ verify: 3072, variant: 1024 }),
+    // 〔dec/r13-extract-fixes，Owner 2026-10-02 同意〕lint、verify 的單次逾時 30 分鐘（docs/local-mode.md 10.25 第 5 點）：
+    // 全域 OLLAMA_TIMEOUT_MS 為了拆題常被調高（Owner 的電腦是 90 分），lint／verify 不該跟著等那麼久；逾時不重試在 workers/jobRunner.js
+    timeoutMs: Object.freeze({ lint: 1_800_000, verify: 1_800_000 })
 });
+
+/** 本機預設單次逾時是哪一輪核准的（啟動訊息用） */
+const LOCAL_TIMEOUT_SOURCE = 'Owner 2026-10-02';
 
 /** 本機預設輸出上限各自是哪一輪哪一題核准的（啟動訊息與 checkOverrides 的 defaults 用） */
 const LOCAL_DEFAULT_SOURCES = Object.freeze({ verify: 'Owner 第五輪 C-c', variant: 'Owner 第七輪 R7-1' });
@@ -192,6 +203,40 @@ function perAgentInt(prefix, agent, env = process.env) {
 }
 
 /**
+ * 〔dec/r13-extract-fixes，Owner 2026-10-02 同意〕這個 agent 的本機預設單次逾時（LOCAL_DEFAULTS.timeoutMs；化學版吃基本名稱）；沒有時 null。
+ * @param {string|undefined} agent
+ * @returns {number|null}
+ */
+function defaultTimeoutFor(agent) {
+    const a = String(agent ?? '').trim().toLowerCase();
+    if (!a) return null;
+    for (const name of [a, baseAgent(a)]) {
+        if (Object.prototype.hasOwnProperty.call(LOCAL_DEFAULTS.timeoutMs, name)) return LOCAL_DEFAULTS.timeoutMs[name];
+    }
+    return null;
+}
+
+/**
+ * 〔dec/r13-extract-fixes〕這一次 Ollama 呼叫的單次逾時要不要換掉全域的 OLLAMA_TIMEOUT_MS。純函式。
+ *   - OLLAMA_TIMEOUT_MS_<AGENT>（化學版先找 _CHEM，再找基本名稱）有寫正整數 → 用它（可以比全域長或短）；
+ *   - 沒寫、而這個 agent 有本機預設（lint、verify：30 分）→ 全域比預設長時換成預設（只降不升）；全域沒寫（預設 30 分）或更短時不換；
+ *   - 其他 agent → 不換（照全域 OLLAMA_TIMEOUT_MS）。
+ * 逾時不在 cassette 的鍵裡，也不寫進回放檔的 request.ollamaOverrides（那裡只記會改變模型輸出的設定）。
+ * @param {string|undefined} agent
+ * @param {object} [env]
+ * @returns {{timeoutMs:number, name:string, source:'env'|'default'}|null}
+ */
+function resolveTimeout(agent, env = process.env) {
+    const own = perAgentInt('OLLAMA_TIMEOUT_MS_', agent, env);
+    if (own) return { timeoutMs: own.value, name: own.name, source: 'env' };
+    const d = defaultTimeoutFor(agent);
+    if (!d) return null;
+    const global = positiveIntOrNull(env.OLLAMA_TIMEOUT_MS);
+    if (global === null || global <= d) return null;
+    return { timeoutMs: d, name: `OLLAMA_TIMEOUT_MS_${agentEnvSuffix(baseAgent(agent))}`, source: 'default' };
+}
+
+/**
  * 一次 Ollama 呼叫要套用哪些本機調整。純函式。
  * @param {{agent?:string, thinkingBudget?:number, maxOutputTokens?:number}} opts  services/llm 收到的呼叫參數
  * @param {object} [env]
@@ -256,8 +301,9 @@ function describeOverrides(env = process.env) {
     return { noThink: { all, names: [...names].sort() }, maxOutput: pick('OLLAMA_MAX_OUTPUT_'), numCtx: pick('OLLAMA_NUM_CTX_') };
 }
 
-/** 本分支新增、會進 eval 重錄子行程的環境變數名稱（eval/lib/suiteProcess.js 錄製時放行、回放時擋掉） */
-const OVERRIDE_ENV_PATTERN = /^OLLAMA_(NO_THINK|MAX_OUTPUT_[A-Z0-9_]+|NUM_CTX_[A-Z0-9_]+)$/;
+/** 本分支新增、會進 eval 重錄子行程的環境變數名稱（eval/lib/suiteProcess.js 錄製時放行、回放時擋掉）
+ *  〔dec/r13-extract-fixes〕多 OLLAMA_TIMEOUT_MS_<AGENT>（全域的 OLLAMA_TIMEOUT_MS 沒有底線後綴，不在這裡） */
+const OVERRIDE_ENV_PATTERN = /^OLLAMA_(NO_THINK|MAX_OUTPUT_[A-Z0-9_]+|NUM_CTX_[A-Z0-9_]+|TIMEOUT_MS_[A-Z0-9_]+)$/;
 
 // ───────────────────────── 〔審查修正〕啟動時印出生效的本機調整、名稱寫錯時警告 ─────────────────────────
 
@@ -314,7 +360,8 @@ function checkOverrides(env = process.env) {
         defaults.push(`不思考：${LOCAL_DEFAULTS.noThink.join('、')}（本機預設，Owner 第五輪 C-b；OLLAMA_NO_THINK 有寫就整個取代）`);
     }
 
-    for (const [prefix, what] of [['OLLAMA_MAX_OUTPUT_', '輸出上限'], ['OLLAMA_NUM_CTX_', 'num_ctx']]) {
+    // 〔dec/r13-extract-fixes〕多一組 OLLAMA_TIMEOUT_MS_<AGENT>（毫秒；全域的 OLLAMA_TIMEOUT_MS 沒有底線後綴，不在這一組）
+    for (const [prefix, what] of [['OLLAMA_MAX_OUTPUT_', '輸出上限'], ['OLLAMA_NUM_CTX_', 'num_ctx'], ['OLLAMA_TIMEOUT_MS_', '單次逾時']]) {
         const items = [];
         for (const key of Object.keys(env).filter(k => k.startsWith(prefix) && k.length > prefix.length).sort()) {
             const raw = String(env[key] ?? '').trim();
@@ -359,6 +406,19 @@ function checkOverrides(env = process.env) {
         for (const [d, agents] of byValue) {
             defaults.push(`輸出上限：${agents.join('、')} ${d}（本機預設，${LOCAL_DEFAULT_SOURCES[base] || 'Owner 核准'}；OLLAMA_MAX_OUTPUT_${agentEnvSuffix(base)} 可覆寫）`);
         }
+    }
+    // 〔dec/r13-extract-fixes〕還在用本機預設單次逾時的 agent（OLLAMA_TIMEOUT_MS_<AGENT> 沒寫）。只在它真的生效時列：
+    // 全域 OLLAMA_TIMEOUT_MS 比預設長（沒寫＝ollama.js 的 30 分，與預設相同，列了也沒有差別）
+    const timeoutAgents = [];
+    for (const base of Object.keys(LOCAL_DEFAULTS.timeoutMs)) {
+        for (const agent of [base, `${base}${CHEM_SUFFIX}`]) {
+            if (KNOWN_AGENTS.includes(agent) && resolveTimeout(agent, env)?.source === 'default') timeoutAgents.push(agent);
+        }
+    }
+    if (timeoutAgents.length) {
+        const mins = Math.round(Math.max(...Object.values(LOCAL_DEFAULTS.timeoutMs)) / 60000);
+        defaults.push(`單次逾時：${timeoutAgents.join('、')} ${mins} 分鐘、逾時不重試（本機預設，${LOCAL_TIMEOUT_SOURCE}；` +
+            `OLLAMA_TIMEOUT_MS 更短時照它；${Object.keys(LOCAL_DEFAULTS.timeoutMs).map(b => `OLLAMA_TIMEOUT_MS_${agentEnvSuffix(b)}`).join('／')} 可覆寫）`);
     }
     return { active, warnings, defaults };
 }
@@ -415,5 +475,7 @@ module.exports = {
     // 〔Owner 第五輪 C-b、C-c〕本機預設
     LOCAL_DEFAULTS, NONE_WORDS, noThinkSpec, defaultMaxOutputFor, textModelIsLocal,
     // 〔Owner 第七輪 R7-1〕
-    LOCAL_DEFAULT_SOURCES, UNCAPPED_CEILING
+    LOCAL_DEFAULT_SOURCES, UNCAPPED_CEILING,
+    // 〔dec/r13-extract-fixes〕lint／verify 的本機預設單次逾時
+    resolveTimeout, defaultTimeoutFor, LOCAL_TIMEOUT_SOURCE
 };
