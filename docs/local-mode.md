@@ -1966,17 +1966,16 @@ Gemini 的拆題請求不變，但下面四點是共用的下游程式，Gemini 
 - **review_reason 選 `provider_error`、不新增值**：照 C-f 新增 `output_truncated` 的做法要多一支 migration 與「還沒套 migration 時退回」的保護；逾時本來就歸 `provider_error`（`REVIEW_REASON_FOR_ERROR`），差別只在不重試，所以沿用既有原因、用 `timed_out` 旗標讓說明句講清楚。Gemini 的逾時、本機的其他錯誤、classify 照舊退避重試。
 - 〔審查修正〕**錄製時 lint／verify 跟著放寬**（`eval/lib/localMode.js` 的 `agentTimeoutRecordEnv`，`eval/tools/rerecord_all.js` 的 `stepExtraEnv` 每一步都套）：原本重錄工具只放寬全域 `OLLAMA_TIMEOUT_MS`（pipeline／e2e 3 小時），`resolveTimeout` 的「全域比預設長就降回 30 分」讓 lint／verify 仍只等 30 分，慢的那一題會被錄成永久的「單次逾時」錯誤回放檔（10.23 第 3 點），CI 的 pipeline／e2e 會一直把那題記成失敗。現在 `.env`／shell 沒寫 `OLLAMA_TIMEOUT_MS_LINT`（或 `_VERIFY`）、而這一步錄製子行程的全域比 30 分長時，把它設成與全域同值：pipeline／e2e 是 3 小時（或 `RERECORD_OLLAMA_TIMEOUT_MS`），其他步驟跟著 `.env` 的 `OLLAMA_TIMEOUT_MS`（Owner 的 90 分）。`.env` 有寫的照寫的。錄製前的盤點訊息會印「單次 Ollama 呼叫逾時 3 小時（其中 lint 3 小時、verify 3 小時）」。只影響錄製（回放擋成空字串、不在鍵裡）；伺服器與桌面版照舊 30 分、逾時不重試。
 
-#### 6. eval 的計分：`answer_agree_rate` 定義照舊；`no_claim` 的題另報、**量法要 Owner 決定**
+#### 6. eval 的計分：`answer_agree_rate` 定義照舊；`no_claim` 的題改由 `verify_agree_rate` 把關（**Owner 2026-10-02 選 A**）
 
-- 〔審查修正〕`dec/r13-extract-fixes` 原本把 `no_claim` 的題改拿答案卷的標準答案跟驗算比、算進 `answer_agree_rate`。這不在 Owner 同意的七項裡，而且樣卷重錄後 10 題都是 `no_claim`，這個指標實際上會從「拆題答案對驗算答案」變成「驗算答案對標準答案」、門檻還是 0.87——等於換了門檻指標的定義，效果接近放寬門檻；選 `answer_text`（不選 `final_answer`）也是看過模擬數字（0.90 對 0.50）之後才定的。所以這一版**改回原本的定義**，量法等 Owner 決定：
-  - `eval/lib/suitePipeline.js` 的 `answer_agree_rate`：照舊只算 `compare` 是 agree／disagree／uncertain 的題，**`no_claim` 不進分母**。
-  - `no_claim` 的題另報 `verify_agree_rate`（`verifyAgreeReport`；報表 JSON 的 `verifyAgree`、Markdown 多一行）：驗算模型算的答案對答案卷，`answer_text`（沒有才 `final_answer`）與只用 `final_answer` **兩種都報**。只報告、不進 `measured`、不比門檻；沒有 `no_claim` 的題時不出現。
-  - `eval/thresholds.json`、`eval/lib/thresholds.js`（`SUITE_METRICS`、`NOT_APPLICABLE_ALLOWED`）都沒動。
-- **後果（重錄之後）**：樣卷的題目頁沒有答案，重錄後 verify 全部是 `no_claim`，`answer_agree_rate` 會是 n/a；門檻有數字卻量不到＝失敗，pipeline 多一條紅（`gate_pass_rate` 0.80 本來就紅）。這是不改定義的誠實結果，不是壞掉。
-- **請 Owner 選一個**（選了之後另開一支小改動；兩個都要動門檻相關的檔，所以這一版不替你選）：
-  - **A. 接受新量法、改名**：`verify_agree_rate`（用 `answer_text` 或 `final_answer`，請一併選）進 `SUITE_METRICS.pipeline`、`thresholds.json` 新增它的門檻（初值照「第一次量測 − 0.03」的規則），`answer_agree_rate` 在「全部是 `no_claim`」時列進 `NOT_APPLICABLE_ALLOWED`。歷史數字不會混在一起。
-  - **B. 只報告、不比門檻**：`verify_agree_rate` 維持只報告；`answer_agree_rate` 在「全部是 `no_claim`」時列進 `NOT_APPLICABLE_ALLOWED`（同 D-2 對 `saved_rate` 的做法）。管線裡「答案對不對」就沒有門檻把關，只靠人工複核。
-  - 不選的話：維持這一版（重錄後 `answer_agree_rate` n/a、pipeline 紅）。
+- 〔審查修正〕`dec/r13-extract-fixes` 原本把 `no_claim` 的題改拿答案卷的標準答案跟驗算比、算進 `answer_agree_rate`。這不在 Owner 同意的七項裡，而且樣卷重錄後 10 題都是 `no_claim`，這個指標實際上會從「拆題答案對驗算答案」變成「驗算答案對標準答案」、門檻還是 0.87——等於換了門檻指標的定義，效果接近放寬門檻；選 `answer_text`（不選 `final_answer`）也是看過模擬數字（0.90 對 0.50）之後才定的。所以審查修正版**改回原本的定義**，量法交給 Owner 在 A（新指標進門檻）、B（只報告、不比門檻）之間選。
+- **Owner 2026-10-02 選 A**（`dec/integration-r13`）：
+  - **`verify_agree_rate`**＝拆題沒寫答案（verify 記 `no_claim`）的題：驗算模型的答案對答案卷（golden）**`answer_text`** 的一致率（不是 `final_answer`；答案卷規定 `answer_text` 不可為空）。進 `SUITE_METRICS.pipeline`、報表 JSON 的 `measured.pipeline`，比門檻。
+  - **門檻 0.87**＝第一次實測 0.9000（9／10，Owner 電腦 2026-10-02 錄完的樣卷回放，`422e4f5`）− 0.03，之後只升不降。`eval/thresholds.json` 的 `pipeline.pipeline.verify_agree_rate`，來源記在同一節的 `_note_verify_agree_rate`。其他門檻數字、golden、回放檔都沒動。
+  - **`answer_agree_rate` 定義與門檻（0.87）不變**：照舊只算 `compare` 是 agree／disagree／uncertain 的題，`no_claim` 不進分母。只有「**全部題目都是 `no_claim`**」時印 n/a、**不比門檻**（列進 `NOT_APPLICABLE_ALLOWED`，CI 那一行「未設門檻（只報告不擋）」寫明原因）；有任何一題不是 `no_claim`（包括 verify 沒跑出結果的題）就照舊比 0.87，量不到＝失敗。
+  - 對稱的一條：**沒有任何一題是 `no_claim`**（Gemini／交叉驗證的拆題都寫了答案）時 `verify_agree_rate` 印 n/a、不比門檻（同樣列進白名單），答案改由 `answer_agree_rate` 把關。兩個條件互斥：只要有題，兩個答案指標至少有一個照比；一題都沒有時兩個都照比（量不到＝失敗）。
+  - 實作：`eval/lib/suitePipeline.js`（`verify_agree_rate` 取 `verifyAgreeReport` 的 `by_answer_text`；何時不比由 `pipelineNotApplicable` 判斷）、`eval/lib/thresholds.js`（`SUITE_METRICS`、`NOT_APPLICABLE_ALLOWED`）、`eval/lib/report2.js`（Markdown 那一行多印 `verify_agree_rate`，不比門檻的指標註明原因）。報表照舊另印一行兩種比法（對 `answer_text`、對 `final_answer`），`final_answer` 那一個只報告。單元測試 `test/unit/evalPipelineVerifyAgree.test.js`。
+- **結果（`422e4f5` 的回放）**：pipeline 的 `verify_agree_rate` 0.9000 ≥ 0.87 達標、`answer_agree_rate` n/a 不算失敗、`saved_rate` n/a（OCR 模式，D-2）；只剩 `gate_pass_rate` 0.8000 < 0.97 未達（原本就紅）。
 
 #### 7. 測試
 
@@ -2006,7 +2005,7 @@ scripts\windows\record_local.bat pipeline,e2e --only-missing
   - 〔審查修正〕lint／verify 的單次逾時在錄製時自動跟著放寬（第 5 點最後一項），不必先改 `.env`。若 `.env` 自己寫了 `OLLAMA_TIMEOUT_MS_LINT`／`OLLAMA_TIMEOUT_MS_VERIFY`（例如 30 分），錄製會照寫的值——要錄得穩，重錄前把這兩行拿掉或改成 `10800000`（3 小時）。
 
   - 只補缺的：`ocr` 回放檔（鍵沒變）照回放；`extract_ocr.v3` 1 次（上次錄 `v2` 約 23 分）；新題幹的分類、lint、驗算（樣卷 10 題，驗算沒有答案可比、每題只採樣一次）。粗估 **約 1.5～3.5 小時**（10.21 第 3 步是 2～4.5 小時，那時驗算要比兩次的題比較多；以實際 log 為準）。
-  - 怎麼確認成功：回放驗證表 pipeline 那一列 replay miss 0；`answer_agree_rate` 預期是 n/a（10 題都是 `no_claim`，第 6 點；要等 Owner 選 A 或 B）、報表多一行 `verify_agree_rate`（雲端模擬：對 `answer_text` 0.90、對 `final_answer` 0.50，第 11 點；實際以重錄後的模型輸出為準〔要實測〕）；`gate_pass_rate` 照舊（原本就未達門檻）。e2e 那一列 `pass 12／fail 0`。錄完把 `eval/cassettes/` 的新檔一起 commit（舊的 `extract_ocr.v2` 那一支可以用 `npm run cassettes:prune` 清掉）。
+  - 怎麼確認成功：回放驗證表 pipeline 那一列 replay miss 0；`answer_agree_rate` 預期是 n/a（10 題都是 `no_claim`，第 6 點；Owner 2026-10-02 選 A 之後不比門檻、改比 `verify_agree_rate` 0.87）、報表多一行 `verify_agree_rate`（雲端模擬：對 `answer_text` 0.90、對 `final_answer` 0.50，第 11 點；實際以重錄後的模型輸出為準〔要實測〕）；`gate_pass_rate` 照舊（原本就未達門檻）。e2e 那一列 `pass 12／fail 0`。錄完把 `eval/cassettes/` 的新檔一起 commit（舊的 `extract_ocr.v2` 那一支可以用 `npm run cassettes:prune` 清掉）。
 
 #### 9. Owner 電腦〔要實測〕
 
