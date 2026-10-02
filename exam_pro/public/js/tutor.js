@@ -18,6 +18,9 @@
 //   - 科目清單讀 GET /api/chapter-whitelist，不寫死（第 1.5 條）。
 //   - 麥克風只在 localhost 或 HTTPS 可用（瀏覽器規定），本階段只支援桌機（DEC-018，D3 = a）；
 //     不可用時隱藏按鈕並說明原因。
+//   - 〔dec/r13-engine-choice〕「回答方式：本機／Gemini」（docs/local-mode.md 10.25）：讀 GET /api/engines 填選項，
+//     記住上次的選擇（localStorage），請求帶 engine；Gemini 沒有金鑰時選項停用並說明。讀不到就不顯示、不帶（照 .env）。
+//     語音照舊只看伺服器有沒有掛語音路由，不跟著這個選項變。
 // ─────────────────────────────────────────────────────────────
 const MAX_MESSAGE = 1000;            // 與 services/tutorService.js 的 MAX_MESSAGE_LEN 一致
 const HISTORY_KEEP = 8;              // 與後端 MAX_HISTORY 一致
@@ -232,8 +235,10 @@ export function parseQuestionId(value) {
 /**
  * 組 POST /api/tutor 的 body：可選欄位沒有值就不送；歷史只送最近 8 輪、每輪截到 4000 字。
  */
-export function buildRequestBody({ message, mode, subject, studentId, questionId, history }) {
+export function buildRequestBody({ message, mode, subject, studentId, questionId, history, engine }) {
     const body = { message: String(message ?? '').trim(), mode };
+    // 〔dec/r13-engine-choice〕回答方式：有選才帶（沒帶＝照 .env）
+    if (engine === 'local' || engine === 'gemini') body.engine = engine;
     if (subject) body.subject = subject;
     if (Number.isInteger(studentId) && studentId > 0) body.student_id = studentId;
     if (Number.isInteger(questionId) && questionId > 0) body.question_id = questionId;
@@ -243,6 +248,41 @@ export function buildRequestBody({ message, mode, subject, studentId, questionId
     })).filter(t => t.text.trim());
     if (turns.length) body.history = turns;
     return body;
+}
+
+// 〔dec/r13-engine-choice〕本機／Gemini 的小工具（review.js、assistant.js 各有一份：測試以 data: URL 載入單一檔案，不能互相 import）
+const ENGINE_IDS = ['local', 'gemini'];
+const ENGINE_TEXT = { local: '本機（免費、較慢）', gemini: 'Gemini（需要 API 費用、較快）' };
+const ENGINE_STORAGE_KEY = 'examPro.engine.tutor';
+
+/**
+ * 預設選哪一個：上次選的（還能用）→ .env 的預設（能用）→ 第一個能用的；都不能用回 null。
+ * @param {{default:string|null, options:Object<string,{available:boolean}>}|null} info GET /api/engines 的 purposes.tutor
+ * @param {string|null} stored
+ * @returns {'local'|'gemini'|null}
+ */
+export function pickEngine(info, stored) {
+    const opts = (info && info.options) || {};
+    const ok = (e) => ENGINE_IDS.includes(e) && Boolean(opts[e] && opts[e].available);
+    if (ok(stored)) return stored;
+    if (info && ok(info.default)) return info.default;
+    return ENGINE_IDS.find(ok) || null;
+}
+
+/** 選項文字（.env 的預設與不能用的原因接在後面） */
+export function engineOptionText(id, opt, isDefault) {
+    let text = ENGINE_TEXT[id] || id;
+    if (isDefault) text += '・.env 預設';
+    if (opt && !opt.available) text += id === 'gemini' ? '・尚未設定 Gemini 金鑰' : '・目前不能用';
+    return text;
+}
+
+function readStoredEngine() {
+    try { return window.localStorage.getItem(ENGINE_STORAGE_KEY); } catch { return null; }
+}
+
+function storeEngine(v) {
+    try { window.localStorage.setItem(ENGINE_STORAGE_KEY, v); } catch { /* 隱私模式：不記也能用 */ }
 }
 
 /** code execution 的 outcome → 中文 */
@@ -428,7 +468,9 @@ function readSettings(ui) {
         mode: state.mode,
         subject: ui.subject.value || null,
         studentId: Number.isInteger(studentId) && studentId > 0 ? studentId : null,
-        questionId: parseQuestionId(ui.questionId.value)
+        questionId: parseQuestionId(ui.questionId.value),
+        // 〔dec/r13-engine-choice〕選單有顯示才帶
+        engine: ui.engineRow && !ui.engineRow.classList.contains('hidden') ? ui.engine.value : null
     };
 }
 
@@ -680,6 +722,50 @@ function buildSettings(ui) {
     return row;
 }
 
+/** 〔dec/r13-engine-choice〕回答方式那一列：先藏著，loadEngines 讀到 /api/engines 才顯示 */
+function buildEngineRow(ui) {
+    ui.engineRow = el('div', 'mt-3 hidden grid grid-cols-1 gap-3 sm:grid-cols-4', { id: 'tutorEngineRow' });
+    ui.engine = el('select', 'field-control block w-full p-2 text-sm', { id: 'tutorEngine', 'aria-label': '回答方式' });
+    ui.engineNote = el('p', 'text-[11px] text-slate-400 sm:col-span-3 self-end', { id: 'tutorEngineNote' });
+    ui.engineRow.append(labeled('回答方式', ui.engine), ui.engineNote);
+    return ui.engineRow;
+}
+
+/**
+ * 〔dec/r13-engine-choice〕讀 GET /api/engines 填「回答方式」；讀不到就維持隱藏（不帶 engine＝照 .env）。
+ * @param {object} app
+ * @param {object} ui
+ */
+async function loadEngines(app, ui) {
+    if (!ui.engine) return;
+    let info = null;
+    try {
+        const res = await app.apiFetch('/api/engines');
+        if (res.ok) info = ((await res.json()).purposes || {}).tutor || null;
+    } catch { info = null; }
+    if (!info) return;
+    for (const id of ENGINE_IDS) {
+        const opt = (info.options || {})[id] || { available: false, reason: null };
+        const o = el('option', '', { value: id, textContent: engineOptionText(id, opt, info.default === id) });
+        o.disabled = !opt.available;
+        if (opt.reason) o.title = opt.reason;
+        ui.engine.appendChild(o);
+    }
+    const picked = pickEngine(info, readStoredEngine());
+    if (picked) ui.engine.value = picked;
+    const describe = () => {
+        const opt = (info.options || {})[ui.engine.value] || {};
+        const gem = (info.options || {}).gemini || {};
+        const parts = [];
+        if (opt.model) parts.push(`用 ${opt.model} 解題與講解${ui.engine.value === 'local' ? '（沒有程式驗算，可能要幾分鐘）' : '（會用程式驗算）'}。`);
+        if (!gem.available && gem.reason) parts.push(`Gemini 選項停用：${gem.reason}。`);
+        ui.engineNote.textContent = parts.join(' ');
+    };
+    describe();
+    ui.engine.addEventListener('change', () => { storeEngine(ui.engine.value); describe(); });
+    ui.engineRow.classList.remove('hidden');
+}
+
 function buildReviewPanel(ui) {
     const panel = el('div', 'mt-3 hidden rounded-2xl border border-teal-200 bg-teal-50/40 p-4', { id: 'tutorVoiceReview' });
     panel.appendChild(el('p', 'text-sm font-extrabold text-teal-800', { textContent: '語音逐字稿（可以修改；按「確認送出」才會送給家教）' }));
@@ -727,6 +813,7 @@ function mountTutorSection(app, section, { voice, voiceNote = '' }) {
 
     const ui = {};
     const settings = buildSettings(ui);
+    const engineRow = buildEngineRow(ui);   // 〔dec/r13-engine-choice〕
 
     ui.log = el('div', 'mt-4 space-y-3 max-h-[32rem] overflow-y-auto rounded-2xl border border-slate-100 bg-slate-50/50 p-4', {
         id: 'tutorLog', 'aria-live': 'polite'
@@ -764,7 +851,7 @@ function mountTutorSection(app, section, { voice, voiceNote = '' }) {
     }
     actions.append(ui.clear, ui.counter, ui.send);
 
-    section.append(head, settings, ui.log, el('div', 'mt-4'), ui.input, ui.preview, actions);
+    section.append(head, settings, engineRow, ui.log, el('div', 'mt-4'), ui.input, ui.preview, actions);
     if (voice) section.appendChild(buildReviewPanel(ui));
 
     // ── 事件 ──
@@ -884,7 +971,7 @@ export async function init() {
         voice: voice === 'on',
         voiceNote: voice === 'local' ? LOCAL_VOICE_NOTE : ''
     });
-    await Promise.all([loadSubjects(app, ui.subject), loadStudents(app, ui.student)]);
+    await Promise.all([loadSubjects(app, ui.subject), loadStudents(app, ui.student), loadEngines(app, ui)]);
     return ui;
 }
 

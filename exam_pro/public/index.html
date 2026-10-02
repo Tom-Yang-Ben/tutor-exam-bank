@@ -424,6 +424,15 @@
                             </select>
                         </div>
 
+                        <!-- 〔dec/r13-engine-choice〕辨識方式（jobs.engine；docs/local-mode.md 10.25）：只有新版管線（FEATURE_PIPELINE）有。
+                             public/js/review.js 讀 GET /api/engines 填選項、記住上次的選擇；讀不到就維持隱藏（照 .env 的設定）。 -->
+                        <div id="pdf_engine_box" class="mt-4 text-left hidden">
+                            <label class="block text-sm font-semibold text-slate-600 mb-1.5" for="pdf_engine">辨識方式</label>
+                            <select id="pdf_engine"
+                                class="field-control block w-full p-2.5 transition-all text-sm"></select>
+                            <p id="pdf_engine_note" class="mt-1.5 text-xs text-slate-500"></p>
+                        </div>
+
                         <!-- 題源標記（0006 著作權管理）：這份考卷入庫的所有題沿用同一個標記 -->
                         <div class="mt-4 text-left">
                             <label class="block text-sm font-semibold text-slate-600 mb-1.5">這份考卷的來源</label>

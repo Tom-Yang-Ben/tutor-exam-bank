@@ -16,6 +16,7 @@
 > 〔整合 2026-09-27 `dec/integration-final5`〕`dec/integration-r5-fix`（`ed93665`）依序併入 `dec/local-classify-nlq-prep-fix`、`dec/latex-escape-repair-fix`、`dec/phys-spoken-reviewed`、`dec/cleanup-exam-legacy`。只有第一條新增了一節（原編 10.12），依併入順序改號為 **10.15**（classify／nlq 重錄前修正）；它的程式註解、eval 訊息、fixture 說明與測試一併改號，`test/unit/localModeSections.test.js` 加入 10.15。其餘三條沒有新增節：LaTeX 修復的說明在 [`llm.md`](llm.md) 第 10 節與 10.8 疑難排解一列，舊版原型移除只在 10.4、10.7 就地加註。10.13、10.14、10.15 裡寫「`dec/latex-escape-repair` 還沒併／在做」的地方就地加註，原文保留。
 > 〔Owner 第五輪 2026-09-27 `dec/r6-templates`〕依第五輪決策單 LC-1＝2、L-2＝1、V5-6＝2 改分類 schema 的欄位順序、公式規範與變式 prompt：新增 10.16「第五輪 A 模板與 schema」（節號暫編），10.13 的 V5-6、10.15 的 LC-1 就地加註。
 > 〔整合 2026-09-27 `dec/integration-r6`〕`local/integration-r5`（`a670783`）依序以 `--no-ff` 併入第五輪五組：`dec/r6-templates-fix`（A）、`dec/r6-local-tuning-fix`（B）、`dec/r6-gates-fix`（C）、`dec/r6-defaults-fix`（D）、`dec/r6-docs-kc-fix`（E）。五組各自暫編的「10.16」依併入順序改號為 **10.16（A 模板與 schema）、10.17（B 本機呼叫調整）、10.18（C 閘門與計分）、10.19（D 預設值與門檻）、10.20（E 文件與知識點）**，交互參照（文件、程式註解、測試）一併改號；新增最後一節 **10.21 重錄計畫**（Owner 電腦要依序跑的重錄步驟）。
+> 〔Owner 2026-10-01，`dec/r13-engine-choice`〕上傳考卷、AI 家教、助教可以在畫面上逐次選「本機／Gemini」（新增 **10.25**；migration 0021、`config/engines.js`、`GET /api/engines`）。沒選或選的與 `.env` 相同時一切照舊；第 0 條「預設走本機、Gemini 保留」不變，只是多了不必改 `.env` 的切換方式。
 
 ## 0. Owner 裁決（2026-09-25，對話中）
 
@@ -1884,3 +1885,76 @@ scripts\windows\record_local.bat variant --only-missing
 
 - 測試：`test/unit/variantCap.test.js` 的 `localOutputCapOf` 那一則換成兩則（`appliedNumPredictOf` 的純函式；services/llm 在 live 送 1024／2048／不送時錯誤帶 1024／2048／`null`、record 錄的回放檔不含這個欄位、replay 與 Gemini 的截斷不帶）。`test/integration/variantTruncation.pg.test.js` 本機截斷改走**真的 services/llm**（live＋假的 Ollama 傳輸回 `done_reason=length`），斷言送出的 `num_predict` 與事件記的相同；另加一則 replay（先 record 成「被截斷」錯誤回放檔再回放）：照樣放棄、不重試，`max_output_tokens` 記 `null`。
 - 跑過（`ci.yml` 的 env、5433 另建全新 UTF8 C.UTF-8 template0 測試庫，用完刪掉）：`npm test` 4,225 項（4,224 過、1 略過）；`check:html` 通過；`test:integration` 653 項全過；`test:e2e` 12 過、2 略過；`desktop` 的 `npm test` 126 項全過。五個 eval 與 e2e 和 `f1a791c` 比對：報表 JSON 只差 `generated_at` 與 pipeline 的牆鐘時間（p50／p95 ms、總延遲），e2e 只差 `duration_ms` 與 pid，其餘逐字相同。
+
+### 10.25 拆題與助教可選本機或 Gemini（2026-10-02，`dec/r13-engine-choice`；Owner 2026-10-01）
+
+> 從 `origin/main`（`4d52987`，PR #40 合併後）開。Owner 2026-10-01 的原話：「在 AI 分析考卷的這個欄位裡面，可以選擇兩種方式做辨識：純本機的辨識、透過 Gemini 的 API 去做辨識題目。助教的部分也是參照一樣的方向，就是可以做成本機的分析思考以及給予答案，也可以透過 Gemini 的 API 去做回答。」
+> **沒選（或選的與 `.env` 相同）時，送出的模型、模板、`cacheKeyParts`、回放檔的鍵與之前逐字相同**；既有回放檔、eval、e2e 的結果不變，不必重錄。
+
+#### 1. 怎麼用（Owner）
+
+1. 更新程式後先 `npm run migrate`（到 `0021_job_engine.sql`：`jobs` 多一欄 `engine`，記這份卷選的辨識方式）。沒套也能開伺服器、照 `.env` 拆題；只有「選了辨識方式再上傳」會回 503 叫你先 migrate。
+2. 要能選 Gemini：`.env` 填 `GEMINI_API_KEY=你的金鑰`，重啟伺服器。沒填時畫面上的 Gemini 選項是灰的，旁邊寫「尚未設定 Gemini 金鑰」；直接打 API 會回 400。**選 Gemini 會產生費用**，單份上限 `JOB_COST_BUDGET_USD`（預設 0.5 美元）與每日上限 `DAILY_COST_BUDGET_USD`（預設 5 美元）照舊生效；家教另有 `TUTOR_DAILY_BUDGET_USD`。
+3. 免費金鑰用不了 Pro 系列：還在免費層就在 `.env` 加 `GEMINI_MODEL_VERIFY=gemini:gemini-3.7-flash`（不加的話驗算與家教用的是 `gemini:gemini-3.1-pro-preview`，免費層會被拒）。
+4. 「建立題目」頁的「AI 批量解析考卷」多一個「辨識方式」：**本機（免費、較慢）**／**Gemini（需要 API 費用、較快）**。預設是 `.env` 的設定（`MODEL_EXTRACT` 是 `ollama:` 就預設本機），之後記住上次的選擇（這台電腦的瀏覽器）。選單下方寫出這份卷會用哪一支模型。只有新版管線（`FEATURE_PIPELINE`）有這個選項；舊流程 `/analyze-pdf` 不變。
+5. 「AI 家教」與「助教」頁多一列「回答方式」，用法同上，各自記住上次的選擇。語音（按住說話）照舊只看伺服器有沒有掛語音路由，不跟著這個選項變。
+
+#### 2. 選了之後各步驟用哪一支模型
+
+選的與 `.env` 相同（或沒選）：**一切照 `.env`**（`config/models.js` 的 getter），下表不適用。選的與 `.env` 不同時（`config/engines.js` 的 `modelsForEngine`）：
+
+| 步驟 | 選 Gemini | 選本機 |
+|---|---|---|
+| 拆題（extract） | `GEMINI_MODEL_EXTRACT` → `.env` 的 `MODEL_EXTRACT`（若本來就是 `gemini:`）→ `gemini:gemini-3.5-flash`（`GEMINI_DEFAULTS`）；走看圖拆題的原路徑（`extract.v3`），不走 OCR | `LOCAL_MODEL_EXTRACT` → `MODEL_EXTRACT`（若是 `ollama:`）→ `ollama:qwen3-vl:8b`；`LOCAL_EXTRACT_MODE` 照 `.env`（預設 `ocr`） |
+| 驗算（verify）、家教 | `GEMINI_MODEL_VERIFY` → `MODEL_VERIFY`（若是 `gemini:`）→ `gemini:gemini-3.1-pro-preview` | `LOCAL_MODEL_VERIFY` → `MODEL_VERIFY`（若是 `ollama:`）→ `ollama:qwen3:8b` |
+| 分類、公式重寫、知識點標註、助教、助教的查題 | 各自的 `MODEL_TEXT`／`MODEL_KC_TAG`／`MODEL_ASSISTANT`／`MODEL_NLQ` 若是 `gemini:` 就照它，否則＝拆題模型（Gemini 模式原本的規則） | 各自的設定若是 `ollama:` 就照它，否則＝驗算模型（LM-15） |
+| 向量（去重、找相似、分類的 kNN） | **不換**，一律 `EMBED_MODEL` | **不換** |
+
+- 向量不換的理由：題庫的向量都是同一個模型算的，換模型＝換向量空間，相似度與去重門檻全部失準。
+- 長節點設定跟著這份卷的引擎：每塊頁數（本機 2 頁、Gemini 20 頁）、節點逾時（本機 45 分、Gemini 120 秒）、「本機逾時只重試 1 次」（只套在本機）。`.env` 明寫的 `JOB_PDF_CHUNK_PAGES`／`JOB_NODE_TIMEOUT_MS` 照樣優先。
+- **工作槽數（`JOB_CONCURRENCY`）是整個伺服器共用的**，不分卷：`.env` 是本機時預設 1 個槽，選 Gemini 的卷也一份一份排；反過來 `.env` 是 Gemini（2 個槽）時選本機的卷，可能同時跑兩個本機模型，16 GB 的電腦會吃緊——這種情況請在 `.env` 寫 `JOB_CONCURRENCY=1`。
+- 驗算的模型與拆題的模型照舊是不同的兩支（Gemini：flash 拆、pro／3.7-flash 驗；本機：qwen3-vl 拆、qwen3 驗）。
+- 不在這次範圍、照舊看 `.env` 的：題庫頁的「生成變式」（變式 job 沒有選項，`jobs.engine` 是 NULL）、語音轉寫、`/analyze-pdf` 舊流程、`npm run kc:backfill` 等腳本。
+
+#### 3. API
+
+- `POST /api/jobs` 多一個選填欄位 `engine`（`local`／`gemini`；不帶＝照 `.env`，`jobs.engine` 存 NULL）。其他值 400；選 Gemini 沒有金鑰 400（「尚未設定 Gemini 金鑰（.env 的 GEMINI_API_KEY），不能選 Gemini」）；選本機但 `.env` 的 `LOCAL_EXTRACT_MODE` 與 `OCR_ENGINE` 互相矛盾也 400（與啟動檢查同一句）；資料庫還沒套 0021 時 503。冪等：有帶 `engine` 時同一份卷、同卷別、同引擎才接回既有 job（沒選的舊 job 以 `.env` 的預設計），所以本機拆過的卷改選 Gemini 重傳會建新 job；沒帶時與之前相同。
+- `GET /api/jobs/:id` 多回 `engine`（`local`／`gemini`／`null`）。
+- `GET /api/engines`（新）：`{ engines:[{id,label}], purposes:{ extract|tutor|assistant: { default, options:{ local|gemini:{ available, reason, model } } } } }`。只讀設定，**不回傳金鑰本身**。
+- `POST /api/tutor`、`POST /api/assistant` 的 body 多一個選填的 `engine`，規則同上（沒金鑰 400）。回應形狀不變。
+
+#### 4. 程式
+
+| 檔案 | 改了什麼 |
+|---|---|
+| `config/engines.js`（新） | 解析 `engine`、各功能照 `.env` 的預設引擎、換引擎時的模型表、金鑰與 OCR 設定檢查、`GET /api/engines` 的內容 |
+| `migrations/0021_job_engine.sql`（新） | `jobs.engine TEXT NULL CHECK (engine IN ('local','gemini'))`，可重複套用 |
+| `workers/jobRunner.js` | `runtimeFor(engine)`：NULL 或與 `.env` 相同＝`loadModels()` 與 runner 的 config（與之前相同）；不同＝那個引擎的模型與長節點預設。讀 `engine` 用 `to_jsonb(jobs) ->> 'engine'`，沒套 0021 的庫讀到 NULL、佇列不會卡住。入庫後的知識點標註也用那個引擎（`kcTagger(id, { model })`）。agent 看到的 `ctx` 形狀不變 |
+| `controllers/jobController.js`、`controllers/engineController.js`（新）、`routes/index.js` | 上面第 3 點 |
+| `services/tutorService.js` | `tutorModelFor(engine)`；Gemini 開 code execution、本機用本機版提示（第 3 條第 10 點的規則照舊跟著 vendor 走） |
+| `services/assistantService.js`、`controllers/assistantController.js`、`services/nlqService.js` | 主控與查題工具換模型；`nlqService` 的 `parseOnly`／`searchNl` 多一個選填的 `model`（快取鍵在有指定模型時帶上模型） |
+| `public/index.html`、`public/js/review.js`、`public/js/tutor.js`、`public/js/assistant.js` | 「辨識方式」「回答方式」選單（讀 `/api/engines`、localStorage 記住上次的選擇、Gemini 沒金鑰時停用並說明；讀不到就不顯示、不帶 `engine`） |
+| `.env.example` | `GEMINI_MODEL_EXTRACT`、`GEMINI_MODEL_VERIFY`、`LOCAL_MODEL_EXTRACT`、`LOCAL_MODEL_VERIFY`（都註解掉；都不寫也能用） |
+
+#### 5. 回放檔與 CI
+
+- 沒有改任何模板、schema、prompt、`cacheKeyParts` 或 `cassetteKey` 的算法；不帶 `engine`（CI、eval、e2e 都不帶）時呼叫的模型逐字相同。**不必重錄任何 suite。**
+- 選 Gemini 的那條路在 CI 沒有回放檔（repo 裡只有本機的），所以 CI 只用假 LLM 驗「每個節點拿到哪一支模型」（`test/unit/engineChoice.test.js`、`test/integration/engineChoice.pg.test.js`），不回放 Gemini 的內容。
+- CI 與測試都沒有放任何真的金鑰（測試裡的 `GEMINI_API_KEY` 是一串假字，只用來表示「有設」，從來沒有送出去）。
+
+#### 6. 〔要實測〕Owner 在 Windows 上的步驟
+
+1. 拉新程式，在 `exam_pro` 跑 `npm run migrate`，看到 `✅ 0021_job_engine.sql`。
+2. 先**不填**金鑰，重啟伺服器（或桌面版重開）。打開「建立題目」：上傳區有「辨識方式」，預設「本機（免費、較慢）・.env 預設」，Gemini 那一項是灰的、下面寫「Gemini 選項停用：尚未設定 Gemini 金鑰…」。AI 家教、助教各有一列「回答方式」，同樣的狀況。
+3. 選本機上傳一份小考卷（1～2 頁）：與之前完全相同（伺服器視窗不會多印「指定用…辨識」那一行）。
+4. `.env` 填 `GEMINI_API_KEY`（免費層再加 `GEMINI_MODEL_VERIFY=gemini:gemini-3.7-flash`），重啟。上傳區選「Gemini」上傳**同一份**小考卷：會建新任務（不是接回本機那一份），伺服器視窗印一行 `這份卷指定用 Gemini 辨識（與 .env 的預設不同）…`，帶出拆題模型、每塊頁數 20、節點逾時 120000。拆完後 `npm run report:jobs` 或 `SELECT node, model FROM job_events WHERE job_id = <新任務>` 看到的都是 `gemini-…`。費用在任務進度的 `cost_usd` 看得到。
+5. 重新整理頁面：「辨識方式」記得上次選的 Gemini。改回本機，下次就是本機。
+6. AI 家教選「Gemini」問一題計算題：回覆下方有「計算驗證」（Gemini 會跑程式）；選「本機」則照舊沒有程式驗算、要等幾分鐘。助教兩種都能回答。
+7. 預估時間：第 1～3 步約 10 分鐘（加上本機拆題本身的時間），第 4～6 步約 10 分鐘，Gemini 費用一份小考卷約幾美分。
+
+#### 7. 驗證（本分支，2026-10-02）
+
+- 新測試：`test/unit/engineChoice.test.js`（25 則：`config/engines.js` 的解析、預設、模型表、金鑰與 OCR 檢查、回應不含金鑰；runner 假 db＋假 agent＋假 LLM：engine＝gemini 時 classify／lint／verify 都拿到 Gemini、local 與 NULL 與 `loadModels()` 相同、`.env` 是 Gemini 時選本機全部換成 ollama、embed 一律不帶 model、拆題的每塊頁數與逾時跟著引擎、`.env` 明寫的值優先、agent 看到的 `ctx` 鍵不變、知識點標註的模型；家教與助教的模型切換、沒金鑰 400、選了與 `.env` 相同時送出的參數逐字相同；三支前端 module 的 `pickEngine` 與家教的 `buildRequestBody`）；`test/integration/engineChoice.pg.test.js`（7 則，真 PostgreSQL：0021 的欄位與 CHECK、再套一次；`GET /api/engines`；`POST /api/jobs` 的 400／202／冪等；runner 端到端三種引擎；沒套 0021 時 503 與 runner 照跑；家教與助教的 400）。
+- 既有測試只改釘住「最後一支 migration 是 0020」的那一則（`localExtractMode.test.js`：改成 0019、0020 相連，之後只有 0021、且 0021 不碰 `review_reason`），另依節號慣例登記 10.25（`localModeSections.test.js`、`rerecordPlanR6.test.js`）。
+- 跑過（`ci.yml` 的 env，5433 另建的全新 UTF8 測試庫：C.UTF-8、template0，migrate 到 0021，用完刪掉）：`npm test` 4,255 項（4,254 過、1 略過；`4d52987` 是 4,225 項）；`check:html` 通過；`test:integration` 660 項全過（`4d52987` 653 項＋本分支 7 項）；`test:e2e` 12 過、2 略過（與 `4d52987` 相同）；`desktop` 的 `npm test` 126 項全過。
+- 五個 eval 與 `4d52987` 在各自的全新測試庫比對：報表 JSON 除了牆鐘時間與 `generated_at` 以外逐字相同（retrieval、classify、nlq 過；pipeline 仍是 `gate_pass_rate` 0.80、variant 仍是 `retrieved_coverage` 0.50 與 2 支錯誤回放檔，兩者原本就未達門檻）。

@@ -11,12 +11,13 @@
 const assistant = require('../services/assistantService');
 
 exports.chat = async (req, res, next) => {
-    const { message, history } = req.body || {};
+    const { message, history, engine } = req.body || {};
     if (history !== undefined && !Array.isArray(history)) {
         return res.status(400).json({ message: 'history 要是陣列（[{role, text}]）。' });
     }
     try {
-        const out = await assistant.runAssistant({ message, history: history || [] });
+        // 〔dec/r13-engine-choice〕回答方式（'local'／'gemini'；沒帶＝照 .env）。不合法或選 Gemini 沒有金鑰 → 400（service 丟 status 400）
+        const out = await assistant.runAssistant({ message, history: history || [], engine: engine ?? null });
         res.status(200).json(out);
     } catch (err) {
         if (err.status === 400) return res.status(400).json({ message: err.message });

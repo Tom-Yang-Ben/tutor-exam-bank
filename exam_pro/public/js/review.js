@@ -123,6 +123,95 @@ function mockEnabled() {
     return new URLSearchParams(location.search).get('mock') === '1';
 }
 
+// ───────────────────────── 〔dec/r13-engine-choice〕辨識方式（本機／Gemini）─────────────────────────
+// docs/local-mode.md「上傳與助教可選本機或 Gemini」一節。tutor.js、assistant.js 各有一份同樣的小工具：
+// 測試以 data: URL 載入單一檔案，module 之間不能互相 import。
+
+const ENGINE_IDS = ['local', 'gemini'];
+const ENGINE_TEXT = { local: '本機（免費、較慢）', gemini: 'Gemini（需要 API 費用、較快）' };
+const ENGINE_STORAGE_KEY = 'examPro.engine.extract';
+
+/**
+ * 預設選哪一個：上次選的（還能用）→ .env 的預設（能用）→ 第一個能用的；都不能用回 null。
+ * @param {{default:string|null, options:Object<string,{available:boolean}>}|null} info GET /api/engines 的 purposes.extract
+ * @param {string|null} stored localStorage 記住的上次選擇
+ * @returns {'local'|'gemini'|null}
+ */
+export function pickEngine(info, stored) {
+    const opts = (info && info.options) || {};
+    const ok = (e) => ENGINE_IDS.includes(e) && Boolean(opts[e] && opts[e].available);
+    if (ok(stored)) return stored;
+    if (info && ok(info.default)) return info.default;
+    return ENGINE_IDS.find(ok) || null;
+}
+
+/**
+ * 選項文字：本機（免費、較慢）／Gemini（需要 API 費用、較快），.env 的預設與不能用的原因接在後面。
+ * @param {'local'|'gemini'} id
+ * @param {{available:boolean, reason:string|null}} opt
+ * @param {boolean} isDefault
+ * @returns {string}
+ */
+export function engineOptionText(id, opt, isDefault) {
+    let text = ENGINE_TEXT[id] || id;
+    if (isDefault) text += '・.env 預設';
+    if (opt && !opt.available) text += id === 'gemini' ? '・尚未設定 Gemini 金鑰' : '・目前不能用';
+    return text;
+}
+
+function readStoredEngine() {
+    try { return window.localStorage.getItem(ENGINE_STORAGE_KEY); } catch { return null; }
+}
+
+function storeEngine(v) {
+    try { window.localStorage.setItem(ENGINE_STORAGE_KEY, v); } catch { /* 隱私模式：不記也能用 */ }
+}
+
+/**
+ * 讀 GET /api/engines，填上傳區的「辨識方式」。讀不到（舊後端、網路）就維持隱藏：上傳不帶 engine＝照 .env。
+ * @param {object} app
+ */
+async function mountEngineChoice(app) {
+    const box = document.getElementById('pdf_engine_box');
+    const select = document.getElementById('pdf_engine');
+    const note = document.getElementById('pdf_engine_note');
+    if (!box || !select) return;
+    let info = null;
+    try {
+        const res = await request(app, '/api/engines');
+        if (res.ok) info = ((await res.json()).purposes || {}).extract || null;
+    } catch { info = null; }
+    if (!info || select.options.length > 0) return;   // 已經填過（init 跑了兩次）就不再填
+    for (const id of ENGINE_IDS) {
+        const opt = (info.options || {})[id] || { available: false, reason: null };
+        const o = el('option', '', { value: id, textContent: engineOptionText(id, opt, info.default === id) });
+        o.disabled = !opt.available;
+        if (opt.reason) o.title = opt.reason;
+        select.appendChild(o);
+    }
+    const picked = pickEngine(info, readStoredEngine());
+    if (picked) select.value = picked;
+    const describe = () => {
+        const opt = (info.options || {})[select.value] || {};
+        const gem = (info.options || {}).gemini || {};
+        const parts = [];
+        if (opt.model) parts.push(`這份卷的拆題與檢查都用 ${opt.model}；向量（找相似、去重）不變。`);
+        if (!gem.available && gem.reason) parts.push(`Gemini 選項停用：${gem.reason}。`);
+        if (note) note.textContent = parts.join(' ');
+    };
+    describe();
+    select.addEventListener('change', () => { storeEngine(select.value); describe(); });
+    box.classList.remove('hidden');
+}
+
+/** 上傳時要帶的 engine：選單有顯示、有選才帶；否則不帶（照 .env） */
+function selectedEngine() {
+    const box = document.getElementById('pdf_engine_box');
+    const select = document.getElementById('pdf_engine');
+    if (!box || !select || box.classList.contains('hidden')) return null;
+    return ENGINE_IDS.includes(select.value) ? select.value : null;
+}
+
 // ───────────────────────── 手寫 mock（只有 ?mock=1 讀得到）─────────────────────────
 
 const MOCK = {
@@ -252,6 +341,20 @@ function request(app, url, options) {
     }
     if (method === 'GET' && url.startsWith('/api/review')) return mockResponse(MOCK.review);
     if (method === 'POST' && url === '/api/jobs') return mockResponse({ job_id: 41, existing: false });
+    // 〔dec/r13-engine-choice〕假資料：預設本機、Gemini 沒有金鑰（停用）
+    if (method === 'GET' && url === '/api/engines') {
+        return mockResponse({
+            purposes: {
+                extract: {
+                    default: 'local',
+                    options: {
+                        local: { available: true, reason: null, model: 'ollama:qwen3-vl:8b' },
+                        gemini: { available: false, reason: '尚未設定 Gemini 金鑰（.env 的 GEMINI_API_KEY），不能選 Gemini', model: 'gemini:gemini-3.5-flash' }
+                    }
+                }
+            }
+        });
+    }
     if (method === 'POST' && /\/approve$/.test(url)) return mockResponse({ question_id: 131 });
     if (method === 'POST' && /\/reject$/.test(url)) {
         return mockResponse({ message: '已標記為不採用。', jq_id: Number(url.split('/')[3]) });
@@ -576,6 +679,9 @@ function takeOverUpload(app) {
         // 〔stage5 WS-B〕卷別（docs/interfaces-stage5.md 第 4.2 條第 1 點）：化學卷走化學模板
         const groupSel = document.getElementById('pdf_subject_group');
         if (groupSel && groupSel.value) formData.append('subject_group', groupSel.value);
+        // 〔dec/r13-engine-choice〕辨識方式（本機／Gemini）；選單沒顯示就不帶＝照 .env
+        const engine = selectedEngine();
+        if (engine) formData.append('engine', engine);
 
         try {
             const res = await request(app, '/api/jobs', { method: 'POST', body: formData });
@@ -907,6 +1013,7 @@ export function init() {
     }
 
     takeOverUpload(app);
+    mountEngineChoice(app).catch(err => console.error('[review] 載入辨識方式失敗（上傳照 .env 的設定）', err));
     if (section) loadReviewQueue(app).catch(err => console.error('[review] 載入複核佇列失敗', err));
 }
 
