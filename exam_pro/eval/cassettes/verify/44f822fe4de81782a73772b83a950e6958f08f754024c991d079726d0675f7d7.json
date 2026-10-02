@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-10-02T09:04:51.395Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 69,
+        "sha256": "f39d10609d718436b4c36c28feccbe1d59afa43d527443ed6c03fe261d32357b"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "log_2 8+log_2 4之值为何?\n\n(A) 5 (B) 6 (C) 7 (D) 12",
+      "questionType": "單選",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(A)",
+      "answer_form": "option",
+      "steps_summary": "計算log₂8與log₂4的值。log₂8=3（因2³=8），log₂4=2（因2²=4）。將兩者相加得3+2=5，因此選項(A)為正確答案。"
+    },
+    "usage": {
+      "tokenIn": 294,
+      "tokenOut": 280,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 125054,
+        "loadMs": 7,
+        "promptEvalMs": 24205,
+        "evalMs": 99997
+      }
+    },
+    "latencyMs": 125061
+  }
+}
