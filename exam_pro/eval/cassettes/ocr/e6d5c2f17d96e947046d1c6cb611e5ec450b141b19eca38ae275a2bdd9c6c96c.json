@@ -4,7 +4,7 @@
     "model": "paddleocr@3.7.0",
     "template": "ocr.v1",
     "kind": "ocr",
-    "recorded_at": "2026-10-02T08:45:47.541Z",
+    "recorded_at": "2026-10-02T19:27:15.770Z",
     "fixtureHash": null
   },
   "request": {
@@ -30,6 +30,6 @@
         "figures": []
       }
     ],
-    "latencyMs": 161505
+    "latencyMs": 153129
   }
 }
