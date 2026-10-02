@@ -45,6 +45,10 @@
 // 〔Owner 2026-09-27 改答 LC-2：加四條規則，dec/r6-classify-rules〕規則表多四條（docs/local-mode.md 10.22）：K3 的平方關係
 //   （疊合 → 直角三角形的邊角關係）、廣義角（直角三角形 → 廣義角與極坐標）、摩擦係數（牛頓運動定律 → 摩擦力與向心力）、
 //   等速圓周運動的運動學（摩擦力與向心力 → 平面運動）。接線不變：第二層與閘門都經 boundaryTarget，本檔程式沒改。
+// 〔r15 dec/r15-chapter-acc〕零成本閘門多一道**證據否決**（utils/chapterPostRules.js 的 gateEvidenceVeto；docs/local-mode.md 10.28）：
+//   拆題模型給的章在否決表裡（目前只有物理「位能與能量守恆」）、題幹卻一個那一章的線索都沒有 → 閘門不採用，
+//   照「信心不足」的路走第二層（kNN 投票／LLM），outcome.data 多一個 gate_veto 記下原因。只在閘門用；第二層與 kNN 不套。
+//   沒被否決的題 outcome.data 與改版前逐鍵相同；第二層的模板、schema、cacheKeyParts 一個字都沒動。
 
 const { CHAPTERS, SUBJECTS, isValidChapter, isValidSubject } = require('../config/chapters');
 const { getChapterExample } = require('../config/chapterExamples');
@@ -52,7 +56,7 @@ const { buildSchema } = require('./schemas');
 const { chapterWhitelistText, resolveSubjectGroup } = require('./promptParts');
 const { registerTemplate } = require('../services/llm/templates');
 // 〔dec/local-classify-nlq-prep〕模型挑的章的後處理：名稱容錯＋相鄰兩章的界線（與 services/nlqService.js 共用）
-const { canonicalChapter, boundaryTarget } = require('../utils/chapterPostRules');
+const { canonicalChapter, boundaryTarget, gateEvidenceVeto } = require('../utils/chapterPostRules');
 
 // 〔章節重整整合 CR-9〕2026-09-26 v1 → v2（docs/chapter-restructure.md 第 8 條 CR-9）：
 //   ① 規則 5 補上「指數與對數」（第一冊）／「指數函數與對數函數」（第三冊）的分冊界線（決策單 A5）；
@@ -282,6 +286,26 @@ function postProcessChapter(subject, rawChapter, chapter, questionText) {
         note: `〔界線規則：模型選「${chapter}」，依題幹的「${hit.evidence}」改為「${hit.to}」〕`,
         adjustments
     };
+}
+
+/**
+ * 〔r15 dec/r15-chapter-acc〕被證據否決的題：rationale 前面加一句（複核的人才知道為什麼沒走閘門）。沒被否決回空字串。
+ * @param {{chapter:string, confidence:number}|null} gateVeto
+ * @returns {string}
+ */
+function gateVetoNote(gateVeto) {
+    return gateVeto ? `〔閘門否決：拆題模型給「${gateVeto.chapter}」（信心 ${gateVeto.confidence}），題幹沒有這一章的線索，改由第二層判斷〕` : '';
+}
+
+/**
+ * 〔r15 dec/r15-chapter-acc〕被證據否決的題在 outcome.data 最後多一個 gate_veto（runner 會原樣寫進 payload.classify）；
+ * 沒被否決的題原樣回傳——鍵與改版前逐一相同。
+ * @param {object} data
+ * @param {object|null} gateVeto
+ * @returns {object}
+ */
+function withGateVeto(data, gateVeto) {
+    return gateVeto ? { ...data, gate_veto: gateVeto } : data;
 }
 
 /** rationale 太長就截斷（schema 不設 maxLength：那會讓「話多」變成整題失敗，代價不成比例） */
@@ -532,7 +556,11 @@ async function run(ctx, input = {}) {
         const minConf = thresholdOf(ctx);
         const confidence = Number(input.chapter_confidence);
         const confidenceUsable = Number.isFinite(confidence) && confidence > 0;
-        if (isValidChapter(subject, input.chapter) && confidenceUsable && confidence >= minConf) {
+        const gatePassed = isValidChapter(subject, input.chapter) && confidenceUsable && confidence >= minConf;
+        // 〔r15 dec/r15-chapter-acc〕證據否決（docs/local-mode.md 10.28）：閘門的條件都過了、但題幹沒有這一章的線索 → 不採用、走第二層
+        const veto = gatePassed ? gateEvidenceVeto(subject, input.chapter, questionText) : null;
+        const gateVeto = veto ? { rule: veto.rule, chapter: input.chapter, confidence, reason: veto.reason } : null;
+        if (gatePassed && !gateVeto) {
             const rationale = `拆題模型給的章節在白名單內，且信心 ${confidence} ≥ ${minConf}，零成本閘門直接採用。`;
             // 〔Owner 第五輪 LC-3 核准，2026-09-27〕第二層的相鄰兩章界線規則也套在閘門上：規則只看題幹，
             // 與章節是哪個模型猜的無關。規則判定要換章時直接改章，仍記為閘門通過（source 'gate'、不呼叫 LLM），
@@ -570,15 +598,15 @@ async function run(ctx, input = {}) {
         if (vote.ok) {
             return {
                 kind: 'pass',
-                data: {
+                data: withGateVeto({
                     chapter: vote.chapter,
                     confidence: vote.cosine,
                     rationale: clampRationale(
-                        `最近 5 個鄰居中有 ${vote.humanVotes} 題人工確認的「${vote.chapter}」，` +
+                        `${gateVetoNote(gateVeto)}最近 5 個鄰居中有 ${vote.humanVotes} 題人工確認的「${vote.chapter}」，` +
                         `最近鄰餘弦 ${vote.cosine.toFixed(4)} ≥ ${knnVoteSimOf(ctx)}，採用 kNN 投票。`),
                     source: 'knn',
                     few_shot_ids: fewShotIds
-                }
+                }, gateVeto)
             };
         }
 
@@ -616,27 +644,28 @@ async function run(ctx, input = {}) {
                 kind: 'fail',
                 reason: 'chapter_invalid',
                 feedback: invalidChapterFeedback(subject, data.chapter),
-                data: {
+                data: withGateVeto({
                     chapter: data.chapter ?? null,
                     confidence: Number(data.confidence) || 0,
-                    rationale: clampRationale(data.rationale),
+                    rationale: clampRationale(gateVeto ? `${gateVetoNote(gateVeto)}${String(data.rationale ?? '').trim()}` : data.rationale),
                     source: 'llm',
                     few_shot_ids: fewShotIds
-                }
+                }, gateVeto)
             };
         }
 
         const post = postProcessChapter(subject, data.chapter, chapter, questionText);
+        const notes = `${gateVetoNote(gateVeto)}${post.note}`;
         const out = {
             chapter: post.chapter,
             confidence: Number.isFinite(Number(data.confidence)) ? Number(data.confidence) : 0,
-            rationale: clampRationale(post.note ? `${post.note}${String(data.rationale ?? '').trim()}` : data.rationale),
+            rationale: clampRationale(notes ? `${notes}${String(data.rationale ?? '').trim()}` : data.rationale),
             source: 'llm',
             few_shot_ids: fewShotIds
         };
         // 有改過才多這個鍵：沒改的題 outcome.data 與改版前逐鍵相同
         if (post.adjustments.length) out.adjustments = post.adjustments;
-        return { kind: 'pass', data: out };
+        return { kind: 'pass', data: withGateVeto(out, gateVeto) };
     } catch (err) {
         // 〔Owner 第五輪 C-f 核准〕供應商回報的 finishReason（'MAX_TOKENS'＝寫到輸出上限被截斷）帶給 runner：本機模式被截斷的不重試、直接進複核
         return {
@@ -661,6 +690,8 @@ module.exports = {
     REGISTERED_TEMPLATE,
     // 〔dec/local-classify-nlq-prep〕第二層的章節後處理
     postProcessChapter,
+    // 〔r15 dec/r15-chapter-acc〕零成本閘門的證據否決
+    gateVetoNote, withGateVeto,
     FEW_SHOT_K, KNN_VOTE_N, KNN_VOTE_MIN_HUMAN, DEFAULT_KNN_VOTE_SIM,
     // 〔stage5 WS-B〕化學題
     AGENT_CHEM, TEMPLATE_CHEM, SYSTEM_CHEM, PROMPT_TEMPLATE_CHEM

@@ -384,7 +384,9 @@ async function runPipelineSuite(args) {
             idx: r.idx, state: r.state, review_reason: r.review_reason,
             chapter: (r.payload.classify && r.payload.classify.chapter) || r.payload.extract.chapter,
             classify_source: r.payload.classify && r.payload.classify.source,
-            retries: r.retries
+            retries: r.retries,
+            // 〔r15 dec/r15-chapter-acc〕零成本閘門的證據否決（docs/local-mode.md 10.28）：被否決的題才多這個鍵
+            ...(r.payload.classify && r.payload.classify.gate_veto ? { gate_veto: r.payload.classify.gate_veto } : {})
         })),
         meta: {
             pdf: isPrivate ? '（私有 PDF，路徑不記錄）' : path.relative(ROOT, pdfPath).replace(/\\/g, '/'),

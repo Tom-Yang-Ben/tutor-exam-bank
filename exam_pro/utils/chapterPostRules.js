@@ -504,6 +504,64 @@ function circularKinematicsEvidence(text) {
     return cue ? `${topic[0]}＋${cue[0]}` : null;
 }
 
+// ───────────────────────── 〔r15 dec/r15-chapter-acc〕零成本閘門的證據否決 ─────────────────────────
+//
+// docs/local-mode.md 10.28 第 2 點。界線規則（下面的 RULES）是「題幹有證據就把章換過去」；證據否決反過來：
+// 拆題模型給的章屬於下表、信心也過了閘門，但題幹裡**一個這一章的線索都沒有**——閘門不採用，這一題照「信心不足」
+// 的路走第二層（kNN 投票／LLM）。否決**不決定章**，只是不讓拆題模型的猜測直接過關；第二層照舊會再套一次界線規則。
+//
+// 為什麼只收「線索可靠」的章：否決的代價是多一次第二層呼叫（本機不花錢，但要時間），以及第二層可能判得比拆題模型差；
+// 拆題模型答對、題幹卻沒有線索的題被否決＝誤否決。所以一章要能列出「這一章的題幾乎一定會寫到」的字，才進這張表，
+// 而且線索寧可寬（任何一個出現就不否決）——否決只在題幹完全不像這一章時才發生。
+//
+// 收錄的章與理由：
+//   物理「位能與能量守恆」：力學能守恆一定要有位能的來源——重力位能（高度改變：高、落、滑下、擺、拋、斜面、曲面、軌道、
+//     坡、鉛直、上升、下降）、彈力位能（彈簧、彈性、橡皮筋、壓縮、伸長）、重力場（重力、引力、衛星、行星）——或直接寫
+//     功與能量的字眼（WORK_ENERGY_MOMENTUM_CUE：功、動能、位能、能量、力學能…）、守恆、機械能、焦耳。
+//     樣卷第 7 題「物體由靜止出發，以 2 m/s² 的等加速度直線前進，求 5 秒後的位移」一個都沒有（水平的等加速度運動學）。
+// 刻意不收的章（各自的反例都是本 repo 裡的題，docs/local-mode.md 10.28 第 2 點）：
+//   「動量守恆與碰撞」：seed_questions.js 的「一靜止的 6 kg 物體突然炸裂為…」「人站在靜止的平板車上…向前走，求平板車的速度」
+//     都沒有「動量、碰撞」這類字，反衝題的寫法列舉不完。
+//   「功與動能」「動量與衝量」：「以 F 的力推物體移動 d，求末速」這類題可以標成功與動能，也可以是牛頓運動定律／直線運動，
+//     沒有可靠的字；golden、fixture 也沒有這幾章的題可以驗。
+//   其他章（數學、化學）：拆題模型在這些章的錯不是「題幹完全不像」，沒有這種證據。
+
+/**
+ * 「光滑」的滑不算（光滑水平面是運動學／牛頓的常見寫法）；「滑下、下滑、滑落、滑行」算。
+ * 單獨的 J（焦耳）前後不能接英文字母。
+ */
+const POTENTIAL_SOURCE_CUE = /高|落|(?<!光)滑|擺|拋|斜面|曲面|弧|軌道|坡|鉛直|上升|下降|升起|彈簧|彈性|彈力|橡皮|壓縮|伸長|重力|引力|衛星|行星|守恆|機械能|焦耳|(?<![A-Za-z])J(?![A-Za-z])|迴圈|雲霄|鞦韆/;
+
+/**
+ * 科目 → 章 → { cues：任何一個命中就不否決, label：寫進理由的線索名稱 }。
+ * 只能列白名單內的章（單元測試逐條檢查）。
+ */
+const GATE_EVIDENCE_CUES = Object.freeze({
+    '物理': Object.freeze({
+        '位能與能量守恆': Object.freeze({
+            cues: Object.freeze([WORK_ENERGY_MOMENTUM_CUE, POTENTIAL_SOURCE_CUE]),
+            label: '功與能量的字眼、位能的來源（高度、彈簧、重力場）'
+        })
+    })
+});
+
+/**
+ * 零成本閘門的證據否決（純函式）：拆題模型給的章在 GATE_EVIDENCE_CUES 裡、而題幹一個線索都沒有 → 回否決的理由；
+ * 其餘（不在表裡的章、有任何一個線索、科目不對）回 null。
+ * @param {string} subject
+ * @param {string} chapter 拆題模型給的章
+ * @param {string} text 題幹
+ * @returns {{rule:'gate_evidence_veto', chapter:string, reason:string}|null}
+ */
+function gateEvidenceVeto(subject, chapter, text) {
+    const bySubject = Object.prototype.hasOwnProperty.call(GATE_EVIDENCE_CUES, subject) ? GATE_EVIDENCE_CUES[subject] : null;
+    const entry = bySubject && Object.prototype.hasOwnProperty.call(bySubject, chapter) ? bySubject[chapter] : null;
+    if (!entry) return null;
+    const s = String(text ?? '').normalize('NFKC');
+    if (entry.cues.some(re => re.test(s))) return null;
+    return { rule: 'gate_evidence_veto', chapter, reason: `題幹沒有「${chapter}」的線索（${entry.label}）` };
+}
+
 // ───────────────────────── 規則表 ─────────────────────────
 
 /**
@@ -641,5 +699,7 @@ module.exports = {
     coordinateTuples, dimensionEvidence, relativeMotionEvidence, freeFallComputationEvidence,
     // 〔Owner 2026-09-27 改答 LC-2〕
     normalizeTrigText, trigAngles, squareRelationEvidence, generalAngleEvidence,
-    frictionCoefficientEvidence, circularKinematicsEvidence
+    frictionCoefficientEvidence, circularKinematicsEvidence,
+    // 〔r15 dec/r15-chapter-acc〕零成本閘門的證據否決（docs/local-mode.md 10.28）
+    gateEvidenceVeto, GATE_EVIDENCE_CUES, WORK_ENERGY_MOMENTUM_CUE, POTENTIAL_SOURCE_CUE
 };

@@ -24,7 +24,7 @@
 // 〔Owner 2026-10-03 第 r14 輪 C-1、C-2，dec/r14-ci-green〕末尾新增 10.27「CI 的兩個 eval 門檻」：標題清單多一節；兩個新測試只指 10.27，
 // eval/lib/thresholds.js、eval/lib/suitePipeline.js 指 10.25（verify_agree_rate）與 10.27。
 // 〔dec/r15-chapter-acc〕末尾新增 10.28「pipeline 章節錯題的根因修正」：標題清單多一節；chapterPostRules.js 另指到 10.28，
-// config/chapterMigrationRules.js 只指 10.28。
+// config/chapterMigrationRules.js 只指 10.28。閘門的證據否決：classify.js、eval/lib/suitePipeline.js 另指到 10.28，新測試只指 10.28。
 // 只讀檔，不連 DB、不呼叫模型。
 // ─────────────────────────────────────────────────────────────
 const { test, describe } = require('node:test');
@@ -108,7 +108,7 @@ describe('docs/local-mode.md 10.12～10.20（整合 r5、final5、r6 改號）',
         ['exam_pro/test/unit/localBenchText.test.js', ['10.14']],
         ['exam_pro/test/unit/localPerfThinking.test.js', ['10.14']],
         // 〔Owner 2026-09-27 改答 LC-2〕classify.js、chapterPostRules.js、suiteClassify.js、localV1Regression 另指到 10.22（四條新規則）
-        ['exam_pro/agents/classify.js', ['10.15', '10.22']],
+        ['exam_pro/agents/classify.js', ['10.15', '10.22', '10.28']],   // 〔dec/r15-chapter-acc〕閘門的證據否決另指 10.28
         ['exam_pro/utils/chapterPostRules.js', ['10.15', '10.22', '10.28']],   // 〔dec/r15-chapter-acc〕對數下標另指 10.28
         ['exam_pro/eval/lib/suiteClassify.js', ['10.15', '10.22']],
         ['exam_pro/eval/tools/local_v1_counterfactual.js', ['10.15']],
@@ -136,9 +136,10 @@ describe('docs/local-mode.md 10.12～10.20（整合 r5、final5、r6 改號）',
         ['exam_pro/test/unit/evalPipelineChapterAcc.test.js', ['10.27']],
         ['exam_pro/test/unit/evalThresholdsEmbedModel.test.js', ['10.27']],
         ['exam_pro/eval/lib/thresholds.js', ['10.25', '10.27']],
-        ['exam_pro/eval/lib/suitePipeline.js', ['10.25', '10.27']],
         // 〔dec/r15-chapter-acc〕pipeline 章節錯題的根因修正
         ['exam_pro/config/chapterMigrationRules.js', ['10.28']],
+        ['exam_pro/test/unit/gateEvidenceVeto.test.js', ['10.28']],
+        ['exam_pro/eval/lib/suitePipeline.js', ['10.25', '10.27', '10.28']],
         // 〔整合 2026-09-27 dec/integration-r6〕第五輪各組暫編的 10.16 改號後，各組自己的檔指到自己那一節
         ['exam_pro/controllers/reviewController.js', ['10.12', '10.17']],   // B：output_truncated
         ['exam_pro/public/js/review.js', ['10.12', '10.17']],               // B
