@@ -53,7 +53,7 @@ flowchart LR
 
 | 項目 | 實測 | 門檻 | 結果 |
 |---|---|---|---|
-| unit／integration／e2e／desktop | 4,343（4,342 過、1 略過）／669／14 項中 12 過、2 略過／126 | 全過 | ✅ |
+| unit／integration／e2e／desktop | 4,345（4,344 過、1 略過）／669／14 項中 12 過、2 略過／126 | 全過 | ✅ |
 | retrieval | hybrid Recall@5 **1.0000**（LIKE 0.8750） | ≥ 0.97（共 9 個門檻） | ✅ |
 | classify | accuracy **0.9891**、macro-F1 **0.9744** | ≥ 0.87、≥ 0.8956 | ✅ |
 | nlq | 規則路徑：coverage 0.84、filters_exact 1.000、recall@10 1.000；LLM 輔路徑：filters_exact 1.000、recall@10 1.000 | 5 個門檻 | ✅ |
