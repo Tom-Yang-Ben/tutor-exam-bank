@@ -17,6 +17,7 @@
 > 〔Owner 第五輪 2026-09-27 `dec/r6-templates`〕依第五輪決策單 LC-1＝2、L-2＝1、V5-6＝2 改分類 schema 的欄位順序、公式規範與變式 prompt：新增 10.16「第五輪 A 模板與 schema」（節號暫編），10.13 的 V5-6、10.15 的 LC-1 就地加註。
 > 〔整合 2026-09-27 `dec/integration-r6`〕`local/integration-r5`（`a670783`）依序以 `--no-ff` 併入第五輪五組：`dec/r6-templates-fix`（A）、`dec/r6-local-tuning-fix`（B）、`dec/r6-gates-fix`（C）、`dec/r6-defaults-fix`（D）、`dec/r6-docs-kc-fix`（E）。五組各自暫編的「10.16」依併入順序改號為 **10.16（A 模板與 schema）、10.17（B 本機呼叫調整）、10.18（C 閘門與計分）、10.19（D 預設值與門檻）、10.20（E 文件與知識點）**，交互參照（文件、程式註解、測試）一併改號；新增最後一節 **10.21 重錄計畫**（Owner 電腦要依序跑的重錄步驟）。
 > 〔Owner 2026-10-01，`dec/r13-engine-choice`〕上傳考卷、AI 家教、助教可以在畫面上逐次選「本機／Gemini」（新增 **10.25**；migration 0021、`config/engines.js`、`GET /api/engines`）。沒選或選的與 `.env` 相同時一切照舊；第 0 條「預設走本機、Gemini 保留」不變，只是多了不必改 `.env` 的切換方式。
+> 〔Owner 2026-10-03 第 r14 輪 C-1、C-2，`dec/r14-ci-green`〕CI 的兩個 eval 門檻（新增 **10.27**）：OCR 模式的 pipeline `gate_pass_rate` 只報告、章節改由新指標 `chapter_acc_rate`（0.77）把關；variant 的 `retrieved_coverage` 門檻依向量模型分開設（本機向量 0.47、Gemini 照舊 0.8367）。第 0～9 條沒有改。
 
 ## 0. Owner 裁決（2026-09-25，對話中）
 
@@ -1975,7 +1976,7 @@ Gemini 的拆題請求不變，但下面四點是共用的下游程式，Gemini 
   - **`answer_agree_rate` 定義與門檻（0.87）不變**：照舊只算 `compare` 是 agree／disagree／uncertain 的題，`no_claim` 不進分母。只有「**全部題目都是 `no_claim`**」時印 n/a、**不比門檻**（列進 `NOT_APPLICABLE_ALLOWED`，CI 那一行「未設門檻（只報告不擋）」寫明原因）；有任何一題不是 `no_claim`（包括 verify 沒跑出結果的題）就照舊比 0.87，量不到＝失敗。
   - 對稱的一條：**沒有任何一題是 `no_claim`**（Gemini／交叉驗證的拆題都寫了答案）時 `verify_agree_rate` 印 n/a、不比門檻（同樣列進白名單），答案改由 `answer_agree_rate` 把關。兩個條件互斥：只要有題，兩個答案指標至少有一個照比；一題都沒有時兩個都照比（量不到＝失敗）。
   - 實作：`eval/lib/suitePipeline.js`（`verify_agree_rate` 取 `verifyAgreeReport` 的 `by_answer_text`；何時不比由 `pipelineNotApplicable` 判斷）、`eval/lib/thresholds.js`（`SUITE_METRICS`、`NOT_APPLICABLE_ALLOWED`）、`eval/lib/report2.js`（Markdown 那一行多印 `verify_agree_rate`，不比門檻的指標註明原因）。報表照舊另印一行兩種比法（對 `answer_text`、對 `final_answer`），`final_answer` 那一個只報告。單元測試 `test/unit/evalPipelineVerifyAgree.test.js`。
-- **結果（`422e4f5` 的回放）**：pipeline 的 `verify_agree_rate` 0.9000 ≥ 0.87 達標、`answer_agree_rate` n/a 不算失敗、`saved_rate` n/a（OCR 模式，D-2）；只剩 `gate_pass_rate` 0.8000 < 0.97 未達（原本就紅）。
+- **結果（`422e4f5` 的回放）**：pipeline 的 `verify_agree_rate` 0.9000 ≥ 0.87 達標、`answer_agree_rate` n/a 不算失敗、`saved_rate` n/a（OCR 模式，D-2）；只剩 `gate_pass_rate` 0.8000 < 0.97 未達（原本就紅）。〔Owner 2026-10-03 第 r14 輪 C-1〕之後 OCR 模式的 `gate_pass_rate` 只報告、章節改由 `chapter_acc_rate` 把關，見 **10.27**。
 
 #### 7. 測試
 
@@ -2117,3 +2118,59 @@ scripts\windows\record_local.bat pipeline,e2e --only-missing
 - 既有測試只改釘住「最後一支 migration 是 0020」的那一則（`localExtractMode.test.js`：改成 0019、0020 相連，之後只有 0021、且 0021 不碰 `review_reason`），另依節號慣例登記 10.26（`localModeSections.test.js`、`rerecordPlanR6.test.js`）。
 - 跑過（`ci.yml` 的 env，5433 另建的全新 UTF8 測試庫：C.UTF-8、template0，migrate 到 0021，用完刪掉）：`npm test` 4,255 項（4,254 過、1 略過；`4d52987` 是 4,225 項）；`check:html` 通過；`test:integration` 660 項全過（`4d52987` 653 項＋本分支 7 項）；`test:e2e` 12 過、2 略過（與 `4d52987` 相同）；`desktop` 的 `npm test` 126 項全過。
 - 五個 eval 與 `4d52987` 在各自的全新測試庫比對：報表 JSON 除了牆鐘時間與 `generated_at` 以外逐字相同（retrieval、classify、nlq 過；pipeline 仍是 `gate_pass_rate` 0.80、variant 仍是 `retrieved_coverage` 0.50 與 2 支錯誤回放檔，兩者原本就未達門檻）。
+
+### 10.27 CI 的兩個 eval 門檻：本機的章節正確率、依向量模型的變式覆蓋率（2026-10-03，`dec/r14-ci-green`；Owner 第 r14 輪 C-1、C-2）
+
+> 從 `main`（`f61cab3`）開。CI（`ci.yml` 的 env：`LOCAL_EXTRACT_MODE=ocr`、`EMBED_MODEL=ollama:qwen3-embedding:0.6b`，回放）有兩個門檻一直是紅的：pipeline 的 `gate_pass_rate` 0.80 < 0.97、variant 的 `retrieved_coverage` 0.50 < 0.8367。兩個門檻都是照 Gemini 定的。Owner 2026-10-03 對兩者各做了一個決定（C-1、C-2），這一節是實作與依據。**golden、回放檔、向量檔一個都沒動；其他門檻數字都沒動。**
+
+#### 1. C-1：pipeline 的章節改由「章節正確率」把關
+
+- **事實**（樣卷 10 題，OCR 模式，`qwen3:8b` 整理拆題）：classify 的零成本閘門（`source='gate'`：拆題模型給的章節合法且信心 ≥ `CLASSIFY_MIN_CONF`）過了 8 題 → `gate_pass_rate` 0.80。走 LLM 的 2 題章節都對；過閘門的 8 題有 2 題錯（第 7 題答案卷「直線運動」→「位能與能量守恆」、第 8 題「指數與對數」→「指數函數與對數函數」）。最後章節對答案卷 8／10＝0.80。
+- **為什麼不推高閘門通過率**：0.97 是照 Gemini 定的——閘門通過＝省一次付費呼叫。本機的 classify 呼叫不花錢，而拆題模型自己猜的章節不可靠；硬把閘門通過率推高，只會讓更多猜錯的章節直接過關。
+- **Owner 決定**：
+  - **`gate_pass_rate` 在 OCR 模式只報告、不比門檻**：條件與 `saved_rate` 的 D-2 相同（`eval/lib/suitePipeline.js` 的 `isOcrOnlyRun`：拆題模型是 ollama 且 `LOCAL_EXTRACT_MODE=ocr`，或任何一題的 `extract_mode` 是 `ocr`）。數字照樣量、照樣印，後面註明「不比門檻：OCR 模式（本機）classify 走 LLM 不花錢…」，CI 那一行「未設門檻（只報告不擋）」也列出原因。**Gemini（非 OCR）模式、交叉驗證照舊比 0.97**，`thresholds.json` 的 0.97 不動。
+  - **新指標 `chapter_acc_rate`（章節正確率）**＝有 classify 結果的題：最後的章節（`payload.classify.chapter`）等於答案卷 `chapter` 的比例。題目對答案卷用 `eval/lib/pdfMatch.js` 的配對規則（與 `verify_agree_rate` 同一套）；**配不上答案卷的題算錯**，不讓配對失敗變成好分數；沒有 classify 結果的題不進分母。oracle stub 那一輪（拆題就是答案卷）一律 n/a。**兩種模式都比門檻**（不在白名單）。
+  - **門檻 0.77**＝第一次實測 0.8000（8／10，`f61cab3` 的回放）− 0.03，之後只升不降。`eval/thresholds.json` 的 `pipeline.pipeline.chapter_acc_rate`，來源記在同一節的 `_note_chapter_acc_rate`。
+- **實作**：`eval/lib/suitePipeline.js`（`chapterAccReport`、`measured.pipeline.chapter_acc_rate`、`pipelineNotApplicable` 在 OCR 模式多宣告 `gate_pass_rate`、報表 JSON 的 `detail.chapter_acc` 列出答錯的題）、`eval/lib/thresholds.js`（`SUITE_METRICS.pipeline` 最後多 `chapter_acc_rate`；`NOT_APPLICABLE_ALLOWED` 多 `gate_pass_rate`）、`eval/lib/report2.js`（閘門通過率後面註明不比的原因；多一行「章節正確率 chapter_acc_rate：0.8000（8／10 …；章節不對：答案卷第 7 題 直線運動 → 位能與能量守恆（gate）、…）」）。單元測試 `test/unit/evalPipelineChapterAcc.test.js`。
+- **之後要提高章節正確率**：看報表列出的錯題。兩題都是「過閘門、拆題模型猜錯」，可行的方向是 OCR 模式把閘門的信心下限調高或一律走 LLM（本機不花錢），但那會改 classify 的行為、要重錄 classify 的回放檔，屬於另一個決定，這一版沒做。
+
+#### 2. C-2：variant 的 `retrieved_coverage` 門檻依向量模型
+
+- **事實**：`retrieved_coverage`（藍本在題庫裡至少找到 2 題相似題的比例）的門檻 0.8367 是用 `gemini-embedding-001` 的向量校準的。CI 改用 `ollama:qwen3-embedding:0.6b`、本機的相似度下限 `VARIANT_RETRIEVE_SIM_MIN` 0.72（`config/similarityThresholds.js`，Owner V5-5）之後實測 0.5000（15／30）。降低下限可以提高覆蓋率，但命中題與藍本同章節的比例（精準度）跟著掉：
+
+  | `VARIANT_RETRIEVE_SIM_MIN` | 0.72（現行） | 0.65 | 0.60 | 0.55 |
+  |---|---:|---:|---:|---:|
+  | `retrieved_coverage` | 0.50 | 0.73 | 0.77 | 0.83 |
+  | 精準度（命中題同章節） | 67% | 51% | 40% | 33% |
+
+- **Owner 決定**：相似度下限**維持 0.72**（精準度優先）；`retrieved_coverage` 的門檻**依向量模型分開設**：`ollama:qwen3-embedding:0.6b` 是 **0.47**（＝實測 0.5000 − 0.03，之後只升不降），`gemini-embedding-001` 照舊 **0.8367**。覆蓋率之後靠擴充題庫提高，不靠降低下限。`gate_pass_rate`（0.45，門檻 0.22）不受影響，兩種向量共用。
+- **怎麼挑門檻組**（通用，任何 suite 都能用；目前只有 variant 有）：`eval/thresholds.json` 的 `variant.by_embed_model` 依模型字串列出要覆寫的指標：
+
+  ```json
+  "by_embed_model": {
+    "ollama:qwen3-embedding:0.6b": { "variant": { "retrieved_coverage": 0.47 } }
+  }
+  ```
+
+  - 用的是**這一輪 suite 實際讀的向量模型**：`eval/lib/suiteVariant.js` 把 `loadEmbeddings` 用的模型記在報表的 `meta.embedModel`（`eval/lib/localMode.js` 的 `embedModelFromEnv`：沒設 `EMBED_MODEL`＝本機預設 `ollama:qwen3-embedding:0.6b`，與讀向量檔、`config/similarityThresholds.js` 挑相似度下限的是同一個字串）。
+  - 對上了＝只覆寫列出來的指標，其餘照基準門檻；對不上任何一組（例如 `gemini-embedding-001`、其他 ollama 向量模型）或報表沒記向量模型（舊報表）＝基準門檻，與沒有這一節時完全相同。比對時前後空白不算、大小寫不分。
+  - 覆寫只接受 `SUITE_METRICS` 裡有的欄與指標、值必須是數字——拼錯直接丟錯，不讓一組打錯字的覆寫靜默失效。
+  - **報表說明套用哪一組、為什麼**：`npm run eval -- --suite variant` 的 Markdown 與 CI 都多印一行「門檻組：向量模型 ollama:qwen3-embedding:0.6b 套用專屬門檻（thresholds.json 的 variant.by_embed_model["ollama:qwen3-embedding:0.6b"]）：variant.retrieved_coverage 0.8367 → 0.47；其餘指標照基準門檻；…」；Gemini 向量印「沒有專屬門檻，套用基準門檻」。報表 JSON 多 `threshold_profile`，重錄工具的回放驗證表（`cassettePlan.thresholdRows`）照報表的 `meta.embedModel` 挑同一組。
+  - `--write-baseline`：對上覆寫時，覆寫列出的指標 ratchet 寫回**那一組**（本機向量的數字不會動到 Gemini 的基準門檻，反之亦然），量測環境記在 `_variant_measured_with.byEmbedModel["<模型>"]`；其餘照舊寫基準門檻。
+  - `_variant_measured_with` 的基準那一份補記 `embedModel: gemini-embedding-001`；本機那一份（相似度下限 0.72／0.87、向量檔 `embeddings.ollama-qwen3-embedding-0.6b.768.json`、實測 0.5／0.45）記在 `byEmbedModel` 底下。說明在 `variant._note_by_embed_model`。
+- **實作**：`eval/lib/thresholds.js`（`resolveSuiteThresholds`；`compareSuite` 與 `writeBaselineSuite` 多一個 `embedModel`）、`eval/run.js`（比門檻與 ratchet 帶 `res.meta.embedModel`、印門檻組）、`eval/lib/suiteVariant.js`（`meta.embedModel`）、`eval/lib/report2.js`、`eval/lib/cassettePlan.js`。單元測試 `test/unit/evalThresholdsEmbedModel.test.js`。
+
+#### 3. 結果（`ci.yml` 的 env，回放）
+
+- pipeline：`chapter_acc_rate` 0.8000 ≥ 0.77、`verify_agree_rate` 0.9000 ≥ 0.87 達標；`gate_pass_rate` 0.8000、`saved_rate`、`answer_agree_rate` 印出但不比（各自的原因）→ 通過。
+- variant：門檻組＝本機向量，`retrieved_coverage` 0.5000 ≥ 0.47、`gate_pass_rate` 0.4500 ≥ 0.22 → 通過。
+- `EMBED_MODEL=gemini-embedding-001`：repo 裡的 Gemini 向量檔缺 5 題（id 51、53、54、55、62；章節重整後沒有重錄），variant suite 在量測前就以「查不到向量」拒絕執行——這是原本就有的狀況，與這次改動無關。門檻組的挑法（Gemini → 基準 0.8367；同樣 0.5000 的量測會判未達）由 `test/unit/evalThresholdsEmbedModel.test.js` 驗。
+- retrieval、classify、nlq 的數字與 `f61cab3` 相同；`npm test` 4,388 項（4,387 過、1 略過；`f61cab3` 是 4,345 項）、`check:html`、integration 669 項、e2e 14 項中 12 過 2 略過，都與之前相同或全過。
+
+#### 4. 〔要實測〕Owner 電腦
+
+不必重錄任何東西。拉新程式後在 `exam_pro` 跑：
+
+1. `npm run eval -- --suite pipeline`：最後印「✅ pipeline eval 通過」，「未設門檻」那一行多 `pipeline.gate_pass_rate（OCR 模式（本機）…）`，報表多一行「章節正確率」。
+2. `npm run eval -- --suite variant`：印「門檻組：向量模型 ollama:qwen3-embedding:0.6b 套用專屬門檻…」與「✅ variant eval 通過」。
+3. 每一步不到 1 分鐘。`.env` 若寫了 `EMBED_MODEL=gemini-embedding-001`，variant 會先因 Gemini 向量檔缺 5 題而拒絕執行（第 3 點）；補錄之後會照基準 0.8367 比，那是預期的行為。

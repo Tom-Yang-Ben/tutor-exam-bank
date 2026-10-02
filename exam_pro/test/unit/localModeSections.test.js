@@ -21,6 +21,8 @@
 // 兩個新工具檔與新測試只指 10.25。
 // 〔dec/r13-engine-choice〕末尾新增 10.26「拆題與助教可選本機或 Gemini」：標題清單多一節；新檔（config/engines.js、migration 0021、
 // 兩個新測試、engineController）只指 10.26。review.js 照舊只指 10.12、10.17（它的新註解以節名稱指過去，不寫節號）。
+// 〔Owner 2026-10-03 第 r14 輪 C-1、C-2，dec/r14-ci-green〕末尾新增 10.27「CI 的兩個 eval 門檻」：標題清單多一節；兩個新測試只指 10.27，
+// eval/lib/thresholds.js、eval/lib/suitePipeline.js 指 10.25（verify_agree_rate）與 10.27。
 // 只讀檔，不連 DB、不呼叫模型。
 // ─────────────────────────────────────────────────────────────
 const { test, describe } = require('node:test');
@@ -60,7 +62,8 @@ describe('docs/local-mode.md 10.12～10.20（整合 r5、final5、r6 改號）',
         ["10.23", "重錄工具補強：只補錄缺的、錯誤回放檔（2026-10-01，`dec/r9-record-tooling`）"],   // 〔dec/r9-record-tooling〕末尾新增
         ["10.24", "變式生成的本機輸出上限與截斷不重試（2026-10-01，`dec/r10-variant-cap`；Owner 第七輪 R7-1＝4）"],   // 〔dec/r10-variant-cap〕末尾新增
         ["10.25", "本機拆題修正：不准編答案、解答頁、LaTeX、答案比對、lint／verify 逾時（2026-10-02，`dec/r13-extract-fixes`；Owner 2026-10-02 同意）"],   // 〔dec/r13-extract-fixes〕末尾新增
-        ["10.26", "拆題與助教可選本機或 Gemini（2026-10-02，`dec/r13-engine-choice`；Owner 2026-10-01）"]   // 〔dec/r13-engine-choice〕末尾新增
+        ["10.26", "拆題與助教可選本機或 Gemini（2026-10-02，`dec/r13-engine-choice`；Owner 2026-10-01）"],   // 〔dec/r13-engine-choice〕末尾新增
+        ["10.27", "CI 的兩個 eval 門檻：本機的章節正確率、依向量模型的變式覆蓋率（2026-10-03，`dec/r14-ci-green`；Owner 第 r14 輪 C-1、C-2）"]   // 〔dec/r14-ci-green〕末尾新增
     ];
 
     test(`第 10 章 10.12 之後的標題依併入順序各出現一次：${EXPECTED.map(e => e[0]).join('、')}`, () => {
@@ -126,6 +129,11 @@ describe('docs/local-mode.md 10.12～10.20（整合 r5、final5、r6 改號）',
         ['exam_pro/controllers/engineController.js', ['10.26']],
         ['exam_pro/test/unit/engineChoice.test.js', ['10.26']],
         ['exam_pro/test/integration/engineChoice.pg.test.js', ['10.26']],
+        // 〔Owner 2026-10-03 第 r14 輪 C-1、C-2，dec/r14-ci-green〕CI 的兩個 eval 門檻
+        ['exam_pro/test/unit/evalPipelineChapterAcc.test.js', ['10.27']],
+        ['exam_pro/test/unit/evalThresholdsEmbedModel.test.js', ['10.27']],
+        ['exam_pro/eval/lib/thresholds.js', ['10.25', '10.27']],
+        ['exam_pro/eval/lib/suitePipeline.js', ['10.25', '10.27']],
         // 〔整合 2026-09-27 dec/integration-r6〕第五輪各組暫編的 10.16 改號後，各組自己的檔指到自己那一節
         ['exam_pro/controllers/reviewController.js', ['10.12', '10.17']],   // B：output_truncated
         ['exam_pro/public/js/review.js', ['10.12', '10.17']],               // B
