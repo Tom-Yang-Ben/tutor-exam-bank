@@ -4,7 +4,8 @@
 //   1. 題目頁「有沒有寫答案」的標記補齊：「（ 3 ）1. 下列何者…」（題號前的括號答案）、「Ans. 4」、「答 4」、「〔答案〕4」、「（答）4」；
 //      「選填題答案：請依序填入」這種作答說明不算。複核頁顯示被清掉的原文，說法改成「沒有偵測到答案標記」。
 //   2. 重錄時 lint／verify 的單次逾時跟著放寬後的全域走（eval/lib/localMode.js 的 agentTimeoutRecordEnv）。
-//   3. eval pipeline 的 answer_agree_rate 定義照舊（no_claim 不進分母）；no_claim 題的「驗算對標準答案」另報 verify_agree_rate、不設門檻。
+//   3. eval pipeline 的 answer_agree_rate 定義照舊（no_claim 不進分母）；no_claim 題的「驗算對標準答案」另報 verify_agree_rate
+//      （〔Owner 2026-10-02 A 案〕之後 verify_agree_rate 進門檻 0.87，見 test/unit/evalPipelineVerifyAgree.test.js）。
 //   5. 解答頁回填的答案與驗算的建議答案交叉確認（workers/jobRunner.js 的 answerKeyCheck／saveStopReason）。
 //   6. end_newline 的變體：「3 & 4 \⏎end{bmatrix}」（換列只剩一半）。
 // 不連 DB、不呼叫模型。真 PG 的版本在 test/integration/extractAnswerKey.pg.test.js。
@@ -163,7 +164,7 @@ describe('重錄時 lint／verify 的單次逾時跟著放寬（eval/lib/localMo
     });
 });
 
-describe('eval pipeline：answer_agree_rate 定義照舊；no_claim 題另報 verify_agree_rate（只報告）', () => {
+describe('eval pipeline：answer_agree_rate 定義照舊；no_claim 題另報 verify_agree_rate（Owner 2026-10-02 A 案後進門檻）', () => {
     const SRC = fs.readFileSync(path.resolve(__dirname, '..', '..', 'eval', 'lib', 'suitePipeline.js'), 'utf8');
     const sheet = { doc: { questions: [
         { question_text: '$\\log_{2} 8 + \\log_{2} 4$ 之值為何？(A) $5$ (B) $6$', question_type: '單選', final_answer: '(A)' },
@@ -181,7 +182,8 @@ describe('eval pipeline：answer_agree_rate 定義照舊；no_claim 題另報 ve
         assert.deepEqual(r.by_answer_text, { agree: 2, rate: 1 });
         // 答案卷的 final_answer 是裸的「5」：比對器抽不到，那一題 uncertain
         assert.deepEqual(r.by_final_answer, { agree: 1, rate: 0.5 });
-        assert.match(r.note, /只報告、不設門檻、不算進 answer_agree_rate/);
+        // 〔Owner 2026-10-02 A 案〕門檻比 answer_text 那一個、final_answer 只報告；兩者都不算進 answer_agree_rate
+        assert.match(r.note, /門檻比的是對 answer_text 那一個（Owner 2026-10-02 A 案.*對 final_answer 只報告；不算進 answer_agree_rate/);
         assert.equal(suitePipeline.verifyAgreeReport([{ payload: { extract: {}, verify: { compare: 'agree' } } }], sheet), null);
     });
 
@@ -191,8 +193,12 @@ describe('eval pipeline：answer_agree_rate 定義照舊；no_claim 題另報 ve
         assert.ok(start > 0);
         assert.doesNotMatch(block, /no_claim|noClaim/, '分母的算法不碰 no_claim');
         assert.match(block, /\['agree', 'disagree', 'uncertain'\]\.includes\(c\)/);
-        // measured.pipeline 只有原本的三個指標＋n（verify_agree_rate 不進門檻）
-        assert.doesNotMatch(SRC.slice(SRC.indexOf('const measured = {'), SRC.indexOf('const measured = {') + 600), /verify/);
+        // 〔Owner 2026-10-02 A 案〕measured.pipeline 多 verify_agree_rate，取 verifyAgreeReport 的 by_answer_text（不是 final_answer）；
+        // answer_agree_rate 那一行照舊只用上面算的 answerAgreeRate（不混 no_claim 的比法）
+        const measuredBlock = SRC.slice(SRC.indexOf('const measured = {'), SRC.indexOf('const measured = {') + 800);
+        assert.match(measuredBlock, /answer_agree_rate: metrics\.round4\(answerAgreeRate\),/);
+        assert.match(measuredBlock, /verify_agree_rate: verifyAgree \? verifyAgree\.by_answer_text\.rate : null,/);
+        assert.doesNotMatch(measuredBlock, /by_final_answer/);
     });
 
     test('報表：有 verifyAgree 才印那一行', () => {

@@ -572,9 +572,10 @@ describe('thresholds 的 suite 通用比對（A-T14 的 ratchet）', () => {
         assert.equal(th.compareSuite(table, 'classify', { classify: { accuracy: 0.7 } }).failures.length, 1);
     });
 
-    test('pipeline 的門檻只放「越高越好」的三個指標', () => {
+    test('pipeline 的門檻只放「越高越好」的指標', () => {
         // needs_review 的比率越低越好，放進 ratchet 會變成「只准更多題進複核」。
-        assert.deepEqual(th.SUITE_METRICS.pipeline.metrics, ['saved_rate', 'gate_pass_rate', 'answer_agree_rate']);
+        // 〔Owner 2026-10-02 A 案〕新增 verify_agree_rate（一致率，同樣越高越好；test/unit/evalPipelineVerifyAgree.test.js）。
+        assert.deepEqual(th.SUITE_METRICS.pipeline.metrics, ['saved_rate', 'gate_pass_rate', 'answer_agree_rate', 'verify_agree_rate']);
     });
 
     test('未知的 suite 丟錯，不靜默略過', () => {

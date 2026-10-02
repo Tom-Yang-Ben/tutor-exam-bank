@@ -128,7 +128,9 @@ const SUITE_METRICS = {
     // classify：cassette 回放 vs golden（規劃 §5.3.2、§3.8）
     classify: { columns: ['classify'], metrics: ['accuracy', 'macro_f1'] },
     // pipeline：對 sample_exam.pdf 跑整條管線（A-T14）
-    pipeline: { columns: ['pipeline'], metrics: ['saved_rate', 'gate_pass_rate', 'answer_agree_rate'] },
+    // 〔Owner 2026-10-02 A 案〕verify_agree_rate：拆題沒寫答案（verify 記 no_claim）的題，驗算模型的答案對答案卷 answer_text 的
+    //   一致率（eval/lib/suitePipeline.js）。與 answer_agree_rate（拆題答案對驗算答案）分開，歷史數字不混在一起。
+    pipeline: { columns: ['pipeline'], metrics: ['saved_rate', 'gate_pass_rate', 'answer_agree_rate', 'verify_agree_rate'] },
 
     // ── 階段 3 的兩個 suite（interfaces-stage3.md 第 8.2、8.3 條）──
     //
@@ -151,9 +153,13 @@ const SUITE_METRICS = {
  *（不讓任何 suite 自己宣告「這個門檻不算」）。thresholds.json 的數字一個都不動。
  *   pipeline.pipeline.saved_rate：OCR 為主（LOCAL_EXTRACT_MODE=ocr、拆題模型是 ollama）每一題都停在人工複核（ocr_only），
  *   自動入庫率設計上恆為 0，不是品質訊號；交叉驗證與 Gemini 模式照舊比 0.87。
+ * 〔Owner 2026-10-02 A 案，docs/local-mode.md 10.25 第 6 點〕
+ *   pipeline.pipeline.answer_agree_rate：全部題目都是 no_claim（拆題沒寫答案）時沒有分母；有任何一題不是 no_claim 就照舊比 0.87。
+ *   pipeline.pipeline.verify_agree_rate：沒有任何一題是 no_claim 時沒有分母；有一題是就照比。
+ *   兩者互斥（條件由 suitePipeline.js 的 pipelineNotApplicable 判斷），有題時至少一個照比。
  */
 const NOT_APPLICABLE_ALLOWED = Object.freeze({
-    pipeline: Object.freeze({ pipeline: Object.freeze(['saved_rate']) })
+    pipeline: Object.freeze({ pipeline: Object.freeze(['saved_rate', 'answer_agree_rate', 'verify_agree_rate']) })
 });
 
 /**
