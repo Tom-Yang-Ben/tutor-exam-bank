@@ -24,6 +24,14 @@
 //   只在「全部題目都是 no_claim」時 n/a、不比門檻；verify_agree_rate 在「沒有任何一題是 no_claim」時 n/a、不比門檻
 //   （兩個條件互斥：有題時至少一個照舊比，不會兩個都略過）。都經 thresholds.js 的白名單 NOT_APPLICABLE_ALLOWED。
 //
+// 〔Owner 2026-10-03 第 r14 輪 C-1，docs/local-mode.md 10.27〕章節的把關從「閘門通過率」改成「章節對不對」：
+//   - **gate_pass_rate** 在 OCR 模式（與 saved_rate 的 D-2 同一個條件 isOcrOnlyRun）**只報告、不比門檻**：門檻 0.97 是照 Gemini
+//     定的（閘門通過＝省一次付費呼叫），本機 classify 走 LLM 不花錢，而拆題模型自己猜的章節不可靠（樣卷 8 題過閘門、其中 2 題章節錯），
+//     硬把閘門通過率推高只會讓章節更不準。Gemini（非 OCR）模式照舊比 0.97。
+//   - 新指標 **chapter_acc_rate**（章節正確率）＝有 classify 結果的題：最後的章節（payload.classify.chapter）等於答案卷 chapter 的比例。
+//     兩種模式都比門檻（thresholds.json 0.77＝首次實測 0.8000 − 0.03）。題目對答案卷用 eval/lib/pdfMatch.js 的配對規則；
+//     配不上答案卷的題算錯（不讓配對失敗變成好分數）。
+//
 // stub 狀態的處理與 compare_pipeline.js 相同：
 //   agents/extract.js 未合入時走 oracle stub，**所有與拆題品質有關的欄位一律 n/a**，
 //   且拒絕寫 thresholds 初值（見 run.js 的 guard）。細節見 eval/lib/pipelineDriver.js 檔頭紅線。
@@ -51,9 +59,14 @@ const ALL_NO_CLAIM_NOTE = '全部題目拆題都沒寫答案（verify 記 no_cla
 /** 〔Owner 2026-10-02 A 案〕沒有任何一題是 no_claim 時 verify_agree_rate 不比門檻的原因 */
 const NO_NO_CLAIM_NOTE = '沒有任何一題是 no_claim（拆題都寫了答案），答案由 answer_agree_rate 把關（Owner 2026-10-02 A 案）';
 
+/** 〔Owner 2026-10-03 第 r14 輪 C-1〕OCR 模式下 gate_pass_rate 不比門檻的原因 */
+const OCR_GATE_PASS_NOTE = 'OCR 模式（本機）classify 走 LLM 不花錢、拆題模型猜的章節不可靠，閘門通過率只報告、不比門檻；' +
+    '章節對不對改由 chapter_acc_rate 把關（Owner 2026-10-03 第 r14 輪 C-1）';
+
 /**
- * 〔Owner 2026-10-02 A 案〕pipeline 這一輪「設計上不比」的指標（給 thresholds.compareSuite 的 notApplicable；只會用到白名單內的三個）。
+ * 〔Owner 2026-10-02 A 案〕pipeline 這一輪「設計上不比」的指標（給 thresholds.compareSuite 的 notApplicable；只會用到白名單內的四個）。
  *   saved_rate        ：OCR 模式（D-2）。
+ *   gate_pass_rate    ：OCR 模式（〔Owner 2026-10-03 第 r14 輪 C-1〕；Gemini 模式照舊比 0.97）。
  *   answer_agree_rate ：有題、而且**每一題**的 verify.compare 都是 no_claim（有一題不是就照舊比 0.87）。
  *   verify_agree_rate ：沒有任何一題的 verify.compare 是 no_claim（有一題是就照比 0.87）。
  * 沒有題（total 0）時兩個答案指標都照比——量不到＝失敗，不讓「什麼都沒跑」變成綠燈。
@@ -65,6 +78,7 @@ function pipelineNotApplicable({ ocrOnly, jq }) {
     const noClaim = rows.filter(r => r && r.payload && r.payload.verify && r.payload.verify.compare === 'no_claim').length;
     const na = {};
     if (ocrOnly) na.saved_rate = OCR_SAVED_RATE_NOTE;
+    if (ocrOnly) na.gate_pass_rate = OCR_GATE_PASS_NOTE;   // 〔Owner 2026-10-03 第 r14 輪 C-1〕
     if (rows.length > 0 && noClaim === rows.length) na.answer_agree_rate = ALL_NO_CLAIM_NOTE;
     if (rows.length > 0 && noClaim === 0) na.verify_agree_rate = NO_NO_CLAIM_NOTE;
     return Object.keys(na).length ? { pipeline: na } : undefined;
@@ -156,6 +170,40 @@ const VERIFY_AGREE_NOTE = '拆題沒寫答案（verify 記 no_claim）的題：�
     '不算進 answer_agree_rate。';
 
 /**
+ * 〔Owner 2026-10-03 第 r14 輪 C-1〕章節正確率：有 classify 結果（payload.classify.chapter 有值）的題，
+ * 最後的章節等於答案卷 chapter 的比例。題目對答案卷用 eval/lib/pdfMatch.js 的配對規則（與 noClaimCompares 同一套：
+ * 題幹取 lint 之後的、沒有才用 extract 的；全部題目一起配，一對一）；**配不上答案卷的題算錯**（不讓配對失敗變成好分數）。
+ * 沒有任何一題有 classify 結果時 rate 是 null（門檻有數字＝失敗）。
+ * @param {Array<object>} jq
+ * @param {{doc:{questions:Array<object>}}} sheet
+ * @returns {{n:number, correct:number, rate:number|null,
+ *            wrong:Array<{idx:number, no:number|null, expect:string|null, got:string, source:string|null}>}}
+ *          wrong[].no：答案卷上的題號（配不上答案卷＝null）；idx 是管線裡的題 idx
+ */
+function chapterAccReport(jq, sheet) {
+    const rows = (jq || []).filter(r => r && r.payload && r.payload.extract);
+    const expected = (sheet && sheet.doc && Array.isArray(sheet.doc.questions)) ? sheet.doc.questions : [];
+    const extracted = rows.map(r => ({ question_text: (r.payload.lint && r.payload.lint.question_text) || r.payload.extract.question_text }));
+    const { matchQuestions } = require('./pdfMatch');
+    const match = matchQuestions(expected, extracted);
+    const byExtracted = new Map(match.pairs.map(p => [p.extractedIdx, p.expectedIdx]));
+    let n = 0;
+    let correct = 0;
+    const wrong = [];
+    rows.forEach((r, j) => {
+        const c = r.payload.classify;
+        const got = c && typeof c.chapter === 'string' && c.chapter.trim() ? c.chapter : null;
+        if (!got) return;   // 沒有 classify 結果的題不進分母
+        n += 1;
+        const k = byExtracted.has(j) ? byExtracted.get(j) : null;
+        const e = k === null ? null : expected[k];
+        if (e && e.chapter === got) { correct += 1; return; }
+        wrong.push({ idx: r.idx, no: e ? (e.no ?? k + 1) : null, expect: e ? e.chapter : null, got, source: c.source || null });
+    });
+    return { n, correct, rate: n === 0 ? null : metrics.round4(correct / n), wrong };
+}
+
+/**
  * 〔Owner 第五輪 D-2〕人工核准前的通過率：走完全部閘門、只因 ocr_only 停下的題 ÷ 全部題（沒有題＝null）。
  * 只報告、不設門檻。
  * @param {Array<{state:string, review_reason:string|null}>} jq
@@ -204,8 +252,8 @@ async function runPipelineSuite(args) {
         return {
             suite: 'pipeline',
             measured: { pipeline: null },
-            // 沒跑完：只帶 D-2 的 saved_rate（measured.pipeline 是 null，compareSuite 本來就整欄算失敗）
-            notApplicable: ocrOnly ? { pipeline: { saved_rate: OCR_SAVED_RATE_NOTE } } : undefined,
+            // 沒跑完：只帶 OCR 模式的 saved_rate（D-2）與 gate_pass_rate（r14 C-1）（measured.pipeline 是 null，compareSuite 本來就整欄算失敗）
+            notApplicable: pipelineNotApplicable({ ocrOnly, jq: [] }),
             ocrOnly: ocrOnly ? { saved_rate_note: OCR_SAVED_RATE_NOTE, pre_approval: { passed: 0, total: 0, rate: null } } : null,
             nodes: {}, reviewReasons: [],
             counts: { total: 0, saved: 0, needs_review: 0, rejected: 0, pending: 0 },
@@ -272,6 +320,8 @@ async function runPipelineSuite(args) {
     const answerAgreeRate = compares.length === 0 ? null
         : compares.filter(c => c === 'agree').length / compares.length;
     const verifyAgree = verifyAgreeReport(res.jq, sheet);
+    // 〔Owner 2026-10-03 第 r14 輪 C-1〕章節正確率（兩種模式都比門檻）
+    const chapterAcc = chapterAccReport(res.jq, sheet);
 
     // oracle stub 的那一輪，saved_rate 與 gate_pass_rate 都是「答案卷抄給自己看」的產物，
     // 一律 n/a——理由見 pipelineDriver 檔頭紅線。
@@ -285,6 +335,9 @@ async function runPipelineSuite(args) {
             answer_agree_rate: metrics.round4(answerAgreeRate),
             // 〔Owner 2026-10-02 A 案〕no_claim 題：驗算答案對答案卷 answer_text 的一致率（沒有 no_claim 的題＝null）
             verify_agree_rate: verifyAgree ? verifyAgree.by_answer_text.rate : null,
+            // 〔Owner 2026-10-03 第 r14 輪 C-1〕有 classify 結果的題：最後章節對答案卷 chapter 的比例。
+            // oracle stub 那一輪拆題就是答案卷，章節在定義上必對，一律 n/a（理由同下面的 fake）
+            chapter_acc_rate: fake ? null : chapterAcc.rate,
             n: total
         }
     };
@@ -293,7 +346,8 @@ async function runPipelineSuite(args) {
         warnings.push(`OCR 模式卻有 ${summary.saved} 題自動入庫：每一題都該停在人工複核（ocr_only），請檢查 save 節點的停等。`);
     }
 
-    // 〔Owner 第五輪 D-2〕saved_rate；〔Owner 2026-10-02 A 案〕answer_agree_rate／verify_agree_rate（條件見 pipelineNotApplicable）
+    // 〔Owner 第五輪 D-2〕saved_rate；〔Owner 2026-10-02 A 案〕answer_agree_rate／verify_agree_rate；
+    // 〔Owner 2026-10-03 第 r14 輪 C-1〕gate_pass_rate（OCR 模式）。條件見 pipelineNotApplicable
     const notApplicable = pipelineNotApplicable({ ocrOnly, jq: res.jq });
 
     return {
@@ -304,6 +358,8 @@ async function runPipelineSuite(args) {
         ocrOnly: ocrOnly ? { saved_rate_note: OCR_SAVED_RATE_NOTE, pre_approval: fake ? { passed: 0, total, rate: null } : preApprovalPassRate(res.jq) } : null,
         // no_claim 題的驗算對標準答案的兩種比法（answer_text 那一個同時是 measured 的 verify_agree_rate）；沒有 no_claim 的題時不帶這個鍵
         ...(verifyAgree ? { verifyAgree } : {}),
+        // 〔Owner 2026-10-03 第 r14 輪 C-1〕章節正確率的明細（答錯的題列出來；oracle stub 那一輪不帶）
+        ...(fake ? {} : { chapterAcc }),
         nodes,
         reviewReasons,
         counts: {
@@ -348,5 +404,6 @@ async function runPipelineSuite(args) {
 
 module.exports = {
     runPipelineSuite, DEFAULT_PDF, isOcrOnlyRun, preApprovalPassRate, OCR_SAVED_RATE_NOTE, noClaimCompares, verifyAgreeReport, VERIFY_AGREE_NOTE,
-    pipelineNotApplicable, ALL_NO_CLAIM_NOTE, NO_NO_CLAIM_NOTE   // 〔Owner 2026-10-02 A 案〕
+    pipelineNotApplicable, ALL_NO_CLAIM_NOTE, NO_NO_CLAIM_NOTE,   // 〔Owner 2026-10-02 A 案〕
+    chapterAccReport, OCR_GATE_PASS_NOTE                          // 〔Owner 2026-10-03 第 r14 輪 C-1〕
 };

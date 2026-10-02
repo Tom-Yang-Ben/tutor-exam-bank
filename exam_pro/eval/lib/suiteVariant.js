@@ -429,6 +429,9 @@ async function runVariantSuite(args = {}) {
             agent: agentExists ? 'agents/generateVariant.js' : '（未合入）',
             llmMode: process.env.LLM_MODE || 'replay',
             embedMode: process.env.EMBED_MODE || 'fixture',
+            // 〔Owner 2026-10-03 第 r14 輪 C-2〕這一輪實際讀的向量模型（loadEmbeddings 用 embedModelFromEnv：沒設 EMBED_MODEL＝本機預設）；
+            // run.js 與回放驗證表照它挑門檻組（thresholds.json 的 variant.by_embed_model）
+            embedModel: emb.model,
             cassetteDir: process.env.EVAL_CASSETTE_DIR || 'eval/cassettes',
             golden: golden.isPrivate ? '（私有層，路徑不記錄）'
                 : path.relative(ROOT, golden.file).replace(/\\/g, '/'),
