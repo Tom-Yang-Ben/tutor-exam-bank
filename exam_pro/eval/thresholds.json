@@ -122,7 +122,17 @@
     "variant": {
       "retrieved_coverage": 0.8367,
       "gate_pass_rate": 0.22
-    }
+    },
+    "by_embed_model": {
+      "_note": "依這一輪 suite 實際用的向量模型（EMBED_MODEL；沒設＝本機預設 ollama:qwen3-embedding:0.6b）另設的門檻，只覆寫列出來的指標，其餘照上面的基準門檻；對不上任何一組＝基準門檻。規則見 eval/lib/thresholds.js 的 resolveSuiteThresholds。",
+      "ollama:qwen3-embedding:0.6b": {
+        "_note": "Owner 2026-10-03 第 r14 輪 C-2：相似度下限維持本機 0.72（精準度優先），覆蓋率之後靠擴充題庫提高、不靠降低下限",
+        "variant": {
+          "retrieved_coverage": 0.47
+        }
+      }
+    },
+    "_note_by_embed_model": "Owner 2026-10-03 第 r14 輪 C-2（docs/local-mode.md 10.27）：基準門檻 retrieved_coverage 0.8367 是用 gemini-embedding-001 的向量校準的（gemini-embedding-001 照用 0.8367，不變）。CI 改用 EMBED_MODEL=ollama:qwen3-embedding:0.6b、本機相似度下限 VARIANT_RETRIEVE_SIM_MIN 0.72（config/similarityThresholds.js，Owner V5-5）後實測 0.5000。降低下限可以提高覆蓋率，但命中題與藍本同章節的比例（精準度）跟著掉：0.72→0.50／67%、0.65→0.73／51%、0.60→0.77／40%、0.55→0.83／33%。Owner 選維持 0.72，本機向量的 retrieved_coverage 門檻另設 0.47＝首次實測 0.5000（15／30，commit f61cab3）− 0.03；之後只升不降，覆蓋率靠擴充題庫提高。gate_pass_rate（0.22）不受影響、兩種向量模型共用。"
   },
   "_nlq_measured_with": {
     "service": "services/nlqService.js",
@@ -145,6 +155,7 @@
     "agent": "agents/generateVariant.js",
     "llmMode": "replay",
     "embedMode": "fixture",
+    "embedModel": "gemini-embedding-001",
     "cassetteDir": "eval/cassettes",
     "golden": "eval/golden/variant.json",
     "goldenEntries": 30,
@@ -161,6 +172,35 @@
       "parseLatexStrict": "utils/textFormatter.js",
       "pricing": "config/pricing.js",
       "anyStub": false
+    },
+    "byEmbedModel": {
+      "ollama:qwen3-embedding:0.6b": {
+        "agent": "agents/generateVariant.js",
+        "llmMode": "replay",
+        "embedMode": "fixture",
+        "embedModel": "ollama:qwen3-embedding:0.6b",
+        "cassetteDir": "eval/cassettes",
+        "golden": "eval/golden/variant.json",
+        "goldenEntries": 30,
+        "goldenPending": 0,
+        "fixture": "eval/fixtures/questions.public.json",
+        "embeddings": "eval/fixtures/embeddings.ollama-qwen3-embedding-0.6b.768.json",
+        "perSource": 2,
+        "variantRetrieveSimMin": 0.72,
+        "variantOfftopicSimMin": 0.87,
+        "engine": "memory",
+        "measuredAt": "2026-10-03",
+        "commit": "f61cab3",
+        "retrievedCoverage": 0.5,
+        "gatePassRate": 0.45,
+        "sources": {
+          "normalizeStem": "utils/normalizeStem.js",
+          "answerCompare": "utils/answerCompare.js",
+          "parseLatexStrict": "utils/textFormatter.js",
+          "pricing": "config/pricing.js",
+          "anyStub": false
+        }
+      }
     }
   }
 }

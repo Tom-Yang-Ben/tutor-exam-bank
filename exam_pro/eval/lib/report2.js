@@ -15,7 +15,7 @@ const path = require('path');
 
 const { shortSha, today, REPORT_DIR } = require('./report');
 const { round4 } = require('./metrics');
-const { SUITE_METRICS } = require('./thresholds');
+const { SUITE_METRICS, loadThresholds, resolveSuiteThresholds } = require('./thresholds');
 
 /** @param {number|null} v @returns {string} */
 function cell(v) {
@@ -175,6 +175,10 @@ function markdownGeneric(res) {
     }
     lines.push('');
 
+    // 〔Owner 2026-10-03 第 r14 輪 C-2〕這個 suite 有依向量模型的門檻組時，說明這一輪套哪一組、為什麼
+    const profile = thresholdProfile(res);
+    if (profile) lines.push(`- 門檻組：${profile.reason}`, '');
+
     if (res.extra && Object.keys(res.extra).length) {
         lines.push('**只報告、不設門檻的數字**（第 8.3 條）：', '');
         for (const [k, v] of Object.entries(res.extra)) {
@@ -183,6 +187,22 @@ function markdownGeneric(res) {
         lines.push('');
     }
     return lines.join('\n');
+}
+
+/**
+ * 〔Owner 2026-10-03 第 r14 輪 C-2〕這一輪會套哪一組門檻（eval/thresholds.json 的 <suite>.by_embed_model，依 res.meta.embedModel）。
+ * 這個 suite 沒有 by_embed_model、或讀不到門檻檔時回 null（報表與改版前相同）。run.js 比門檻用的是同一支 resolver。
+ * @param {object} res
+ * @param {object} [table] thresholds.json 的內容；未給時讀 eval/thresholds.json
+ * @returns {object|null}
+ */
+function thresholdProfile(res, table) {
+    if (!SUITE_METRICS[res.suite]) return null;
+    try {
+        return resolveSuiteThresholds(table || loadThresholds(), res.suite, { embedModel: res.meta && res.meta.embedModel }).profile;
+    } catch (_) {
+        return null;   // 門檻檔壞掉時 run.js 比門檻那一步會丟出真正的錯；報表照常印
+    }
 }
 
 /**
@@ -239,6 +259,8 @@ function emit(opts) {
         // 〔Owner 第五輪 D-2〕這一輪設計上不比的指標（run.js 比門檻時用的同一份）；
         // 重錄工具的回放驗證表（eval/lib/cassettePlan.js 的 thresholdRows）讀它，才不會把 OCR 模式的 saved_rate 列成 ❌
         not_applicable: res.notApplicable || null,
+        // 〔Owner 2026-10-03 第 r14 輪 C-2〕有依向量模型的門檻組時才有這一欄：套哪一組、為什麼
+        ...(thresholdProfile(res) ? { threshold_profile: thresholdProfile(res) } : {}),
         warnings: [...new Set(res.warnings || [])],
         // 〔dec/r9-record-tooling〕有讀到錯誤回放檔才有這一欄（沒有時報表與之前逐欄相同）
         ...(errorCassettes ? { error_cassettes: errorCassettes } : {}),
@@ -266,4 +288,4 @@ function emit(opts) {
     return { file, doc };
 }
 
-module.exports = { emit, markdownClassify, markdownPipeline, markdownGeneric, cell, errorCassetteSummary, errorCassetteLine };
+module.exports = { emit, markdownClassify, markdownPipeline, markdownGeneric, cell, errorCassetteSummary, errorCassetteLine, thresholdProfile };

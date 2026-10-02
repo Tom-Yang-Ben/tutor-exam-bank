@@ -168,14 +168,128 @@ const NOT_APPLICABLE_ALLOWED = Object.freeze({
     pipeline: Object.freeze({ pipeline: Object.freeze(['saved_rate', 'gate_pass_rate', 'answer_agree_rate', 'verify_agree_rate']) })
 });
 
+// ─────────────────────────────────────────────────────────────
+// 〔Owner 2026-10-03 第 r14 輪 C-2，docs/local-mode.md 10.27〕依向量模型的門檻覆寫
+//
+// 檢索類的指標（例：variant 的 retrieved_coverage）量的是「向量夠不夠近」，數字跟著向量模型走：
+// 同一份 golden，gemini-embedding-001 與 ollama:qwen3-embedding:0.6b 的餘弦分佈不同，相似度下限也不同
+// （config/similarityThresholds.js，Owner V5-5）。所以門檻可以依「這一輪 suite 實際用的向量模型」另設一組：
+//
+//   thresholds.json 的 <suite>.by_embed_model：
+//     { "<EMBED_MODEL 完整字串>": { "<column>": { "<metric>": 門檻 } }, "_note…": "…" }
+//
+//   - 對不上任何一組（或這一輪沒記錄向量模型）＝套用基準門檻（<suite>.<column>），行為與沒有這一節時完全相同。
+//   - 對上了＝只覆寫列出來的指標，其餘照基準門檻；覆寫值同樣「第一次量測 − 0.03、之後只升不降」。
+//   - 模型字串照 EMBED_MODEL 的寫法比（前後空白不算、大小寫不分）；沒設 EMBED_MODEL 時 suite 記的是本機預設
+//     （eval/lib/localMode.js 的 embedModelFromEnv，與 eval/lib/embeddings.js 讀向量檔用的是同一支）。
+//   - 覆寫只接受 SUITE_METRICS 裡有的欄與指標、值必須是數字——拼錯就丟錯，不讓一組打錯字的覆寫靜默失效。
+// ─────────────────────────────────────────────────────────────
+
+const BY_EMBED_MODEL_KEY = 'by_embed_model';
+
+/** 模型字串的比對形式（前後空白不算、大小寫不分） */
+function normalizeEmbedModel(model) {
+    return String(model ?? '').trim().toLowerCase();
+}
+
+/**
+ * 找出某個向量模型在 <suite>.by_embed_model 裡的那一組（底線開頭的鍵是說明，不是模型）。
+ * @param {object} section thresholds[suite]
+ * @param {string|null|undefined} embedModel
+ * @returns {{key:string, override:object}|null}
+ */
+function findEmbedOverride(section, embedModel) {
+    const by = section && section[BY_EMBED_MODEL_KEY];
+    const want = normalizeEmbedModel(embedModel);
+    if (!by || typeof by !== 'object' || !want) return null;
+    for (const [key, override] of Object.entries(by)) {
+        if (key.startsWith('_')) continue;
+        if (normalizeEmbedModel(key) === want) return { key, override };
+    }
+    return null;
+}
+
+/**
+ * 檢查 <suite>.by_embed_model 的形狀：只能覆寫 SUITE_METRICS 裡的欄與指標，值是數字或 null（null＝這一組不設這個門檻）。
+ * @param {string} suite
+ * @param {object} section
+ */
+function validateEmbedOverrides(suite, section) {
+    const spec = SUITE_METRICS[suite];
+    const by = section && section[BY_EMBED_MODEL_KEY];
+    if (!by) return;
+    if (typeof by !== 'object' || Array.isArray(by)) throw new Error(`thresholds.json 的 ${suite}.${BY_EMBED_MODEL_KEY} 必須是物件`);
+    for (const [key, override] of Object.entries(by)) {
+        if (key.startsWith('_')) continue;
+        if (!override || typeof override !== 'object') throw new Error(`${suite}.${BY_EMBED_MODEL_KEY}["${key}"] 必須是 { <欄>: { <指標>: 門檻 } }`);
+        for (const [column, metricsOverride] of Object.entries(override)) {
+            if (column.startsWith('_')) continue;
+            if (!spec.columns.includes(column)) throw new Error(`${suite}.${BY_EMBED_MODEL_KEY}["${key}"] 的欄「${column}」不在 SUITE_METRICS.${suite}.columns`);
+            for (const [metric, v] of Object.entries(metricsOverride || {})) {
+                if (metric.startsWith('_')) continue;
+                if (!spec.metrics.includes(metric)) throw new Error(`${suite}.${BY_EMBED_MODEL_KEY}["${key}"].${column} 的指標「${metric}」不在 SUITE_METRICS.${suite}.metrics`);
+                if (v !== null && typeof v !== 'number') throw new Error(`${suite}.${BY_EMBED_MODEL_KEY}["${key}"].${column}.${metric} 必須是數字或 null`);
+            }
+        }
+    }
+}
+
+/**
+ * 這一輪實際套用的門檻：基準門檻再疊上「這個向量模型」的覆寫（沒有對上就是基準門檻本身）。
+ * @param {object} thresholds 整份 thresholds.json
+ * @param {string} suite
+ * @param {{embedModel?:string|null}} [ctx] embedModel：suite 實際用的向量模型（variant 的 res.meta.embedModel）
+ * @returns {{table:object, profile:null|{suite:string, embedModel:string|null, key:string|null, applied:boolean,
+ *            overrides:Array<{metric:string, base:number|null, value:number|null}>, reason:string}}}
+ *          profile 為 null＝這個 suite 沒有 by_embed_model（與改版前完全相同，不印門檻組）。
+ */
+function resolveSuiteThresholds(thresholds, suite, ctx = {}) {
+    const spec = SUITE_METRICS[suite];
+    if (!spec) throw new Error(`未知的 suite「${suite}」`);
+    const section = (thresholds && thresholds[suite]) || null;
+    if (!section || !section[BY_EMBED_MODEL_KEY]) return { table: thresholds, profile: null };
+    validateEmbedOverrides(suite, section);
+
+    const embedModel = (ctx && typeof ctx.embedModel === 'string' && ctx.embedModel.trim()) ? ctx.embedModel.trim() : null;
+    const hit = findEmbedOverride(section, embedModel);
+    if (!hit) {
+        const reason = embedModel
+            ? `向量模型 ${embedModel} 沒有專屬門檻，套用基準門檻（thresholds.json 的 ${suite}.${spec.columns.join('／')}）`
+            : `這一輪沒有記錄向量模型，套用基準門檻（thresholds.json 的 ${suite}.${spec.columns.join('／')}）`;
+        return { table: thresholds, profile: { suite, embedModel, key: null, applied: false, overrides: [], reason } };
+    }
+
+    const merged = { ...section };
+    const overrides = [];
+    for (const column of spec.columns) {
+        const o = hit.override[column];
+        if (!o) continue;
+        const base = section[column] || {};
+        const next = { ...base };
+        for (const metric of spec.metrics) {
+            if (!(metric in o)) continue;
+            next[metric] = o[metric];
+            overrides.push({ metric: `${column}.${metric}`, base: typeof base[metric] === 'number' ? base[metric] : null, value: o[metric] });
+        }
+        merged[column] = next;
+    }
+    const why = typeof hit.override._note === 'string' ? `；${hit.override._note}` : '';
+    const reason = `向量模型 ${embedModel} 套用專屬門檻（thresholds.json 的 ${suite}.${BY_EMBED_MODEL_KEY}["${hit.key}"]）：` +
+        (overrides.length ? overrides.map(o => `${o.metric} ${o.base ?? '（無）'} → ${o.value ?? '（無）'}`).join('、') : '沒有覆寫任何指標') +
+        '；其餘指標照基準門檻' + why;
+    return { table: { ...thresholds, [suite]: merged }, profile: { suite, embedModel, key: hit.key, applied: true, overrides, reason } };
+}
+
 /**
  * 通用的門檻比對。
  * @param {object} thresholds  整份 thresholds.json
  * @param {string} suite       'retrieval'|'classify'|'pipeline'
  * @param {object} measured    { <column>: { <metric>: number|null } | null }
- * @param {{notApplicable?:Record<string,Record<string,string>>}} [opts]
+ * @param {{notApplicable?:Record<string,Record<string,string>>, embedModel?:string|null}} [opts]
  *        notApplicable：{ <column>: { <metric>: 原因 } }——只接受 NOT_APPLICABLE_ALLOWED 裡的組合，其餘丟錯
- * @returns {{failures:string[], checked:number, skipped:string[]}}
+ *        embedModel：〔Owner 2026-10-03 第 r14 輪 C-2〕suite 實際用的向量模型；<suite>.by_embed_model 有這個模型就疊上它的門檻
+ * @returns {{failures:string[], checked:number, skipped:string[], profile:object|null}}
+ *          profile：套用了哪一組門檻、為什麼（resolveSuiteThresholds；suite 沒有 by_embed_model 時是 null）
  */
 function compareSuite(thresholds, suite, measured, opts = {}) {
     const spec = SUITE_METRICS[suite];
@@ -183,7 +297,8 @@ function compareSuite(thresholds, suite, measured, opts = {}) {
     const failures = [];
     const skipped = [];
     let checked = 0;
-    const table = (thresholds && thresholds[suite]) || {};
+    const resolved = resolveSuiteThresholds(thresholds, suite, { embedModel: opts && opts.embedModel });
+    const table = (resolved.table && resolved.table[suite]) || {};
     const na = (opts && opts.notApplicable) || {};
     for (const [column, metricsNa] of Object.entries(na)) {
         for (const metric of Object.keys(metricsNa || {})) {
@@ -215,7 +330,7 @@ function compareSuite(thresholds, suite, measured, opts = {}) {
             }
         }
     }
-    return { failures, checked, skipped };
+    return { failures, checked, skipped, profile: resolved.profile };
 }
 
 /**
@@ -225,6 +340,9 @@ function compareSuite(thresholds, suite, measured, opts = {}) {
  * @param {object} opts.measured
  * @param {string} [opts.file]
  * @param {object} [opts.meta]     寫進 <suite>._measured_with
+ * @param {string|null} [opts.embedModel] 〔Owner 2026-10-03 第 r14 輪 C-2〕suite 實際用的向量模型：<suite>.by_embed_model 有這個模型時，
+ *        **它覆寫的指標寫回那一組**（不拿本機向量的數字去動 Gemini 的基準門檻，反之亦然），meta 寫進
+ *        _<suite>_measured_with.byEmbedModel[模型]；其餘指標照舊寫基準門檻。
  * @returns {{written:boolean, changes:string[], kept:string[]}}
  */
 function writeBaselineSuite(opts) {
@@ -233,6 +351,8 @@ function writeBaselineSuite(opts) {
     const target = path.resolve(opts.file || DEFAULT_PATH);
     const current = loadThresholds(target);
     current[opts.suite] = current[opts.suite] || {};
+    validateEmbedOverrides(opts.suite, current[opts.suite]);
+    const hit = findEmbedOverride(current[opts.suite], opts.embedModel);
 
     const changes = [];
     const kept = [];
@@ -241,26 +361,43 @@ function writeBaselineSuite(opts) {
         if (!got) { kept.push(`${column}：這次沒有量到，維持原狀`); continue; }
         const existing = current[opts.suite][column] || null;
         const next = {};
+        // 這個向量模型的覆寫（有對上才有）：它列出的指標寫回覆寫那一組
+        const ov = hit && hit.override[column] ? { ...hit.override[column] } : null;
         for (const metric of spec.metrics) {
             const v = got[metric];
+            const toOverride = ov !== null && metric in ov;
+            const label = toOverride ? `${opts.suite}.${BY_EMBED_MODEL_KEY}["${hit.key}"].${column}.${metric}` : `${opts.suite}.${column}.${metric}`;
             if (v === null || v === undefined) { next[metric] = existing ? existing[metric] : null; continue; }
             const candidate = Math.max(0, Math.round((v - BASELINE_MARGIN) * 10000) / 10000);
-            const old = existing ? existing[metric] : null;
+            const old = toOverride ? ov[metric] : (existing ? existing[metric] : null);
+            let value;
             if (old === null || old === undefined) {
-                next[metric] = candidate;
-                changes.push(`${opts.suite}.${column}.${metric}：（無）→ ${candidate}`);
+                value = candidate;
+                changes.push(`${label}：（無）→ ${candidate}`);
             } else if (candidate > old) {
-                next[metric] = candidate;
-                changes.push(`${opts.suite}.${column}.${metric}：${old} → ${candidate}（ratchet 調高）`);
+                value = candidate;
+                changes.push(`${label}：${old} → ${candidate}（ratchet 調高）`);
             } else {
-                next[metric] = old;
-                kept.push(`${opts.suite}.${column}.${metric}：維持 ${old}（新量測 −${BASELINE_MARGIN} 後為 ${candidate}）`);
+                value = old;
+                kept.push(`${label}：維持 ${old}（新量測 −${BASELINE_MARGIN} 後為 ${candidate}）`);
             }
+            if (toOverride) { ov[metric] = value; next[metric] = existing ? existing[metric] : null; }
+            else next[metric] = value;
         }
         current[opts.suite][column] = next;
+        if (ov) hit.override[column] = ov;
     }
 
-    if (opts.meta) current[`_${opts.suite}_measured_with`] = opts.meta;
+    const measuredKey = `_${opts.suite}_measured_with`;
+    if (opts.meta && hit) {
+        // 對上覆寫：量測環境記在那個模型底下，基準門檻的量測環境不動
+        const prev = current[measuredKey] || {};
+        current[measuredKey] = { ...prev, byEmbedModel: { ...(prev.byEmbedModel || {}), [hit.key]: opts.meta } };
+    } else if (opts.meta) {
+        // 基準門檻：照舊整份換掉，但保留各向量模型的量測環境（那幾組門檻沒有被這一次寫入）
+        const prevBy = current[measuredKey] && current[measuredKey].byEmbedModel;
+        current[measuredKey] = prevBy ? { ...opts.meta, byEmbedModel: prevBy } : opts.meta;
+    }
     if (changes.length === 0) return { written: false, changes, kept };
     fs.writeFileSync(target, JSON.stringify(current, null, 2) + '\n', 'utf8');
     return { written: true, changes, kept };
@@ -269,5 +406,6 @@ function writeBaselineSuite(opts) {
 module.exports = {
     loadThresholds, compare, writeBaseline, DEFAULT_PATH, BASELINE_MARGIN,
     compareSuite, writeBaselineSuite, SUITE_METRICS,
-    NOT_APPLICABLE_ALLOWED   // 〔Owner 第五輪 D-2〕
+    NOT_APPLICABLE_ALLOWED,  // 〔Owner 第五輪 D-2〕
+    resolveSuiteThresholds, BY_EMBED_MODEL_KEY   // 〔Owner 2026-10-03 第 r14 輪 C-2〕
 };

@@ -363,13 +363,17 @@ async function runStage2Suite(args, runner) {
                 '   等 WS-B／WS-C 的零件合入、cassette 錄好之後再跑 --write-baseline。'
             );
         }
-        const w = thresholds.writeBaselineSuite({ suite: res.suite, measured: res.measured, meta: res.meta });
+        // 〔Owner 2026-10-03 第 r14 輪 C-2〕有依向量模型的門檻組時，ratchet 寫回那一組（不動另一種向量模型的門檻）
+        const w = thresholds.writeBaselineSuite({ suite: res.suite, measured: res.measured, meta: res.meta, embedModel: res.meta && res.meta.embedModel });
         console.log(w.written ? `thresholds.json 已更新：\n  - ${w.changes.join('\n  - ')}` : 'thresholds.json 無需更新。');
         if (w.kept.length) console.log(`  保持不變：\n  - ${w.kept.join('\n  - ')}`);
     }
 
     // 〔Owner 第五輪 D-2〕suite 宣告「這一輪設計上不比」的指標（只認 thresholds.js 白名單裡的，例：OCR 模式的 saved_rate）
-    const cmp = thresholds.compareSuite(thresholds.loadThresholds(), res.suite, res.measured, { notApplicable: res.notApplicable });
+    // 〔Owner 2026-10-03 第 r14 輪 C-2〕embedModel：suite 實際用的向量模型，有專屬門檻（<suite>.by_embed_model）就套那一組
+    const cmp = thresholds.compareSuite(thresholds.loadThresholds(), res.suite, res.measured,
+        { notApplicable: res.notApplicable, embedModel: res.meta && res.meta.embedModel });
+    if (cmp.profile) console.log(`門檻組：${cmp.profile.reason}`);
     if (cmp.skipped.length) console.log(`未設門檻（只報告不擋）：${cmp.skipped.join('、')}`);
     if (cmp.failures.length) {
         console.error(`\n❌ ${res.suite} eval 未達門檻：\n  - ${cmp.failures.join('\n  - ')}`);
