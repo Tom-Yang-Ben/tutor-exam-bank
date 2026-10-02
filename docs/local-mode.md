@@ -1893,8 +1893,8 @@ scripts\windows\record_local.bat variant --only-missing
 
 #### 1. 怎麼用（Owner）
 
-1. 更新程式後先 `npm run migrate`（到 `0021_job_engine.sql`：`jobs` 多一欄 `engine`，記這份卷選的辨識方式）。沒套也能開伺服器、照 `.env` 拆題；只有「選了辨識方式再上傳」會回 503 叫你先 migrate。
-2. 要能選 Gemini：`.env` 填 `GEMINI_API_KEY=你的金鑰`，重啟伺服器。沒填時畫面上的 Gemini 選項是灰的，旁邊寫「尚未設定 Gemini 金鑰」；直接打 API 會回 400。**選 Gemini 會產生費用**，單份上限 `JOB_COST_BUDGET_USD`（預設 0.5 美元）與每日上限 `DAILY_COST_BUDGET_USD`（預設 5 美元）照舊生效；家教另有 `TUTOR_DAILY_BUDGET_USD`。
+1. 更新程式後先 `npm run migrate`（到 `0021_job_engine.sql`：`jobs` 多一欄 `engine`，記這份卷選的辨識方式）。**拉程式後請一定先 migrate。** 沒套的話：伺服器照樣能開；畫面上的「辨識方式」選的是 `.env` 預設（本機）時照常建任務、照 `.env` 拆題（伺服器視窗會印一行提醒你 migrate，這份卷不記錄選了什麼）；選的與 `.env` 不同（例如 Gemini）時回 503 叫你先 migrate，不會默默照 `.env` 跑。（〔`dec/r13-engine-choice-fix`〕原本寫「只有選了辨識方式才會 503」不對：畫面只要讀得到 `/api/engines` 就一定帶 `engine`，連預設也帶，所以原版在沒 migrate 前從畫面上傳一律 503；已改成上面的行為。）
+2. 要能選 Gemini：`.env` 填 `GEMINI_API_KEY=你的金鑰`，重啟伺服器。沒填時畫面上的 Gemini 選項是灰的，旁邊寫「尚未設定 Gemini 金鑰」；直接打 API 會回 400。**選 Gemini 會產生費用**，單份上限 `JOB_COST_BUDGET_USD`（預設 0.5 美元）與每日上限 `DAILY_COST_BUDGET_USD`（預設 5 美元）照舊生效；家教另有 `TUTOR_DAILY_BUDGET_USD`。**助教選 Gemini 時沒有任何每日上限**（從 `origin/main` 起助教就沒有預算閘門；以前 `.env` 是本機時助教不會花錢，所以沒差）：每次提問最多 `ASSISTANT_MAX_STEPS`（預設 5）步，每步一次主控呼叫，用到查題工具時再加查題的呼叫。要上限得另開任務（例如讓助教共用家教的每日預算）。
 3. 免費金鑰用不了 Pro 系列：還在免費層就在 `.env` 加 `GEMINI_MODEL_VERIFY=gemini:gemini-3.7-flash`（不加的話驗算與家教用的是 `gemini:gemini-3.1-pro-preview`，免費層會被拒）。
 4. 「建立題目」頁的「AI 批量解析考卷」多一個「辨識方式」：**本機（免費、較慢）**／**Gemini（需要 API 費用、較快）**。預設是 `.env` 的設定（`MODEL_EXTRACT` 是 `ollama:` 就預設本機），之後記住上次的選擇（這台電腦的瀏覽器）。選單下方寫出這份卷會用哪一支模型。只有新版管線（`FEATURE_PIPELINE`）有這個選項；舊流程 `/analyze-pdf` 不變。
 5. 「AI 家教」與「助教」頁多一列「回答方式」，用法同上，各自記住上次的選擇。語音（按住說話）照舊只看伺服器有沒有掛語音路由，不跟著這個選項變。
@@ -1912,13 +1912,13 @@ scripts\windows\record_local.bat variant --only-missing
 
 - 向量不換的理由：題庫的向量都是同一個模型算的，換模型＝換向量空間，相似度與去重門檻全部失準。
 - 長節點設定跟著這份卷的引擎：每塊頁數（本機 2 頁、Gemini 20 頁）、節點逾時（本機 45 分、Gemini 120 秒）、「本機逾時只重試 1 次」（只套在本機）。`.env` 明寫的 `JOB_PDF_CHUNK_PAGES`／`JOB_NODE_TIMEOUT_MS` 照樣優先。
-- **工作槽數（`JOB_CONCURRENCY`）是整個伺服器共用的**，不分卷：`.env` 是本機時預設 1 個槽，選 Gemini 的卷也一份一份排；反過來 `.env` 是 Gemini（2 個槽）時選本機的卷，可能同時跑兩個本機模型，16 GB 的電腦會吃緊——這種情況請在 `.env` 寫 `JOB_CONCURRENCY=1`。
+- **工作槽數（`JOB_CONCURRENCY`）是整個伺服器共用的**，不分卷：`.env` 是本機時預設 1 個槽，選 Gemini 的卷也一份一份排。**後果：本機卷在跑的時候（lint／verify 每次 5～20 分鐘，16 題可能好幾小時），新上傳、選 Gemini 的卷要排在它後面，可能好幾小時都不開始。** 想馬上跑 Gemini，要等本機卷結束，或暫時在 `.env` 寫 `JOB_CONCURRENCY=2` 並重啟（代價：兩份本機卷也可能同時跑，16 GB 的電腦會吃緊；用完改回來）。替雲端的卷開獨立的槽要另開任務。反過來 `.env` 是 Gemini（2 個槽）時選本機的卷，可能同時跑兩個本機模型，16 GB 的電腦會吃緊——這種情況請在 `.env` 寫 `JOB_CONCURRENCY=1`。
 - 驗算的模型與拆題的模型照舊是不同的兩支（Gemini：flash 拆、pro／3.7-flash 驗；本機：qwen3-vl 拆、qwen3 驗）。
 - 不在這次範圍、照舊看 `.env` 的：題庫頁的「生成變式」（變式 job 沒有選項，`jobs.engine` 是 NULL）、語音轉寫、`/analyze-pdf` 舊流程、`npm run kc:backfill` 等腳本。
 
 #### 3. API
 
-- `POST /api/jobs` 多一個選填欄位 `engine`（`local`／`gemini`；不帶＝照 `.env`，`jobs.engine` 存 NULL）。其他值 400；選 Gemini 沒有金鑰 400（「尚未設定 Gemini 金鑰（.env 的 GEMINI_API_KEY），不能選 Gemini」）；選本機但 `.env` 的 `LOCAL_EXTRACT_MODE` 與 `OCR_ENGINE` 互相矛盾也 400（與啟動檢查同一句）；資料庫還沒套 0021 時 503。冪等：有帶 `engine` 時同一份卷、同卷別、同引擎才接回既有 job（沒選的舊 job 以 `.env` 的預設計），所以本機拆過的卷改選 Gemini 重傳會建新 job；沒帶時與之前相同。
+- `POST /api/jobs` 多一個選填欄位 `engine`（`local`／`gemini`；不帶＝照 `.env`，`jobs.engine` 存 NULL）。其他值 400；選 Gemini 沒有金鑰 400（「尚未設定 Gemini 金鑰（.env 的 GEMINI_API_KEY），不能選 Gemini」）；選本機但 `.env` 的 `LOCAL_EXTRACT_MODE` 與 `OCR_ENGINE` 互相矛盾也 400（與啟動檢查同一句）；資料庫還沒套 0021 時：`engine` 等於 `.env` 的預設就照常建 job（不寫 `engine`＝NULL，伺服器印一行提醒），與 `.env` 不同才 503。冪等：有帶 `engine` 時同一份卷、同卷別、同引擎才接回既有 job（沒選的舊 job 以 `.env` 的預設計），所以本機拆過的卷改選 Gemini 重傳會建新 job；沒帶時與之前相同。
 - `GET /api/jobs/:id` 多回 `engine`（`local`／`gemini`／`null`）。
 - `GET /api/engines`（新）：`{ engines:[{id,label}], purposes:{ extract|tutor|assistant: { default, options:{ local|gemini:{ available, reason, model } } } } }`。只讀設定，**不回傳金鑰本身**。
 - `POST /api/tutor`、`POST /api/assistant` 的 body 多一個選填的 `engine`，規則同上（沒金鑰 400）。回應形狀不變。
@@ -1944,7 +1944,7 @@ scripts\windows\record_local.bat variant --only-missing
 
 #### 6. 〔要實測〕Owner 在 Windows 上的步驟
 
-1. 拉新程式，在 `exam_pro` 跑 `npm run migrate`，看到 `✅ 0021_job_engine.sql`。
+1. 拉新程式，**先**在 `exam_pro` 跑 `npm run migrate`，看到 `✅ 0021_job_engine.sql`（桌面版的啟動器只提示、不自動套）。這一步要在第 3 步之前做。
 2. 先**不填**金鑰，重啟伺服器（或桌面版重開）。打開「建立題目」：上傳區有「辨識方式」，預設「本機（免費、較慢）・.env 預設」，Gemini 那一項是灰的、下面寫「Gemini 選項停用：尚未設定 Gemini 金鑰…」。AI 家教、助教各有一列「回答方式」，同樣的狀況。
 3. 選本機上傳一份小考卷（1～2 頁）：與之前完全相同（伺服器視窗不會多印「指定用…辨識」那一行）。
 4. `.env` 填 `GEMINI_API_KEY`（免費層再加 `GEMINI_MODEL_VERIFY=gemini:gemini-3.7-flash`），重啟。上傳區選「Gemini」上傳**同一份**小考卷：會建新任務（不是接回本機那一份），伺服器視窗印一行 `這份卷指定用 Gemini 辨識（與 .env 的預設不同）…`，帶出拆題模型、每塊頁數 20、節點逾時 120000。拆完後 `npm run report:jobs` 或 `SELECT node, model FROM job_events WHERE job_id = <新任務>` 看到的都是 `gemini-…`。費用在任務進度的 `cost_usd` 看得到。
@@ -1954,7 +1954,7 @@ scripts\windows\record_local.bat variant --only-missing
 
 #### 7. 驗證（本分支，2026-10-02）
 
-- 新測試：`test/unit/engineChoice.test.js`（25 則：`config/engines.js` 的解析、預設、模型表、金鑰與 OCR 檢查、回應不含金鑰；runner 假 db＋假 agent＋假 LLM：engine＝gemini 時 classify／lint／verify 都拿到 Gemini、local 與 NULL 與 `loadModels()` 相同、`.env` 是 Gemini 時選本機全部換成 ollama、embed 一律不帶 model、拆題的每塊頁數與逾時跟著引擎、`.env` 明寫的值優先、agent 看到的 `ctx` 鍵不變、知識點標註的模型；家教與助教的模型切換、沒金鑰 400、選了與 `.env` 相同時送出的參數逐字相同；三支前端 module 的 `pickEngine` 與家教的 `buildRequestBody`）；`test/integration/engineChoice.pg.test.js`（7 則，真 PostgreSQL：0021 的欄位與 CHECK、再套一次；`GET /api/engines`；`POST /api/jobs` 的 400／202／冪等；runner 端到端三種引擎；沒套 0021 時 503 與 runner 照跑；家教與助教的 400）。
+- 新測試：`test/unit/engineChoice.test.js`（25 則：`config/engines.js` 的解析、預設、模型表、金鑰與 OCR 檢查、回應不含金鑰；runner 假 db＋假 agent＋假 LLM：engine＝gemini 時 classify／lint／verify 都拿到 Gemini、local 與 NULL 與 `loadModels()` 相同、`.env` 是 Gemini 時選本機全部換成 ollama、embed 一律不帶 model、拆題的每塊頁數與逾時跟著引擎、`.env` 明寫的值優先、agent 看到的 `ctx` 鍵不變、知識點標註的模型；家教與助教的模型切換、沒金鑰 400、選了與 `.env` 相同時送出的參數逐字相同；三支前端 module 的 `pickEngine` 與家教的 `buildRequestBody`）；`test/integration/engineChoice.pg.test.js`（7 則，真 PostgreSQL：0021 的欄位與 CHECK、再套一次；`GET /api/engines`；`POST /api/jobs` 的 400／202／冪等；runner 端到端三種引擎；沒套 0021 時選 `.env` 預設照常建 job、選另一種 503，runner 照跑；家教與助教的 400）。
 - 既有測試只改釘住「最後一支 migration 是 0020」的那一則（`localExtractMode.test.js`：改成 0019、0020 相連，之後只有 0021、且 0021 不碰 `review_reason`），另依節號慣例登記 10.25（`localModeSections.test.js`、`rerecordPlanR6.test.js`）。
 - 跑過（`ci.yml` 的 env，5433 另建的全新 UTF8 測試庫：C.UTF-8、template0，migrate 到 0021，用完刪掉）：`npm test` 4,255 項（4,254 過、1 略過；`4d52987` 是 4,225 項）；`check:html` 通過；`test:integration` 660 項全過（`4d52987` 653 項＋本分支 7 項）；`test:e2e` 12 過、2 略過（與 `4d52987` 相同）；`desktop` 的 `npm test` 126 項全過。
 - 五個 eval 與 `4d52987` 在各自的全新測試庫比對：報表 JSON 除了牆鐘時間與 `generated_at` 以外逐字相同（retrieval、classify、nlq 過；pipeline 仍是 `gate_pass_rate` 0.80、variant 仍是 `retrieved_coverage` 0.50 與 2 支錯誤回放檔，兩者原本就未達門檻）。

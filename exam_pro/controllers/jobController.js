@@ -33,9 +33,9 @@ const JOBS_DIR = path.join(APP_DIR, 'data', 'jobs');
 /** 存進 jobs.pdf_path 的是相對於 exam_pro/ 的路徑，worker 自己 resolve（搬 repo 也不會壞）。 */
 const JOBS_DIR_REL = path.posix.join('data', 'jobs');
 
-/** 〔dec/r13-engine-choice〕選了辨識方式、資料庫卻還沒套 0021 時 POST /api/jobs 回 503 的訊息 */
+/** 〔dec/r13-engine-choice〕選了與 .env 不同的辨識方式、資料庫卻還沒套 0021 時 POST /api/jobs 回 503 的訊息（選 .env 預設的照常建 job） */
 const ENGINE_SCHEMA_MESSAGE = '資料庫還沒套 migrations/0021_job_engine.sql（記錄每份考卷選的辨識方式）：請在 exam_pro 執行 npm run migrate，'
-    + '套完不必重啟。在那之前上傳時請不要選辨識方式（照 .env 的設定）。';
+    + '套完不必重啟。在那之前只能用 .env 預設的辨識方式。';
 
 const RETRYABLE_REASONS = ['provider_error', 'budget_exceeded'];
 /** node → 該節點對應的 state（NODE_FOR_STATE 的反查表），retry 要把列退回前一個狀態時用。 */
@@ -204,16 +204,24 @@ exports.createJob = async (req, res, next) => {
                  VALUES ('pdf', $1, $2, 'queued', $3, $4, $5, $6) RETURNING id`,
                 [sha256, pageCount, Number.isFinite(budget) ? budget : 0.5, sourceType, sourceDetail, subjectGroup]);
             const jobId = rows[0].id;
-            // 〔dec/r13-engine-choice〕有選才寫（沒選＝NULL＝照 .env）。同一個交易：還沒套 0021 時這一句失敗、整筆回滾，回 503 叫人先 migrate。
+            // 〔dec/r13-engine-choice〕有選才寫（沒選＝NULL＝照 .env）。還沒套 0021 時這一句會失敗（42703）：
+            // 〔dec/r13-engine-choice-fix〕選的就是 .env 的預設 → 退回 SAVEPOINT、不寫 engine（＝NULL＝照 .env，結果相同），照常建 job；
+            // 前端只要讀得到 /api/engines 就一定帶 engine（預設也帶），不這樣做的話沒 migrate 前從畫面上傳一律 503。
+            // 選的與 .env 不同 → 存不下這個選擇，整筆回滾、回 503 叫人先 migrate（不能默默照 .env 跑錯引擎）。
             if (engine !== null) {
+                await client.query('SAVEPOINT job_engine');
                 try {
                     await client.query('UPDATE jobs SET engine = $2 WHERE id = $1', [jobId, engine]);
+                    await client.query('RELEASE SAVEPOINT job_engine');
                 } catch (err) {
-                    if (err && err.code === '42703') {
+                    if (!(err && err.code === '42703')) throw err;
+                    if (engine === engines.defaultEngine('extract')) {
+                        await client.query('ROLLBACK TO SAVEPOINT job_engine');
+                        console.warn(`[jobs] 資料庫還沒套 0021_job_engine.sql：job ${jobId} 選的是 .env 的預設（${engine}），不記錄選擇、照 .env 拆題。請在 exam_pro 執行 npm run migrate。`);
+                    } else {
                         await client.query('ROLLBACK').catch(() => { });
                         return res.status(503).json({ message: ENGINE_SCHEMA_MESSAGE });
                     }
-                    throw err;
                 }
             }
 

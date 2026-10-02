@@ -5,7 +5,8 @@
 //   1. migration 0021：jobs.engine 欄位與 CHECK；再套一次不動。
 //   2. GET /api/engines：預設本機、沒有金鑰時 Gemini 停用；回應裡沒有金鑰本身。
 //   3. POST /api/jobs 的 engine：不合法 400、選 Gemini 沒金鑰 400、有（假的）金鑰 202 並寫進 jobs.engine；GET /api/jobs/:id 回 engine；
-//      冪等鍵含引擎；資料庫還沒套 0021 時選了引擎回 503、沒選照常（runner 讀不到欄位當 NULL）。
+//      冪等鍵含引擎；資料庫還沒套 0021 時選了與 .env 不同的引擎回 503、選 .env 預設或沒選照常建 job
+//      （〔dec/r13-engine-choice-fix〕SAVEPOINT 退回、不寫 engine；runner 讀不到欄位當 NULL）。
 //   4. runner 端到端（假 agent 照真 agent 讀 ctx.config.models 的鍵呼叫假 LLM）：engine＝gemini 的卷每個節點都是 Gemini、
 //      engine＝local 與 NULL 都是 .env 的本機模型；向量呼叫一律不帶 model（＝EMBED_MODEL）。
 //   5. POST /api/tutor、POST /api/assistant：engine＝gemini 沒有金鑰 400；engine 不合法 400。
@@ -266,14 +267,33 @@ module.exports.run = async (ctx, input) => {
             await truncateAll();
         });
 
-        test('還沒套 0021 的庫：選了引擎回 503（不建 job）；沒選照常建 job，runner 讀不到欄位當 NULL、照 .env 跑完', async () => {
+        test('還沒套 0021 的庫：選了與 .env 不同的引擎回 503（不建 job）；選 .env 預設或沒選照常建 job，runner 讀不到欄位當 NULL、照 .env 跑完', async () => {
             await query('ALTER TABLE jobs DROP COLUMN engine');
+            const warn = console.warn;
+            const warned = [];
+            console.warn = (...a) => { warned.push(a.join(' ')); };
             try {
                 process.env.GEMINI_API_KEY = FAKE_KEY;
-                const r1 = await request(freshApp()).post('/api/jobs').field('engine', 'local').attach('pdf', await makePdf('nocol'), 'exam.pdf');
+                // .env 預設是本機，選 Gemini＝與預設不同：存不下這個選擇 → 整筆回滾、503
+                const r1 = await request(freshApp()).post('/api/jobs').field('engine', 'gemini').attach('pdf', await makePdf('nocol'), 'exam.pdf');
                 assert.equal(r1.status, 503);
                 assert.match(r1.body.message, /0021_job_engine\.sql/);
                 assert.equal((await query('SELECT COUNT(*)::int AS n FROM jobs')).rows[0].n, 0, '整筆回滾，沒有留下 job');
+                // 〔dec/r13-engine-choice-fix〕畫面一定帶 engine（預設也帶）：選的是 .env 預設 → 退回 SAVEPOINT、不寫 engine，照常建 job
+                const pdf0 = await makePdf('nocol0');
+                const r0 = await request(freshApp()).post('/api/jobs').field('engine', 'local').attach('pdf', pdf0, 'exam.pdf');
+                assert.equal(r0.status, 202, JSON.stringify(r0.body));
+                assert.equal(r0.body.existing, false);
+                const j0 = (await query('SELECT state, pdf_path FROM jobs WHERE id = $1', [r0.body.job_id])).rows[0];
+                assert.equal(j0.state, 'queued');
+                assert.ok(j0.pdf_path, 'SAVEPOINT 之後的 pdf_path 也有寫進去（交易沒有被弄壞）');
+                assert.equal((await request(freshApp()).get(`/api/jobs/${r0.body.job_id}`)).body.engine, null);
+                assert.ok(warned.some(w => /0021_job_engine\.sql/.test(w) && /npm run migrate/.test(w)), '伺服器視窗印一行提醒 migrate');
+                // 同一份卷、選預設再傳一次：冪等接回（to_jsonb 讀不到欄位＝以 .env 預設計）
+                const r0b = await request(freshApp()).post('/api/jobs').field('engine', 'local').attach('pdf', pdf0, 'exam.pdf');
+                assert.equal(r0b.status, 202);
+                assert.equal(r0b.body.job_id, r0.body.job_id);
+                assert.equal(r0b.body.existing, true);
                 const r2 = await request(freshApp()).post('/api/jobs').attach('pdf', await makePdf('nocol2'), 'exam.pdf');
                 assert.equal(r2.status, 202);
                 assert.equal((await request(freshApp()).get(`/api/jobs/${r2.body.job_id}`)).body.engine, null);
@@ -285,6 +305,7 @@ module.exports.run = async (ctx, input) => {
                 await drain(makeRunner());
                 assert.equal(llmCalls.filter(c => c.agent === 'extract')[0].model, 'ollama:qwen3-vl:8b');
             } finally {
+                console.warn = warn;
                 await query(MIGRATION);   // 把欄位套回來（其他測試檔要用）
                 await truncateAll();
             }
