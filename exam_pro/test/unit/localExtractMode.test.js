@@ -366,9 +366,16 @@ describe('複核原因白名單與 0019', () => {
         assert.ok(!/job_events/.test(body), 'job_events.error_class 不變（政策停等寫 NULL）');
     });
 
-    test('0019 之後只有〔Owner 第五輪 C-f〕的 0020；0015 沒被改（凍結）', () => {
+    test('0019 之後只有〔Owner 第五輪 C-f〕的 0020（〔dec/r13-engine-choice〕再之後的 0021 只動 jobs、不碰複核原因）；0015 沒被改（凍結）', () => {
         const files = fs.readdirSync(path.join(APP_DIR, 'migrations')).filter(f => f.endsWith('.sql')).sort();
-        assert.deepEqual(files.slice(-2), ['0019_ocr_only_review.sql', '0020_output_truncated_review.sql']);
+        const i19 = files.indexOf('0019_ocr_only_review.sql');
+        assert.deepEqual(files.slice(i19, i19 + 2), ['0019_ocr_only_review.sql', '0020_output_truncated_review.sql']);
+        // 〔dec/r13-engine-choice〕0020 之後的 migration 不得改 job_questions.review_reason 的 CHECK（白名單仍是上面的 12 個）
+        assert.deepEqual(files.slice(i19 + 2), ['0021_job_engine.sql']);
+        for (const f of files.slice(i19 + 2)) {
+            const body = fs.readFileSync(path.join(APP_DIR, 'migrations', f), 'utf8').replace(/--.*$/gm, '');
+            assert.ok(!/review_reason/.test(body), `${f} 不該碰 review_reason`);
+        }
         const f15 = fs.readFileSync(path.join(APP_DIR, 'migrations', '0015_extract_disagree.sql'), 'utf8');
         assert.ok(!f15.includes('ocr_only'));
     });

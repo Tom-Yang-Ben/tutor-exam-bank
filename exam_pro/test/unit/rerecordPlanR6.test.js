@@ -139,14 +139,16 @@ describe('docs/local-mode.md 10.21 與工具一致', () => {
     // 〔dec/r9-record-tooling〕末尾再新增 10.23（重錄工具補強），照同一個慣例登記
     // 〔dec/r10-variant-cap〕末尾再新增 10.24（變式生成的本機輸出上限與截斷不重試），照同一個慣例登記
     // 〔dec/r13-extract-fixes〕末尾再新增 10.25（本機拆題修正），照同一個慣例登記
-    test('10.21 之後依序只有 10.22、10.23、10.24、10.25 四節', () => {
+    // 〔dec/r13-engine-choice〕末尾再新增 10.26（拆題與助教可選本機或 Gemini），照同一個慣例登記
+    test('10.21 之後依序只有 10.22、10.23、10.24、10.25、10.26 五節', () => {
         assert.ok(start > 0);
         const after = [...doc.slice(start + 4).matchAll(/^### (.*)$/gm)].map(m => m[1]);
         assert.deepEqual(after, [
             '10.22 classify 重錄後的四條界線規則（2026-09-27，改答 LC-2）',
             '10.23 重錄工具補強：只補錄缺的、錯誤回放檔（2026-10-01，`dec/r9-record-tooling`）',
             '10.24 變式生成的本機輸出上限與截斷不重試（2026-10-01，`dec/r10-variant-cap`；Owner 第七輪 R7-1＝4）',
-            '10.25 本機拆題修正：不准編答案、解答頁、LaTeX、答案比對、lint／verify 逾時（2026-10-02，`dec/r13-extract-fixes`；Owner 2026-10-02 同意）'
+            '10.25 本機拆題修正：不准編答案、解答頁、LaTeX、答案比對、lint／verify 逾時（2026-10-02，`dec/r13-extract-fixes`；Owner 2026-10-02 同意）',
+            '10.26 拆題與助教可選本機或 Gemini（2026-10-02，`dec/r13-engine-choice`；Owner 2026-10-01）'
         ]);
     });
 

@@ -81,6 +81,11 @@
 //   ③ 退避睡眠改走 pause，沒有放棄時等同 sleep(ms)：每次自己登記一個喚醒函式、睡完就移除。〔審查 dec/r8-b1-abandon-fix〕
 //      dec/r8-b1-abandon 原本讓每次退避 race 一個常駐的 promise，沒有 shutdown 時那個 promise 永遠不 settle，每次退避都在它身上
 //      留下一個永遠不釋放的 reaction（每次約 300 位元組），長時間開著的伺服器記憶體會緩慢增加；現在不會。
+//
+// 〔dec/r13-engine-choice，docs/local-mode.md 10.26〕上傳時可以選「本機／Gemini」（jobs.engine，migration 0021）。
+// 選的與 .env 的拆題引擎不同時，這份卷的拆題與逐題檢查改用那個引擎的模型與長節點預設（runtimeFor）；
+// NULL 或與 .env 相同時一切照舊（loadModels() 與 runner 的 config）。讀 engine 用 to_jsonb(jobs) ->> 'engine'：
+// 還沒套 0021 的庫取不到這個鍵、得到 NULL，不會因為欄位不存在而整個佇列卡住。
 // ─────────────────────────────────────────────────────────────
 const fs = require('fs');
 const path = require('path');
@@ -988,8 +993,11 @@ function createRunner(opts = {}) {
     const sleep = opts.sleep || ((ms) => new Promise(r => setTimeout(r, ms)));
     const estimateCost = opts.estimateCost || estimateCostFromPricing;
     // 〔stage5 WS-C〕延遲 require：旗標關閉時連 kcTagService 都不載入
+    // 〔dec/r13-engine-choice〕第二個參數 { model }：這份 job 指定了與 .env 不同的引擎時，標註改用那個引擎的模型（沒給＝與之前相同）
     const kcTagger = opts.kcTagger
-        || ((questionId) => require('../services/kcTagService').tagQuestion(questionId, { db, llm, logger }));
+        || ((questionId, o) => require('../services/kcTagService').tagQuestion(questionId, {
+            db, llm, logger, ...(o && o.model ? { config: { model: o.model } } : {})
+        }));
 
     const agentCache = new Map();
     // 在途的工作單位。成員是每次 spawn 各自一個的 token（'jq:12#7'），不是列 id：
@@ -1342,6 +1350,9 @@ function createRunner(opts = {}) {
         const meter = newMeter();
         const startedAt = Date.now();
         let timeoutHandle = null;
+        // 〔dec/r13-engine-choice〕這份 job 的長節點設定（runtimeFor）；沒帶＝runner 的 config（與之前相同）
+        const rt = ctxBase.runtime || null;
+        const nodeTimeoutMs = rt ? rt.nodeTimeoutMs : config.nodeTimeoutMs;
 
         // 〔dec/r8-b1-abandon〕已經在放棄了：新的節點不開始（save 也一樣：還沒開始就不開始）
         if (abandoning) {
@@ -1375,9 +1386,9 @@ function createRunner(opts = {}) {
                     classifyMinConf: config.classifyMinConf,
                     dedupDup: config.dedupDup,
                     dedupVariant: config.dedupVariant,
-                    pdfChunkPages: config.pdfChunkPages,
+                    pdfChunkPages: rt ? rt.pdfChunkPages : config.pdfChunkPages,
                     inlineMaxBytes: config.inlineMaxBytes,
-                    nodeTimeoutMs: config.nodeTimeoutMs,
+                    nodeTimeoutMs,
                     // 階段 3（第 4.5 條 + 裁決 S3-R9）：generateVariant 的兩道閘門與 classify 的 kNN 短路。
                     // 跑題閾值走 variantOfftopicSimMin；檢索下限（variantRetrieveSimMin）不進 ctx——
                     // 那是 services/variantService.js 的事，agent 用不到。
@@ -1397,18 +1408,18 @@ function createRunner(opts = {}) {
                 localExtract: { mode: config.localExtractMode }
             }
         };
-        delete ctx.models; delete ctx.limits;
+        delete ctx.models; delete ctx.limits; delete ctx.runtime;
 
         let outcome;
         try {
             const timeout = new Promise((_, reject) => {
                 timeoutHandle = setTimeout(() => {
                     controller.abort();
-                    reject(Object.assign(new Error(`節點 ${node} 超過 ${config.nodeTimeoutMs} ms 未回應`), { errorClass: 'timeout' }));
-                }, config.nodeTimeoutMs);
+                    reject(Object.assign(new Error(`節點 ${node} 超過 ${nodeTimeoutMs} ms 未回應`), { errorClass: 'timeout' }));
+                }, nodeTimeoutMs);
                 if (typeof timeoutHandle.unref === 'function') timeoutHandle.unref();
             });
-            const run = node === 'save' ? saveNode(ctx, input) : loadAgent(node).run(ctx, input);
+            const run = node === 'save' ? saveNode(ctx, input, rt) : loadAgent(node).run(ctx, input);
             outcome = await Promise.race(abandonRace ? [run, timeout, abandonRace] : [run, timeout]);
             if (!abandonedHere && (!outcome || typeof outcome.kind !== 'string')) {
                 outcome = { kind: 'error', errorClass: 'provider_error', message: `節點 ${node} 回傳的不是合法 outcome` };
@@ -1447,7 +1458,7 @@ function createRunner(opts = {}) {
      * 最後一道閘門 + 入庫。validateQuestionFields 與 INSERT 在同一個交易裡，
      * 因此不會出現「questions 有了、job_questions.question_id 還是 NULL」的中間狀態。
      */
-    async function saveNode(ctx, input) {
+    async function saveNode(ctx, input, rt = null) {
         const { validateQuestionFields } = require('../utils/questionValidation');
         const fields = buildSaveFields(input);
         const v = validateQuestionFields(fields);
@@ -1503,9 +1514,11 @@ function createRunner(opts = {}) {
             // 〔stage5 WS-C〕save 成功（已 COMMIT）之後的唯一掛鉤：FEATURE_KC_TAGGING 關閉時完全不呼叫；
             // 開啟時 fire-and-forget，失敗只記 log，不影響 job 狀態（interfaces-stage5.md 第 4.3 條第 3 點）。
             // save 是零成本節點、預算用盡仍會跑，標註卻要付錢：該 job 的預算或當日預算用盡就不標。
+            // 〔dec/r13-engine-choice〕這份 job 指定了與 .env 不同的引擎：標註也用那個引擎的模型（kcTagModel）；照 .env 時呼叫方式與之前相同
+            const kcTagModel = rt && rt.kcTagModel ? rt.kcTagModel : null;
             runKcTagHook({
                 questionId, enabled: require('../config/features').FEATURE_KC_TAGGING,
-                tagger: kcTagger, logger: ctx.logger || logger,
+                tagger: kcTagModel ? (id) => kcTagger(id, { model: kcTagModel }) : kcTagger, logger: ctx.logger || logger,
                 budgetCheck: async () => {
                     const jobLeft = ctx?.config?.limits?.budgetLeft;
                     if (typeof jobLeft === 'number' && jobLeft <= 0) return 'job_budget';
@@ -1629,7 +1642,8 @@ function createRunner(opts = {}) {
             const { rows } = await db.query(
                 `SELECT q.id, q.job_id, q.idx, q.state, q.payload, q.retries,
                         j.kind, j.pdf_sha256, j.source_type, j.source_detail, j.subject_group,
-                        j.budget_usd::float8 AS budget_usd, j.cost_usd::float8 AS cost_usd
+                        j.budget_usd::float8 AS budget_usd, j.cost_usd::float8 AS cost_usd,
+                        to_jsonb(j) ->> 'engine' AS engine
                    FROM job_questions q JOIN jobs j ON j.id = q.job_id
                   WHERE q.id = $1`, [jqId]);
             if (rows.length === 0) return;
@@ -1637,6 +1651,8 @@ function createRunner(opts = {}) {
             if (!ADVANCEABLE_STATES.includes(jq.state)) return;   // 期間被人 approve／reject 了
 
             const node = NODE_FOR_STATE[jq.state];
+            // 〔dec/r13-engine-choice〕這份 job 的引擎（沒套 0021 的庫 to_jsonb 取不到這個鍵＝NULL＝照 .env）
+            const runtime = runtimeFor(jq.engine);
             const budgetLeft = Number(jq.budget_usd) - Number(jq.cost_usd);
             // 第 4.6 條：變式 job 的 lint 重試上限由 VARIANT_LINT_RETRIES 覆寫，其餘節點不變。
             const limits = jq.kind === 'variant'
@@ -1737,7 +1753,8 @@ function createRunner(opts = {}) {
                         budget_usd: Number(jq.budget_usd), cost_usd: Number(jq.cost_usd)
                     },
                     jq: { id: jq.id, idx: jq.idx, payload: jq.payload, retries: jq.retries },
-                    logger, models: loadModels(), limits
+                    // 〔dec/r13-engine-choice〕jobs.engine 照 .env（NULL 或相同）時 runtime.models 就是 loadModels()
+                    logger, models: runtime.models, limits, runtime
                 };
                 const res = await invokeNode(node, ctxBase, buildInput(node, jq));
                 if (res.abandoned) {
@@ -1881,14 +1898,24 @@ function createRunner(opts = {}) {
         try {
             const { rows } = await db.query(
                 `SELECT id, pdf_path, pdf_sha256, page_count, subject_group,
-                        budget_usd::float8 AS budget_usd, cost_usd::float8 AS cost_usd
+                        budget_usd::float8 AS budget_usd, cost_usd::float8 AS cost_usd,
+                        to_jsonb(jobs) ->> 'engine' AS engine
                    FROM jobs WHERE id = $1`, [jobId]);
             if (rows.length === 0) return;
             const job = rows[0];
+            // 〔dec/r13-engine-choice〕這份卷指定的引擎（與 .env 相同或沒指定＝runner 的 config，與之前相同）
+            const runtime = runtimeFor(job.engine);
+            if (runtime.engine) {
+                logger.info({
+                    job_id: jobId, node: 'extract', engine: runtime.engine, model: runtime.models.extract,
+                    pdf_chunk_pages: runtime.pdfChunkPages, node_timeout_ms: runtime.nodeTimeoutMs,
+                    msg: `這份卷指定用${runtime.engine === 'gemini' ? ' Gemini' : '本機'}辨識（與 .env 的預設不同），拆題與逐題檢查都用這一組模型`
+                });
+            }
 
             // 〔DA-13〕逐塊檢查點：已經拆完的塊（extract 事件 pass／skipped）跳過，只跑沒拆完的（planResumeChunks）
             const checkpoints = await readExtractCheckpoints(jobId);
-            const plan = planResumeChunks(job.page_count, config.pdfChunkPages, checkpoints);
+            const plan = planResumeChunks(job.page_count, runtime.pdfChunkPages, checkpoints);
             if (plan.mode === 'inconsistent') {
                 // 〔dec/r7-checkpoints-fix〕不自動重拆（題號會撞、會建出重複列，理由見 planResumeChunks），留給人處理
                 logger.warn({
@@ -1924,7 +1951,7 @@ function createRunner(opts = {}) {
             for (const chunk of plan.todo) {
                 // 〔dec/r8-b1-abandon〕放棄：不開始下一塊；被中止的那一塊沒有留下題目列與檢查點（runExtractChunk 回 abandoned），
                 // job 停在 extracting、不 failed，只放掉自己的租約，下次開啟從這一塊接著拆（DA-13 的檢查點）
-                const r = abandoning ? { ok: false, abandoned: true } : await runExtractChunk(job, chunk);
+                const r = abandoning ? { ok: false, abandoned: true } : await runExtractChunk(job, chunk, runtime);
                 if (r.abandoned) {
                     await abandonUnit(lease, stopRenew, { unit: 'extract', job_id: jobId, node: 'extract', chunk: chunk.no, page_range: [chunk.fromPage, chunk.toPage] });
                     return;
@@ -2049,7 +2076,7 @@ function createRunner(opts = {}) {
      * 單一 chunk 的拆題（含 fail 重試 1 次與 error 退避），成功時建 job_questions。
      * 〔第四輪 V3〕本機模式（config.localExtract）的 timeout 另有上限 LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES（見常數的說明）。
      */
-    async function runExtractChunk(job, chunk) {
+    async function runExtractChunk(job, chunk, runtime = runtimeFor(job.engine)) {
         let failRetries = 0;
         let errorRetries = 0;
         let timeoutRetries = 0;   // 〔第四輪 V3〕其中幾次是 timeout（只在本機模式用來設上限）
@@ -2075,7 +2102,7 @@ function createRunner(opts = {}) {
                     subject_group: job.subject_group ?? 'math_physics',
                     budget_usd: Number(job.budget_usd), cost_usd: Number(rows[0]?.cost_usd ?? 0)
                 },
-                jq: null, logger, models: loadModels(), limits: { ...DEFAULT_LIMITS, budgetLeft }
+                jq: null, logger, models: runtime.models, limits: { ...DEFAULT_LIMITS, budgetLeft }, runtime
             };
             const res = await invokeNode('extract', ctxBase, { jobId: job.id, pdfPath: resolveJobPath(job.pdf_path), chunk });
             // 〔dec/r8-b1-abandon〕被放棄：不裁圖、不建題目列、不寫事件（檢查點），迴圈不重試
@@ -2148,7 +2175,8 @@ function createRunner(opts = {}) {
             }
             // error：退避後重試，用盡就讓整份 job failed
             // 〔第四輪 V3〕本機模式的 timeout 用過 LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES 次就不再重試；總上限仍是 maxErrorRetries
-            const localTimeoutCapped = config.localExtract === true && outcome.errorClass === 'timeout'
+            // 〔dec/r13-engine-choice〕「本機」看這份卷實際用的引擎（runtime.localExtract；照 .env 時＝config.localExtract）
+            const localTimeoutCapped = runtime.localExtract === true && outcome.errorClass === 'timeout'
                 && timeoutRetries >= LOCAL_EXTRACT_TIMEOUT_MAX_RETRIES;
             if (!localTimeoutCapped && errorRetries < DEFAULT_LIMITS.maxErrorRetries) {
                 await pause(backoffMs(errorRetries));   // 〔dec/r8-b1-abandon〕放棄時馬上醒來，迴圈開頭就結束
@@ -2533,6 +2561,45 @@ function createRunner(opts = {}) {
             `UPDATE jobs SET state = 'failed', error = $2, locked_until = NULL, updated_at = now() WHERE id = $1`,
             [jobId, message]);
         logger.error({ job_id: jobId, node, outcome: 'error', latency_ms: 0, error: message });
+    }
+
+    // ── 〔dec/r13-engine-choice〕這份 job 指定的引擎（jobs.engine，migration 0021；docs/local-mode.md 10.26）──
+    // engine 是 NULL、或等於 .env 的拆題引擎（MODEL_EXTRACT 的供應商）→ 一律照舊：loadModels() 與 runner 的 config，
+    // 送出的模型、cacheKeyParts、cassette 的鍵逐字不變。不同 → 這份卷的拆題與逐題檢查（classify、lint、verify、
+    // 知識點標註）都換成那個引擎的模型（config/engines.js 的 modelsForEngine），長節點設定（每塊頁數、節點逾時、
+    // 本機逾時只重試 1 次）也照那個引擎的預設；.env 明寫的 JOB_PDF_CHUNK_PAGES／JOB_NODE_TIMEOUT_MS 與 createRunner({config}) 給的值照樣優先。
+    // 向量不跟著換（embed 不經過這裡，一律 EMBED_MODEL）。工作槽數（JOB_CONCURRENCY）是整個 runner 共用的，不分 job。
+    const explicitConfigKeys = new Set(Object.keys(opts.config || {}));
+    const engineModelsCache = new Map();
+    /**
+     * @param {string|null|undefined} engine jobs.engine
+     * @returns {{engine:'local'|'gemini'|null, models:object, kcTagModel:string|null, localExtract:boolean,
+     *            pdfChunkPages:number, nodeTimeoutMs:number}}
+     */
+    function runtimeFor(engine) {
+        const engines = require('../config/engines');
+        const eng = engines.overrideEngine(engine, 'extract');
+        if (!eng) {
+            return {
+                engine: null, models: loadModels(), kcTagModel: null, localExtract: config.localExtract === true,
+                pdfChunkPages: config.pdfChunkPages, nodeTimeoutMs: config.nodeTimeoutMs
+            };
+        }
+        if (!engineModelsCache.has(eng)) engineModelsCache.set(eng, engines.modelsForEngine(eng));
+        const set = engineModelsCache.get(eng);
+        const local = eng === 'local';
+        const env = process.env;
+        const fixed = (envName, key) => explicitConfigKeys.has(key) || Number.isFinite(Number.parseInt(env[envName], 10));
+        const base = loadConfig(env);
+        return {
+            engine: eng,
+            // 與 loadModels() 同樣五個鍵（agent 只讀這五個）
+            models: { extract: set.extract, verify: set.verify, variant: set.variant, ocrStructure: set.ocrStructure, text: set.text },
+            kcTagModel: set.kcTag,
+            localExtract: local,
+            pdfChunkPages: fixed('JOB_PDF_CHUNK_PAGES', 'pdfChunkPages') ? config.pdfChunkPages : (local ? LOCAL_PDF_CHUNK_PAGES : base.pdfChunkPages),
+            nodeTimeoutMs: fixed('JOB_NODE_TIMEOUT_MS', 'nodeTimeoutMs') ? config.nodeTimeoutMs : (local ? LOCAL_NODE_TIMEOUT_MS : base.nodeTimeoutMs)
+        };
     }
 
     // ── 模型設定（config/models.js 由 WS-B 提供，還沒合入時退回 .env）──

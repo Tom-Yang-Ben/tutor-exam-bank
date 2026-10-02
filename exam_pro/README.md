@@ -319,6 +319,8 @@ Windows 也可以用桌面圖示：雙擊一次 `scripts\windows\install_desktop
 
 切回 Gemini、預期速度與品質、疑難排解見 [`docs/local-mode.md`](../docs/local-mode.md) 第 10 條；決策見 ADR-017。
 
+不改 `.env` 也能逐次切換：上傳考卷的「辨識方式」、AI 家教與助教的「回答方式」都可選本機或 Gemini（Gemini 要先填 `GEMINI_API_KEY`；向量不跟著換），說明見 [`docs/local-mode.md`](../docs/local-mode.md) 10.26。
+
 ---
 
 ## 🧪 測試
