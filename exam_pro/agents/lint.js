@@ -243,7 +243,12 @@ async function run(ctx, input) {
     }
 
     // 重寫過的文字再跑一次 ①②——模型改完仍可能不合格，閘門不因為它出手就放水
-    const second = gate(data.question_text, typeof data.answer_text === 'string' ? data.answer_text : answerText);
+    // 〔dec/r13-extract-fixes〕原本沒有答案（本機拆題在題目頁沒寫答案時留空）：模型回什麼都不採用（prompt 裡寫的是「（空）」，
+    // 模型可能照抄回來，或自己補一個答案——SYSTEM 明令「嚴禁自己解題或補上答案」，這裡在程式上再擋一次）
+    const rewrittenAnswer = answerText.trim() === ''
+        ? answerText
+        : (typeof data.answer_text === 'string' ? data.answer_text : answerText);
+    const second = gate(data.question_text, rewrittenAnswer);
     const merged = [...new Set([...first.applied, ...second.applied])];
 
     if (second.ok) {

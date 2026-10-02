@@ -103,6 +103,12 @@ function markdownPipeline(res) {
         const p = res.ocrOnly.pre_approval || { passed: 0, total: 0, rate: null };
         lines.push(`- 人工核准前的通過率（OCR 模式）：${cell(p.rate)}（${p.passed}／${p.total} 題走完全部閘門、只因「只用 OCR 拆題」停下；只報告、不設門檻）`, '');
     }
+    // 〔審查 dec/r13-extract-fixes〕no_claim 題的驗算對標準答案：只報告、不設門檻
+    if (res.verifyAgree) {
+        const v = res.verifyAgree;
+        lines.push(`- verify_agree_rate（${v.n} 題 no_claim）：對答案卷 answer_text ${cell(v.by_answer_text.rate)}（${v.by_answer_text.agree}／${v.n}）、` +
+            `對 final_answer ${cell(v.by_final_answer.rate)}（${v.by_final_answer.agree}／${v.n}）。${v.note}`, '');
+    }
 
     lines.push('**needs_review 原因分佈**：', '');
     if (!res.reviewReasons || res.reviewReasons.length === 0) {

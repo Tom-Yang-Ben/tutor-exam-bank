@@ -35,8 +35,9 @@ const SAMPLE_PDF = path.join(APP_DIR, 'eval', 'fixtures', 'sample_exam.pdf');
 const RERECORD_HINT = '請 Owner 執行 npm run cassettes:rerecord 重錄（docs/chapter-restructure.md 第 5 條），錄好後這一則自動恢復執行';
 
 /** 樣卷的 OCR 與 extract_ocr 回放檔由哪一步錄（docs/local-mode.md 10.21 的重錄計畫） */
-const EXTRACT_OCR_RECORD_STEP = 'docs/local-mode.md 10.21 第 3 步（scripts\\windows\\record_local.bat pipeline,e2e；'
-    + 'OCR 為主，只錄 ocr 與 extract_ocr.v2，不呼叫看圖模型）';
+// 〔dec/r13-extract-fixes〕extract_ocr.v2 → v3（本機模板多了 answer_text 與矩陣等寫法），要錄的是 10.25 第 8 點那一步
+const EXTRACT_OCR_RECORD_STEP = 'docs/local-mode.md 10.25 第 8 點（scripts\\windows\\record_local.bat pipeline,e2e --only-missing；'
+    + 'OCR 為主，只錄 ocr 與 extract_ocr.v3，不呼叫看圖模型）';
 
 /**
  * repo 內 Gemini 錄的舊向量檔（embeddings.gemini-embedding-001.768.json）。
@@ -92,7 +93,6 @@ function sampleExtractOcrCassette(opts = {}) {
     const ocr = require('../../../services/ocr');
     const cassette = require('../../../services/llm/cassette');
     const extractAgent = require('../../../agents/extract');
-    const { buildSchema } = require('../../../agents/schemas');
     const models = require('../../../config/models');
     const { loadSheet } = require('../../../eval/lib/pdfGolden');
 
@@ -127,7 +127,8 @@ function sampleExtractOcrCassette(opts = {}) {
     }
 
     const req = extractAgent.ocrStructureRequest({
-        group: 'math_physics', models: { ocrStructure: model }, schema: buildSchema('extract'),
+        // 〔dec/r13-extract-fixes〕本機路徑的 schema（只換 answer_text 的說明）與 agent 實際送出的同一份
+        group: 'math_physics', models: { ocrStructure: model }, schema: extractAgent.localExtractSchema('math_physics'),
         range: { fromPage, toPage }, ocrText: ocr.pagesToText(pages), chunkNo, pdfSha256
     });
     const key = cassette.cassetteKey({

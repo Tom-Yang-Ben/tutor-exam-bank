@@ -17,6 +17,8 @@
 // 〔dec/r9-record-tooling〕末尾新增 10.23「重錄工具補強」：標題清單多一節；新測試與 services/llm/cassette.js 只指 10.23。
 // 〔Owner 第七輪 R7-1＝4，dec/r10-variant-cap〕末尾新增 10.24「變式生成的本機輸出上限與截斷不重試」：標題清單多一節；
 // services/llm/localTuning.js 另指到 10.24（變式的本機預設），兩個新測試只指 10.24。
+// 〔dec/r13-extract-fixes〕末尾新增 10.25「本機拆題修正」：標題清單多一節；localTuning.js 另指到 10.25（lint／verify 逾時），
+// 兩個新工具檔與新測試只指 10.25。
 // 只讀檔，不連 DB、不呼叫模型。
 // ─────────────────────────────────────────────────────────────
 const { test, describe } = require('node:test');
@@ -54,7 +56,8 @@ describe('docs/local-mode.md 10.12～10.20（整合 r5、final5、r6 改號）',
         ["10.21", "重錄計畫（2026-09-27，第五輪之後）"],   // 整合 r6 新增（test/unit/rerecordPlanR6.test.js）
         ["10.22", "classify 重錄後的四條界線規則（2026-09-27，改答 LC-2）"],   // 〔Owner 2026-09-27 改答 LC-2〕dec/r6-classify-rules
         ["10.23", "重錄工具補強：只補錄缺的、錯誤回放檔（2026-10-01，`dec/r9-record-tooling`）"],   // 〔dec/r9-record-tooling〕末尾新增
-        ["10.24", "變式生成的本機輸出上限與截斷不重試（2026-10-01，`dec/r10-variant-cap`；Owner 第七輪 R7-1＝4）"]   // 〔dec/r10-variant-cap〕末尾新增
+        ["10.24", "變式生成的本機輸出上限與截斷不重試（2026-10-01，`dec/r10-variant-cap`；Owner 第七輪 R7-1＝4）"],   // 〔dec/r10-variant-cap〕末尾新增
+        ["10.25", "本機拆題修正：不准編答案、解答頁、LaTeX、答案比對、lint／verify 逾時（2026-10-02，`dec/r13-extract-fixes`；Owner 2026-10-02 同意）"]   // 〔dec/r13-extract-fixes〕末尾新增
     ];
 
     test(`第 10 章 10.12 之後的標題依併入順序各出現一次：${EXPECTED.map(e => e[0]).join('、')}`, () => {
@@ -89,7 +92,7 @@ describe('docs/local-mode.md 10.12～10.20（整合 r5、final5、r6 改號）',
         ['exam_pro/eval/lib/embedThresholds.js', ['10.13']],
         ['exam_pro/eval/tools/embed_threshold_labels.json', ['10.13']],
         ['docs/local-embed-thresholds-report.md', ['10.13']],
-        ['exam_pro/services/llm/localTuning.js', ['10.14', '10.24']],   // 〔Owner 第七輪 R7-1〕變式的本機預設另指 10.24
+        ['exam_pro/services/llm/localTuning.js', ['10.14', '10.24', '10.25']],   // 〔Owner 第七輪 R7-1〕變式的本機預設另指 10.24；〔dec/r13-extract-fixes〕lint／verify 逾時指 10.25
         ['exam_pro/migrations/0020_output_truncated_review.sql', ['10.17']],   // 〔第五輪 B；整合 r6 改號〕
         ['exam_pro/eval/tools/local_bench_text.js', ['10.14']],
         ['exam_pro/test/unit/localTuning.test.js', ['10.14']],
@@ -110,6 +113,10 @@ describe('docs/local-mode.md 10.12～10.20（整合 r5、final5、r6 改號）',
         // 〔dec/r10-variant-cap〕變式的本機輸出上限與截斷不重試
         ['exam_pro/test/unit/variantCap.test.js', ['10.24']],
         ['exam_pro/test/integration/variantTruncation.pg.test.js', ['10.24']],
+        // 〔dec/r13-extract-fixes〕本機拆題修正
+        ['exam_pro/utils/answerKey.js', ['10.25']],
+        ['exam_pro/utils/extractLatexRepair.js', ['10.25']],
+        ['exam_pro/test/unit/extractFixesR13.test.js', ['10.25']],
         // 〔整合 2026-09-27 dec/integration-r6〕第五輪各組暫編的 10.16 改號後，各組自己的檔指到自己那一節
         ['exam_pro/controllers/reviewController.js', ['10.12', '10.17']],   // B：output_truncated
         ['exam_pro/public/js/review.js', ['10.12', '10.17']],               // B
