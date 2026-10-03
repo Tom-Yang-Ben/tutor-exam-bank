@@ -171,13 +171,53 @@ describe('index.html 與 package.json 的接點（第 5 條第 1、2 點）', ()
         }
     });
 
-    test('dependencies：五個前端套件都在，主版本與原本的 CDN 相同（gsap 照原本釘死 3.13.0）', () => {
+    test('dependencies：五個前端套件都在，主版本與原本的 CDN 相同', () => {
         const deps = PKG.dependencies;
         assert.match(deps.mathjax, /^\^?3\./, 'CDN 用的是 mathjax@3');
-        assert.equal(deps.gsap, '3.13.0', 'CDN 用的是 gsap@3.13.0');
+        assert.match(deps.gsap, /^\^?3\./, 'CDN 用的是 gsap@3');
         assert.match(deps['@tailwindcss/browser'], /^\^?4\./, 'CDN 用的是 @tailwindcss/browser@4');
         assert.ok(deps['@fontsource-variable/manrope']);
         assert.ok(deps['@fontsource-variable/noto-sans-tc']);
+    });
+
+    // gsap 原本在上面那一條被釘成精確的 '3.13.0'，理由是「與原本的 CDN 引用同版」——而舊的 CDN 網址
+    // 恰好寫了完整版號（gsap@3.13.0），mathjax 寫的是 @3。那是抄了網址的形狀，不是技術上的不變量：
+    // 離線 vendor 真正不能破的是「主版號不變」（上面那一條）與「index.html 的版本說明不能和
+    // package.json 不一致」（本條，原本沒有人在檢查）。改成鎖這兩個關係之後，minor／patch 升版合法，
+    // 但忘了改註解就會被抓到。gsap 另有 .github/dependabot.yml 的 exclude-patterns 讓它單獨開 PR。
+    //
+    // 註解可以只寫主版號（mathjax 3），也可以寫完整版號（gsap 3.13.0）；寫了就必須是 package.json 的前綴。
+    /**
+     * @param {string} line index.html 的「版本：…」那一行
+     * @param {Record<string, string>} deps package.json 的 dependencies
+     * @returns {string[]} 對不上的訊息（空陣列＝一致）
+     */
+    function versionCommentMismatches(line, deps) {
+        const out = [];
+        for (const pkg of ['gsap', 'mathjax', '@tailwindcss/browser']) {
+            const declared = String(deps[pkg]).replace(/^\^/, '');
+            const m = new RegExp(`${pkg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+([0-9][0-9.]*)`).exec(line);
+            if (!m) { out.push(`版本說明裡沒寫 ${pkg} 的版本`); continue; }
+            if (declared !== m[1] && !declared.startsWith(`${m[1]}.`)) {
+                out.push(`index.html 說 ${pkg} ${m[1]}，package.json 是 ${declared}——改了版本要一起改那行註解`);
+            }
+        }
+        return out;
+    }
+    test('index.html 的版本說明與 package.json 一致（註解不能說謊）', () => {
+        const line = INDEX_HTML.split('\n').find(l => l.includes('版本：'));
+        assert.ok(line, 'index.html 的 head 註解裡找不到「版本：」那一行');
+        assert.deepEqual(versionCommentMismatches(line, PKG.dependencies), []);
+    });
+
+    test('檢查器本身抓得到違規（量尺自我檢查）', () => {
+        const deps = { gsap: '3.15.0', mathjax: '^3.2.2', '@tailwindcss/browser': '^4.1.0' };
+        // 註解還寫著舊版號 → 要被抓到
+        assert.equal(versionCommentMismatches('版本：@tailwindcss/browser 4、gsap 3.13.0、mathjax 3。', deps).length, 1);
+        // 註解只寫主版號 → 合法（mathjax 一向這樣寫）
+        assert.deepEqual(versionCommentMismatches('版本：@tailwindcss/browser 4、gsap 3、mathjax 3。', deps), []);
+        // 整個套件沒寫在註解裡 → 要被抓到
+        assert.equal(versionCommentMismatches('版本：mathjax 3。', deps).length, 2);
     });
 
     test('voice-route 注入點：index.html 有佔位字串、app.js 用 replaceAll 換、tutor.js 從 <meta> 讀', () => {

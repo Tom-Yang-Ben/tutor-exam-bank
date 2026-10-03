@@ -12,6 +12,13 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+        # gsap 不進群組：public/index.html 與 test/unit/publicOffline.test.js 鎖住它的主版號與
+        # 註解裡的版本（離線 vendor 的版本不能和說明不一致），升版要順手改那行註解。
+        # 分組時它一紅就把同一個 PR 裡其他套件的修補版一起扣住（#54 踩過），所以讓它單獨開 PR。
+        # 用 exclude-patterns 而不是 ignore：ignore 會連 security update 一起吃掉，
+        # 那樣 gsap 哪天出 CVE 就收不到通知。同 electron「不分組、紅燈當提醒」的做法。
+        exclude-patterns:
+          - gsap
   # 桌面版（Electron 殼，docs/desktop-app-design.md R-7）。〔Owner 2026-10-01 同意：選 1、分組選 B〕
   # 頻率與 PR 上限照上面 /exam_pro；**不分組**（分組選 B）：每個有新版的套件各開一個 PR。
   # desktop/package.json 的直接相依只有 electron（鎖死 44.4.5），分組只包一個套件沒有好處，
