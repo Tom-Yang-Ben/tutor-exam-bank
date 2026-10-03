@@ -138,6 +138,8 @@ if (featuresWs3A.FEATURE_STUDENTS) {
     // GET /students 已依裁決 S4-2 搬到上方核心區（組卷下拉恆常需要，不該吃這個旗標）
     router.get('/students/:id/papers', studentController.listStudentPapers);
     router.get('/students/:id/weakness', studentController.getWeakness);
+    // 〔dec/r16-remedial〕學習報告（只讀、不呼叫 LLM；docs/student-report.md）
+    router.get('/students/:id/report', require('../controllers/reportController').getReport);
     router.get('/papers/:id', paperController.getPaper);
     router.patch('/papers/:id/results', paperController.patchResults);
 }

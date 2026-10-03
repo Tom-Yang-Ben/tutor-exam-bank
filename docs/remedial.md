@@ -280,6 +280,7 @@ body：
 | `migrations/0022_paper_kind_targets.sql` | 〔dec/r16-remedial〕`exam_papers.kind`、`targets`（第 10.1 節） |
 | `services/remedialFillService.js` | 〔dec/r16-remedial〕題庫不夠時自動補題：藍本挑選、分配與上限、先檢索、建變式 job（第 11 節） |
 | `services/remedialProvenance.js` | 〔dec/r16-remedial〕補題來源註記：入庫時抄到題目、複核畫面的 `remedial_for`、合併學生（第 11.3 節） |
+| `services/assistantService.js` | 〔擴充〕〔dec/r16-remedial〕助教的 `plan_remedial_paper`、`get_remedial_effect`（`FEATURE_REMEDIAL` 開啟才有；第 12 節） |
 | `migrations/0023_remedial_variant_provenance.sql` | 〔dec/r16-remedial〕`jobs.target_student_id`、`questions.target_student_id`／`target_source_question_id`（第 11.3 節） |
 
 ---
@@ -378,6 +379,8 @@ body：
 | 整合 | `test/integration/remedialErrorFocus.pg.test.js` | 〔dec/r16-remedial〕依錯因出題：套用（降上限＋偏好，連抽 6 次）、同票、沒標錯因、R10、退回上限、退回也不夠、知識點基底、草稿不寫庫 |
 | 單元 | `test/unit/remedialFill.test.js` | 〔dec/r16-remedial〕補題 body 驗證、藍本順序、分配與上限、錯題查詢（R10）、`fillShortfall` 組裝（先檢索、合流、上限、跳過）、前端與複核畫面的純函式 |
 | 整合 | `test/integration/remedialFill.pg.test.js` | 〔dec/r16-remedial〕0023、藍本挑選與 R10、建 job 帶來源、先檢索、合流、上限 5 題、跳過、400／404／旗標；假 agent 跑完生成：input 不含學生資料、複核的 `remedial_for`、approve 與自動入庫抄來源、一般變式不抄；刪除與合併學生 |
+| 單元 | `test/unit/assistantRemedialTools.test.js` | 〔dec/r16-remedial〕旗標關閉時助教的 SYSTEM 與模板雜湊逐字不變（釘值）、開啟時多兩個工具與另一個識別名、參數驗證、代號、摘要不含卷名 |
+| 整合 | `test/integration/studentReport.pg.test.js` | 〔dec/r16-remedial〕助教的兩個工具接真的資料庫（假 LLM）：只預覽不寫庫、prompt 與鍵沒有姓名；學習報告（見 `docs/student-report.md`） |
 | 整合 | `test/integration/remedialEffect.pg.test.js` | 〔dec/r16-remedial〕0022（預設、CHECK、再套一次）；`confirm-paper` 存 `kind`／`targets`、不合法 400 不寫、一般卷 normal、純重練卷 retrain；補救成效（improved／worse／insufficient_data／pending、只算批改完之後建立的卷、R10、知識點加權、days、新到舊、limit、從草稿一路到成效、404／400、旗標關閉） |
 
 整合測試自己插入知識點、`question_kcs`、`kc_prerequisites`、`attempts` fixture，不依賴 WS-C 的種子檔。
@@ -636,4 +639,22 @@ cassette 的鍵都不變（整合測試檢查 agent 收到的 input）。姓名�
 （上次重錄 60 題整步 17,292 秒，見 `docs/local-mode.md`）。一次最多 5 題 → 大約 **20～30 分鐘**；runner 依 `JOB_CONCURRENCY` 並行，
 但本機模型通常一次只跑一支，所以實際接近依序。畫面上的「重新整理進度」讀既有的 `GET /api/jobs/:id`（排隊中／生成中／檢查中／完成，
 以及待複核、已入庫、不採用的題數）。Gemini 模式快得多，但每題要花 API 費用（`VARIANT_TOKEN_BUDGET_USD` 照舊是每個 job 的上限）。
+
+---
+
+## 12. 助教的補救卷工具（〔dec/r16-remedial〕）
+
+`FEATURE_REMEDIAL` 開啟時，對話式助教（`services/assistantService.js`）多兩個**只讀**工具：
+
+| 工具 | 參數 | 回傳給主控的內容 |
+|---|---|---|
+| `plan_remedial_paper` | `student_name`（必填）、`subject`（必填）、`total`（5–50，預設 20）、`days`（1–365，預設 90） | 跑一次 `planRemedialPaper`（與畫面上「產生草稿」同一段程式，**只預覽、不寫庫、不確認出卷**）：`basis`、題數、每個目標的桶／單位／要幾題找到幾題／理由／錯因主因與調整、不足量、notes。不含題目內容 |
+| `get_remedial_effect` | `student_name`（必填）、`limit`（1–10，預設 5） | `loadRemedialEffect` 的摘要：每份補救卷的日期、批改完了沒、每個補救單位的狀態、補救前與之後的答對率、樣本少。**不放卷名**（卷名含學生姓名） |
+
+- **旗標關閉（CI 的情況）時一切不變**：系統提示詞（含工具說明書）`SYSTEM`、模板識別名 `assistant.v2` 與它的雜湊、工具清單都與加工具之前逐字相同
+  （`test/unit/assistantRemedialTools.test.js` 釘住 SYSTEM 的 sha256 與模板雜湊）。助教沒有 eval suite、`eval/cassettes` 裡也沒有 assistant 的回放檔，
+  所以這兩個工具不影響任何 eval 與 cassette。
+- **旗標開啟時**用另一份說明書 `SYSTEM_REMEDIAL`（多一句「補救卷同樣只能預覽」與兩個工具）與另一個模板識別名 `assistant.v2+remedial.v1`：
+  說明書不同、鍵就不同，不會讀到別份說明書錄的回應。
+- 學生姓名照舊不出境（DEC-009）：主控看到「學生#3」，工具參數換回姓名再查；工具結果進 prompt 前一樣經 `pseudo.mask`。
 

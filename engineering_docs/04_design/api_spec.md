@@ -166,6 +166,7 @@ app.use((err, req, res, next) => {
 | `FEATURE_REMEDIAL`〔修訂 2026-09-24〕 | `POST /api/students/:id/remedial-paper`（只產草稿）、`GET /api/students/:id/remedial-paper/items?ids=`（手動加題前查整組；只讀） | FR-031 | — |
 | `FEATURE_REMEDIAL`〔修訂 2026-09-24〕 | `GET /api/coverage` | FR-033 | — |
 | `FEATURE_REMEDIAL`〔修訂 2026-10-03 dec/r16-remedial〕 | `POST /api/students/:id/remedial-paper`（擴充：補救組的 `blueprint` 列多 `error_focus`——依錯因出題；頂層多 `targets` 目標快照）、`GET /api/students/:id/remedial-effect?limit=&days=`（新增：補救成效，只讀；還沒套 0022 → 503）；`POST /api/confirm-paper` 接受 `kind: "remedial"`＋`targets`（核心端點，不吃旗標；見 `docs/remedial.md` §9、§10） | FR-031 | — |
+| `FEATURE_STUDENTS`〔修訂 2026-10-03 dec/r16-remedial〕 | `GET /api/students/:id/report?days=&audience=teacher\|parent&format=json\|html\|docx`（新增：學習報告，確定性、不呼叫 LLM；重練與補救成效兩節跟著 `FEATURE_RETRAIN`／`FEATURE_REMEDIAL`；見 `docs/student-report.md`） | FR-022 | — |
 | `FEATURE_REMEDIAL`＋`FEATURE_VARIANTS`〔修訂 2026-10-03 dec/r16-remedial〕 | `POST /api/students/:id/remedial-paper/fill-shortfall`（新增：庫存不足的補救單位用該生的錯題建變式 job，先檢索、一次最多生成 5 題；還沒套 0023 → 503）；`GET /api/review`、`GET /api/review/:jqId` 補題的列多 `remedial_for`（見 `docs/remedial.md` §11） | FR-031 | 10/min |
 | `FEATURE_TUTOR`〔修訂 2026-09-24〕 | `POST /api/tutor` | FR-034 | 10/min（可調） |
 | `FEATURE_VOICE`＋`FEATURE_TUTOR`〔修訂 2026-09-24〕 | `POST /api/voice/transcribe`（multipart `audio`，memoryStorage、≤5 MB） | FR-035 | 10/min（可調） |

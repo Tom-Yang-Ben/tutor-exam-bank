@@ -561,6 +561,63 @@ function request(app, url, options) {
     return mockResponse({ message: `mock 沒有覆蓋 ${method} ${url}` }, 501);
 }
 
+// ───────────────────────── 〔dec/r16-remedial〕學習報告（docs/student-report.md）─────────────────────────
+
+/** 報告的讀者（與伺服器 services/studentReportService.js 的 AUDIENCES 相同）。 */
+export const REPORT_AUDIENCES = [['teacher', '老師版'], ['parent', '家長版']];
+
+/**
+ * GET /api/students/:id/report 的網址（純函式）。
+ * @param {number} studentId
+ * @param {{days:number|string, audience:string, format:'json'|'html'|'docx'}} p
+ * @returns {string}
+ */
+export function reportUrl(studentId, { days, audience, format }) {
+    const params = new URLSearchParams({ days: String(days), audience, format });
+    return `/api/students/${studentId}/report?${params.toString()}`;
+}
+
+/**
+ * 「學習報告」那一列：選讀者，按「列印報告」開一個可列印的新視窗、按「下載 Word」存 .docx。
+ * 報告由伺服器產生（不呼叫 LLM）；用 apiFetch 取回再交給瀏覽器，金鑰標頭照常帶得到。
+ * @param {object} app
+ * @param {number} studentId
+ * @param {string} days
+ * @returns {HTMLElement}
+ */
+function reportBar(app, studentId, days) {
+    const box = el('div', 'mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-4', { id: 'stuReport' });
+    box.appendChild(el('p', 'eyebrow text-indigo-500 mr-2', { textContent: `學習報告（近 ${days} 天）` }));
+    const audience = el('select', 'field-control min-h-0 p-2 text-sm', { id: 'stuReportAudience', 'aria-label': '報告給誰看' });
+    for (const [v, label] of REPORT_AUDIENCES) audience.appendChild(el('option', '', { value: v, textContent: label }));
+    const print = el('button', 'text-sm px-3 py-2 rounded-xl border border-indigo-200 bg-white font-bold text-indigo-700 hover:bg-indigo-50 cursor-pointer', {
+        type: 'button', id: 'stuReportPrint', textContent: '列印報告'
+    });
+    const word = el('button', 'text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white font-bold text-slate-600 hover:bg-slate-50 cursor-pointer', {
+        type: 'button', id: 'stuReportDocx', textContent: '下載 Word'
+    });
+    const open = async (format) => {
+        const res = await request(app, reportUrl(studentId, { days, audience: audience.value, format }));
+        if (!res.ok) { app.showToast(await messageOf(res), 'error'); return; }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        if (format === 'html') {
+            const w = window.open(url, '_blank');
+            if (!w) app.showToast('瀏覽器擋下了新視窗，請允許彈出視窗後再按一次。', 'error');
+        } else {
+            const a = el('a', '', { href: url, download: `學習報告（${audience.value === 'parent' ? '家長版' : '老師版'}）.docx` });
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+    };
+    print.addEventListener('click', () => { open('html').catch(() => app.showToast('報告產生失敗', 'error')); });
+    word.addEventListener('click', () => { open('docx').catch(() => app.showToast('報告產生失敗', 'error')); });
+    box.append(audience, print, word);
+    return box;
+}
+
 // ───────────────────────── DOM 小工具 ─────────────────────────
 
 /**
@@ -1818,6 +1875,8 @@ async function loadStudentView(app) {
     weaknessBox.appendChild(el('div', 'mt-4', {})).appendChild(
         recentWrongList(app, weakness.recent_wrong, currentStudentId, labelOf)
     );
+    // 〔dec/r16-remedial〕學習報告（列印、Word；同一個時間窗）
+    weaknessBox.appendChild(reportBar(app, studentId, days));
 
     // 深連結：組卷後按「立即批改」進來時，把那一張卷直接展開。
     if (pendingPaperId !== null) {

@@ -1200,6 +1200,40 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { description: ":id 不合法或學生不存在；FEATURE_REMEDIAL 關閉時路由不存在" }
         "503": { description: 資料庫還沒套 migrations/0022_paper_kind_targets.sql }
+  # 修訂 2026-10-03（dec/r16-remedial 學習報告，docs/student-report.md）
+  /students/{id}/report:
+    get:
+      tags: [students]
+      summary: 學習報告（老師版／家長版；確定性、不呼叫 LLM；FEATURE_STUDENTS）
+      operationId: getStudentReport
+      parameters:
+        - { $ref: "#/components/parameters/IdPath" }
+        - { name: days, in: query, schema: { type: integer, minimum: 1, maximum: 365, default: 30 } }
+        - { name: audience, in: query, schema: { type: string, enum: [teacher, parent], default: teacher } }
+        - { name: format, in: query, schema: { type: string, enum: [json, html, docx], default: json } }
+      responses:
+        "200":
+          description: "json：報告（家長版不含內部代碼）；html：可列印的完整頁；docx：Word 下載"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  student: { type: object }
+                  audience: { type: string, enum: [teacher, parent] }
+                  generated_on: { type: string }
+                  period: { type: object, properties: { days: { type: integer }, from: { type: string }, to: { type: string } } }
+                  summary: { type: object }
+                  weakest_chapters: { type: array, items: { type: object } }
+                  error_types: { type: array, items: { type: object } }
+                  weekly_trend: { type: array, items: { type: object } }
+                  retrain: { type: ["object", "null"], description: FEATURE_RETRAIN 關閉時 null }
+                  remedial_effect: { type: ["object", "null"], description: FEATURE_REMEDIAL 關閉時 null }
+                  suggestions: { type: array, items: { type: object, properties: { code: { type: string, description: 只有老師版 }, text: { type: string } } } }
+            text/html: { schema: { type: string } }
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document: { schema: { type: string, format: binary } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { description: ":id 不合法或學生不存在；FEATURE_STUDENTS 關閉時路由不存在" }
   # 修訂 2026-10-03（dec/r16-remedial 題庫不夠時自動補題，docs/remedial.md 第 11 節）
   /students/{id}/remedial-paper/fill-shortfall:
     post:
