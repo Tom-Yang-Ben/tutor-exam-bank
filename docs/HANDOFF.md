@@ -500,7 +500,10 @@ git add eval/cassettes eval/fixtures/embeddings.*.json
 - 主目錄 `exam_pro/node_modules` 偶爾壞掉 → `npm ci`。
 - 四個 worktree 的 `.env` 是從主目錄複製的；`npm ci` 要各自跑。
 - **FEATURE_SIMILAR=true 時 e2e 的 dedup1 需要 sample PDF 題的向量**：CI 沒設這個旗標，dedup1 一路 skipped 所以恆綠；本機 .env 開著就會 embed fixture miss → 0 題入庫。已於 0c79865 補錄 16 筆向量進 fixture；之後 fixture 若重建，記得用 LLM_MODE=replay EMBED_MODE=record FEATURE_SIMILAR=true 跑一次管線補齊。
-- bash 裡 node -e 的字串**絕不能含反引號**（會被當指令替換執行——踩過兩次，一次把 nlqHeuristics.js 當 shell 跑出五個空檔案）：多行編輯一律先 Write 腳本檔再 node 執行。
+- bash 裡**任何雙引號字串都絕不能含反引號**（會被當指令替換執行），不只 `node -e`：
+  - `node -e`：踩過兩次，一次把 nlqHeuristics.js 當 shell 跑出五個空檔案。多行編輯一律先 Write 腳本檔再 node 執行。
+  - `gh pr create --body` / `gh pr comment --body` / `gh pr close --comment`：2026-10-04 踩過。Markdown 的行內程式碼一定有反引號，bash 會去執行 `.claude/CLAUDE.md`、`docs/HANDOFF.md` 這些被引用到的檔名，裡面的 `>` 還會在 repo 根目錄建出以內文為檔名的空檔，PR body 同時被吃掉。**一律先 Write 到暫存目錄再 `--body-file`／`--comment-file`**。
+  - 同理適用任何「訊息本身是 Markdown」的指令參數（`git commit -m`、`gh issue` 等）。commit 訊息用 `git commit -F -` 搭 **單引號** heredoc（`<<'EOF'`）才安全；不加引號的 `<<EOF` 一樣會展開反引號與 `$`。
 
 ## 9. 給新對話的起手式
 1. 讀本檔 + memory（自動）。
