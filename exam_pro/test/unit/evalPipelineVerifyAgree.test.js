@@ -68,8 +68,9 @@ describe('契約：SUITE_METRICS、白名單、thresholds.json', () => {
 
     test('thresholds.json：verify_agree_rate 0.87（首次實測 0.9000 − 0.03），原本三個數字不動，來源照慣例記在 pipeline 節', () => {
         assert.deepEqual(FILE.pipeline.pipeline,
-            // 〔Owner 2026-10-03 第 r14 輪 C-1〕多 chapter_acc_rate 0.77（evalPipelineChapterAcc.test.js），其餘不動
-            { saved_rate: 0.87, gate_pass_rate: 0.97, answer_agree_rate: 0.87, verify_agree_rate: 0.87, chapter_acc_rate: 0.77 });
+            // 〔Owner 2026-10-03 第 r14 輪 C-1〕多 chapter_acc_rate（evalPipelineChapterAcc.test.js），其餘不動；
+            // 〔r15 dec/r15-chapter-acc〕chapter_acc_rate 實測 1.0000 之後 ratchet 0.77 → 0.97
+            { saved_rate: 0.87, gate_pass_rate: 0.97, answer_agree_rate: 0.87, verify_agree_rate: 0.87, chapter_acc_rate: 0.97 });
         assert.equal(Math.round((0.9 - th.BASELINE_MARGIN) * 10000) / 10000, FILE.pipeline.pipeline.verify_agree_rate);
         const note = FILE.pipeline._note_verify_agree_rate;
         assert.ok(typeof note === 'string', 'pipeline 節要有 _note_verify_agree_rate');
@@ -142,12 +143,13 @@ describe('pipelineNotApplicable：條件', () => {
 });
 
 describe('門檻比對（eval/thresholds.json 本身）', () => {
-    // 〔Owner 2026-10-03 第 r14 輪 C-1〕thresholds.json 多了 chapter_acc_rate 門檻（0.77）：量測照新契約帶 0.8（達標），這一節只看答案指標
+    // 〔Owner 2026-10-03 第 r14 輪 C-1〕thresholds.json 多了 chapter_acc_rate 門檻：量測照新契約帶一個達標的值，這一節只看答案指標
+    //（〔r15〕門檻 0.77 → 0.97，帶的值 0.8 → r15 實測的 1）
     const OCR = { saved_rate: suite.OCR_SAVED_RATE_NOTE };
 
     test('全部 no_claim：answer_agree_rate n/a 不算失敗、列在「未設門檻」；verify_agree_rate 0.90 ≥ 0.87 過', () => {
         const r = th.compareSuite(FILE, 'pipeline',
-            { pipeline: { saved_rate: null, gate_pass_rate: 0.97, answer_agree_rate: null, verify_agree_rate: 0.9, chapter_acc_rate: 0.8, n: 10 } },
+            { pipeline: { saved_rate: null, gate_pass_rate: 0.97, answer_agree_rate: null, verify_agree_rate: 0.9, chapter_acc_rate: 1, n: 10 } },
             { notApplicable: { pipeline: { ...OCR, answer_agree_rate: suite.ALL_NO_CLAIM_NOTE } } });
         assert.deepEqual(r.failures, []);
         assert.equal(r.checked, 3);   // gate_pass_rate、verify_agree_rate、chapter_acc_rate（〔r14 C-1〕）
@@ -156,16 +158,16 @@ describe('門檻比對（eval/thresholds.json 本身）', () => {
 
     test('全部 no_claim：verify_agree_rate 低於 0.87 或量不到都是失敗', () => {
         const na = { notApplicable: { pipeline: { answer_agree_rate: suite.ALL_NO_CLAIM_NOTE } } };
-        const low = th.compareSuite(FILE, 'pipeline', { pipeline: { saved_rate: 0.9, gate_pass_rate: 1, answer_agree_rate: null, verify_agree_rate: 0.86, chapter_acc_rate: 0.8 } }, na);
+        const low = th.compareSuite(FILE, 'pipeline', { pipeline: { saved_rate: 0.9, gate_pass_rate: 1, answer_agree_rate: null, verify_agree_rate: 0.86, chapter_acc_rate: 1 } }, na);
         assert.deepEqual(low.failures, ['pipeline.verify_agree_rate：0.8600 < 門檻 0.87']);
-        const gone = th.compareSuite(FILE, 'pipeline', { pipeline: { saved_rate: 0.9, gate_pass_rate: 1, answer_agree_rate: null, verify_agree_rate: null, chapter_acc_rate: 0.8 } }, na);
+        const gone = th.compareSuite(FILE, 'pipeline', { pipeline: { saved_rate: 0.9, gate_pass_rate: 1, answer_agree_rate: null, verify_agree_rate: null, chapter_acc_rate: 1 } }, na);
         assert.deepEqual(gone.failures, ['pipeline.verify_agree_rate：門檻 0.87 但這次是 n/a']);
-        const edge = th.compareSuite(FILE, 'pipeline', { pipeline: { saved_rate: 0.9, gate_pass_rate: 1, answer_agree_rate: null, verify_agree_rate: 0.87, chapter_acc_rate: 0.8 } }, na);
+        const edge = th.compareSuite(FILE, 'pipeline', { pipeline: { saved_rate: 0.9, gate_pass_rate: 1, answer_agree_rate: null, verify_agree_rate: 0.87, chapter_acc_rate: 1 } }, na);
         assert.deepEqual(edge.failures, []);
     });
 
     test('有非 no_claim 的題（沒宣告不比）：answer_agree_rate 照舊比 0.87——n/a 與 0.80 都是失敗', () => {
-        const base = { saved_rate: 0.9, gate_pass_rate: 1, verify_agree_rate: 0.9, chapter_acc_rate: 0.8 };
+        const base = { saved_rate: 0.9, gate_pass_rate: 1, verify_agree_rate: 0.9, chapter_acc_rate: 1 };
         assert.deepEqual(th.compareSuite(FILE, 'pipeline', { pipeline: { ...base, answer_agree_rate: null } }).failures,
             ['pipeline.answer_agree_rate：門檻 0.87 但這次是 n/a']);
         assert.deepEqual(th.compareSuite(FILE, 'pipeline', { pipeline: { ...base, answer_agree_rate: 0.8 } }).failures,
@@ -175,15 +177,15 @@ describe('門檻比對（eval/thresholds.json 本身）', () => {
 
     test('沒有 no_claim 的題（Gemini／交叉驗證）：verify_agree_rate n/a 不算失敗，answer_agree_rate 照比', () => {
         const na = { notApplicable: { pipeline: { verify_agree_rate: suite.NO_NO_CLAIM_NOTE } } };
-        const ok = th.compareSuite(FILE, 'pipeline', { pipeline: { saved_rate: 0.9, gate_pass_rate: 1, answer_agree_rate: 0.9, verify_agree_rate: null, chapter_acc_rate: 0.8 } }, na);
+        const ok = th.compareSuite(FILE, 'pipeline', { pipeline: { saved_rate: 0.9, gate_pass_rate: 1, answer_agree_rate: 0.9, verify_agree_rate: null, chapter_acc_rate: 1 } }, na);
         assert.deepEqual(ok.failures, []);
         assert.equal(ok.checked, 4);   // 〔r14 C-1〕多 chapter_acc_rate
-        const bad = th.compareSuite(FILE, 'pipeline', { pipeline: { saved_rate: 0.9, gate_pass_rate: 1, answer_agree_rate: 0.5, verify_agree_rate: null, chapter_acc_rate: 0.8 } }, na);
+        const bad = th.compareSuite(FILE, 'pipeline', { pipeline: { saved_rate: 0.9, gate_pass_rate: 1, answer_agree_rate: 0.5, verify_agree_rate: null, chapter_acc_rate: 1 } }, na);
         assert.deepEqual(bad.failures, ['pipeline.answer_agree_rate：0.5000 < 門檻 0.87']);
     });
 
     test('沒宣告不比時 verify_agree_rate n/a 是失敗（舊報表、cassette 被誤刪不會變綠）', () => {
-        const r = th.compareSuite(FILE, 'pipeline', { pipeline: { saved_rate: 0.9, gate_pass_rate: 1, answer_agree_rate: 0.9, chapter_acc_rate: 0.8 } });
+        const r = th.compareSuite(FILE, 'pipeline', { pipeline: { saved_rate: 0.9, gate_pass_rate: 1, answer_agree_rate: 0.9, chapter_acc_rate: 1 } });
         assert.deepEqual(r.failures, ['pipeline.verify_agree_rate：門檻 0.87 但這次是 n/a']);
     });
 });
@@ -195,8 +197,8 @@ describe('報表與回放驗證表', () => {
 
     const res = {
         suite: 'pipeline',
-        // 〔Owner 2026-10-03 第 r14 輪 C-1〕報表照新契約帶 chapter_acc_rate（0.8 ≥ 0.77）
-        measured: { pipeline: { saved_rate: null, gate_pass_rate: 0.8, answer_agree_rate: null, verify_agree_rate: 0.9, chapter_acc_rate: 0.8, n: 10 } },
+        // 〔Owner 2026-10-03 第 r14 輪 C-1〕報表照新契約帶 chapter_acc_rate（〔r15〕1 ≥ 0.97）
+        measured: { pipeline: { saved_rate: null, gate_pass_rate: 0.8, answer_agree_rate: null, verify_agree_rate: 0.9, chapter_acc_rate: 1, n: 10 } },
         notApplicable: { pipeline: { saved_rate: suite.OCR_SAVED_RATE_NOTE, answer_agree_rate: suite.ALL_NO_CLAIM_NOTE } },
         ocrOnly: { saved_rate_note: suite.OCR_SAVED_RATE_NOTE, pre_approval: { passed: 10, total: 10, rate: 1 } },
         verifyAgree: { n: 10, by_answer_text: { agree: 9, rate: 0.9 }, by_final_answer: { agree: 5, rate: 0.5 }, note: suite.VERIFY_AGREE_NOTE },

@@ -161,10 +161,10 @@ suite 仍保留「`source='gate'` 應為 0」的斷言——那是這條約定�
 | `gate_pass_rate` | classify 零成本閘門通過率 | 0.97 | OCR 模式（本機 classify 走 LLM 不花錢、拆題模型猜的章節不可靠；數字照印。Owner 2026-10-03 第 r14 輪 C-1） |
 | `answer_agree_rate` | 拆題寫的答案對驗算模型答案的一致率（分母只算 agree／disagree／uncertain） | 0.87 | 全部題目都是 `no_claim`（拆題沒寫答案；Owner 2026-10-02 A 案） |
 | `verify_agree_rate` | 拆題沒寫答案（verify 記 `no_claim`）的題：驗算模型答案對答案卷 `answer_text` 的一致率 | 0.87（首次實測 0.9000 − 0.03，Owner 2026-10-02 A 案） | 沒有任何一題是 `no_claim` |
-| `chapter_acc_rate` | 章節正確率：有 classify 結果的題，最後章節等於答案卷 `chapter` 的比例（配不上答案卷的題算錯） | 0.77（首次實測 0.8000 − 0.03，Owner 2026-10-03 第 r14 輪 C-1） | 兩種模式都比 |
+| `chapter_acc_rate` | 章節正確率：有 classify 結果的題，最後章節等於答案卷 `chapter` 的比例（配不上答案卷的題算錯） | 0.97（實測 1.0000 − 0.03；首次 0.77＝0.8000 − 0.03，Owner 2026-10-03 第 r14 輪 C-1） | 兩種模式都比 |
 
 「不比」只認 `eval/lib/thresholds.js` 的白名單 `NOT_APPLICABLE_ALLOWED`；條件由 `eval/lib/suitePipeline.js` 判斷，
-細節見 `docs/local-mode.md` 10.25 第 6 點（答案的兩個指標）與 10.27 第 1 點（`gate_pass_rate`、`chapter_acc_rate`）。
+細節見 `docs/local-mode.md` 10.25 第 6 點（答案的兩個指標）、10.27 第 1 點（`gate_pass_rate`、`chapter_acc_rate`）與 10.28（章節錯題的根因修正、`chapter_acc_rate` 升到 0.97）。
 
 ### 兩個 suite 現在的狀態
 

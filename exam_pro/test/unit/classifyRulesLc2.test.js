@@ -43,10 +43,12 @@ describe('① 誤觸檢查：現有的全部文字', () => {
     // 1,108 → 1,167、有章 958 → 1,017；pipeline 錄的 classify.v2 多 2 筆（樣卷第 6、10 題），模型回答 466 → 468。10.22 第 3 點的附記。
     // 〔2026-10-02 樣卷改用 extract_ocr.v3 重錄入庫〕拆出的題幹寫法變了（例如選項括號），pipeline 多錄 2 支 classify.v2（樣卷第 6、10 題的新題幹），
     // 模型回答 468 → 470；其中第 10 題同樣被規則 4 改成「平面運動」＝pdf_sample golden，工具只用 classify golden 對答案，所以列 unknown。
-    test('掃描範圍（10.22 第 3、7 點的數字；2026-10-02 重錄入庫後）：共 1,167 段、有章的 1,017 段、沒有章的 150 段（公式 golden）；模型回答 470 筆', () => {
+    // 〔2026-10-03 r15 閘門證據否決〕樣卷第 7 題（拆題模型給「位能與能量守恆」、題幹沒有能量線索）改走第二層，
+    // pipeline 補錄 1 支 classify.v2，模型回答 470 → 471；那一筆沒有被任何界線規則換章（下面逐筆列出的換章清單不變）。
+    test('掃描範圍（10.22 第 3、7 點的數字；2026-10-03 補錄後）：共 1,167 段、有章的 1,017 段、沒有章的 150 段（公式 golden）；模型回答 471 筆', () => {
         assert.equal(r.counts.labeled, 1167);
         assert.equal(r.counts.labeledWithChapter, 1017);
-        assert.equal(r.counts.predictions, 470);
+        assert.equal(r.counts.predictions, 471);
         assert.equal(r.counts.nlq, 90);
         const corpora = [...new Set(r.evidence.map(e => e.corpus))];
         assert.ok(corpora.includes('pdf_sample golden 題幹＋答案'), '有掃 pdf_sample golden');

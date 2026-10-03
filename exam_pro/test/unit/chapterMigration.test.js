@@ -118,6 +118,33 @@ describe('config/chapterMigrationRules.js', () => {
         assert.equal(rules.findNonCommonLogBase(undefined), null);
     });
 
+    // 〔r15 dec/r15-chapter-acc〕docs/local-mode.md 10.28：OCR 純文字的下標沒有大括號（log_10 2），原本只讀一個字元，被當成底數 1
+    test('〔r15〕findNonCommonLogBase：沒有大括號的數字下標讀一整串；以 10 開頭的一串當常用對數；字母只讀一個', () => {
+        // 常用對數（不算）
+        for (const text of [
+            'log_10 2',
+            '已知log_10 2=0.3010，利用log_10 5=log_10 $\\frac{10}{2}$求log_10 5之近似值。',   // 樣卷第 8 題的 OCR 原文
+            'log_102=0.3010',                    // OCR 把 log_10 2 的空白吃掉
+            '$\\log_{10} 2$',
+            '$\\log_{ 10 } 2$',
+            '$\\log_10 2$',                      // LaTeX 沒寫大括號（排版上是錯的，但意思是常用對數）
+            'log_ 10 2'
+        ]) {
+            assert.equal(rules.findNonCommonLogBase(text), null, text);
+        }
+        // 底數不是 10（算）
+        assert.equal(rules.findNonCommonLogBase('log_2 8+log_2 4之值为何?'), 'log_2', '樣卷第 1 題的 OCR 原文照舊命中');
+        assert.equal(rules.findNonCommonLogBase('log_2 8'), 'log_2');
+        assert.equal(rules.findNonCommonLogBase('log_28'), 'log_28', 'OCR 吃掉空白的 log_2 8：整串 28 不以 10 開頭，照舊算底數不是 10');
+        assert.equal(rules.findNonCommonLogBase('$\\log_3 x$'), '\\log_3');
+        assert.equal(rules.findNonCommonLogBase('log_a b'), 'log_a', '字母只讀一個：b 是真數');
+        assert.equal(rules.findNonCommonLogBase('log_ab'), 'log_a');
+        assert.equal(rules.findNonCommonLogBase('$\\log_{\\frac12} x$'), '\\log_{\\frac12}');
+        assert.equal(rules.findNonCommonLogBase('$\\log_{\\frac{1}{2}} x$') !== null, true);
+        assert.equal(rules.findNonCommonLogBase('log_10 2 與 log_5 2'), 'log_5', '常用對數之後的非常用底仍會命中');
+        assert.equal(rules.findNonCommonLogBase('log_0.5 x'), 'log_0', '小數底數 0.5 不是 10');
+    });
+
     test('〔章節重整整合〕指數與對數：換底、指數／對數方程式與不等式、非常用底 → 指數函數與對數函數；常用對數留原章', () => {
         const targets = MIGRATION['數學']['指數與對數'].to;
         const to = t => (rules.matchKeywordRule('數學', targets, [[t]]) || {}).to || null;

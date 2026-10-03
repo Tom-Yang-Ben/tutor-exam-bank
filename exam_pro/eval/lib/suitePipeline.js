@@ -29,7 +29,7 @@
 //     定的（閘門通過＝省一次付費呼叫），本機 classify 走 LLM 不花錢，而拆題模型自己猜的章節不可靠（樣卷 8 題過閘門、其中 2 題章節錯），
 //     硬把閘門通過率推高只會讓章節更不準。Gemini（非 OCR）模式照舊比 0.97。
 //   - 新指標 **chapter_acc_rate**（章節正確率）＝有 classify 結果的題：最後的章節（payload.classify.chapter）等於答案卷 chapter 的比例。
-//     兩種模式都比門檻（thresholds.json 0.77＝首次實測 0.8000 − 0.03）。題目對答案卷用 eval/lib/pdfMatch.js 的配對規則；
+//     兩種模式都比門檻（thresholds.json 初值 0.77＝首次實測 0.8000 − 0.03；〔r15〕實測 1.0000 之後升到 0.97，docs/local-mode.md 10.28）。題目對答案卷用 eval/lib/pdfMatch.js 的配對規則；
 //     配不上答案卷的題算錯（不讓配對失敗變成好分數）。
 //
 // stub 狀態的處理與 compare_pipeline.js 相同：
@@ -384,7 +384,9 @@ async function runPipelineSuite(args) {
             idx: r.idx, state: r.state, review_reason: r.review_reason,
             chapter: (r.payload.classify && r.payload.classify.chapter) || r.payload.extract.chapter,
             classify_source: r.payload.classify && r.payload.classify.source,
-            retries: r.retries
+            retries: r.retries,
+            // 〔r15 dec/r15-chapter-acc〕零成本閘門的證據否決（docs/local-mode.md 10.28）：被否決的題才多這個鍵
+            ...(r.payload.classify && r.payload.classify.gate_veto ? { gate_veto: r.payload.classify.gate_veto } : {})
         })),
         meta: {
             pdf: isPrivate ? '（私有 PDF，路徑不記錄）' : path.relative(ROOT, pdfPath).replace(/\\/g, '/'),

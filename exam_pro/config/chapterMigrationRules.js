@@ -51,17 +51,36 @@ function findWideAngle(text) {
 }
 
 /**
+ * 〔r15 dec/r15-chapter-acc〕log 的下標（底數）：大括號整段、一串數字、或單一個英文字母。
+ * 原本沒有大括號時只吃一個字元：OCR 的純文字常寫成「log_10 2」（沒有大括號），會被讀成底數「1」——
+ * 樣卷第 8 題「已知 log_10 2=0.3010…」因此被當成第三冊的題（docs/local-mode.md 10.28）。
+ * 改成沒有大括號時讀**一整串數字**；字母照舊只讀一個（log_a b 的 b 是真數，不是底數的一部分）。
+ * findVariableLogArgument（utils/chapterPostRules.js）跳過下標時用同一個寫法，兩邊對「下標到哪裡為止」的判斷一致。
+ * 第 1 組是下標原文（大括號的含括號）。
+ */
+const LOG_SUBSCRIPT_SOURCE = String.raw`_\s*(\{[^}]*\}|\d+|[A-Za-z])`;
+
+/**
  * 〔章節重整整合〕底數不是 10 的對數：\log_{2}、\log_3、log_a、\log_{\frac12}… → 第三冊「指數函數與對數函數」。
  * \log_{10} 與不寫底數的 log（常用對數）不算。
+ * 〔r15 dec/r15-chapter-acc〕沒有大括號的數字下標讀一整串（見 LOG_SUBSCRIPT_SOURCE）：log_10 2、\log_10 2 是常用對數；
+ * 一串以「10」開頭的數字也當成底數 10——OCR 會把「log_10 2」的空白吃掉成「log_102」，高中題目幾乎不會出現
+ * 底數 100、102 這種對數，把它當常用對數是往「不換章」的方向錯。log_2 8、\log_3 x 照舊算底數不是 10。
  * @param {string} text
  * @returns {string|null} 命中的原文
  */
 function findNonCommonLogBase(text) {
-    const re = /\\?log_\s*(\{[^}]*\}|[A-Za-z0-9])/g;
+    const re = new RegExp(String.raw`\\?log${LOG_SUBSCRIPT_SOURCE}`, 'g');
     let m;
     while ((m = re.exec(String(text ?? ''))) !== null) {
-        const base = m[1].replace(/^\{|\}$/g, '').trim();
-        if (base && base !== '10') return m[0];
+        const sub = m[1];
+        if (sub.startsWith('{')) {
+            const base = sub.slice(1, -1).trim();
+            if (base && base !== '10') return m[0];
+            continue;
+        }
+        if (/^\d+$/.test(sub) && sub.startsWith('10')) continue;
+        return m[0];
     }
     return null;
 }
@@ -237,4 +256,4 @@ function validateRules(rules = KEYWORD_RULES) {
     return problems;
 }
 
-module.exports = { KEYWORD_RULES, matchKeywordRule, validateRules, normalizeForMatch, findWideAngle, findNonCommonLogBase, findVariableExponent, findFirstNTermsSum, findVariableZ };
+module.exports = { KEYWORD_RULES, matchKeywordRule, validateRules, normalizeForMatch, findWideAngle, findNonCommonLogBase, findVariableExponent, findFirstNTermsSum, findVariableZ, LOG_SUBSCRIPT_SOURCE };

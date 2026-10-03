@@ -53,11 +53,11 @@ flowchart LR
 
 | 項目 | 實測 | 門檻 | 結果 |
 |---|---|---|---|
-| unit／integration／e2e／desktop | 4,388（4,387 過、1 略過）／669／14 項中 12 過、2 略過／126 | 全過 | ✅ |
+| unit／integration／e2e／desktop | 4,408（4,407 過、1 略過）／669／14 項中 12 過、2 略過／126 | 全過 | ✅ |
 | retrieval | hybrid Recall@5 **1.0000**（LIKE 0.8750） | ≥ 0.97（共 9 個門檻） | ✅ |
 | classify | accuracy **0.9891**、macro-F1 **0.9744** | ≥ 0.87、≥ 0.8956 | ✅ |
 | nlq | 規則路徑：coverage 0.84、filters_exact 1.000、recall@10 1.000；LLM 輔路徑：filters_exact 1.000、recall@10 1.000 | 5 個門檻 | ✅ |
-| pipeline | chapter_acc_rate（章節正確率）**0.80**、verify_agree_rate（驗算答案對標準答案）0.90；gate_pass_rate（分類零成本閘門）0.80 只報告 | ≥ 0.77、≥ 0.87 | ✅ |
+| pipeline | chapter_acc_rate（章節正確率）**1.00**、verify_agree_rate（驗算答案對標準答案）0.90；gate_pass_rate（分類零成本閘門）0.70 只報告 | ≥ 0.97、≥ 0.87 | ✅ |
 | variant | retrieved_coverage **0.50**、gate_pass_rate 0.45（本機向量的門檻組） | ≥ 0.47、≥ 0.22 | ✅ |
 
 - pipeline 在 OCR 模式下：saved_rate 設計上一律是 0（每題都停在複核）；分類零成本閘門通過率只報告（本機的分類呼叫不花錢，而拆題模型自己猜的章節不可靠），兩者都不跟門檻比，章節對不對由 chapter_acc_rate 把關。Gemini 模式照樣要求 gate_pass_rate ≥ 0.97。
