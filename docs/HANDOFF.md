@@ -507,3 +507,30 @@ git add eval/cassettes eval/fixtures/embeddings.*.json
 2. 跑 §6「看進度」。
 3. 依狀態接續：四條第二輪未完 → 等；完了 → 試合併 → 合併 → CI；之後處理 variant 錄製（先問費用）、golden 定案、門檻、試用、README 數字。
 4. 回報時用表格、講清楚「做了什麼／數字／接下來要使用者做什麼」。
+
+## 10. 否決與擱置的升版決策
+
+重新提案之前先讀這一節（`.claude/CLAUDE.md` 維護契約第 6 條「拒絕有紀錄」；本 repo 沒有 `.out-of-scope/`，所以記在這裡）。
+
+### 10.1 MathJax 3 → 4：擱置（2026-10-04，Owner 裁定）
+
+Dependabot 的 `mathjax` 4.1.3 升版 PR（#43）已關閉。**不是因為測試紅燈，是因為照合會靜默弄壞所有數學排版。**以下是實際裝 `mathjax@4.1.3` 查證的結果，重新評估時不必重查：
+
+| 查證項 | v3（現況） | v4.1.3 |
+| :--- | :--- | :--- |
+| bundle 檔位置 | `es5/`（`app.js:63` 的 `dir: 'es5'`） | **沒有 `es5/`**，`tex-mml-chtml.js` 等直接在套件根目錄 |
+| CHTML 字型 | 套件內 `output/chtml/fonts/woff-v2` | **拆成獨立套件** `@mathjax/mathjax-newcm-font`（50 MB、105 個 woff2）；`output/` 只剩 `chtml.js`、`svg.js` |
+| 預設字型 | MathJax TeX | `mathjax-newcm`（**所有公式外觀會變**） |
+| `exports` 對應 | — | 有 `'./es5/*': './*'`，但 `packageDir()` 是組**檔案系統路徑**，繞過 `exports`，救不到 |
+
+連帶影響：
+
+- `/vendor/mathjax` 會指到不存在的目錄；而 `index.html` 各處都是 `if (window.MathJax && typeof window.MathJax.typesetPromise === 'function')`，載不到**不會報錯**，只是題目預覽、詳解預覽、組卷畫面的公式全部變成裸 LaTeX。
+- 離線 vendor 要從 1 條路由變 2 條，而且得改 `index.html` 的 `window.MathJax` loader 設定——`app.js:53` 的註解「index.html 的 window.MathJax 設定一個字都不用改」在 v4 不再成立。
+- `test/unit/publicOffline.test.js:176` 的 `assert.match(deps.mathjax, /^\^?3\./)` 要一起改。
+
+要做的話是一件前端基礎設施工作（2 條 vendor 路由、loader 設定、測試斷言、node_modules +50 MB），而且**必須由 Owner 開著系統逐頁肉眼確認公式排版**，不能只靠 CI。MathJax 3 目前運作正常，升級沒有解決任何現有痛點，所以擱置。Dependabot 之後還會再提，依本節直接關閉即可。
+
+### 10.2 gsap 維持 3.13.0（2026-10-04）
+
+Dependabot #41 的 `minor-and-patch` 群組含 `gsap` 3.13.0 → 3.15.0，已拆解：`docx` 與 `sharp` 由 PR #51 帶進來，`gsap` 不升。原因是 `public/index.html:47` 記著版本、`test/unit/publicOffline.test.js:177` 斷言 `deps.gsap === '3.13.0'`（本機離線 vendor 要與原本的 CDN 引用同版），而 gsap 在本專案只用在一個 `gsap.fromTo` 動效，升版沒有好處。
