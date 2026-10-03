@@ -26,6 +26,7 @@
 2.5 是契約之外多的一支（理由見第 6 節）。
 〔dec/r16-remedial〕2.2 的回應多了錯因（補救組 `blueprint` 列的 `error_focus`，第 9 節）與目標快照（`targets`，第 10.2 節）；
 另有第六支 `GET /api/students/:id/remedial-effect`（補救成效，第 10.3 節），同樣在 `FEATURE_REMEDIAL` 之後、只讀、不呼叫 LLM。
+第七支 `POST /api/students/:id/remedial-paper/fill-shortfall`（題庫不夠時自動補題，第 11 節）另需 `FEATURE_VARIANTS`，會建變式 job，所以有限流。
 
 ### 2.1 `GET /api/students/:id/weakness/kc?days=&subject=`
 
@@ -277,6 +278,9 @@ body：
 | `utils/remedialTargets.js` | 〔dec/r16-remedial〕`confirm-paper` 的 `kind`／`targets` 驗證（純函式，第 10.2 節） |
 | `services/remedialEffectService.js` | 〔dec/r16-remedial〕補救成效的聚合 SQL 與狀態判斷（第 10.3、10.4 節） |
 | `migrations/0022_paper_kind_targets.sql` | 〔dec/r16-remedial〕`exam_papers.kind`、`targets`（第 10.1 節） |
+| `services/remedialFillService.js` | 〔dec/r16-remedial〕題庫不夠時自動補題：藍本挑選、分配與上限、先檢索、建變式 job（第 11 節） |
+| `services/remedialProvenance.js` | 〔dec/r16-remedial〕補題來源註記：入庫時抄到題目、複核畫面的 `remedial_for`、合併學生（第 11.3 節） |
+| `migrations/0023_remedial_variant_provenance.sql` | 〔dec/r16-remedial〕`jobs.target_student_id`、`questions.target_student_id`／`target_source_question_id`（第 11.3 節） |
 
 ---
 
@@ -372,6 +376,8 @@ body：
 | 單元 | `test/unit/remedialErrorStrategy.test.js` | 〔dec/r16-remedial〕錯因對照表（每個代碼一列、標籤同白名單、預設策略）、錯因統計、主因門檻（2 筆、40% 邊界、同票、別科不適用）、難度上限、偏好鍵與反應式偵測；偏好排序交給真的 `pickPaperUnits`（偏好先抽、題數不少、同鍵仍隨機、承上組與家族互斥）；`buildPlan`／`buildTargets`／`planRemedialPaper` 的套用、退回與沒標錯因時逐字不變 |
 | 單元 | `test/unit/remedialEffect.test.js` | 〔dec/r16-remedial〕`confirm-paper` 的 `targets` 驗證（逐項的 400）、狀態門檻邊界、起算時間、目標成效組裝、SQL 參數順序與 R10、查詢參數、0022 檔案層級 |
 | 整合 | `test/integration/remedialErrorFocus.pg.test.js` | 〔dec/r16-remedial〕依錯因出題：套用（降上限＋偏好，連抽 6 次）、同票、沒標錯因、R10、退回上限、退回也不夠、知識點基底、草稿不寫庫 |
+| 單元 | `test/unit/remedialFill.test.js` | 〔dec/r16-remedial〕補題 body 驗證、藍本順序、分配與上限、錯題查詢（R10）、`fillShortfall` 組裝（先檢索、合流、上限、跳過）、前端與複核畫面的純函式 |
+| 整合 | `test/integration/remedialFill.pg.test.js` | 〔dec/r16-remedial〕0023、藍本挑選與 R10、建 job 帶來源、先檢索、合流、上限 5 題、跳過、400／404／旗標；假 agent 跑完生成：input 不含學生資料、複核的 `remedial_for`、approve 與自動入庫抄來源、一般變式不抄；刪除與合併學生 |
 | 整合 | `test/integration/remedialEffect.pg.test.js` | 〔dec/r16-remedial〕0022（預設、CHECK、再套一次）；`confirm-paper` 存 `kind`／`targets`、不合法 400 不寫、一般卷 normal、純重練卷 retrain；補救成效（improved／worse／insufficient_data／pending、只算批改完之後建立的卷、R10、知識點加權、days、新到舊、limit、從草稿一路到成效、404／400、旗標關閉） |
 
 整合測試自己插入知識點、`question_kcs`、`kc_prerequisites`、`attempts` fixture，不依賴 WS-C 的種子檔。
@@ -563,3 +569,71 @@ Owner 2026-10-03：補救卷原本只看「哪個單位弱」，不看「錯在�
   補救卷之後又改批改（重新存批改卡）時，起算時間跟著往後移。
 - 補救卷上某個目標的題全部被老師在草稿裡刪掉，快照仍在：`on_paper.assigned = 0`，`status` 照「之後」判斷。
 - 只追蹤經由草稿確認的補救卷（0022 之前出的補救卷是 `normal`，沒有快照）。
+
+---
+
+## 11. 題庫不夠時自動補題（〔dec/r16-remedial〕）
+
+補救卷草稿某個補救目標回報「庫存不足」時，老師按那一行的「**生成變式補題**」：系統拿這位學生在那個單位答錯的題當藍本，
+走既有的變式 job（`POST /api/questions/:id/variants` 背後的同一套：`services/variantService.js`、`agents/generateVariant.js`、
+job runner）出變式。生成好的題停在「待複核」，老師核准後重新產生草稿就抽得到。需要 `FEATURE_REMEDIAL`＋`FEATURE_VARIANTS`。
+
+### 11.1 `POST /api/students/:id/remedial-paper/fill-shortfall`
+
+body（只收列出的鍵）：
+
+| 鍵 | 必填 | 規則 | 預設 |
+|---|---|---|---|
+| `subject` | ✅ | 科目白名單 | — |
+| `days` | | 1–365：錯題看多久以內的（同草稿的時間窗） | 90 |
+| `difficulty_delta` | | −1／0／1（同 `variants` 端點） | 0 |
+| `units` | ✅ | 1–3 個 `{ unit_type: 'chapter'\|'kc', chapter, kc_id?（kc 必填）, needed（1–50）, error_type?（錯因代碼） }`；章節在白名單、不重複 | — |
+
+前端由草稿的 `blueprint` 列組出來：`needed`＝要的 − 找到的；錯因主因有套用時帶 `error_type`；知識點目標的 `blueprint` 列另帶 `kc_id`。
+
+回應（有建新 job 時 202，否則 200）：
+
+```json
+{ "student_id": 3, "subject": "數學", "max_generate": 5, "generating": 3, "capped": false, "retrieved_ids": [52],
+  "units": [{ "unit_type": "chapter", "chapter": "向量內積", "needed": 4, "sources_found": 3, "generating": 3, "unplanned": 0,
+              "items": [ { "source_question_id": 41, "mode": "retrieved", "retrieved": [{ "id": 52, "chapter": "向量內積", "difficulty": 3, "cosine": 0.91 }] },
+                         { "source_question_id": 38, "mode": "generating", "job_id": 12, "state": "queued", "existing": false, "count": 2, "retrieved": [] },
+                         { "source_question_id": 30, "mode": "skipped", "reason": "follow_up" } ] }],
+  "jobs": [{ "job_id": 12, "state": "queued", "existing": false, "source_question_id": 38, "chapter": "向量內積" }],
+  "notes": ["…"] }
+```
+
+錯誤：`:id` 不合法或學生不存在 → 404；body 不合法 → 400；任一旗標關閉 → 404（不掛載）；還沒套 0023 → 503（沒有建任何 job）；限流 10 次／分（獨立的桶）。
+
+### 11.2 規則（`services/remedialFillService.js`）
+
+1. **藍本**＝該生在這個單位、時間窗內**第一次作答**（檢視 `attempts`，R10：重練才錯的不算）答錯或部分給分的題，最近的先；
+   有 `error_type` 時，標了那個錯因的錯題排前面。承上題（`follow_up`）、沒有向量（`no_vector`）、已封存的題不能當藍本，跳過並回報。
+2. **分配**：`needed` 平均分給前幾個藍本（一個藍本一個 job，每個最多 `VARIANT_MAX_PER_REQUEST` 題）；**整個請求最多生成
+   `MAX_FILL_GENERATE = 5` 題**，超過的不生成（`capped`、`notes` 說明，核准後再按一次）。藍本不夠分時差的題數在 `unplanned`。
+3. **先檢索**：每個藍本先跑 `variantService.findRetrieved`（同科、同難度、不同家族、**該生沒寫過**、餘弦 ≥ 檢索下限）。
+   庫裡已經有夠用的相似題就不生成，把題號回報（`retrieved_ids`；老師用題目 ID 加進草稿）；不夠只生成差額。
+4. **生成**：`variantService.createVariantJob`（同一藍本已經在跑就合流，`existing: true`，不重複花錢）；`requested.student_id`
+   照舊給檢索排除他寫過的題，job 另記 `target_student_id`。變式 job 沒有逐份選引擎：`jobs.engine` 為 NULL＝照 `.env`。
+   `VARIANT_AUTO_APPROVE=false`（預設）時生成的題停在複核（`awaiting_approval`）。
+
+**學生資料不出境**：變式 agent 的 input（藍本題目、鄰居、兄弟題幹）與一般的變式完全相同，沒有學生 id 或姓名，所以 prompt 與
+cassette 的鍵都不變（整合測試檢查 agent 收到的 input）。姓名只出現在本機的複核畫面。
+
+### 11.3 來源註記（`migrations/0023_remedial_variant_provenance.sql`、`services/remedialProvenance.js`）
+
+- `jobs.target_student_id`：補題 job 為誰出（藍本是既有的 `jobs.source_question_id`）。
+- 核准入庫（`POST /api/review/:jqId/approve`）或自動入庫（runner 的 save）時，同一個交易把來源抄到 `questions.target_student_id`
+  與 `questions.target_source_question_id`（`variant_of` 是家族根，不一定是那一題錯題）。一般的變式、拆題不寫這兩欄。
+- `GET /api/review` 的列與 `GET /api/review/:jqId` 多 `remedial_for: { student_id, student_name, source_question_id }`（只有補題的列有），
+  複核卡片顯示「補救卷補題：為 王小明（學生 #3）的錯題 #41 生成」。
+- 外鍵都是 `ON DELETE SET NULL`；合併學生把註記搬到目標學生。沒套 0023 的庫讀不到這一欄＝當一般 job，不擋原本的流程。
+- 與 0022 分開：0022 動 `exam_papers`（補救成效），0023 動 `jobs`、`questions`（補題來源），兩件功能各自套用、各自驗。
+
+### 11.4 本機模式要多久
+
+變式在本機（`qwen3:8b`，CPU）一題生成的中位數約 **2 分 41 秒**（最慢約 6 分），加上分類、lint、驗算，整條約 **5 分鐘一題**
+（上次重錄 60 題整步 17,292 秒，見 `docs/local-mode.md`）。一次最多 5 題 → 大約 **20～30 分鐘**；runner 依 `JOB_CONCURRENCY` 並行，
+但本機模型通常一次只跑一支，所以實際接近依序。畫面上的「重新整理進度」讀既有的 `GET /api/jobs/:id`（排隊中／生成中／檢查中／完成，
+以及待複核、已入庫、不採用的題數）。Gemini 模式快得多，但每題要花 API 費用（`VARIANT_TOKEN_BUDGET_USD` 照舊是每個 job 的上限）。
+

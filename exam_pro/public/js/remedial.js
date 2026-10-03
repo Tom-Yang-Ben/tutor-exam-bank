@@ -22,6 +22,9 @@
 //   - 補救成效：草稿回應的 targets（目標快照）在確認時原樣帶給 confirm-paper（kind: 'remedial'）；
 //     區塊最下方「補救成效」列出這位學生的補救卷，每個補救目標「補救前 → 之後」的答對率與狀態
 //     （GET /api/students/:id/remedial-effect；選學生、確認出卷後重讀）。
+//   - 題庫不夠時自動補題（第 11 節；另需 FEATURE_VARIANTS）：補救目標「庫存不足」那一行多一顆「生成變式補題」，
+//     POST /api/students/:id/remedial-paper/fill-shortfall 以該生的錯題出變式；草稿下方列出排了哪些生成工作，
+//     「重新整理進度」讀既有的 GET /api/jobs/:id。生成好的題在「待複核」，核准後重新產生草稿才抽得到。
 //
 // 跨 module 的唯一通道：監聽 document 上的 `remedial:add`（detail.question_id），把題目加進目前的草稿。
 // 發送端是「找相似」結果每列的「加入補救卷」按鈕（〔stage5 WS-D〕掛鉤，見 docs/remedial.md）。
@@ -100,6 +103,12 @@ function retrainEnabled() {
     return parseBool(meta ? meta.content : '');
 }
 
+/** @returns {boolean} 〔dec/r16-remedial〕FEATURE_VARIANTS 是否開啟（「生成變式補題」要它） */
+function variantsEnabled() {
+    const meta = document.querySelector('meta[name="feature-variants"]');
+    return parseBool(meta ? meta.content : '');
+}
+
 function retrainRatio() {
     const meta = document.querySelector('meta[name="retrain-attach-ratio"]');
     return parseAttachRatio(meta ? meta.content : '');
@@ -140,7 +149,7 @@ export function remedialRequestBody({ subject, total, mix, days, scope, retrainC
 const KC_TABLE_LIMIT = 10;                   // 「知識點掌握度」只列最弱的 10 個
 
 /** 模組層狀態：目前的草稿與上一次確認的卷（重整就歸零）。 */
-const state = { draft: null, lastPaper: null };
+const state = { draft: null, lastPaper: null, fill: null };
 
 // ───────────────────────── 橋接與旗標 ─────────────────────────
 
@@ -324,6 +333,53 @@ export function errorFocusText(f) {
     const s = f.strategy || {};
     const fallback = f.reason === 'dominant_difficulty_fallback' ? '（降難度後題不夠，已退回原本的難度上限）' : '';
     return `錯因以「${f.label ?? f.type}」為主（${evidence}）→ ${s.summary ?? ''}${fallback}。${s.rationale ?? ''}`;
+}
+
+/** 一次最多生成幾題（與伺服器 services/remedialFillService.js 的 MAX_FILL_GENERATE 相同）。 */
+export const MAX_FILL_GENERATE = 5;
+
+/**
+ * 草稿的一列 blueprint → 補題請求的一個單位（純函式）。只有補救組、而且找到的比要的少才有；
+ * 知識點目標要有 kc_id（伺服器回的 blueprint 列會帶）。錯因主因有套用時一起帶，讓伺服器優先拿那種錯因的錯題當藍本。
+ * @param {object} row
+ * @returns {{unit_type:string, chapter:string, kc_id?:number, needed:number, error_type?:string}|null}
+ */
+export function fillUnitOf(row) {
+    if (!row || row.bucket !== 'remedial' || !(row.got < row.wanted) || !row.target) return null;
+    const isKc = row.target.type === 'kc';
+    if (isKc && !Number.isInteger(row.kc_id)) return null;
+    const unit = { unit_type: isKc ? 'kc' : 'chapter', chapter: row.target.chapter, needed: row.wanted - row.got };
+    if (isKc) unit.kc_id = row.kc_id;
+    if (row.error_focus && row.error_focus.applied && row.error_focus.type) unit.error_type = row.error_focus.type;
+    return unit;
+}
+
+/**
+ * 補題請求的 body（純函式）。days 用產生草稿時的時間窗（沒記到就不帶，伺服器預設 90）。
+ * @param {object} draft
+ * @param {object} row blueprint 的一列
+ * @returns {object|null}
+ */
+export function fillRequestBody(draft, row) {
+    const unit = fillUnitOf(row);
+    if (!draft || !unit) return null;
+    return { subject: draft.subject, ...(Number.isInteger(draft.days) ? { days: draft.days } : {}), units: [unit] };
+}
+
+const JOB_STATE_LABEL = { queued: '排隊中', extracting: '生成中', processing: '檢查中', done: '完成', failed: '失敗' };
+
+/**
+ * 一個補題工作的一行（純函式）。status＝GET /api/jobs/:id 的回應（還沒讀過就是 null）。
+ * @param {{job_id:number, state:string, existing?:boolean, source_question_id:number, chapter?:string}} job
+ * @param {object|null} status
+ * @returns {string}
+ */
+export function fillJobLine(job, status) {
+    const state = status?.state ?? job.state;
+    const head = `任務 #${job.job_id}（${job.chapter ? `${job.chapter}，` : ''}藍本：錯題 #${job.source_question_id}${job.existing ? '，已在進行中' : ''}）：${JOB_STATE_LABEL[state] || state}`;
+    const c = status?.counts;
+    if (!c) return head;
+    return `${head}　·　待複核 ${c.needs_review} 題、已入庫 ${c.saved}、不採用 ${c.rejected}、處理中 ${c.pending}`;
 }
 
 /** 補救成效的狀態標籤與顏色。 */
@@ -872,6 +928,16 @@ function renderDraft(app, ui) {
                     textContent: focus, 'data-error-focus': b.error_focus.type
                 }));
             }
+            // 〔dec/r16-remedial〕庫存不足的補救目標：用他的錯題出變式補題（FEATURE_VARIANTS 關閉時不顯示）
+            const reason = (draft.shortfalls.find(s => s.target?.name === b.target?.name && s.bucket === b.bucket) || {}).reason;
+            const body = reason === 'insufficient_stock' && variantsEnabled() ? fillRequestBody(draft, b) : null;
+            if (body) {
+                const btn = el('button', 'ml-3 mt-1 text-[11px] font-bold px-2 py-1 rounded-lg border border-violet-200 bg-white text-violet-700 hover:bg-violet-50 cursor-pointer disabled:opacity-40', {
+                    type: 'button', textContent: `生成變式補題（還差 ${body.units[0].needed} 題）`, 'data-fill-unit': b.target?.name ?? ''
+                });
+                btn.addEventListener('click', () => { requestFill(app, ui, body, btn).catch(err => console.error('[remedial] 補題失敗', err)); });
+                g.appendChild(btn);
+            }
         }
         const list = el('div', 'mt-2 space-y-2');
         for (const item of group.items) {
@@ -911,6 +977,9 @@ function renderDraft(app, ui) {
         g.appendChild(list);
         box.appendChild(g);
     }
+
+    // 〔dec/r16-remedial〕補題進度（這位學生的）
+    if (state.fill && state.fill.student_id === draft.student_id) box.appendChild(renderFill(app, ui));
 
     // 手動加題
     const add = el('div', 'mt-4 flex flex-wrap items-center gap-2');
@@ -964,6 +1033,7 @@ async function generateDraft(app, ui, shared) {
         const body = await res.json();
         const droppedManual = manualIdsLost(state.draft);
         state.draft = draftFromResponse(body, student.name);
+        state.draft.days = days;   // 〔dec/r16-remedial〕補題沿用同一個時間窗
         if (droppedManual.length) {
             app.showToast(`原草稿手動加入的 ${idList(droppedManual)} 沒有保留在新草稿裡；需要的話請再加一次。`, 'info');
         }
@@ -1076,6 +1146,71 @@ async function downloadWord(app, paper, edition = 'standard') {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+}
+
+/**
+ * 〔dec/r16-remedial〕送出補題請求，把排了哪些工作記在 state.fill（同一位學生累加；換學生就換一份）。
+ */
+async function requestFill(app, ui, body, btn) {
+    const draft = state.draft;
+    if (!draft) return;
+    btn.disabled = true;
+    try {
+        const res = await postJson(app, `/api/students/${draft.student_id}/remedial-paper/fill-shortfall`, body);
+        if (!res.ok) { app.showToast(await messageOf(res), 'error'); return; }
+        const out = await res.json();
+        if (!state.fill || state.fill.student_id !== draft.student_id) state.fill = { student_id: draft.student_id, jobs: [], notes: [], status: {} };
+        for (const j of out.jobs || []) {
+            if (!state.fill.jobs.some(x => x.job_id === j.job_id)) state.fill.jobs.push(j);
+        }
+        state.fill.notes = Array.isArray(out.notes) ? out.notes : [];
+        const n = Number(out.generating) || 0;
+        app.showToast(n > 0
+            ? `已排 ${n} 題變式生成（本機一題約 3～6 分鐘）。生成好的題在「待複核」，核准後重新產生草稿。`
+            : (out.notes && out.notes[0]) || '沒有排任何生成。', n > 0 ? 'success' : 'info');
+        renderDraft(app, ui);
+    } catch {
+        app.showToast('與後端連線中斷', 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+/** 補題進度方塊（工作清單＋說明＋重新整理）。 */
+function renderFill(app, ui) {
+    const f = state.fill;
+    const box = el('div', 'mt-4 rounded-xl border border-violet-200 bg-violet-50/50 p-3 text-xs text-slate-700', { id: 'remFill' });
+    box.appendChild(el('p', 'font-extrabold text-violet-800', { textContent: '變式補題進度' }));
+    for (const n of f.notes) box.appendChild(el('p', 'mt-1 text-[11px] text-slate-500', { textContent: n }));
+    if (f.jobs.length === 0) {
+        box.appendChild(el('p', 'mt-1 text-[11px] text-slate-400', { textContent: '沒有進行中的生成工作。' }));
+        return box;
+    }
+    const list = el('ul', 'mt-2 space-y-1');
+    for (const j of f.jobs) list.appendChild(el('li', '', { textContent: fillJobLine(j, f.status[j.job_id] || null), 'data-job-id': j.job_id }));
+    box.appendChild(list);
+    box.appendChild(el('p', 'mt-2 text-[11px] text-slate-500', {
+        textContent: '生成好的題會停在「待複核」（題庫管理）；核准之後按「產生草稿」重新產生，補上的題才會出現在草稿裡。'
+    }));
+    const refresh = el('button', 'mt-2 text-[11px] font-bold px-2 py-1 rounded-lg border border-violet-200 bg-white text-violet-700 hover:bg-violet-50 cursor-pointer', {
+        id: 'remFillRefresh', type: 'button', textContent: '重新整理進度'
+    });
+    refresh.addEventListener('click', () => { refreshFill(app, ui).catch(err => console.error('[remedial] 補題進度讀取失敗', err)); });
+    box.appendChild(refresh);
+    return box;
+}
+
+/** 讀每個補題工作的狀態（既有的 GET /api/jobs/:id），讀完重畫草稿。 */
+async function refreshFill(app, ui) {
+    const f = state.fill;
+    if (!f) return;
+    for (const j of f.jobs) {
+        try {
+            const res = await app.apiFetch(`/api/jobs/${j.job_id}`);
+            if (res.ok) f.status[j.job_id] = await res.json();
+        } catch { /* 讀不到就維持上一次的狀態 */ }
+    }
+    renderDraft(app, ui);
 }
 
 /**

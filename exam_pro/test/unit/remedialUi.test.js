@@ -785,3 +785,45 @@ describe('〔dec/r16-remedial〕依錯因出題與補救成效（remedial.js）'
         assert.ok($('remEffect').textContent.includes('補救成效讀取失敗：資料庫還沒套 migrations/0022_paper_kind_targets.sql'));
     });
 });
+
+// ═════════════════════════ 〔dec/r16-remedial〕題庫不夠時自動補題 ═════════════════════════
+describe('〔dec/r16-remedial〕生成變式補題（remedial.js）', () => {
+    const FILL = {
+        student_id: 1, subject: '數學', max_generate: 5, generating: 2, capped: false, retrieved_ids: [],
+        units: [], jobs: [{ job_id: 31, state: 'queued', existing: false, source_question_id: 41, chapter: '向量內積' }],
+        notes: ['生成好的題會出現在「待複核」；核准之後重新產生補救卷草稿，就會抽得到。']
+    };
+    async function generated(meta) {
+        await mount({ meta, examApp: routedBridge({
+            'POST /api/students/1/remedial-paper/fill-shortfall': () => respond(FILL, 202),
+            'GET /api/jobs/31': () => respond({ id: 31, state: 'done', counts: { saved: 0, needs_review: 2, pending: 0, rejected: 0 } })
+        }) });
+        $('remStudent').value = '1';
+        $('remGenerate').click();
+        await settle();
+    }
+
+    test('FEATURE_VARIANTS 關閉：庫存不足的目標沒有補題按鈕', async () => {
+        await generated(ON);
+        assert.equal($('remDraft').querySelectorAll('button[data-fill-unit]').length, 0);
+    });
+
+    test('開啟：庫存不足的補救目標一顆按鈕；送出的 body（單位、還差幾題、時間窗）；列出工作、重新整理讀 /api/jobs/:id', async () => {
+        await generated({ ...ON, 'feature-variants': 'true' });
+        const buttons = $('remDraft').querySelectorAll('button[data-fill-unit]');
+        assert.equal(buttons.length, 1, '只有庫存不足的那一個補救目標');
+        assert.equal(buttons[0].textContent, '生成變式補題（還差 2 題）');
+        buttons[0].click();
+        await settle();
+        const post = env.window.ExamApp.calls.fetches.find(f => f.url === '/api/students/1/remedial-paper/fill-shortfall');
+        assert.deepEqual(post.body, { subject: '數學', days: 90, units: [{ unit_type: 'chapter', chapter: '向量內積', needed: 2 }] });
+        assert.ok(env.window.ExamApp.calls.toasts.some(t => t.message.includes('已排 2 題變式生成')));
+        const fill = $('remFill');
+        assert.ok(fill.textContent.includes('任務 #31（向量內積，藍本：錯題 #41）：排隊中'));
+        assert.ok(fill.textContent.includes('待複核'));
+        $('remFillRefresh').click();
+        await settle();
+        assert.ok(env.window.ExamApp.calls.fetches.some(f => f.url === '/api/jobs/31'));
+        assert.ok($('remFill').textContent.includes('完成　·　待複核 2 題'));
+    });
+});

@@ -659,11 +659,13 @@ async function planRemedialPaper({ studentId, subject, total, mix, days, sourceT
         }
     });
 
-    // 〔dec/r16-remedial〕補救組的列一律有 error_focus（沒有任何錯因標記時為 null）；先備、延伸的列沒有這個鍵
+    // 〔dec/r16-remedial〕補救組的列一律有 error_focus（沒有任何錯因標記時為 null）；先備、延伸的列沒有這個鍵。
+    // 知識點目標的列另多 kc_id（「生成變式補題」要指名單位；target 的形狀不動）
     const blueprint = plan.quotas.map((q, i) => ({
         bucket: q.bucket, target: q.target, wanted: q.wanted, got: results[i].got,
         difficulty_min: q.difficulty_min, difficulty_max: q.difficulty_max, rationale: q.rationale,
-        ...(q.bucket === 'remedial' ? { error_focus: q.error_focus ?? null } : {})
+        ...(q.bucket === 'remedial' ? { error_focus: q.error_focus ?? null } : {}),
+        ...(q.unit && q.unit.unit_type === 'kc' ? { kc_id: q.unit.kc_id } : {})
     }));
     const shortfalls = plan.quotas
         .map((q, i) => ({ bucket: q.bucket, target: q.target, wanted: q.wanted, got: results[i].got,

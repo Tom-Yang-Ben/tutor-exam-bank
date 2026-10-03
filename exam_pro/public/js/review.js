@@ -787,6 +787,19 @@ function reasonBar(reason, payload) {
 }
 
 /**
+ * 〔dec/r16-remedial〕補救卷補題的來源一行（純函式）：GET /api/review 的 remedial_for → 「補救卷補題：為 王小明（學生 #3）的錯題 #41 生成」。
+ * 沒有 remedial_for（一般的變式、拆題）回 null。
+ * @param {{student_id:number, student_name:string|null, source_question_id:number|null}|undefined} r
+ * @returns {string|null}
+ */
+export function remedialForText(r) {
+    if (!r || !Number.isInteger(r.student_id)) return null;
+    const who = r.student_name ? `${r.student_name}（學生 #${r.student_id}）` : `學生 #${r.student_id}`;
+    const src = Number.isInteger(r.source_question_id) ? `的錯題 #${r.source_question_id}` : '';
+    return `補救卷補題：為 ${who}${src} 生成`;
+}
+
+/**
  * 一張複核卡片。
  * @param {object} app
  * @param {object} item  GET /api/review 的一列
@@ -799,6 +812,14 @@ function reviewCard(app, item) {
     card.appendChild(el('div', 'eyebrow text-violet-500 mb-2', {
         textContent: `jq #${item.jq_id}　·　任務 #${item.job_id}　·　idx ${item.idx}`
     }));
+
+    // 〔dec/r16-remedial〕補救卷補題的變式：標出是替哪一位學生、拿哪一題錯題出的（姓名只在本機畫面）
+    const provenance = remedialForText(item.remedial_for);
+    if (provenance) {
+        const line = el('p', 'mb-2 text-xs font-bold text-violet-700', { textContent: provenance });
+        line.dataset.remedialFor = String(item.remedial_for.student_id);
+        card.appendChild(line);
+    }
 
     // 先放一條只有預覽資訊的原因列；點開詳情後會用完整 payload 換掉。
     const bar = reasonBar(item.review_reason, null);
