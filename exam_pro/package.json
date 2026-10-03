@@ -73,7 +73,7 @@
     "@tailwindcss/browser": "^4.3.3",
     "ajv": "^8.20.0",
     "cors": "^2.8.5",
-    "docx": "^9.7.2",
+    "docx": "^9.8.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "gsap": "3.13.0",
@@ -84,7 +84,7 @@
     "pdf-lib": "^1.17.1",
     "pg": "^8.23.0",
     "pgvector": "^0.3.0",
-    "sharp": "^0.35.4"
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "nodemon": "^3.1.0",
