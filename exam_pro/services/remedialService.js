@@ -23,6 +23,11 @@
 //   6. items 每題帶 follows_question_id 與 group_ids（同一承上組在草稿裡的全部成員，承接順序），
 //      前端據此「整組刪、整組加」，不會把承上題和它的前題拆開（confirm-paper 也會整組檢查，〔Owner 決策單 2026-09-25 B7〕）。
 //
+//   7. 〔dec/r16-remedial 依錯因出題〕補救組的每個目標另看該生在這個單位答錯題的錯因（attempts.error_types，
+//      只算第一次作答，R10）：證據夠（config/remedialErrorStrategy.js 的 MIN_TAGGED_WRONG、MIN_DOMINANT_SHARE）
+//      就照主因的策略調整這個目標的選題——難度上限降一級（抽不滿就退回原本的上限，寫進 notes）、
+//      偏好某些題型或順序（只排先後，不篩掉題）。blueprint 的補救列多 error_focus（沒標任何錯因時為 null）。
+//
 // 另有 lookupItems（GET /api/students/:id/remedial-paper/items）：草稿「用題目 ID 加題」前查題目資料與
 // 所在承上組的完整成員（含封存、已寫過的旗標），讓前端能整組加入或拒絕（docs/remedial.md 第 2.5 節）。
 //
@@ -31,6 +36,8 @@
 // ─────────────────────────────────────────────────────────────
 const kcWeakness = require('./kcWeaknessService');
 const { groupFollowUps } = require('../utils/paperGroups');
+// 〔dec/r16-remedial〕依錯因出題的對照表（純函式）
+const errorStrategy = require('../config/remedialErrorStrategy');
 
 /** 契約第 4.4 條第 2 項的預設與區間。 */
 const DEFAULT_TOTAL = 20;
@@ -187,8 +194,58 @@ function targetOf(type, u) {
         : { type: 'chapter', chapter: u.chapter, name: u.chapter };
 }
 
+// ───────────────── 〔dec/r16-remedial〕依錯因出題（純函式）─────────────────
+
+/** 單位鍵：kc 基底用 kc_id、chapter 基底用章名（錯因統計 Map 的鍵）。 */
+function unitKeyOf(basis, u) {
+    return basis === 'kc' ? u.kc_id : u.chapter;
+}
+
+/**
+ * 錯因主因 → 補救目標的調整（純函式）。
+ *
+ * @param {ReturnType<typeof errorStrategy.dominantErrorType>} focus
+ * @param {number|null} dMax 原本的難度上限
+ * @returns {{ error_focus: object|null, difficultyMax: number|null, rankOf: Function|null, lowered: boolean, text: string }}
+ *   error_focus  blueprint 的 error_focus（null＝沒有任何錯因標記）
+ *   difficultyMax 調整後的上限（可能等於原本的）
+ *   rankOf       偏好鍵（給 pickByQuotas）；策略沒有偏好或沒套用時為 null
+ *   lowered      上限有沒有真的降
+ *   text         接在 rationale 後面的一句（沒有標記時為 ''）
+ */
+function applyErrorFocus(focus, dMax) {
+    if (!focus) return { error_focus: null, difficultyMax: dMax, rankOf: null, lowered: false, text: '' };
+    const pct = fmtPct(focus.share);
+    const base = { type: focus.type, label: focus.label, count: focus.count, share: focus.share, tagged_wrong: focus.tagged_wrong };
+    if (!focus.applied) {
+        const why = {
+            insufficient_evidence: `有標錯因的錯題只有 ${focus.tagged_wrong} 題，還看不出主因`,
+            no_dominant: `錯因分散（最多的「${focus.label}」只占 ${pct}）`,
+            tie: `錯因「${focus.label}」與另一種錯因一樣多，看不出主因`,
+            not_applicable: `錯因以「${focus.label}」為主，但這個策略不適用這一科`
+        }[focus.reason] || '看不出錯因主因';
+        return {
+            error_focus: { ...base, strategy: null, applied: false, reason: focus.reason },
+            difficultyMax: dMax, rankOf: null, lowered: false, text: `；${why}，選題不依錯因調整`
+        };
+    }
+    const s = errorStrategy.ERROR_STRATEGIES[focus.type];
+    const adjusted = errorStrategy.adjustedDifficultyMax(dMax, s);
+    const rankOf = (s.prefer_types || s.prefer_order) ? (row => errorStrategy.preferenceKey(s, row)) : null;
+    return {
+        error_focus: { ...base, strategy: errorStrategy.strategyView(s), applied: true, reason: 'dominant' },
+        difficultyMax: adjusted,
+        rankOf,
+        lowered: adjusted !== dMax,
+        text: `；錯因以「${focus.label}」為主（有標錯因的錯題 ${focus.tagged_wrong} 題，標了 ${focus.count} 次，占 ${pct}）→ ${s.summary}`
+    };
+}
+
 /**
  * 組出選題計畫（純函式）：每個目標一段配額，依 remedial → prerequisite → extension 排列。
+ *
+ * 〔dec/r16-remedial〕補救組每段多帶 error_focus（見 applyErrorFocus），
+ * 主因套用時視策略多帶 rankOf（偏好）與 fallbackPool（降難度上限抽不滿時退回的原 pool）、fallback_rationale。
  *
  * @param {object} p
  * @param {'kc'|'chapter'} p.basis
@@ -197,11 +254,13 @@ function targetOf(type, u) {
  * @param {object[]} p.ranked     rankUnits 的輸出（kc 基底為知識點、chapter 基底為章節，章節列須帶 chapter）
  * @param {object[]} [p.prereqRows] kc 基底時的先備列（見 choosePrereqTargets）
  * @param {string} p.subject
+ * @param {Map<string|number, object>|null} [p.errorProfiles] 補救單位的錯因統計（errorStrategy.errorProfileFromRows；
+ *        鍵同 unitKeyOf）。null 或查不到＝沒有錯因標記
  * @returns {{ quotas: Array<{bucket:string, target:object, wanted:number, pool:object,
  *                            difficulty_min:number|null, difficulty_max:number|null, rationale:string}>,
  *             notes: string[], counts: object }}
  */
-function buildPlan({ basis, total, mix, ranked, prereqRows = [], subject }) {
+function buildPlan({ basis, total, mix, ranked, prereqRows = [], subject, errorProfiles = null }) {
     const notes = [];
     const counts = allocateQuotas(total, mix);
     const { remedial: remUnits, extension: extUnits } = chooseUnits(ranked);
@@ -240,16 +299,29 @@ function buildPlan({ basis, total, mix, ranked, prereqRows = [], subject }) {
     remUnits.forEach((u, i) => {
         if (remSplit[i] <= 0) return;
         const dMax = remedialDifficultyMax(u);
-        quotas.push({
+        // 〔dec/r16-remedial 依錯因出題〕主因夠明確才調整；沒有任何錯因標記時 error_focus 為 null、其餘逐字同前
+        const profile = errorProfiles ? errorProfiles.get(unitKeyOf(basis, u)) : null;
+        const ef = applyErrorFocus(errorStrategy.dominantErrorType(profile, subject), dMax);
+        const poolOf = max => (basis === 'kc' ? { kcIds: [u.kc_id], difficultyMax: max } : { chapters: [u.chapter], difficultyMax: max });
+        const head = `掌握度下界 ${fmtPct(u.mastery_lb)}（批改 ${fmtNum(u.graded)} 題、答對 ${fmtNum(u.correct)}）`;
+        const quota = {
             bucket: 'remedial',
             target: targetOf(basis, u),
             wanted: remSplit[i],
-            pool: basis === 'kc' ? { kcIds: [u.kc_id], difficultyMax: dMax } : { chapters: [u.chapter], difficultyMax: dMax },
+            pool: poolOf(ef.difficultyMax),
             difficulty_min: null,
-            difficulty_max: dMax,
-            rationale: `掌握度下界 ${fmtPct(u.mastery_lb)}（批改 ${fmtNum(u.graded)} 題、答對 ${fmtNum(u.correct)}）`
-                + (dMax !== null ? `；選難度 ≤ ${dMax} 的題` : '')
-        });
+            difficulty_max: ef.difficultyMax,
+            rationale: head + ef.text + (ef.difficultyMax !== null ? `；選難度 ≤ ${ef.difficultyMax} 的題` : ''),
+            error_focus: ef.error_focus
+        };
+        if (ef.rankOf) quota.rankOf = ef.rankOf;
+        if (ef.lowered) {
+            // 降了難度上限：抽不滿就退回原本的上限（pickByQuotas 的 fallbackPool），偏好照舊
+            quota.fallbackPool = poolOf(dMax);
+            quota.original_difficulty_max = dMax;
+            quota.fallback_rationale = head + ef.text + `；難度 ≤ ${ef.difficultyMax} 的題不夠，改選難度 ≤ ${dMax} 的題`;
+        }
+        quotas.push(quota);
     });
 
     const preSplit = splitCount(prereqTargets.length ? counts.prerequisite : 0, prereqTargets.length);
@@ -351,6 +423,43 @@ function buildPrereqQuery(kcIds) {
 }
 
 /**
+ * 〔dec/r16-remedial 依錯因出題〕補救單位的錯題錯因（$1 studentId、$2 days、$3 subject 同弱點面板的凍結順序，$4 單位鍵）。
+ *
+ * 每列＝該生在時間窗內、**第一次作答**（檢視 attempts，R10：重練不算）、已批改且答錯或部分給分
+ * （正確度 COALESCE(score, result) < 1，與 buildChapterMastery 的「答錯題」同一條線）的一筆作答，
+ * 帶它所屬的單位（unit）與錯因陣列；聚合在 JS 端（config/remedialErrorStrategy.js 的 errorProfileFromRows）。
+ * kc 基底時一筆作答掛幾個（同科）知識點就出現幾列，與知識點弱點只算同科標註同一條線（S5-42）。
+ *
+ * @param {{basis:'kc'|'chapter', studentId:number, days:number, subject:string, keys:Array<number|string>}} opts
+ * @returns {{text:string, values:any[]}}
+ */
+function buildErrorProfileQuery({ basis, studentId, days, subject, keys }) {
+    const where = `WHERE a.student_id = $1
+   AND a.assigned_at >= CURRENT_DATE - $2::int
+   AND ($3::text IS NULL OR q.subject = $3)
+   AND a.result IS NOT NULL
+   AND COALESCE(a.score::float8, a.result::float8) < 1`;
+    if (basis === 'kc') {
+        return {
+            text: `SELECT qk.kc_id AS unit, a.error_types
+  FROM attempts a JOIN questions q ON q.id = a.question_id
+  JOIN question_kcs qk ON qk.question_id = a.question_id
+  JOIN knowledge_components kx ON kx.id = qk.kc_id AND kx.subject = q.subject
+ ${where}
+   AND qk.kc_id = ANY($4::int[])`,
+            values: [studentId, days, subject, keys]
+        };
+    }
+    return {
+        text: `SELECT q.chapter AS unit, a.error_types
+  FROM attempts a JOIN questions q ON q.id = a.question_id
+ ${where}
+   AND q.chapter = ANY($4::text[])`,
+        values: [studentId, days, subject, keys]
+    };
+}
+
+/**
  * 「用題目 ID 加題」前的查詢（$1 ids、$2 studentId）：題目本身＋所在承上組的全部成員。
  *
  * 承上組的走訪與 examController.fetchCandidatePool 同一段遞迴（無向走訪 follows_question_id：
@@ -425,7 +534,16 @@ async function planRemedialPaper({ studentId, subject, total, mix, days, sourceT
         ranked = kcWeakness.rankUnits(rows.map(r => ({ ...r, name: r.chapter })), minN, u => u.chapter);
     }
 
-    const plan = buildPlan({ basis, total, mix, ranked, prereqRows, subject });
+    // 〔dec/r16-remedial 依錯因出題〕補救組的單位（與 buildPlan 內同一個 chooseUnits，結果相同）先查錯因
+    let errorProfiles = null;
+    const remKeys = chooseUnits(ranked).remedial.map(u => unitKeyOf(basis, u));
+    if (remKeys.length) {
+        const q = buildErrorProfileQuery({ basis, studentId, days, subject, keys: remKeys });
+        const { rows } = await deps.query(q.text, q.values);
+        errorProfiles = errorStrategy.errorProfileFromRows(rows);
+    }
+
+    const plan = buildPlan({ basis, total, mix, ranked, prereqRows, subject, errorProfiles });
     const notes = [...plan.notes];
     if (basis === 'chapter' && kc.taggedGraded > 0) {
         notes.unshift(`有知識點標註的已批改題只有 ${kc.taggedGraded} 題（少於 ${Math.max(minN, 1)}），先以章節為單位判斷弱點。`);
@@ -434,9 +552,23 @@ async function planRemedialPaper({ studentId, subject, total, mix, days, sourceT
     const results = plan.quotas.length
         ? await deps.pickByQuotas({
             studentId, subject, sourceTypes,
-            quotas: plan.quotas.map(q => ({ count: q.wanted, pool: q.pool }))
+            // rankOf／fallbackPool 只有套用錯因策略的補救目標才有；沒有時這一段與 dec/r16-remedial 之前相同
+            quotas: plan.quotas.map(q => ({
+                count: q.wanted, pool: q.pool,
+                ...(q.rankOf ? { rankOf: q.rankOf } : {}),
+                ...(q.fallbackPool ? { fallbackPool: q.fallbackPool } : {})
+            }))
         })
         : [];
+    // 降了難度上限卻抽不滿、退回原本上限的目標：blueprint 照實際用的區間回報，notes 說明
+    plan.quotas.forEach((q, i) => {
+        if (!q.fallbackPool || !results[i] || !results[i].usedFallback) return;
+        notes.push(`「${q.target.name}」錯因以「${q.error_focus.label}」為主，原本只選難度 ≤ ${q.difficulty_max} 的題，`
+            + `但湊不到 ${q.wanted} 題，已改回難度 ≤ ${q.original_difficulty_max}（題型偏好照舊）。`);
+        q.difficulty_max = q.original_difficulty_max;
+        q.rationale = q.fallback_rationale;
+        q.error_focus = { ...q.error_focus, reason: 'dominant_difficulty_fallback' };
+    });
 
     const allIds = results.flatMap(r => r.ids);
     let rowsById = new Map();
@@ -472,9 +604,11 @@ async function planRemedialPaper({ studentId, subject, total, mix, days, sourceT
         }
     });
 
+    // 〔dec/r16-remedial〕補救組的列一律有 error_focus（沒有任何錯因標記時為 null）；先備、延伸的列沒有這個鍵
     const blueprint = plan.quotas.map((q, i) => ({
         bucket: q.bucket, target: q.target, wanted: q.wanted, got: results[i].got,
-        difficulty_min: q.difficulty_min, difficulty_max: q.difficulty_max, rationale: q.rationale
+        difficulty_min: q.difficulty_min, difficulty_max: q.difficulty_max, rationale: q.rationale,
+        ...(q.bucket === 'remedial' ? { error_focus: q.error_focus ?? null } : {})
     }));
     const shortfalls = plan.quotas
         .map((q, i) => ({ bucket: q.bucket, target: q.target, wanted: q.wanted, got: results[i].got,
@@ -543,10 +677,13 @@ module.exports = {
     chooseUnits,
     choosePrereqTargets,
     buildPlan,
+    unitKeyOf,
+    applyErrorFocus,
     previewText,
     groupIdsById,
     buildChapterMastery,
     buildPrereqQuery,
+    buildErrorProfileQuery,
     buildItemLookupQuery,
     planRemedialPaper,
     lookupItems

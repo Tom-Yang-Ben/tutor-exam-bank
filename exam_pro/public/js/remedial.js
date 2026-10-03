@@ -17,6 +17,9 @@
 // 〔retrain PR-3〕FEATURE_RETRAIN 開啟時，配比下方多「☐ 附上到期重練 [N] 題」，草稿多一組「到期重練」
 // （POST remedial-paper 的 retrain_count；確認時帶 retrain_question_ids、下載 Word 時帶 paper_id）。細節見下方〔retrain PR-3〕那一段。
 //
+// 〔dec/r16-remedial〕依錯因出題（docs/remedial.md 第 9 節）：草稿補救組每個目標下多一行「錯因：…」
+// （blueprint 的 error_focus：主因、怎麼調、為什麼）。
+//
 // 跨 module 的唯一通道：監聽 document 上的 `remedial:add`（detail.question_id），把題目加進目前的草稿。
 // 發送端是「找相似」結果每列的「加入補救卷」按鈕（〔stage5 WS-D〕掛鉤，見 docs/remedial.md）。
 //
@@ -280,6 +283,31 @@ export function draftFromResponse(body, studentName) {
         shortfalls: Array.isArray(body.shortfalls) ? body.shortfalls : [],
         notes: Array.isArray(body.notes) ? body.notes : []
     };
+}
+
+// ───────────────────────── 〔dec/r16-remedial〕依錯因出題（純函式）─────────────────────────
+
+const ERROR_FOCUS_REASON = {
+    insufficient_evidence: '有標錯因的錯題還太少',
+    no_dominant: '錯因分散',
+    tie: '兩種錯因一樣多',
+    not_applicable: '這一科不適用'
+};
+
+/**
+ * blueprint 的 error_focus → 草稿上的一行（純函式）。沒有任何錯因標記（null）回 null（不顯示）。
+ * @param {object|null|undefined} f
+ * @returns {string|null}
+ */
+export function errorFocusText(f) {
+    if (!f || typeof f !== 'object') return null;
+    const evidence = `有標錯因的錯題 ${f.tagged_wrong ?? '?'} 題，「${f.label ?? f.type}」${f.count} 次（${Math.round(Number(f.share) * 100)}%）`;
+    if (!f.applied) {
+        return `錯因：看不出主因（${ERROR_FOCUS_REASON[f.reason] || f.reason}；${evidence}），選題不依錯因調整。`;
+    }
+    const s = f.strategy || {};
+    const fallback = f.reason === 'dominant_difficulty_fallback' ? '（降難度後題不夠，已退回原本的難度上限）' : '';
+    return `錯因以「${f.label ?? f.type}」為主（${evidence}）→ ${s.summary ?? ''}${fallback}。${s.rationale ?? ''}`;
 }
 
 /**
@@ -786,6 +814,13 @@ function renderDraft(app, ui) {
                 textContent: `・${b.target?.name ?? ''}：${b.rationale ?? ''}　要 ${b.wanted} 題、找到 ${b.got} 題`
                     + (short ? `（${SHORTFALL_REASON[(draft.shortfalls.find(s => s.target?.name === b.target?.name && s.bucket === b.bucket) || {}).reason] || '不足'}）` : '')
             }));
+            // 〔dec/r16-remedial〕依錯因出題：補救目標的錯因主因與調整（沒有錯因標記時不顯示）
+            const focus = errorFocusText(b.error_focus);
+            if (focus) {
+                g.appendChild(el('p', `ml-3 text-[11px] ${b.error_focus.applied ? 'font-bold text-violet-700' : 'text-slate-400'}`, {
+                    textContent: focus, 'data-error-focus': b.error_focus.type
+                }));
+            }
         }
         const list = el('div', 'mt-2 space-y-2');
         for (const item of group.items) {

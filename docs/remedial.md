@@ -24,6 +24,7 @@
 2.3 的 `blueprint` 是既有 `POST /api/generate-paper` 的擴充，**不吃旗標**（它不呼叫 LLM，是組卷核心功能的延伸）。
 五支都不呼叫 LLM，掛在旗標後的四支不寫資料庫，所以沒有套限流（契約第 1.2 條的限流針對會花錢的端點）。
 2.5 是契約之外多的一支（理由見第 6 節）。
+〔dec/r16-remedial〕2.2 的回應多了錯因（補救組 `blueprint` 列的 `error_focus`，第 9 節）。
 
 ### 2.1 `GET /api/students/:id/weakness/kc?days=&subject=`
 
@@ -271,6 +272,7 @@ body：
 | `routes/index.js` | 〔擴充〕檔尾 WS-D 區塊 |
 | `public/js/remedial.js` | `#remedial`、`#coverage` |
 | `public/js/variants.js` | 〔擴充〕「找相似」結果的「加入補救卷」按鈕（見第 6 節） |
+| `config/remedialErrorStrategy.js` | 〔dec/r16-remedial〕錯因 → 選題策略的對照表與判斷（純函式，第 9 節） |
 
 ---
 
@@ -363,6 +365,8 @@ body：
 | 單元 | `test/unit/remedialValidation.test.js` | 補救卷 body（含 mix 總和溢位）、覆蓋率 query、加題查詢的 `ids`、blueprint 驗證與承上題政策開關、候選池 SQL 的參數順序；〔修訂 2026-09-26 合併回填 B10〕blueprint 逐列建議題數（`blueprintPolicyError`、`blueprintShortfallHints`、`followUpShortfallText`） |
 | 單元 | `test/unit/remedialUi.test.js` | 前端檔案契約、純函式、miniDom 渲染（旗標關閉不渲染、草稿、刪題加題、`remedial:add`、確認、覆蓋率）、承上題整組（「承上 #x」、「刪這組」、整組加入或拒絕、不混科、確認前擋缺前題的承上題）、variants.js 掛鉤 |
 | 整合 | `test/integration/remedial.pg.test.js` | 旗標關閉 404；kc 加權與 Wilson 排序；kc 基底／chapter 退回；各 bucket 配額；不足量；已作答、封存、跨科、題源排除；家族互斥；承上題整組與 items 的組資訊；不寫庫並接 confirm-paper；加題查詢（承上組成員、封存與已寫過旗標、missing、400／404）；blueprint 的互斥 400、逐列不足、跨列家族互斥與不重複、真出卷；單章路徑收到非字串 chapter 仍是 400 庫存不足；覆蓋率 |
+| 單元 | `test/unit/remedialErrorStrategy.test.js` | 〔dec/r16-remedial〕錯因對照表（每個代碼一列、標籤同白名單、預設策略）、錯因統計、主因門檻（2 筆、40% 邊界、同票、別科不適用）、難度上限、偏好鍵與反應式偵測；偏好排序交給真的 `pickPaperUnits`（偏好先抽、題數不少、同鍵仍隨機、承上組與家族互斥）；`buildPlan`／`planRemedialPaper` 的套用、退回與沒標錯因時逐字不變 |
+| 整合 | `test/integration/remedialErrorFocus.pg.test.js` | 〔dec/r16-remedial〕依錯因出題：套用（降上限＋偏好，連抽 6 次）、同票、沒標錯因、R10、退回上限、退回也不夠、知識點基底、草稿不寫庫 |
 
 整合測試自己插入知識點、`question_kcs`、`kc_prerequisites`、`attempts` fixture，不依賴 WS-C 的種子檔。
 
@@ -378,3 +382,68 @@ body：
 - 掌握度模型（G12 第二步）：資料量夠了再上固定參數 BKT，取代 Wilson 下界排序。
 - 題庫不足時自動退回鄰近章節或觸發變式生成（G22）：目前只回報不足量，由老師決定。
 - 組卷分頁的跨章配額 UI；助教的 `plan_remedial_paper` 只讀工具。
+
+---
+
+## 9. 依錯因出題（〔dec/r16-remedial〕補救組）
+
+Owner 2026-10-03：補救卷原本只看「哪個單位弱」，不看「錯在哪裡」。批改時標的錯因（`attempts.error_types`，白名單
+`config/errorTypes.js`）其實說明了該怎麼補，所以補救組的每個目標另看錯因、照主因調整選題。不呼叫 LLM。
+
+### 9.1 怎麼判斷主因
+
+- **範圍**：補救組（`bucket = 'remedial'`）的每個目標單位。先備、延伸組不看錯因。
+- **算哪些作答**：該生、同一個時間窗（`days`）、**每題第一次作答**（檢視 `attempts`，R10：重練的錯因不算）、
+  已批改且正確度 `COALESCE(score, result) < 1`（答錯或部分給分）。章節基底＝該章的題；知識點基底＝掛了該知識點
+  （同科標註）的題。SQL：`remedialService.buildErrorProfileQuery`；聚合：`remedialErrorStrategy.errorProfileFromRows`。
+- 只數白名單內的代碼；同一筆作答重複標同一個代碼只算一次。「有標錯因的錯題」＝至少有一個白名單代碼的那一筆。
+- **門檻**（`config/remedialErrorStrategy.js` 的具名常數）：有標錯因的錯題 ≥ `MIN_TAGGED_WRONG = 2`，而且
+  主因占全部錯因標記 ≥ `MIN_DOMINANT_SHARE = 0.4`（`share`＝主因次數 ÷ 全部錯因標記數；一題可標多個，分母是標記數）。
+
+| 情況 | `error_focus` | 選題 |
+|---|---|---|
+| 這個單位的錯題完全沒標錯因 | `null` | 與沒有這個功能時逐字相同（`rationale` 不提錯因） |
+| 有標錯因的錯題只有 1 筆 | `applied: false`、`reason: 'insufficient_evidence'` | 不調整，`rationale` 說「還看不出主因」 |
+| 主因 < 40% | `applied: false`、`reason: 'no_dominant'` | 不調整 |
+| 第一名同票（例：觀念 2、計算 2） | `applied: false`、`reason: 'tie'` | 不調整 |
+| 主因的策略不適用這一科（`chem_equation` 只對化學） | `applied: false`、`reason: 'not_applicable'` | 不調整 |
+| 其餘 | `applied: true`、`reason: 'dominant'` | 照 9.2 的策略調整 |
+
+### 9.2 錯因 → 策略（預設，待 Owner 確認）
+
+| 代碼 | 標籤 | 難度上限 | 偏好（只排先後，不篩題） | 給老師看的理由 |
+|---|---|---|---|---|
+| `concept` | 觀念不清 | 降一級（最低 1） | 單選／多選／填空 | 觀念還沒建立時，先用短的觀念檢查題確認他懂了，再回到難題。 |
+| `formula` | 公式記錯 | 降一級 | 單選／多選／填空 | 公式記錯先用直接套公式的基本題把公式記牢。 |
+| `method` | 方法選錯 | 不變 | 計算 | 方法選錯要在完整的解題過程裡練「該用哪一招」，計算題最看得出來。 |
+| `calc` | 計算錯誤 | 不變 | 計算／填空 | 計算錯誤靠練習量改善，多給要算到底的題。 |
+| `unit` | 單位或有效數字 | 不變 | 計算／填空 | 單位與有效數字要在實際算出數值的題裡練。 |
+| `careless` | 粗心抄錯 | 不變 | 計算／填空 | 粗心靠練習量與檢查習慣改善，多給要寫出答案的題。 |
+| `reading` | 審題錯誤 | 不變 | 題幹長的先（壓掉空白後的字數） | 審題錯誤要練讀長題目、抓條件，題幹長的題先出。 |
+| `blank` | 未作答 | 降一級 | 簡單的先 | 空白通常是不知道從哪裡下手，先給做得出來的題建立信心與起手式。 |
+| `time` | 時間不足 | 降一級 | 簡單的先 | 時間不夠先練基本題的速度，再拉難度。 |
+| `chem_equation` | 化學式或係數 | 不變 | 題幹有反應式的先（→、⟶、⇌、`\rightarrow`、`\longrightarrow`、`\xrightarrow`、`\rightleftharpoons`、`\ce{… -> …}`、「反應式」） | 化學式或係數出錯，要多寫、多配平反應式。只對化學。 |
+
+改策略只改這張表與 `ERROR_STRATEGIES`，選題程式不必動（`test/unit/remedialErrorStrategy.test.js` 釘住現在的預設，改了要一起改）。
+
+### 9.3 套用方式
+
+- **難度上限**是硬條件：補救目標的上限（第 3.3 節）降一級後抽。**抽不滿就退回原本的上限**再抽一次
+  （`examController.pickByQuotas` 的 `fallbackPool`；兩次取抽到較多的那一次），偏好照舊；這時 `notes` 多一句
+  `「向量內積」錯因以「觀念不清」為主，原本只選難度 ≤ 3 的題，但湊不到 5 題，已改回難度 ≤ 4（題型偏好照舊）。`，
+  `blueprint` 的 `difficulty_max` 回報實際用的上限、`error_focus.reason` 改成 `'dominant_difficulty_fallback'`（`applied` 仍是 true）。
+  退回之後還是不夠，照舊逐目標回報在 `shortfalls`。
+- **偏好**一律做成候選池內的排序（`pickByQuotas` 的 `rankOf`）：把洗牌函式包一層「先洗牌、再依偏好鍵穩定排序」交給同一個
+  `pickPaperUnits`。候選池 SQL、家族互斥、承上題整組、裝箱規則都不變，所以偏好**只改變抽的先後，永遠不會讓題數變少**；
+  偏好鍵相同的題之間仍是隨機。一組承上題的偏好鍵取組內最好的一題。沒有偏好或沒套用時，`pickByQuotas` 收到的配額與之前逐字相同。
+- `rationale` 在掌握度那一句後面接錯因：例 `掌握度下界 3%（批改 6 題、答對 1）；錯因以「觀念不清」為主（有標錯因的錯題 4 題，標了 3 次，占 75%）→ 難度上限降一級，優先單選／多選／填空；選難度 ≤ 3 的題`。
+- `blueprint` 中 `bucket = 'remedial'` 的列**一律**有 `error_focus` 鍵（沒標錯因時為 `null`；先備、延伸列沒有這個鍵）：
+
+```json
+{ "type": "concept", "label": "觀念不清", "count": 3, "share": 0.75, "tagged_wrong": 4,
+  "strategy": { "difficulty_ceiling_delta": -1, "prefer_types": ["單選", "多選", "填空"], "prefer_order": null,
+                "summary": "難度上限降一級，優先單選／多選／填空", "rationale": "觀念還沒建立時，…" },
+  "applied": true, "reason": "dominant" }
+```
+
+  沒套用時 `strategy` 為 `null`。草稿畫面在每個補救目標下多一行（主因、怎麼調、為什麼；沒套用時灰字說明看不出主因）。

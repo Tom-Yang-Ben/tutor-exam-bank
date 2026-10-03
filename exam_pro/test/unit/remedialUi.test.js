@@ -659,3 +659,53 @@ describe('「找相似」結果的「加入補救卷」按鈕（variants.js 的�
         assert.equal(body.querySelectorAll('button[data-remedial-add]').length, 0);
     });
 });
+
+// ═════════════════════════ 〔dec/r16-remedial〕依錯因出題 ═════════════════════════
+describe('〔dec/r16-remedial〕依錯因出題（remedial.js）', () => {
+    const FOCUS = {
+        type: 'concept', label: '觀念不清', count: 3, share: 0.75, tagged_wrong: 4, applied: true, reason: 'dominant',
+        strategy: { difficulty_ceiling_delta: -1, prefer_types: ['單選', '多選', '填空'], prefer_order: null,
+            summary: '難度上限降一級，優先單選／多選／填空', rationale: '觀念還沒建立時，先用短的觀念檢查題確認他懂了，再回到難題。' }
+    };
+    const FOCUSED_DRAFT = {
+        ...DRAFT,
+        blueprint: [{ ...DRAFT.blueprint[0], error_focus: FOCUS }, DRAFT.blueprint[1]]
+    };
+
+    test('純函式：errorFocusText（null 不顯示、套用、看不出主因、退回難度上限）', async () => {
+        const mod = await loadFresh('remedial.js');
+        assert.equal(mod.errorFocusText(null), null);
+        assert.equal(mod.errorFocusText(undefined), null);
+        assert.equal(mod.errorFocusText(FOCUS),
+            '錯因以「觀念不清」為主（有標錯因的錯題 4 題，「觀念不清」3 次（75%））→ 難度上限降一級，優先單選／多選／填空。觀念還沒建立時，先用短的觀念檢查題確認他懂了，再回到難題。');
+        assert.match(mod.errorFocusText({ ...FOCUS, reason: 'dominant_difficulty_fallback' }), /降難度後題不夠，已退回原本的難度上限/);
+        assert.match(mod.errorFocusText({ ...FOCUS, applied: false, reason: 'tie', strategy: null }), /^錯因：看不出主因（兩種錯因一樣多；.*選題不依錯因調整。$/);
+    });
+
+    test('草稿：補救目標下顯示錯因主因與調整；確認 body 不變', async () => {
+        await mount({ examApp: routedBridge({ 'POST /api/students/1/remedial-paper': () => respond(FOCUSED_DRAFT) }) });
+        $('remStudent').value = '1';
+        $('remGenerate').click();
+        await settle();
+        const lines = $('remDraft').querySelectorAll('p[data-error-focus]');
+        assert.equal(lines.length, 1, '只有帶 error_focus 的目標顯示');
+        assert.equal(lines[0].getAttribute('data-error-focus'), 'concept');
+        assert.ok(lines[0].textContent.includes('錯因以「觀念不清」為主'));
+        assert.ok(lines[0].textContent.includes('觀念還沒建立時'));
+        $('remConfirm').click();
+        await settle();
+        const confirm = env.window.ExamApp.calls.fetches.find(f => f.url === '/api/confirm-paper');
+        assert.deepEqual(confirm.body, { student_id: 1, question_ids: [11, 12, 21] });
+    });
+
+    test('沒有 error_focus 的舊回應：不顯示錯因行、確認 body 不多鍵', async () => {
+        await mount();
+        $('remStudent').value = '1';
+        $('remGenerate').click();
+        await settle();
+        assert.equal($('remDraft').querySelectorAll('p[data-error-focus]').length, 0);
+        $('remConfirm').click();
+        await settle();
+        assert.deepEqual(env.window.ExamApp.calls.fetches.find(f => f.url === '/api/confirm-paper').body, { student_id: 1, question_ids: [11, 12, 21] });
+    });
+});

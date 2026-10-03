@@ -1,5 +1,8 @@
 const { pool, query } = require('../config/db');
 const { pickPaperUnits, nearestReachableCounts, sortForPaperGrouped } = require('../utils/paperGroups');
+const { shuffle } = require('../utils/shuffle');
+// 〔dec/r16-remedial 依錯因出題〕pickByQuotas 的偏好排序（純函式；config 不 require 本檔）
+const { compareKeys } = require('../config/remedialErrorStrategy');
 // 〔Owner 決策單 2026-09-25 B7〕confirm-paper 的承上題整組檢查（純函式＋與補救卷手動加題同一段成員查詢）。
 // remedialService 只在 defaultDeps() 裡才 require 本檔，載入時不成環。
 const { findIncompleteFollowUpGroups, incompleteFollowUpGroupsMessage } = require('../utils/followUpPaperCheck');
@@ -232,41 +235,107 @@ async function fetchCandidatePool(opts) {
  * unitSizes（該段家族互斥後每個可用組的題數）給 blueprint 在承上組湊不滿時算「改成幾題湊得滿」
  * （〔Owner 決策單 2026-09-25 B10〕）；補救卷不讀它。
  *
+ * 〔dec/r16-remedial 依錯因出題〕每段可多帶兩個選用鍵（只有補救卷用；沒帶時這一段的行為與抽題結果逐字不變）：
+ *   - rankOf(row) → number[]：偏好順序（小的先抽）。row＝{ id, question_type, question_text, difficulty }，
+ *     抽之前另查一次這些欄位。做法是把洗牌函式包一層「先洗牌、再依偏好穩定排序」交給同一個 pickPaperUnits——
+ *     偏好只改變抽的**先後**，候選池、家族互斥、承上題整組與裝箱規則都不變，所以偏好永遠不會讓題數變少。
+ *     一組承上題的偏好鍵取組內最好的一題。同鍵的題維持隨機。
+ *   - fallbackPool：pool 抽不滿 count 時，改用它再抽一次（例：錯因策略把難度上限降一級，降了之後題不夠就退回原本的上限）；
+ *     兩次取抽到較多的那一次（同數取 pool 那一次），結果多 usedFallback（有帶 fallbackPool 才多這個鍵）。
+ *
  * @param {object} p
  * @param {number} p.studentId
  * @param {string} p.subject
  * @param {Array<{count:number, pool:{chapters?:string[]|null, kcIds?:number[]|null,
- *                difficultyMin?:number|null, difficultyMax?:number|null}}>} p.quotas
+ *                difficultyMin?:number|null, difficultyMax?:number|null},
+ *                rankOf?:(row:object)=>number[], fallbackPool?:object}>} p.quotas
  * @param {number[]} [p.excludeIds]
  * @param {string[]|null} [p.sourceTypes]
  * @param {(items:Array)=>Array} [p.shuffleFn]
- * @returns {Promise<Array<{ids:number[], got:number, availableCount:number, unitSizes:number[]}>>} 與 quotas 一一對應
+ * @returns {Promise<Array<{ids:number[], got:number, availableCount:number, unitSizes:number[], usedFallback?:boolean}>>} 與 quotas 一一對應
  */
 async function pickByQuotas({ studentId, subject, quotas, excludeIds = [], sourceTypes = null, shuffleFn }) {
     const usedIds = new Set();
     const usedFamilies = new Set();
     const results = [];
-    for (const quota of quotas) {
-        if (!(quota.count > 0)) { results.push({ ids: [], got: 0, availableCount: 0, unitSizes: [] }); continue; }
+
+    /** 抽一段（不動 usedIds／usedFamilies；呼叫端決定採用哪一次之後才記）。 */
+    async function pickOne(pool, quota) {
         const { candidates, related } = await fetchCandidatePool({
             subject, studentId, excludeIds, sourceTypes,
-            chapters: quota.pool.chapters ?? null,
-            kcIds: quota.pool.kcIds ?? null,
-            difficultyMin: quota.pool.difficultyMin ?? null,
-            difficultyMax: quota.pool.difficultyMax ?? null
+            chapters: pool.chapters ?? null,
+            kcIds: pool.kcIds ?? null,
+            difficultyMin: pool.difficultyMin ?? null,
+            difficultyMax: pool.difficultyMax ?? null
         });
         const free = candidates.filter(c => !usedIds.has(c.id) && !usedFamilies.has(c.variant_of ?? c.id));
+        let sf = shuffleFn;
+        if (typeof quota.rankOf === 'function' && free.length > 0) {
+            sf = await preferenceShuffle(free.map(c => c.id), quota.rankOf, shuffleFn || shuffle);
+        }
         const picked = pickPaperUnits({
-            candidates: free, related, limitCount: quota.count, ...(shuffleFn ? { shuffleFn } : {})
+            candidates: free, related, limitCount: quota.count, ...(sf ? { shuffleFn: sf } : {})
         });
-        const byId = new Map(free.map(c => [c.id, c]));
+        return { picked, byId: new Map(free.map(c => [c.id, c])) };
+    }
+
+    for (const quota of quotas) {
+        if (!(quota.count > 0)) { results.push({ ids: [], got: 0, availableCount: 0, unitSizes: [] }); continue; }
+        let chosen = await pickOne(quota.pool, quota);
+        let usedFallback = false;
+        if (quota.fallbackPool && chosen.picked.actual < quota.count) {
+            const fb = await pickOne(quota.fallbackPool, quota);
+            if (fb.picked.actual > chosen.picked.actual) { chosen = fb; usedFallback = true; }
+        }
+        const { picked, byId } = chosen;
         for (const id of picked.ids) {
             usedIds.add(id);
             usedFamilies.add(byId.get(id).variant_of ?? id);
         }
-        results.push({ ids: picked.ids, got: picked.actual, availableCount: picked.availableCount, unitSizes: picked.unitSizes });
+        results.push({
+            ids: picked.ids, got: picked.actual, availableCount: picked.availableCount, unitSizes: picked.unitSizes,
+            ...(quota.fallbackPool ? { usedFallback } : {})
+        });
     }
     return results;
+}
+
+/**
+ * 〔dec/r16-remedial 依錯因出題〕「先洗牌、再依偏好穩定排序」的洗牌函式（給 pickPaperUnits）。
+ * pickPaperUnits 交給洗牌函式的元素是「組」（{ ids, … }）：組的偏好鍵取組內最好的一題；元素若是單題（有 id、沒有 ids）也照樣處理。
+ * 偏好鍵相同的元素維持洗牌後的順序（Array.prototype.sort 是穩定排序），所以同鍵之間仍是隨機。
+ *
+ * @param {number[]} ids 候選題
+ * @param {(row:object)=>number[]} rankOf
+ * @param {(items:Array)=>Array} baseShuffle
+ * @returns {Promise<(items:Array)=>Array>}
+ */
+async function preferenceShuffle(ids, rankOf, baseShuffle) {
+    const { rows } = await query(
+        'SELECT id, question_type, question_text, difficulty FROM questions WHERE id = ANY($1::int[])', [ids]);
+    return preferenceOrderFn(new Map(rows.map(r => [r.id, rankOf(r)])), baseShuffle);
+}
+
+/**
+ * preferenceShuffle 的純函式部分：題目 id → 偏好鍵 的對照表 → 洗牌函式。
+ * 查不到鍵的元素排最後（[Infinity]）。
+ * @param {Map<number, number[]>} keyOfId
+ * @param {(items:Array)=>Array} baseShuffle
+ * @returns {(items:Array)=>Array}
+ */
+function preferenceOrderFn(keyOfId, baseShuffle) {
+    const keyOf = (item) => {
+        const members = Array.isArray(item?.ids) ? item.ids : [item?.id];
+        const keys = members.map(id => keyOfId.get(id)).filter(Boolean);
+        if (keys.length === 0) return [Infinity];
+        return keys.reduce((best, k) => (compareKeys(k, best) < 0 ? k : best));
+    };
+    return (items) => {
+        const shuffled = baseShuffle(items);
+        const keyed = shuffled.map(item => ({ item, key: keyOf(item) }));
+        keyed.sort((a, b) => compareKeys(a.key, b.key));
+        return keyed.map(k => k.item);
+    };
 }
 
 /**
@@ -771,6 +840,8 @@ async function generateBlueprintPaper(req, res, next) {
     }
 }
 // 純函式給單元測試
+// 〔dec/r16-remedial〕偏好排序的純函式（test/unit/remedialErrorStrategy.test.js）
+exports._pickInternals = { preferenceOrderFn };
 exports._blueprintInternals = { parseBlueprint, parseExcludeIds, parseSourceTypes, shortfallReason, blueprintPolicyError,
     blueprintShortfallHints, followUpShortfallText, blueprintTitle, MAX_BLUEPRINT_ROWS };
 

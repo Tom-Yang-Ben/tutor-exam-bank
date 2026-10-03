@@ -268,6 +268,8 @@ describe('planRemedialPaper（注入假依賴，只驗組裝）', () => {
             seen,
             async query(text, values) {
                 if (/tagged_graded/.test(text)) return { rows: [{ tagged_graded: tagged, untagged_graded: 9 }] };
+                // 〔dec/r16-remedial〕補救單位的錯題錯因：這組夾具沒有標錯因
+                if (/AS unit, a\.error_types/.test(text)) return { rows: [] };
                 if (/question_kcs qk ON qk\.question_id = w\.question_id/.test(text)) return { rows: [] };
                 if (/GROUP BY q\.chapter/.test(text)) {
                     return { rows: [
