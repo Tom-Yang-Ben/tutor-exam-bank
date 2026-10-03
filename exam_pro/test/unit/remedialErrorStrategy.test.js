@@ -8,7 +8,7 @@
 //   3. 選題順序：examController 的 preferenceOrderFn 交給真的 pickPaperUnits——偏好的題先抽、承上組與家族互斥照舊、
 //      偏好永遠不讓題數變少、同鍵之間仍是隨機。
 //   4. remedialService：buildPlan 套用主因（pool、fallbackPool、rankOf、error_focus、rationale）、沒標錯因時逐字不變、
-//      planRemedialPaper 的退回難度上限（notes 與 blueprint）。
+//      buildTargets 的快照、planRemedialPaper 的退回難度上限（notes 與 blueprint）。
 // ─────────────────────────────────────────────────────────────
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
@@ -281,7 +281,17 @@ describe('buildPlan × 錯因主因', () => {
         assert.match(rem.rationale, /有標錯因的錯題只有 1 題，還看不出主因，選題不依錯因調整；選難度 ≤ 4 的題$/);
     });
 
-    test('kc 基底：單位鍵是 kc_id', () => {
+    test('每段帶快照用的 unit、baseline（答錯＝批改 − 答對，部分給分按比例）', () => {
+        const plan = r.buildPlan(base);
+        assert.deepEqual(plan.quotas.map(q => [q.bucket, q.unit, q.baseline]), [
+            ['remedial', { unit_type: 'chapter', subject: '數學', chapter: '向量內積' }, { graded: 6, wrong: 5, wrong_rate: 0.8333, low_sample: false }],
+            ['extension', { unit_type: 'chapter', subject: '數學', chapter: '排列' }, { graded: 6, wrong: 0, wrong_rate: 0, low_sample: false }]
+        ]);
+        assert.deepEqual(r.baselineOf(undefined), { graded: 0, wrong: 0, wrong_rate: null, low_sample: true });
+        assert.deepEqual(r.baselineOf({ graded: 1.5, correct: 1.25, low_sample: true }), { graded: 1.5, wrong: 0.25, wrong_rate: 0.1667, low_sample: true });
+    });
+
+    test('kc 基底：單位鍵是 kc_id，快照帶 kc_id；先備知識點沒有作答時 baseline 為 0／null', () => {
         const kcRanked = [
             { kc_id: 1, code: 'MATH.向量內積.01', name: '內積', chapter: '向量內積', graded: 5, correct: 1, mastery_lb: 0.03, low_sample: false, avg_wrong_difficulty: 2, avg_graded_difficulty: 2 }
         ];
@@ -291,9 +301,30 @@ describe('buildPlan × 錯因主因', () => {
             errorProfiles: new Map([[1, { wrong: 4, tagged_wrong: 2, counts: { method: 2 } }]])
         });
         const rem = plan.quotas.find(q => q.bucket === 'remedial');
-        assert.equal(r.unitKeyOf('kc', { kc_id: 1, chapter: '向量內積' }), 1);
+        assert.deepEqual(rem.unit, { unit_type: 'kc', subject: '數學', chapter: '向量內積', kc_id: 1 });
         assert.equal(rem.error_focus.type, 'method');
-        assert.ok(!('error_focus' in plan.quotas.find(q => q.bucket === 'prerequisite')), '先備組不看錯因');
+        const pre = plan.quotas.find(q => q.bucket === 'prerequisite');
+        assert.deepEqual([pre.unit, pre.baseline], [
+            { unit_type: 'kc', subject: '數學', chapter: '向量的加減與係數積', kc_id: 9 },
+            { graded: 0, wrong: 0, wrong_rate: null, low_sample: true }
+        ]);
+    });
+
+    test('buildTargets：每段一列、只有補救組帶 error_focus 摘要；不在白名單的章節略過並回報', () => {
+        const plan = r.buildPlan({ ...base, errorProfiles: profiles([['向量內積', { wrong: 5, tagged_wrong: 4, counts: { concept: 3, calc: 1 } }]]) });
+        const { targets, skipped } = r.buildTargets(plan.quotas);
+        assert.deepEqual(skipped, []);
+        assert.deepEqual(targets, [
+            { unit_type: 'chapter', subject: '數學', chapter: '向量內積', bucket: 'remedial',
+                baseline: { graded: 6, wrong: 5, wrong_rate: 0.8333, low_sample: false },
+                error_focus: { type: 'concept', count: 3, share: 0.75, applied: true } },
+            { unit_type: 'chapter', subject: '數學', chapter: '排列', bucket: 'extension',
+                baseline: { graded: 6, wrong: 0, wrong_rate: 0, low_sample: false } }
+        ]);
+        const legacy = r.buildPlan({ ...base, ranked: [{ ...ranked[0], chapter: '舊章名', name: '舊章名' }, ranked[1]] });
+        const out = r.buildTargets(legacy.quotas);
+        assert.deepEqual(out.skipped, ['舊章名']);
+        assert.deepEqual(out.targets.map(t => t.chapter), ['排列']);
     });
 
     test('錯因查詢：$1 studentId、$2 days、$3 subject、$4 單位鍵；只讀檢視 attempts（R10）、答錯或部分給分', () => {
@@ -341,7 +372,7 @@ describe('planRemedialPaper × 錯因（注入假依賴）', () => {
         { unit: '向量內積', error_types: ['concept', 'calc'] }, { unit: '向量內積', error_types: [] }
     ];
 
-    test('主因套用：pickByQuotas 收到 rankOf 與 fallbackPool；blueprint 的 error_focus', async () => {
+    test('主因套用：pickByQuotas 收到 rankOf 與 fallbackPool；blueprint 的 error_focus；targets 快照', async () => {
         const d = deps({ usedFallback: false, errorRows: conceptRows });
         const out = await run(d);
         assert.deepEqual(d.seen.errorQuery, [5, 90, '數學', ['向量內積']]);
@@ -353,6 +384,9 @@ describe('planRemedialPaper × 錯因（注入假依賴）', () => {
         assert.equal(b.difficulty_max, 3);
         assert.deepEqual([b.error_focus.type, b.error_focus.count, b.error_focus.share, b.error_focus.tagged_wrong, b.error_focus.reason],
             ['concept', 3, 0.75, 3, 'dominant']);
+        assert.deepEqual(out.targets, [{ unit_type: 'chapter', subject: '數學', chapter: '向量內積', bucket: 'remedial',
+            baseline: { graded: 6, wrong: 5, wrong_rate: 0.8333, low_sample: false },
+            error_focus: { type: 'concept', count: 3, share: 0.75, applied: true } }]);
         assert.ok(!out.notes.some(n => n.includes('改回難度')));
     });
 
@@ -372,5 +406,6 @@ describe('planRemedialPaper × 錯因（注入假依賴）', () => {
         assert.deepEqual(d.seen.quotas, [{ count: 5, pool: { chapters: ['向量內積'], difficultyMax: 4 } }]);
         assert.equal(out.blueprint[0].error_focus, null);
         assert.equal(out.blueprint[0].rationale, '掌握度下界 3%（批改 6 題、答對 1）；選難度 ≤ 4 的題');
+        assert.ok(!('error_focus' in out.targets[0]));
     });
 });

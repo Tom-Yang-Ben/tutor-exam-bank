@@ -27,6 +27,9 @@
 //      只算第一次作答，R10）：證據夠（config/remedialErrorStrategy.js 的 MIN_TAGGED_WRONG、MIN_DOMINANT_SHARE）
 //      就照主因的策略調整這個目標的選題——難度上限降一級（抽不滿就退回原本的上限，寫進 notes）、
 //      偏好某些題型或順序（只排先後，不篩掉題）。blueprint 的補救列多 error_focus（沒標任何錯因時為 null）。
+//   8. 〔dec/r16-remedial 補救成效〕回應多 targets：每個目標單位在出卷當下的快照（單位、桶、批改／答錯／錯誤率、
+//      錯因主因）。前端確認時原樣交給 confirm-paper（kind = 'remedial'），存進 exam_papers.targets，
+//      之後 GET /api/students/:id/remedial-effect 拿它當「補救前」比較（services/remedialEffectService.js）。
 //
 // 另有 lookupItems（GET /api/students/:id/remedial-paper/items）：草稿「用題目 ID 加題」前查題目資料與
 // 所在承上組的完整成員（含封存、已寫過的旗標），讓前端能整組加入或拒絕（docs/remedial.md 第 2.5 節）。
@@ -36,8 +39,9 @@
 // ─────────────────────────────────────────────────────────────
 const kcWeakness = require('./kcWeaknessService');
 const { groupFollowUps } = require('../utils/paperGroups');
-// 〔dec/r16-remedial〕依錯因出題的對照表（純函式）
+// 〔dec/r16-remedial〕依錯因出題的對照表（純函式）；補救成效的快照只收白名單章節
 const errorStrategy = require('../config/remedialErrorStrategy');
+const { isValidChapter } = require('../config/chapters');
 
 /** 契約第 4.4 條第 2 項的預設與區間。 */
 const DEFAULT_TOTAL = 20;
@@ -194,11 +198,24 @@ function targetOf(type, u) {
         : { type: 'chapter', chapter: u.chapter, name: u.chapter };
 }
 
-// ───────────────── 〔dec/r16-remedial〕依錯因出題（純函式）─────────────────
+// ───────────────── 〔dec/r16-remedial〕依錯因出題、補救成效快照（純函式）─────────────────
 
-/** 單位鍵：kc 基底用 kc_id、chapter 基底用章名（錯因統計 Map 的鍵）。 */
+/** 單位鍵：kc 基底用 kc_id、chapter 基底用章名（錯因統計 Map 的鍵、快照的比對都用它）。 */
 function unitKeyOf(basis, u) {
     return basis === 'kc' ? u.kc_id : u.chapter;
+}
+
+/**
+ * 「補救前」的基準（快照用；純函式）：批改量、答錯量（＝批改 − 答對，部分給分按比例）、錯誤率、樣本不足。
+ * u 不存在（先備知識點在時間窗內沒有作答）時回 0／null／true。
+ * @param {object|null|undefined} u rankUnits 的一列
+ * @returns {{graded:number, wrong:number, wrong_rate:number|null, low_sample:boolean}}
+ */
+function baselineOf(u) {
+    if (!u) return { graded: 0, wrong: 0, wrong_rate: null, low_sample: true };
+    const graded = Number(u.graded) || 0;
+    const wrong = kcWeakness.round4(Math.max(0, graded - (Number(u.correct) || 0)));
+    return { graded: kcWeakness.round4(graded), wrong, wrong_rate: graded > 0 ? kcWeakness.round4(wrong / graded) : null, low_sample: Boolean(u.low_sample) };
 }
 
 /**
@@ -242,9 +259,35 @@ function applyErrorFocus(focus, dMax) {
 }
 
 /**
+ * 補救成效的快照（純函式；回應的 targets、confirm-paper 存進 exam_papers.targets）。
+ * 每段配額一列；章節不在白名單的單位（資料庫裡的舊章節）不追蹤，回報在 skipped（呼叫端寫進 notes）——
+ * confirm-paper 對 targets 的章節嚴格驗白名單，伺服器自己產的快照不能被它擋下。
+ *
+ * @param {Array<{bucket:string, unit:object, baseline:object, error_focus?:object|null}>} quotas buildPlan 的 quotas
+ * @returns {{ targets: object[], skipped: string[] }}
+ */
+function buildTargets(quotas) {
+    const targets = [];
+    const skipped = [];
+    for (const q of quotas) {
+        if (!q.unit) continue;
+        if (!isValidChapter(q.unit.subject, q.unit.chapter)) {
+            if (!skipped.includes(q.unit.chapter)) skipped.push(q.unit.chapter);
+            continue;
+        }
+        const t = { ...q.unit, bucket: q.bucket, baseline: { ...q.baseline } };
+        if (q.error_focus) {
+            t.error_focus = { type: q.error_focus.type, count: q.error_focus.count, share: q.error_focus.share, applied: q.error_focus.applied };
+        }
+        targets.push(t);
+    }
+    return { targets, skipped };
+}
+
+/**
  * 組出選題計畫（純函式）：每個目標一段配額，依 remedial → prerequisite → extension 排列。
  *
- * 〔dec/r16-remedial〕補救組每段多帶 error_focus（見 applyErrorFocus），
+ * 〔dec/r16-remedial〕每段多帶 unit（快照的單位）、baseline（補救前的基準）；補救組另帶 error_focus（見 applyErrorFocus），
  * 主因套用時視策略多帶 rankOf（偏好）與 fallbackPool（降難度上限抽不滿時退回的原 pool）、fallback_rationale。
  *
  * @param {object} p
@@ -294,6 +337,12 @@ function buildPlan({ basis, total, mix, ranked, prereqRows = [], subject, errorP
         remCount += counts.extension;
     }
 
+    // 〔dec/r16-remedial〕快照的單位（補救成效用）；kc 基底多 kc_id
+    const unitOf = (type, u) => (type === 'kc'
+        ? { unit_type: 'kc', subject, chapter: u.chapter, kc_id: u.kc_id }
+        : { unit_type: 'chapter', subject, chapter: u.chapter });
+    const rankedByKey = new Map(ranked.map(u => [unitKeyOf(basis, u), u]));
+
     const quotas = [];
     const remSplit = splitCount(remCount, remUnits.length);
     remUnits.forEach((u, i) => {
@@ -312,7 +361,9 @@ function buildPlan({ basis, total, mix, ranked, prereqRows = [], subject, errorP
             difficulty_min: null,
             difficulty_max: ef.difficultyMax,
             rationale: head + ef.text + (ef.difficultyMax !== null ? `；選難度 ≤ ${ef.difficultyMax} 的題` : ''),
-            error_focus: ef.error_focus
+            error_focus: ef.error_focus,
+            unit: unitOf(basis, u),
+            baseline: baselineOf(u)
         };
         if (ef.rankOf) quota.rankOf = ef.rankOf;
         if (ef.lowered) {
@@ -334,7 +385,9 @@ function buildPlan({ basis, total, mix, ranked, prereqRows = [], subject, errorP
             pool: { kcIds: [t.kc_id], difficultyMax: PREREQ_DIFFICULTY_MAX },
             difficulty_min: null,
             difficulty_max: PREREQ_DIFFICULTY_MAX,
-            rationale: `「${t.for_name}」的先備知識點；選基礎題（難度 ≤ ${PREREQ_DIFFICULTY_MAX}）`
+            rationale: `「${t.for_name}」的先備知識點；選基礎題（難度 ≤ ${PREREQ_DIFFICULTY_MAX}）`,
+            unit: unitOf('kc', t),
+            baseline: baselineOf(rankedByKey.get(t.kc_id))
         });
     });
 
@@ -350,7 +403,9 @@ function buildPlan({ basis, total, mix, ranked, prereqRows = [], subject, errorP
             difficulty_min: dMin,
             difficulty_max: null,
             rationale: `已相對掌握（掌握度下界 ${fmtPct(u.mastery_lb)}）`
-                + (dMin !== null ? `；選難度 ≥ ${dMin} 的題` : '')
+                + (dMin !== null ? `；選難度 ≥ ${dMin} 的題` : ''),
+            unit: unitOf(basis, u),
+            baseline: baselineOf(u)
         });
     });
 
@@ -617,8 +672,13 @@ async function planRemedialPaper({ studentId, subject, total, mix, days, sourceT
     if (plan.quotas.length && items.length < total) {
         notes.push(`本草稿實際 ${items.length} 題（要求 ${total} 題）。不足的部分可以用題目 ID 手動加題，或到「題庫覆蓋率」看哪一章該補題。`);
     }
+    // 〔dec/r16-remedial 補救成效〕出卷當下的目標快照
+    const { targets, skipped } = buildTargets(plan.quotas);
+    if (skipped.length) {
+        notes.push(`「${skipped.join('、')}」不在章節白名單（資料庫裡的舊章節），這份卷不追蹤這些單位的補救成效。`);
+    }
 
-    return { student_id: studentId, subject, basis, question_ids: questionIds, items, blueprint, shortfalls, notes };
+    return { student_id: studentId, subject, basis, question_ids: questionIds, items, blueprint, shortfalls, notes, targets };
 }
 
 /**
@@ -678,7 +738,9 @@ module.exports = {
     choosePrereqTargets,
     buildPlan,
     unitKeyOf,
+    baselineOf,
     applyErrorFocus,
+    buildTargets,
     previewText,
     groupIdsById,
     buildChapterMastery,

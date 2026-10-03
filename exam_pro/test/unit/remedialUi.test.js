@@ -660,16 +660,41 @@ describe('「找相似」結果的「加入補救卷」按鈕（variants.js 的�
     });
 });
 
-// ═════════════════════════ 〔dec/r16-remedial〕依錯因出題 ═════════════════════════
-describe('〔dec/r16-remedial〕依錯因出題（remedial.js）', () => {
+// ═════════════════════════ 〔dec/r16-remedial〕依錯因出題、補救成效 ═════════════════════════
+describe('〔dec/r16-remedial〕依錯因出題與補救成效（remedial.js）', () => {
     const FOCUS = {
         type: 'concept', label: '觀念不清', count: 3, share: 0.75, tagged_wrong: 4, applied: true, reason: 'dominant',
         strategy: { difficulty_ceiling_delta: -1, prefer_types: ['單選', '多選', '填空'], prefer_order: null,
             summary: '難度上限降一級，優先單選／多選／填空', rationale: '觀念還沒建立時，先用短的觀念檢查題確認他懂了，再回到難題。' }
     };
+    const TARGETS = [{ unit_type: 'chapter', subject: '數學', chapter: '向量內積', bucket: 'remedial',
+        baseline: { graded: 6, wrong: 5, wrong_rate: 0.8333, low_sample: false }, error_focus: { type: 'concept', count: 3, share: 0.75, applied: true } }];
     const FOCUSED_DRAFT = {
         ...DRAFT,
-        blueprint: [{ ...DRAFT.blueprint[0], error_focus: FOCUS }, DRAFT.blueprint[1]]
+        blueprint: [{ ...DRAFT.blueprint[0], error_focus: FOCUS }, DRAFT.blueprint[1]],
+        targets: TARGETS
+    };
+    const EFFECT = {
+        student_id: 1, limit: 10, days: null,
+        thresholds: { improved_delta: 0.1, worse_delta: -0.1, min_after_graded: 2, min_n: 5 },
+        papers: [{
+            paper_id: 9, title: '王小明-向量內積特訓卷(2026_9_24)', created_at: '2026-09-24T02:00:00.000Z', graded: true,
+            assigned_count: 5, graded_count: 5, anchor_at: '2026-09-25T02:00:00.000Z',
+            targets: [
+                { unit_type: 'chapter', subject: '數學', chapter: '向量內積', name: '向量內積', bucket: 'remedial',
+                    error_focus: { type: 'concept', count: 3, share: 0.75, applied: true, label: '觀念不清' },
+                    before: { graded: 6, wrong: 5, wrong_rate: 0.8333, correct_rate: 0.1667, low_sample: false },
+                    on_paper: { assigned: 5, graded: 5, correct: 3, rate: 0.6 },
+                    after: { graded: 3, correct: 2, rate: 0.6667, papers: 1 }, delta: 0.5, low_sample: true, status: 'improved' },
+                { unit_type: 'chapter', subject: '數學', chapter: '排列', name: '排列', bucket: 'remedial', error_focus: null,
+                    before: { graded: 4, wrong: 2, wrong_rate: 0.5, correct_rate: 0.5, low_sample: true },
+                    on_paper: { assigned: 2, graded: 2, correct: 1, rate: 0.5 },
+                    after: { graded: 0, correct: 0, rate: null, papers: 0 }, delta: null, low_sample: true, status: 'insufficient_data' }
+            ]
+        }, {
+            paper_id: 12, title: '王小明-排列特訓卷(2026_10_1)', created_at: '2026-10-01T02:00:00.000Z', graded: false,
+            assigned_count: 4, graded_count: 1, anchor_at: '2026-10-01T02:00:00.000Z', targets: []
+        }]
     };
 
     test('純函式：errorFocusText（null 不顯示、套用、看不出主因、退回難度上限）', async () => {
@@ -682,7 +707,21 @@ describe('〔dec/r16-remedial〕依錯因出題（remedial.js）', () => {
         assert.match(mod.errorFocusText({ ...FOCUS, applied: false, reason: 'tie', strategy: null }), /^錯因：看不出主因（兩種錯因一樣多；.*選題不依錯因調整。$/);
     });
 
-    test('草稿：補救目標下顯示錯因主因與調整；確認 body 不變', async () => {
+    test('純函式：remedialConfirmKeys（有快照才帶 kind／targets）、pctText、effectLine', async () => {
+        const mod = await loadFresh('remedial.js');
+        assert.deepEqual(mod.remedialConfirmKeys(null), {});
+        assert.deepEqual(mod.remedialConfirmKeys({ targets: [] }), {});
+        assert.deepEqual(mod.remedialConfirmKeys(mod.emptyDraft(1, '王小明', '數學')), {}, '手動湊的空草稿不帶');
+        assert.deepEqual(mod.remedialConfirmKeys(mod.draftFromResponse(FOCUSED_DRAFT, '王小明')), { kind: 'remedial', targets: TARGETS });
+        assert.deepEqual(mod.draftFromResponse(DRAFT, '王小明').targets, [], '舊回應沒有 targets');
+        assert.deepEqual([mod.pctText(null), mod.pctText(0.6667), mod.pctText(0)], ['—', '67%', '0%']);
+        assert.equal(mod.effectLine(EFFECT.papers[0].targets[0]),
+            '補救前 17%（批改 6 題） → 這張卷 60%（5/5 題已批改） → 之後 67%（批改 3 題），變化 +50 個百分點');
+        assert.equal(mod.effectLine(EFFECT.papers[0].targets[1]), '補救前 50%（批改 4 題） → 這張卷 50%（2/2 題已批改） → 之後 —（批改 0 題）');
+        assert.deepEqual(Object.keys(mod.EFFECT_STATUS), ['improved', 'no_change', 'worse', 'insufficient_data', 'pending']);
+    });
+
+    test('草稿：補救目標下顯示錯因主因與調整；確認時帶 kind: remedial 與目標快照', async () => {
         await mount({ examApp: routedBridge({ 'POST /api/students/1/remedial-paper': () => respond(FOCUSED_DRAFT) }) });
         $('remStudent').value = '1';
         $('remGenerate').click();
@@ -695,7 +734,7 @@ describe('〔dec/r16-remedial〕依錯因出題（remedial.js）', () => {
         $('remConfirm').click();
         await settle();
         const confirm = env.window.ExamApp.calls.fetches.find(f => f.url === '/api/confirm-paper');
-        assert.deepEqual(confirm.body, { student_id: 1, question_ids: [11, 12, 21] });
+        assert.deepEqual(confirm.body, { student_id: 1, question_ids: [11, 12, 21], kind: 'remedial', targets: TARGETS });
     });
 
     test('沒有 error_focus 的舊回應：不顯示錯因行、確認 body 不多鍵', async () => {
@@ -707,5 +746,42 @@ describe('〔dec/r16-remedial〕依錯因出題（remedial.js）', () => {
         $('remConfirm').click();
         await settle();
         assert.deepEqual(env.window.ExamApp.calls.fetches.find(f => f.url === '/api/confirm-paper').body, { student_id: 1, question_ids: [11, 12, 21] });
+    });
+
+    test('補救成效：選學生才讀；每份卷、每個目標的狀態標籤、補救前 → 之後、樣本少；沒有卷時的提示；讀取失敗', async () => {
+        await mount({ examApp: routedBridge({
+            'GET /api/students/1/remedial-effect': () => respond(EFFECT),
+            'GET /api/students/2/remedial-effect': () => respond({ ...EFFECT, papers: [] })
+        }) });
+        assert.ok($('remEffect').textContent.includes('選學生後顯示'));
+        assert.ok(!env.window.ExamApp.calls.fetches.some(f => f.url.includes('/remedial-effect')), '還沒選學生不讀');
+        $('remStudent').value = '1';
+        $('remStudent').dispatchEvent({ type: 'change' });
+        await settle();
+        const box = $('remEffect');
+        assert.ok(env.window.ExamApp.calls.fetches.some(f => f.url === '/api/students/1/remedial-effect'));
+        assert.deepEqual(box.querySelectorAll('div[data-paper-id]').map(d => d.getAttribute('data-paper-id')), ['9', '12']);
+        assert.deepEqual(box.querySelectorAll('div[data-status]').map(d => d.getAttribute('data-status')), ['improved', 'insufficient_data']);
+        const rows = box.querySelectorAll('div[data-status]');
+        assert.ok(rows[0].textContent.includes('進步') && rows[0].textContent.includes('樣本少') && rows[0].textContent.includes('依錯因出題：觀念不清'));
+        assert.ok(rows[1].textContent.includes('資料不足') && !rows[1].textContent.includes('樣本少'), '資料不足就不再標樣本少');
+        assert.ok(box.textContent.includes('已批改 1/4 題'));
+        assert.ok(box.textContent.includes('這份卷沒有補救組的目標可追蹤'));
+        assert.ok(box.textContent.includes('高 10 個百分點以上算進步'));
+
+        $('remStudent').value = '2';
+        $('remStudent').dispatchEvent({ type: 'change' });
+        await settle();
+        assert.ok($('remEffect').textContent.includes('還沒有從這裡確認出卷的補救卷'));
+    });
+
+    test('補救成效讀取失敗（例如還沒 migrate 的 503）：顯示伺服器的訊息', async () => {
+        await mount({ examApp: routedBridge({
+            'GET /api/students/1/remedial-effect': () => respond({ message: '資料庫還沒套 migrations/0022_paper_kind_targets.sql' }, 503)
+        }) });
+        $('remStudent').value = '1';
+        $('remStudent').dispatchEvent({ type: 'change' });
+        await settle();
+        assert.ok($('remEffect').textContent.includes('補救成效讀取失敗：資料庫還沒套 migrations/0022_paper_kind_targets.sql'));
     });
 });

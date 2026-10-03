@@ -114,7 +114,7 @@ function runSuite() {
                 await wrongHistory(s, await addMany(4, { difficulty: 3 }), errorTypes);
             }
 
-            test('主因「觀念不清」：難度上限 4 → 3、單選先抽滿、上限外的題不抽；blueprint 的 error_focus、rationale', async () => {
+            test('主因「觀念不清」：難度上限 4 → 3、單選先抽滿、上限外的題不抽；blueprint 的 error_focus、rationale、targets 快照', async () => {
                 const s = await addStudent();
                 await history(s, [['concept'], ['concept'], ['concept', 'calc'], []]);
                 const choice = await addMany(3, { type: '單選', difficulty: 2 });
@@ -135,6 +135,9 @@ function runSuite() {
                     assert.equal(b.error_focus.strategy.summary, '難度上限降一級，優先單選／多選／填空');
                     assert.match(b.rationale, /錯因以「觀念不清」為主（有標錯因的錯題 3 題，標了 3 次，占 75%）→ 難度上限降一級/);
                     assert.deepEqual(res.body.shortfalls, []);
+                    assert.deepEqual(res.body.targets, [{ unit_type: 'chapter', subject: '數學', chapter: '向量內積', bucket: 'remedial',
+                        baseline: { graded: 4, wrong: 4, wrong_rate: 1, low_sample: true },
+                        error_focus: { type: 'concept', count: 3, share: 0.75, applied: true } }]);
                 }
                 assert.deepEqual(await footprint(), { papers: 0, assignments: 4 }, '草稿不寫庫');
             });
@@ -157,6 +160,7 @@ function runSuite() {
                 const pb = plain.body.blueprint[0];
                 assert.equal(pb.error_focus, null);
                 assert.equal(pb.rationale, '掌握度下界 0%（批改 4 題、答對 0）；選難度 ≤ 4 的題');
+                assert.ok(!('error_focus' in plain.body.targets[0]));
             });
 
             test('R10：重練作答的錯因不算——第一次作答只有 1 題標錯因 → 證據不夠，不套用', async () => {
@@ -201,7 +205,7 @@ function runSuite() {
                 assert.equal(res.body.blueprint[0].error_focus.reason, 'dominant_difficulty_fallback');
             });
 
-            test('知識點基底：錯因以知識點為單位計算', async () => {
+            test('知識點基底：錯因以知識點為單位計算，快照帶 kc_id', async () => {
                 const s = await addStudent();
                 const k1 = await addKc('MATH.向量內積.01', { name: '內積的意義' });
                 const hist = await addMany(5, { difficulty: 2 });
@@ -215,6 +219,8 @@ function runSuite() {
                 assert.equal(res.body.basis, 'kc');
                 const b = res.body.blueprint[0];
                 assert.deepEqual([b.target.code, b.error_focus.type, b.error_focus.count, b.error_focus.applied], ['MATH.向量內積.01', 'calc', 3, true]);
+                assert.deepEqual(res.body.targets[0], { unit_type: 'kc', subject: '數學', chapter: '向量內積', kc_id: k1, bucket: 'remedial',
+                    baseline: { graded: 5, wrong: 5, wrong_rate: 1, low_sample: false }, error_focus: { type: 'calc', count: 3, share: 0.75, applied: true } });
             });
         });
 

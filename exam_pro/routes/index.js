@@ -242,6 +242,8 @@ if (featuresS5D.FEATURE_REMEDIAL) {
     router.post('/students/:id/remedial-paper', remedialController.remedialPaper);
     router.get('/students/:id/remedial-paper/items', remedialController.remedialItems);
     router.get('/coverage', remedialController.getCoverage);
+    // 〔dec/r16-remedial〕補救成效（只讀）
+    router.get('/students/:id/remedial-effect', remedialController.getRemedialEffect);
 }
 
 // ── 階段 5 WS-E：AI 家教與按住說話（docs/interfaces-stage5.md 第 4.5 條）──

@@ -165,6 +165,7 @@ app.use((err, req, res, next) => {
 | `FEATURE_REMEDIAL`〔修訂 2026-09-24〕 | `GET /api/students/:id/weakness/kc` | FR-030 | — |
 | `FEATURE_REMEDIAL`〔修訂 2026-09-24〕 | `POST /api/students/:id/remedial-paper`（只產草稿）、`GET /api/students/:id/remedial-paper/items?ids=`（手動加題前查整組；只讀） | FR-031 | — |
 | `FEATURE_REMEDIAL`〔修訂 2026-09-24〕 | `GET /api/coverage` | FR-033 | — |
+| `FEATURE_REMEDIAL`〔修訂 2026-10-03 dec/r16-remedial〕 | `POST /api/students/:id/remedial-paper`（擴充：補救組的 `blueprint` 列多 `error_focus`——依錯因出題；頂層多 `targets` 目標快照）、`GET /api/students/:id/remedial-effect?limit=&days=`（新增：補救成效，只讀；還沒套 0022 → 503）；`POST /api/confirm-paper` 接受 `kind: "remedial"`＋`targets`（核心端點，不吃旗標；見 `docs/remedial.md` §9、§10） | FR-031 | — |
 | `FEATURE_TUTOR`〔修訂 2026-09-24〕 | `POST /api/tutor` | FR-034 | 10/min（可調） |
 | `FEATURE_VOICE`＋`FEATURE_TUTOR`〔修訂 2026-09-24〕 | `POST /api/voice/transcribe`（multipart `audio`，memoryStorage、≤5 MB） | FR-035 | 10/min（可調） |
 
