@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-10-02T09:31:10.596Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 84,
+        "sha256": "c7924fc22cb0210b495aa17debb1a912c1f931a1979da1f4ff9316c1f359e034"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "關於等速圓周運動，下列敘述何者正確？ (複選)\n\n(A) 速率不變（B) 速度不變 （C) 加速度指向圓心(D) 合力為零",
+      "questionType": "多選",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "(A)(C)",
+      "answer_form": "option",
+      "steps_summary": "等速圓周運動中，速率為標量不變，故(A)正確；速度為矢量，方向持續改變，故(B)錯誤。加速度指向圓心為向心加速度，故(C)正確。合力提供向心力不為零，故(D)錯誤。"
+    },
+    "usage": {
+      "tokenIn": 306,
+      "tokenOut": 342,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 128724,
+        "loadMs": 7,
+        "promptEvalMs": 6160,
+        "evalMs": 121765
+      }
+    },
+    "latencyMs": 128730
+  }
+}

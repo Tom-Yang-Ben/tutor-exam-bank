@@ -8,6 +8,8 @@
 //            answerCompare 回 agree → pass；uncertain → 再採樣一次，仍 uncertain → fail；
 //            disagree → fail('answer_mismatch')，payload 存兩個答案
 //   模型   = MODEL_VERIFY（與 MODEL_EXTRACT 不同支，config/models.js 啟動時會檢查）
+//   〔dec/r13-extract-fixes〕claimed_answer 是空字串（本機拆題在題目頁沒寫答案時留空）→ 採樣一次、compare='no_claim'、
+//            pass，算出來的答案另存 suggested_answer；不比對、不進 answer_mismatch（docs/local-mode.md 10.25 第 1 點）
 //
 // 為什麼用確定性比對器而不是叫模型自評：「不一致率」要能變成 report:jobs 裡的一個數字，
 // 才有辦法回答「該不該多付一家模型的錢」（規劃 §3.8）。
@@ -167,12 +169,21 @@ async function run(ctx, input) {
         }
         samples = n;
 
+        // 〔dec/r13-extract-fixes〕拆題沒有答案（本機拆題在題目頁沒寫答案時一律留空，docs/local-mode.md 10.25）：
+        // 沒有東西可以比，不比對、不再採樣；算出來的答案存成建議答案（suggested_answer），複核頁拿它預填。
+        if (!claimed.trim()) {
+            compare = 'no_claim';
+            break;
+        }
+
         compare = answerCompare({
             question_type: questionType,
             claimed,
             model: { final_answer: out.final_answer, answer_form: out.answer_form },
             // 〔stage5 WS-B〕化學題才帶 subject：比對器據此嘗試化學式比對（數學／物理不帶，行為不變）
             ...(v.subject ? { subject: v.subject } : {}),
+            // 〔dec/r13-extract-fixes〕單選／多選讀題幹的選項（「(3)」對「14」時看選項 (3) 的內容）；只給比對器，不進 prompt
+            question_text: questionText,
         });
 
         // agree／disagree 都是「比出來了」，不必再採樣；只有 uncertain 值得再花一次錢
@@ -187,9 +198,14 @@ async function run(ctx, input) {
         claimed_answer: claimed,     // 兩個答案都留在 payload，複核時老師要對照
         compare,
         samples,
+        // 〔dec/r13-extract-fixes〕沒有答案可比時，驗算模型算出來的答案就是建議答案（複核頁預填；入庫前一定經人工）
+        ...(compare === 'no_claim' ? { suggested_answer: out.final_answer } : {}),
     };
 
     if (compare === 'agree') return { kind: 'pass', data };
+    // 〔dec/r13-extract-fixes〕沒有答案不是「對不上」：照常往下走（不進 answer_mismatch）。
+    // 答案是空的題不會自動入庫——workers/jobRunner.js 的 save 前會停在 needs_review（answerMissingStopReason）。
+    if (compare === 'no_claim') return { kind: 'pass', data };
 
     const feedback = compare === 'disagree'
         ? `驗證模型算出「${out.final_answer}」，拆題模型抄的是「${claimed}」。`

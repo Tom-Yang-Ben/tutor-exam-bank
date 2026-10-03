@@ -233,6 +233,8 @@ models.MODEL_EXTRACT;                            // getter，即時讀 process.e
 models.warnIfSameModel();                        // 啟動時叫一次
 ```
 
+〔dec/r13-engine-choice〕上傳考卷、AI 家教、助教可以逐次選「本機／Gemini」：選的與 `.env` 不同時，模型改由 `config/engines.js` 的 `modelsForEngine` 決定（`GEMINI_MODEL_EXTRACT`／`GEMINI_MODEL_VERIFY`、`LOCAL_MODEL_*`，沒寫就是 `GEMINI_DEFAULTS`／本機預設）；`EMBED_MODEL` 一律不換。沒選或相同時照上面的 getter，cassette 的鍵不變。說明見 [`local-mode.md`](local-mode.md) 的「拆題與助教可選本機或 Gemini」一節。
+
 `MODEL_VERIFY` 與 `MODEL_EXTRACT` 的**裸 ID 相同**時印警告（同一個模型自己驗自己，會用同一套先驗犯同一個錯）；同家不同級不警告——A-T0 spike 證實免費金鑰用不了 Pro 系列，那是本專案目前做得到的唯一異級驗證（裁決 S0-5）。
 
 ```js

@@ -268,6 +268,8 @@ describe('planRemedialPaper（注入假依賴，只驗組裝）', () => {
             seen,
             async query(text, values) {
                 if (/tagged_graded/.test(text)) return { rows: [{ tagged_graded: tagged, untagged_graded: 9 }] };
+                // 〔dec/r16-remedial〕補救單位的錯題錯因：這組夾具沒有標錯因
+                if (/AS unit, a\.error_types/.test(text)) return { rows: [] };
                 if (/question_kcs qk ON qk\.question_id = w\.question_id/.test(text)) return { rows: [] };
                 if (/GROUP BY q\.chapter/.test(text)) {
                     return { rows: [
@@ -295,7 +297,8 @@ describe('planRemedialPaper（注入假依賴，只驗組裝）', () => {
     test('chapter 基底：回應形狀、items 依桶分組、question_ids 用 sortForPaper 的順序、shortfalls 與 notes', async () => {
         const deps = fakeDeps();
         const out = await r.planRemedialPaper({ studentId: 5, subject: '數學', total: 10, mix: r.DEFAULT_MIX, days: 90, sourceTypes: null, minN: 5 }, deps);
-        assert.deepEqual(Object.keys(out), ['student_id', 'subject', 'basis', 'question_ids', 'items', 'blueprint', 'shortfalls', 'notes']);
+        // 〔dec/r16-remedial〕最後多 targets（補救成效的目標快照）
+        assert.deepEqual(Object.keys(out), ['student_id', 'subject', 'basis', 'question_ids', 'items', 'blueprint', 'shortfalls', 'notes', 'targets']);
         assert.equal(out.student_id, 5);
         assert.equal(out.basis, 'chapter');
         assert.deepEqual(deps.seen.quotas.map(q => q.count), [8, 2]);

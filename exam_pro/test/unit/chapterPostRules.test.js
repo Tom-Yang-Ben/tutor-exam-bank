@@ -102,6 +102,25 @@ describe('A5：指數與對數（第一冊）／指數函數與對數函數（�
         assert.equal(pr.firstVolumeEvidence('化簡 $8^{\\frac{2}{3}}$。'), null, '沒有第一冊的明確題材就不換（指數律本身兩冊都可能出現）');
     });
 
+    // 〔r15 dec/r15-chapter-acc〕docs/local-mode.md 10.28：沒有大括號的數字下標讀一整串（config/chapterMigrationRules.js 的 LOG_SUBSCRIPT_SOURCE）
+    test('〔r15〕OCR 純文字的 log_10：樣卷第 8 題不再被換到第三冊、第 1 題照舊換；真數裡的未知數不再被下標的「0」蓋掉', () => {
+        const q8 = '已知log_10 2=0.3010，利用log_10 5=log_10 $\\frac{10}{2}$求log_10 5之近似值。\n\n(A) 0.6990(B)0.3010(C) 0.1505(D)1.6990';
+        const q1 = 'log_2 8+log_2 4之值为何?\n\n(A) 5 (B) 6 (C) 7 (D) 12';
+        assert.equal(pr.thirdVolumeEvidence(q8), null);
+        assert.equal(pr.boundaryTarget('指數與對數', q8), null, '第 8 題是常用對數（第一冊），閘門不換');
+        assert.deepEqual(
+            (({ to, rule, evidence }) => ({ to, rule, evidence }))(pr.boundaryTarget('指數與對數', q1)),
+            { to: '指數函數與對數函數', rule: 'exp_log_third', evidence: 'log_2' }
+        );
+        // 真數：下標整串跳過，後面的才是真數
+        assert.equal(pr.findVariableLogArgument('解 log_10 x = 2'), 'log_10 x');
+        assert.equal(pr.findVariableLogArgument('log_10 2=0.3010'), null);
+        assert.equal(pr.findVariableLogArgument('$\\log_{2} x$'), '\\log_{2} x');
+        assert.equal(pr.findVariableLogArgument('log_2(x-1)=3'), 'log_2(x-1)');
+        assert.equal(pr.thirdVolumeEvidence('解方程式 log_10 x = 2'), 'log_10 x（解）', '常用對數的對數方程式屬第三冊（A5）');
+        assert.equal(pr.thirdVolumeEvidence('已知 log_10 x = 2.3，求 x 的首數'), null, '有第一冊題材照舊不換');
+    });
+
     test('boundaryTarget：只在模型挑了 from 的那一章時才換', () => {
         const text = '求 $\\log_{7} 49$ 的值。';
         assert.deepEqual(

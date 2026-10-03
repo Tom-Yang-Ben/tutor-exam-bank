@@ -10,7 +10,7 @@
 |---|---|---|
 | `--suite retrieval`（階段 1） | Recall@5／Recall@10／MRR，分 LIKE、純向量、hybrid 三欄對照 | ✅ |
 | `--suite classify`（階段 2，A-T14） | 章節分類的 accuracy／macro-F1／Top-5 混淆對，cassette 回放 vs golden | ✅ |
-| `--suite pipeline`（階段 2，A-T14） | 各節點通過率、needs_review 原因分佈、每份 PDF 的 token 與成本 | ✅ |
+| `--suite pipeline`（階段 2，A-T14） | 各節點通過率、needs_review 原因分佈、每份 PDF 的 token 與成本；門檻比 saved_rate、gate_pass_rate、answer_agree_rate、verify_agree_rate、chapter_acc_rate | ✅ |
 | `compare_pipeline.js`（E-X12a） | 舊流程 vs 新管線的逐欄對照 | ❌ 會連外，只在本機跑 |
 
 公式 golden（`eval/golden/formula.json`）由 **WS-C** 產出，以 `node --test` 的表格測試跑，
@@ -152,6 +152,19 @@ suite 仍保留「`source='gate'` 應為 0」的斷言——那是這條約定�
 輸出三組數字：各節點通過率（**分母是 `pass + fail + error`，不含 `skipped`**——
 證明題的 verify 與未就緒的 dedup1 本來就該跳過）、needs_review 原因分佈、
 每份 PDF 的 token 與成本（`token_out` 一定含 thinking，第 0.4 條）。
+
+比門檻的五個指標（`eval/thresholds.json` 的 `pipeline.pipeline`）：
+
+| 指標 | 量什麼 | 門檻 | 什麼時候不比（印 n/a、列在「未設門檻」） |
+|---|---|---:|---|
+| `saved_rate` | 自動入庫的比例 | 0.87 | OCR 模式（每題都停在人工複核，Owner 第五輪 D-2） |
+| `gate_pass_rate` | classify 零成本閘門通過率 | 0.97 | OCR 模式（本機 classify 走 LLM 不花錢、拆題模型猜的章節不可靠；數字照印。Owner 2026-10-03 第 r14 輪 C-1） |
+| `answer_agree_rate` | 拆題寫的答案對驗算模型答案的一致率（分母只算 agree／disagree／uncertain） | 0.87 | 全部題目都是 `no_claim`（拆題沒寫答案；Owner 2026-10-02 A 案） |
+| `verify_agree_rate` | 拆題沒寫答案（verify 記 `no_claim`）的題：驗算模型答案對答案卷 `answer_text` 的一致率 | 0.87（首次實測 0.9000 − 0.03，Owner 2026-10-02 A 案） | 沒有任何一題是 `no_claim` |
+| `chapter_acc_rate` | 章節正確率：有 classify 結果的題，最後章節等於答案卷 `chapter` 的比例（配不上答案卷的題算錯） | 0.97（實測 1.0000 − 0.03；首次 0.77＝0.8000 − 0.03，Owner 2026-10-03 第 r14 輪 C-1） | 兩種模式都比 |
+
+「不比」只認 `eval/lib/thresholds.js` 的白名單 `NOT_APPLICABLE_ALLOWED`；條件由 `eval/lib/suitePipeline.js` 判斷，
+細節見 `docs/local-mode.md` 10.25 第 6 點（答案的兩個指標）、10.27 第 1 點（`gate_pass_rate`、`chapter_acc_rate`）與 10.28（章節錯題的根因修正、`chapter_acc_rate` 升到 0.97）。
 
 ### 兩個 suite 現在的狀態
 
@@ -336,6 +349,22 @@ npm run cassettes:prune -- --apply          # 確認清單後刪除
   「只准更多題進複核」——那不是門檻，是反向的門檻。這類數字只在報表裡呈現分佈。
 - 「整欄門檻都是 `null`」＝ 尚未建立基準線，等同於欄位不存在（只報告不擋）；
   只要**其中一個指標有數字**，那一欄就開始守門，量不到就算失敗。
+
+### 依向量模型的門檻（`<suite>.by_embed_model`）
+
+檢索類的數字跟著向量模型走（餘弦分佈、相似度下限都不同）。`thresholds.json` 的某個 suite 可以有一節
+`by_embed_model`：`{ "<EMBED_MODEL 完整字串>": { "<欄>": { "<指標>": 門檻 } } }`，依**這一輪 suite 實際讀的向量模型**
+（報表的 `meta.embedModel`；沒設 `EMBED_MODEL`＝本機預設 `ollama:qwen3-embedding:0.6b`）只覆寫列出來的指標，其餘照基準門檻；
+對不上任何一組或報表沒記向量模型＝基準門檻。`eval/lib/thresholds.js` 的 `resolveSuiteThresholds` 挑門檻組，
+`compareSuite`（`run.js` 與回放驗證表）與 `writeBaselineSuite`（ratchet 寫回那一組）共用；覆寫的欄或指標拼錯直接丟錯。
+報表與 CI 多印一行「門檻組：…」說明套用哪一組、為什麼（報表 JSON 的 `threshold_profile`）。
+
+目前只有 variant 有（Owner 2026-10-03 第 r14 輪 C-2，`docs/local-mode.md` 10.27 第 2 點）：
+
+| 向量模型 | `retrieved_coverage` | `gate_pass_rate` | 依據 |
+|---|---:|---:|---|
+| `gemini-embedding-001`（基準） | 0.8367 | 0.22 | 原本的基準線 |
+| `ollama:qwen3-embedding:0.6b` | 0.47 | 0.22（照基準） | 相似度下限維持 0.72（精準度優先）；實測 0.5000 − 0.03，覆蓋率之後靠擴充題庫提高 |
 
 ### replay miss 的處置（介面第 5.2 條、裁決 S2-14）
 

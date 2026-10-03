@@ -38,16 +38,24 @@ describe('thresholds.compareSuite：notApplicable 白名單', () => {
     });
 
     test('白名單以外的指標不能宣告「不比」：直接丟錯', () => {
-        assert.throws(() => th.compareSuite(TABLE, 'pipeline', { pipeline: { saved_rate: 1, gate_pass_rate: null, answer_agree_rate: 1 } },
-            { notApplicable: { pipeline: { gate_pass_rate: 'x' } } }), /白名單/);
+        // 〔Owner 2026-10-03 第 r14 輪 C-1〕gate_pass_rate 進白名單（OCR 模式只報告）之後，改用不在白名單的 chapter_acc_rate 驗這條
+        assert.throws(() => th.compareSuite(TABLE, 'pipeline', { pipeline: { saved_rate: 1, gate_pass_rate: 1, answer_agree_rate: 1, chapter_acc_rate: null } },
+            { notApplicable: { pipeline: { chapter_acc_rate: 'x' } } }), /白名單/);
         assert.throws(() => th.compareSuite({ classify: { classify: { accuracy: 0.87 } } }, 'classify', { classify: { accuracy: null } },
             { notApplicable: { classify: { accuracy: 'x' } } }), /白名單/);
-        assert.deepEqual(th.NOT_APPLICABLE_ALLOWED, { pipeline: { pipeline: ['saved_rate'] } });
+        // 〔Owner 2026-10-02 A 案〕白名單多 answer_agree_rate（全部 no_claim 時）與 verify_agree_rate（沒有 no_claim 時）；
+        // 條件與比對見 test/unit/evalPipelineVerifyAgree.test.js。
+        // 〔Owner 2026-10-03 第 r14 輪 C-1〕gate_pass_rate 進白名單（只有 OCR 模式宣告；條件見 test/unit/evalPipelineChapterAcc.test.js）；
+        // chapter_acc_rate 不在白名單（上面那一則照樣丟錯）。
+        assert.deepEqual(th.NOT_APPLICABLE_ALLOWED, { pipeline: { pipeline: ['saved_rate', 'gate_pass_rate', 'answer_agree_rate', 'verify_agree_rate'] } });
     });
 
-    test('thresholds.json 的 pipeline 門檻一個數字都沒動', () => {
+    test('thresholds.json 的 pipeline 門檻：原本三個數字一個都沒動', () => {
         const file = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', '..', 'eval', 'thresholds.json'), 'utf8'));
-        assert.deepEqual(file.pipeline.pipeline, TABLE.pipeline.pipeline);
+        // 〔Owner 2026-10-02 A 案〕多一個鍵 verify_agree_rate 0.87（首次實測 0.9000 − 0.03）；
+        // 〔Owner 2026-10-03 第 r14 輪 C-1〕再多 chapter_acc_rate 0.77（首次實測 0.8000 − 0.03）；原本三個照舊逐字釘住
+        // 〔r15 dec/r15-chapter-acc〕chapter_acc_rate 實測 1.0000（commit 4d10671）之後 ratchet 到 0.97
+        assert.deepEqual(file.pipeline.pipeline, { ...TABLE.pipeline.pipeline, verify_agree_rate: 0.87, chapter_acc_rate: 0.97 });
     });
 });
 

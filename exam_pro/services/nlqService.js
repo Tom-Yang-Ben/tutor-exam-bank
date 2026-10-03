@@ -430,7 +430,7 @@ function timeoutMs() {
  * 回 null 讓呼叫端走 fallback_level 1。
  * @returns {Promise<object|null>}
  */
-async function callLlm({ llm, query, logger, pseudonymizer = IDENTITY }) {
+async function callLlm({ llm, query, logger, pseudonymizer = IDENTITY, model = null }) {
     const { buildSchema } = require('../agents/schemas');
     // 學生姓名不出境（DEC-009）：送 LLM 的是代號版（「小明」→「學生#3」），回來再換回姓名。
     // 沒有學生清單時 mask 是恆等函式，prompt 與 cacheKeyParts 與加這一層之前逐字相同。
@@ -443,7 +443,8 @@ async function callLlm({ llm, query, logger, pseudonymizer = IDENTITY }) {
             .replace('{{QUERY}}', masked);
 
         const res = await llm.generateJson({
-            model: modelNlq(),
+            // 〔dec/r13-engine-choice〕助教選了與 .env 不同的引擎時由呼叫端帶 model；沒帶＝MODEL_NLQ（與之前相同）
+            model: model || modelNlq(),
             system: SYSTEM,
             parts: [{ text: prompt }],
             schema: buildSchema('nlq'),
@@ -477,7 +478,8 @@ function mathPhysicsTerms() {
 /**
  * 解析一句查詢，不碰資料庫。eval 的 suiteNlq.js 也走這一支。
  *
- * @param {{query:string, llm?:object, logger?:object, noCache?:boolean, pseudonymizer?:object}} opts
+ * @param {{query:string, llm?:object, logger?:object, noCache?:boolean, pseudonymizer?:object, model?:string}} opts
+ *   model：〔dec/r13-engine-choice〕LLM 輔路徑用的模型；未給＝MODEL_NLQ（與之前相同）
  *   pseudonymizer：utils/pseudonym.js 的替換器；未給時為恆等（eval 走這條）
  * @returns {Promise<{filters:object, parse_path:'rules'|'llm'|'llm_failed',
  *                    semantic_text:string, warnings:string[], confident:boolean,
@@ -485,7 +487,8 @@ function mathPhysicsTerms() {
  */
 async function parseOnly(opts = {}) {
     const query = String(opts.query ?? '').trim();
-    const key = sha1(query);
+    // 〔dec/r13-engine-choice〕指定了模型（助教選了另一個引擎）時快取鍵帶上模型，兩種引擎的解析結果不會互相頂替；沒指定＝原本的鍵
+    const key = opts.model ? sha1(`${opts.model}\n${query}`) : sha1(query);
 
     if (!opts.noCache) {
         const hit = cacheGet(key);
@@ -515,7 +518,7 @@ async function parseOnly(opts = {}) {
     // 第 6.3 條：**只有在 confident === false 且 semantic_text 仍有實詞時才呼叫**
     if (!rules.confident && hasContentWord(semanticText)) {
         const llm = opts.llm || require('./llm');
-        const data = await callLlm({ llm, query, logger: opts.logger, pseudonymizer: opts.pseudonymizer || IDENTITY });
+        const data = await callLlm({ llm, query, logger: opts.logger, pseudonymizer: opts.pseudonymizer || IDENTITY, model: opts.model || null });
         if (data) {
             // 〔dec/x-nlq-improve〕帶原句：句子裡找不到證據的條件不採用、明講的平面／空間以句子為準（mergeLlm 的註解）
             const merged = mergeLlm(filters, semanticText, data, { query });
@@ -851,7 +854,7 @@ async function searchNl(input, deps = {}) {
     // 學生姓名 ↔ 代號：LLM 輔路徑與 embedding 都是對外呼叫，送出前遮罩（DEC-009）
     const pseudonymizer = await loadPseudonymizer(db);
 
-    const parsed = await parseOnly({ query: input.query, llm, logger, pseudonymizer });
+    const parsed = await parseOnly({ query: input.query, llm, logger, pseudonymizer, ...(deps.model ? { model: deps.model } : {}) });
     const warnings = parsed.warnings.slice();
 
     // 第 6.4 條第 5 點：查 students.name（要 DB，所以不進第 6.7 條的快取）

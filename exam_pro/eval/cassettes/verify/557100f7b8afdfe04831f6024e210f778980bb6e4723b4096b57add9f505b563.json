@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "agent": "verify",
+    "model": "qwen3:8b",
+    "template": "verify.v1",
+    "recorded_at": "2026-10-02T09:22:14.659Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 56,
+        "sha256": "ef77433146270d963dd500e71581123d1ed68a17be59d94769e02c48a34e3d64"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "verify.v1",
+      "questionText": "物體由靜止出發，以2m/s^2的等加速度直線前進，求5秒後的位移。",
+      "questionType": "計算",
+      "sampleNo": 1
+    },
+    "ollamaOverrides": {
+      "numPredict": 3072
+    }
+  },
+  "response": {
+    "data": {
+      "final_answer": "25m",
+      "answer_form": "number",
+      "steps_summary": "使用匀加速直线运动位移公式 s = ut + ½at²，其中初速度u=0，加速度a=2m/s²，时间t=5s。代入计算得 s = 0.5*2*(5)^2 = 25m。"
+    },
+    "usage": {
+      "tokenIn": 289,
+      "tokenOut": 317,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 114995,
+        "loadMs": 7,
+        "promptEvalMs": 3728,
+        "evalMs": 110641
+      }
+    },
+    "latencyMs": 115002
+  }
+}

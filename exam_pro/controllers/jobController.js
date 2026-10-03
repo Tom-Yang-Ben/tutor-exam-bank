@@ -13,6 +13,9 @@
 //
 // 〔stage5 WS-B〕docs/interfaces-stage5.md 第 4.2 條第 1 點：POST /api/jobs 多一個 multipart 欄位
 // subject_group（'math_physics' 預設／'chemistry'，其他值 400），GET /api/jobs/:id 多回 subject_group。
+//
+// 〔dec/r13-engine-choice〕docs/local-mode.md 10.26：POST /api/jobs 多一個 multipart 欄位 engine（'local'／'gemini'；
+// 沒帶＝照 .env），選 Gemini 卻沒有金鑰回 400；GET /api/jobs/:id 多回 engine。GET /api/engines 在 controllers/engineController.js。
 // ─────────────────────────────────────────────────────────────
 const fs = require('fs');
 const path = require('path');
@@ -29,6 +32,10 @@ const APP_DIR = path.resolve(__dirname, '..');
 const JOBS_DIR = path.join(APP_DIR, 'data', 'jobs');
 /** 存進 jobs.pdf_path 的是相對於 exam_pro/ 的路徑，worker 自己 resolve（搬 repo 也不會壞）。 */
 const JOBS_DIR_REL = path.posix.join('data', 'jobs');
+
+/** 〔dec/r13-engine-choice〕選了與 .env 不同的辨識方式、資料庫卻還沒套 0021 時 POST /api/jobs 回 503 的訊息（選 .env 預設的照常建 job） */
+const ENGINE_SCHEMA_MESSAGE = '資料庫還沒套 migrations/0021_job_engine.sql（記錄每份考卷選的辨識方式）：請在 exam_pro 執行 npm run migrate，'
+    + '套完不必重啟。在那之前只能用 .env 預設的辨識方式。';
 
 const RETRYABLE_REASONS = ['provider_error', 'budget_exceeded'];
 /** node → 該節點對應的 state（NODE_FOR_STATE 的反查表），retry 要把列退回前一個狀態時用。 */
@@ -145,6 +152,16 @@ exports.createJob = async (req, res, next) => {
             return res.status(400).json({ message: `subject_group 只能是 ${SUBJECT_GROUP_KEYS.join(' 或 ')}。` });
         }
 
+        // 〔dec/r13-engine-choice〕辨識方式（docs/local-mode.md 10.26）：沒帶或空字串＝照 .env（jobs.engine 存 NULL）；
+        // local／gemini 以外的值 400；選了 Gemini 卻沒有 GEMINI_API_KEY（或選本機但 .env 的本機拆題設定互相矛盾）也 400，
+        // 在存檔、付費之前就擋下。
+        const engines = require('../config/engines');
+        const parsedEngine = engines.parseEngine(req.body?.engine);
+        if (parsedEngine.error) return res.status(400).json({ message: parsedEngine.error });
+        const engine = parsedEngine.engine;
+        const engineProblem = engines.engineProblem(engine, 'extract');
+        if (engineProblem) return res.status(400).json({ message: engineProblem });
+
         const buffer = fs.readFileSync(tmpPath);
         // mimetype 與副檔名都是客戶端宣告的；檔頭 %PDF- 才是檔案自己說的（utils/pdfSniff.js）
         if (!isPdfBuffer(buffer)) return res.status(400).json({ message: '檔案內容不是 PDF（缺少 %PDF- 檔頭）。' });
@@ -153,12 +170,21 @@ exports.createJob = async (req, res, next) => {
 
         // 冪等（第 1.3 條）：同一份 PDF 已經有未失敗的 job 就回既有那一筆，不重寫檔、不重付費。
         // 〔stage5 WS-B〕冪等鍵加上卷別：老師選錯卷別重傳時要能建新 job（同卷別重傳仍回既有那一筆）。
+        // 〔dec/r13-engine-choice〕有選辨識方式時冪等鍵再加上引擎（沒選的舊 job 以 .env 的預設計）：本機拆過的卷改選 Gemini 重傳會建新 job。
+        // 沒帶 engine 時查詢一個字都沒改。
         if (!force) {
-            const { rows } = await query(
-                `SELECT id FROM jobs
-                  WHERE pdf_sha256 = $1 AND state <> 'failed' AND subject_group = $2
-                  ORDER BY id DESC LIMIT 1`,
-                [sha256, subjectGroup]);
+            const { rows } = engine === null
+                ? await query(
+                    `SELECT id FROM jobs
+                      WHERE pdf_sha256 = $1 AND state <> 'failed' AND subject_group = $2
+                      ORDER BY id DESC LIMIT 1`,
+                    [sha256, subjectGroup])
+                : await query(
+                    `SELECT id FROM jobs
+                      WHERE pdf_sha256 = $1 AND state <> 'failed' AND subject_group = $2
+                        AND COALESCE(to_jsonb(jobs) ->> 'engine', $3::text) = $4
+                      ORDER BY id DESC LIMIT 1`,
+                    [sha256, subjectGroup, engines.defaultEngine('extract'), engine]);
             if (rows.length > 0) return res.status(202).json({ job_id: rows[0].id, existing: true });
         }
 
@@ -178,6 +204,26 @@ exports.createJob = async (req, res, next) => {
                  VALUES ('pdf', $1, $2, 'queued', $3, $4, $5, $6) RETURNING id`,
                 [sha256, pageCount, Number.isFinite(budget) ? budget : 0.5, sourceType, sourceDetail, subjectGroup]);
             const jobId = rows[0].id;
+            // 〔dec/r13-engine-choice〕有選才寫（沒選＝NULL＝照 .env）。還沒套 0021 時這一句會失敗（42703）：
+            // 〔dec/r13-engine-choice-fix〕選的就是 .env 的預設 → 退回 SAVEPOINT、不寫 engine（＝NULL＝照 .env，結果相同），照常建 job；
+            // 前端只要讀得到 /api/engines 就一定帶 engine（預設也帶），不這樣做的話沒 migrate 前從畫面上傳一律 503。
+            // 選的與 .env 不同 → 存不下這個選擇，整筆回滾、回 503 叫人先 migrate（不能默默照 .env 跑錯引擎）。
+            if (engine !== null) {
+                await client.query('SAVEPOINT job_engine');
+                try {
+                    await client.query('UPDATE jobs SET engine = $2 WHERE id = $1', [jobId, engine]);
+                    await client.query('RELEASE SAVEPOINT job_engine');
+                } catch (err) {
+                    if (!(err && err.code === '42703')) throw err;
+                    if (engine === engines.defaultEngine('extract')) {
+                        await client.query('ROLLBACK TO SAVEPOINT job_engine');
+                        console.warn(`[jobs] 資料庫還沒套 0021_job_engine.sql：job ${jobId} 選的是 .env 的預設（${engine}），不記錄選擇、照 .env 拆題。請在 exam_pro 執行 npm run migrate。`);
+                    } else {
+                        await client.query('ROLLBACK').catch(() => { });
+                        return res.status(503).json({ message: ENGINE_SCHEMA_MESSAGE });
+                    }
+                }
+            }
 
             // 目錄自建，不需要 .gitkeep（第 1.3 條）；檔名用 job id，天然不會撞名
             fs.mkdirSync(JOBS_DIR, { recursive: true });
@@ -220,6 +266,7 @@ exports.getJob = async (req, res, next) => {
     try {
         const { rows } = await query(
             `SELECT id, state, token_in, token_out, cost_usd, budget_usd, subject_group,
+                    to_jsonb(jobs) ->> 'engine' AS engine,
                     ROUND(EXTRACT(EPOCH FROM (
                         (CASE WHEN state IN ('done','failed') THEN updated_at ELSE now() END) - created_at
                     )) * 1000)::bigint AS elapsed_ms
@@ -248,7 +295,9 @@ exports.getJob = async (req, res, next) => {
             budget_usd: Number(job.budget_usd),
             elapsed_ms: Number(job.elapsed_ms),
             // 〔stage5 WS-B〕上傳時的卷別（第 4.2 條第 1 點；附加鍵，既有欄位與順序不變）
-            subject_group: job.subject_group
+            subject_group: job.subject_group,
+            // 〔dec/r13-engine-choice〕上傳時選的辨識方式（'local'／'gemini'；沒選＝null＝照 .env；附加鍵）
+            engine: job.engine ?? null
         });
     } catch (err) { next(err); }
 };
@@ -370,3 +419,4 @@ module.exports.maybeFinishJob = maybeFinishJob;
 module.exports.parseId = parseId;
 module.exports.JOBS_DIR = JOBS_DIR;
 module.exports.RETRYABLE_REASONS = RETRYABLE_REASONS;
+module.exports.ENGINE_SCHEMA_MESSAGE = ENGINE_SCHEMA_MESSAGE;   // 〔dec/r13-engine-choice〕

@@ -37,6 +37,10 @@
 //   - 回覆裡若仍出現「用程式／Python／sympy 驗算」之類的說法（codeRuns 是空的），在回覆後面附上更正
 //     （UNVERIFIED_CLAIM_NOTE）——不改寫模型的文字，但不讓它的宣稱無人糾正。
 //   Gemini（有 code execution）的系統提示、模板、tools 與回覆處理一個字都沒改。
+//
+// 〔dec/r13-engine-choice，docs/local-mode.md 10.26〕body 多一個選填的 engine（'local'／'gemini'）：老師在畫面上選
+// 「本機／Gemini」回答。沒帶、或等於 MODEL_TUTOR 的引擎＝MODEL_TUTOR（模型、模板、cacheKeyParts 與之前逐字相同）；
+// 不同＝那個引擎的家教模型（tutorModelFor），提示與模板照上面的規則跟著 vendor 走。選 Gemini 卻沒有金鑰回 400。
 // ─────────────────────────────────────────────────────────────
 const { createPseudonymizer } = require('../utils/pseudonym');
 const { registerTemplate, sha256Hex } = require('./llm/templates');
@@ -272,7 +276,28 @@ function validateTutorInput(body, opts = {}) {
         history = b.history.map(t => ({ role: t.role, text: t.text.trim() }));
     }
 
-    return { value: { message, mode: b.mode, subject, studentId, questionId, history } };
+    // 〔dec/r13-engine-choice〕回答方式（'local'／'gemini'；沒帶＝照 .env）。有帶才多一個 engine 鍵，沒帶時回傳形狀與之前相同
+    const parsedEngine = require('../config/engines').parseEngine(b.engine);
+    if (parsedEngine.error) return { error: parsedEngine.error };
+
+    return {
+        value: {
+            message, mode: b.mode, subject, studentId, questionId, history,
+            ...(parsedEngine.engine ? { engine: parsedEngine.engine } : {})
+        }
+    };
+}
+
+/**
+ * 〔dec/r13-engine-choice〕這一次家教要用哪一支模型（docs/local-mode.md 10.26）。
+ * engine 沒帶、或等於 MODEL_TUTOR 的引擎 → MODEL_TUTOR（與之前逐字相同）；不同 → 那個引擎的家教模型（config/engines.js）。
+ * @param {'local'|'gemini'|null|undefined} engine
+ * @returns {string}
+ */
+function tutorModelFor(engine) {
+    const engines = require('../config/engines');
+    const override = engines.overrideEngine(engine, 'tutor');
+    return override ? engines.modelsForEngine(override).tutor : require('../config/models').MODEL_TUTOR;
 }
 
 // ───────────────────────── 脈絡組裝（純函式）─────────────────────────
@@ -617,9 +642,11 @@ function withTruncationNote(reply) {
 async function prepareTutorRequest(input, deps = {}) {
     const db = { ...defaultDb, ...(deps.db || {}) };
     const models = require('../config/models');
-    const { id: modelId } = models.parseModel(models.MODEL_TUTOR);
+    // 〔dec/r13-engine-choice〕老師在畫面上選的回答方式（沒選或與 .env 相同＝MODEL_TUTOR，與之前相同）
+    const tutorModel = tutorModelFor(input.engine);
+    const { id: modelId } = models.parseModel(tutorModel);
     // 本機模式第 3 條第 10 點：沒有 code execution 的供應商改用本機版提示與模板
-    const { codeExecution } = require('./llm').capabilitiesOf(models.MODEL_TUTOR);
+    const { codeExecution } = require('./llm').capabilitiesOf(tutorModel);
 
     // ── 題目 ──
     let question = null;
@@ -672,7 +699,7 @@ async function prepareTutorRequest(input, deps = {}) {
     const studentContext = studentBlock(student) !== '';
 
     const llmOpts = {
-        model: models.MODEL_TUTOR,
+        model: tutorModel,
         system: (codeExecution ? SYSTEM : SYSTEM_LOCAL)[input.mode],
         parts: [{ text: prompt }],
         tools: { codeExecution },                       // Gemini：true（與之前相同）；本機：false
@@ -707,6 +734,9 @@ async function runTutor(body, deps = {}) {
     const parsed = validateTutorInput(body);
     if (parsed.error) throw httpError(400, parsed.error);
     const input = parsed.value;
+    // 〔dec/r13-engine-choice〕選了 Gemini 卻沒有 GEMINI_API_KEY：400，在花錢與查 DB 之前擋下
+    const engineProblem = require('../config/engines').engineProblem(input.engine || null, 'tutor');
+    if (engineProblem) throw httpError(400, engineProblem);
 
     const budget = deps.budget || sharedBudget;
     budget.assertAvailable();                       // 用完就在查 DB、呼叫 LLM 之前擋下
@@ -768,6 +798,7 @@ async function runTutor(body, deps = {}) {
 
 module.exports = {
     runTutor, prepareTutorRequest, validateTutorInput, buildPrompt, orderKcs,
+    tutorModelFor,   // 〔dec/r13-engine-choice〕
     questionBlock, kcBlock, studentBlock, historyBlock, errorTypeLabel,
     createBudget, sharedBudget, readDailyBudget, estimateUsd, httpError, withTruncationNote, publicLlmError,
     SYSTEM, PROMPT_TEMPLATE, TEMPLATES, AGENT, MODES,

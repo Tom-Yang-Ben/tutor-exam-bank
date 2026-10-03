@@ -1,5 +1,8 @@
 const { pool, query } = require('../config/db');
 const { pickPaperUnits, nearestReachableCounts, sortForPaperGrouped } = require('../utils/paperGroups');
+const { shuffle } = require('../utils/shuffle');
+// 〔dec/r16-remedial 依錯因出題〕pickByQuotas 的偏好排序（純函式；config 不 require 本檔）
+const { compareKeys } = require('../config/remedialErrorStrategy');
 // 〔Owner 決策單 2026-09-25 B7〕confirm-paper 的承上題整組檢查（純函式＋與補救卷手動加題同一段成員查詢）。
 // remedialService 只在 defaultDeps() 裡才 require 本檔，載入時不成環。
 const { findIncompleteFollowUpGroups, incompleteFollowUpGroupsMessage } = require('../utils/followUpPaperCheck');
@@ -11,6 +14,8 @@ const retrainService = require('../services/retrainService');
 const retrainSelect = require('../services/retrainSelect');
 const retrainValidation = require('../utils/retrainValidation');
 const features = require('../config/features');
+// 〔dec/r16-remedial 補救成效〕confirm-paper 的 kind／targets 驗證（純函式）
+const remedialTargets = require('../utils/remedialTargets');
 // 〔stage5 WS-D〕pg 序列化查詢參數的同一支函式（pg 的 package.json exports 公開 ./lib/*）：
 // 單章路徑用它把 chapter 轉成與抽出前 `q.chapter = $2` 相同的比對字串（見 selectPaperQuestions）
 const { prepareValue } = require('pg/lib/utils');
@@ -232,41 +237,107 @@ async function fetchCandidatePool(opts) {
  * unitSizes（該段家族互斥後每個可用組的題數）給 blueprint 在承上組湊不滿時算「改成幾題湊得滿」
  * （〔Owner 決策單 2026-09-25 B10〕）；補救卷不讀它。
  *
+ * 〔dec/r16-remedial 依錯因出題〕每段可多帶兩個選用鍵（只有補救卷用；沒帶時這一段的行為與抽題結果逐字不變）：
+ *   - rankOf(row) → number[]：偏好順序（小的先抽）。row＝{ id, question_type, question_text, difficulty }，
+ *     抽之前另查一次這些欄位。做法是把洗牌函式包一層「先洗牌、再依偏好穩定排序」交給同一個 pickPaperUnits——
+ *     偏好只改變抽的**先後**，候選池、家族互斥、承上題整組與裝箱規則都不變，所以偏好永遠不會讓題數變少。
+ *     一組承上題的偏好鍵取組內最好的一題。同鍵的題維持隨機。
+ *   - fallbackPool：pool 抽不滿 count 時，改用它再抽一次（例：錯因策略把難度上限降一級，降了之後題不夠就退回原本的上限）；
+ *     兩次取抽到較多的那一次（同數取 pool 那一次），結果多 usedFallback（有帶 fallbackPool 才多這個鍵）。
+ *
  * @param {object} p
  * @param {number} p.studentId
  * @param {string} p.subject
  * @param {Array<{count:number, pool:{chapters?:string[]|null, kcIds?:number[]|null,
- *                difficultyMin?:number|null, difficultyMax?:number|null}}>} p.quotas
+ *                difficultyMin?:number|null, difficultyMax?:number|null},
+ *                rankOf?:(row:object)=>number[], fallbackPool?:object}>} p.quotas
  * @param {number[]} [p.excludeIds]
  * @param {string[]|null} [p.sourceTypes]
  * @param {(items:Array)=>Array} [p.shuffleFn]
- * @returns {Promise<Array<{ids:number[], got:number, availableCount:number, unitSizes:number[]}>>} 與 quotas 一一對應
+ * @returns {Promise<Array<{ids:number[], got:number, availableCount:number, unitSizes:number[], usedFallback?:boolean}>>} 與 quotas 一一對應
  */
 async function pickByQuotas({ studentId, subject, quotas, excludeIds = [], sourceTypes = null, shuffleFn }) {
     const usedIds = new Set();
     const usedFamilies = new Set();
     const results = [];
-    for (const quota of quotas) {
-        if (!(quota.count > 0)) { results.push({ ids: [], got: 0, availableCount: 0, unitSizes: [] }); continue; }
+
+    /** 抽一段（不動 usedIds／usedFamilies；呼叫端決定採用哪一次之後才記）。 */
+    async function pickOne(pool, quota) {
         const { candidates, related } = await fetchCandidatePool({
             subject, studentId, excludeIds, sourceTypes,
-            chapters: quota.pool.chapters ?? null,
-            kcIds: quota.pool.kcIds ?? null,
-            difficultyMin: quota.pool.difficultyMin ?? null,
-            difficultyMax: quota.pool.difficultyMax ?? null
+            chapters: pool.chapters ?? null,
+            kcIds: pool.kcIds ?? null,
+            difficultyMin: pool.difficultyMin ?? null,
+            difficultyMax: pool.difficultyMax ?? null
         });
         const free = candidates.filter(c => !usedIds.has(c.id) && !usedFamilies.has(c.variant_of ?? c.id));
+        let sf = shuffleFn;
+        if (typeof quota.rankOf === 'function' && free.length > 0) {
+            sf = await preferenceShuffle(free.map(c => c.id), quota.rankOf, shuffleFn || shuffle);
+        }
         const picked = pickPaperUnits({
-            candidates: free, related, limitCount: quota.count, ...(shuffleFn ? { shuffleFn } : {})
+            candidates: free, related, limitCount: quota.count, ...(sf ? { shuffleFn: sf } : {})
         });
-        const byId = new Map(free.map(c => [c.id, c]));
+        return { picked, byId: new Map(free.map(c => [c.id, c])) };
+    }
+
+    for (const quota of quotas) {
+        if (!(quota.count > 0)) { results.push({ ids: [], got: 0, availableCount: 0, unitSizes: [] }); continue; }
+        let chosen = await pickOne(quota.pool, quota);
+        let usedFallback = false;
+        if (quota.fallbackPool && chosen.picked.actual < quota.count) {
+            const fb = await pickOne(quota.fallbackPool, quota);
+            if (fb.picked.actual > chosen.picked.actual) { chosen = fb; usedFallback = true; }
+        }
+        const { picked, byId } = chosen;
         for (const id of picked.ids) {
             usedIds.add(id);
             usedFamilies.add(byId.get(id).variant_of ?? id);
         }
-        results.push({ ids: picked.ids, got: picked.actual, availableCount: picked.availableCount, unitSizes: picked.unitSizes });
+        results.push({
+            ids: picked.ids, got: picked.actual, availableCount: picked.availableCount, unitSizes: picked.unitSizes,
+            ...(quota.fallbackPool ? { usedFallback } : {})
+        });
     }
     return results;
+}
+
+/**
+ * 〔dec/r16-remedial 依錯因出題〕「先洗牌、再依偏好穩定排序」的洗牌函式（給 pickPaperUnits）。
+ * pickPaperUnits 交給洗牌函式的元素是「組」（{ ids, … }）：組的偏好鍵取組內最好的一題；元素若是單題（有 id、沒有 ids）也照樣處理。
+ * 偏好鍵相同的元素維持洗牌後的順序（Array.prototype.sort 是穩定排序），所以同鍵之間仍是隨機。
+ *
+ * @param {number[]} ids 候選題
+ * @param {(row:object)=>number[]} rankOf
+ * @param {(items:Array)=>Array} baseShuffle
+ * @returns {Promise<(items:Array)=>Array>}
+ */
+async function preferenceShuffle(ids, rankOf, baseShuffle) {
+    const { rows } = await query(
+        'SELECT id, question_type, question_text, difficulty FROM questions WHERE id = ANY($1::int[])', [ids]);
+    return preferenceOrderFn(new Map(rows.map(r => [r.id, rankOf(r)])), baseShuffle);
+}
+
+/**
+ * preferenceShuffle 的純函式部分：題目 id → 偏好鍵 的對照表 → 洗牌函式。
+ * 查不到鍵的元素排最後（[Infinity]）。
+ * @param {Map<number, number[]>} keyOfId
+ * @param {(items:Array)=>Array} baseShuffle
+ * @returns {(items:Array)=>Array}
+ */
+function preferenceOrderFn(keyOfId, baseShuffle) {
+    const keyOf = (item) => {
+        const members = Array.isArray(item?.ids) ? item.ids : [item?.id];
+        const keys = members.map(id => keyOfId.get(id)).filter(Boolean);
+        if (keys.length === 0) return [Infinity];
+        return keys.reduce((best, k) => (compareKeys(k, best) < 0 ? k : best));
+    };
+    return (items) => {
+        const shuffled = baseShuffle(items);
+        const keyed = shuffled.map(item => ({ item, key: keyOf(item) }));
+        keyed.sort((a, b) => compareKeys(a.key, b.key));
+        return keyed.map(k => k.item);
+    };
 }
 
 /**
@@ -771,6 +842,8 @@ async function generateBlueprintPaper(req, res, next) {
     }
 }
 // 純函式給單元測試
+// 〔dec/r16-remedial〕偏好排序的純函式（test/unit/remedialErrorStrategy.test.js）
+exports._pickInternals = { preferenceOrderFn };
 exports._blueprintInternals = { parseBlueprint, parseExcludeIds, parseSourceTypes, shortfallReason, blueprintPolicyError,
     blueprintShortfallHints, followUpShortfallText, blueprintTitle, MAX_BLUEPRINT_ROWS };
 
@@ -805,17 +878,25 @@ function buildInsertNewAssignmentsSql() {
  * 「先鎖項目、再動派題與作答」與批改、刪卷同一個順序（retrainService 檔頭的「併發」）。
  * 沒有重練題（預設）時，這個交易裡的語句與 PR-3 之前一模一樣。
  *
- * @param {{studentId:number, paperTitle:string, questionIds:number[], todayStr:string, retrainQuestionIds?:number[]}} p
- * @returns {Promise<{paperId:number|null, conflict:boolean, retrainConflict?:{question_id:number, reason:string}}>}
+ * 〔dec/r16-remedial 補救成效〕kind（migrations/0022）：'normal'（預設）時建卷的 INSERT 與之前逐字相同；
+ * 'remedial'／'retrain' 才多寫 kind（與 targets）。這兩種先設 SAVEPOINT：資料庫還沒套 0022（42703 欄位不存在）時，
+ *   - 'retrain'：退回不帶 kind 的 INSERT（卷照樣出，只是沒記種類），伺服器視窗提醒一次 migrate；
+ *   - 'remedial'：什麼都不寫，回 schemaMissing（呼叫端回 503 請老師先 migrate）——沒有快照的補救卷追蹤不了成效，
+ *     不該悄悄出成一般卷。
+ *
+ * @param {{studentId:number, paperTitle:string, questionIds:number[], todayStr:string, retrainQuestionIds?:number[],
+ *          kind?:'normal'|'remedial'|'retrain', targets?:object[]|null}} p
+ * @returns {Promise<{paperId:number|null, conflict:boolean, retrainConflict?:{question_id:number, reason:string}, schemaMissing?:boolean}>}
  */
-async function writePaper({ studentId, paperTitle, questionIds, todayStr, retrainQuestionIds = [] }) {
+async function writePaper({ studentId, paperTitle, questionIds, todayStr, retrainQuestionIds = [], kind = 'normal', targets = null }) {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        const { rows: [paper] } = await client.query(
-            `INSERT INTO exam_papers (title, student_id, question_ids) VALUES ($1, $2, $3::int[]) RETURNING id`,
-            [paperTitle, studentId, questionIds]
-        );
+        const paper = await insertPaperRow(client, { paperTitle, studentId, questionIds, kind, targets });
+        if (!paper) {
+            await client.query('ROLLBACK');
+            return { paperId: null, conflict: false, schemaMissing: true };
+        }
         // 〔retrain PR-3〕重練題：先鎖項目再檢查、寫入（有衝突時什麼都沒寫）
         let newIds = questionIds;
         if (retrainQuestionIds.length > 0) {
@@ -851,6 +932,44 @@ async function writePaper({ studentId, paperTitle, questionIds, todayStr, retrai
     }
 }
 
+/** 0022 還沒套的提醒只印一次（同 jobController 的 0021 提醒）。 */
+let warnedKindSchema = false;
+/** 〔dec/r16-remedial〕資料庫還沒套 0022 時，補救卷確認回 503 的訊息。 */
+const PAPER_KIND_SCHEMA_MESSAGE = '資料庫還沒套 migrations/0022_paper_kind_targets.sql（補救卷的目標快照）：請在 exam_pro 執行 npm run migrate，'
+    + '再確認一次。這份補救卷沒有出卷、沒有記錄。';
+
+/**
+ * 〔dec/r16-remedial 補救成效〕建卷那一列（writePaper 的交易內）。
+ * 'normal' 與之前同一句 INSERT；其他種類在 SAVEPOINT 裡多寫 kind／targets，欄位不存在（42703）時見 writePaper 的說明。
+ * @returns {Promise<{id:number}|null>} null＝補救卷但資料庫還沒套 0022
+ */
+async function insertPaperRow(client, { paperTitle, studentId, questionIds, kind, targets }) {
+    const plain = () => client.query(
+        `INSERT INTO exam_papers (title, student_id, question_ids) VALUES ($1, $2, $3::int[]) RETURNING id`,
+        [paperTitle, studentId, questionIds]
+    );
+    if (kind === 'normal') return (await plain()).rows[0];
+    await client.query('SAVEPOINT paper_kind');
+    try {
+        const { rows: [paper] } = await client.query(
+            `INSERT INTO exam_papers (title, student_id, question_ids, kind, targets)
+             VALUES ($1, $2, $3::int[], $4, $5::jsonb) RETURNING id`,
+            [paperTitle, studentId, questionIds, kind, targets === null ? null : JSON.stringify(targets)]
+        );
+        await client.query('RELEASE SAVEPOINT paper_kind');
+        return paper;
+    } catch (err) {
+        if (!(err && err.code === '42703')) throw err;
+        await client.query('ROLLBACK TO SAVEPOINT paper_kind');
+        if (!warnedKindSchema) {
+            warnedKindSchema = true;
+            console.warn('[papers] 資料庫還沒套 0022_paper_kind_targets.sql：試卷種類與補救卷的目標快照不會記錄。請在 exam_pro 執行 npm run migrate。');
+        }
+        if (kind === 'remedial') return null;
+        return (await plain()).rows[0];
+    }
+}
+
 // ─────────────────────────────────────────────────────────────
 // POST /api/confirm-paper（W1-2 的「確認」；docs/roadmap-plan.md §6.2.3）
 //
@@ -873,6 +992,11 @@ async function writePaper({ studentId, paperTitle, questionIds, todayStr, retrai
 //   - B7 的整組檢查與新題共用、一視同仁（incompleteFollowUpGroupsInPaper）。
 //   - 每一題都是重練題（純重練卷）時卷名是「<姓名>-錯題重練卷(日期)」。
 //   - 回應多 retrain_question_ids（有帶才多，依出題順序）；沒帶時行為與回應逐字不變。
+//
+// 〔dec/r16-remedial 補救成效〕body 可多帶 kind: 'remedial' 與 targets（補救卷草稿回應裡的目標快照；docs/remedial.md 第 10 節）。
+//   - 驗證在 utils/remedialTargets.js（只收列出的鍵、章節白名單、單科、數字範圍），不合法 → 400；排在 retrain 檢查之後。
+//   - 存進 exam_papers.kind／targets（migrations/0022）；資料庫還沒套 0022 → 503，不寫任何東西。
+//   - 沒帶時：純重練卷（每一題都是重練題）記 kind = 'retrain'，其餘 'normal'；回應逐字不變。
 // ─────────────────────────────────────────────────────────────
 
 /**
@@ -936,6 +1060,9 @@ exports.confirmPaper = async (req, res, next) => {
         const rt = retrainValidation.parseConfirmRetrain(req.body, { enabled: features.FEATURE_RETRAIN });
         if (rt.error) return res.status(400).json({ message: rt.error });
         const retrainIds = rt.value;
+        // 〔dec/r16-remedial 補救成效〕kind: 'remedial'＋targets（目標快照）；兩個都沒帶＝null，以下逐字同前
+        const kp = remedialTargets.parseConfirmKind(req.body);
+        if (kp.error) return res.status(400).json({ message: kp.error });
 
         // 〔Owner 決策單 2026-09-25 B7〕承上題必須整組：缺題就 400，列出哪一組缺了哪幾題
         const incomplete = await incompleteFollowUpGroupsInPaper(student.id, question_ids, retrainIds);
@@ -961,10 +1088,15 @@ exports.confirmPaper = async (req, res, next) => {
             ? retrainSelect.retrainPaperTitle(student.name, titleDate)
             : `${student.name}-${titleQuestion.chapter}特訓卷(${titleDate})`;
 
+        // 〔dec/r16-remedial〕試卷種類：前端說是補救卷就是補救卷；否則純重練卷記 'retrain'；其餘 'normal'（INSERT 逐字同前）
+        const kind = kp.value ? 'remedial'
+            : (retrainIds !== null && retrainSelect.isPureRetrain(finalSortedIds, retrainIds) ? 'retrain' : 'normal');
         const outcome = await writePaper({
             studentId: student.id, paperTitle, questionIds: finalSortedIds, todayStr,
-            ...(retrainIds !== null ? { retrainQuestionIds: retrainIds } : {})
+            ...(retrainIds !== null ? { retrainQuestionIds: retrainIds } : {}),
+            ...(kind !== 'normal' ? { kind, targets: kp.value ? kp.value.targets : null } : {})
         });
+        if (outcome.schemaMissing) return res.status(503).json({ message: PAPER_KIND_SCHEMA_MESSAGE });
         if (outcome.retrainConflict) {
             // 〔retrain PR-3〕項目在草稿之後被派到別張卷、移出或還沒進清單（不變量 I6）
             return res.status(409).json({ message: retrainService.retrainConflictMessage(outcome.retrainConflict.question_id) });

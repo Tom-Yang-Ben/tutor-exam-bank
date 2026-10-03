@@ -24,6 +24,9 @@
 2.3 的 `blueprint` 是既有 `POST /api/generate-paper` 的擴充，**不吃旗標**（它不呼叫 LLM，是組卷核心功能的延伸）。
 五支都不呼叫 LLM，掛在旗標後的四支不寫資料庫，所以沒有套限流（契約第 1.2 條的限流針對會花錢的端點）。
 2.5 是契約之外多的一支（理由見第 6 節）。
+〔dec/r16-remedial〕2.2 的回應多了錯因（補救組 `blueprint` 列的 `error_focus`，第 9 節）與目標快照（`targets`，第 10.2 節）；
+另有第六支 `GET /api/students/:id/remedial-effect`（補救成效，第 10.3 節），同樣在 `FEATURE_REMEDIAL` 之後、只讀、不呼叫 LLM。
+第七支 `POST /api/students/:id/remedial-paper/fill-shortfall`（題庫不夠時自動補題，第 11 節）另需 `FEATURE_VARIANTS`，會建變式 job，所以有限流。
 
 ### 2.1 `GET /api/students/:id/weakness/kc?days=&subject=`
 
@@ -255,7 +258,7 @@ body：
 
 ## 4. 資料
 
-- **沒有新增 migration、沒有新的環境變數。** 讀的表全是 `stage5/base` 已建好的：
+- **階段 5 沒有新增 migration、沒有新的環境變數。**〔dec/r16-remedial〕補救成效另加 `migrations/0022_paper_kind_targets.sql`（第 10.1 節），仍沒有新的環境變數。階段 5 讀的表全是 `stage5/base` 已建好的：
   `attempts`（`result`、`score`）、`questions`、`question_kcs`、`kc_prerequisites`、`knowledge_components`。
 - 門檻沿用 `WEAKNESS_MIN_N`（預設 5）；旗標 `FEATURE_REMEDIAL`（`.env.example` 已有說明，預設關）。
 - 知識點資料可能是空的（WS-C 的載入與標註還沒跑）：那時一切自動退回章節基底，覆蓋率的 `kc_rows` 是空陣列。
@@ -271,6 +274,14 @@ body：
 | `routes/index.js` | 〔擴充〕檔尾 WS-D 區塊 |
 | `public/js/remedial.js` | `#remedial`、`#coverage` |
 | `public/js/variants.js` | 〔擴充〕「找相似」結果的「加入補救卷」按鈕（見第 6 節） |
+| `config/remedialErrorStrategy.js` | 〔dec/r16-remedial〕錯因 → 選題策略的對照表與判斷（純函式，第 9 節） |
+| `utils/remedialTargets.js` | 〔dec/r16-remedial〕`confirm-paper` 的 `kind`／`targets` 驗證（純函式，第 10.2 節） |
+| `services/remedialEffectService.js` | 〔dec/r16-remedial〕補救成效的聚合 SQL 與狀態判斷（第 10.3、10.4 節） |
+| `migrations/0022_paper_kind_targets.sql` | 〔dec/r16-remedial〕`exam_papers.kind`、`targets`（第 10.1 節） |
+| `services/remedialFillService.js` | 〔dec/r16-remedial〕題庫不夠時自動補題：藍本挑選、分配與上限、先檢索、建變式 job（第 11 節） |
+| `services/remedialProvenance.js` | 〔dec/r16-remedial〕補題來源註記：入庫時抄到題目、複核畫面的 `remedial_for`、合併學生（第 11.3 節） |
+| `services/assistantService.js` | 〔擴充〕〔dec/r16-remedial〕助教的 `plan_remedial_paper`、`get_remedial_effect`（`FEATURE_REMEDIAL` 開啟才有；第 12 節） |
+| `migrations/0023_remedial_variant_provenance.sql` | 〔dec/r16-remedial〕`jobs.target_student_id`、`questions.target_student_id`／`target_source_question_id`（第 11.3 節） |
 
 ---
 
@@ -363,6 +374,14 @@ body：
 | 單元 | `test/unit/remedialValidation.test.js` | 補救卷 body（含 mix 總和溢位）、覆蓋率 query、加題查詢的 `ids`、blueprint 驗證與承上題政策開關、候選池 SQL 的參數順序；〔修訂 2026-09-26 合併回填 B10〕blueprint 逐列建議題數（`blueprintPolicyError`、`blueprintShortfallHints`、`followUpShortfallText`） |
 | 單元 | `test/unit/remedialUi.test.js` | 前端檔案契約、純函式、miniDom 渲染（旗標關閉不渲染、草稿、刪題加題、`remedial:add`、確認、覆蓋率）、承上題整組（「承上 #x」、「刪這組」、整組加入或拒絕、不混科、確認前擋缺前題的承上題）、variants.js 掛鉤 |
 | 整合 | `test/integration/remedial.pg.test.js` | 旗標關閉 404；kc 加權與 Wilson 排序；kc 基底／chapter 退回；各 bucket 配額；不足量；已作答、封存、跨科、題源排除；家族互斥；承上題整組與 items 的組資訊；不寫庫並接 confirm-paper；加題查詢（承上組成員、封存與已寫過旗標、missing、400／404）；blueprint 的互斥 400、逐列不足、跨列家族互斥與不重複、真出卷；單章路徑收到非字串 chapter 仍是 400 庫存不足；覆蓋率 |
+| 單元 | `test/unit/remedialErrorStrategy.test.js` | 〔dec/r16-remedial〕錯因對照表（每個代碼一列、標籤同白名單、預設策略）、錯因統計、主因門檻（2 筆、40% 邊界、同票、別科不適用）、難度上限、偏好鍵與反應式偵測；偏好排序交給真的 `pickPaperUnits`（偏好先抽、題數不少、同鍵仍隨機、承上組與家族互斥）；`buildPlan`／`buildTargets`／`planRemedialPaper` 的套用、退回與沒標錯因時逐字不變 |
+| 單元 | `test/unit/remedialEffect.test.js` | 〔dec/r16-remedial〕`confirm-paper` 的 `targets` 驗證（逐項的 400）、狀態門檻邊界、起算時間、目標成效組裝、SQL 參數順序與 R10、查詢參數、0022 檔案層級 |
+| 整合 | `test/integration/remedialErrorFocus.pg.test.js` | 〔dec/r16-remedial〕依錯因出題：套用（降上限＋偏好，連抽 6 次）、同票、沒標錯因、R10、退回上限、退回也不夠、知識點基底、草稿不寫庫 |
+| 單元 | `test/unit/remedialFill.test.js` | 〔dec/r16-remedial〕補題 body 驗證、藍本順序、分配與上限、錯題查詢（R10）、`fillShortfall` 組裝（先檢索、合流、上限、跳過）、前端與複核畫面的純函式 |
+| 整合 | `test/integration/remedialFill.pg.test.js` | 〔dec/r16-remedial〕0023、藍本挑選與 R10、建 job 帶來源、先檢索、合流、上限 5 題、跳過、400／404／旗標；假 agent 跑完生成：input 不含學生資料、複核的 `remedial_for`、approve 與自動入庫抄來源、一般變式不抄；刪除與合併學生 |
+| 單元 | `test/unit/assistantRemedialTools.test.js` | 〔dec/r16-remedial〕旗標關閉時助教的 SYSTEM 與模板雜湊逐字不變（釘值）、開啟時多兩個工具與另一個識別名、參數驗證、代號、摘要不含卷名 |
+| 整合 | `test/integration/studentReport.pg.test.js` | 〔dec/r16-remedial〕助教的兩個工具接真的資料庫（假 LLM）：只預覽不寫庫、prompt 與鍵沒有姓名；學習報告（見 `docs/student-report.md`） |
+| 整合 | `test/integration/remedialEffect.pg.test.js` | 〔dec/r16-remedial〕0022（預設、CHECK、再套一次）；`confirm-paper` 存 `kind`／`targets`、不合法 400 不寫、一般卷 normal、純重練卷 retrain；補救成效（improved／worse／insufficient_data／pending、只算批改完之後建立的卷、R10、知識點加權、days、新到舊、limit、從草稿一路到成效、404／400、旗標關閉） |
 
 整合測試自己插入知識點、`question_kcs`、`kc_prerequisites`、`attempts` fixture，不依賴 WS-C 的種子檔。
 
@@ -378,3 +397,264 @@ body：
 - 掌握度模型（G12 第二步）：資料量夠了再上固定參數 BKT，取代 Wilson 下界排序。
 - 題庫不足時自動退回鄰近章節或觸發變式生成（G22）：目前只回報不足量，由老師決定。
 - 組卷分頁的跨章配額 UI；助教的 `plan_remedial_paper` 只讀工具。
+
+---
+
+## 9. 依錯因出題（〔dec/r16-remedial〕補救組）
+
+Owner 2026-10-03：補救卷原本只看「哪個單位弱」，不看「錯在哪裡」。批改時標的錯因（`attempts.error_types`，白名單
+`config/errorTypes.js`）其實說明了該怎麼補，所以補救組的每個目標另看錯因、照主因調整選題。不呼叫 LLM。
+
+### 9.1 怎麼判斷主因
+
+- **範圍**：補救組（`bucket = 'remedial'`）的每個目標單位。先備、延伸組不看錯因。
+- **算哪些作答**：該生、同一個時間窗（`days`）、**每題第一次作答**（檢視 `attempts`，R10：重練的錯因不算）、
+  已批改且正確度 `COALESCE(score, result) < 1`（答錯或部分給分）。章節基底＝該章的題；知識點基底＝掛了該知識點
+  （同科標註）的題。SQL：`remedialService.buildErrorProfileQuery`；聚合：`remedialErrorStrategy.errorProfileFromRows`。
+- 只數白名單內的代碼；同一筆作答重複標同一個代碼只算一次。「有標錯因的錯題」＝至少有一個白名單代碼的那一筆。
+- **門檻**（`config/remedialErrorStrategy.js` 的具名常數）：有標錯因的錯題 ≥ `MIN_TAGGED_WRONG = 2`，而且
+  主因占全部錯因標記 ≥ `MIN_DOMINANT_SHARE = 0.4`（`share`＝主因次數 ÷ 全部錯因標記數；一題可標多個，分母是標記數）。
+
+| 情況 | `error_focus` | 選題 |
+|---|---|---|
+| 這個單位的錯題完全沒標錯因 | `null` | 與沒有這個功能時逐字相同（`rationale` 不提錯因） |
+| 有標錯因的錯題只有 1 筆 | `applied: false`、`reason: 'insufficient_evidence'` | 不調整，`rationale` 說「還看不出主因」 |
+| 主因 < 40% | `applied: false`、`reason: 'no_dominant'` | 不調整 |
+| 第一名同票（例：觀念 2、計算 2） | `applied: false`、`reason: 'tie'` | 不調整 |
+| 主因的策略不適用這一科（`chem_equation` 只對化學） | `applied: false`、`reason: 'not_applicable'` | 不調整 |
+| 其餘 | `applied: true`、`reason: 'dominant'` | 照 9.2 的策略調整 |
+
+### 9.2 錯因 → 策略（預設，待 Owner 確認）
+
+| 代碼 | 標籤 | 難度上限 | 偏好（只排先後，不篩題） | 給老師看的理由 |
+|---|---|---|---|---|
+| `concept` | 觀念不清 | 降一級（最低 1） | 單選／多選／填空 | 觀念還沒建立時，先用短的觀念檢查題確認他懂了，再回到難題。 |
+| `formula` | 公式記錯 | 降一級 | 單選／多選／填空 | 公式記錯先用直接套公式的基本題把公式記牢。 |
+| `method` | 方法選錯 | 不變 | 計算 | 方法選錯要在完整的解題過程裡練「該用哪一招」，計算題最看得出來。 |
+| `calc` | 計算錯誤 | 不變 | 計算／填空 | 計算錯誤靠練習量改善，多給要算到底的題。 |
+| `unit` | 單位或有效數字 | 不變 | 計算／填空 | 單位與有效數字要在實際算出數值的題裡練。 |
+| `careless` | 粗心抄錯 | 不變 | 計算／填空 | 粗心靠練習量與檢查習慣改善，多給要寫出答案的題。 |
+| `reading` | 審題錯誤 | 不變 | 題幹長的先（壓掉空白後的字數） | 審題錯誤要練讀長題目、抓條件，題幹長的題先出。 |
+| `blank` | 未作答 | 降一級 | 簡單的先 | 空白通常是不知道從哪裡下手，先給做得出來的題建立信心與起手式。 |
+| `time` | 時間不足 | 降一級 | 簡單的先 | 時間不夠先練基本題的速度，再拉難度。 |
+| `chem_equation` | 化學式或係數 | 不變 | 題幹有反應式的先（→、⟶、⇌、`\rightarrow`、`\longrightarrow`、`\xrightarrow`、`\rightleftharpoons`、`\ce{… -> …}`、「反應式」） | 化學式或係數出錯，要多寫、多配平反應式。只對化學。 |
+
+改策略只改這張表與 `ERROR_STRATEGIES`，選題程式不必動（`test/unit/remedialErrorStrategy.test.js` 釘住現在的預設，改了要一起改）。
+
+### 9.3 套用方式
+
+- **難度上限**是硬條件：補救目標的上限（第 3.3 節）降一級後抽。**抽不滿就退回原本的上限**再抽一次
+  （`examController.pickByQuotas` 的 `fallbackPool`；兩次取抽到較多的那一次），偏好照舊；這時 `notes` 多一句
+  `「向量內積」錯因以「觀念不清」為主，原本只選難度 ≤ 3 的題，但湊不到 5 題，已改回難度 ≤ 4（題型偏好照舊）。`，
+  `blueprint` 的 `difficulty_max` 回報實際用的上限、`error_focus.reason` 改成 `'dominant_difficulty_fallback'`（`applied` 仍是 true）。
+  退回之後還是不夠，照舊逐目標回報在 `shortfalls`。
+- **偏好**一律做成候選池內的排序（`pickByQuotas` 的 `rankOf`）：把洗牌函式包一層「先洗牌、再依偏好鍵穩定排序」交給同一個
+  `pickPaperUnits`。候選池 SQL、家族互斥、承上題整組、裝箱規則都不變，所以偏好**只改變抽的先後，永遠不會讓題數變少**；
+  偏好鍵相同的題之間仍是隨機。一組承上題的偏好鍵取組內最好的一題。沒有偏好或沒套用時，`pickByQuotas` 收到的配額與之前逐字相同。
+- `rationale` 在掌握度那一句後面接錯因：例 `掌握度下界 3%（批改 6 題、答對 1）；錯因以「觀念不清」為主（有標錯因的錯題 4 題，標了 3 次，占 75%）→ 難度上限降一級，優先單選／多選／填空；選難度 ≤ 3 的題`。
+- `blueprint` 中 `bucket = 'remedial'` 的列**一律**有 `error_focus` 鍵（沒標錯因時為 `null`；先備、延伸列沒有這個鍵）：
+
+```json
+{ "type": "concept", "label": "觀念不清", "count": 3, "share": 0.75, "tagged_wrong": 4,
+  "strategy": { "difficulty_ceiling_delta": -1, "prefer_types": ["單選", "多選", "填空"], "prefer_order": null,
+                "summary": "難度上限降一級，優先單選／多選／填空", "rationale": "觀念還沒建立時，…" },
+  "applied": true, "reason": "dominant" }
+```
+
+  沒套用時 `strategy` 為 `null`。草稿畫面在每個補救目標下多一行（主因、怎麼調、為什麼；沒套用時灰字說明看不出主因）。
+
+---
+
+## 10. 補救成效追蹤（〔dec/r16-remedial〕）
+
+補救卷出了之後，看「補完有沒有變好」：每份補救卷的每個補救目標，比較出卷當下（補救前）、這張卷上、之後其他卷上的答對率。
+
+### 10.1 資料（`migrations/0022_paper_kind_targets.sql`）
+
+`exam_papers` 加兩欄：`kind TEXT NOT NULL DEFAULT 'normal'`（CHECK：`normal`／`remedial`／`retrain`）與 `targets JSONB`
+（只有 `remedial` 能有、必須是陣列；`exam_papers_targets_kind_check`）。既有的卷一律是 `normal`，不回頭猜哪些是補救卷（沒有快照也比不了）。
+索引 `idx_exam_papers_student_kind (student_id, kind, created_at DESC)`。可重複套用。
+
+| 種類 | 什麼時候寫 |
+|---|---|
+| `normal` | 其餘全部（建卷的 INSERT 與之前逐字相同） |
+| `remedial` | `confirm-paper` 帶 `kind: 'remedial'`＋`targets`（補救卷草稿確認） |
+| `retrain` | `confirm-paper` 的每一題都在 `retrain_question_ids` 裡（純錯題重練卷，卷名「錯題重練卷」的那種） |
+
+資料庫還沒套 0022 時：補救卷確認回 **503**（什麼都沒寫，請先 `npm run migrate`；沒有快照的補救卷追蹤不了成效，不悄悄出成一般卷）；
+純重練卷照樣出卷、只是不記種類（伺服器視窗提醒一次）；`GET …/remedial-effect` 回 503。
+
+### 10.2 目標快照與確認
+
+`POST /api/students/:id/remedial-paper` 的回應最後多 `targets`：每段配額（含先備、延伸）一列，出卷當下的單位與基準。
+
+```json
+[{ "unit_type": "chapter", "subject": "數學", "chapter": "向量內積", "bucket": "remedial",
+   "baseline": { "graded": 6, "wrong": 5, "wrong_rate": 0.8333, "low_sample": false },
+   "error_focus": { "type": "concept", "count": 3, "share": 0.75, "applied": true } },
+ { "unit_type": "kc", "subject": "數學", "chapter": "向量的加減與係數積", "kc_id": 9, "bucket": "prerequisite",
+   "baseline": { "graded": 0, "wrong": 0, "wrong_rate": null, "low_sample": true } }]
+```
+
+- `baseline`：與弱點排序同一份聚合（只算第一次作答）。`wrong`＝批改量 − 答對量（部分給分按比例；知識點依權重）；
+  `wrong_rate`＝`wrong ÷ graded`（`graded = 0` 時 `null`）；`low_sample` 同第 2.1 節。先備知識點在時間窗內沒有作答時是 0／`null`／`true`。
+- `error_focus` 只有補救組、而且該單位有錯因標記時才有（只存代碼、次數、比例、是否套用；標籤讀的時候再查）。
+- 章節不在白名單的單位（資料庫裡的舊章節）不放進快照，`notes` 說明不追蹤它們——`confirm-paper` 對章節嚴格驗白名單，伺服器自己產的快照不能被擋。
+- 前端確認時把 `targets` 原樣交給 `POST /api/confirm-paper { student_id, question_ids, kind: 'remedial', targets }`；
+  只靠「找相似」手動湊的空草稿沒有快照，照一般卷確認。
+
+`confirm-paper` 的驗證（`utils/remedialTargets.js`，排在 retrain 檢查之後；不合法 → 400，什麼都不寫）：
+
+- `targets` 只能搭配 `kind: 'remedial'`；`kind` 只接受 `'remedial'`（`retrain` 由伺服器判斷）；`kind` 有帶時 `targets` 必填，1–12 個。
+- 每一層只收列出的鍵（目標：`unit_type`、`subject`、`chapter`、`kc_id`、`bucket`、`baseline`、`error_focus`；`baseline` 四個鍵全部必填；
+  `error_focus`：`type`、`count`、`share`、`applied`），多一個鍵就 400。
+- `subject` 在科目白名單、`chapter` 在該科章節白名單（`config/chapters.js`）、全部目標同科；`kc_id` 只有知識點單位有、是 int4 範圍內的正整數；
+  `bucket` 是 `remedial`／`prerequisite`／`extension`；`graded` 0–10000、`wrong` 0–`graded`、`wrong_rate` 0–1（`graded = 0` 時必須 `null`）、
+  `low_sample` 布林；`error_focus` 只有補救組能帶、代碼在錯因白名單、`count` 正整數、`share` 0–1；同一組同一個單位不得重複。
+- 回應形狀不變（不多鍵）。
+
+### 10.3 `GET /api/students/:id/remedial-effect?limit=&days=`
+
+- `limit` 1–50（預設 10）：最多幾份補救卷，新到舊（`created_at DESC, id DESC`）。`days` 1–365（選填）：只看補救卷批改完之後幾天內建立的卷。
+- 錯誤：`:id` 不合法或學生不存在 → 404；`limit`／`days` 不合法 → 400；`FEATURE_REMEDIAL` 關閉 → 404；還沒套 0022 → 503。
+
+```json
+{ "student_id": 3, "limit": 10, "days": null,
+  "thresholds": { "improved_delta": 0.1, "worse_delta": -0.1, "min_after_graded": 2, "min_n": 5 },
+  "papers": [{ "paper_id": 41, "title": "王小明-向量內積特訓卷(2026_10_3)", "created_at": "…", "graded": true,
+               "assigned_count": 5, "graded_count": 5, "anchor_at": "…",
+               "targets": [{ "unit_type": "chapter", "subject": "數學", "chapter": "向量內積", "name": "向量內積", "bucket": "remedial",
+                             "error_focus": { "type": "concept", "count": 3, "share": 0.75, "applied": true, "label": "觀念不清" },
+                             "before": { "graded": 6, "wrong": 5, "wrong_rate": 0.8333, "correct_rate": 0.1667, "low_sample": false },
+                             "on_paper": { "assigned": 5, "graded": 5, "correct": 3, "rate": 0.6 },
+                             "after": { "graded": 3, "correct": 3, "rate": 1, "papers": 1 },
+                             "delta": 0.8333, "low_sample": true, "status": "improved" }] }] }
+```
+
+只列補救組的目標（先備、延伸的快照留著，但不算成效）。知識點單位多 `kc_id`、`code`，`name` 是知識點現在的名稱。
+
+| 欄位 | 定義 |
+|---|---|
+| `before` | 快照（出卷當下），事後**不重算**：弱點面板的數字會隨新的批改一直變，重算出來的不是「補救前」。`correct_rate`＝1 − `wrong_rate` |
+| `on_paper` | 這張補救卷上、這個單位的題：`assigned`（派了幾題）、`graded`、`correct`、`rate`。只供參考，不進 `status` |
+| `graded`（卷） | 卷上**每一題**都批改了（含卷上的重練題，`assignment_attempts`） |
+| `anchor_at` | 「之後」的起算時間：批改完＝最後一題的 `graded_at`；還沒批改完＝建卷時間 |
+| `after` | **其他**卷上、這個單位的作答，卷的建立時間 > `anchor_at`（有 `days` 時再 ≤ `anchor_at + days`）；`papers`＝有批改的卷數。沒有卷號的歷史作答不算 |
+| `delta` | `after.rate − before.correct_rate`，小數第 4 位；任一邊沒有資料時 `null` |
+| `low_sample` | `after.graded < WEAKNESS_MIN_N`（同弱點面板，預設 5） |
+
+共同規則：只算**每題第一次作答**（檢視 `attempts`，R10；重練與回測的效果看「重練成效」）；正確度＝`COALESCE(score, result)`；
+已批改＝`result IS NOT NULL`；知識點單位依 `question_kcs.weight` 加權、只算同科標註；章節單位每題權重 1。
+
+### 10.4 狀態（`services/remedialEffectService.js` 的具名常數）
+
+依序判斷：
+
+| `status` | 條件 |
+|---|---|
+| `pending` | 補救卷還沒批改完（`graded = false`） |
+| `insufficient_data` | 補救前沒有批改資料（`before.correct_rate = null`），或 `after.graded < MIN_AFTER_GRADED`（**2**；知識點為加權題數） |
+| `improved` | `delta ≥ IMPROVED_DELTA`（**+0.10**，即答對率高 10 個百分點以上） |
+| `worse` | `delta ≤ WORSE_DELTA`（**−0.10**） |
+| `no_change` | 其餘 |
+
+`low_sample` 與 `status` 分開：2–4 題就判斷方向，但標「樣本少」；這三個門檻都待 Owner 確認。
+
+### 10.5 畫面
+
+學生分頁「依弱點出補救卷」區塊最下方的「補救成效」：選了學生就讀，確認出卷後重讀。每份補救卷一張卡（卷名、日期、批改進度），
+每個補救目標一行：狀態標籤（進步／持平／退步／資料不足／還沒批改完）、單位名稱、`補救前 17%（批改 6 題） → 這張卷 60%（5/5 題已批改） → 之後 100%（批改 3 題），變化 +83 個百分點`，
+之後批改量不到 `WEAKNESS_MIN_N` 時多一個「樣本少」標籤，依錯因出題的目標另標主因。
+
+### 10.6 已知限制
+
+- 「之後」以卷的**建立時間**比補救卷**最後一題的批改時間**：補救卷批改完之前就出的卷不算（學生寫那張卷時，老師還沒看過補救卷的結果）；
+  補救卷之後又改批改（重新存批改卡）時，起算時間跟著往後移。
+- 補救卷上某個目標的題全部被老師在草稿裡刪掉，快照仍在：`on_paper.assigned = 0`，`status` 照「之後」判斷。
+- 只追蹤經由草稿確認的補救卷（0022 之前出的補救卷是 `normal`，沒有快照）。
+
+---
+
+## 11. 題庫不夠時自動補題（〔dec/r16-remedial〕）
+
+補救卷草稿某個補救目標回報「庫存不足」時，老師按那一行的「**生成變式補題**」：系統拿這位學生在那個單位答錯的題當藍本，
+走既有的變式 job（`POST /api/questions/:id/variants` 背後的同一套：`services/variantService.js`、`agents/generateVariant.js`、
+job runner）出變式。生成好的題停在「待複核」，老師核准後重新產生草稿就抽得到。需要 `FEATURE_REMEDIAL`＋`FEATURE_VARIANTS`。
+
+### 11.1 `POST /api/students/:id/remedial-paper/fill-shortfall`
+
+body（只收列出的鍵）：
+
+| 鍵 | 必填 | 規則 | 預設 |
+|---|---|---|---|
+| `subject` | ✅ | 科目白名單 | — |
+| `days` | | 1–365：錯題看多久以內的（同草稿的時間窗） | 90 |
+| `difficulty_delta` | | −1／0／1（同 `variants` 端點） | 0 |
+| `units` | ✅ | 1–3 個 `{ unit_type: 'chapter'\|'kc', chapter, kc_id?（kc 必填）, needed（1–50）, error_type?（錯因代碼） }`；章節在白名單、不重複 | — |
+
+前端由草稿的 `blueprint` 列組出來：`needed`＝要的 − 找到的；錯因主因有套用時帶 `error_type`；知識點目標的 `blueprint` 列另帶 `kc_id`。
+
+回應（有建新 job 時 202，否則 200）：
+
+```json
+{ "student_id": 3, "subject": "數學", "max_generate": 5, "generating": 3, "capped": false, "retrieved_ids": [52],
+  "units": [{ "unit_type": "chapter", "chapter": "向量內積", "needed": 4, "sources_found": 3, "generating": 3, "unplanned": 0,
+              "items": [ { "source_question_id": 41, "mode": "retrieved", "retrieved": [{ "id": 52, "chapter": "向量內積", "difficulty": 3, "cosine": 0.91 }] },
+                         { "source_question_id": 38, "mode": "generating", "job_id": 12, "state": "queued", "existing": false, "count": 2, "retrieved": [] },
+                         { "source_question_id": 30, "mode": "skipped", "reason": "follow_up" } ] }],
+  "jobs": [{ "job_id": 12, "state": "queued", "existing": false, "source_question_id": 38, "chapter": "向量內積" }],
+  "notes": ["…"] }
+```
+
+錯誤：`:id` 不合法或學生不存在 → 404；body 不合法 → 400；任一旗標關閉 → 404（不掛載）；還沒套 0023 → 503（沒有建任何 job）；限流 10 次／分（獨立的桶）。
+
+### 11.2 規則（`services/remedialFillService.js`）
+
+1. **藍本**＝該生在這個單位、時間窗內**第一次作答**（檢視 `attempts`，R10：重練才錯的不算）答錯或部分給分的題，最近的先；
+   有 `error_type` 時，標了那個錯因的錯題排前面。承上題（`follow_up`）、沒有向量（`no_vector`）、已封存的題不能當藍本，跳過並回報。
+2. **分配**：`needed` 平均分給前幾個藍本（一個藍本一個 job，每個最多 `VARIANT_MAX_PER_REQUEST` 題）；**整個請求最多生成
+   `MAX_FILL_GENERATE = 5` 題**，超過的不生成（`capped`、`notes` 說明，核准後再按一次）。藍本不夠分時差的題數在 `unplanned`。
+3. **先檢索**：每個藍本先跑 `variantService.findRetrieved`（同科、同難度、不同家族、**該生沒寫過**、餘弦 ≥ 檢索下限）。
+   庫裡已經有夠用的相似題就不生成，把題號回報（`retrieved_ids`；老師用題目 ID 加進草稿）；不夠只生成差額。
+4. **生成**：`variantService.createVariantJob`（同一藍本已經在跑就合流，`existing: true`，不重複花錢）；`requested.student_id`
+   照舊給檢索排除他寫過的題，job 另記 `target_student_id`。變式 job 沒有逐份選引擎：`jobs.engine` 為 NULL＝照 `.env`。
+   `VARIANT_AUTO_APPROVE=false`（預設）時生成的題停在複核（`awaiting_approval`）。
+
+**學生資料不出境**：變式 agent 的 input（藍本題目、鄰居、兄弟題幹）與一般的變式完全相同，沒有學生 id 或姓名，所以 prompt 與
+cassette 的鍵都不變（整合測試檢查 agent 收到的 input）。姓名只出現在本機的複核畫面。
+
+### 11.3 來源註記（`migrations/0023_remedial_variant_provenance.sql`、`services/remedialProvenance.js`）
+
+- `jobs.target_student_id`：補題 job 為誰出（藍本是既有的 `jobs.source_question_id`）。
+- 核准入庫（`POST /api/review/:jqId/approve`）或自動入庫（runner 的 save）時，同一個交易把來源抄到 `questions.target_student_id`
+  與 `questions.target_source_question_id`（`variant_of` 是家族根，不一定是那一題錯題）。一般的變式、拆題不寫這兩欄。
+- `GET /api/review` 的列與 `GET /api/review/:jqId` 多 `remedial_for: { student_id, student_name, source_question_id }`（只有補題的列有），
+  複核卡片顯示「補救卷補題：為 王小明（學生 #3）的錯題 #41 生成」。
+- 外鍵都是 `ON DELETE SET NULL`；合併學生把註記搬到目標學生。沒套 0023 的庫讀不到這一欄＝當一般 job，不擋原本的流程。
+- 與 0022 分開：0022 動 `exam_papers`（補救成效），0023 動 `jobs`、`questions`（補題來源），兩件功能各自套用、各自驗。
+
+### 11.4 本機模式要多久
+
+變式在本機（`qwen3:8b`，CPU）一題生成的中位數約 **2 分 41 秒**（最慢約 6 分），加上分類、lint、驗算，整條約 **5 分鐘一題**
+（上次重錄 60 題整步 17,292 秒，見 `docs/local-mode.md`）。一次最多 5 題 → 大約 **20～30 分鐘**；runner 依 `JOB_CONCURRENCY` 並行，
+但本機模型通常一次只跑一支，所以實際接近依序。畫面上的「重新整理進度」讀既有的 `GET /api/jobs/:id`（排隊中／生成中／檢查中／完成，
+以及待複核、已入庫、不採用的題數）。Gemini 模式快得多，但每題要花 API 費用（`VARIANT_TOKEN_BUDGET_USD` 照舊是每個 job 的上限）。
+
+---
+
+## 12. 助教的補救卷工具（〔dec/r16-remedial〕）
+
+`FEATURE_REMEDIAL` 開啟時，對話式助教（`services/assistantService.js`）多兩個**只讀**工具：
+
+| 工具 | 參數 | 回傳給主控的內容 |
+|---|---|---|
+| `plan_remedial_paper` | `student_name`（必填）、`subject`（必填）、`total`（5–50，預設 20）、`days`（1–365，預設 90） | 跑一次 `planRemedialPaper`（與畫面上「產生草稿」同一段程式，**只預覽、不寫庫、不確認出卷**）：`basis`、題數、每個目標的桶／單位／要幾題找到幾題／理由／錯因主因與調整、不足量、notes。不含題目內容 |
+| `get_remedial_effect` | `student_name`（必填）、`limit`（1–10，預設 5） | `loadRemedialEffect` 的摘要：每份補救卷的日期、批改完了沒、每個補救單位的狀態、補救前與之後的答對率、樣本少。**不放卷名**（卷名含學生姓名） |
+
+- **旗標關閉（CI 的情況）時一切不變**：系統提示詞（含工具說明書）`SYSTEM`、模板識別名 `assistant.v2` 與它的雜湊、工具清單都與加工具之前逐字相同
+  （`test/unit/assistantRemedialTools.test.js` 釘住 SYSTEM 的 sha256 與模板雜湊）。助教沒有 eval suite、`eval/cassettes` 裡也沒有 assistant 的回放檔，
+  所以這兩個工具不影響任何 eval 與 cassette。
+- **旗標開啟時**用另一份說明書 `SYSTEM_REMEDIAL`（多一句「補救卷同樣只能預覽」與兩個工具）與另一個模板識別名 `assistant.v2+remedial.v1`：
+  說明書不同、鍵就不同，不會讀到別份說明書錄的回應。
+- 學生姓名照舊不出境（DEC-009）：主控看到「學生#3」，工具參數換回姓名再查；工具結果進 prompt 前一樣經 `pseudo.mask`。
+

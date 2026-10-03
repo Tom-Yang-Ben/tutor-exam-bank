@@ -41,10 +41,14 @@ describe('① 誤觸檢查：現有的全部文字', () => {
     // 補掃 pdf_sample golden 10 題、拆題回放檔（走閘門的 9 題；第 4 題的章「三角函數的定義」不在白名單，不走閘門）之後的精確值
     // 〔2026-09-28 重錄第 2、3 步入庫〕語料變大：variant 回放檔（qwen3:8b）多 59 題（本機 60 → 119；var-008#1 錄製逾時，少 1 題），
     // 1,108 → 1,167、有章 958 → 1,017；pipeline 錄的 classify.v2 多 2 筆（樣卷第 6、10 題），模型回答 466 → 468。10.22 第 3 點的附記。
-    test('掃描範圍（10.22 第 3、7 點的數字；2026-09-28 重錄入庫後）：共 1,167 段、有章的 1,017 段、沒有章的 150 段（公式 golden）；模型回答 468 筆', () => {
+    // 〔2026-10-02 樣卷改用 extract_ocr.v3 重錄入庫〕拆出的題幹寫法變了（例如選項括號），pipeline 多錄 2 支 classify.v2（樣卷第 6、10 題的新題幹），
+    // 模型回答 468 → 470；其中第 10 題同樣被規則 4 改成「平面運動」＝pdf_sample golden，工具只用 classify golden 對答案，所以列 unknown。
+    // 〔2026-10-03 r15 閘門證據否決〕樣卷第 7 題（拆題模型給「位能與能量守恆」、題幹沒有能量線索）改走第二層，
+    // pipeline 補錄 1 支 classify.v2，模型回答 470 → 471；那一筆沒有被任何界線規則換章（下面逐筆列出的換章清單不變）。
+    test('掃描範圍（10.22 第 3、7 點的數字；2026-10-03 補錄後）：共 1,167 段、有章的 1,017 段、沒有章的 150 段（公式 golden）；模型回答 471 筆', () => {
         assert.equal(r.counts.labeled, 1167);
         assert.equal(r.counts.labeledWithChapter, 1017);
-        assert.equal(r.counts.predictions, 468);
+        assert.equal(r.counts.predictions, 471);
         assert.equal(r.counts.nlq, 90);
         const corpora = [...new Set(r.evidence.map(e => e.corpus))];
         assert.ok(corpora.includes('pdf_sample golden 題幹＋答案'), '有掃 pdf_sample golden');
@@ -83,6 +87,8 @@ describe('① 誤觸檢查：現有的全部文字', () => {
             // 〔2026-09-28 重錄入庫〕pipeline 錄的樣卷第 10 題（「關於等速圓周運動，下列敘述何者正確？（複選）」）：模型答「摩擦力與向心力」、
             // 規則 4 改成「平面運動」，與 pdf_sample golden 第 10 題相同＝改對的方向。工具只用 classify golden 對答案，所以判成 unknown。
             // 同一次錄的第 6 題（繩的張力）模型答「摩擦力與向心力」＝golden，規則沒有動它。
+            // 〔2026-10-02〕extract_ocr.v3 重錄後樣卷第 10 題的新題幹，同下（＝pdf_sample golden；陣列依字串排序）
+            '2026-09-27 本機 classify.v2 回放檔｜09d4a923｜摩擦力與向心力→平面運動｜unknown',
             '2026-09-27 本機 classify.v2 回放檔｜1b7f0693｜摩擦力與向心力→平面運動｜unknown',
             '2026-09-27 本機 classify.v2 回放檔｜cls-fx-025｜三角函數的疊合→直角三角形的邊角關係｜fixed',
             '2026-09-27 本機 classify.v2 回放檔｜cls-fx-026｜三角函數的疊合→直角三角形的邊角關係｜fixed',

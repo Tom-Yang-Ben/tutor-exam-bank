@@ -224,9 +224,11 @@ function thresholdRows(doc, table = thresholds.loadThresholds()) {
     const spec = thresholds.SUITE_METRICS[suite];
     if (!spec) throw new Error(`未知的 suite「${suite}」`);
     const notApplicable = doc.not_applicable || undefined;
+    // 〔Owner 2026-10-03 第 r14 輪 C-2〕門檻組照報表記的向量模型挑（meta.embedModel；舊報表沒有這一欄＝基準門檻）
+    const embedModel = (doc.meta && doc.meta.embedModel) || null;
     const cmp = suite === 'retrieval' ? thresholds.compare(table, measured)
-        : thresholds.compareSuite(table, suite, measured, { notApplicable });
-    const want = table[suite] || {};
+        : thresholds.compareSuite(table, suite, measured, { notApplicable, embedModel });
+    const want = (suite === 'retrieval' ? table : thresholds.resolveSuiteThresholds(table, suite, { embedModel }).table)[suite] || {};
     const rows = [];
     for (const column of spec.columns) {
         for (const metric of spec.metrics) {
@@ -239,7 +241,7 @@ function thresholdRows(doc, table = thresholds.loadThresholds()) {
             rows.push({ metric: `${column}.${metric}`, measured: v, threshold: t, ok: v !== null && v + 1e-9 >= t });
         }
     }
-    return { suite, rows, failures: cmp.failures, skipped: cmp.skipped };
+    return { suite, rows, failures: cmp.failures, skipped: cmp.skipped, profile: cmp.profile || null };
 }
 
 module.exports = { analyze, formatSummary, thresholdRows, nlqQueryGaps, fixtureEmbedGaps };

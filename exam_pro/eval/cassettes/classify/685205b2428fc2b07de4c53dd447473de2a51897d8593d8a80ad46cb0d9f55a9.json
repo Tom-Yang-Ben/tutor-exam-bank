@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agent": "classify",
+    "model": "qwen3:8b",
+    "template": "classify.v2",
+    "recorded_at": "2026-10-02T19:32:31.094Z",
+    "fixtureHash": "df143abe4dbb7e6e87176294defd11d573307f2ced93dc0cd1ea6b9626786fcd"
+  },
+  "request": {
+    "parts": [
+      {
+        "kind": "text",
+        "chars": 2900,
+        "sha256": "e823345696a1703936db263a2bb1d19d09967ee08366cae188007ce03b315476"
+      }
+    ],
+    "cacheKeyParts": {
+      "template": "classify.v2",
+      "questionText": "物體由靜止出發，以2m/s^2的等加速度直線前進，求5秒後的位移。",
+      "fewShotIds": []
+    }
+  },
+  "response": {
+    "data": {
+      "rationale": "題目涉及等加速度直線運動，需使用位移公式計算位移，屬於直線運動的範疇。",
+      "chapter": "直線運動",
+      "confidence": 0.95
+    },
+    "usage": {
+      "tokenIn": 2789,
+      "tokenOut": 56,
+      "tokenThinking": 0,
+      "tokenCached": 0,
+      "timing": {
+        "totalMs": 315075,
+        "loadMs": 15841,
+        "promptEvalMs": 271482,
+        "evalMs": 27660
+      }
+    },
+    "latencyMs": 315094
+  }
+}

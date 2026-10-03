@@ -76,11 +76,13 @@ describe('SUITE_METRICS 的兩節（第 8.2、8.3 條）', () => {
         assert.ok(!thresholds.SUITE_METRICS.variant.metrics.includes('cost_usd'));
     });
 
-    test('階段 1／2 的三節一個字都沒被動到（既有基準線是契約）', () => {
+    test('階段 1／2 的三節沒被階段 3 動到（既有基準線是契約）', () => {
         assert.deepEqual(thresholds.SUITE_METRICS.retrieval.metrics, ['recall5', 'recall10', 'mrr']);
         assert.deepEqual(thresholds.SUITE_METRICS.classify.columns, ['classify']);
+        // 〔Owner 2026-10-02 A 案〕pipeline 在原本三個之後新增 verify_agree_rate（原本三個的名稱與順序不變）
         assert.deepEqual(thresholds.SUITE_METRICS.pipeline.metrics,
-            ['saved_rate', 'gate_pass_rate', 'answer_agree_rate']);
+            // 〔Owner 2026-10-03 第 r14 輪 C-1〕再新增 chapter_acc_rate（排在最後）
+            ['saved_rate', 'gate_pass_rate', 'answer_agree_rate', 'verify_agree_rate', 'chapter_acc_rate']);
     });
 });
 

@@ -19,6 +19,10 @@
 // 'MAX_TOKENS'（回應寫到輸出上限被截斷）而且 limits.retryTruncated === false 時，不重試、直接 needs_review('output_truncated')
 // （migration 0020）。limits.retryTruncated 沒給＝true＝照舊重試（DEFAULT_LIMITS 不變）；只有 runner 判定這一次呼叫的是
 // 本機模型（ollama）時才給 false——Gemini 模式照舊重試 maxErrorRetries 次。
+//
+// 〔dec/r13-extract-fixes，Owner 2026-10-02 同意〕規則 6b：error 的 errorClass 是 'timeout' 而且 limits.retryTimeout === false 時，
+// 不重試、直接 needs_review('provider_error')。retryTimeout 沒給＝true＝照舊重試（DEFAULT_LIMITS 不變）；只有 runner 判定
+// 這一次是本機模型的 lint／verify 時才給 false（docs/local-mode.md 10.25 第 5 點）。
 // ─────────────────────────────────────────────────────────────
 
 /** 每個非終態恰好對應一個節點：這一格要跑哪一支 agent。 */
@@ -167,6 +171,13 @@ function transition({ state, retries, outcome, limits } = {}) {
     // 規則 6a〔Owner 第五輪 C-f〕：本機模式被截斷的回應不重試（溫度 0 重跑多半又寫到上限），直接進複核。
     if (outcome.finishReason === 'MAX_TOKENS' && lim.retryTruncated === false) {
         return toReview(prev, 'output_truncated');
+    }
+
+    // 規則 6b〔dec/r13-extract-fixes，Owner 2026-10-02 同意〕：本機模式的 lint／verify 單次呼叫逾時不重試（CPU 上重跑一次又是
+    // 幾十分鐘，2026-10-01 一題 lint 逾時後重試 4 次、卡 7.5 小時），直接進複核；原因沿用 provider_error（不新增 review_reason，
+    // 不必 migration）。limits.retryTimeout 沒給＝true＝照舊重試；只有 runner 判定這一次呼叫的是本機模型時才給 false。
+    if (outcome.errorClass === 'timeout' && lim.retryTimeout === false) {
+        return toReview(prev, 'provider_error');
     }
 
     const key = `${node}:error`;

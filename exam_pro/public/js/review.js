@@ -123,6 +123,95 @@ function mockEnabled() {
     return new URLSearchParams(location.search).get('mock') === '1';
 }
 
+// ───────────────────────── 〔dec/r13-engine-choice〕辨識方式（本機／Gemini）─────────────────────────
+// docs/local-mode.md「上傳與助教可選本機或 Gemini」一節。tutor.js、assistant.js 各有一份同樣的小工具：
+// 測試以 data: URL 載入單一檔案，module 之間不能互相 import。
+
+const ENGINE_IDS = ['local', 'gemini'];
+const ENGINE_TEXT = { local: '本機（免費、較慢）', gemini: 'Gemini（需要 API 費用、較快）' };
+const ENGINE_STORAGE_KEY = 'examPro.engine.extract';
+
+/**
+ * 預設選哪一個：上次選的（還能用）→ .env 的預設（能用）→ 第一個能用的；都不能用回 null。
+ * @param {{default:string|null, options:Object<string,{available:boolean}>}|null} info GET /api/engines 的 purposes.extract
+ * @param {string|null} stored localStorage 記住的上次選擇
+ * @returns {'local'|'gemini'|null}
+ */
+export function pickEngine(info, stored) {
+    const opts = (info && info.options) || {};
+    const ok = (e) => ENGINE_IDS.includes(e) && Boolean(opts[e] && opts[e].available);
+    if (ok(stored)) return stored;
+    if (info && ok(info.default)) return info.default;
+    return ENGINE_IDS.find(ok) || null;
+}
+
+/**
+ * 選項文字：本機（免費、較慢）／Gemini（需要 API 費用、較快），.env 的預設與不能用的原因接在後面。
+ * @param {'local'|'gemini'} id
+ * @param {{available:boolean, reason:string|null}} opt
+ * @param {boolean} isDefault
+ * @returns {string}
+ */
+export function engineOptionText(id, opt, isDefault) {
+    let text = ENGINE_TEXT[id] || id;
+    if (isDefault) text += '・.env 預設';
+    if (opt && !opt.available) text += id === 'gemini' ? '・尚未設定 Gemini 金鑰' : '・目前不能用';
+    return text;
+}
+
+function readStoredEngine() {
+    try { return window.localStorage.getItem(ENGINE_STORAGE_KEY); } catch { return null; }
+}
+
+function storeEngine(v) {
+    try { window.localStorage.setItem(ENGINE_STORAGE_KEY, v); } catch { /* 隱私模式：不記也能用 */ }
+}
+
+/**
+ * 讀 GET /api/engines，填上傳區的「辨識方式」。讀不到（舊後端、網路）就維持隱藏：上傳不帶 engine＝照 .env。
+ * @param {object} app
+ */
+async function mountEngineChoice(app) {
+    const box = document.getElementById('pdf_engine_box');
+    const select = document.getElementById('pdf_engine');
+    const note = document.getElementById('pdf_engine_note');
+    if (!box || !select) return;
+    let info = null;
+    try {
+        const res = await request(app, '/api/engines');
+        if (res.ok) info = ((await res.json()).purposes || {}).extract || null;
+    } catch { info = null; }
+    if (!info || select.options.length > 0) return;   // 已經填過（init 跑了兩次）就不再填
+    for (const id of ENGINE_IDS) {
+        const opt = (info.options || {})[id] || { available: false, reason: null };
+        const o = el('option', '', { value: id, textContent: engineOptionText(id, opt, info.default === id) });
+        o.disabled = !opt.available;
+        if (opt.reason) o.title = opt.reason;
+        select.appendChild(o);
+    }
+    const picked = pickEngine(info, readStoredEngine());
+    if (picked) select.value = picked;
+    const describe = () => {
+        const opt = (info.options || {})[select.value] || {};
+        const gem = (info.options || {}).gemini || {};
+        const parts = [];
+        if (opt.model) parts.push(`這份卷的拆題與檢查都用 ${opt.model}；向量（找相似、去重）不變。`);
+        if (!gem.available && gem.reason) parts.push(`Gemini 選項停用：${gem.reason}。`);
+        if (note) note.textContent = parts.join(' ');
+    };
+    describe();
+    select.addEventListener('change', () => { storeEngine(select.value); describe(); });
+    box.classList.remove('hidden');
+}
+
+/** 上傳時要帶的 engine：選單有顯示、有選才帶；否則不帶（照 .env） */
+function selectedEngine() {
+    const box = document.getElementById('pdf_engine_box');
+    const select = document.getElementById('pdf_engine');
+    if (!box || !select || box.classList.contains('hidden')) return null;
+    return ENGINE_IDS.includes(select.value) ? select.value : null;
+}
+
 // ───────────────────────── 手寫 mock（只有 ?mock=1 讀得到）─────────────────────────
 
 const MOCK = {
@@ -252,6 +341,20 @@ function request(app, url, options) {
     }
     if (method === 'GET' && url.startsWith('/api/review')) return mockResponse(MOCK.review);
     if (method === 'POST' && url === '/api/jobs') return mockResponse({ job_id: 41, existing: false });
+    // 〔dec/r13-engine-choice〕假資料：預設本機、Gemini 沒有金鑰（停用）
+    if (method === 'GET' && url === '/api/engines') {
+        return mockResponse({
+            purposes: {
+                extract: {
+                    default: 'local',
+                    options: {
+                        local: { available: true, reason: null, model: 'ollama:qwen3-vl:8b' },
+                        gemini: { available: false, reason: '尚未設定 Gemini 金鑰（.env 的 GEMINI_API_KEY），不能選 Gemini', model: 'gemini:gemini-3.5-flash' }
+                    }
+                }
+            }
+        });
+    }
     if (method === 'POST' && /\/approve$/.test(url)) return mockResponse({ question_id: 131 });
     if (method === 'POST' && /\/reject$/.test(url)) {
         return mockResponse({ message: '已標記為不採用。', jq_id: Number(url.split('/')[3]) });
@@ -338,8 +441,15 @@ export function reasonSentence(reason, payload) {
         }
         case 'budget_exceeded':
             return '這份 PDF 的成本已達上限，剩下的節點沒有執行。可在任務頁按「提高預算並重跑」。';
-        case 'provider_error':
+        case 'provider_error': {
+            // 〔dec/r13-extract-fixes〕本機模型的 lint／verify 逾時不重試（workers/jobRunner.js 在 payload[節點] 記 timed_out）
+            const step = (p.verify && p.verify.timed_out) ? '驗算' : (p.lint && p.lint.timed_out) ? '公式檢查' : null;
+            if (step) {
+                return `本機模型的${step}這一步逾時，依設定不重試、直接交給老師。這一題沒有被判定為壞題：請自己核對題目與答案；` +
+                    `要讓模型再跑一次，可在 .env 調高 ${step === '驗算' ? 'OLLAMA_TIMEOUT_MS_VERIFY' : 'OLLAMA_TIMEOUT_MS_LINT'}（本機預設 30 分鐘，單位毫秒）後重跑這一題。`;
+            }
             return '供應商連續錯誤（逾時或配額），重試次數已用盡。這一題沒有被判定為壞題，重跑通常就會過。';
+        }
         case 'awaiting_approval':
             return '沒有任何閘門判定它壞掉，但流程需要人點頭。';
         case 'extract_disagree': {
@@ -400,6 +510,62 @@ export function figureHintNote(payload) {
 }
 
 /**
+ * 〔dec/r13-extract-fixes〕驗算模型給的建議答案：拆題沒有答案（verify 的 compare 是 'no_claim'）時才有。
+ * @param {object} payload
+ * @returns {string} 沒有回空字串
+ */
+export function suggestedAnswerOf(payload) {
+    const v = payload && payload.verify;
+    if (!v || v.compare !== 'no_claim') return '';
+    const s = typeof v.suggested_answer === 'string' ? v.suggested_answer : (typeof v.final_answer === 'string' ? v.final_answer : '');
+    return s.trim();
+}
+
+/**
+ * 〔dec/r13-extract-fixes〕答案欄的來源說明（docs/local-mode.md「本機拆題修正」一節）：
+ *   - 拆題沒有答案、預填的是驗算的建議答案 → 提醒老師對照原卷核對；
+ *   - 答案取自同一份卷的解答頁（payload.extract.answer_src === 'answer_key'）→ 說明來源；驗算的建議答案不同時一併列出；
+ *   - 拆題模型給的答案被清掉（answer_dropped）→ 顯示被清掉的原文（droppedAnswerNote），沒有建議答案時提醒要自己補。
+ *   〔審查 dec/r13-extract-fixes〕說法是「沒有偵測到答案標記」，不斷言「原卷沒有寫答案」（偵測可能漏判）。
+ * @param {object} payload
+ * @returns {string} 沒有要說的回空字串
+ */
+export function answerSourceNote(payload) {
+    const p = payload || {};
+    const ex = p.extract || {};
+    const own = ((p.lint && p.lint.answer_text) || ex.answer_text || '').trim();
+    const suggested = suggestedAnswerOf(p);
+    if (own && ex.answer_src === 'answer_key') {
+        // 〔審查 dec/r13-extract-fixes〕回填的答案沒有跟驗算比過（verify 跑的時候答案還是空的）：兩個都給老師看
+        return suggested && suggested !== own
+            ? `答案取自這份卷的解答頁；驗算模型算的是「${suggested}」，兩者不同時請核對。`
+            : '答案取自這份卷的解答頁。';
+    }
+    if (own) return '';
+    // 〔審查 dec/r13-extract-fixes〕被清掉的原文要讓老師看得到；而且程式只知道「沒有偵測到答案標記」，不能斷言原卷沒寫答案
+    const dropped = droppedAnswerNote(ex.answer_dropped);
+    const lead = dropped || '這一題沒有偵測到印在頁面上的答案。';
+    if (suggested) return `${lead}答案欄預填的是驗算模型算的建議答案「${suggested}」，請對照原卷核對後再核准。`;
+    if (ex.answer_dropped || ex.extract_mode === 'ocr' || ex.cross_check) return `${lead}請對照原卷補上答案再核准。`;
+    return '';
+}
+
+/**
+ * 〔審查 dec/r13-extract-fixes〕被清掉的拆題答案（payload.extract.answer_dropped）→ 說明句。沒有就回空字串。
+ * not_on_page：頁面上沒偵測到答案標記（「答：」「【解答】」「（ 3 ）1.」…），拆題模型給的答案視為自己編的；
+ * blank_marker：模型給的只是填答格記號（⑮⑯）。原文照實顯示（過長的在拆題時已截成 300 字）。
+ * @param {object|undefined} dropped
+ * @returns {string}
+ */
+export function droppedAnswerNote(dropped) {
+    if (!dropped || typeof dropped !== 'object') return '';
+    const text = typeof dropped.text === 'string' ? dropped.text.trim() : '';
+    if (!text) return '';
+    if (dropped.reason === 'blank_marker') return `拆題模型原本填「${text}」，那只是填答格記號，已清掉。`;
+    return `拆題模型原本填「${text}」，頁面上沒偵測到答案標記（「答：」「【解答】」「（ 3 ）1.」這類），視為模型自己推算的、已清掉；原卷若有印答案請照原卷改。`;
+}
+
+/**
  * 複核卡片可展開的「原卷文字層片段」（docs/source-check.md）。
  * 只有 extract 階段定位成功的片段才給看；掃描檔、找不到、變式題一律回 null（不顯示這一塊）。
  * @param {object} payload
@@ -427,7 +593,8 @@ export function payloadToQuestion(payload) {
         question_type: ex.question_type || '填空',
         difficulty: ex.difficulty || 3,
         question_text: (p.lint && p.lint.question_text) || ex.question_text || '',
-        answer_text: (p.lint && p.lint.answer_text) || ex.answer_text || '',
+        // 〔dec/r13-extract-fixes〕拆題沒有答案（本機拆題在題目頁沒寫答案時留空）時，預填驗算模型算的建議答案（answerSourceNote 會說明）
+        answer_text: (p.lint && p.lint.answer_text) || ex.answer_text || suggestedAnswerOf(p) || '',
         // 管線裁出的附圖路徑（docs/figures.md）；approve 的 body 直接展開這個物件，
         // 所以入庫時 question_img 會跟著送到 reviewController
         question_img: ex.figure_img || null
@@ -576,6 +743,9 @@ function takeOverUpload(app) {
         // 〔stage5 WS-B〕卷別（docs/interfaces-stage5.md 第 4.2 條第 1 點）：化學卷走化學模板
         const groupSel = document.getElementById('pdf_subject_group');
         if (groupSel && groupSel.value) formData.append('subject_group', groupSel.value);
+        // 〔dec/r13-engine-choice〕辨識方式（本機／Gemini）；選單沒顯示就不帶＝照 .env
+        const engine = selectedEngine();
+        if (engine) formData.append('engine', engine);
 
         try {
             const res = await request(app, '/api/jobs', { method: 'POST', body: formData });
@@ -606,12 +776,27 @@ function reasonBar(reason, payload) {
     const tone = TONE_CLASS[REASON_TONE[reason]] || TONE_CLASS.slate;
     const bar = el('div', `mb-3 rounded-xl border px-3 py-2 text-xs font-bold leading-5 ${tone}`);
     // 〔OCR 為主〕只用 OCR 拆的題先被別的閘門攔下（例如答案對不上）時，補圖提示接在那一句後面
-    const note = reason === 'ocr_only' ? '' : figureHintNote(payload);
+    const figureNote = reason === 'ocr_only' ? '' : figureHintNote(payload);
+    // 〔dec/r13-extract-fixes〕答案欄的來源（建議答案、解答頁、沒有答案）接在最後
+    const note = [figureNote, payload ? answerSourceNote(payload) : ''].filter(Boolean).join(' ');
     bar.append(
         el('span', 'mr-2 rounded-md bg-white/70 px-1.5 py-0.5', { textContent: REASON_LABEL[reason] || reason }),
         el('span', '', { textContent: reasonSentence(reason, payload) + (note ? ` ${note}` : '') })
     );
     return bar;
+}
+
+/**
+ * 〔dec/r16-remedial〕補救卷補題的來源一行（純函式）：GET /api/review 的 remedial_for → 「補救卷補題：為 王小明（學生 #3）的錯題 #41 生成」。
+ * 沒有 remedial_for（一般的變式、拆題）回 null。
+ * @param {{student_id:number, student_name:string|null, source_question_id:number|null}|undefined} r
+ * @returns {string|null}
+ */
+export function remedialForText(r) {
+    if (!r || !Number.isInteger(r.student_id)) return null;
+    const who = r.student_name ? `${r.student_name}（學生 #${r.student_id}）` : `學生 #${r.student_id}`;
+    const src = Number.isInteger(r.source_question_id) ? `的錯題 #${r.source_question_id}` : '';
+    return `補救卷補題：為 ${who}${src} 生成`;
 }
 
 /**
@@ -627,6 +812,14 @@ function reviewCard(app, item) {
     card.appendChild(el('div', 'eyebrow text-violet-500 mb-2', {
         textContent: `jq #${item.jq_id}　·　任務 #${item.job_id}　·　idx ${item.idx}`
     }));
+
+    // 〔dec/r16-remedial〕補救卷補題的變式：標出是替哪一位學生、拿哪一題錯題出的（姓名只在本機畫面）
+    const provenance = remedialForText(item.remedial_for);
+    if (provenance) {
+        const line = el('p', 'mb-2 text-xs font-bold text-violet-700', { textContent: provenance });
+        line.dataset.remedialFor = String(item.remedial_for.student_id);
+        card.appendChild(line);
+    }
 
     // 先放一條只有預覽資訊的原因列；點開詳情後會用完整 payload 換掉。
     const bar = reasonBar(item.review_reason, null);
@@ -907,6 +1100,7 @@ export function init() {
     }
 
     takeOverUpload(app);
+    mountEngineChoice(app).catch(err => console.error('[review] 載入辨識方式失敗（上傳照 .env 的設定）', err));
     if (section) loadReviewQueue(app).catch(err => console.error('[review] 載入複核佇列失敗', err));
 }
 
