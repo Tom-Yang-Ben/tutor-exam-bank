@@ -22,7 +22,7 @@ const APP_DIR = path.resolve(__dirname, '..', '..');
 
 if (!TEST_DATABASE_URL) {
     test('HOST 整合測試（需要 PostgreSQL）', {
-        skip: '未設定 TEST_DATABASE_URL；npm test 不連資料庫。請跑 node -r dotenv/config --test "test/integration/**/*.test.js"'
+        skip: '未設定 TEST_DATABASE_URL；npm test 不連資料庫。請跑 node --env-file=.env --test "test/integration/**/*.test.js"'
     }, () => { });
 } else {
     if (!/_test(\?|$)/.test(TEST_DATABASE_URL)) {
