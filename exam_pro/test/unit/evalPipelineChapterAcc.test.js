@@ -4,6 +4,9 @@
 //   ① gate_pass_rate 在 OCR 模式（與 saved_rate 的 D-2 同一個條件）只報告、不比門檻；Gemini（非 OCR）模式照舊比 0.97。
 //   ② 新指標 chapter_acc_rate（章節正確率）＝有 classify 結果的題：最後章節等於答案卷 chapter 的比例；兩種模式都比，
 //      門檻 0.77（首次實測 0.8000 − 0.03）。配不上答案卷的題算錯。
+//   〔r15 dec/r15-chapter-acc〕對數下標與閘門證據否決（docs/local-mode.md 10.28）之後，Owner 補錄第 7 題的 classify 回放檔、
+//      實測 1.0000（10／10，commit 4d10671），--write-baseline 把門檻升到 0.97（1.0000 − 0.03）。下面的門檻數字改釘 0.97；
+//      報表的例子改成 r15 的實測（全對、閘門 0.70），r14 那份 8／10 的報表留著當「門檻未達」與「列出答錯的題」的例子。
 // 不連 DB、不呼叫模型（pipelineDriver.runPipeline 換成假的，答案卷用 repo 裡真的樣卷答案卷）。
 // 執行：npm test
 // ─────────────────────────────────────────────────────────────
@@ -81,13 +84,16 @@ describe('契約：SUITE_METRICS、白名單、thresholds.json', () => {
             { notApplicable: { pipeline: { chapter_acc_rate: 'x' } } }), /白名單/);
     });
 
-    test('thresholds.json：chapter_acc_rate 0.77（首次實測 0.8000 − 0.03）、gate_pass_rate 仍是 0.97，來源記在 _note_chapter_acc_rate', () => {
-        assert.equal(FILE.pipeline.pipeline.chapter_acc_rate, 0.77);
-        assert.equal(Math.round((0.8 - th.BASELINE_MARGIN) * 10000) / 10000, FILE.pipeline.pipeline.chapter_acc_rate);
+    // 〔r15 dec/r15-chapter-acc〕原本釘 0.77（r14 首次實測 0.8000 − 0.03）；r15 實測 1.0000 之後 ratchet 到 0.97
+    test('thresholds.json：chapter_acc_rate 0.97（r15 實測 1.0000 − 0.03；r14 初值 0.77）、gate_pass_rate 仍是 0.97，來源記在 _note_chapter_acc_rate', () => {
+        assert.equal(FILE.pipeline.pipeline.chapter_acc_rate, 0.97);
+        assert.equal(Math.round((1 - th.BASELINE_MARGIN) * 10000) / 10000, FILE.pipeline.pipeline.chapter_acc_rate);
         assert.equal(FILE.pipeline.pipeline.gate_pass_rate, 0.97, 'Gemini 模式的閘門門檻不動');
+        assert.equal(FILE.pipeline.pipeline.verify_agree_rate, 0.87, 'verify_agree_rate 不受 r15 影響');
         const note = FILE.pipeline._note_chapter_acc_rate;
         assert.ok(typeof note === 'string', 'pipeline 節要有 _note_chapter_acc_rate');
-        for (const s of ['Owner 2026-10-03', '第 r14 輪 C-1', '0.8000', '− 0.03', '只升不降', 'gate_pass_rate', 'OCR 模式', '0.97', 'Gemini']) {
+        for (const s of ['Owner 2026-10-03', '第 r14 輪 C-1', '0.8000', '− 0.03', '只升不降', 'gate_pass_rate', 'OCR 模式', '0.97', 'Gemini',
+            'r15', '1.0000', '4d10671', '10.28']) {
             assert.ok(note.includes(s), `來源說明沒寫到 ${s}`);
         }
     });
@@ -145,7 +151,7 @@ describe('runPipelineSuite：OCR 模式 gate_pass_rate 只報告；chapter_acc_r
         const cmp = th.compareSuite(FILE, 'pipeline', res.measured, { notApplicable: res.notApplicable });
         assert.deepEqual(cmp.failures.filter(f => f.includes('gate_pass_rate')), [], 'OCR 模式 gate_pass_rate 不算失敗');
         assert.ok(cmp.skipped.some(s => s.startsWith('pipeline.gate_pass_rate（OCR 模式（本機）')), cmp.skipped.join('、'));
-        assert.deepEqual(cmp.failures.filter(f => f.includes('chapter_acc_rate')), ['pipeline.chapter_acc_rate：0.6667 < 門檻 0.77']);
+        assert.deepEqual(cmp.failures.filter(f => f.includes('chapter_acc_rate')), ['pipeline.chapter_acc_rate：0.6667 < 門檻 0.97']);
     });
 
     test('Gemini（非 OCR）模式：gate_pass_rate 照舊比 0.97；chapter_acc_rate 同樣比', async () => {
@@ -157,7 +163,7 @@ describe('runPipelineSuite：OCR 模式 gate_pass_rate 只報告；chapter_acc_r
 
         const cmp = th.compareSuite(FILE, 'pipeline', res.measured, { notApplicable: res.notApplicable });
         assert.deepEqual(cmp.failures.filter(f => f.includes('gate_pass_rate')), ['pipeline.gate_pass_rate：0.6667 < 門檻 0.97']);
-        assert.deepEqual(cmp.failures.filter(f => f.includes('chapter_acc_rate')), ['pipeline.chapter_acc_rate：0.6667 < 門檻 0.77']);
+        assert.deepEqual(cmp.failures.filter(f => f.includes('chapter_acc_rate')), ['pipeline.chapter_acc_rate：0.6667 < 門檻 0.97']);
     });
 
     test('Gemini 模式全部過閘門、章節全對：兩個都達標', async () => {
@@ -182,13 +188,17 @@ describe('runPipelineSuite：OCR 模式 gate_pass_rate 只報告；chapter_acc_r
 describe('門檻比對：chapter_acc_rate 兩種模式都是硬門檻', () => {
     const base = { saved_rate: 0.9, gate_pass_rate: 1, answer_agree_rate: 0.9, verify_agree_rate: 0.9 };
 
-    test('0.77 剛好過；0.76 與 n/a 是失敗（OCR 模式的宣告也救不了它）', () => {
+    // 〔r15〕門檻 0.97：樣卷 10 題錯 1 題（0.9）就是紅燈
+    test('0.97 剛好過；0.96、0.9（樣卷錯 1 題）與 n/a 是失敗（OCR 模式的宣告也救不了它）', () => {
         const ocrNa = { notApplicable: suite.pipelineNotApplicable({ ocrOnly: true, jq: [] }) };
-        assert.deepEqual(th.compareSuite(FILE, 'pipeline', { pipeline: { ...base, chapter_acc_rate: 0.77 } }).failures, []);
-        assert.deepEqual(th.compareSuite(FILE, 'pipeline', { pipeline: { ...base, chapter_acc_rate: 0.76 } }).failures,
-            ['pipeline.chapter_acc_rate：0.7600 < 門檻 0.77']);
+        assert.deepEqual(th.compareSuite(FILE, 'pipeline', { pipeline: { ...base, chapter_acc_rate: 0.97 } }).failures, []);
+        assert.deepEqual(th.compareSuite(FILE, 'pipeline', { pipeline: { ...base, chapter_acc_rate: 1 } }).failures, []);
+        assert.deepEqual(th.compareSuite(FILE, 'pipeline', { pipeline: { ...base, chapter_acc_rate: 0.96 } }).failures,
+            ['pipeline.chapter_acc_rate：0.9600 < 門檻 0.97']);
+        assert.deepEqual(th.compareSuite(FILE, 'pipeline', { pipeline: { ...base, chapter_acc_rate: 0.9 } }).failures,
+            ['pipeline.chapter_acc_rate：0.9000 < 門檻 0.97']);
         assert.deepEqual(th.compareSuite(FILE, 'pipeline', { pipeline: { ...base, chapter_acc_rate: null } }, ocrNa).failures,
-            ['pipeline.chapter_acc_rate：門檻 0.77 但這次是 n/a']);
+            ['pipeline.chapter_acc_rate：門檻 0.97 但這次是 n/a']);
     });
 });
 
@@ -198,7 +208,8 @@ describe('報表與回放驗證表', () => {
     after(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
 
     const na = suite.pipelineNotApplicable({ ocrOnly: true, jq: [{ payload: { verify: { compare: 'no_claim' } } }] });
-    const res = {
+    // 〔r15〕r14 的實測（8／10，兩題過閘門猜錯）：門檻 0.97 之下是「未達」的例子，也是「列出答錯的題」的例子
+    const resR14 = {
         suite: 'pipeline',
         measured: { pipeline: { saved_rate: null, gate_pass_rate: 0.8, answer_agree_rate: null, verify_agree_rate: 0.9, chapter_acc_rate: 0.8, n: 10 } },
         notApplicable: na,
@@ -213,11 +224,24 @@ describe('報表與回放驗證表', () => {
         warnings: [],
         meta: { pdf: 'eval/fixtures/sample_exam.pdf', questionsExpected: 10, llmMode: 'replay', agentSources: {}, stateMachine: 'x', db: null, sources: {}, cassetteDir: 'eval/cassettes' }
     };
+    // 〔r15〕r15 的實測（commit 4d10671 的回放）：章節 10／10、第 7 題被閘門否決改走 LLM → 閘門通過率 0.70（OCR 模式只報告）
+    const res = {
+        ...resR14,
+        measured: { pipeline: { saved_rate: null, gate_pass_rate: 0.7, answer_agree_rate: null, verify_agree_rate: 0.9, chapter_acc_rate: 1, n: 10 } },
+        chapterAcc: { n: 10, correct: 10, rate: 1, wrong: [] }
+    };
 
-    test('Markdown：閘門通過率照印並註明不比門檻；章節正確率一行列出答錯的題', () => {
-        const md = report2.markdownPipeline(res);
+    test('Markdown：閘門通過率照印並註明不比門檻；章節正確率一行列出答錯的題（r14 的報表）', () => {
+        const md = report2.markdownPipeline(resR14);
         assert.match(md, /classify 零成本閘門通過率：0\.8000（不比門檻：OCR 模式（本機）classify 走 LLM 不花錢/);
         assert.match(md, /- 章節正確率 chapter_acc_rate：0\.8000（8／10 題有 classify 結果的題，最後章節等於答案卷；章節不對：答案卷第 7 題 直線運動 → 位能與能量守恆（gate）、答案卷第 8 題 指數與對數 → 指數函數與對數函數（gate））/);
+    });
+
+    test('Markdown：全對（r15 的報表）不印「章節不對」', () => {
+        const md = report2.markdownPipeline(res);
+        assert.match(md, /classify 零成本閘門通過率：0\.7000（不比門檻：OCR 模式（本機）/);
+        assert.match(md, /- 章節正確率 chapter_acc_rate：1（10／10 題有 classify 結果的題，最後章節等於答案卷）/);
+        assert.doesNotMatch(md, /章節不對/);
     });
 
     test('Markdown：舊報表（measured 沒有 chapter_acc_rate）不印那一行', () => {
@@ -227,19 +251,32 @@ describe('報表與回放驗證表', () => {
         assert.match(md, /閘門通過率：1　answer_agree_rate/);
     });
 
-    test('報表 JSON → thresholdRows：OCR 模式 gate_pass_rate 標 na、chapter_acc_rate 達標，沒有門檻未達', () => {
+    function emitDoc(r) {
         const origLog = console.log;
         let emitted;
-        try { console.log = () => {}; emitted = report2.emit({ res, dir: tmp }); } finally { console.log = origLog; }
-        const doc = JSON.parse(fs.readFileSync(emitted.file, 'utf8'));
-        assert.equal(doc.measured.pipeline.chapter_acc_rate, 0.8);
-        assert.equal(doc.detail.chapter_acc.correct, 8);
+        try { console.log = () => {}; emitted = report2.emit({ res: r, dir: tmp }); } finally { console.log = origLog; }
+        return JSON.parse(fs.readFileSync(emitted.file, 'utf8'));
+    }
+
+    test('報表 JSON → thresholdRows（r15 的報表）：OCR 模式 gate_pass_rate 標 na、chapter_acc_rate 達標，沒有門檻未達', () => {
+        const doc = emitDoc(res);
+        assert.equal(doc.measured.pipeline.chapter_acc_rate, 1);
+        assert.equal(doc.detail.chapter_acc.correct, 10);
         const t = thresholdRows(doc, FILE);
         assert.deepEqual(t.failures, []);
         const by = Object.fromEntries(t.rows.map(r => [r.metric, r]));
         assert.equal(by['pipeline.gate_pass_rate'].na, suite.OCR_GATE_PASS_NOTE);
         assert.equal(by['pipeline.chapter_acc_rate'].ok, true);
-        assert.equal(by['pipeline.chapter_acc_rate'].threshold, 0.77);
+        assert.equal(by['pipeline.chapter_acc_rate'].threshold, 0.97);
         assert.equal(by['pipeline.chapter_acc_rate'].na, undefined);
+    });
+
+    test('報表 JSON → thresholdRows（r14 的報表）：0.8000 在門檻 0.97 之下是未達', () => {
+        const doc = emitDoc(resR14);
+        const t = thresholdRows(doc, FILE);
+        const by = Object.fromEntries(t.rows.map(r => [r.metric, r]));
+        assert.equal(by['pipeline.chapter_acc_rate'].ok, false);
+        assert.equal(t.failures.length, 1);
+        assert.match(t.failures[0], /chapter_acc_rate/);
     });
 });

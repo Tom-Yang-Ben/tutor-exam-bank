@@ -133,7 +133,7 @@ describe('docs/local-mode.md 10.12～10.20（整合 r5、final5、r6 改號）',
         ['exam_pro/test/unit/engineChoice.test.js', ['10.26']],
         ['exam_pro/test/integration/engineChoice.pg.test.js', ['10.26']],
         // 〔Owner 2026-10-03 第 r14 輪 C-1、C-2，dec/r14-ci-green〕CI 的兩個 eval 門檻
-        ['exam_pro/test/unit/evalPipelineChapterAcc.test.js', ['10.27']],
+        ['exam_pro/test/unit/evalPipelineChapterAcc.test.js', ['10.27', '10.28']],   // 〔dec/r15-chapter-acc〕門檻 ratchet 另指 10.28
         ['exam_pro/test/unit/evalThresholdsEmbedModel.test.js', ['10.27']],
         ['exam_pro/eval/lib/thresholds.js', ['10.25', '10.27']],
         // 〔dec/r15-chapter-acc〕pipeline 章節錯題的根因修正

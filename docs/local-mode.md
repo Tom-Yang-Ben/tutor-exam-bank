@@ -18,7 +18,7 @@
 > 〔整合 2026-09-27 `dec/integration-r6`〕`local/integration-r5`（`a670783`）依序以 `--no-ff` 併入第五輪五組：`dec/r6-templates-fix`（A）、`dec/r6-local-tuning-fix`（B）、`dec/r6-gates-fix`（C）、`dec/r6-defaults-fix`（D）、`dec/r6-docs-kc-fix`（E）。五組各自暫編的「10.16」依併入順序改號為 **10.16（A 模板與 schema）、10.17（B 本機呼叫調整）、10.18（C 閘門與計分）、10.19（D 預設值與門檻）、10.20（E 文件與知識點）**，交互參照（文件、程式註解、測試）一併改號；新增最後一節 **10.21 重錄計畫**（Owner 電腦要依序跑的重錄步驟）。
 > 〔Owner 2026-10-01，`dec/r13-engine-choice`〕上傳考卷、AI 家教、助教可以在畫面上逐次選「本機／Gemini」（新增 **10.25**；migration 0021、`config/engines.js`、`GET /api/engines`）。沒選或選的與 `.env` 相同時一切照舊；第 0 條「預設走本機、Gemini 保留」不變，只是多了不必改 `.env` 的切換方式。
 > 〔Owner 2026-10-03 第 r14 輪 C-1、C-2，`dec/r14-ci-green`〕CI 的兩個 eval 門檻（新增 **10.27**）：OCR 模式的 pipeline `gate_pass_rate` 只報告、章節改由新指標 `chapter_acc_rate`（0.77）把關；variant 的 `retrieved_coverage` 門檻依向量模型分開設（本機向量 0.47、Gemini 照舊 0.8367）。第 0～9 條沒有改。
-> 〔2026-10-03 `dec/r15-chapter-acc`〕pipeline 章節錯題的根因修正（新增 **10.28**）：OCR 純文字的對數下標 `log_10 2` 被讀成底數「1」的錯；classify 零成本閘門多一道「證據否決」（拆題模型給「位能與能量守恆」、題幹卻沒有任何能量或位能來源的字時不採用、改走第二層）。pipeline 要補錄 1 支 classify 回放檔。第 0～9 條沒有改。
+> 〔2026-10-03 `dec/r15-chapter-acc`〕pipeline 章節錯題的根因修正（新增 **10.28**）：OCR 純文字的對數下標 `log_10 2` 被讀成底數「1」的錯；classify 零成本閘門多一道「證據否決」（拆題模型給「位能與能量守恆」、題幹卻沒有任何能量或位能來源的字時不採用、改走第二層）。pipeline 補錄 1 支 classify 回放檔之後章節正確率 1.00、門檻升到 0.97。第 0～9 條沒有改。
 
 ## 0. Owner 裁決（2026-09-25，對話中）
 
@@ -2131,7 +2131,7 @@ scripts\windows\record_local.bat pipeline,e2e --only-missing
 - **Owner 決定**：
   - **`gate_pass_rate` 在 OCR 模式只報告、不比門檻**：條件與 `saved_rate` 的 D-2 相同（`eval/lib/suitePipeline.js` 的 `isOcrOnlyRun`：拆題模型是 ollama 且 `LOCAL_EXTRACT_MODE=ocr`，或任何一題的 `extract_mode` 是 `ocr`）。數字照樣量、照樣印，後面註明「不比門檻：OCR 模式（本機）classify 走 LLM 不花錢…」，CI 那一行「未設門檻（只報告不擋）」也列出原因。**Gemini（非 OCR）模式、交叉驗證照舊比 0.97**，`thresholds.json` 的 0.97 不動。
   - **新指標 `chapter_acc_rate`（章節正確率）**＝有 classify 結果的題：最後的章節（`payload.classify.chapter`）等於答案卷 `chapter` 的比例。題目對答案卷用 `eval/lib/pdfMatch.js` 的配對規則（與 `verify_agree_rate` 同一套）；**配不上答案卷的題算錯**，不讓配對失敗變成好分數；沒有 classify 結果的題不進分母。oracle stub 那一輪（拆題就是答案卷）一律 n/a。**兩種模式都比門檻**（不在白名單）。
-  - **門檻 0.77**＝第一次實測 0.8000（8／10，`f61cab3` 的回放）− 0.03，之後只升不降。`eval/thresholds.json` 的 `pipeline.pipeline.chapter_acc_rate`，來源記在同一節的 `_note_chapter_acc_rate`。
+  - **門檻 0.77**＝第一次實測 0.8000（8／10，`f61cab3` 的回放）− 0.03，之後只升不降。`eval/thresholds.json` 的 `pipeline.pipeline.chapter_acc_rate`，來源記在同一節的 `_note_chapter_acc_rate`。〔2026-10-03 `dec/r15-chapter-acc`〕修了兩題錯題的根因、實測 1.0000 之後升到 **0.97**，見 **10.28** 第 5 點。
 - **實作**：`eval/lib/suitePipeline.js`（`chapterAccReport`、`measured.pipeline.chapter_acc_rate`、`pipelineNotApplicable` 在 OCR 模式多宣告 `gate_pass_rate`、報表 JSON 的 `detail.chapter_acc` 列出答錯的題）、`eval/lib/thresholds.js`（`SUITE_METRICS.pipeline` 最後多 `chapter_acc_rate`；`NOT_APPLICABLE_ALLOWED` 多 `gate_pass_rate`）、`eval/lib/report2.js`（閘門通過率後面註明不比的原因；多一行「章節正確率 chapter_acc_rate：0.8000（8／10 …；章節不對：答案卷第 7 題 直線運動 → 位能與能量守恆（gate）、…）」）。單元測試 `test/unit/evalPipelineChapterAcc.test.js`。
 - **之後要提高章節正確率**：看報表列出的錯題。兩題都是「過閘門、拆題模型猜錯」，可行的方向是 OCR 模式把閘門的信心下限調高或一律走 LLM（本機不花錢），但那會改 classify 的行為、要重錄 classify 的回放檔，屬於另一個決定，這一版沒做。
 
@@ -2163,7 +2163,7 @@ scripts\windows\record_local.bat pipeline,e2e --only-missing
 
 #### 3. 結果（`ci.yml` 的 env，回放）
 
-- pipeline：`chapter_acc_rate` 0.8000 ≥ 0.77、`verify_agree_rate` 0.9000 ≥ 0.87 達標；`gate_pass_rate` 0.8000、`saved_rate`、`answer_agree_rate` 印出但不比（各自的原因）→ 通過。
+- pipeline：`chapter_acc_rate` 0.8000 ≥ 0.77（〔`dec/r15-chapter-acc`〕之後 1.0000 ≥ 0.97，見 10.28 第 5 點）、`verify_agree_rate` 0.9000 ≥ 0.87 達標；`gate_pass_rate` 0.8000、`saved_rate`、`answer_agree_rate` 印出但不比（各自的原因）→ 通過。
 - variant：門檻組＝本機向量，`retrieved_coverage` 0.5000 ≥ 0.47、`gate_pass_rate` 0.4500 ≥ 0.22 → 通過。
 - `EMBED_MODEL=gemini-embedding-001`：repo 裡的 Gemini 向量檔缺 5 題（id 51、53、54、55、62；章節重整後沒有重錄），variant suite 在量測前就以「查不到向量」拒絕執行——這是原本就有的狀況，與這次改動無關。門檻組的挑法（Gemini → 基準 0.8367；同樣 0.5000 的量測會判未達）由 `test/unit/evalThresholdsEmbedModel.test.js` 驗。
 - retrieval、classify、nlq 的數字與 `f61cab3` 相同；`npm test` 4,388 項（4,387 過、1 略過；`f61cab3` 是 4,345 項）、`check:html`、integration 669 項、e2e 14 項中 12 過 2 略過，都與之前相同或全過。
@@ -2206,7 +2206,7 @@ scripts\windows\record_local.bat pipeline,e2e --only-missing
 - **加上第 2 點**：第 7 題改走第二層，classify 的回放檔 `classify/685205b2428f….json`（鍵＝`classify.v2`＋第 7 題的 OCR 原文＋few-shot id 為空）repo 裡沒有 → pipeline eval 停在 replay miss（同一支被讀 4 次＝第一次＋重試），`npm test` 的 `test/unit/evalPipeline.test.js`「pipelineDriver 端到端」有兩則因為同一支而紅（那兩則的設計就是 extract_ocr 錄好之後任何 replay miss 都直接紅）。**這是預期的，錄好之後自動轉綠；回放檔一支都沒有手寫或改動。** 其餘：classify（accuracy 0.9839／macro-F1 0.9744）、nlq、retrieval、variant 的報表與改動前相同，integration、e2e、`check:html` 通過。
 - 錄好之後第 7 題的章由本機 classify（`qwen3:8b`）決定：classify eval 對同一題的 LaTeX 版（cls-fx-047）答「直線運動」（答對），OCR 版的鍵不同、要錄了才知道。答對時 `chapter_acc_rate` 0.9000 → 1.0000；答錯時維持 0.9000（仍 ≥ 0.77）。`gate_pass_rate`（OCR 模式只報告）0.80 → 0.70。
 
-#### 4. 〔要實測〕Owner 電腦：補錄 1 支 classify 回放檔
+#### 4. Owner 電腦：補錄 1 支 classify 回放檔（2026-10-03 已補錄，結果見第 5 點）
 
 `npm run cassettes:rerecord -- --suites pipeline,e2e --dry-run`（本分支）列出的缺口：
 
@@ -2219,4 +2219,13 @@ scripts\windows\record_local.bat pipeline,e2e --only-missing
 
 1. `scripts\windows\record_local.bat pipeline --only-missing`（＝`npm run cassettes:rerecord -- --suites pipeline --only-missing`）：只呼叫缺的那 1 次 classify（工具粗估 4～24 分；PaddleOCR 照舊重跑一次）。完整重錄（不加 `--only-missing`）pipeline 是 14 次呼叫、粗估 2 小時 25 分以上，不需要。
 2. `npm run eval -- --suite pipeline`：最後印「✅ pipeline eval 通過」，報表的「章節正確率」看第 7 題錄到的章；`npm test` 全綠。
-3. 把新的 `eval/cassettes/classify/685205b2428f….json` commit 進來，README 的評測表照實測更新（本分支沒動 README）。
+3. 把新的 `eval/cassettes/classify/685205b2428f….json` commit 進來，README 的評測表照實測更新。
+
+#### 5. 補錄之後的實測（2026-10-03，Owner 電腦；`4d10671`）
+
+- **補錄**：Owner 照第 4 點在自己的電腦補錄，`4d10671` 存入 `classify/685205b2428f….json`：本機 classify（`qwen3:8b`）對第 7 題答「**直線運動**」（答對）。第 7 題的 lint／verify 照舊命中既有的回放檔，沒有其他新增的回放檔。
+- **同一個 commit 也改寫了 `ocr/e6d5c2f1….json`**：錄 pipeline 時 PaddleOCR 照舊重跑一次（第 4 點第 1 步、10.23「OCR 不在只補缺的範圍」），回放檔被覆寫。改的**只有 metadata**——`meta.recorded_at`（2026-10-02T08:45:47Z → 2026-10-02T19:27:15Z）與 `response.latencyMs`（161505 → 153129）；OCR 的輸出（每頁的文字與版面）逐字相同，鍵不變，對任何 eval 沒有影響。
+- **pipeline（`ci.yml` 的 env，回放）**：`chapter_acc_rate` **1.0000**（10／10）、`verify_agree_rate` 0.9000 ≥ 0.87 → 通過；`gate_pass_rate` **0.7000**（第 7 題被否決、改走第二層；OCR 模式只報告）、`saved_rate`、`answer_agree_rate` 照舊不比。
+- **門檻升級**：`npm run eval -- --suite pipeline --write-baseline` 依只升不降把 `chapter_acc_rate` 0.77 → **0.97**（＝1.0000 − 0.03；樣卷 10 題錯 1 題即未達）；`gate_pass_rate` 0.97、`verify_agree_rate` 0.87 不動。同一次也更新了 `_pipeline_measured_with`（量測環境的紀錄：本機的 `pdfChunkPages` 2、`dedupDup` 0.99、agent 多列 `source_check`），不是門檻。`_note_chapter_acc_rate` 補記來源。
+- **跟著改的測試**：`test/unit/evalPipelineChapterAcc.test.js` 改釘 0.97（0.97 剛好過；0.96、0.9 與 n/a 失敗），報表的例子改成 r15 的實測（10／10、閘門 0.70），r14 那份 8／10 留作「門檻未達」與「列出答錯的題」的例子；`evalPipelineVerifyAgree`、`evalPipelineOcrMode`、`rerecordPlanR6` 裡當成「達標的填充值」的 `chapter_acc_rate` 改成 1、門檻釘 0.97。`84119c7` 把 `classifyRulesLc2.test.js` 的回答筆數 470 → 471（多了第 7 題的 classify 回放檔）。
+- **其餘**：`npm test` 4,408 項（4,407 過、1 略過），integration 669 項、e2e 14 項中 12 過 2 略過、`check:html`、retrieval、classify、nlq、variant 都通過；README 評測表的 pipeline 列與 unit 項數照這次實測更新。

@@ -54,7 +54,8 @@ describe('thresholds.compareSuite：notApplicable 白名單', () => {
         const file = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', '..', 'eval', 'thresholds.json'), 'utf8'));
         // 〔Owner 2026-10-02 A 案〕多一個鍵 verify_agree_rate 0.87（首次實測 0.9000 − 0.03）；
         // 〔Owner 2026-10-03 第 r14 輪 C-1〕再多 chapter_acc_rate 0.77（首次實測 0.8000 − 0.03）；原本三個照舊逐字釘住
-        assert.deepEqual(file.pipeline.pipeline, { ...TABLE.pipeline.pipeline, verify_agree_rate: 0.87, chapter_acc_rate: 0.77 });
+        // 〔r15 dec/r15-chapter-acc〕chapter_acc_rate 實測 1.0000（commit 4d10671）之後 ratchet 到 0.97
+        assert.deepEqual(file.pipeline.pipeline, { ...TABLE.pipeline.pipeline, verify_agree_rate: 0.87, chapter_acc_rate: 0.97 });
     });
 });
 

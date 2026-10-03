@@ -267,7 +267,8 @@ describe('〔r6 審查〕10.21 的成功判準與 verifyReport／thresholdRows �
             // 〔Owner 2026-10-02 A 案〕回放驗證表讀 eval/thresholds.json 本身，那裡多了 verify_agree_rate 門檻：
             // 報表照新契約帶這個數字（有 no_claim 也有非 no_claim 的一輪，兩個都量）
             // 〔Owner 2026-10-03 第 r14 輪 C-1〕同理多了 chapter_acc_rate 門檻（0.77），報表帶這個數字
-            measured: { pipeline: { saved_rate: null, gate_pass_rate: 1, answer_agree_rate: 0.9, verify_agree_rate: 0.9, chapter_acc_rate: 0.9, n: 10 } },
+            // 〔r15 dec/r15-chapter-acc〕門檻 ratchet 到 0.97，帶的值 0.9 → r15 實測的 1
+            measured: { pipeline: { saved_rate: null, gate_pass_rate: 1, answer_agree_rate: 0.9, verify_agree_rate: 0.9, chapter_acc_rate: 1, n: 10 } },
             notApplicable: na,
             ocrOnly: { saved_rate_note: suitePipeline.OCR_SAVED_RATE_NOTE, pre_approval: { passed: 10, total: 10, rate: 1 } },
             counts: { total: 10, saved: 0, needs_review: 10, rejected: 0, pending: 0 },
