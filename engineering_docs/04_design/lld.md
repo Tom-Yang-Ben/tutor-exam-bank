@@ -105,6 +105,7 @@ flowchart TD
 | 步數上限 | 每輪最多 N 次工具呼叫，達上限回覆 `truncated: true` 並附部分結果 | `ASSISTANT_MAX_STEPS=5`（1–10） |
 | 輸入上限 | 單則訊息 500 字、歷史保留最近 8 則 | `MAX_MESSAGE_LEN`、`MAX_HISTORY` |
 | 工具（全只讀） | `list_students`／`get_student_weakness`／`search_questions`／`find_similar`／`preview_paper`（僅 dry-run 選題，不寫入；確認出卷由人在 UI 執行） | 註冊表 `TOOLS` |
+| 補救卷工具〔修訂 2026-10-03 dec/r16-remedial〕 | `FEATURE_REMEDIAL` 開啟才給主控：`plan_remedial_paper`（補救卷草稿摘要，只預覽）、`get_remedial_effect`（補救成效）；旗標關閉時 `SYSTEM`／`TEMPLATE`／工具清單逐字不變，開啟時改用 `SYSTEM_REMEDIAL`＋模板 `assistant.v2+remedial.v1`（見 `docs/remedial.md` §12） | `REMEDIAL_TOOLS`、`assistantSetup` |
 | 錯誤回饋 | 不認識的工具、壞參數、工具 throw 一律轉成錯誤結果餵回主控（迴圈續行），不成為例外 | — |
 | 模型 | `MODEL_ASSISTANT` 未設時退回 `MODEL_EXTRACT`（gemini-3.5-flash）；走 `generateJson`，cassette 與節流機制一併沿用 | `exam_pro/config/models.js` |
 

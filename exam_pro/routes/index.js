@@ -138,6 +138,8 @@ if (featuresWs3A.FEATURE_STUDENTS) {
     // GET /students 已依裁決 S4-2 搬到上方核心區（組卷下拉恆常需要，不該吃這個旗標）
     router.get('/students/:id/papers', studentController.listStudentPapers);
     router.get('/students/:id/weakness', studentController.getWeakness);
+    // 〔dec/r16-remedial〕學習報告（只讀、不呼叫 LLM；docs/student-report.md）
+    router.get('/students/:id/report', require('../controllers/reportController').getReport);
     router.get('/papers/:id', paperController.getPaper);
     router.patch('/papers/:id/results', paperController.patchResults);
 }
@@ -242,6 +244,17 @@ if (featuresS5D.FEATURE_REMEDIAL) {
     router.post('/students/:id/remedial-paper', remedialController.remedialPaper);
     router.get('/students/:id/remedial-paper/items', remedialController.remedialItems);
     router.get('/coverage', remedialController.getCoverage);
+    // 〔dec/r16-remedial〕補救成效（只讀）
+    router.get('/students/:id/remedial-effect', remedialController.getRemedialEffect);
+    // 〔dec/r16-remedial〕題庫不夠時自動補題：另需 FEATURE_VARIANTS（走既有的變式 job）；會花錢，套與變式題同級的限流（獨立的桶）
+    if (featuresS5D.FEATURE_VARIANTS) {
+        const fillRateLimit = createRateLimiter({
+            windowMs: 60 * 1000,
+            max: 10,
+            message: '補題請求過於頻繁，請稍候再試（每分鐘最多 10 次）。'
+        });
+        router.post('/students/:id/remedial-paper/fill-shortfall', fillRateLimit, remedialController.fillShortfall);
+    }
 }
 
 // ── 階段 5 WS-E：AI 家教與按住說話（docs/interfaces-stage5.md 第 4.5 條）──

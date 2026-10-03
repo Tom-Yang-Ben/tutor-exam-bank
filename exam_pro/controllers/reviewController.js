@@ -16,6 +16,8 @@ const { query, pool } = require('../config/db');
 const { validateQuestionFields } = require('../utils/questionValidation');
 const jobCtl = require('./jobController');
 const followUp = require('../services/followUpLinker');
+// 〔dec/r16-remedial 補救卷補題〕補題 job 的來源註記（migrations/0023）
+const provenance = require('../services/remedialProvenance');
 
 /** approve 回應的 follows_question_id：入庫（或 merge 目標）題目在綁定重算後的前題 */
 async function followsOf(client, questionId) {
@@ -139,11 +141,14 @@ exports.listReview = async (req, res, next) => {
             `SELECT id AS jq_id, job_id, idx, state, review_reason, payload, question_id
                FROM job_questions WHERE ${where} ORDER BY id ASC LIMIT $1`, params);
 
+        // 〔dec/r16-remedial 補救卷補題〕替學生補題的列多 remedial_for（只加鍵；一般的列形狀不變）
+        const remedialFor = await provenance.remedialForJobs({ query }, rows.map(r => r.job_id));
         res.json({
             items: rows.map(r => ({
                 jq_id: r.jq_id, job_id: r.job_id, idx: r.idx, state: r.state,
                 review_reason: r.review_reason, stem_preview: jobCtl.stemPreview(r.payload),
-                question_id: r.question_id
+                question_id: r.question_id,
+                ...(remedialFor.has(r.job_id) ? { remedial_for: remedialFor.get(r.job_id) } : {})
             }))
         });
     } catch (err) { next(err); }
@@ -162,7 +167,9 @@ exports.getReviewItem = async (req, res, next) => {
         if (rows.length === 0) return res.status(404).json({ message: NOT_FOUND });
         // FR-019：多一個 follow_up 區塊（只加鍵，既有欄位不動）
         const follow_up = await followUp.describeFollowUp({ query }, rows[0]);
-        res.json({ ...rows[0], follow_up });
+        // 〔dec/r16-remedial 補救卷補題〕替學生補題的列多 remedial_for（只加鍵）
+        const remedialFor = await provenance.remedialForJobs({ query }, [rows[0].job_id]);
+        res.json({ ...rows[0], follow_up, ...(remedialFor.has(rows[0].job_id) ? { remedial_for: remedialFor.get(rows[0].job_id) } : {}) });
     } catch (err) { next(err); }
 };
 
@@ -287,6 +294,8 @@ exports.approve = async (req, res, next) => {
             body.solution_img || null, origin, chapterSrc, variantOf, hash, sourceType, sourceDetail,
                 chapterTokens, keywordTokens, stemTokens]);
         const questionId = inserted[0].id;
+        // 〔dec/r16-remedial 補救卷補題〕替學生補題的變式：入庫的題記下為誰、拿哪一題錯題出的（一般的 job 什麼都不多寫）
+        if (isVariant) await provenance.stampQuestion(client, jq.job_id, questionId);
 
         await client.query(
             `UPDATE job_questions SET state = 'saved', review_reason = NULL, question_id = $2,

@@ -318,7 +318,8 @@ function runSuite() {
                 const res = await remedialPaper(s.id, { subject: '數學', total: 10 });
                 assert.equal(res.status, 200, JSON.stringify(res.body));
                 const body = res.body;
-                assert.deepEqual(Object.keys(body), ['student_id', 'subject', 'basis', 'question_ids', 'items', 'blueprint', 'shortfalls', 'notes']);
+                // 〔dec/r16-remedial〕最後多 targets（補救成效的目標快照；remedialEffect.pg.test.js 驗內容）
+                assert.deepEqual(Object.keys(body), ['student_id', 'subject', 'basis', 'question_ids', 'items', 'blueprint', 'shortfalls', 'notes', 'targets']);
                 assert.equal(body.student_id, s.id);
                 assert.equal(body.subject, '數學');
                 assert.equal(body.basis, 'chapter');

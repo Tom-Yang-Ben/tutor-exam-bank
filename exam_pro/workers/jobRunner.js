@@ -1508,6 +1508,9 @@ function createRunner(opts = {}) {
 
             const questionId = rows[0].id;
             await client.query('UPDATE job_questions SET question_id = $2 WHERE id = $1', [ctx.jq.id, questionId]);
+            // 〔dec/r16-remedial 補救卷補題〕替學生補題的變式 job（jobs.target_student_id，migrations/0023）：入庫的題記下為誰、
+            // 拿哪一題錯題出的（services/remedialProvenance.js）。一般的變式與拆題 job 不多寫任何東西；沒套 0023 的庫讀不到這一欄＝不寫
+            if (origin === 'variant') await require('../services/remedialProvenance').stampQuestion(client, ctx.job.id, questionId);
             await client.query('COMMIT');
 
             scheduleEmbed(questionId, ctx.logger);

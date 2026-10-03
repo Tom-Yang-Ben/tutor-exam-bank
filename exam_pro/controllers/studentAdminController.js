@@ -199,6 +199,8 @@ exports.mergeStudent = async (req, res, next) => {
         );
         // 〔retrain PR-2〕最後重算目標學生搬過來的項目（同一交易）
         await retrainService.recompute(client, into, movedItemQids);
+        // 〔dec/r16-remedial〕補救卷補題的來源註記搬到目標學生（沒套 0023 的庫不做；外鍵是 ON DELETE SET NULL，不搬會變成 NULL）
+        await require('../services/remedialProvenance').mergeStudent(client, from, into);
         // ④ 刪來源學生
         await client.query('DELETE FROM students WHERE id = $1', [from]);
         await client.query('COMMIT');

@@ -279,22 +279,26 @@ async function findActiveJob(db, sourceId) {
  * 不必為兩個參數改 `0003` 的 DDL，也不必把參數塞進 `pdf_path` 這種語意不符的欄位。
  * generate 節點認領時讀「該 job 最早一列 node='generate' 的 detail.requested」。
  *
+ * 〔dec/r16-remedial 補救卷補題〕opts.targetStudentId：這個 job 是替哪一位學生補題（jobs.target_student_id，migrations/0023）。
+ * 有給才在 INSERT 多寫這一欄；沒給時語句與之前逐字相同。只是來源註記：不進 agent 的 input、不進 prompt。
+ *
  * @returns {Promise<{job_id:number, state:string}>}
  */
-async function createVariantJob(db, sourceId, params, budgetUsd = tokenBudgetUsd()) {
+async function createVariantJob(db, sourceId, params, budgetUsd = tokenBudgetUsd(), opts = {}) {
+    const targetStudentId = Number.isInteger(opts.targetStudentId) ? opts.targetStudentId : null;
     const client = await db.pool.connect();
     try {
         await client.query('BEGIN');
         // 〔stage5 WS-B〕subject_group 依藍本科目：化學藍本 → 'chemistry'（jobs.subject_group，migrations/0011）。
         // agents 另以題目科目為準（agents/promptParts.js 的 resolveSubjectGroup），這一欄讓 job 本身也看得出卷別。
         const { rows } = await client.query(
-            `INSERT INTO jobs (kind, source_question_id, pdf_sha256, pdf_path, page_count, state, budget_usd, source_type, subject_group)
+            `INSERT INTO jobs (kind, source_question_id, pdf_sha256, pdf_path, page_count, state, budget_usd, source_type, subject_group${targetStudentId !== null ? ', target_student_id' : ''})
              VALUES ('variant', $1, NULL, NULL, NULL, 'queued', $2,
                      (SELECT source_type FROM questions WHERE id = $1),
                      COALESCE((SELECT CASE WHEN subject = '化學' THEN 'chemistry' ELSE 'math_physics' END
-                                 FROM questions WHERE id = $1), 'math_physics'))
+                                 FROM questions WHERE id = $1), 'math_physics')${targetStudentId !== null ? ', $3' : ''})
              RETURNING id, state`,
-            [sourceId, budgetUsd]);
+            targetStudentId !== null ? [sourceId, budgetUsd, targetStudentId] : [sourceId, budgetUsd]);
         // 題源標記（0006）：變式預設**繼承藍本**——改寫是否充分要人判斷，
         // 確認後可在題庫管理把該變式改標 'self'，不在這裡自動漂白。
         const job = rows[0];

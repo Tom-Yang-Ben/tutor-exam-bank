@@ -266,8 +266,12 @@ paths:
               properties:
                 student_id: { type: integer }
                 question_ids: { type: array, items: { type: integer }, minItems: 1 }
+                # 修訂 2026-10-03（dec/r16-remedial 補救成效）：補救卷草稿的目標快照；兩個都沒帶時行為逐字不變
+                kind: { type: string, enum: [remedial], description: 帶了 targets 就必填 }
+                targets: { type: array, minItems: 1, maxItems: 12, items: { $ref: "#/components/schemas/RemedialSnapshotTarget" }, description: "kind = remedial 時必填；嚴格驗證（多鍵、章節不在白名單、混科、數字超出範圍 → 400）" }
       responses:
         "200": { description: 已確認建卷 }
+        "503": { description: "帶了 kind = remedial 但資料庫還沒套 migrations/0022_paper_kind_targets.sql（修訂 2026-10-03）；什麼都沒寫" }
         # 修訂 2026-09-26 合併回填（Owner 決策單 2026-09-25 B7，local/integration 7dc14a0）：伺服器端檢查承上題整組；
         #   卷裡有某組的任一題、整組卻沒有全部在卷裡 → 400，不寫卷、不寫 attempts，回應多 incomplete_groups（契約見 docs/interfaces-stage1.md 第 7.1 條）
         "400":
@@ -1098,6 +1102,27 @@ paths:
                         difficulty_min: { type: ["integer", "null"], description: 契約外多給 }
                         difficulty_max: { type: ["integer", "null"], description: 契約外多給 }
                         rationale: { type: string, description: 選這個單位的理由（契約外多給） }
+                        # 修訂 2026-10-03（dec/r16-remedial 依錯因出題）：bucket = remedial 的列一律有 error_focus（docs/remedial.md 第 9 節）
+                        error_focus:
+                          type: ["object", "null"]
+                          description: "只有 bucket = remedial 的列有這個鍵；該單位的錯題沒有任何錯因標記時為 null"
+                          properties:
+                            type: { type: string, description: 錯因代碼（config/errorTypes.js） }
+                            label: { type: string }
+                            count: { type: integer, description: 主因被標了幾次 }
+                            share: { type: number, description: 主因占全部錯因標記的比例 }
+                            tagged_wrong: { type: integer, description: 有標錯因的錯題數（第一次作答） }
+                            strategy:
+                              type: ["object", "null"]
+                              description: 套用的策略；沒套用時 null
+                              properties:
+                                difficulty_ceiling_delta: { type: integer, enum: [0, -1] }
+                                prefer_types: { type: ["array", "null"], items: { type: string } }
+                                prefer_order: { type: ["string", "null"], enum: [text_length_desc, difficulty_asc, chem_equation, null] }
+                                summary: { type: string }
+                                rationale: { type: string }
+                            applied: { type: boolean }
+                            reason: { type: string, enum: [dominant, dominant_difficulty_fallback, insufficient_evidence, no_dominant, tie, not_applicable] }
                   shortfalls:
                     type: array
                     items:
@@ -1109,8 +1134,169 @@ paths:
                         got: { type: integer }
                         reason: { type: string, enum: [insufficient_stock, follow_up_group] }
                   notes: { type: array, items: { type: string } }
+                  # 修訂 2026-10-03（dec/r16-remedial 補救成效）：目標快照，確認時原樣交給 confirm-paper
+                  targets: { type: array, items: { $ref: "#/components/schemas/RemedialSnapshotTarget" } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { description: ":id 不合法或學生不存在；FEATURE_REMEDIAL 關閉時路由不存在" }
+  # 修訂 2026-10-03（dec/r16-remedial 補救成效，docs/remedial.md 第 10 節）
+  /students/{id}/remedial-effect:
+    get:
+      tags: [remedial]
+      summary: 補救成效（每份補救卷的補救組目標：補救前 → 這張卷 → 之後；只讀；FEATURE_REMEDIAL）
+      operationId: getRemedialEffect
+      parameters:
+        - { $ref: "#/components/parameters/IdPath" }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 10 }, description: 最多幾份補救卷（新到舊） }
+        - { name: days, in: query, schema: { type: integer, minimum: 1, maximum: 365 }, description: 只看補救卷批改完之後幾天內建立的卷；省略＝不限 }
+      responses:
+        "200":
+          description: 成功；只算每題第一次作答（檢視 attempts）
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  student_id: { type: integer }
+                  limit: { type: integer }
+                  days: { type: ["integer", "null"] }
+                  thresholds:
+                    type: object
+                    properties:
+                      improved_delta: { type: number }
+                      worse_delta: { type: number }
+                      min_after_graded: { type: number }
+                      min_n: { type: integer, description: WEAKNESS_MIN_N }
+                  papers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        paper_id: { type: integer }
+                        title: { type: string }
+                        created_at: { type: string, format: date-time }
+                        graded: { type: boolean, description: 卷上每一題都批改了 }
+                        assigned_count: { type: integer }
+                        graded_count: { type: integer }
+                        anchor_at: { type: string, format: date-time, description: 「之後」的起算時間（批改完＝最後一題的批改時間；否則建卷時間） }
+                        targets:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              unit_type: { type: string, enum: [chapter, kc] }
+                              subject: { type: string }
+                              chapter: { type: string }
+                              kc_id: { type: integer }
+                              code: { type: ["string", "null"] }
+                              name: { type: string }
+                              bucket: { type: string, enum: [remedial] }
+                              error_focus: { type: ["object", "null"] }
+                              before: { type: object, description: "{graded, wrong, wrong_rate, correct_rate, low_sample}（出卷當下的快照）" }
+                              on_paper: { type: object, description: "{assigned, graded, correct, rate}" }
+                              after: { type: object, description: "{graded, correct, rate, papers}" }
+                              delta: { type: ["number", "null"], description: after.rate − before.correct_rate }
+                              low_sample: { type: boolean, description: after.graded < WEAKNESS_MIN_N }
+                              status: { type: string, enum: [improved, no_change, worse, insufficient_data, pending] }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { description: ":id 不合法或學生不存在；FEATURE_REMEDIAL 關閉時路由不存在" }
+        "503": { description: 資料庫還沒套 migrations/0022_paper_kind_targets.sql }
+  # 修訂 2026-10-03（dec/r16-remedial 學習報告，docs/student-report.md）
+  /students/{id}/report:
+    get:
+      tags: [students]
+      summary: 學習報告（老師版／家長版；確定性、不呼叫 LLM；FEATURE_STUDENTS）
+      operationId: getStudentReport
+      parameters:
+        - { $ref: "#/components/parameters/IdPath" }
+        - { name: days, in: query, schema: { type: integer, minimum: 1, maximum: 365, default: 30 } }
+        - { name: audience, in: query, schema: { type: string, enum: [teacher, parent], default: teacher } }
+        - { name: format, in: query, schema: { type: string, enum: [json, html, docx], default: json } }
+      responses:
+        "200":
+          description: "json：報告（家長版不含內部代碼）；html：可列印的完整頁；docx：Word 下載"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  student: { type: object }
+                  audience: { type: string, enum: [teacher, parent] }
+                  generated_on: { type: string }
+                  period: { type: object, properties: { days: { type: integer }, from: { type: string }, to: { type: string } } }
+                  summary: { type: object }
+                  weakest_chapters: { type: array, items: { type: object } }
+                  error_types: { type: array, items: { type: object } }
+                  weekly_trend: { type: array, items: { type: object } }
+                  retrain: { type: ["object", "null"], description: FEATURE_RETRAIN 關閉時 null }
+                  remedial_effect: { type: ["object", "null"], description: FEATURE_REMEDIAL 關閉時 null }
+                  suggestions: { type: array, items: { type: object, properties: { code: { type: string, description: 只有老師版 }, text: { type: string } } } }
+            text/html: { schema: { type: string } }
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document: { schema: { type: string, format: binary } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { description: ":id 不合法或學生不存在；FEATURE_STUDENTS 關閉時路由不存在" }
+  # 修訂 2026-10-03（dec/r16-remedial 題庫不夠時自動補題，docs/remedial.md 第 11 節）
+  /students/{id}/remedial-paper/fill-shortfall:
+    post:
+      tags: [remedial]
+      summary: 庫存不足的補救單位用該生的錯題出變式補題（FEATURE_REMEDIAL＋FEATURE_VARIANTS；建變式 job，先檢索，一次最多生成 5 題）
+      operationId: fillRemedialShortfall
+      parameters: [{ $ref: "#/components/parameters/IdPath" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [subject, units]
+              properties:
+                subject: { type: string }
+                days: { type: integer, minimum: 1, maximum: 365, default: 90 }
+                difficulty_delta: { type: integer, enum: [-1, 0, 1], default: 0 }
+                units:
+                  type: array
+                  minItems: 1
+                  maxItems: 3
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [unit_type, chapter, needed]
+                    properties:
+                      unit_type: { type: string, enum: [chapter, kc] }
+                      chapter: { type: string }
+                      kc_id: { type: integer, description: unit_type = kc 才有（必填） }
+                      needed: { type: integer, minimum: 1, maximum: 50 }
+                      error_type: { type: string, description: 錯因代碼；有給時標了這個錯因的錯題優先當藍本 }
+      responses:
+        "200": { description: 沒有建新的 job（庫裡已有夠用的相似題、合流到進行中的 job、或沒有藍本）；回應形狀同 202 }
+        "202":
+          description: 建了變式 job
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  student_id: { type: integer }
+                  subject: { type: string }
+                  max_generate: { type: integer }
+                  generating: { type: integer, description: 這次新排的生成題數 }
+                  capped: { type: boolean }
+                  retrieved_ids: { type: array, items: { type: integer }, description: 檢索到、該生沒寫過的相似題 }
+                  units: { type: array, items: { type: object } }
+                  jobs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        job_id: { type: integer }
+                        state: { type: string }
+                        existing: { type: boolean }
+                        source_question_id: { type: integer }
+                        chapter: { type: string }
+                  notes: { type: array, items: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { description: ":id 不合法或學生不存在；任一旗標關閉時路由不存在" }
+        "503": { description: 資料庫還沒套 migrations/0023_remedial_variant_provenance.sql }
   /students/{id}/remedial-paper/items:
     get:
       tags: [remedial]
@@ -1414,6 +1600,36 @@ components:
         weight: { type: number, description: "(0, 1]；AI 標註一律 1" }
         src: { type: string, enum: [ai, human] }
         confidence: { type: ["number", "null"], description: 只有 AI 標註才有 }
+    # 修訂 2026-10-03（dec/r16-remedial 補救成效）：補救卷的目標快照（exam_papers.targets 的一個元素）
+    RemedialSnapshotTarget:
+      type: object
+      additionalProperties: false
+      required: [unit_type, subject, chapter, bucket, baseline]
+      properties:
+        unit_type: { type: string, enum: [chapter, kc] }
+        subject: { type: string }
+        chapter: { type: string, description: 章節白名單內 }
+        kc_id: { type: integer, description: unit_type = kc 才有（必填） }
+        bucket: { type: string, enum: [remedial, prerequisite, extension] }
+        baseline:
+          type: object
+          additionalProperties: false
+          required: [graded, wrong, wrong_rate, low_sample]
+          properties:
+            graded: { type: number, minimum: 0 }
+            wrong: { type: number, minimum: 0 }
+            wrong_rate: { type: ["number", "null"], minimum: 0, maximum: 1 }
+            low_sample: { type: boolean }
+        error_focus:
+          type: object
+          additionalProperties: false
+          description: 只有 bucket = remedial 能帶
+          required: [type, count, share, applied]
+          properties:
+            type: { type: string }
+            count: { type: integer, minimum: 1 }
+            share: { type: number, minimum: 0, maximum: 1 }
+            applied: { type: boolean }
     RemedialTarget:
       type: object
       properties:

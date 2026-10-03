@@ -5,6 +5,9 @@
 //   POST /api/students/:id/remedial-paper               依弱點出補救卷草稿（只讀不寫）
 //   GET  /api/students/:id/remedial-paper/items?ids=    草稿手動加題前查題目與承上組（只讀；契約之外多的一支，見 docs/remedial.md）
 //   GET  /api/coverage?subject=&student_id=             題庫覆蓋率（章 × 難度、知識點題數）
+//   GET  /api/students/:id/remedial-effect?limit=&days= 補救成效（〔dec/r16-remedial〕補救卷的目標 補救前 → 之後；只讀）
+//   POST /api/students/:id/remedial-paper/fill-shortfall  〔dec/r16-remedial〕庫存不足的補救單位用該生的錯題出變式補題
+//                                                       （另需 FEATURE_VARIANTS；會建變式 job、之後由 runner 呼叫 LLM，所以有限流）
 //
 // 全部只在 FEATURE_REMEDIAL 開啟時掛載（routes/index.js 檔尾的 WS-D 區塊；關閉時落到 Express 預設 404）。
 // 都不呼叫 LLM、不寫資料庫，所以沒有套限流（契約第 1.2 條的限流要求是針對會呼叫 LLM 的端點）。
@@ -20,6 +23,9 @@ const { _internals: studentInternals } = require('./studentController');
 const kcWeakness = require('../services/kcWeaknessService');
 const remedial = require('../services/remedialService');
 const coverage = require('../services/coverageService');
+// 〔dec/r16-remedial〕補救成效追蹤、題庫不夠時自動補題
+const remedialEffect = require('../services/remedialEffectService');
+const remedialFill = require('../services/remedialFillService');
 // 〔retrain PR-3〕補救卷附上到期的重練題（API-8）
 const features = require('../config/features');
 const retrainSelect = require('../services/retrainSelect');
@@ -127,6 +133,31 @@ function parseItemIdsQuery(q) {
     return { ids };
 }
 
+/**
+ * 〔dec/r16-remedial〕補救成效的查詢參數（純函式）：limit 1~50（預設 10）；days 1~365（選填；沒帶＝之後全部）。
+ * @param {object} q req.query
+ * @returns {{error:string} | {limit:number, days:number|null}}
+ */
+function parseEffectQuery(q) {
+    const intOf = (raw) => (/^\d+$/.test(String(raw).trim()) ? Number(String(raw).trim()) : NaN);
+    let limit = remedialEffect.DEFAULT_LIMIT;
+    if (q.limit !== undefined && q.limit !== null && String(q.limit) !== '') {
+        limit = intOf(q.limit);
+        if (!Number.isInteger(limit) || limit < 1 || limit > remedialEffect.MAX_LIMIT) {
+            return { error: `limit 必須是 1~${remedialEffect.MAX_LIMIT} 的整數。` };
+        }
+    }
+    let days = null;
+    if (q.days !== undefined && q.days !== null && String(q.days) !== '') {
+        days = intOf(q.days);
+        if (!Number.isInteger(days) || days < 1 || days > 365) return { error: 'days 必須是 1~365 的整數。' };
+    }
+    return { limit, days };
+}
+
+/** 〔dec/r16-remedial〕資料庫還沒套 0022 時補救成效回 503 的訊息。 */
+const EFFECT_SCHEMA_MESSAGE = '資料庫還沒套 migrations/0022_paper_kind_targets.sql（補救卷的目標快照），看不到補救成效：請在 exam_pro 執行 npm run migrate。';
+
 /** 學生存在嗎。 */
 async function studentExists(id) {
     const { rowCount } = await query('SELECT 1 FROM students WHERE id = $1', [id]);
@@ -214,4 +245,46 @@ exports.getCoverage = async (req, res, next) => {
     }
 };
 
-exports._internals = { parseRemedialBody, parseCoverageQuery, parseItemIdsQuery, MAX_LOOKUP_IDS };
+// ─────────────────── GET /api/students/:id/remedial-effect ───────────────────
+// 〔dec/r16-remedial〕補救成效（docs/remedial.md 第 10 節）。只讀、不呼叫 LLM。
+
+exports.getRemedialEffect = async (req, res, next) => {
+    const studentId = parseId(req.params.id);
+    if (studentId === null) return res.status(404).json({ message: STUDENT_NOT_FOUND });
+    const parsed = parseEffectQuery(req.query);
+    if (parsed.error) return res.status(400).json({ message: parsed.error });
+    try {
+        if (!(await studentExists(studentId))) return res.status(404).json({ message: STUDENT_NOT_FOUND });
+        const out = await remedialEffect.loadRemedialEffect(
+            { studentId, limit: parsed.limit, days: parsed.days, minN: weaknessMinN() }, { query });
+        res.status(200).json({ student_id: studentId, limit: parsed.limit, days: parsed.days, ...out });
+    } catch (err) {
+        // exam_papers.kind 不存在（42703）＝還沒套 0022
+        if (err && err.code === '42703') return res.status(503).json({ message: EFFECT_SCHEMA_MESSAGE });
+        next(err);
+    }
+};
+
+// ─────────────────── POST /api/students/:id/remedial-paper/fill-shortfall ───────────────────
+// 〔dec/r16-remedial〕題庫不夠時自動補題（docs/remedial.md 第 11 節）。本身不呼叫 LLM，但會建變式 job（runner 背景生成）。
+
+/** 資料庫還沒套 0023 時補題回 503 的訊息。 */
+const FILL_SCHEMA_MESSAGE = '資料庫還沒套 migrations/0023_remedial_variant_provenance.sql（補題的來源註記）：請在 exam_pro 執行 npm run migrate。沒有建立任何生成工作。';
+
+exports.fillShortfall = async (req, res, next) => {
+    const studentId = parseId(req.params.id);
+    if (studentId === null) return res.status(404).json({ message: STUDENT_NOT_FOUND });
+    const parsed = remedialFill.parseFillBody(req.body);
+    if (parsed.error) return res.status(400).json({ message: parsed.error });
+    try {
+        if (!(await studentExists(studentId))) return res.status(404).json({ message: STUDENT_NOT_FOUND });
+        const out = await remedialFill.fillShortfall({ studentId, ...parsed.value });
+        res.status(out.jobs.some(j => !j.existing) ? 202 : 200).json(out);
+    } catch (err) {
+        // jobs.target_student_id 不存在（42703）＝還沒套 0023（第一個建 job 的請求在交易裡失敗，什麼都沒寫）
+        if (err && err.code === '42703') return res.status(503).json({ message: FILL_SCHEMA_MESSAGE });
+        next(err);
+    }
+};
+
+exports._internals = { parseRemedialBody, parseCoverageQuery, parseItemIdsQuery, parseEffectQuery, MAX_LOOKUP_IDS };

@@ -348,7 +348,8 @@ function runSuite() {
             assert.equal(res.status, 200, JSON.stringify(res.body));
             const body = res.body;
             assert.deepEqual(Object.keys(body).sort(),
-                ['basis', 'blueprint', 'items', 'notes', 'question_ids', 'shortfalls', 'student_id', 'subject']);
+                // 〔dec/r16-remedial〕多 targets（補救成效的目標快照）
+                ['basis', 'blueprint', 'items', 'notes', 'question_ids', 'shortfalls', 'student_id', 'subject', 'targets']);
             assert.equal(body.student_id, S.studentId);
             assert.equal(body.subject, '化學');
             // 有標註的已批改題 6 ≥ WEAKNESS_MIN_N(5) → kc 基底（第 4.4 條第 2 點；知識點來自第 1 條載入的化學種子檔）
