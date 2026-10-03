@@ -11,7 +11,7 @@
 // 三道防線與 controllers.pg.test.js 相同：
 //   1. **只讀 process.env.TEST_DATABASE_URL，本檔絕不 require('dotenv')**。
 //      `npm test`（= node --test test/unit/**）不會預載 .env，因此這支整支被 skip。
-//      要跑它：node -r dotenv/config --test "test/integration/**/*.test.js"
+//      要跑它：node --env-file=.env --test "test/integration/**/*.test.js"
 //      （Node 24 在 Windows 上 `--test <目錄>` 會把目錄當模組 require 而失敗，必須用 glob）
 //   2. 資料庫名必須以 `_test` 結尾，否則直接失敗。
 //   3. 連線在 require config/db.js **之前**就把 DATABASE_URL 覆寫成測試庫。
@@ -28,7 +28,7 @@ const APP_DIR = path.resolve(__dirname, '..', '..');
 
 if (!TEST_DATABASE_URL) {
     test('學生／試卷／弱點面板整合測試（需要 PostgreSQL）', {
-        skip: '未設定 TEST_DATABASE_URL；npm test 不連資料庫。請跑 node -r dotenv/config --test "test/integration/**/*.test.js"'
+        skip: '未設定 TEST_DATABASE_URL；npm test 不連資料庫。請跑 node --env-file=.env --test "test/integration/**/*.test.js"'
     }, () => { });
 } else {
     if (!/_test(\?|$)/.test(TEST_DATABASE_URL)) {

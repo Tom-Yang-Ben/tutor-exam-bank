@@ -5,7 +5,7 @@
 //   1. **只讀 process.env.TEST_DATABASE_URL，本檔絕不 require('dotenv')**。
 //      `npm test`（= node --test）不會預載 .env，因此這支整支被 skip。
 //      要跑它請自己把變數帶進來，例如：
-//          node -r dotenv/config --test "test/integration/**/*.test.js"
+//          node --env-file=.env --test "test/integration/**/*.test.js"
 //      （Node 24 在 Windows 上 `--test <目錄>` 會把目錄當成模組去 require 而失敗，
 //        必須用上面的 glob 形式——這一點也適用於 WS-D 之後要改的 npm test）
 //      CI 則由 workflow 的 env 直接給（WS-D 的 D-C1）。
@@ -25,7 +25,7 @@ const APP_DIR = path.resolve(__dirname, '..', '..');
 
 if (!TEST_DATABASE_URL) {
     test('controller 整合測試（需要 PostgreSQL）', {
-        skip: '未設定 TEST_DATABASE_URL；npm test 不連資料庫。請跑 node -r dotenv/config --test "test/integration/**/*.test.js"'
+        skip: '未設定 TEST_DATABASE_URL；npm test 不連資料庫。請跑 node --env-file=.env --test "test/integration/**/*.test.js"'
     }, () => { });
 } else {
     // 防呆與 migrate.js 一致：整合測試絕不能打到真題庫
