@@ -185,4 +185,19 @@ describe('查詢參數、檔名、SQL、前端網址', () => {
         assert.equal(mod.reportUrl(3, { days: '30', audience: 'parent', format: 'html' }), '/api/students/3/report?days=30&audience=parent&format=html');
         assert.deepEqual(mod.REPORT_AUDIENCES.map(a => a[0]), R.AUDIENCES);
     });
+
+    test('students.js：報告的時間窗自己一個選單，預設與伺服器端相同', async () => {
+        const src = fs.readFileSync(path.resolve(__dirname, '..', '..', 'public', 'js', 'students.js'), 'utf8');
+        const mod = await import('data:text/javascript;charset=utf-8,' + encodeURIComponent(src + '\n// reportDays\n'));
+        // 畫面不帶 days 與助教不帶 days 必須看到同一個期間，所以兩邊的預設是同一個數字。
+        assert.equal(mod.REPORT_DEFAULT_DAYS, R.DEFAULT_DAYS);
+        assert.ok(mod.REPORT_DAYS_OPTIONS.includes(mod.REPORT_DEFAULT_DAYS));
+        for (const d of mod.REPORT_DAYS_OPTIONS) {
+            assert.ok(Number.isInteger(d) && d >= 1 && d <= 365, `報告期間選項 ${d} 不在伺服器端的 1~365 內`);
+        }
+        // 報告列建自己的 stuReportDays，且不再從弱點面板的 days 取值（回歸：裁決 S4-4 的 365 曾經蓋掉報告的 30）。
+        assert.match(src, /id: 'stuReportDays'/);
+        assert.match(src, /reportBar\(app, studentId\)/);
+        assert.ok(!/reportBar\(app, studentId, days\)/.test(src), 'reportBar 不該再吃面板的 days');
+    });
 });

@@ -567,6 +567,16 @@ function request(app, url, options) {
 export const REPORT_AUDIENCES = [['teacher', '老師版'], ['parent', '家長版']];
 
 /**
+ * 報告自己的時間窗，不跟著上方弱點面板的「近 N 天」走。
+ *
+ * 面板預設 365 天（裁決 S4-4：家教是長期視角），報告要講的是近況——一份「近一年總結」
+ * 當月度回報會被整年的資料稀釋。兩個用途各自一個選單：`REPORT_DEFAULT_DAYS` 與伺服器端
+ * `services/studentReportService.js` 的 `DEFAULT_DAYS` 相同，畫面與助教（不帶 days）看到的是同一個期間。
+ */
+export const REPORT_DEFAULT_DAYS = 30;
+export const REPORT_DAYS_OPTIONS = [7, 14, 30, 90, 180, 365];   // 全部落在伺服器端 1~365 的合法區間
+
+/**
  * GET /api/students/:id/report 的網址（純函式）。
  * @param {number} studentId
  * @param {{days:number|string, audience:string, format:'json'|'html'|'docx'}} p
@@ -578,16 +588,22 @@ export function reportUrl(studentId, { days, audience, format }) {
 }
 
 /**
- * 「學習報告」那一列：選讀者，按「列印報告」開一個可列印的新視窗、按「下載 Word」存 .docx。
+ * 「學習報告」那一列：選期間與讀者，按「列印報告」開一個可列印的新視窗、按「下載 Word」存 .docx。
  * 報告由伺服器產生（不呼叫 LLM）；用 apiFetch 取回再交給瀏覽器，金鑰標頭照常帶得到。
+ * 期間用自己的選單（`REPORT_DAYS_OPTIONS`，預設 `REPORT_DEFAULT_DAYS`），與上方面板的「近 N 天」無關。
  * @param {object} app
  * @param {number} studentId
- * @param {string} days
  * @returns {HTMLElement}
  */
-function reportBar(app, studentId, days) {
+function reportBar(app, studentId) {
     const box = el('div', 'mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-4', { id: 'stuReport' });
-    box.appendChild(el('p', 'eyebrow text-indigo-500 mr-2', { textContent: `學習報告（近 ${days} 天）` }));
+    box.appendChild(el('p', 'eyebrow text-indigo-500 mr-2', { textContent: '學習報告' }));
+    const daysSel = el('select', 'field-control min-h-0 p-2 text-sm', { id: 'stuReportDays', 'aria-label': '報告期間' });
+    for (const d of REPORT_DAYS_OPTIONS) {
+        const o = el('option', '', { value: String(d), textContent: `近 ${d} 天` });
+        if (d === REPORT_DEFAULT_DAYS) o.selected = true;
+        daysSel.appendChild(o);
+    }
     const audience = el('select', 'field-control min-h-0 p-2 text-sm', { id: 'stuReportAudience', 'aria-label': '報告給誰看' });
     for (const [v, label] of REPORT_AUDIENCES) audience.appendChild(el('option', '', { value: v, textContent: label }));
     const print = el('button', 'text-sm px-3 py-2 rounded-xl border border-indigo-200 bg-white font-bold text-indigo-700 hover:bg-indigo-50 cursor-pointer', {
@@ -597,6 +613,7 @@ function reportBar(app, studentId, days) {
         type: 'button', id: 'stuReportDocx', textContent: '下載 Word'
     });
     const open = async (format) => {
+        const days = Number(daysSel.value) || REPORT_DEFAULT_DAYS;
         const res = await request(app, reportUrl(studentId, { days, audience: audience.value, format }));
         if (!res.ok) { app.showToast(await messageOf(res), 'error'); return; }
         const blob = await res.blob();
@@ -614,7 +631,7 @@ function reportBar(app, studentId, days) {
     };
     print.addEventListener('click', () => { open('html').catch(() => app.showToast('報告產生失敗', 'error')); });
     word.addEventListener('click', () => { open('docx').catch(() => app.showToast('報告產生失敗', 'error')); });
-    box.append(audience, print, word);
+    box.append(daysSel, audience, print, word);
     return box;
 }
 
@@ -1875,8 +1892,8 @@ async function loadStudentView(app) {
     weaknessBox.appendChild(el('div', 'mt-4', {})).appendChild(
         recentWrongList(app, weakness.recent_wrong, currentStudentId, labelOf)
     );
-    // 〔dec/r16-remedial〕學習報告（列印、Word；同一個時間窗）
-    weaknessBox.appendChild(reportBar(app, studentId, days));
+    // 〔dec/r16-remedial〕學習報告（列印、Word；期間用報告自己的選單，不跟著面板的「近 N 天」）
+    weaknessBox.appendChild(reportBar(app, studentId));
 
     // 深連結：組卷後按「立即批改」進來時，把那一張卷直接展開。
     if (pendingPaperId !== null) {
