@@ -534,6 +534,38 @@ Dependabot 的 `mathjax` 4.1.3 升版 PR（#43）已關閉。**不是因為測�
 
 要做的話是一件前端基礎設施工作（2 條 vendor 路由、loader 設定、測試斷言、node_modules +50 MB），而且**必須由 Owner 開著系統逐頁肉眼確認公式排版**，不能只靠 CI。MathJax 3 目前運作正常，升級沒有解決任何現有痛點，所以擱置。Dependabot 之後還會再提，依本節直接關閉即可。
 
-### 10.2 gsap 維持 3.13.0（2026-10-04）
+### 10.2 gsap：從釘精確版改成鎖主版號（2026-10-04，PR #51 → #57）
 
-Dependabot #41 的 `minor-and-patch` 群組含 `gsap` 3.13.0 → 3.15.0，已拆解：`docx` 與 `sharp` 由 PR #51 帶進來，`gsap` 不升。原因是 `public/index.html:47` 記著版本、`test/unit/publicOffline.test.js:177` 斷言 `deps.gsap === '3.13.0'`（本機離線 vendor 要與原本的 CDN 引用同版），而 gsap 在本專案只用在一個 `gsap.fromTo` 動效，升版沒有好處。
+**第一次處理（PR #51）**：Dependabot #41 的 `minor-and-patch` 群組含 `gsap` 3.13.0 → 3.15.0，撞到 `test/unit/publicOffline.test.js` 的 `assert.equal(deps.gsap, '3.13.0')`，一個紅燈把整批扣住。當時拆解：`docx` 與 `sharp` 由 PR #51 帶進來，gsap 不升。
+
+**再檢討後改做法（PR #57）**：Dependabot 隔天重開 #54 又把 gsap 綁進來，確認這會每週重演。追下去發現那個精確釘版**不是技術上的不變量**——舊的 CDN 網址恰好寫了完整版號（`gsap@3.13.0`），mathjax 寫的是 `@3`，測試只是照抄了兩種形狀。改成鎖兩個真正的關係：
+
+- `deps.gsap` 比對 `/^\^?3\./`（主版號，與 mathjax、tailwind 同一種寫法）；
+- **新增**：`public/index.html` 的「版本：…」註解必須和 `package.json` 一致——這一條原本**沒有任何檢查**，升版時那行註解可以默默變成謊話。附量尺自我檢查。
+
+機制面在 `.github/dependabot.yml` 的 `minor-and-patch` 群組加 `exclude-patterns: [gsap]`，讓 gsap 單獨開 PR、不再連坐。**刻意不用 `ignore`**：`ignore` 會連 Dependabot 的 security update 一起吃掉，gsap 哪天出 CVE 就收不到通知。這和同一個檔案裡 electron「不分組、紅燈當刻意的提醒」的既有做法一致。
+
+`package.json` 的 gsap 版本至今未動（仍 `3.13.0`）；改的只是「什麼叫合法」。
+
+### 10.3 第二層分類不套證據否決（2026-10-04，Owner 裁定）
+
+`local-mode.md` 10.28 第 2 點留了一個觀察：classify eval 唯一的錯題 cls-fx-051（v-t 圖面積代表什麼，正解「物體的運動（速度與加速度）」，第二層本機模型答「位能與能量守恆」）是「題幹完全不像這一章」的同一種錯，`gateEvidenceVeto` 對它也會成立，所以第二層似乎也該套。**查證後決定不做。**
+
+查證結果（實跑，不是推論）：
+
+| 問題 | 答案 |
+| :--- | :--- |
+| 否決對 cls-fx-051 成立嗎 | 成立（題幹沒有功、能量、高度、彈簧等任何線索） |
+| 否決能不能給出正解 | **不能**。`boundaryTarget` 對這段題幹回 `null`，沒有任何界線規則會改成運動學章 |
+| accuracy 會變嗎 | **不會**。`suiteClassify.js:126` 對 `kind:'fail'` 記 `pred = null`，照樣算答錯，仍 91/92 |
+| macro-F1 會變嗎 | **不會**。`metrics.js` 的 `macroF1` 只從 **gold** 取類別；golden 裡「位能與能量守恆」當正解的題數是 **0**，那個 false positive 從來沒被算進去。cls-fx-051 只讓「物體的運動（速度與加速度）」recall ＝ 0.5（support 2、錯 1），改成 null 之後還是同一個 fn |
+
+不做的理由：
+
+1. **改不動任何有門檻的數字**，只有報表細節（混淆對、`review_reasons`）會動。
+2. **本機模式幾乎沒有實際好處**：OCR 拆題下 `saved_rate` 設計上一律是 0，每題本來就停人工複核，差別只剩複核佇列上多一句理由。有意義的是 Gemini 模式（題目會自動入庫，章節錯＝組卷時出現在錯的章）。
+3. **要做乾淨得動資料庫**：新的 `review_reason`（如 `chapter_unsupported`）被 DDL 的 CHECK 鎖住，要 migration ＋複核 UI ＋測試；借用 `chapter_invalid` 會把「章節不在白名單」和「章節合法但沒有證據」混成同一個訊號。
+4. **兩層的否決代價不對稱**：第一層被否決只是改走第二層（便宜）；第二層被否決是把一題送進 Owner 的複核佇列，誤判要花人的時間。
+5. **只蓋一章**，推廣要為更多章寫線索表，而 `chapterPostRules.js` 開頭自己寫著看著錯題寫的規則「會高估對新題的效果」。
+
+想讓 classify 真的變 92/92 只有兩條路，兩條都有既有阻礙：加一條 v-t 圖面積的界線規則（推翻 `chapterPostRules.js:36`「不為 cls-fx-051 那一組寫規則」的決定），或改模板／few-shot 後重錄 cassette（本機模型數小時，要先確認電腦不睡眠）。
