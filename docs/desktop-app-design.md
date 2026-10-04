@@ -698,7 +698,7 @@ B1 刻意**不搬任何資料**：記錄檔放 `exam_pro\data\logs\`（`desktop-
   4. 6.2 節「自動化驗收」`desktop` 那一行的「**不在 CI**：要進 CI 得改 `ci.yml`，要 Owner 同意（第 3 條第 8 項）」：改成 CI 的 `desktop` job 會跑 `npm test`（`npm run smoke` 仍不在 CI）。
   5. 6.2 節「留給之後」第一點、本段標題、R-7 的「待 Owner 同意」：改成已同意（日期、選項）；Owner 選 2、3 或分組 B 時照「選項」刪改兩個 yml。
   6. `docs/HANDOFF.md` §0.00d「Owner 接下來要做的」第 5 點：改成已完成。
-  7. `docs/pr-drafts/local-integration-to-main.md`（還沒用掉的話）：4.1 節表格 `desktop` 那一列的「不在 GitHub Actions 裡（`ci.yml` 只跑 `exam_pro`）」改成在 CI 的 `desktop` job；第 5 節「開 PR 之前」第 5 步「等 GitHub Actions 的 unit 與 integration 兩個 job 跑完」改成三個 job。
+  7. ~~`docs/pr-drafts/local-integration-to-main.md`（還沒用掉的話）：4.1 節表格 `desktop` 那一列的「不在 GitHub Actions 裡（`ci.yml` 只跑 `exam_pro`）」改成在 CI 的 `desktop` job；第 5 節「開 PR 之前」第 5 步「等 GitHub Actions 的 unit 與 integration 兩個 job 跑完」改成三個 job。~~〔2026-10-05〕該稿已於 2026-10-01 成為 [PR #40](https://github.com/Tom-Yang-Ben/tutor-exam-bank/pull/40) 的說明並合併，檔案已自主線移除；這一條不再需要做。
   8. `ci.yml` 檔頭與 `desktop` job 上方、`dependabot.yml` 的「〔提案 2026-09-27……待 Owner 同意〕」字樣拿掉。
 - **審查修正**（2026-09-27，`dec/r8-desktop-ci-fix`）：① 拿掉「大版本一定看得到」，改寫成 GitHub 文件的說法加上兩個例外，新增分組子題（A／B）與 45 發布後的實測步驟；② `ci.yml` 在 `npm test` 之後再確認一次沒有下載 Electron；③ 列出「併入時要一起改的」，`ci.yml` 檔頭的「所有 run 步驟」改成限定 unit、integration；④ HANDOFF 第 5 點改成只含指路的一行，可以單獨進整合分支（另備分支 `dec/r8-desktop-ci-pointer`，內容與本分支那一行逐字相同，先後合併都不會衝突）；⑤ 寫明紅燈只有設成必要檢查才擋得住合併。
 
