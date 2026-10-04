@@ -92,6 +92,7 @@ npm start                            # http://localhost:3000（預設只接受�
 | [`exam_pro/README.md`](./exam_pro/README.md) | 安裝、設定、啟動、常用指令、常見問題 |
 | [`docs/local-mode.md`](./docs/local-mode.md) | 本機模式：安裝、`.env`、切回 Gemini、速度與品質、重錄回放檔 |
 | [`docs/desktop-launcher.md`](./docs/desktop-launcher.md) | 桌面啟動器 A（「出題系統」圖示） |
+| [`docs/demo-script.md`](./docs/demo-script.md) | 現場操作腳本：順序、等待時間講什麼、退路 |
 | [`docs/desktop-app-design.md`](./docs/desktop-app-design.md) | Electron 桌面版 B1 的設計與驗收步驟 |
 | [`docs/llm.md`](./docs/llm.md) | LLM 轉接層、模型設定、cassette |
 | [`docs/retrieval.md`](./docs/retrieval.md) | hybrid 檢索與自然語言查題 |
