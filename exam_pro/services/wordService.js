@@ -175,6 +175,24 @@ function answerHeading(n, retrain) {
 }
 
 /**
+ * 題目區一題開頭的題號（純函式）：「1. 」。
+ * @param {number} n 題號（1 起）
+ * @returns {string}
+ */
+function questionNumber(n) {
+    return `${n}. `;
+}
+
+/**
+ * 接在題目敘述後面的題型與難度（純函式）：「 [單選] (難度: ★★★)」。
+ * @param {{question_type:string, difficulty:number}} q
+ * @returns {string}
+ */
+function questionTags(q) {
+    return ` [${q.question_type}] (難度: ${'★'.repeat(Number(q.difficulty) || 0)})`;
+}
+
+/**
  * @param {string} paperTitle
  * @param {string} studentName
  * @param {Array<object>} sortedQuestions
@@ -198,9 +216,11 @@ exports.generateExamPaperDocx = async (paperTitle, studentName, sortedQuestions,
     for (let i = 0; i < sortedQuestions.length; i++) {
         const q = sortedQuestions[i];
 
+        // 一題的順序：題號 → 題目敘述 → [題型] (難度)。題型與難度接在敘述同一段的最後面（Owner 2026-10-05）。
         const paragraphComponents = [
-            new TextRun({ text: `第 ${i + 1} 題. [${q.question_type}] (難度: ${'★'.repeat(q.difficulty)})\n`, bold: true, color: "2B6CB0" }),
-            ...buildParagraphComponents(q.question_text)
+            new TextRun({ text: questionNumber(i + 1), bold: true, color: "2B6CB0" }),
+            ...buildParagraphComponents(q.question_text),
+            new TextRun({ text: questionTags(q), bold: true, color: "2B6CB0" })
         ];
 
         childrenElements.push(new Paragraph({ children: paragraphComponents }));
@@ -275,3 +295,6 @@ exports.parseEdition = parseEdition;
 // 〔retrain PR-3〕重練題的標示
 exports.RETRAIN_MARK = RETRAIN_MARK;
 exports.answerHeading = answerHeading;
+// 題目區一題的題號與題型難度標籤
+exports.questionNumber = questionNumber;
+exports.questionTags = questionTags;
