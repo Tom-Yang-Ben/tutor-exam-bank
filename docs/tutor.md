@@ -2,8 +2,8 @@
 
 > 產出者：WS-E（階段 5，分支 `stage5/ws-e`）。缺口 G06、G07、G08；需求 DEC-018（待 Owner 簽核）。
 > 介面以 `docs/interfaces-stage5.md` 第 4.5、5.1、5.2 條為準；決策見
-> [ADR-012](../engineering_docs/03_architecture/adr/ADR-012-tutor-code-execution-spoken-text.md)（家教獨立於助教、code execution 驗算、以口語版為講法依據）與
-> [ADR-013](../engineering_docs/03_architecture/adr/ADR-013-push-to-talk-teacher-confirm.md)（按住說話、老師確認才送出、音訊不落地）。
+> ADR-012（家教獨立於助教、code execution 驗算、以口語版為講法依據）與
+> ADR-013（按住說話、老師確認才送出、音訊不落地）。
 > **本檔所有成本數字都是依 `config/pricing.js` 估算，沒有實際呼叫過 Gemini**（開發環境沒有金鑰，CI 也不打網路）。
 
 ---

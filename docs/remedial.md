@@ -3,7 +3,7 @@
 > 產出者：WS-D（階段 5，分支 `stage5/ws-d`）。缺口 G04、G10；需求 DEC-016（待 Owner 簽核）。
 > 介面以 `docs/interfaces-stage5.md` 第 4.4 條為準（凍結）；本檔寫的是實作的選題規則、設計取捨與給老師的操作說明，
 > 整合階段據此回填 api_spec、openapi、srs 等共用文件（契約第 1.7 條）。
-> 工程取捨的決策紀錄：[ADR-014](../engineering_docs/03_architecture/adr/ADR-014-remedial-paper-wilson-quota.md)。
+> 工程取捨的決策紀錄：ADR-014。
 
 ---
 

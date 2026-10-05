@@ -87,4 +87,4 @@ SELECT COALESCE(SUM(cost_usd),0) FROM job_events WHERE created_at >= date_trunc(
 | :--- | :--- |
 | 上游需求 | DEC-005、FR-001、FR-011、NFR-005（租約認領、斷點續跑、退避重試） |
 | 對應模組 | `exam_pro/workers/jobRunner.js`、`exam_pro/pipeline/stateMachine.js`、`exam_pro/scripts/report_jobs.js` |
-| 下游文件 | [../05_qa/qa_tracker.md](../05_qa/qa_tracker.md)（TC-001-*）；事故覆盤紀錄：尚無事故（發生時於此登錄） |
+| 下游文件 | `qa_tracker.md`（內部工程文件，未隨 repo 公開）（TC-001-*）；事故覆盤紀錄：尚無事故（發生時於此登錄） |

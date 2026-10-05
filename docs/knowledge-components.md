@@ -3,7 +3,7 @@
 > 版本 v1.0 | 2026-09-24 | 分支 `stage5/ws-c` | 對應：缺口 G02、DEC-015、ADR-011、`docs/interfaces-stage5.md` 第 2、3.4、3.5、4.3 條
 > 本檔是知識點系統（程式）的權威文件：資料語意、載入規則、四支 API、自動標註、前端與老師的操作說明。
 > 知識點的**內容**（`config/kc/<科目>.json`）由 KC 內容組產出，不在本分支；本分支的測試一律用 `exam_pro/test/fixtures/kc/` 的小型 fixture。
-> 共用文件（`engineering_docs/**` 的 api_spec／openapi／db_design／srs、README、HANDOFF、roadmap）由整合階段依本檔回填（第 1.7 條）。
+> 共用文件（內部工程文件的 api_spec／openapi／db_design／srs、README、HANDOFF、roadmap）由整合階段依本檔回填（第 1.7 條）。
 
 ## 1. 一句話
 
