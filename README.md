@@ -6,7 +6,11 @@
 
 AI 步驟預設全部在本機執行（Ollama 與 PaddleOCR），不連外、不需要 API 金鑰；拆題與問答可逐次改用 Gemini。
 
-![操作介面](./screenshots/operation-page.png)
+| 建立題目與考卷 PDF 匯入 | 智慧組卷：依學生與章節抽題，確認前可換題 |
+|---|---|
+| ![建立題目](./screenshots/create-question.png) | ![智慧組卷](./screenshots/smart-paper.png) |
+| **匯出的 Word 考卷：公式是可編輯的原生方程式** | **學生面板的弱點分頁** |
+| ![Word 考卷](./screenshots/exam-paper-word.png) | ![學生弱點分析](./screenshots/student-weakness.png) |
 
 ## 目錄
 
@@ -185,7 +189,7 @@ tutor-exam-bank/
 ## 授權與著作權
 
 - **程式碼保留所有權利**（[`LICENSE`](./LICENSE)）：可在 GitHub 上瀏覽與做技術評估；未經授權不得執行、複製、修改、散布，也不得納入資料集或用於訓練模型。2026-08-24 之前的歷史版本曾以 Apache-2.0 釋出，該授權僅適用於那些版本。
-- **本 repo 不含題庫資料**：沒有考卷、試題或掃描檔。示範題、評測用的 fixture 與 golden 均為作者自行編寫。
+- **本 repo 不含題庫資料**：沒有題庫匯出檔、考卷 PDF 或掃描檔。示範題、評測用的 fixture 與 golden 均為作者自行編寫；`screenshots/` 的畫面截圖裡出現的題目取自學校段考試題。
 - **匯入題目的著作權屬原著作權人**：本系統僅用於管理使用者合法持有或有權使用的題目（[`NOTICE`](./NOTICE)）。
 - **安全**：後端預設只接受本機連線；`API_KEY` 會注入前端頁面，不能作為存取控制。對外部署的要求見 [`exam_pro/README.md`](./exam_pro/README.md#安全)。
 
