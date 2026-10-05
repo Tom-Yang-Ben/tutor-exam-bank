@@ -119,7 +119,7 @@
 
 ## 6. L4：eval、CI、腳本、文件
 
-**檔案**：`.github/workflows/ci.yml`、`exam_pro/eval/**`（`lib/pipelineDriver.js` 除外，見第 4 條第 5 點）、`exam_pro/scripts/record_*.js`、`exam_pro/scripts/windows/*.bat`（新）、`exam_pro/.env.example`、`exam_pro/package.json` 的 scripts、`docs/**`（本檔第 0～9 條除外）、`engineering_docs/**`、`README.md`、`exam_pro/README.md`。
+**檔案**：`.github/workflows/ci.yml`、`exam_pro/eval/**`（`lib/pipelineDriver.js` 除外，見第 4 條第 5 點）、`exam_pro/scripts/record_*.js`、`exam_pro/scripts/windows/*.bat`（新）、`exam_pro/.env.example`、`exam_pro/package.json` 的 scripts、`docs/**`（本檔第 0～9 條除外）、內部工程文件、`README.md`、`exam_pro/README.md`。
 
 1. `ci.yml`：`MODEL_EXTRACT`、`MODEL_VERIFY`、`EMBED_MODEL` 改成第 2 條的本機預設；CI 仍是 replay＋fixture，不裝 Ollama、不裝 Python。
 2. `eval/tools/rerecord_all.js`：
@@ -134,7 +134,7 @@
    - `switch_to_gemini.bat`／`switch_to_local.bat` **不做**（改 `.env` 由 Owner 自己來；文件寫清楚要改哪幾行）。
 5. 文件：
    - 本檔第 10 條以後補「使用說明」：安裝步驟、`.env` 範例、切回 Gemini 的方法、預期速度與品質、疑難排解。
-   - `engineering_docs` 新增 ADR-017（本機優先推論）。
+   - 內部工程文件新增 ADR-017（本機優先推論）。
    - `docs/HANDOFF.md`、`deployment_and_operations.md` 的上線步驟：換 embedding 模型後要在本機 `embed:backfill` 全部題目、再 `search:reindex`（免費但慢）。
    - `.env.example` 補齊第 2 條全部變數。
 
@@ -1403,7 +1403,7 @@ C-f 的細節：
 
 #### 2. O-3：ADR-017 改寫為 OCR 為主（Owner 第五輪 O-3 核准，選 2）
 
-- `engineering_docs/03_architecture/adr/ADR-017-local-first-inference.md` 升 v1.1：本機拆題＝PaddleOCR＋文字模型整理（`extract_ocr`），看圖模型只在 `cross` 模式；新增「選項四：OCR 為主」與 **§3.1 定案條件**。**狀態維持「提議中／待數據定案」**。原文全部保留，改寫處就地加〔修訂 2026-09-27〕。
+- ADR-017（內部工程文件）升 v1.1：本機拆題＝PaddleOCR＋文字模型整理（`extract_ocr`），看圖模型只在 `cross` 模式；新增「選項四：OCR 為主」與 **§3.1 定案條件**。**狀態維持「提議中／待數據定案」**。原文全部保留，改寫處就地加〔修訂 2026-09-27〕。
 - 定案條件（摘要，全文在 ADR §3.1）：① 以本機模型、`ocr` 模式重錄 classify／nlq／variant／pipeline＋e2e，五個 eval 的分數與門檻對照；② 實際上傳幾份真卷（建議至少 3 份，份數由 Owner 定）後的每卷拆題時間（`perf:local`）、OCR 版面配圖統計（`report:jobs`）、複核時要改的題數比例與每題時間。數字齊了由 Owner 決定接受、回到 `cross`，或另開 ADR。
 - `engineering_tracker.md` §3 的 ADR 索引就地加註。
 

@@ -143,7 +143,7 @@ describe('範本與文件（DA-11＝1：預設只聽本機；要區網存取時�
     });
 
     test('deployment_and_operations.md：環境變數表有 HOST；對外部署前置條件提到 HOST', () => {
-        const text = read('engineering_docs/06_ops/deployment_and_operations.md');
+        const text = read('docs/ops/deployment_and_operations.md');
         assert.match(text, /\| `HOST`[^\n]*127\.0\.0\.1/);
         const i = text.indexOf('### 4.1 對外部署前置條件');
         assert.ok(i >= 0);

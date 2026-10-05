@@ -687,7 +687,7 @@ function planResumeChunks(pageCount, chunkPages, checkpoints) {
 /** 〔dec/r7-checkpoints-fix〕planResumeChunks 回 inconsistent 時 jobs.error 的那句話（不自動重拆、請人處理）。 */
 const EXTRACT_CHECKPOINT_INCONSISTENT_MSG =
     '拆題檢查點對不上：已拆完的塊不是從第 1 頁起連續的一串（正常流程不會發生）。為了不讓題號衝突或建出重複的題，' +
-    '沒有自動接著拆，按重試也會停在這裡。處理方式見 engineering_docs/06_ops/runbook-job-stuck.md 的「拆題檢查點對不上」。';
+    '沒有自動接著拆，按重試也會停在這裡。處理方式見 docs/ops/runbook-job-stuck.md 的「拆題檢查點對不上」。';
 
 /**
  * 供應商錯誤的退避毫秒數（第 2.3 條：睡眠由 runner 做，狀態機只計數）。

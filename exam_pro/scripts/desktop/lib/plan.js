@@ -40,7 +40,7 @@
 const EXCLUDED_PORTS_CMD = 'netsh interface ipv4 show excludedportrange protocol=tcp';
 
 /** 升級流程的出處（提示 migration 沒套時引用） */
-const UPGRADE_DOC = 'engineering_docs/06_ops/deployment_and_operations.md §3.3、§3.6';
+const UPGRADE_DOC = 'docs/ops/deployment_and_operations.md §3.3、§3.6';
 const LAUNCHER_DOC = 'docs/desktop-launcher.md';
 
 /**
