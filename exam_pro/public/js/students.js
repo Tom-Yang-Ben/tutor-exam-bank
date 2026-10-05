@@ -1862,6 +1862,32 @@ export function summaryStats(papers, weakness) {
     };
 }
 
+/** 試卷列表預設列出最近幾張（待批改的不受這個數字限制，一律列出） */
+export const RECENT_PAPERS = 5;
+
+/**
+ * 試卷列表哪幾張預設顯示（純函式）：還沒批完的一律顯示，另外加上最近的 keep 張；其餘收在「顯示其餘」後面。
+ * 順序不變（API 已經是最近出的在最上面）。
+ * @param {Array<{total:number, graded:number}>} papers
+ * @param {number} [keep]
+ * @returns {boolean[]} 與 papers 等長；true＝預設顯示
+ */
+export function paperVisibility(papers, keep = RECENT_PAPERS) {
+    return (Array.isArray(papers) ? papers : []).map((p, i) => i < keep || Number(p.graded) < Number(p.total));
+}
+
+// students.js → remedial.js：把補救卷那一塊的學生（與科目）帶成學生面板目前選的。remedial.js 有草稿在編時不理。
+export const REMEDIAL_PREFILL_EVENT = 'examapp:remedial-prefill';
+
+/** 通知補救卷那一塊目前看的是哪位學生（FEATURE_REMEDIAL 關閉時不發）。 */
+function announceRemedialPrefill() {
+    const studentId = currentStudentId();
+    if (studentId === null || !featureOn('remedial')) return;
+    document.dispatchEvent(new CustomEvent(REMEDIAL_PREFILL_EVENT, {
+        detail: { student_id: studentId, subject: (document.getElementById('stuSubject') || {}).value || '' }
+    }));
+}
+
 /** 「重練與補救」分頁有沒有東西可放（兩個旗標都關就不畫這個分頁）。 */
 function practiceEnabled() { return retrainEnabled() || featureOn('remedial'); }
 
@@ -1891,6 +1917,7 @@ function setTab(tab) {
         const node = document.getElementById(id);
         if (node) node.style.display = tab === 'practice' ? '' : 'none';
     }
+    if (tab === 'practice') announceRemedialPrefill();
 }
 
 /** 摘要列的一格。tab 有給就整格可按，按了切到那個分頁。 */
@@ -2045,16 +2072,44 @@ async function loadStudentView(app) {
     } else {
         const list = el('div', 'space-y-2', { id: 'stuPaperList' });
         const onGraded = () => loadStudentView(app).catch(() => {});
-        for (const p of papers) list.appendChild(paperCard(app, p, onGraded));
+        const visible = paperVisibility(papers);
+        papers.forEach((p, i) => {
+            const card = paperCard(app, p, onGraded);
+            if (!visible[i]) { card.classList.add('hidden'); card.setAttribute('data-paper-older', '1'); }
+            list.appendChild(card);
+        });
         papersBox.appendChild(list);
+        const older = visible.filter(v => !v).length;
+        if (older > 0) {
+            const more = el('button', 'mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500 transition-colors hover:bg-slate-50 cursor-pointer', {
+                type: 'button', id: 'stuPaperMore', textContent: `顯示其餘 ${older} 張（都已批完）`
+            });
+            more.addEventListener('click', showOlderPapers);
+            papersBox.appendChild(more);
+        }
     }
 
     // ── 弱點面板 ──
     const weakness = await weaknessRes.json();
     renderSummary(studentId, papers, weakness, { subject, days });
+    if (activeTab === 'practice') announceRemedialPrefill();
     const grid = el('div', 'grid gap-4 lg:grid-cols-3');
     for (const spec of TABLE_SPECS) grid.appendChild(weaknessTable(app, spec, weakness[spec.key]));
-    weaknessBox.append(el('p', 'eyebrow mb-2 text-rose-400', { textContent: '弱點（錯誤率由高到低）' }), grid);
+    const weakHead = el('div', 'mb-2 flex flex-wrap items-center justify-between gap-2');
+    weakHead.appendChild(el('p', 'eyebrow text-rose-400', { textContent: '弱點（錯誤率由高到低）' }));
+    if (featureOn('remedial')) {
+        // 補救卷由伺服器依這位學生的批改結果自己挑最弱的單位，所以入口是「這位學生」，不是表裡的某一列
+        const toRemedial = el('button', 'text-xs px-3 py-1.5 rounded-xl border border-rose-200 bg-white font-bold text-rose-700 transition-colors hover:bg-rose-50 cursor-pointer', {
+            type: 'button', id: 'stuToRemedial', textContent: '依弱點出補救卷 →'
+        });
+        toRemedial.addEventListener('click', () => {
+            setTab('practice');
+            const node = document.getElementById('remedial');
+            if (node && typeof node.scrollIntoView === 'function') node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+        weakHead.appendChild(toRemedial);
+    }
+    weaknessBox.append(weakHead, grid);
     // 〔stage5 WS-A〕錯因分布（第 4.1 條第 3、7 項）。舊後端沒有這個鍵時不畫，不假裝是空的。
     if (Array.isArray(weakness.by_error_type)) weaknessBox.appendChild(errorTypeTable(weakness.by_error_type));
 
@@ -2084,6 +2139,13 @@ async function loadStudentView(app) {
     }
 }
 
+/** 把收起來的舊試卷全部列出來，並拿掉「顯示其餘」按鈕。 */
+function showOlderPapers() {
+    for (const card of document.querySelectorAll('#stuPaperList [data-paper-older]')) card.classList.remove('hidden');
+    const more = document.getElementById('stuPaperMore');
+    if (more) more.remove();
+}
+
 /**
  * 展開指定的試卷卡片並捲到它。
  * @param {number} paperId
@@ -2093,6 +2155,7 @@ function openPaper(paperId) {
     const card = document.querySelector(`#stuPaperList [data-paper-id="${paperId}"]`);
     if (!card || typeof card.__open !== 'function') return false;
     setTab('grade');
+    if (card.classList.contains('hidden')) showOlderPapers();
     card.__open();
     card.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return true;

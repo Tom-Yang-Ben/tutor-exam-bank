@@ -166,3 +166,71 @@ describe('學生視圖：摘要列與分頁（?mock=1）', () => {
         assert.equal(html.split(`new CustomEvent('${STUDENT_TAB_EVENT}'`).length - 1, 2, 'routeFromHash 與 showSection 各發一次');
     });
 });
+
+describe('paperVisibility（純函式）', () => {
+    test('最近 5 張與所有待批改的顯示，其餘收起；順序不變', async () => {
+        const { paperVisibility, RECENT_PAPERS } = await loadFresh('students.js');
+        assert.equal(RECENT_PAPERS, 5);
+        const done = { total: 3, graded: 3 };
+        const pending = { total: 3, graded: 1 };
+        assert.deepEqual(paperVisibility([done, done, done, done, done, done, pending, done]),
+            [true, true, true, true, true, false, true, false]);
+        assert.deepEqual(paperVisibility([done, done]), [true, true]);
+        assert.deepEqual(paperVisibility(undefined), []);
+    });
+});
+
+describe('學生視圖：試卷列表收合與補救卷入口', () => {
+    const json = body => Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+    // 8 張卷（最近的在最上面）：第 7 張（#2）還沒批完，其餘都批完
+    const PAPERS = Array.from({ length: 8 }, (_, i) => ({
+        paper_id: 8 - i, title: `卷 ${8 - i}`, created_at: `2026-08-${String(20 - i).padStart(2, '0')}T00:00:00.000Z`,
+        total: 3, graded: 8 - i === 2 ? 1 : 3
+    }));
+    const WEAKNESS = { by_chapter: [], by_type: [], by_difficulty: [], trend_weekly: [], recent_wrong: [] };
+
+    async function mountReal(meta = {}) {
+        const events = [];
+        const examApp = fakeBridge({
+            apiFetch(url) {
+                if (url === '/api/students') return json({ items: [{ id: 3, name: '甲', papers: 8, graded_ratio: 0.9 }] });
+                if (url === '/api/students/3/papers') return json({ items: PAPERS });
+                if (url.startsWith('/api/students/3/weakness')) return json(WEAKNESS);
+                return Promise.resolve(new Response(JSON.stringify({ message: 'no' }), { status: 404 }));
+            }
+        });
+        env = install({ meta: { ...BASE_META, ...meta }, sections: ['students', 'retrain', 'remedial'], examApp });
+        const mod = await loadFresh('students.js');
+        env.document.addEventListener(mod.REMEDIAL_PREFILL_EVENT, e => events.push(e.detail));
+        await mod.init();
+        await flush();
+        await flush();
+        return { mod, events, $: id => env.document.getElementById(id) };
+    }
+    const shownIds = $ => $('stuPaperList').children.filter(c => !c.classList.contains('hidden')).map(c => c.getAttribute('data-paper-id'));
+
+    test('預設列出最近 5 張與待批改的那一張；按「顯示其餘」全部列出、按鈕消失', async () => {
+        const { $ } = await mountReal();
+        assert.equal($('stuPaperList').children.length, 8, '卡片都在，只是收起');
+        assert.deepEqual(shownIds($), ['8', '7', '6', '5', '4', '2']);
+        assert.equal($('stuPaperMore').textContent, '顯示其餘 2 張（都已批完）');
+        $('stuPaperMore').click();
+        assert.equal(shownIds($).length, 8);
+        assert.equal($('stuPaperMore'), null);
+    });
+
+    test('FEATURE_REMEDIAL 關閉：弱點分頁沒有補救卷入口，也不發 prefill 事件', async () => {
+        const { $, events } = await mountReal();
+        assert.equal($('stuToRemedial'), null);
+        assert.deepEqual(events, []);
+    });
+
+    test('FEATURE_REMEDIAL 開啟：按「依弱點出補救卷」切到重練與補救分頁，並把學生與科目帶給補救卷那一塊', async () => {
+        const { $, events } = await mountReal({ 'feature-remedial': 'true' });
+        assert.deepEqual(events, [], '還沒進那個分頁之前不發');
+        $('stuToRemedial').click();
+        assert.equal($('stuTabs').querySelector('button[data-tab="practice"]').getAttribute('aria-selected'), 'true');
+        assert.equal($('remedial').style.display, '');
+        assert.deepEqual(events, [{ student_id: 3, subject: '' }]);
+    });
+});
