@@ -71,7 +71,7 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 | 2 | `npm run migrate` | 對 `DATABASE_URL` 套用 `migrations/0001`–`0009`〔修訂 2026-09-15e〕〔修訂 2026-09-15f〕、`0010`–`0012`〔修訂 2026-09-24〕、`0013`–`0018`〔整合 2026-09-26〕（含錯題重練的 0016～0018 第一次套用時照 §3.6 做前後快照比對）、`0019`〔OCR 為主 2026-09-26〕（複核原因加 `ocr_only`，只重建一條 CHECK；**要開 `LOCAL_EXTRACT_MODE=ocr` 之前一定要先套**，否則工作佇列暫停、不認領任何工作，伺服器視窗印一次「請在 exam_pro 執行 npm run migrate」，套完自己恢復〔審查 2026-09-26〕）；只前進不 down，重跑為 no-op（依檔名排序逐支判斷，編號缺口不影響套用） |
 | 3 | `npm start`（開發改 `npm run dev`） | 啟動後開 `http://localhost:3000` |
 
-〔修訂 2026-09-27 桌面啟動器〕Windows 上也可以點桌面的「出題系統」圖示：第 1、3 步由啟動器代做（需要時先開 Docker Desktop），第 2 步**不代做**——有沒套的 migration 只在啟動畫面提醒，升級仍照本節與 §3.6 手動做；關閉用「關閉出題系統」圖示（背景工作先收尾）。見 [`docs/desktop-launcher.md`](../../docs/desktop-launcher.md)。
+〔修訂 2026-09-27 桌面啟動器〕Windows 上也可以點桌面的「出題系統」圖示：第 1、3 步由啟動器代做（需要時先開 Docker Desktop），第 2 步**不代做**——有沒套的 migration 只在啟動畫面提醒，升級仍照本節與 §3.6 手動做；關閉用「關閉出題系統」圖示（背景工作先收尾）。見 [`docs/desktop-launcher.md`](../desktop-launcher.md)。
 
 〔修訂 2026-09-27 桌面啟動器審查〕第 3 步的 `npm start` 聽不了連接埠時（`EADDRINUSE`＝被別的程式佔用；`EACCES`＝沒有權限，Windows 上多半是埠落在 Hyper-V／WSL／Docker 保留的範圍，用 `netsh interface ipv4 show excludedportrange protocol=tcp` 查），會印出錯誤碼與處理方式並以結束碼 1 結束。原本會照印「已成功安全啟動」、不聽任何埠卻繼續跑背景拆題（Express 5 把 listen 錯誤交給 callback）；~~待 Owner 確認~~〔Owner 2026-09-27 第六輪 DL-5 選 1〕保留（`docs/desktop-launcher.md` 第 8 節 DL-5）。〔修訂 2026-09-27 DA-11〕後端改聽 `HOST`（預設 `127.0.0.1`），啟動訊息多一段括號說明實際聽的位址。
 
@@ -159,7 +159,7 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 
 ### 3.5 本機模式部署與上線〔修訂 2026-09-25 本機模式〕
 
-適用於把 `local/base`（本機模式，ADR-017）併入後，第一次在 Owner 的電腦上改用本機推論。使用說明、`.env` 範例、速度與品質、疑難排解的權威版本在 [`docs/local-mode.md`](../../docs/local-mode.md) 第 10 條；本節只列上線順序。全程**不花錢**；只有第 1 步要連網下載。
+適用於把 `local/base`（本機模式，ADR-017）併入後，第一次在 Owner 的電腦上改用本機推論。使用說明、`.env` 範例、速度與品質、疑難排解的權威版本在 [`docs/local-mode.md`](../local-mode.md) 第 10 條；本節只列上線順序。全程**不花錢**；只有第 1 步要連網下載。
 
 | # | 步驟 | 指令 | 確認什麼 |
 | :--- | :--- | :--- | :--- |
@@ -178,7 +178,7 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 
 ### 3.6 錯題重練上線（migrations 0016～0018）〔整合 2026-09-26〕
 
-適用於第一次把含錯題重練的版本（`dec/integration-all` 之後）升級到本機正式庫。權威說明在 [`docs/retrain-and-review.md`](../../docs/retrain-and-review.md) 第 5.6.6 節「升級步驟」（遷移驗證沿用第 3.6、5.6.1 節）；本節只列順序。全程**不呼叫 LLM、不花錢**。
+適用於第一次把含錯題重練的版本（`dec/integration-all` 之後）升級到本機正式庫。權威說明在 [`docs/retrain-and-review.md`](../retrain-and-review.md) 第 5.6.6 節「升級步驟」（遷移驗證沿用第 3.6、5.6.1 節）；本節只列順序。全程**不呼叫 LLM、不花錢**。
 
 **新程式即使 `FEATURE_RETRAIN` 關閉，也必須套到 0018。** 拆表（0016）是核心資料層、不受旗標管；批改（`PATCH /api/papers/:id/results` 先鎖 `retrain_items` 再重算）、刪卷、刪學生、合併學生都會讀寫 `retrain_items` 與 `retired_by_unflag`，資料庫沒套到 0018 就會 500。所以不能只拉程式不 migrate，也不能讓服務在舊 schema 上跑新程式（`npm run dev` 的 nodemon 一拉下程式就重啟，§3.3）。
 
@@ -249,4 +249,4 @@ CI 零金鑰零網路（NFR-003）：`LLM_MODE=replay` 讀 `eval/cassettes/`、`
 ## 7. 追溯與相關文件
 
 - 上游：DEC-004（PG 切換）、DEC-008／NFR-002（成本受控）、DEC-009（資料留本地）、ADR-017 與 `docs/local-mode.md`（本機優先推論）〔修訂 2026-09-25 本機模式〕、NFR-001（安全邊界）、NFR-004（品質門檻）、NFR-005（可靠性）、NFR-006（migrations 只增不改）；NFR-007（階段 5 成本）、NFR-008（錄音不落地）〔修訂 2026-09-24〕；sad §7 部署視圖；階段 5 各功能文件（`docs/grading-and-profile.md`、`chemistry.md`、`knowledge-components.md`、`remedial.md`、`tutor.md`）〔修訂 2026-09-24〕
-- 下游：[runbook-job-stuck.md](./runbook-job-stuck.md)、[runbook-llm-cost-quota.md](./runbook-llm-cost-quota.md)、[runbook-pg-down.md](./runbook-pg-down.md)、[runbook-eval-threshold-fail.md](./runbook-eval-threshold-fail.md)；部署與驗收證據登錄於 [`../05_qa/qa_tracker.md`](../05_qa/qa_tracker.md) ②執行證據
+- 下游：[runbook-job-stuck.md](./runbook-job-stuck.md)、[runbook-llm-cost-quota.md](./runbook-llm-cost-quota.md)、[runbook-pg-down.md](./runbook-pg-down.md)、[runbook-eval-threshold-fail.md](./runbook-eval-threshold-fail.md)；部署與驗收證據登錄於 `qa_tracker.md`（內部工程文件，未隨 repo 公開） ②執行證據

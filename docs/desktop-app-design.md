@@ -98,7 +98,7 @@ Owner 的電腦：Windows 11 筆電，i5-8265U 等級、只有內顯、16 GB 記
 另外幾件相關的現況：
 
 - PaddleOCR 的 Python 環境在 `exam_pro/ocr_service/.venv`，由 `setup_local_ai.bat` 建立。
-- 每天 02:00 由 Windows 工作排程器的「題庫每日備份」跑 `備份資料庫.bat`，借用容器裡的 `pg_dump`（`engineering_docs/06_ops/deployment_and_operations.md` §6）。
+- 每天 02:00 由 Windows 工作排程器的「題庫每日備份」跑 `備份資料庫.bat`，借用容器裡的 `pg_dump`（`docs/ops/deployment_and_operations.md` §6）。
 - 這台電腦**另外有一個原生的 PostgreSQL 17 服務占著 5432**（`exam_pro/docker-compose.yml` 檔頭的註解）。但 `scripts/backup.js` 的檔頭記載 `where pg_dump` 沒有結果，所以 PG17 的工具**不在 `PATH` 裡**；它的 `bin` 資料夾在哪裡〔要實測〕。
 - 啟動用的 `.bat`（`exam_pro\啟動資料庫.bat`、`備份資料庫.bat` 等）都在版控裡。
 - Windows 11 的 Smart App Control（SAC）是開、評估還是關〔要實測：「Windows 安全性 → 應用程式與瀏覽器控制 → Smart App Control」〕。它開著時，本機 build 的未簽章 exe 會被擋（DA-9、R-5）。〔2026-09-27〕DA-9 定案選 1（不簽章），前提是 SAC 關閉；`wsl_memory_check.bat` 會一併讀出 SAC 的狀態（第 10 節），Owner 看畫面或 log 確認。
@@ -523,7 +523,7 @@ pg_restore -h 127.0.0.1 -p 5452 -U exam --no-owner --no-acl -d tutor_exam_bank <
 
 ### 5.3 升級時的固定流程（U1、U2 都一樣）
 
-這是把現在手動的升級步驟（`engineering_docs/06_ops/deployment_and_operations.md` §3.6：停服務 → 備份 → 快照 → migrate → 快照 → 比對，回 0 才啟動）自動化。A 的啟動器刻意只偵測、不自動升級（`d730422` 的 `utils/migrationStatus.js` 檔頭）；B 照這次的需求改成自動，但任何一步不過就停下，不自動還原。偵測待套的 migration 直接用 A 的 `compareMigrations()`。
+這是把現在手動的升級步驟（`docs/ops/deployment_and_operations.md` §3.6：停服務 → 備份 → 快照 → migrate → 快照 → 比對，回 0 才啟動）自動化。A 的啟動器刻意只偵測、不自動升級（`d730422` 的 `utils/migrationStatus.js` 檔頭）；B 照這次的需求改成自動，但任何一步不過就停下，不自動還原。偵測待套的 migration 直接用 A 的 `compareMigrations()`。
 
 1. 偵測到版本改變，**或者**有待套的 migration，就進入升級模式；此時視窗只顯示進度，不開放操作。
 2. **自動備份**：跑第 19 項的 `runBackup()`，失敗就停下，不往下做。

@@ -4,7 +4,7 @@
 // 兩個地方共用同一套比法，不各寫一份：
 //   1. GET /api/health（controllers/healthController.js）回報 migration 版本；
 //   2. 桌面啟動器（scripts/desktop/launch.js）開機前檢查有沒有沒套的 migration——**只提示、不自動升級**
-//      （升級要走「停服務 → 備份 → migrate → 快照比對」，engineering_docs/06_ops/deployment_and_operations.md §3.6）。
+//      （升級要走「停服務 → 備份 → migrate → 快照比對」，docs/ops/deployment_and_operations.md §3.6）。
 //
 // 規則與 migrate.js 相同：migrations/*.sql 依檔名排序；schema_migrations.version 存的就是檔名。
 // 本檔只讀，不寫資料庫，也不建 schema_migrations（那是 migrate.js 的事）。

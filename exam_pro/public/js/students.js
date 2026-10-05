@@ -22,6 +22,9 @@
 //   4. **只呼叫、不改後端**。五支 API 的形狀是凍結的；這裡對 400／404 的訊息
 //      一律原樣顯示（`{ message }`），不自己翻譯，否則老師看到的跟 log 裡的對不起來。
 //
+// 版面：頂端一排摘要（待批改、錯誤率、到期重練、最近出卷），下面四個分頁——批改、弱點、重練與補救、報告
+// （見檔內「分頁與摘要」一段）。「學科」「近 N 天」只在它們有作用的分頁出現。
+//
 // 三個刻意的顯示決定（都來自第 1.5 條的語意，不是版面偏好）：
 //
 //   - `wrong_rate === null`（`graded = 0`）顯示「—」而不是 0%。沒批改不等於全對。
@@ -114,7 +117,9 @@ const FEATURE_META = {
     similar: 'meta[name="feature-similar"]',
     variants: 'meta[name="feature-variants"]',
     // 〔retrain PR-4〕批改卡的「要重練」勾選框與徽章、學生清單的到期徽章（docs/retrain-and-review.md 第 5.3 節）
-    retrain: 'meta[name="feature-retrain"]'
+    retrain: 'meta[name="feature-retrain"]',
+    // 「重練與補救」分頁要不要畫（補救卷那一塊由 remedial.js 自己渲染，本檔只看旗標）
+    remedial: 'meta[name="feature-remedial"]'
 };
 
 /**
@@ -1267,14 +1272,22 @@ async function refreshRetrainBadges(app) {
     const sel = document.getElementById('stuStudent');
     if (!sel) return;
     let body;
+    // 拿不到 summary 時，摘要的「到期重練」從「…」改成「—」（不讓它一直像在載入）
+    const noDue = () => { dueFailed = true; const t = document.getElementById('stuSumDue'); if (t && dueByStudent === null) t.textContent = '—'; };
     try {
         const res = await request(app, '/api/retrain/summary');
-        if (!res.ok) return;
+        if (!res.ok) { noDue(); return; }
         body = await res.json();
     } catch {
+        noDue();
         return;
     }
     const dueOf = new Map(((body && body.items) || []).map(r => [String(r.student_id), Number(r.due) || 0]));
+    dueByStudent = dueOf;
+    dueFailed = false;
+    const dueTile = document.getElementById('stuSumDue');
+    const shown = currentStudentId();
+    if (dueTile && shown !== null) dueTile.textContent = dueText(shown);
     for (const o of [...sel.options]) {
         const name = o.getAttribute('data-name');
         if (!name) continue;
@@ -1740,18 +1753,42 @@ function mountStudentsSection(app, section) {
     const manageBtn = el('button', 'text-sm px-4 py-2 rounded-xl border border-slate-200 bg-white font-bold text-slate-600 transition-colors hover:border-amber-200 hover:bg-amber-50 hover:text-amber-700 cursor-pointer', {
         type: 'button', id: 'stuManageBtn', textContent: '⚙ 管理學生'
     });
-    controls.append(studentSel, subjectSel, daysSel, refresh, manageBtn);
+    controls.append(studentSel, refresh, manageBtn);
     head.append(title, controls);
+
+    // 摘要列（選了學生、資料回來才顯示）
+    const summaryBox = el('div', 'hidden mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4', { id: 'stuSummary' });
+
+    // 分頁列
+    const tabBar = el('div', 'mb-4 flex flex-wrap gap-2', { id: 'stuTabs', role: 'tablist', 'aria-label': '學生視圖分頁' });
+    for (const [tab, label] of STUDENT_TABS) {
+        if (tab === 'practice' && !practiceEnabled()) continue;
+        const btn = el('button', 'text-sm px-4 py-2 rounded-xl border font-bold transition-colors cursor-pointer', {
+            type: 'button', role: 'tab', 'data-tab': tab, textContent: label
+        });
+        btn.addEventListener('click', () => setTab(tab));
+        tabBar.appendChild(btn);
+    }
+
+    // 統計範圍：只作用在弱點統計與重練卡，所以只在那兩個分頁出現
+    const filterBar = el('div', 'hidden mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2', { id: 'stuFilters' });
+    filterBar.append(
+        el('p', 'text-xs font-bold text-slate-500', { textContent: '統計範圍' }),
+        subjectSel, daysSel,
+        el('p', 'text-[11px] text-slate-400', { textContent: '只影響弱點統計與重練成效；試卷列表與報告不受影響。' })
+    );
 
     const manageBox = el('div', 'hidden mb-4', { id: 'stuManage' });
 
     const status = el('p', 'rounded-xl border border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-500', {
         id: 'stuStatus', textContent: '載入中…'
     });
-    const papersBox = el('div', 'mt-4', { id: 'stuPapers' });
-    const weaknessBox = el('div', 'mt-6', { id: 'stuWeakness' });
+    const papersBox = el('div', '', { id: 'stuPapers', role: 'tabpanel' });
+    const weaknessBox = el('div', '', { id: 'stuWeakness', role: 'tabpanel' });
+    const reportBox = el('div', '', { id: 'stuReportBox', role: 'tabpanel' });
 
-    section.append(head, manageBox, status, papersBox, weaknessBox);
+    section.append(head, manageBox, summaryBox, tabBar, filterBar, status, papersBox, weaknessBox, reportBox);
+    setTab(activeTab);
 
     manageBtn.addEventListener('click', () => {
         const willOpen = manageBox.classList.contains('hidden');
@@ -1764,6 +1801,172 @@ function mountStudentsSection(app, section) {
     subjectSel.addEventListener('change', reload);
     daysSel.addEventListener('change', reload);
     refresh.addEventListener('click', reload);
+}
+
+// ───────────────────────── 分頁與摘要 ─────────────────────────
+//
+// 學生視圖分成四個分頁：批改（試卷列表）、弱點、重練與補救、報告。
+//   - 「重練與補救」的內容不在 #students 裡：那是 retrain.js、remedial.js 各自的 <section>（#retrain、#remedial）。
+//     本檔只用 style.display 控制它們顯示與否，不動它們的 class（兩支 module 掛載時會整個重設 className）。
+//   - 「學科」「近 N 天」只作用在弱點統計與重練卡（STUDENT_VIEW_EVENT 的 subject、days），所以只在這兩個分頁顯示；
+//     試卷列表不看這兩個條件，報告用自己的期間選單。
+//   - 別的 module 要把老師帶到某個子區塊時發 STUDENT_TAB_EVENT（detail.anchor＝'retrain'｜'remedial'，或 detail.tab），
+//     index.html 的 showSection／routeFromHash 也發同一個事件。
+
+export const STUDENT_TAB_EVENT = 'examapp:student-tab';
+export const STUDENT_TABS = [['grade', '批改'], ['weakness', '弱點'], ['practice', '重練與補救'], ['report', '報告']];
+const FILTER_TABS = ['weakness', 'practice'];
+const PRACTICE_ANCHORS = ['retrain', 'remedial'];
+const TAB_ON = ['border-indigo-200', 'bg-indigo-50', 'text-indigo-700'];
+const TAB_OFF = ['border-slate-200', 'bg-white', 'text-slate-600'];
+
+let activeTab = 'grade';
+// GET /api/retrain/summary 最近一次的結果（student_id 字串 → 到期題數）；摘要的「到期重練」讀它。null＝還沒拿到
+let dueByStudent = null;
+let dueFailed = false;   // 最近一次沒拿到（顯示「—」而不是一直「…」）
+
+/**
+ * 子錨點屬於哪個分頁（純函式）。不是學生視圖裡的子區塊就回 null。
+ * @param {string} anchor 'retrain'、'#remedial'…
+ * @returns {string|null}
+ */
+export function tabForAnchor(anchor) {
+    const a = String(anchor || '').replace(/^#/, '');
+    return PRACTICE_ANCHORS.includes(a) ? 'practice' : null;
+}
+
+/**
+ * 摘要列的數字（純函式）。
+ * 錯誤率由 by_type 加總：每一筆作答恰好落在一個題型，所以加總就是這段期間已批改的全部題數
+ * （跟著面板的學科與天數走）。沒有已批改的題時 wrongRate 是 null（顯示「—」，不是 0%）。
+ * @param {Array<{created_at:string,total:number,graded:number}>} papers GET /api/students/:id/papers 的 items
+ * @param {{by_type?:Array<{graded:number,wrong:number}>}} weakness
+ * @returns {{papers:number, pending:number, graded:number, wrong:number, wrongRate:number|null, lastPaperDate:string|null}}
+ */
+export function summaryStats(papers, weakness) {
+    const list = Array.isArray(papers) ? papers : [];
+    const rows = weakness && Array.isArray(weakness.by_type) ? weakness.by_type : [];
+    const graded = rows.reduce((n, r) => n + (Number(r.graded) || 0), 0);
+    const wrong = rows.reduce((n, r) => n + (Number(r.wrong) || 0), 0);
+    const last = list.reduce((m, p) => {
+        const d = String(p.created_at || '').slice(0, 10);
+        return d > m ? d : m;
+    }, '');
+    return {
+        papers: list.length,
+        pending: list.filter(p => Number(p.graded) < Number(p.total)).length,
+        graded,
+        wrong,
+        wrongRate: graded > 0 ? wrong / graded : null,
+        lastPaperDate: last || null
+    };
+}
+
+/** 試卷列表預設列出最近幾張（待批改的不受這個數字限制，一律列出） */
+export const RECENT_PAPERS = 5;
+
+/**
+ * 試卷列表哪幾張預設顯示（純函式）：還沒批完的一律顯示，另外加上最近的 keep 張；其餘收在「顯示其餘」後面。
+ * 順序不變（API 已經是最近出的在最上面）。
+ * @param {Array<{total:number, graded:number}>} papers
+ * @param {number} [keep]
+ * @returns {boolean[]} 與 papers 等長；true＝預設顯示
+ */
+export function paperVisibility(papers, keep = RECENT_PAPERS) {
+    return (Array.isArray(papers) ? papers : []).map((p, i) => i < keep || Number(p.graded) < Number(p.total));
+}
+
+// students.js → remedial.js：把補救卷那一塊的學生（與科目）帶成學生面板目前選的。remedial.js 有草稿在編時不理。
+export const REMEDIAL_PREFILL_EVENT = 'examapp:remedial-prefill';
+
+/** 通知補救卷那一塊目前看的是哪位學生（FEATURE_REMEDIAL 關閉時不發）。 */
+function announceRemedialPrefill() {
+    const studentId = currentStudentId();
+    if (studentId === null || !featureOn('remedial')) return;
+    document.dispatchEvent(new CustomEvent(REMEDIAL_PREFILL_EVENT, {
+        detail: { student_id: studentId, subject: (document.getElementById('stuSubject') || {}).value || '' }
+    }));
+}
+
+/** 「重練與補救」分頁有沒有東西可放（兩個旗標都關就不畫這個分頁）。 */
+function practiceEnabled() { return retrainEnabled() || featureOn('remedial'); }
+
+/**
+ * 切換分頁。不認得的分頁、或沒畫出來的分頁（旗標關閉）不動。
+ * @param {string} tab
+ */
+function setTab(tab) {
+    const bar = document.getElementById('stuTabs');
+    if (!bar) return;
+    const buttons = [...bar.querySelectorAll('button[data-tab]')];   // NodeList 沒有 some()
+    if (!buttons.some(b => b.getAttribute('data-tab') === tab)) return;
+    activeTab = tab;
+    for (const b of buttons) {
+        const on = b.getAttribute('data-tab') === tab;
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+        b.classList.remove(...(on ? TAB_OFF : TAB_ON));
+        b.classList.add(...(on ? TAB_ON : TAB_OFF));
+    }
+    for (const [id, name] of [['stuPapers', 'grade'], ['stuWeakness', 'weakness'], ['stuReportBox', 'report']]) {
+        const node = document.getElementById(id);
+        if (node) node.classList.toggle('hidden', name !== tab);
+    }
+    const filters = document.getElementById('stuFilters');
+    if (filters) filters.classList.toggle('hidden', !FILTER_TABS.includes(tab));
+    for (const id of PRACTICE_ANCHORS) {
+        const node = document.getElementById(id);
+        if (node) node.style.display = tab === 'practice' ? '' : 'none';
+    }
+    if (tab === 'practice') announceRemedialPrefill();
+}
+
+/** 摘要列的一格。tab 有給就整格可按，按了切到那個分頁。 */
+function summaryTile(label, value, hint, tab) {
+    const tile = el(tab ? 'button' : 'div',
+        `rounded-2xl border border-slate-200 bg-white p-3 text-left${tab ? ' cursor-pointer transition-colors hover:border-indigo-200 hover:bg-indigo-50' : ''}`,
+        tab ? { type: 'button' } : {});
+    tile.append(
+        el('p', 'text-[11px] font-bold text-slate-400', { textContent: label }),
+        el('p', 'mt-0.5 text-xl font-extrabold tracking-tight text-slate-900', { textContent: value }),
+        el('p', 'mt-0.5 text-[11px] text-slate-400', { textContent: hint })
+    );
+    if (tab) tile.addEventListener('click', () => setTab(tab));
+    return tile;
+}
+
+/** 「到期重練」那一格的數字：還沒拿到 summary 時顯示「…」。 */
+function dueText(studentId) {
+    if (dueByStudent === null) return dueFailed ? '—' : '…';
+    return `${dueByStudent.get(String(studentId)) || 0} 題`;
+}
+
+/**
+ * 畫摘要列與「批改」分頁上的待批數。
+ * @param {number} studentId
+ * @param {Array<object>} papers
+ * @param {object} weakness
+ * @param {{subject:string, days:string}} scope 面板目前的統計範圍（寫在錯誤率那一格的說明）
+ */
+function renderSummary(studentId, papers, weakness, scope) {
+    const box = document.getElementById('stuSummary');
+    if (!box) return;
+    box.innerHTML = '';
+    const stats = summaryStats(papers, weakness);
+    box.append(
+        summaryTile('待批改', `${stats.pending} 張`, `共 ${stats.papers} 張試卷`, 'grade'),
+        summaryTile('錯誤率', formatPercent(stats.wrongRate),
+            `${scope.subject || '不分科'}・近 ${scope.days} 天・已批 ${stats.graded} 題`, 'weakness')
+    );
+    if (retrainEnabled()) {
+        const due = summaryTile('到期重練', dueText(studentId), '今天該回測的錯題', 'practice');
+        due.children[1].id = 'stuSumDue';
+        box.appendChild(due);
+    }
+    box.appendChild(summaryTile('最近出卷', stats.lastPaperDate || '—', '最新一張試卷的出卷日'));
+    box.classList.remove('hidden');
+
+    const gradeTab = document.querySelector('#stuTabs button[data-tab="grade"]');
+    if (gradeTab) gradeTab.textContent = stats.pending > 0 ? `批改（待批 ${stats.pending}）` : '批改';
 }
 
 /** @returns {number|null} 目前選到的學生 id */
@@ -1829,8 +2032,12 @@ async function loadStudentView(app) {
     const weaknessBox = document.getElementById('stuWeakness');
     const studentId = currentStudentId();
     if (!papersBox || !weaknessBox) return;
+    const reportBox = document.getElementById('stuReportBox');
+    const summaryBox = document.getElementById('stuSummary');
     papersBox.innerHTML = '';
     weaknessBox.innerHTML = '';
+    if (reportBox) reportBox.innerHTML = '';
+    if (summaryBox) { summaryBox.innerHTML = ''; summaryBox.classList.add('hidden'); }
     // 〔retrain PR-4〕錯題重練卡跟著這裡選的學生走；順便更新學生清單的到期徽章（旗標關閉時不發事件、不打 API）
     if (retrainEnabled()) announceStudentView(app, studentId);
     if (studentId === null) return;
@@ -1865,15 +2072,44 @@ async function loadStudentView(app) {
     } else {
         const list = el('div', 'space-y-2', { id: 'stuPaperList' });
         const onGraded = () => loadStudentView(app).catch(() => {});
-        for (const p of papers) list.appendChild(paperCard(app, p, onGraded));
+        const visible = paperVisibility(papers);
+        papers.forEach((p, i) => {
+            const card = paperCard(app, p, onGraded);
+            if (!visible[i]) { card.classList.add('hidden'); card.setAttribute('data-paper-older', '1'); }
+            list.appendChild(card);
+        });
         papersBox.appendChild(list);
+        const older = visible.filter(v => !v).length;
+        if (older > 0) {
+            const more = el('button', 'mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500 transition-colors hover:bg-slate-50 cursor-pointer', {
+                type: 'button', id: 'stuPaperMore', textContent: `顯示其餘 ${older} 張（都已批完）`
+            });
+            more.addEventListener('click', showOlderPapers);
+            papersBox.appendChild(more);
+        }
     }
 
     // ── 弱點面板 ──
     const weakness = await weaknessRes.json();
+    renderSummary(studentId, papers, weakness, { subject, days });
+    if (activeTab === 'practice') announceRemedialPrefill();
     const grid = el('div', 'grid gap-4 lg:grid-cols-3');
     for (const spec of TABLE_SPECS) grid.appendChild(weaknessTable(app, spec, weakness[spec.key]));
-    weaknessBox.append(el('p', 'eyebrow mb-2 text-rose-400', { textContent: '弱點（錯誤率由高到低）' }), grid);
+    const weakHead = el('div', 'mb-2 flex flex-wrap items-center justify-between gap-2');
+    weakHead.appendChild(el('p', 'eyebrow text-rose-400', { textContent: '弱點（錯誤率由高到低）' }));
+    if (featureOn('remedial')) {
+        // 補救卷由伺服器依這位學生的批改結果自己挑最弱的單位，所以入口是「這位學生」，不是表裡的某一列
+        const toRemedial = el('button', 'text-xs px-3 py-1.5 rounded-xl border border-rose-200 bg-white font-bold text-rose-700 transition-colors hover:bg-rose-50 cursor-pointer', {
+            type: 'button', id: 'stuToRemedial', textContent: '依弱點出補救卷 →'
+        });
+        toRemedial.addEventListener('click', () => {
+            setTab('practice');
+            const node = document.getElementById('remedial');
+            if (node && typeof node.scrollIntoView === 'function') node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+        weakHead.appendChild(toRemedial);
+    }
+    weaknessBox.append(weakHead, grid);
     // 〔stage5 WS-A〕錯因分布（第 4.1 條第 3、7 項）。舊後端沒有這個鍵時不畫，不假裝是空的。
     if (Array.isArray(weakness.by_error_type)) weaknessBox.appendChild(errorTypeTable(weakness.by_error_type));
 
@@ -1892,8 +2128,8 @@ async function loadStudentView(app) {
     weaknessBox.appendChild(el('div', 'mt-4', {})).appendChild(
         recentWrongList(app, weakness.recent_wrong, currentStudentId, labelOf)
     );
-    // 〔dec/r16-remedial〕學習報告（列印、Word；期間用報告自己的選單，不跟著面板的「近 N 天」）
-    weaknessBox.appendChild(reportBar(app, studentId));
+    // 〔dec/r16-remedial〕學習報告（列印、Word；期間用報告自己的選單，不跟著面板的「近 N 天」）——自己一個分頁
+    (reportBox || weaknessBox).appendChild(reportBar(app, studentId));
 
     // 深連結：組卷後按「立即批改」進來時，把那一張卷直接展開。
     if (pendingPaperId !== null) {
@@ -1901,6 +2137,13 @@ async function loadStudentView(app) {
         pendingPaperId = null;
         openPaper(target);
     }
+}
+
+/** 把收起來的舊試卷全部列出來，並拿掉「顯示其餘」按鈕。 */
+function showOlderPapers() {
+    for (const card of document.querySelectorAll('#stuPaperList [data-paper-older]')) card.classList.remove('hidden');
+    const more = document.getElementById('stuPaperMore');
+    if (more) more.remove();
 }
 
 /**
@@ -1911,6 +2154,8 @@ async function loadStudentView(app) {
 function openPaper(paperId) {
     const card = document.querySelector(`#stuPaperList [data-paper-id="${paperId}"]`);
     if (!card || typeof card.__open !== 'function') return false;
+    setTab('grade');
+    if (card.classList.contains('hidden')) showOlderPapers();
     card.__open();
     card.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return true;
@@ -1974,6 +2219,15 @@ export async function init() {
             else refreshRetrainBadges(app).catch(() => {});
         });
     }
+    // 別的區塊要把老師帶到子區塊（#retrain、#remedial）時，先切到它所在的分頁
+    document.addEventListener(STUDENT_TAB_EVENT, (event) => {
+        const detail = (event && event.detail) || {};
+        const tab = detail.tab || tabForAnchor(detail.anchor);
+        if (tab) setTab(tab);
+    });
+    // 直接以 #retrain／#remedial 開頁時，index.html 的路由可能比本檔早跑完，這裡補看一次
+    const hashTab = tabForAnchor(typeof location !== 'undefined' ? location.hash : '');
+    if (hashTab) setTab(hashTab);
     loadErrorTypes(app);   // 〔stage5 WS-A〕先暖快取：展開試卷時錯因 chip 不必再等一次來回
 
     if (await loadStudents(app)) await loadStudentView(app);

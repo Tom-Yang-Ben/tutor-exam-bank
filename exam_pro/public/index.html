@@ -2001,6 +2001,8 @@
             if (VIEW_FOR_ANCHOR[anchor] && !TOP_ANCHORS.includes(anchor)) {
                 // 視圖內的子錨點（review／nlq／variants）才需要捲動；頂層分頁回到頁首
                 const node = document.getElementById(anchor);
+                // 學生視圖的子區塊（#retrain、#remedial）在分頁裡：請 students.js 先切到那個分頁（不認得的錨點它不理）
+                document.dispatchEvent(new CustomEvent('examapp:student-tab', { detail: { anchor } }));
                 if (node) requestAnimationFrame(() => node.scrollIntoView({ behavior: 'smooth', block: 'start' }));
             } else {
                 window.scrollTo({ top: 0 });
@@ -2031,6 +2033,7 @@
                 showView(viewId);
                 history.replaceState(null, '', '#' + id);   // 網址跟上，重新整理不會跳回預設視圖
             }
+            document.dispatchEvent(new CustomEvent('examapp:student-tab', { detail: { anchor: id } }));
             node.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 

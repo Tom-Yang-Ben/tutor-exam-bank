@@ -1,7 +1,7 @@
 # docs/grading-and-profile.md — 批改細節、學生檔案與文字詳解
 
 > 版本 v1.0 | 2026-09-24 | 分支 `stage5/ws-a` | 對應：`docs/interfaces-stage5.md` 第 4.1 條（WS-A）、缺口 G03／G05／G09、DEC-015、DEC-017、ADR-015
-> 本檔是 WS-A 三項功能的權威文件：API、資料、設計取捨與給老師的操作說明。共用文件（`engineering_docs/**` 的 api_spec、openapi、db_design、各 tracker，`README.md`，`docs/HANDOFF.md`）由整合階段依本檔回填，WS-A 沒有動。
+> 本檔是 WS-A 三項功能的權威文件：API、資料、設計取捨與給老師的操作說明。共用文件（內部工程文件的 api_spec、openapi、db_design、各 tracker，`README.md`，`docs/HANDOFF.md`）由整合階段依本檔回填，WS-A 沒有動。
 > WS-A 開發時沒有新增 migration：用的是 `stage5/base` 已建好的 `0010`（attempts 批改細節、students 檔案欄位）與 `0011`（questions 文字詳解）。〔最終審查修正〕整合後另加 `0013_teacher_edit_markers.sql` 的 `questions.solution_cleared_at`（老師清空過詳解的標記，裁決 S5-41）。WS-A 沒有新的環境變數與功能旗標（第 1.3 條：WS-A 屬既有核心流程的延伸）。
 
 ## 目錄
@@ -254,6 +254,6 @@ body 多一個 `edition`：沒送（或 null）＝`standard`（現行行為）�
 
 ## 8. 檔案清單
 
-新增：`exam_pro/config/errorTypes.js`、`exam_pro/config/studentProfile.js`、`exam_pro/scripts/backfill_solutions.js`、本檔、`engineering_docs/03_architecture/adr/ADR-015-grading-detail-and-solution-provenance.md`、上表八支測試。
+新增：`exam_pro/config/errorTypes.js`、`exam_pro/config/studentProfile.js`、`exam_pro/scripts/backfill_solutions.js`、本檔、ADR-015（內部工程文件）、上表八支測試。
 
 修改：`controllers/paperController.js`、`controllers/studentController.js`、`controllers/studentAdminController.js`、`controllers/questionController.js`、`controllers/wordController.js`、`services/weaknessService.js`（只在檔尾新增）、`services/wordService.js`、`workers/jobRunner.js`（只在 save 寫詳解）、`routes/index.js`（檔尾 WS-A 區塊）、`public/js/students.js`、`public/index.html`（題目編輯 modal 的詳解欄、題庫列表的「有詳解」標籤、Word 版本選單）、`package.json`（`solution:backfill`）、`test/integration/students.pg.test.js`（第 6 條第 9 項）。

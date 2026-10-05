@@ -732,7 +732,8 @@ function mountRemedialSkeleton(section) {
     section.appendChild(sectionHead('補', 'bg-rose-50 text-rose-700', 'Remedial paper', '依弱點出補救卷',
         '依學生最近的批改結果，自動挑最弱的單位補救、補先備、再加一點延伸。只產草稿；確認後才出卷並記入作答歷史。'));
 
-    const controls = el('div', 'grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-[1.2fr_.8fr_.6fr_.7fr_.6fr_.6fr_.6fr_1fr_auto] gap-3 items-end rounded-2xl border border-slate-100 bg-slate-50 p-4');
+    // 八個欄位排成四欄（手機兩欄），「產生草稿」自己一列靠右：原本九欄擠在同一列，卡片寬度放不下，按鈕會被擠出右緣、文字變直排
+    const controls = el('div', 'grid grid-cols-2 sm:grid-cols-4 gap-3 items-end rounded-2xl border border-slate-100 bg-slate-50 p-4');
     const ui = {
         student: el('select', 'field-control p-2 text-sm', { id: 'remStudent', 'aria-label': '學生' }),
         subject: el('select', 'field-control p-2 text-sm', { id: 'remSubject', 'aria-label': '科目' }),
@@ -742,7 +743,7 @@ function mountRemedialSkeleton(section) {
         mixPrereq: el('input', 'field-control p-2 text-sm', { id: 'remMixPrereq', type: 'number', min: 0, 'aria-label': '先備配比（%）' }),
         mixExt: el('input', 'field-control p-2 text-sm', { id: 'remMixExt', type: 'number', min: 0, 'aria-label': '延伸配比（%）' }),
         scope: el('select', 'field-control p-2 text-sm', { id: 'remSourceScope', 'aria-label': '題源限制（著作權）' }),
-        generate: el('button', 'bg-rose-600 hover:bg-rose-700 text-white text-sm font-extrabold py-2 px-4 rounded-xl cursor-pointer disabled:opacity-40', {
+        generate: el('button', 'col-span-full justify-self-end whitespace-nowrap bg-rose-600 hover:bg-rose-700 text-white text-sm font-extrabold py-2 px-5 rounded-xl cursor-pointer disabled:opacity-40', {
             id: 'remGenerate', type: 'button', textContent: '產生草稿'
         })
     };
@@ -1360,6 +1361,8 @@ function handleAdd(app, ui, shared, detail) {
     addQuestions(app, ui, [detail.question_id]).then(added => {
         if (!added) return;
         if (typeof app.showSection === 'function') app.showSection('students');
+        // 學生視圖分頁化之後 #remedial 在「重練與補救」分頁：先請 students.js 切過去，下面的捲動才看得到
+        document.dispatchEvent(new CustomEvent('examapp:student-tab', { detail: { anchor: 'remedial' } }));
         const node = document.getElementById('remedial');
         if (node && typeof node.scrollIntoView === 'function') node.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }).catch(err => console.error('[remedial] 加入補救卷失敗', err));
@@ -1382,6 +1385,24 @@ function mountRemedial(app, section, shared) {
     }
     ui.generate.addEventListener('click', () => { generateDraft(app, ui, shared).catch(err => console.error('[remedial] 產生草稿失敗', err)); });
     document.addEventListener(REMEDIAL_ADD_EVENT, (event) => handleAdd(app, ui, shared, (event && event.detail) || {}));
+    // 學生面板切到「重練與補救」分頁（或在那裡換學生）時，把這裡的學生與科目帶成面板選的那一位。
+    // 有草稿在編時不動：草稿綁著原本的學生與科目，換掉下拉會讓畫面與草稿對不上。
+    const prefill = (detail) => {
+        if (state.draft || !Number.isInteger(detail.student_id)) return;
+        if (!shared.students.some(st => st.id === detail.student_id)) return;
+        const subject = detail.subject && shared.subjects.includes(detail.subject) ? detail.subject : ui.subject.value;
+        if (ui.student.value === String(detail.student_id) && ui.subject.value === subject) return;
+        ui.student.value = String(detail.student_id);
+        ui.subject.value = subject;
+        ui.student.dispatchEvent(new Event('change'));
+        ui.subject.dispatchEvent(new Event('change'));
+    };
+    document.addEventListener('examapp:remedial-prefill', (event) => prefill((event && event.detail) || {}));
+    // 本檔的掛載要先等學生與科目清單，可能比 students.js 發事件晚：這一塊正顯示著（人就在那個分頁）就直接讀面板的下拉補一次
+    const panelStudent = document.getElementById('stuStudent');
+    if (section.style.display !== 'none' && panelStudent && panelStudent.value) {
+        prefill({ student_id: Number(panelStudent.value), subject: (document.getElementById('stuSubject') || {}).value || '' });
+    }
     return ui;
 }
 

@@ -8,11 +8,11 @@
 > 〔修訂 2026-09-26 凍結後審查，分支 `dec/retrain-schedule-fix`〕更正「已派出、還沒批改」的範圍（第 4.4、4.6、4.7、5.2、5.5、6.2、6.3、9.1 節）：重練派題沒批改一律算；**新題派題只有派題日 ≥ 起算日才算**。原寫法「任何一筆派題還沒批改」會讓手動加入的以前的題（R11 選 3 唯一的加入方式）永遠不到期：MySQL 時期匯入的舊紀錄 `result` 全是 NULL、對不上卷的 `paper_id` 也是 NULL，批改不了。純函式與測試同步修正（新增 `countsAsInFlight`）。另外：第 4.6 節與 TC-038-4 的隨機測試說明改成如實描述（逐筆批改改驗每一個中間歷史都與參考實作相同；不變量 I7 在 I/O 層的部分由整合測試驗）；第 4.4 節補上「重新加入當天已批改的重練派題」這個邊界。Owner 的答覆與決定沒有變。
 > 〔修訂 2026-09-26 第二階段審查修正，分支 `dec/retrain-phase2-fix`〕只新增第 5.6.6 節（審查意見的處理、新 migration `0018_retrain_unflag_marker.sql`、升級步驟、待 Owner 裁決的「判定已會的題被帶著出又答錯」）；其餘各節原文不動。
 > 〔Owner 決策單 2026-09-26 第四輪 T1～T3〕Owner 在「上線與本機速度決策單」確認了第 5.6.6 節的待裁決（T1）與實作時自己定的規則（T2、T3），**三題都選 1、照現狀**，程式不改；就地加註在第 5.6.5 節彙總表之前與第 5.6.6 節（原文不刪）。總表見 `docs/HANDOFF.md` §0.00b。
-> **需求來源**：DEC-003 例外條款（錯題重練與間隔複習可再出同一題、每次作答各自記錄；資料層拆「派題」與「作答」，Owner 選 a：拆表）、DEC-016（錯過的題要練到會為止、依間隔複習排程回測）；兩者 2026-09-25 已核准。開發順序依 Owner 決策單 B22（錯題重練 → 間隔複習 → 診斷報告 → …；`docs/HANDOFF.md` 第 0.2 節 G 段）。缺口編號 G11、G13 出自 2026-09-24 缺口分析第 5 節「缺口總表」P1，`engineering_docs/01_requirements/srs.md` 第 1 節「尚未分配 FR」一條也以這兩個編號引用。
-> **決策紀錄**：ADR-018（派題與作答拆表，以相容檢視保留既有讀法）、ADR-019（間隔複習採固定關卡、排程為作答歷史的純函式），在 `engineering_docs/03_architecture/adr/`。
-> **編號**：功能需求 FR-036～FR-040、驗收 ACPT-036～ACPT-040 依 Owner 答覆**在本檔定稿**（第 6.1、6.2 節）；`engineering_docs/01_requirements/srs.md` 等共用文件的同步由其他分支辦理。migration 寫成「0016 之後的下一號」（0016 可能被同一輪的其他分支用掉），本檔以 **M1**、**M2** 代稱，預計是 0017、0018。
+> **需求來源**：DEC-003 例外條款（錯題重練與間隔複習可再出同一題、每次作答各自記錄；資料層拆「派題」與「作答」，Owner 選 a：拆表）、DEC-016（錯過的題要練到會為止、依間隔複習排程回測）；兩者 2026-09-25 已核准。開發順序依 Owner 決策單 B22（錯題重練 → 間隔複習 → 診斷報告 → …；`docs/HANDOFF.md` 第 0.2 節 G 段）。缺口編號 G11、G13 出自 2026-09-24 缺口分析第 5 節「缺口總表」P1，內部工程文件 `srs.md` 第 1 節「尚未分配 FR」一條也以這兩個編號引用。
+> **決策紀錄**：ADR-018（派題與作答拆表，以相容檢視保留既有讀法）、ADR-019（間隔複習採固定關卡、排程為作答歷史的純函式），在內部工程文件的 ADR 目錄。
+> **編號**：功能需求 FR-036～FR-040、驗收 ACPT-036～ACPT-040 依 Owner 答覆**在本檔定稿**（第 6.1、6.2 節）；內部工程文件 `srs.md` 等共用文件的同步由其他分支辦理。migration 寫成「0016 之後的下一號」（0016 可能被同一輪的其他分支用掉），本檔以 **M1**、**M2** 代稱，預計是 0017、0018。
 > **不呼叫任何 LLM**：這個功能全是資料庫與純函式，本機模式與 Gemini 模式的行為相同，不需要任何 cassette。
-> 共用文件（`engineering_docs/**` 除了新增的兩份 ADR、`docs/HANDOFF.md`、`docs/roadmap-plan.md`、`docs/interfaces-stage5.md`）由文件整合任務依本檔回填，`dec/retrain-schedule` 沒有動。
+> 共用文件（內部工程文件除了新增的兩份 ADR、`docs/HANDOFF.md`、`docs/roadmap-plan.md`、`docs/interfaces-stage5.md`）由文件整合任務依本檔回填，`dec/retrain-schedule` 沒有動。
 
 ## 目錄
 
@@ -819,7 +819,7 @@ capForAttach(newCount, ratio) ：R6，floor(新題數 × 比例)，且新題＋�
 | 項目 | 狀態 | 說明 |
 | :--- | :--- | :--- |
 | API-13 `GET /api/students/:id/retrain-stats?days=&subject=` | ✅ 已實作 | 掛在 `routes/index.js` 檔尾錯題重練區塊（旗標關閉不掛載）；`controllers/retrainController.js` 的 `stats`；參數驗證 `utils/retrainValidation.js` 的 `parseStatsQuery`（嚴格驗證，同裁決 S5-21）；計算在新檔 `services/retrainStatsService.js`（只讀；題數與到期直接用 `retrainService.listItems`，所以判斷與 API-1 完全相同）。語意見下表 ① |
-| 學生分頁「錯題重練」卡（`public/js/retrain.js`，錨點 `#retrain`） | ✅ 已實作 | 放在學生視圖、緊接在 `#students`（弱點面板）之後。四個數字（到期、進行中、練到會、卡關；點一下就篩那一類）；清單照 API-1 回來的順序（伺服器依第 4.7 節排好，前端不重排）；每列章節、題幹預覽（MathJax）、關卡標籤、下次到期（逾期標紅）、連對／錯次數、徽章（到期／已派出卷 #…／卡關／已封存，另有「派出超過 14 天還沒批改」）、可展開作答歷史（錯因用 `GET /api/error-types` 的標籤）；每列動作移出、判定已會、重新加入（API-3）、找相似（沿用既有的 `examapp:variant-request`，FEATURE_SIMILAR 關閉時不畫）；上方「手動加入題號」（API-2）、「出一份重練卷」（API-5 → 草稿沿用補救卷樣式、承上組整組刪 → API-7 → 下載 Word 帶 `paper_id`，三種版本）；「重練成效」小表（API-13） |
+| 學生分頁「錯題重練」卡（`public/js/retrain.js`，錨點 `#retrain`） | ✅ 已實作 | 放在學生視圖、緊接在 `#students` 之後，只在學生面板的「重練與補救」分頁顯示（students.js 以 style.display 控制）。四個數字（到期、進行中、練到會、卡關；點一下就篩那一類）；清單照 API-1 回來的順序（伺服器依第 4.7 節排好，前端不重排）；每列章節、題幹預覽（MathJax）、關卡標籤、下次到期（逾期標紅）、連對／錯次數、徽章（到期／已派出卷 #…／卡關／已封存，另有「派出超過 14 天還沒批改」）、可展開作答歷史（錯因用 `GET /api/error-types` 的標籤）；每列動作移出、判定已會、重新加入（API-3）、找相似（沿用既有的 `examapp:variant-request`，FEATURE_SIMILAR 關閉時不畫）；上方「手動加入題號」（API-2）、「出一份重練卷」（API-5 → 草稿沿用補救卷樣式、承上組整組刪 → API-7 → 下載 Word 帶 `paper_id`，三種版本）；「重練成效」小表（API-13） |
 | 批改卡（`public/js/students.js` 最小掛鉤） | ✅ 已實作 | 新題對錯按鈕旁「要重練」勾選框（預設不勾、答錯也不自動勾；依 API-9 的 `retrain_flagged` 顯示已勾）；重練題不給勾選框、改標「重練・第 n 關」；`diffResults` 只在勾選改過時送 `results[i].retrain`；儲存後依 API-10 的 `retrain` 摘要提示「3 題進入重練清單、1 題練到會。」 |
 | 學生清單的到期徽章（API-4） | ✅ 已實作 | 學生分頁的學生下拉選單：`姓名【到期 N】（N 卷，已批 …）`（下表 ④）。載入學生視圖、批改後、重練卡改了清單之後更新 |
 | 旗標關閉 | ✅ | `#retrain` 整段不渲染（空 `<section>`）；students.js 不畫勾選框與徽章、不改選項文字、不發事件、不打任何新 API，PATCH body 與 `diffResults` 的輸出逐位元不變（列上沒有 `retrain` 鍵）。FEATURE_STUDENTS 關閉（學生分頁不存在）時重練卡也不渲染 |
@@ -832,7 +832,7 @@ capForAttach(newCount, ratio) ：R6，floor(新題數 × 比例)，且新題＋�
 | # | 項目 | 實作 |
 | :--- | :--- | :--- |
 | ① | API-13 的時間窗（第 5.2 節只列參數） | `days` 只影響答對率：`first_retrain`／`spaced` 只算派題日 ≥ `since`（＝今天 − `days`，含當天；與弱點面板的 `assigned_at >= CURRENT_DATE - days` 同一種算法）而且已批改的重練派題。題數（`entered`／`active`／`mastered`／`retired`／`stuck`）、`backlog`、`by_chapter` 是**清單現況**（依科目篩選、不受 `days` 影響）：「進過清單」＝還在表上的項目（進行中＋練到會＋移出；還沒重練就取消勾選的項目已刪掉，不算）。`days` 1～365、預設 90（同 weakness API）；回應最後多一個 `since`。`backlog` 以今天為準（不收 `as_of`）：`due_now`＝API-1 的 `due`（已派出、封存的不算），`overdue_7d`＝其中逾期 ≥ 7 天。`by_chapter` 依進過清單多 → 進行中多 → 章節名排序，沒有章節的是 `null`、排最後 |
-| ② | 重練卡的學生、科目、時間窗 | 跟著學生分頁上方的下拉走（students.js 每次載入學生視圖時發 `examapp:student-view`，detail 帶 `student_id`、`student_name`、`subject`、`days`；retrain.js 掛載時也直接讀一次下拉，避免事件比監聽先到）。卡片自己另有「顯示」（API-1 的 `status`）與「預計作答日」（API-1、API-5 的 `as_of`；空白＝今天）。換學生時草稿與上一張卷一起清掉 |
+| ② | 重練卡的學生、科目、時間窗 | 跟著學生分頁的學生下拉與「統計範圍」（學科、近 N 天；只在弱點、重練與補救兩個分頁出現）走（students.js 每次載入學生視圖時發 `examapp:student-view`，detail 帶 `student_id`、`student_name`、`subject`、`days`；retrain.js 掛載時也直接讀一次下拉，避免事件比監聽先到）。卡片自己另有「顯示」（API-1 的 `status`）與「預計作答日」（API-1、API-5 的 `as_of`；空白＝今天）。換學生時草稿與上一張卷一起清掉 |
 | ③ | 重練卡改了清單之後 | retrain.js 發 `examapp:retrain-changed`（detail `student_id`、`papers_changed`）：students.js 更新到期徽章；確認了重練卷（`papers_changed`）時重載整個學生視圖，新卷立刻出現在試卷列表、可以批改 |
 | ④ | 學生清單的「到期 3」徽章 | 學生清單是 `<select>`，選項放不了樣式徽章：做成選項文字 `姓名【到期 3】（2 卷，已批 50.0%）`；沒有到期的題就維持原文字。`data-name` 不變（「立即批改」靠它比對姓名） |
 | ⑤ | 動作的確認 | 「移出」「判定已會」要按第二次才送（同學生管理面板的做法；按錯了只能「重新加入」，進度會歸零）；「重新加入」一按就送。重練卡不提供改備註（API-3 的 `note` 只顯示） |
@@ -997,7 +997,7 @@ capForAttach(newCount, ratio) ：R6，floor(新題數 × 比例)，且新題＋�
 
 ### 6.1 功能需求（FR-036～FR-040，定稿）
 
-〔凍結〕編號與內容依 Owner 2026-09-26 答覆定稿；同步進 `engineering_docs/01_requirements/srs.md` 由其他分支辦理。〔整合 2026-09-26〕已在 `dec/integration-all` 同步：`srs.md` §1（FR-036～040，端點欄另補實際路徑）、§2（NFR-006 補一句、NFR-010 附第 5.6.5 節的實測）、§6.2（ACPT-036-*～040-* 照第 6.2 節）；`qa_tracker.md` TC-036-*～040-*（照第 6.3 節，測試檔以實際檔案為準）；`engineering_tracker.md` FR 列與 ADR-018、ADR-019 索引。
+〔凍結〕編號與內容依 Owner 2026-09-26 答覆定稿；同步進內部工程文件 `srs.md` 由其他分支辦理。〔整合 2026-09-26〕已在 `dec/integration-all` 同步：`srs.md` §1（FR-036～040，端點欄另補實際路徑）、§2（NFR-006 補一句、NFR-010 附第 5.6.5 節的實測）、§6.2（ACPT-036-*～040-* 照第 6.2 節）；`qa_tracker.md` TC-036-*～040-*（照第 6.3 節，測試檔以實際檔案為準）；`engineering_tracker.md` FR 列與 ADR-018、ADR-019 索引。
 
 | ID | 需求描述 | API 端點 | 旗標 | 來源 | 優先級 | 驗收 ID |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |

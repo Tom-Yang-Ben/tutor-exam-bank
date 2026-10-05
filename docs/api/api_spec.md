@@ -196,4 +196,4 @@ app.use((err, req, res, next) => {
 | 上游（功能需求） | FR-001～FR-017（§5 端點總表逐條對應；FR-017 題源標記由本輪補入〔修訂 2026-08-29〕）；FR-021～FR-035（階段 5）〔修訂 2026-09-24〕 |
 | 上游（非功能需求） | NFR-001（認證／CORS／production 不回細節）、NFR-002（各端點限流）、NFR-006（confirm-paper 同交易）；NFR-007（家教／語音每日預算）、NFR-008（錄音不落地）〔修訂 2026-09-24〕 |
 | 契約 SSOT | [`openapi-exam-pro-v1.yaml`](./openapi-exam-pro-v1.yaml)；路由掛載真相 `exam_pro/routes/index.js`、`exam_pro/app.js` |
-| 下游 | `../02_ux_ui/ui_spec-*.md`（各頁資料需求）、`../05_qa/test_plan.md`（整合案例 TC-*）、`../06_ops/runbook-llm-cost-quota.md`（429／成本上限處置） |
+| 下游 | `../02_ux_ui/ui_spec-*.md`（各頁資料需求）、`../05_qa/test_plan.md`（整合案例 TC-*）、[`../ops/runbook-llm-cost-quota.md`](../ops/runbook-llm-cost-quota.md)（429／成本上限處置） |

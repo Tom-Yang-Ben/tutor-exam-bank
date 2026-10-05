@@ -7,7 +7,7 @@
 
 ## 1. 一句話
 
-上傳考卷時選「卷別」：**數學／物理**沿用凍結的 prompt、schema 與 cassette，一個字都不動；**化學**走另一組 agent 名、模板與 schema。化學題入庫之後，題庫、相似題、變式、NLQ、組卷、批改、弱點面板與 Word 匯出都能用。取捨見 [ADR-010](../engineering_docs/03_architecture/adr/ADR-010-subject-group-routing-for-chemistry.md)。
+上傳考卷時選「卷別」：**數學／物理**沿用凍結的 prompt、schema 與 cassette，一個字都不動；**化學**走另一組 agent 名、模板與 schema。化學題入庫之後，題庫、相似題、變式、NLQ、組卷、批改、弱點面板與 Word 匯出都能用。取捨見 ADR-010。
 
 ## 2. API 與資料
 

@@ -1,7 +1,7 @@
 {
   "name": "tutor-exam-bank",
   "version": "1.0.0",
-  "description": "家教專用數學物理題庫系統 - 企業級重構版",
+  "description": "高中數學、物理、化學的題庫與出題系統：考卷 PDF 拆題、hybrid 檢索、組卷與 Word 匯出",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -56,6 +56,7 @@
     "exam-bank",
     "express",
     "postgresql",
+    "ollama",
     "gemini",
     "latex",
     "docx",
@@ -68,7 +69,7 @@
   "dependencies": {
     "@fontsource-variable/manrope": "^5.3.0",
     "@fontsource-variable/noto-sans-tc": "^5.3.0",
-    "@google/genai": "^2.24.0",
+    "@google/genai": "^2.26.0",
     "@node-rs/jieba": "^2.0.3",
     "@tailwindcss/browser": "^4.3.3",
     "ajv": "^8.20.0",
