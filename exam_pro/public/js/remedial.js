@@ -1360,6 +1360,8 @@ function handleAdd(app, ui, shared, detail) {
     addQuestions(app, ui, [detail.question_id]).then(added => {
         if (!added) return;
         if (typeof app.showSection === 'function') app.showSection('students');
+        // 學生視圖分頁化之後 #remedial 在「重練與補救」分頁：先請 students.js 切過去，下面的捲動才看得到
+        document.dispatchEvent(new CustomEvent('examapp:student-tab', { detail: { anchor: 'remedial' } }));
         const node = document.getElementById('remedial');
         if (node && typeof node.scrollIntoView === 'function') node.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }).catch(err => console.error('[remedial] 加入補救卷失敗', err));
