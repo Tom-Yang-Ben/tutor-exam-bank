@@ -6,23 +6,18 @@
 
 AI 步驟預設全部在本機執行（Ollama 與 PaddleOCR），不連外、不需要 API 金鑰；拆題與問答可逐次改用 Gemini。
 
-| 建立題目與考卷 PDF 匯入 | 智慧組卷：依學生與章節抽題，確認前可換題 |
-|---|---|
-| ![建立題目](./screenshots/create-question.png) | ![智慧組卷](./screenshots/smart-paper.png) |
-| **匯出的 Word 考卷：公式是可編輯的原生方程式** | **學生面板的弱點分頁** |
-| ![Word 考卷](./screenshots/exam-paper-word.png) | ![學生弱點分析](./screenshots/student-weakness.png) |
+<p align="center">
+  <img src="./screenshots/create-question.png" alt="建立題目與考卷 PDF 匯入" width="88%"><br><b>① 建立題目</b>：手動輸入，或上傳考卷 PDF 由系統拆題
+</p>
+<table>
+  <tr>
+    <td width="33%" align="center" valign="top"><img src="./screenshots/smart-paper.png" alt="智慧組卷"><br><b>② 智慧組卷</b><br><sub>依學生與章節抽題，確認前可換題</sub></td>
+    <td width="33%" align="center" valign="top"><img src="./screenshots/exam-paper-word.png" alt="匯出的 Word 考卷"><br><b>③ 匯出 Word 考卷</b><br><sub>公式是可編輯的原生方程式</sub></td>
+    <td width="33%" align="center" valign="top"><img src="./screenshots/student-weakness.png" alt="學生弱點分析"><br><b>④ 弱點分析</b><br><sub>批改後看章節、題型與錯因分布</sub></td>
+  </tr>
+</table>
 
-## 目錄
-
-- [功能](#功能)
-- [系統架構](#系統架構)
-- [技術棧](#技術棧)
-- [環境需求](#環境需求)
-- [安裝與啟動](#安裝與啟動)
-- [測試與評測](#測試與評測)
-- [專案結構](#專案結構)
-- [文件](#文件)
-- [授權與著作權](#授權與著作權)
+<p align="center"><a href="#功能">功能</a> · <a href="#系統架構">系統架構</a> · <a href="#技術棧">技術棧</a> · <a href="#環境需求">環境需求</a> · <a href="#安裝與啟動">安裝與啟動</a> · <a href="#測試與評測">測試與評測</a> · <a href="#專案結構">專案結構</a> · <a href="#文件">文件</a> · <a href="#授權與著作權">授權</a></p>
 
 ## 功能
 
@@ -48,38 +43,43 @@ AI 步驟預設全部在本機執行（Ollama 與 PaddleOCR），不連外、不
 
 ## 系統架構
 
+整套系統跑在同一台電腦上：老師用瀏覽器或桌面視窗操作，後端程式負責網頁、API 與背景拆題，資料存在本機的資料庫。
+
 ```mermaid
-flowchart LR
-    UI["瀏覽器前端<br/>單頁 HTML＋ES modules"] -->|"HTTP /api"| API
-    subgraph PROC["Node.js 行程（預設只聽 127.0.0.1:3000）"]
-        API["Express 5 API<br/>路由依 FEATURE_* 掛載"]
-        RUN["job runner<br/>與 API 同行程"]
+flowchart TB
+    T["老師<br/>瀏覽器或桌面視窗"]
+    subgraph PC["同一台電腦"]
+        B["後端程式（Node.js）<br/>網頁、API、背景拆題"]
+        D[("資料庫（PostgreSQL）<br/>題目、學生、作答、待處理的工作")]
+        M["本機模型（Ollama）<br/>看圖、讀文字、算相似度"]
+        O["文字辨識（PaddleOCR）<br/>把考卷 PDF 轉成文字"]
     end
-    API -->|"POST /api/jobs"| DB
-    RUN -->|"認領：SKIP LOCKED＋租約"| DB[("PostgreSQL 16<br/>pgvector＋pg_trgm")]
-    RUN --> PIPE
-    subgraph PIPE["拆題管線（狀態機）"]
-        direction LR
-        N1["extract"] --> N2["dedup0"] --> N3["classify"] --> N4["lint"] --> N5["source_check"] --> N6["verify"] --> N7["dedup1"] --> N8["save"]
-    end
-    PIPE -->|"通過"| DB
-    PIPE -->|"未通過"| REV["人工複核佇列"]
-    REV -->|"老師核准"| DB
-    API --> SVC["領域服務<br/>檢索、組卷、Word、批改、補救、重練、助教"]
-    SVC --> DB
-    N1 --> OCR["OCR 轉接層<br/>PaddleOCR（Python 子行程）"]
-    PIPE --> LLM["LLM 轉接層<br/>Ollama（預設）或 Gemini"]
-    SVC --> LLM
-    LLM -.->|"record／replay"| CAS["回放檔 cassette"]
-    OCR -.->|"record／replay"| CAS
+    G["Gemini<br/>選用，需要金鑰"]
+    T -->|"操作"| B
+    B -->|"存取"| D
+    B -->|"呼叫"| M & O
+    B -.->|"選用"| G
 ```
 
-- **API 與 job runner**：同一個 Node.js 行程。上傳考卷只建立一筆 job，由 runner 在背景認領；認領採 `FOR UPDATE SKIP LOCKED` 與租約，行程中斷後租約到期即可重新認領。
-- **拆題管線**：流程由程式寫定的狀態機推進（[`pipeline/stateMachine.js`](./exam_pro/pipeline/stateMachine.js)），不由模型決定。`extract` 以整份考卷為單位，其餘七個節點逐題執行；每個節點的輸出先通過 JSON Schema 與章節白名單驗證。未通過的題目附上 12 種原因之一，停在人工複核，其餘題目照常入庫。
-- **LLM 與 OCR 轉接層**：所有模型呼叫經 [`services/llm`](./exam_pro/services/llm)，OCR 經 [`services/ocr`](./exam_pro/services/ocr)。兩者都有 live、record、replay 三種模式；replay 只讀回放檔，找不到即失敗，不會改呼叫模型。
-- **檢索**：向量檢索（768 維）與 jieba 分詞的全文檢索以 RRF 融合，寫在同一段 SQL（[`queries/hybrid.js`](./exam_pro/queries/hybrid.js)），供相似題、自然語言查題與變式題使用，評測也跑同一段。題庫列表的關鍵字篩選是一般的 `ILIKE` 比對。
+上傳一份考卷之後，後端在背景依固定順序處理每一題。順序由程式寫定（[`pipeline/stateMachine.js`](./exam_pro/pipeline/stateMachine.js)），不交給模型決定。
+
+```mermaid
+flowchart LR
+    U["上傳<br/>考卷 PDF"] --> E["拆題<br/>extract"]
+    subgraph CHK["逐題檢查：任何一關沒過，這一題就停下來"]
+        H["去重<br/>dedup0"] --> C["分章節<br/>classify"] --> L["查公式<br/>lint"] --> S["對原卷<br/>source_check"] --> V["驗算<br/>verify"] --> X["再去重<br/>dedup1"]
+    end
+    E --> H
+    X -->|"全過"| K[("入庫")]
+    CHK -.->|"沒過"| R["人工複核<br/>老師核准才入庫"]
+    R --> K
+```
+
+- **背景工作**：上傳只建立一筆工作，由後端程式在背景認領（`FOR UPDATE SKIP LOCKED` 加租約）；程式中斷後，租約到期就能接著處理。
+- **逐題檢查**：每一關的輸出先通過 JSON Schema 與章節白名單驗證。沒過的題目附上 12 種原因之一，停在人工複核；其餘題目照常入庫。
+- **模型與文字辨識**：所有呼叫都經轉接層（[`services/llm`](./exam_pro/services/llm)、[`services/ocr`](./exam_pro/services/ocr)），有 live、record、replay 三種模式；replay 只讀回放檔，找不到即失敗，不會改呼叫模型。測試與評測因此不需要模型。
+- **檢索**：向量檢索（768 維）與 jieba 分詞的全文檢索以 RRF 融合，寫在同一段 SQL（[`queries/hybrid.js`](./exam_pro/queries/hybrid.js)），供相似題、自然語言查題與變式題使用。題庫列表的關鍵字篩選是一般的 `ILIKE` 比對。
 - **Word 匯出**：自製的 LaTeX 解析器直接產生 OOXML 數學物件（[`utils/textFormatter.js`](./exam_pro/utils/textFormatter.js)、[`services/wordService.js`](./exam_pro/services/wordService.js)），輸出範例見 [`sample_exam.docx`](./exam_pro/sample_exam.docx)。
-- **桌面啟動**：Windows 桌面啟動器依序啟動 Docker、資料庫、Ollama 與後端；另有 Electron 桌面版（[`desktop/`](./desktop)）把後端內嵌在同一個視窗，目前仍在驗收階段。
 
 ## 技術棧
 
@@ -91,7 +91,7 @@ flowchart LR
 | 前端 | 單頁 HTML 與 ES modules（不打包）、Tailwind、MathJax，資源由後端從本機供應 |
 | 文件輸出 | `docx` |
 | 測試 | `node:test`、supertest、回放式評測、GitHub Actions |
-| 桌面 | Windows 啟動器（Node.js 腳本）、Electron 44 |
+| 桌面 | Windows 啟動器（Node.js 腳本）；Electron 44 桌面版（[`desktop/`](./desktop)，驗收中） |
 
 ## 環境需求
 
