@@ -1360,6 +1360,8 @@ function handleAdd(app, ui, shared, detail) {
     addQuestions(app, ui, [detail.question_id]).then(added => {
         if (!added) return;
         if (typeof app.showSection === 'function') app.showSection('students');
+        // 學生視圖分頁化之後 #remedial 在「重練與補救」分頁：先請 students.js 切過去，下面的捲動才看得到
+        document.dispatchEvent(new CustomEvent('examapp:student-tab', { detail: { anchor: 'remedial' } }));
         const node = document.getElementById('remedial');
         if (node && typeof node.scrollIntoView === 'function') node.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }).catch(err => console.error('[remedial] 加入補救卷失敗', err));
@@ -1382,6 +1384,24 @@ function mountRemedial(app, section, shared) {
     }
     ui.generate.addEventListener('click', () => { generateDraft(app, ui, shared).catch(err => console.error('[remedial] 產生草稿失敗', err)); });
     document.addEventListener(REMEDIAL_ADD_EVENT, (event) => handleAdd(app, ui, shared, (event && event.detail) || {}));
+    // 學生面板切到「重練與補救」分頁（或在那裡換學生）時，把這裡的學生與科目帶成面板選的那一位。
+    // 有草稿在編時不動：草稿綁著原本的學生與科目，換掉下拉會讓畫面與草稿對不上。
+    const prefill = (detail) => {
+        if (state.draft || !Number.isInteger(detail.student_id)) return;
+        if (!shared.students.some(st => st.id === detail.student_id)) return;
+        const subject = detail.subject && shared.subjects.includes(detail.subject) ? detail.subject : ui.subject.value;
+        if (ui.student.value === String(detail.student_id) && ui.subject.value === subject) return;
+        ui.student.value = String(detail.student_id);
+        ui.subject.value = subject;
+        ui.student.dispatchEvent(new Event('change'));
+        ui.subject.dispatchEvent(new Event('change'));
+    };
+    document.addEventListener('examapp:remedial-prefill', (event) => prefill((event && event.detail) || {}));
+    // 本檔的掛載要先等學生與科目清單，可能比 students.js 發事件晚：這一塊正顯示著（人就在那個分頁）就直接讀面板的下拉補一次
+    const panelStudent = document.getElementById('stuStudent');
+    if (section.style.display !== 'none' && panelStudent && panelStudent.value) {
+        prefill({ student_id: Number(panelStudent.value), subject: (document.getElementById('stuSubject') || {}).value || '' });
+    }
     return ui;
 }
 
