@@ -68,15 +68,15 @@
   "type": "commonjs",
   "dependencies": {
     "@fontsource-variable/manrope": "^5.3.0",
-    "@fontsource-variable/noto-sans-tc": "^5.3.0",
-    "@google/genai": "^2.26.0",
-    "@node-rs/jieba": "^2.0.3",
+    "@fontsource-variable/noto-sans-tc": "^5.3.1",
+    "@google/genai": "^2.30.0",
+    "@node-rs/jieba": "^2.0.4",
     "@tailwindcss/browser": "^4.3.3",
     "ajv": "^8.20.0",
     "cors": "^2.8.5",
-    "docx": "^9.8.1",
-    "dotenv": "^18.0.5",
-    "express": "^5.2.1",
+    "docx": "^9.11.0",
+    "dotenv": "^18.0.8",
+    "express": "^5.3.0",
     "gsap": "3.15.0",
     "mathjax": "^3.2.2",
     "multer": "^2.4.0",
@@ -90,6 +90,6 @@
   "devDependencies": {
     "nodemon": "^3.1.0",
     "pdfkit": "^0.20.2",
-    "supertest": "^7.3.0"
+    "supertest": "^7.3.1"
   }
 }
